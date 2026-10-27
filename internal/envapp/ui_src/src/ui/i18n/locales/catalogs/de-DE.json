@@ -3161,7 +3161,11 @@
       "outputFormatPlaceholder": "table {{.ID}}\t{{.Names}}",
       "proxyURLPlaceholder": "http://proxy.example.com:3128",
       "proxyBypassPlaceholder": "localhost,127.0.0.1,.example.com",
-      "credentialStorePlaceholder": "desktop"
+      "credentialStorePlaceholder": "desktop",
+      "lifecycleWait": "Starten, Stoppen oder Neustarten kann bis zu zwei Minuten dauern. Währenddessen können Sie weiterarbeiten.",
+      "interruptionTitle": "Dienstunterbrechung",
+      "interruptionMessage": "Laufende Container und abhängige Webdienste können unterbrochen werden.",
+      "configurationRisk": "Ungültige Einstellungen können den Start des Containerdienstes verhindern."
     },
     "views": {
       "containers": "Container",
@@ -3520,7 +3524,23 @@
       "started": "Gestartet",
       "errorTitle": "Vorgang fehlgeschlagen",
       "progressTitle": "Fortschritt",
-      "loadingProgress": "Fortschritt wird geladen…"
+      "loadingProgress": "Fortschritt wird geladen…",
+      "errors": {
+        "canceled": "Der Vorgang wurde abgebrochen.",
+        "engine_timeout": "Der Dienst hat nicht rechtzeitig geantwortet. Er wird möglicherweise noch gestartet oder gestoppt. Aktualisieren Sie vor einem erneuten Versuch den Status.",
+        "engine_permission_denied": "Zugriff verweigert. Prüfen Sie die Berechtigungen des aktuellen Benutzers.",
+        "engine_unavailable": "Der Containerdienst ist nicht verfügbar. Prüfen Sie den Status und versuchen Sie es erneut.",
+        "container_service_configuration_conflict": "Die Konfiguration wurde geändert. Laden Sie sie vor dem Speichern neu.",
+        "service_recovery_required": "Der Dienst konnte nicht wiederhergestellt werden. Prüfen Sie die Konfiguration im Verwaltungstool des Hosts.",
+        "insufficient_storage": "Nicht genügend Speicherplatz. Geben Sie Speicherplatz frei und versuchen Sie es erneut.",
+        "registry_rate_limited": "Das Anfragelimit der Image-Registry wurde erreicht. Melden Sie sich an oder versuchen Sie es später erneut.",
+        "image_not_found": "Das Image oder die Plattform wurde nicht gefunden. Prüfen Sie Image-Name und Plattform.",
+        "registry_access_denied": "Die Image-Registry hat den Zugriff verweigert. Prüfen Sie Image-Name und Anmeldung.",
+        "registry_unavailable": "Die Image-Registry ist nicht erreichbar. Prüfen Sie die Netzwerkverbindung.",
+        "preflight_stale": "Die Ressource wurde nach der Prüfung geändert. Aktualisieren und prüfen Sie den Vorgang erneut.",
+        "reconciliation_required": "Der endgültige Zustand konnte nicht bestätigt werden. Aktualisieren Sie den Dienststatus vor einem erneuten Versuch.",
+        "operation_failed": "Der Vorgang konnte nicht abgeschlossen werden. Prüfen Sie den Dienststatus und versuchen Sie es erneut."
+      }
     },
     "operationStates": {
       "queued": "In Warteschlange",
@@ -3544,7 +3564,13 @@
     },
     "review": {
       "title": "Vorgang prüfen",
-      "operation": "Vorgang"
+      "operation": "Vorgang",
+      "risk": {
+        "low": "Geringes Risiko",
+        "medium": "Mittleres Risiko",
+        "high": "Hohes Risiko",
+        "critical": "Kritisches Risiko"
+      }
     },
     "prune": {
       "moreActions": "Weitere Aktionen",

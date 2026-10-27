@@ -3161,7 +3161,11 @@
       "outputFormatPlaceholder": "table {{.ID}}\t{{.Names}}",
       "proxyURLPlaceholder": "http://proxy.example.com:3128",
       "proxyBypassPlaceholder": "localhost,127.0.0.1,.example.com",
-      "credentialStorePlaceholder": "desktop"
+      "credentialStorePlaceholder": "desktop",
+      "lifecycleWait": "啟動、停止或重新啟動最多可能需要兩分鐘。等待期間可繼續使用其他功能。",
+      "interruptionTitle": "服務中斷",
+      "interruptionMessage": "執行中的容器及相依的 Web 服務可能會中斷。",
+      "configurationRisk": "無效設定可能導致容器服務無法啟動。"
     },
     "views": {
       "containers": "容器",
@@ -3520,7 +3524,23 @@
       "started": "開始時間",
       "errorTitle": "操作失敗",
       "progressTitle": "執行進度",
-      "loadingProgress": "正在載入進度…"
+      "loadingProgress": "正在載入進度…",
+      "errors": {
+        "canceled": "操作已取消。",
+        "engine_timeout": "服務未在時限內回應，可能仍在啟動或停止。請先重新整理狀態，再決定是否重試。",
+        "engine_permission_denied": "存取遭拒。請檢查目前使用者的權限。",
+        "engine_unavailable": "容器服務無法使用。請檢查狀態後重試。",
+        "container_service_configuration_conflict": "設定已變更。請重新載入後再儲存。",
+        "service_recovery_required": "服務未能復原。請在主機管理工具中檢查設定。",
+        "insufficient_storage": "儲存空間不足。請釋出空間後重試。",
+        "registry_rate_limited": "映像檔登錄庫的請求次數已達上限。請登入或稍後重試。",
+        "image_not_found": "找不到映像檔或要求的平台。請檢查映像檔名稱和平台。",
+        "registry_access_denied": "映像檔登錄庫拒絕存取。請檢查映像檔名稱和登入狀態。",
+        "registry_unavailable": "無法連線至映像檔登錄庫。請檢查網路。",
+        "preflight_stale": "資源在確認後已變更。請重新整理並再次確認操作。",
+        "reconciliation_required": "無法確認最終狀態。請先重新整理服務狀態，再決定是否重試。",
+        "operation_failed": "操作未能完成。請檢查服務狀態後重試。"
+      }
     },
     "operationStates": {
       "queued": "等待中",
@@ -3544,7 +3564,13 @@
     },
     "review": {
       "title": "檢閱操作",
-      "operation": "操作"
+      "operation": "操作",
+      "risk": {
+        "low": "低風險",
+        "medium": "中度風險",
+        "high": "高風險",
+        "critical": "嚴重風險"
+      }
     },
     "prune": {
       "moreActions": "更多操作",

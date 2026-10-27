@@ -29,6 +29,8 @@ type CommandEnvironmentRunner interface {
 
 const containerServiceDiscoveryTimeout = 2 * time.Second
 
+const containerServiceActionTimeout = 2 * time.Minute
+
 type containerServiceConfigurationSourceDefinition struct {
 	sourceID        ContainerServiceConfigurationSourceID
 	path            string
@@ -746,10 +748,17 @@ func (c *CLIClient) resolveContainerService(ctx context.Context, serviceID strin
 }
 
 func (c *CLIClient) runContainerServiceAction(ctx context.Context, service ContainerService, method Method) error {
+	// Lifecycle commands wait for a VM or host service, unlike discovery probes.
+	// Share one budget across every step (including Podman stop/start).
+	ctx, cancel := context.WithTimeout(ctx, containerServiceActionTimeout)
+	defer cancel()
+	run := func(name string, args ...string) ([]byte, error) {
+		return c.runHostCommandEnvWithTimeout(ctx, containerServiceActionTimeout, nil, name, args...)
+	}
 	switch service.Implementation {
 	case ContainerServiceDockerDesktop:
 		action := strings.TrimPrefix(string(method), "container.services.")
-		_, err := c.runHostCommand(ctx, "docker", "desktop", action)
+		_, err := run("docker", "desktop", action)
 		return err
 	case ContainerServiceDockerEngine:
 		if service.serviceUnit == "" {
@@ -760,7 +769,7 @@ func (c *CLIClient) runContainerServiceAction(ctx context.Context, service Conta
 		if service.serviceUserUnit {
 			args = append([]string{"--user"}, args...)
 		}
-		_, err := c.runHostCommand(ctx, "systemctl", args...)
+		_, err := run("systemctl", args...)
 		return err
 	case ContainerServicePodmanMachine:
 		if invalidEndpointName(service.machineName) {
@@ -768,16 +777,16 @@ func (c *CLIClient) runContainerServiceAction(ctx context.Context, service Conta
 		}
 		switch method {
 		case MethodContainerServicesStart:
-			_, err := c.runHostCommand(ctx, "podman", "machine", "start", service.machineName)
+			_, err := run("podman", "machine", "start", service.machineName)
 			return err
 		case MethodContainerServicesStop:
-			_, err := c.runHostCommand(ctx, "podman", "machine", "stop", service.machineName)
+			_, err := run("podman", "machine", "stop", service.machineName)
 			return err
 		case MethodContainerServicesRestart:
-			if _, err := c.runHostCommand(ctx, "podman", "machine", "stop", service.machineName); err != nil {
+			if _, err := run("podman", "machine", "stop", service.machineName); err != nil {
 				return err
 			}
-			_, err := c.runHostCommand(ctx, "podman", "machine", "start", service.machineName)
+			_, err := run("podman", "machine", "start", service.machineName)
 			return err
 		}
 	}
@@ -1158,11 +1167,14 @@ func (c *CLIClient) runHostCommand(ctx context.Context, name string, args ...str
 }
 
 func (c *CLIClient) runHostCommandEnv(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+	return c.runHostCommandEnvWithTimeout(ctx, c.Timeout, env, name, args...)
+}
+
+func (c *CLIClient) runHostCommandEnvWithTimeout(ctx context.Context, timeout time.Duration, env []string, name string, args ...string) ([]byte, error) {
 	runner := c.Runner
 	if runner == nil {
 		runner = execRunner{}
 	}
-	timeout := c.Timeout
 	if timeout <= 0 {
 		timeout = defaultCommandTimeout
 	}

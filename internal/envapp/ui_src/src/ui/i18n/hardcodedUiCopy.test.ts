@@ -60,8 +60,6 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: "../../../desktop/src/welcome/App.tsx", kind: "expression", text: "/root/.redeven", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
   { file: "../../../desktop/src/welcome/App.tsx", kind: "placeholder", text: "https://github.com/floegence/redeven/releases", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
   { file: "../../../desktop/src/welcome/EnvironmentAccessWorkflow.tsx", kind: "expression", text: "HTTP", reason: "Standard protocol, platform, or measurement identifier." },
-  { file: "../../../desktop/src/welcome/GatewayMembersDialog.tsx", kind: "placeholder", text: "gateway.example, 192.168.1.10", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
-  { file: "../../../desktop/src/welcome/RuntimeGatewayJoinPanel.tsx", kind: "placeholder", text: "https://gateway.example:7443", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
   { file: "../../../desktop/src/welcome/SSHEnvironmentSettingsForm.tsx", kind: "placeholder", text: "$HOME/.redeven", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
   { file: "../../../desktop/src/welcome/SSHEnvironmentSettingsForm.tsx", kind: "placeholder", text: "https://github.com/floegence/redeven/releases", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
   { file: "../../flower_ui/src/FlowerChromeConnection.tsx", kind: "expression", text: "Alt+Home", reason: "Literal keyboard shortcut." },
@@ -208,7 +206,7 @@ function sourceFiles(root: string): readonly string[] {
       continue;
     }
     if (!entry.name.endsWith('.tsx')) continue;
-    if (/\.(?:test|spec|stories)\.tsx$/u.test(entry.name) || entry.name.includes('testHarness')) continue;
+    if (/\.(?:test(?:\.shared)?|spec|stories)\.tsx$/u.test(entry.name) || entry.name.includes('testHarness')) continue;
     files.push(resolved);
   }
   return files;

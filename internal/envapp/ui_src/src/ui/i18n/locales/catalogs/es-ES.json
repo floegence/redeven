@@ -3161,7 +3161,11 @@
       "outputFormatPlaceholder": "table {{.ID}}\t{{.Names}}",
       "proxyURLPlaceholder": "http://proxy.example.com:3128",
       "proxyBypassPlaceholder": "localhost,127.0.0.1,.example.com",
-      "credentialStorePlaceholder": "desktop"
+      "credentialStorePlaceholder": "desktop",
+      "lifecycleWait": "Iniciar, detener o reiniciar puede tardar hasta dos minutos. Puede seguir trabajando mientras termina la operación.",
+      "interruptionTitle": "Interrupción del servicio",
+      "interruptionMessage": "Los contenedores en ejecución y los servicios Web dependientes pueden interrumpirse.",
+      "configurationRisk": "Una configuración no válida puede impedir que se inicie el servicio de contenedores."
     },
     "views": {
       "containers": "Contenedores",
@@ -3520,7 +3524,23 @@
       "started": "Inicio",
       "errorTitle": "Falló la operación",
       "progressTitle": "Progreso",
-      "loadingProgress": "Cargando progreso…"
+      "loadingProgress": "Cargando progreso…",
+      "errors": {
+        "canceled": "Se canceló la operación.",
+        "engine_timeout": "El servicio no respondió a tiempo. Puede que aún se esté iniciando o deteniendo. Actualice su estado antes de volver a intentarlo.",
+        "engine_permission_denied": "Acceso denegado. Revise los permisos del usuario actual.",
+        "engine_unavailable": "El servicio de contenedores no está disponible. Revise su estado y vuelva a intentarlo.",
+        "container_service_configuration_conflict": "La configuración cambió. Vuelva a cargarla antes de guardarla.",
+        "service_recovery_required": "No se pudo recuperar el servicio. Revise su configuración en la herramienta de administración del host.",
+        "insufficient_storage": "No hay suficiente almacenamiento. Libere espacio y vuelva a intentarlo.",
+        "registry_rate_limited": "Se alcanzó el límite de solicitudes del registro de imágenes. Inicie sesión o inténtelo más tarde.",
+        "image_not_found": "No se encontró la imagen o la plataforma. Revise el nombre de la imagen y la plataforma.",
+        "registry_access_denied": "El registro de imágenes denegó el acceso. Revise el nombre de la imagen y el inicio de sesión.",
+        "registry_unavailable": "No se puede acceder al registro de imágenes. Revise la red.",
+        "preflight_stale": "El recurso cambió después de la revisión. Actualice y vuelva a revisar la operación.",
+        "reconciliation_required": "No se pudo confirmar el estado final. Actualice el estado del servicio antes de volver a intentarlo.",
+        "operation_failed": "No se pudo completar la operación. Revise el estado del servicio y vuelva a intentarlo."
+      }
     },
     "operationStates": {
       "queued": "En cola",
@@ -3544,7 +3564,13 @@
     },
     "review": {
       "title": "Revisar operación",
-      "operation": "Operación"
+      "operation": "Operación",
+      "risk": {
+        "low": "Riesgo bajo",
+        "medium": "Riesgo medio",
+        "high": "Riesgo alto",
+        "critical": "Riesgo crítico"
+      }
     },
     "prune": {
       "moreActions": "Más acciones",

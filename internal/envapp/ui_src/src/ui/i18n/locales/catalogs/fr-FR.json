@@ -3161,7 +3161,11 @@
       "outputFormatPlaceholder": "table {{.ID}}\t{{.Names}}",
       "proxyURLPlaceholder": "http://proxy.example.com:3128",
       "proxyBypassPlaceholder": "localhost,127.0.0.1,.example.com",
-      "credentialStorePlaceholder": "desktop"
+      "credentialStorePlaceholder": "desktop",
+      "lifecycleWait": "Le démarrage, l’arrêt ou le redémarrage peut prendre jusqu’à deux minutes. Vous pouvez continuer à travailler pendant ce temps.",
+      "interruptionTitle": "Interruption du service",
+      "interruptionMessage": "Les conteneurs en cours d’exécution et les services Web dépendants peuvent être interrompus.",
+      "configurationRisk": "Des paramètres invalides peuvent empêcher le démarrage du service de conteneurs."
     },
     "views": {
       "containers": "Conteneurs",
@@ -3520,7 +3524,23 @@
       "started": "Début",
       "errorTitle": "Échec de l’opération",
       "progressTitle": "Progression",
-      "loadingProgress": "Chargement de la progression…"
+      "loadingProgress": "Chargement de la progression…",
+      "errors": {
+        "canceled": "L’opération a été annulée.",
+        "engine_timeout": "Le service n’a pas répondu à temps. Il est peut-être encore en cours de démarrage ou d’arrêt. Actualisez son état avant de réessayer.",
+        "engine_permission_denied": "Accès refusé. Vérifiez les autorisations de l’utilisateur actuel.",
+        "engine_unavailable": "Le service de conteneurs est indisponible. Vérifiez son état et réessayez.",
+        "container_service_configuration_conflict": "La configuration a changé. Rechargez-la avant d’enregistrer.",
+        "service_recovery_required": "Le service n’a pas pu être rétabli. Vérifiez sa configuration dans l’outil de gestion de l’hôte.",
+        "insufficient_storage": "L’espace de stockage est insuffisant. Libérez de l’espace et réessayez.",
+        "registry_rate_limited": "La limite de requêtes du registre d’images est atteinte. Connectez-vous ou réessayez plus tard.",
+        "image_not_found": "L’image ou la plateforme est introuvable. Vérifiez le nom de l’image et la plateforme.",
+        "registry_access_denied": "Le registre d’images a refusé l’accès. Vérifiez le nom de l’image et votre connexion au registre.",
+        "registry_unavailable": "Le registre d’images est inaccessible. Vérifiez le réseau.",
+        "preflight_stale": "La ressource a changé après vérification. Actualisez et vérifiez à nouveau l’opération.",
+        "reconciliation_required": "L’état final n’a pas pu être confirmé. Actualisez l’état du service avant de réessayer.",
+        "operation_failed": "L’opération n’a pas pu aboutir. Vérifiez l’état du service et réessayez."
+      }
     },
     "operationStates": {
       "queued": "En attente",
@@ -3544,7 +3564,13 @@
     },
     "review": {
       "title": "Vérifier l’opération",
-      "operation": "Opération"
+      "operation": "Opération",
+      "risk": {
+        "low": "Risque faible",
+        "medium": "Risque modéré",
+        "high": "Risque élevé",
+        "critical": "Risque critique"
+      }
     },
     "prune": {
       "moreActions": "Plus d’actions",

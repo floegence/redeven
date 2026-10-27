@@ -512,6 +512,58 @@ describe('native Containers page', () => {
     },
   );
 
+  it('reviews a service start without exposing internal hashes and submits the original preflight', async () => {
+    const preflight = {
+      method: 'container.services.start', resource_kind: 'container_service',
+      request_hash: 'sha256:request-internal', plan_hash: 'sha256:plan-internal',
+      plan: { method: 'container.services.start', target: { name: 'Docker Desktop' }, risk_level: 'medium', risk_flags: [], requires_admin: true,
+        summary: ['Apply the reviewed lifecycle action to this container service'] },
+    };
+    harness.preflight.mockResolvedValue(preflight);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button'))
+      .find(button => button.textContent?.includes('containers.actions.start'))?.click();
+    await settle();
+    const dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
+    expect(dialog.textContent).toContain('Docker Desktop');
+    expect(dialog.textContent).toContain('containers.review.risk.medium');
+    expect(dialog.textContent).toContain('containers.services.lifecycleWait');
+    expect(dialog.textContent).not.toContain('sha256:');
+    expect(dialog.textContent).not.toContain('Apply the reviewed lifecycle');
+    expect(dialog.querySelector('.container-service-impact')).toBeNull();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent?.includes('containers.actions.run'))?.click();
+    await settle();
+    expect(harness.createOperation).toHaveBeenCalledWith(preflight, { engine: 'docker', service_id: 'container_service_docker' });
+  });
+
+  it.each(['engine_timeout', 'reconciliation_required', 'unrecognized_future_error'])(
+    'presents service operation failure %s with a readable identity and localized guidance', async (errorCode) => {
+      harness.listOperations.mockResolvedValue([{
+        operation_id: 'operation-service', method: 'container.services.start', engine: 'docker',
+        resource_kind: 'container_service', resource_identity: 'container_service_docker', state: 'failed',
+        error_code: errorCode, error_message: 'The container engine did not finish the operation in time.',
+        created_at_unix_ms: 1, updated_at_unix_ms: 11_001, finished_at_unix_ms: 11_001,
+      }]);
+      const host = document.createElement('div'); document.body.append(host);
+      dispose = render(() => <EnvContainersPage />, host);
+      await settle();
+      host.querySelector<HTMLButtonElement>('[aria-label="containers.operations.title"]')?.click();
+      await settle();
+      const drawer = host.querySelector<HTMLElement>('[data-drawer]')!;
+      expect(drawer.textContent).not.toContain('container_service_docker');
+      expect(drawer.textContent).not.toContain('The container engine');
+      expect(drawer.querySelector('.container-operation-error code')).toBeNull();
+      expect(drawer.querySelector('.container-operation-error')?.textContent).toContain(
+        'containers.operations.errors.' + (errorCode === 'unrecognized_future_error' ? 'operation_failed' : errorCode),
+      );
+    },
+  );
+
   it('retains the Desktop start control through health failures and recovery', async () => {
     const stopped = {
       service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'stopped',
