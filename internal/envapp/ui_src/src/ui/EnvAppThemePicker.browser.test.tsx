@@ -4,6 +4,8 @@ import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { EnvAppThemePicker } from './EnvAppThemePicker';
+import { I18nProvider } from './i18n';
+import { writeStoredLanguagePreference } from './i18n/storage';
 
 let dispose: (() => void) | undefined;
 afterEach(() => {
@@ -12,6 +14,40 @@ afterEach(() => {
   document.documentElement.removeAttribute('data-floe-shell-theme');
   document.documentElement.removeAttribute('data-floe-surface-style');
   document.documentElement.classList.remove('dark', 'light');
+  writeStoredLanguagePreference('system');
+});
+
+it.each([
+  ['en-US', 'Theme', 1100],
+  ['zh-CN', '主题', 1100],
+  ['zh-TW', '主題', 1100],
+  ['en-US', 'Theme', 320],
+  ['zh-CN', '主题', 320],
+  ['zh-TW', '主題', 320],
+] as const)('keeps the %s heading %s on one compact line at %i px', async (locale, title, width) => {
+  await page.viewport(width, 800);
+  writeStoredLanguagePreference(locale);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  dispose = render(() => <I18nProvider><FloeProvider config={{ storage: { enabled: false }, theme: { defaultTheme: 'dark', shellPresets: builtInShellThemePresets, defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS } }}>
+    <div class="flex justify-end p-4"><EnvAppThemePicker onSourceChange={() => true} onShellThemeChange={() => true} /></div>
+  </FloeProvider></I18nProvider>, host);
+  await expect.poll(() => host.querySelector('[data-envapp-theme-trigger]')).not.toBeNull();
+  host.querySelector<HTMLButtonElement>('[data-envapp-theme-trigger]')!.click();
+  const dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
+  await expect.poll(() => dialog.dataset.floatingPresence).toBe('open');
+  const heading = dialog.querySelector<HTMLElement>('h2')!;
+  const modes = dialog.querySelector<HTMLElement>('[role="radiogroup"]')!;
+  expect(heading.textContent).toBe(title);
+  expect(heading.parentElement?.textContent).toBe(title);
+  expect(dialog.querySelector('[id$="-mode-label"]')).toBeNull();
+  expect(modes.getAttribute('aria-label')).toBeTruthy();
+  const rect = heading.getBoundingClientRect();
+  expect(rect.height).toBeLessThanOrEqual(parseFloat(getComputedStyle(heading).lineHeight) + 1);
+  expect(modes.getBoundingClientRect().top - rect.bottom).toBeLessThanOrEqual(13);
+  expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+  expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+  await page.screenshot({ element: dialog });
 });
 
 it('paints feedback and keeps the workspace usable while the actual theme provider awaits a change', async () => {
@@ -39,7 +75,7 @@ it('paints feedback and keeps the workspace usable while the actual theme provid
     </>;
   }
   dispose = render(() => <FloeProvider config={{ storage: { enabled: false }, theme: { defaultTheme: 'dark', shellPresets: builtInShellThemePresets, defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS } }}><Workspace /></FloeProvider>, host);
-  await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe('porcelain-dark');
+  await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe(BUILT_IN_SHELL_THEME_DEFAULTS.dark);
   const draft = host.querySelector('textarea')!;
   draft.value = 'Keep this unsaved draft';
   draft.setSelectionRange(2, 6);
@@ -71,7 +107,7 @@ it('paints feedback and keeps the workspace usable while the actual theme provid
   expect([draft.selectionStart, draft.selectionEnd]).toEqual([2, 6]);
   trigger.click();
   host.querySelector<HTMLButtonElement>('[id$="-mode-light"]')!.click();
-  await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe('porcelain-light');
+  await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe(BUILT_IN_SHELL_THEME_DEFAULTS.light);
   expect(host.querySelector<HTMLElement>('[data-envapp-theme-preset]')?.dataset.envappThemePreset).toBe('porcelain-light');
 });
 

@@ -134,6 +134,23 @@ describe('EnvAppThemePicker', () => {
     }
   });
 
+  it('uses a single Theme heading above the accessibly named color modes', () => {
+    const { dispose } = mountPicker();
+    try {
+      openPicker();
+      const dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
+      const heading = dialog.querySelector('h2')!;
+      expect(heading.textContent).toBe('Theme');
+      expect(dialog.getAttribute('aria-label')).toBe('Theme');
+      expect(heading.parentElement?.textContent).toBe('Theme');
+      const modes = dialog.querySelector('[role="radiogroup"]')!;
+      expect(modes.getAttribute('aria-label')).toBe('Color mode');
+      expect(dialog.querySelector('[id$="-mode-label"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows all 13 light themes, including Cloud White', () => {
     const { dispose } = mountPicker();
     try {

@@ -333,24 +333,22 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
           }}
         >
           <Show when={props.presentation !== 'inline'}><div class="mb-3 min-w-0 pr-9">
-            <div class="min-w-0">
-              <h2 class="text-sm font-semibold text-foreground">{i18n.t('shell.themePicker.title')}</h2>
-              <p class="mt-0.5 break-words text-[11px] leading-snug text-muted-foreground">
-                {selectedPreset() ? presetLabel(i18n, selectedPreset()!) : activeMode()}
-              </p>
-            </div>
+            <h2 class="truncate text-sm font-semibold text-foreground">{i18n.t('shell.themePicker.title')}</h2>
           </div></Show>
 
           <div class="mb-3">
-            <div
-              id={`${modeGroupID}-label`}
-              class="mb-1.5 text-[10px] font-semibold uppercase text-muted-foreground"
-            >
-              {i18n.t('shell.themePicker.modeLabel')}
-            </div>
+            <Show when={props.presentation === 'inline'}>
+              <div
+                id={`${modeGroupID}-label`}
+                class="mb-1.5 text-[10px] font-semibold uppercase text-muted-foreground"
+              >
+                {i18n.t('shell.themePicker.modeLabel')}
+              </div>
+            </Show>
             <div
               role="radiogroup"
-              aria-labelledby={`${modeGroupID}-label`}
+              aria-label={props.presentation === 'inline' ? undefined : i18n.t('shell.themePicker.modeLabel')}
+              aria-labelledby={props.presentation === 'inline' ? `${modeGroupID}-label` : undefined}
               class="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/40 p-1"
             >
               <For each={THEME_SOURCE_OPTIONS}>

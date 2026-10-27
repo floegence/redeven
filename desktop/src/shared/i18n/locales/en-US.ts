@@ -870,7 +870,7 @@ export const enUS = {
     useLightTheme: 'Use light theme',
     themePicker: {
       openLabel: 'Appearance',
-      title: 'Appearance',
+      title: 'Theme',
       closeLabel: 'Close appearance',
       modeLabel: 'Color mode',
       mode: {

@@ -443,7 +443,7 @@
     },
     "themePicker": {
       "openLabel": "화면 모양",
-      "title": "화면 모양",
+      "title": "테마",
       "closeLabel": "화면 모양 설정 닫기",
       "commandDescription": "색상 모드와 사용 가능한 셸 테마를 선택합니다.",
       "modeLabel": "색상 모드",

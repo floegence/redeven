@@ -27,6 +27,16 @@ function mount() {
 function preset(name: string) { return document.querySelector<HTMLButtonElement>(`[data-desktop-theme-preset="${name}"]`)!; }
 
 describe('Desktop appearance interaction', () => {
+  it('uses a single Theme heading above the accessibly named color modes', () => {
+    mount();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('h2')?.textContent).toBe('Theme');
+    expect(dialog.getAttribute('aria-label')).toBe('Theme');
+    expect(dialog.querySelector('.redeven-theme-picker__header')?.textContent).toBe('Theme');
+    expect(dialog.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe('Color mode');
+    expect(dialog.querySelector('[id$="-mode-label"]')).toBeNull();
+  });
+
   it('selects Soft Black through the shared persistence request', async () => {
     const view = mount();
     preset('soft-black').click();

@@ -443,7 +443,7 @@
     },
     "themePicker": {
       "openLabel": "外观",
-      "title": "外观",
+      "title": "主题",
       "closeLabel": "关闭外观设置",
       "commandDescription": "选择颜色模式和可用的界面主题。",
       "modeLabel": "颜色模式",

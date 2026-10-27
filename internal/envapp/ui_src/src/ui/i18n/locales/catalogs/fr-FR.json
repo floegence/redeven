@@ -443,7 +443,7 @@
     },
     "themePicker": {
       "openLabel": "Apparence",
-      "title": "Apparence",
+      "title": "Thème",
       "closeLabel": "Fermer les réglages d’apparence",
       "commandDescription": "Choisissez un mode de couleur et l’un des thèmes d’interface disponibles.",
       "modeLabel": "Mode de couleur",

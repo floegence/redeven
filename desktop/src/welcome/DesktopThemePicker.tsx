@@ -352,12 +352,9 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
             </div>
 
             <div class="redeven-theme-picker__mode-section">
-              <div id={`${modeGroupID}-label`} class="redeven-theme-picker__section-label">
-                {props.i18n.t(translationKey('shell.themePicker.modeLabel'))}
-              </div>
               <div
                 role="radiogroup"
-                aria-labelledby={`${modeGroupID}-label`}
+                aria-label={props.i18n.t(translationKey('shell.themePicker.modeLabel'))}
                 class="redeven-theme-picker__mode-group"
               >
                 <For each={THEME_SOURCE_OPTIONS}>

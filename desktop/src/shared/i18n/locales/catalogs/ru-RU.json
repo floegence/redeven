@@ -1981,7 +1981,7 @@
     "useLightTheme": "Использовать светлую тему",
     "themePicker": {
       "openLabel": "Оформление",
-      "title": "Оформление",
+      "title": "Тема",
       "closeLabel": "Закрыть настройки оформления",
       "modeLabel": "Цветовой режим",
       "mode": {
