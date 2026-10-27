@@ -474,6 +474,44 @@ describe('native Containers page', () => {
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
   });
 
+  it.each([undefined, 'can_write', 'can_execute', 'can_admin'] as const)(
+    'keeps stopped Docker Desktop start available with permission gate %s',
+    async (missingPermission) => {
+      harness.permissions.is_owner = false;
+      if (missingPermission) harness.permissions[missingPermission] = false;
+      harness.listRuntimes.mockResolvedValue([{ engine: 'docker', state: 'stopped' }]);
+      harness.listServices.mockResolvedValue([{
+        service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'stopped',
+        capabilities: { start: true, stop: true, restart: true },
+        configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
+      }]);
+      const host = document.createElement('div');
+      document.body.append(host);
+      dispose = render(() => <EnvContainersPage />, host);
+      await settle();
+
+      host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click();
+      await settle();
+      const card = host.querySelector<HTMLElement>('.container-service-card')!;
+      expect(card.textContent).toContain('Docker Desktop');
+      expect(card.textContent).toContain('containers.services.states.stopped');
+      expect(card.querySelector('.container-service-card__guidance')).toBeNull();
+      const start = Array.from(card.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.includes('containers.actions.start'));
+      expect(start).toBeDefined();
+      expect(start?.disabled).toBe(Boolean(missingPermission));
+      start?.click();
+      await settle();
+      if (missingPermission) {
+        expect(harness.preflight).not.toHaveBeenCalled();
+      } else {
+        expect(harness.preflight).toHaveBeenCalledWith('container.services.start', {
+          engine: 'docker', service_id: 'container_service_desktop',
+        });
+      }
+    },
+  );
+
   it('keeps service cards stable while refreshing and uses matching geometry for the initial skeleton', async () => {
     const services = [{
       service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',

@@ -352,6 +352,9 @@ func serviceGeneration(version string, state ContainerServiceState) string {
 
 func (c *CLIClient) dockerDesktopState(ctx context.Context) (ContainerServiceState, bool) {
 	raw, err := c.runHostCommand(ctx, "docker", "desktop", "status", "--format", "json")
+	if errors.Is(err, ErrDaemonStopped) {
+		return ContainerServiceStateStopped, true
+	}
 	if err != nil {
 		return "", false
 	}
