@@ -3046,7 +3046,7 @@
       "retry": "再検出"
     },
     "runtimeStatus": {
-      "title": "コンテナサービスの状態"
+      "title": "コンテナエンジンサービスの状態"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "検出に失敗"
     },
     "services": {
-      "open": "サービスを管理",
-      "title": "コンテナサービス",
-      "description": "この環境で使用中の Docker と Podman サービスを管理します。",
-      "loadFailed": "コンテナサービスを読み込めませんでした",
+      "open": "エンジンサービスを管理",
+      "title": "コンテナエンジンサービス",
+      "description": "この環境の Docker と Podman のコンテナエンジンサービスを管理します。",
+      "loadFailed": "コンテナエンジンサービスを読み込めませんでした",
       "configure": "設定",
       "rootless": "Rootless",
       "restartRequired": "保存した設定を適用するには再起動が必要です",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "起動、停止、再起動には最大2分かかる場合があります。完了を待つ間も他の機能を利用できます。",
       "interruptionTitle": "サービスの中断",
       "interruptionMessage": "実行中のコンテナと依存する Web サービスが中断される場合があります。",
-      "configurationRisk": "無効な設定はコンテナサービスの起動を妨げることがあります。",
+      "configurationRisk": "設定が無効な場合、コンテナエンジンサービスが起動しないことがあります。",
       "lifecycle": {
         "starting": "起動中…",
         "stopping": "停止中…",
         "restarting": "再起動中…",
         "updating": "変更を適用中…",
-        "waiting": "サービスの応答を待っています。他の作業を続けられます。このカードは自動的に更新されます。",
+        "waiting": "エンジンの応答を待っています。状態は自動的に更新されます。",
         "desktopRecovery": "Docker Desktop の準備が完了していません。このコンピューターで Docker Desktop を開き、設定を完了するか起動エラーを解決してから、状態を確認してください。",
         "checkStatus": "状態を確認",
         "history": "操作履歴"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "リソースがありません",
-      "description": "現在、この種類のリソースを提供するアクティブなコンテナサービスはありません。",
+      "description": "このカテゴリのリソースを提供する稼働中のコンテナエンジンサービスはありません。",
       "filteredTitle": "一致するリソースがありません",
       "filteredDescription": "検索条件またはフィルターを変更して、他のリソースを表示してください。"
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "再起動ポリシー",
       "cpus": "CPU",
       "memory": "メモリ (MiB)",
-      "runtime": "コンテナサービス"
+      "runtime": "コンテナエンジン"
     },
     "detailTabs": {
       "overview": "概要",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}秒",
       "minutes": "{count}分",
       "layers": "レイヤー",
-      "service": "サービス",
+      "service": "コンテナエンジン",
       "duration": "所要時間",
       "started": "開始時刻",
       "errorTitle": "操作に失敗しました",
@@ -3540,7 +3540,7 @@
         "canceled": "操作はキャンセルされました。",
         "engine_timeout": "サービスが時間内に応答しませんでした。起動や停止が続いている可能性があります。再試行の前に状態を更新してください。",
         "engine_permission_denied": "アクセスが拒否されました。現在のユーザーの権限を確認してください。",
-        "engine_unavailable": "コンテナサービスを利用できません。状態を確認して再試行してください。",
+        "engine_unavailable": "コンテナエンジンサービスを利用できません。状態を確認してから再試行してください。",
         "container_service_configuration_conflict": "設定が変更されました。再読み込みしてから保存してください。",
         "service_recovery_required": "サービスを復旧できませんでした。ホストの管理ツールで設定を確認してください。",
         "insufficient_storage": "容量が不足しています。空き容量を確保して再試行してください。",

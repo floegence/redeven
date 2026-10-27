@@ -1340,7 +1340,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     }
   };
 
-  const selectedOperation = createMemo(() => operations().find((operation) => operation.operation_id === selectedOperationID()) ?? null);
+  const operationsByID = createMemo(() => new Map(operations().map(operation => [operation.operation_id, operation])));
+  const selectedOperation = createMemo(() => operationsByID().get(selectedOperationID()) ?? null);
 
   const mergeOperationEvent = (event: ContainerOperationEvent) => {
     setOperationEvents((current) => {
@@ -2275,6 +2276,13 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
       case 'operation_failed': return i18n.t('containers.operations.errors.operation_failed');
       default: return i18n.t('containers.operations.errors.operation_failed');
     }
+  };
+
+  const operationIcon = (method: string) => {
+    if (method.endsWith('.start')) return <Play class="h-4 w-4" />;
+    if (method.endsWith('.stop')) return <StopFilled class="h-4 w-4" />;
+    if (method.endsWith('.restart')) return <Refresh class="h-4 w-4" />;
+    return <Activity class="h-4 w-4" />;
   };
 
   const serviceOperationTitle = (operation: ContainerOperation): string => {
@@ -3817,7 +3825,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                 <div class="container-service-card__header">
                   <div class="container-service-card__mark"><ContainerServiceBrandMark engine={service().engine} remote={service().remote} /></div>
                   <div class="container-service-card__identity"><span>{runtimeName(service().engine)}</span><h3>{service().name}</h3><small>{i18n.t(`containers.services.implementations.${service().implementation}` as Parameters<typeof i18n.t>[0])}<Show when={service().version}> · {service().version}</Show><Show when={service().rootless}> · {i18n.t('containers.services.rootless')}</Show></small></div>
-                  <Tag variant={active() ? 'neutral' : service().state === 'running' ? 'success' : service().state === 'error' || service().state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{active() ? serviceOperationTitle(operation()!) : serviceStateLabel(service().state)}</Tag>
+                  <Show when={!active()}><Tag variant={service().state === 'running' ? 'success' : service().state === 'error' || service().state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{serviceStateLabel(service().state)}</Tag></Show>
                 </div>
                 <div class="container-service-card__body">
                   <Show when={service().restart_required}><div class="container-service-card__notice"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.restartRequired')}</div></Show>
@@ -3826,7 +3834,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                     <div class="container-service-operation__status" role="status" aria-live="polite">
                       <Show when={operationActive(item())} fallback={<AlertTriangle class="h-4 w-4" />}><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" /></Show>
                       <strong>{serviceOperationTitle(item())}</strong>
-                      <small>{operationDuration(item())}</small>
+                      <small class="container-service-operation__elapsed" title={i18n.t('containers.operations.duration')}>{operationDuration(item())}</small>
                     </div>
                     <Show when={serviceOperationMessage(item(), service())}><p>{serviceOperationMessage(item(), service())}</p></Show>
                     <div class="container-service-operation__actions">
@@ -3836,7 +3844,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                     </div>
                   </div>}</Show>
                 </div>
-                <div class="container-service-card__actions">
+                <div class="container-service-card__actions" hidden={Boolean(active())}>
                   <Show when={service().state !== 'running' && service().capabilities.start}><Button size="sm" onClick={() => runContainerServiceAction(service(), 'start')} disabled={service().state !== 'stopped' || Boolean(active()) || mutationBusy() || !canRWX() || !canAdmin()} title={service().state !== 'stopped' ? serviceGuidance(service()) || serviceStateLabel(service().state) : undefined}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button></Show>
                   <Show when={service().state === 'running' && service().capabilities.stop}><Button size="sm" variant="outline" onClick={() => runContainerServiceAction(service(), 'stop')} disabled={Boolean(active()) || mutationBusy() || !canRWX() || !canAdmin()}><StopFilled class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button></Show>
                   <Show when={service().state === 'running' && service().capabilities.restart}><Button size="sm" variant="outline" onClick={() => runContainerServiceAction(service(), 'restart')} disabled={Boolean(active()) || mutationBusy() || !canRWX() || !canAdmin()}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button></Show>
@@ -3921,28 +3929,39 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
         </Show>}>{renderContainerServicesPage()}</Show>
       </main>
 
-      <EnvAppDrawer class="container-operations-drawer" open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} bodyDescription={i18n.t('containers.operations.description')} bodyClass="min-h-0">
+      <EnvAppDrawer class="container-operations-drawer" open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.services.lifecycle.history')} bodyClass="container-operations-body">
         <div class="container-operations-workspace" data-container-operations>
-          <Show when={operations().length > 0} fallback={<div class="py-12 text-center text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('containers.operations.empty')}</div>}>
-            <div class="container-operation-list" role="listbox" aria-label={i18n.t('containers.operations.title')}>
-              <For each={operations()}>{(operation) => <button type="button" role="option" aria-selected={selectedOperationID() === operation.operation_id} class="container-operation-card" data-state={operation.state} onClick={() => setSelectedOperationID(operation.operation_id)}><span class="container-operation-card__state" aria-hidden="true" /><span class="min-w-0 flex-1 text-left"><strong>{operationLabel(operation.method)}</strong><small>{operationResourceName(operation)}</small><small>{i18n.formatRelativeTime(operation.updated_at_unix_ms)}</small></span><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></button>}</For>
-            </div>
-            <Show when={selectedOperation()} keyed>{(operation) => {
+          <Show when={operations().length > 0} fallback={<div class="container-operations-empty"><Activity class="h-6 w-6" /><p>{i18n.t('containers.operations.empty')}</p></div>}>
+            <nav class="container-operation-list" aria-label={i18n.t('containers.operations.title')}>
+              <div class="container-operation-list__heading"><span>{i18n.t('containers.operations.title')}</span><span>{operations().length}</span></div>
+              <For each={operations().map(operation => operation.operation_id)}>{(operationID) => <Show when={operationsByID().get(operationID)}>{(operation) =>
+                <button type="button" aria-pressed={selectedOperationID() === operationID} class="container-operation-card" data-state={operation().state} onClick={() => setSelectedOperationID(operationID)}>
+                <span class="container-operation-card__icon" aria-hidden="true">{operationIcon(operation().method)}</span>
+                <span class="container-operation-card__copy"><span class="container-operation-card__title"><strong>{operationLabel(operation().method)}</strong><span class="container-operation-state" data-state={operation().state}>{operationStateLabel(operation().state)}</span></span><small>{operationResourceName(operation())}</small><span class="container-operation-card__meta"><time>{i18n.formatRelativeTime(operation().updated_at_unix_ms)}</time><span>{operationDuration(operation())}</span></span></span>
+                </button>
+              }</Show>}</For>
+            </nav>
+            <Show when={selectedOperation()}>{(operation) => {
               const progress = () => latestOperationProgress();
-              const phase = () => operationActive(operation) ? (progress().phase || operation.state) : operation.state;
+              const phase = () => operationActive(operation()) ? (progress().phase || operation().state) : operation().state;
               const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().current / progress().total) * 100)) : 0;
-              return <section class="container-operation-detail" data-state={operation.state}>
-                <header><div><span>{operationLabel(operation.method)}</span><h3>{operationResourceName(operation)}</h3></div><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></header>
-                <Show when={operation.resource_kind !== 'container_service'}><div class="container-operation-progress" data-indeterminate={operationActive(operation) && progress().total === 0 ? 'true' : 'false'}>
-                  <div><strong>{operationPhaseLabel(phase())}</strong><Show when={operationActive(operation) && progress().total > 0}><span>{progress().summary}</span></Show></div>
-                  <div class="container-operation-progress__track" role="progressbar" aria-label={operationPhaseLabel(phase())} aria-valuemin={0} aria-valuemax={operationActive(operation) && progress().total ? progress().total : 100} aria-valuenow={operation.state === 'succeeded' ? 100 : operationActive(operation) && progress().total ? progress().current : undefined}><span style={{ width: operation.state === 'succeeded' ? '100%' : progress().total ? `${percent()}%` : undefined }} /></div>
+              const events = () => operation().resource_kind === 'container_service' ? operationEvents().filter(event => event.type !== 'progress') : operationEvents();
+              return <section class="container-operation-detail" data-state={operation().state}>
+                <header><div class="container-operation-detail__identity"><span>{runtimeName(operation().engine)} · {operationLabel(operation().method)}</span><h3>{operationResourceName(operation())}</h3></div><span class="container-operation-state" data-state={operation().state}>{operationStateLabel(operation().state)}</span></header>
+                <Show when={operation().resource_kind !== 'container_service'}><div class="container-operation-progress" data-indeterminate={operationActive(operation()) && progress().total === 0 ? 'true' : 'false'}>
+                  <div><strong>{operationPhaseLabel(phase())}</strong><Show when={operationActive(operation()) && progress().total > 0}><span>{progress().summary}</span></Show></div>
+                  <div class="container-operation-progress__track" role="progressbar" aria-label={operationPhaseLabel(phase())} aria-valuemin={0} aria-valuemax={operationActive(operation()) && progress().total ? progress().total : 100} aria-valuenow={operation().state === 'succeeded' ? 100 : operationActive(operation()) && progress().total ? progress().current : undefined}><span style={{ width: operation().state === 'succeeded' ? '100%' : progress().total ? `${percent()}%` : undefined }} /></div>
                 </div>
                 </Show>
-                <Show when={operation.resource_kind === 'container_service' && operationActive(operation)}><p class="container-service-card__guidance" role="status">{serviceOperationTitle(operation)} {i18n.t('containers.services.lifecycle.waiting')}</p></Show>
-                <dl class="container-operation-facts"><div><dt>{i18n.t('containers.operations.service')}</dt><dd>{runtimeName(operation.engine)}</dd></div><Show when={operation.resource_kind === 'container_service' && servicesByID().get(operation.resource_identity)}>{(service) => <div><dt>{i18n.t('containers.services.currentStatus')}</dt><dd>{serviceStateLabel(service().state)}</dd></div>}</Show><div><dt>{i18n.t('containers.operations.duration')}</dt><dd>{operationDuration(operation)}</dd></div><div><dt>{i18n.t('containers.operations.started')}</dt><dd>{formatDate(operation.started_at_unix_ms || operation.created_at_unix_ms)}</dd></div></dl>
-                <Show when={operation.error_code || operation.error_message}><div class="container-operation-error" role="alert"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.operations.errorTitle')}</strong><p>{operationErrorMessage(operation)}</p></div></div></Show>
-                <div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading()} fallback={<div class="container-operation-timeline__loading">{i18n.t('containers.operations.loadingProgress')}</div>}><For each={operation.resource_kind === 'container_service' ? operationEvents().filter(event => event.type !== 'progress') : operationEvents()}>{(event) => { const item = progressFromEvent(event); return <div class="container-operation-step" data-state={event.state}><span aria-hidden="true">{TERMINAL_OPERATION_STATES.has(event.state) && event.state !== 'succeeded' ? <X class="h-3 w-3" /> : <Check class="h-3 w-3" />}</span><div><strong>{operation.resource_kind === 'container_service' ? operationStateLabel(event.state) : operationPhaseLabel(item.phase)}</strong><Show when={item.total > 0}><small>{item.summary}</small></Show></div><time>{i18n.formatRelativeTime(event.created_at_unix_ms)}</time></div>; }}</For></Show></div>
-                <Show when={operationActive(operation)}><div class="container-operation-detail__actions"><Button size="sm" variant="outline" onClick={() => void cancelContainerOperation(operation.operation_id).then(loadOperations)} disabled={!canExecute()}>{i18n.t('containers.actions.cancel')}</Button></div></Show>
+                <Show when={operation().resource_kind === 'container_service' && operationActive(operation())}><div class="container-operation-live" role="status"><span class="container-operation-live__icon" aria-hidden="true"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" /></span><div><strong>{serviceOperationTitle(operation())}</strong><p>{i18n.t('containers.services.lifecycle.waiting')}</p></div><Button size="sm" variant="ghost" onClick={() => void cancelContainerOperation(operation().operation_id).then(loadOperations)} disabled={!canExecute() || operation().state === 'canceling'}>{i18n.t('containers.actions.cancel')}</Button></div></Show>
+                <dl class="container-operation-facts"><div><dt>{i18n.t('containers.operations.duration')}</dt><dd>{operationDuration(operation())}</dd></div><Show when={operation().resource_kind === 'container_service' && servicesByID().get(operation().resource_identity)}>{(service) => <div><dt>{i18n.t('containers.services.currentStatus')}</dt><dd>{serviceStateLabel(service().state)}</dd></div>}</Show><div class="container-operation-facts__started"><dt>{i18n.t('containers.operations.started')}</dt><dd>{formatDate(operation().started_at_unix_ms || operation().created_at_unix_ms)}</dd></div></dl>
+                <Show when={operation().error_code || operation().error_message}><div class="container-operation-error" role="alert"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.operations.errorTitle')}</strong><p>{operationErrorMessage(operation())}</p></div></div></Show>
+                <Show when={operationEventsLoading() || events().length > 0}><div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading()} fallback={<div class="container-operation-timeline__loading">{i18n.t('containers.operations.loadingProgress')}</div>}><ol><For each={events()}>{(event, index) => {
+                  const item = progressFromEvent(event);
+                  const current = () => operationActive(operation()) && index() === events().length - 1;
+                  return <li class="container-operation-step" data-state={event.state} data-current={current() ? 'true' : 'false'}><span aria-hidden="true"><Show when={current()} fallback={TERMINAL_OPERATION_STATES.has(event.state) && event.state !== 'succeeded' ? <X class="h-3 w-3" /> : <Check class="h-3 w-3" />}><Refresh class="h-3 w-3 animate-spin motion-reduce:animate-none" /></Show></span><div><strong>{operation().resource_kind === 'container_service' ? operationStateLabel(event.state) : operationPhaseLabel(item.phase)}</strong><Show when={item.total > 0}><small>{item.summary}</small></Show></div><time>{i18n.formatRelativeTime(event.created_at_unix_ms)}</time></li>;
+                }}</For></ol></Show></div></Show>
+                <Show when={operation().resource_kind !== 'container_service' && operationActive(operation())}><div class="container-operation-detail__actions"><Button size="sm" variant="outline" onClick={() => void cancelContainerOperation(operation().operation_id).then(loadOperations)} disabled={!canExecute() || operation().state === 'canceling'}>{i18n.t('containers.actions.cancel')}</Button></div></Show>
               </section>;
             }}</Show>
           </Show>

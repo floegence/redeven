@@ -3046,7 +3046,7 @@
       "retry": "Vérifier à nouveau"
     },
     "runtimeStatus": {
-      "title": "État des services de conteneurs"
+      "title": "État des services des moteurs de conteneurs"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "Échec de la détection"
     },
     "services": {
-      "open": "Gérer les services",
-      "title": "Services de conteneurs",
-      "description": "Gérez les services Docker et Podman actifs de cet environnement.",
-      "loadFailed": "Impossible de charger les services de conteneurs",
+      "open": "Gérer les services des moteurs",
+      "title": "Services des moteurs de conteneurs",
+      "description": "Gérez les services des moteurs Docker et Podman de cet environnement.",
+      "loadFailed": "Impossible de charger les services des moteurs de conteneurs",
       "configure": "Configurer",
       "rootless": "Sans privilèges",
       "restartRequired": "Un redémarrage est requis pour appliquer la configuration enregistrée",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "Le démarrage, l’arrêt ou le redémarrage peut prendre jusqu’à deux minutes. Vous pouvez continuer à travailler pendant ce temps.",
       "interruptionTitle": "Interruption du service",
       "interruptionMessage": "Les conteneurs en cours d’exécution et les services Web dépendants peuvent être interrompus.",
-      "configurationRisk": "Des paramètres invalides peuvent empêcher le démarrage du service de conteneurs.",
+      "configurationRisk": "Des paramètres invalides peuvent empêcher le démarrage du service du moteur de conteneurs.",
       "lifecycle": {
         "starting": "Démarrage…",
         "stopping": "Arrêt…",
         "restarting": "Redémarrage…",
         "updating": "Application des modifications…",
-        "waiting": "En attente de la réponse du service. Vous pouvez continuer à travailler ; cette carte se met à jour automatiquement.",
+        "waiting": "En attente du moteur. Le statut se met à jour automatiquement.",
         "desktopRecovery": "Docker Desktop n’est pas encore prêt. Ouvrez Docker Desktop sur cet ordinateur, terminez la configuration ou résolvez l’erreur de démarrage, puis vérifiez l’état ici.",
         "checkStatus": "Vérifier l’état",
         "history": "Historique des actions"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "Aucune ressource trouvée",
-      "description": "Aucun service de conteneurs actif n’expose actuellement cette catégorie de ressources.",
+      "description": "Aucun service actif de moteur de conteneurs ne fournit de ressources dans cette catégorie.",
       "filteredTitle": "Aucune ressource correspondante",
       "filteredDescription": "Modifiez la recherche ou les filtres pour afficher plus de ressources."
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "Politique de redémarrage",
       "cpus": "CPU",
       "memory": "Mémoire (Mio)",
-      "runtime": "Service de conteneurs"
+      "runtime": "Moteur de conteneurs"
     },
     "detailTabs": {
       "overview": "Vue d’ensemble",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}s",
       "minutes": "{count}min",
       "layers": "couches",
-      "service": "Service",
+      "service": "Moteur de conteneurs",
       "duration": "Durée",
       "started": "Début",
       "errorTitle": "Échec de l’opération",
@@ -3540,7 +3540,7 @@
         "canceled": "L’opération a été annulée.",
         "engine_timeout": "Le service n’a pas répondu à temps. Il est peut-être encore en cours de démarrage ou d’arrêt. Actualisez son état avant de réessayer.",
         "engine_permission_denied": "Accès refusé. Vérifiez les autorisations de l’utilisateur actuel.",
-        "engine_unavailable": "Le service de conteneurs est indisponible. Vérifiez son état et réessayez.",
+        "engine_unavailable": "Le service du moteur de conteneurs est indisponible. Vérifiez son état et réessayez.",
         "container_service_configuration_conflict": "La configuration a changé. Rechargez-la avant d’enregistrer.",
         "service_recovery_required": "Le service n’a pas pu être rétabli. Vérifiez sa configuration dans l’outil de gestion de l’hôte.",
         "insufficient_storage": "L’espace de stockage est insuffisant. Libérez de l’espace et réessayez.",

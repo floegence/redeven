@@ -153,6 +153,7 @@ import { ContainersPageSkeleton } from './ContainersPresentation';
 
 const mediaCommands = commands as unknown as {
   emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
+  installContainerServiceIconRoutes: () => Promise<void>;
 };
 
 async function settle(): Promise<void> {
@@ -185,7 +186,11 @@ function mount(variant: 'activity' | 'workbench' = 'activity', appearance: 'ligh
 describe('native Containers responsive product surface', () => {
   let dispose: (() => void) | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await mediaCommands.installContainerServiceIconRoutes();
+    const api = await import('../services/containerResourcesApi');
+    vi.mocked(api.listContainerOperationEvents).mockReset().mockResolvedValue([]);
+    vi.mocked(api.cancelContainerOperation).mockReset();
     browserHarness.scope = '';
     browserHarness.phase = () => 'ready';
     document.documentElement.classList.add('dark');
@@ -303,7 +308,7 @@ describe('native Containers responsive product surface', () => {
     }]);
     const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
     await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
-    const serviceToggle = mounted.host.querySelector<HTMLButtonElement>('[aria-label="Container services"], [aria-label="容器服务"], [aria-label="容器服務"]')!;
+    const serviceToggle = mounted.host.querySelector<HTMLButtonElement>('[aria-label="Container engine services"], [aria-label="容器引擎服务"], [aria-label="容器引擎服務"]')!;
     serviceToggle.click();
     await expect.poll(() => mounted.host.querySelector('.container-service-operation')?.textContent).toContain('Docker Desktop');
     const recovery = mounted.host.querySelector('.container-service-operation')?.textContent ?? '';
@@ -335,10 +340,10 @@ describe('native Containers responsive product surface', () => {
       created_at_unix_ms: Date.now() - 120000, updated_at_unix_ms: Date.now(), finished_at_unix_ms: Date.now(),
     }]);
     const copy = locale === 'zh-CN'
-      ? { services: '容器服务', check: '检查状态', history: '操作记录', stop: '停止', running: '运行中', current: '服务当前状态' }
+      ? { services: '容器引擎服务', check: '检查状态', history: '操作记录', stop: '停止', running: '运行中', current: '服务当前状态' }
       : locale === 'zh-TW'
-        ? { services: '容器服務', check: '檢查狀態', history: '操作記錄', stop: '停止', running: '執行中', current: '服務目前狀態' }
-        : { services: 'Container services', check: 'Check status', history: 'Operation history', stop: 'Stop', running: 'Running', current: 'Current service status' };
+        ? { services: '容器引擎服務', check: '檢查狀態', history: '操作記錄', stop: '停止', running: '執行中', current: '服務目前狀態' }
+        : { services: 'Container engine services', check: 'Check status', history: 'Operation history', stop: 'Stop', running: 'Running', current: 'Current service status' };
     const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
     await page.getByRole('button', { name: copy.services, exact: true }).click();
     await expect.element(page.getByRole('button', { name: copy.check, exact: true })).toBeVisible();
@@ -369,6 +374,108 @@ describe('native Containers responsive product surface', () => {
     expect(detail.textContent).not.toContain('engine_timeout');
   });
 
+  it.each([
+    [1440, 'zh-CN', 'dark'], [1440, 'en-US', 'light'],
+    [390, 'zh-CN', 'dark'], [390, 'zh-TW', 'light'],
+  ] as const)('presents active engine work and selectable history at %spx in %s %s', async (width, locale, appearance) => {
+    await page.viewport(width, 900);
+    window.localStorage.setItem('redeven_ui_language_preference', locale);
+    const api = await import('../services/containerResourcesApi');
+    vi.mocked(api.listContainerServices).mockResolvedValueOnce([{
+      service_id: 'desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'running', version: '29.0.1',
+      capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
+    }, {
+      service_id: 'remote', engine: 'podman', name: 'Remote Podman', implementation: 'remote', state: 'unreachable', remote: true, guidance_code: 'remote_host',
+      capabilities: { start: false, stop: false, restart: false }, configuration: { mode: 'unavailable' },
+    }]);
+    const now = Date.now();
+    const active = {
+      operation_id: 'current-restart', method: 'container.services.restart', engine: 'docker',
+      resource_kind: 'container_service', resource_identity: 'desktop', state: 'running',
+      created_at_unix_ms: now - 46000, started_at_unix_ms: now - 45000, updated_at_unix_ms: now,
+    };
+    const history = [active, ...[1, 2].map(index => ({ ...active, operation_id: `failed-${index}`, method: 'container.services.start',
+      state: 'failed', error_code: 'engine_timeout', error_message: 'private diagnostic',
+      created_at_unix_ms: now - index * 300000 - 120000, started_at_unix_ms: now - index * 300000 - 120000,
+      updated_at_unix_ms: now - index * 300000, finished_at_unix_ms: now - index * 300000,
+    }))];
+    browserHarness.listOperations.mockResolvedValue(history);
+    vi.mocked(api.listContainerOperationEvents).mockImplementation(async operationID => [
+      { sequence: 1, operation_id: operationID, type: 'state', state: 'queued', created_at_unix_ms: now - 46000 },
+      { sequence: 2, operation_id: operationID, type: 'state', state: 'running', created_at_unix_ms: now - 45000 },
+      ...(operationID === active.operation_id ? [] : [{ sequence: 3, operation_id: operationID, type: 'state', state: 'failed' as const, created_at_unix_ms: now - 300000 }]),
+    ]);
+    const copy = locale === 'zh-CN'
+      ? { services: '容器引擎服务', history: '操作记录', active: '正在重启', cancel: '取消' }
+      : locale === 'zh-TW'
+        ? { services: '容器引擎服務', history: '操作記錄', active: '正在重新啟動', cancel: '取消' }
+        : { services: 'Container engine services', history: 'Operation history', active: 'Restarting', cancel: 'Cancel' };
+    const mounted = mount('activity', appearance); dispose = mounted.dispose;
+    await page.getByRole('button', { name: copy.services, exact: true }).click();
+    await expect.poll(() => mounted.host.querySelector('.container-service-operation')?.textContent).toContain(copy.active);
+    const card = mounted.host.querySelector<HTMLElement>('.container-service-card')!;
+    expect(card.querySelector('.container-service-card__header')?.textContent).not.toContain(copy.active);
+    expect(card.querySelector<HTMLElement>('.container-service-card__actions')?.hidden).toBe(true);
+    await expect.poll(() => [...mounted.host.querySelectorAll<HTMLImageElement>('.container-service-card img')].every(img => img.complete && img.naturalWidth > 0)).toBe(true);
+    for (const element of [card, ...card.querySelectorAll<HTMLElement>('.container-service-operation')]) {
+      expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    for (const animation of document.getAnimations()) if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    await settle();
+    await page.screenshot({ path: `__screenshots__/container-engine-active-${width}-${locale}-${appearance}.png` });
+    await page.getByRole('button', { name: copy.history, exact: true }).click();
+    await expect.element(page.getByRole('dialog', { name: copy.history, exact: true })).toBeVisible();
+    await expect.poll(() => document.querySelectorAll('.container-operation-step').length).toBe(2);
+    for (const animation of document.getAnimations()) if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    await settle();
+    const workspace = document.querySelector<HTMLElement>('[data-container-operations]')!;
+    const nav = workspace.querySelector<HTMLElement>('nav')!;
+    const detail = workspace.querySelector<HTMLElement>('.container-operation-detail')!;
+    expect(workspace.getBoundingClientRect().height).toBeGreaterThan(600);
+    expect(detail.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1);
+    expect(detail.scrollWidth).toBeLessThanOrEqual(detail.clientWidth + 1);
+    expect(workspace.querySelector('[role="progressbar"]')).toBeNull();
+    expect(workspace.querySelector('.container-operation-step[data-current="true"] .animate-spin')).not.toBeNull();
+    if (width === 390) {
+      expect(nav.scrollWidth).toBeGreaterThan(nav.clientWidth);
+      expect(detail.getBoundingClientRect().top).toBeGreaterThanOrEqual(nav.getBoundingClientRect().bottom);
+      expect(detail.querySelector('button')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
+    await page.screenshot({ path: `__screenshots__/container-engine-history-${width}-${locale}-${appearance}.png` });
+    const rows = [...nav.querySelectorAll<HTMLButtonElement>('button')];
+    if (width === 1440 && locale === 'zh-CN') {
+      rows[0].focus();
+      const previousCalls = browserHarness.listOperations.mock.calls.length;
+      browserHarness.listOperations.mockImplementation(async () => history.map(item => ({ ...item, updated_at_unix_ms: Date.now() })));
+      await expect.poll(() => browserHarness.listOperations.mock.calls.length, { timeout: 3500 }).toBeGreaterThan(previousCalls);
+      await settle();
+      expect(nav.querySelector('button')).toBe(rows[0]);
+      expect(document.activeElement).toBe(rows[0]);
+      expect(workspace.querySelector('.container-operation-detail')).toBe(detail);
+    }
+    rows[1].focus();
+    await userEvent.keyboard('{Enter}');
+    await expect.poll(() => rows[1].getAttribute('aria-pressed')).toBe('true');
+    await expect.poll(() => workspace.querySelector('.container-operation-detail')?.getAttribute('data-state')).toBe('failed');
+    expect(workspace.querySelector('.container-operation-live')).toBeNull();
+    expect(workspace.textContent).not.toContain('private diagnostic');
+    expect(workspace.querySelectorAll('.container-operation-step[data-current="true"]')).toHaveLength(0);
+    rows[0].focus();
+    await userEvent.keyboard('{Enter}');
+    await expect.poll(() => rows[0].getAttribute('aria-pressed')).toBe('true');
+    browserHarness.listOperations.mockResolvedValue([{ ...active, state: 'canceling' }, ...history.slice(1)]);
+    vi.mocked(api.cancelContainerOperation).mockResolvedValue({ ...active, engine: 'docker', state: 'canceling', request_id: 'request', request_hash: 'request', plan_hash: 'plan', cancel_requested: true });
+    await page.getByRole('dialog').getByRole('button', { name: copy.cancel, exact: true }).click();
+    expect(api.cancelContainerOperation).toHaveBeenCalledWith(active.operation_id);
+    await expect.element(page.getByRole('dialog').getByRole('button', { name: copy.cancel, exact: true })).toBeDisabled();
+    if (width === 1440 && locale === 'zh-CN') {
+      browserHarness.listOperations.mockResolvedValue([history[1]]);
+      await expect.poll(() => nav.querySelectorAll('button').length, { timeout: 3500 }).toBe(1);
+      await expect.poll(() => nav.querySelector('button')?.getAttribute('aria-pressed')).toBe('true');
+      expect(workspace.querySelector('.container-operation-detail')?.getAttribute('data-state')).toBe('failed');
+    }
+  });
+
   it('keeps active lifecycle controls stable across polling and revalidates success', async () => {
     const api = await import('../services/containerResourcesApi');
     const stopped = {
@@ -383,9 +490,10 @@ describe('native Containers responsive product surface', () => {
     browserHarness.listOperations.mockResolvedValue([operation]);
     const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
     await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
-    await page.getByRole('button', { name: 'Container services', exact: true }).click();
+    await page.getByRole('button', { name: 'Container engine services', exact: true }).click();
     await expect.poll(() => mounted.host.querySelector('.container-service-operation')?.textContent).toContain('Starting');
-    await expect.element(page.getByRole('button', { name: 'Start', exact: true })).toBeDisabled();
+    expect(mounted.host.querySelector<HTMLElement>('.container-service-card__actions')?.hidden).toBe(true);
+    await expect.element(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
     const cancel = mounted.host.querySelector('.container-service-operation button');
     const previousCalls = browserHarness.listOperations.mock.calls.length;
     browserHarness.listOperations.mockImplementation(async () => [{ ...operation, updated_at_unix_ms: Date.now() }]);
@@ -569,7 +677,7 @@ describe('native Containers responsive product surface', () => {
     await settle();
     const workspace = document.querySelector<HTMLElement>('[data-container-operations]')!;
     expect(workspace.closest('[data-container-page]')).toBeNull();
-    const card = workspace.querySelector<HTMLElement>('.container-operation-card[aria-selected="false"]')!;
+    const card = workspace.querySelector<HTMLElement>('.container-operation-card[aria-pressed="false"]')!;
     const idleBackground = getComputedStyle(card).backgroundColor;
     await page.elementLocator(card).hover();
     await expect.poll(() => getComputedStyle(card).backgroundColor).not.toBe(idleBackground);
@@ -1223,7 +1331,7 @@ describe('native Containers responsive product surface', () => {
     await settle();
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
-    root.querySelector<HTMLButtonElement>('[aria-label="Container services"]')?.click();
+    root.querySelector<HTMLButtonElement>('[aria-label="Container engine services"]')?.click();
     await settle();
 
     const servicePage = root.querySelector<HTMLElement>('[data-container-services-page]')!;
@@ -1260,7 +1368,7 @@ describe('native Containers responsive product surface', () => {
     mounted.host.style.right = 'auto';
     await settle();
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
-    root.querySelector<HTMLButtonElement>('[aria-label="Container services"]')!.click();
+    root.querySelector<HTMLButtonElement>('[aria-label="Container engine services"]')!.click();
     await settle();
     const grid = root.querySelector<HTMLElement>('.container-services-grid')!;
     expect(getComputedStyle(grid).gridTemplateColumns.split(' ')).toHaveLength(1);
@@ -1276,7 +1384,7 @@ describe('native Containers responsive product surface', () => {
     await settle();
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
-    root.querySelector<HTMLButtonElement>('[aria-label="Container services"]')?.click();
+    root.querySelector<HTMLButtonElement>('[aria-label="Container engine services"]')?.click();
     await settle();
 
     const servicePage = root.querySelector<HTMLElement>('[data-container-services-page]')!;
@@ -1289,8 +1397,8 @@ describe('native Containers responsive product surface', () => {
     const secondActions = cards[1].querySelector<HTMLElement>('.container-service-card__actions')!;
     expect(Math.abs(cards[0].getBoundingClientRect().height - cards[1].getBoundingClientRect().height)).toBeLessThanOrEqual(1);
     expect(Math.abs(firstActions.getBoundingClientRect().bottom - secondActions.getBoundingClientRect().bottom)).toBeLessThanOrEqual(1);
-    expect(cards[0].getBoundingClientRect().bottom - firstActions.getBoundingClientRect().bottom).toBeLessThanOrEqual(18);
-    expect(cards[1].getBoundingClientRect().bottom - secondActions.getBoundingClientRect().bottom).toBeLessThanOrEqual(18);
+    expect(cards[0].getBoundingClientRect().bottom - firstActions.getBoundingClientRect().bottom).toBeLessThanOrEqual(22);
+    expect(cards[1].getBoundingClientRect().bottom - secondActions.getBoundingClientRect().bottom).toBeLessThanOrEqual(22);
 
     Array.from(cards[0].querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Configure'))?.click();
     await settle();

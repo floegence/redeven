@@ -3039,14 +3039,14 @@
     "resourceNavigation": "容器資源",
     "loading": "正在載入容器資源…",
     "engineState": {
-      "unavailableTitle": "未偵測到容器服務",
+      "unavailableTitle": "未偵測到容器引擎服務",
       "unavailableDescription": "系統中未安裝、未啟動或無法連線至 {engine}。",
-      "permissionTitle": "無權存取容器服務",
-      "permissionDescription": "Redeven 無法存取 {engine}，請檢查目前使用者的容器服務權限。",
+      "permissionTitle": "無權存取容器引擎服務",
+      "permissionDescription": "Redeven 無法存取 {engine}，請檢查目前使用者的容器引擎服務權限。",
       "retry": "重新偵測"
     },
     "runtimeStatus": {
-      "title": "容器服務狀態"
+      "title": "容器引擎服務狀態"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "偵測失敗"
     },
     "services": {
-      "open": "管理服務",
-      "title": "容器服務",
-      "description": "管理此環境中正在使用的 Docker 與 Podman 服務。",
-      "loadFailed": "無法載入容器服務",
+      "open": "管理引擎服務",
+      "title": "容器引擎服務",
+      "description": "管理此環境中的 Docker 與 Podman 容器引擎服務。",
+      "loadFailed": "無法載入容器引擎服務",
       "configure": "設定",
       "rootless": "無根模式",
       "restartRequired": "需要重新啟動才能套用已儲存的設定",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "啟動、停止或重新啟動最多可能需要兩分鐘。等待期間可繼續使用其他功能。",
       "interruptionTitle": "服務中斷",
       "interruptionMessage": "執行中的容器及相依的 Web 服務可能會中斷。",
-      "configurationRisk": "無效設定可能導致容器服務無法啟動。",
+      "configurationRisk": "無效設定可能導致容器引擎服務無法啟動。",
       "lifecycle": {
         "starting": "正在啟動…",
         "stopping": "正在停止…",
         "restarting": "正在重新啟動…",
         "updating": "正在套用變更…",
-        "waiting": "正在等待服務回應。你可以繼續其他工作，此卡片會自動更新。",
+        "waiting": "正在等待引擎回應，狀態會自動更新。",
         "desktopRecovery": "Docker Desktop 尚未就緒。請在這部電腦上開啟 Docker Desktop，完成設定或處理啟動錯誤後，再檢查狀態。",
         "checkStatus": "檢查狀態",
         "history": "操作記錄"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "找不到資源",
-      "description": "目前沒有可用的容器服務提供此類資源。",
+      "description": "目前沒有可用的容器引擎服務提供此類資源。",
       "filteredTitle": "沒有符合的資源",
       "filteredDescription": "調整搜尋字詞或篩選條件，以查看更多資源。"
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "重新啟動原則",
       "cpus": "CPU",
       "memory": "記憶體 (MiB)",
-      "runtime": "容器服務"
+      "runtime": "容器引擎服務"
     },
     "detailTabs": {
       "overview": "概覽",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}秒",
       "minutes": "{count}分鐘",
       "layers": "層",
-      "service": "容器服務",
+      "service": "容器引擎",
       "duration": "耗時",
       "started": "開始時間",
       "errorTitle": "操作失敗",
@@ -3540,7 +3540,7 @@
         "canceled": "操作已取消。",
         "engine_timeout": "服務未在時限內回應，可能仍在啟動或停止。請先重新整理狀態，再決定是否重試。",
         "engine_permission_denied": "存取遭拒。請檢查目前使用者的權限。",
-        "engine_unavailable": "容器服務無法使用。請檢查狀態後重試。",
+        "engine_unavailable": "容器引擎服務無法使用。請檢查狀態後重試。",
         "container_service_configuration_conflict": "設定已變更。請重新載入後再儲存。",
         "service_recovery_required": "服務未能復原。請在主機管理工具中檢查設定。",
         "insufficient_storage": "儲存空間不足。請釋出空間後重試。",
