@@ -21691,6 +21691,7 @@
       "frontmatter": {
         "description": "Gateway enrollment, connection ownership and consent.",
         "lifecycle": "contract",
+        "quality_exception": "Cross-boundary consent contract spanning enrollment, welcome task ownership, and management presentation; each surface keeps its own authority check inside one Desktop interaction.",
         "reviewed_at": "2026-10-27",
         "tags": [
           "desktop",
@@ -29289,6 +29290,7 @@
       "frontmatter": {
         "description": "One workspace facts stream, two bounded reading interests, and one indexed ThreadCache.",
         "lifecycle": "contract",
+        "quality_exception": "Cross-boundary live-state contract spanning stream ownership, bounded reading interests, delivery and body caching, immediate send feedback, and recovery inside one timeline concept.",
         "reviewed_at": "2026-10-27",
         "tags": [
           "flower",
@@ -33779,5 +33781,5 @@
       ]
     }
   ],
-  "source_sha256": "c6f6adf6d759209ba98f32a2449156217a3a4ab7367d541fdbe242f35e94814e"
+  "source_sha256": "5db708e2bcc51adbf884cd557ad8eb2291b88b58cc24861919c500691a353965"
 }

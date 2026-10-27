@@ -6,6 +6,7 @@ tags: [ui, flower, live, threads]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
+quality_exception: Cross-boundary live-state contract spanning stream ownership, bounded reading interests, delivery and body caching, immediate send feedback, and recovery inside one timeline concept.
 ---
 # Summary
 
