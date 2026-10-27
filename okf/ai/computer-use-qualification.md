@@ -5,7 +5,7 @@ description: Establish scope-specific evidence for decoded frames, real target i
 tags: [ai, computer-use, desktop, testing]
 timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -33,7 +33,15 @@ Foreground macOS and credentialed model qualification remain explicit runs; the 
 ## Real DeepSeek reliability acceptance
 `TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.
 
-Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1); use -parallel 3 for independent isolated cases. Twelve scenarios include key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts and conditional waits.
+Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1); use -parallel 3 for independent isolated cases. Fifteen scenarios include key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks and strict timeout termination.
+
+Natural tasks use the production default tool surface. Only the legacy default-wait
+case explicitly retains its primitive. Read canonical tool results through
+ThreadToolResultReader, decoding Floret's error-status ERROR prefix before the
+host JSON envelope. Diagnostic assertions require data.script_error; echoed
+scripts, logs and final prose cannot satisfy them. Retain plain pre-dispatch
+runtime rejections separately; never infer script diagnostics from their text.
+Count fixture events separately.
 
 Diagnostic scenarios specify the required operations, while table and download
 tasks exercise autonomous planning. Verify returned tool payloads and counted

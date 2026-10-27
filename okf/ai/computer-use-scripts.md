@@ -84,6 +84,8 @@ Native targets reject these browser reads inside scripts before adapter dispatch
 
 scroll_progress belongs to the scroll return value. It reports immediate
 before/after measurements, with null or unchanged values remaining inconclusive.
+The core help demonstrates awaited node reads and logging the returned scroll
+result; node and snapshot objects do not carry scroll measurements.
 
 Repeated identical observations in the same script namespace/document/scope
 receive a bounded advisory after two repeats. This never replays input, changes
