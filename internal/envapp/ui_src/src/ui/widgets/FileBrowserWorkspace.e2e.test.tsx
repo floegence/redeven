@@ -448,7 +448,7 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('keeps filter feedback above while the shared status bar owns the filtered item count', async () => {
+  it('keeps filter feedback only in the shared status bar', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -481,8 +481,8 @@ describe('FileBrowserWorkspace interactions', () => {
 
       const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
       const statusBar = host.querySelector('[data-file-browser-status-bar="true"]') as HTMLElement | null;
-      expect(headerStatus?.textContent).toBe('Filter active');
-      expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
+      expect(headerStatus).toBeNull();
+      expect(host.textContent).not.toContain('Filter active');
       expect(statusBar?.textContent).toContain('1 item');
       expect(statusBar?.textContent).toContain('Filtered view');
       expect(statusBar?.textContent).toContain('/');
@@ -2615,7 +2615,8 @@ describe('FileBrowserWorkspace interactions', () => {
       await flush();
 
       expect(filterInput!.value).toBe('current');
-      expect(host.textContent).toContain('Filter active');
+      expect(host.querySelector('[data-testid="file-browser-header-status"]')).toBeNull();
+      expect(host.querySelector('[data-file-browser-status-bar="true"]')?.textContent).toContain('Filtered view');
       expect(host.textContent).not.toContain('fresh.txt');
 
       setRevealRequest({
@@ -2629,7 +2630,8 @@ describe('FileBrowserWorkspace interactions', () => {
       await flush();
       await flush();
 
-      expect(host.textContent).not.toContain('Filter active');
+      expect(filterInput!.value).toBe('');
+      expect(host.querySelector('[data-file-browser-status-bar="true"]')?.textContent).not.toContain('Filtered view');
       expect(scrollIntoView).toHaveBeenCalled();
       expect(host.textContent).toContain('fresh.txt');
       expect(host.textContent).toContain('1 selected');

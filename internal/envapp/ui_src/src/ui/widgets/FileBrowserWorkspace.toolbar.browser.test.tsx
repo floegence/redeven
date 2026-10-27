@@ -54,6 +54,43 @@ it.each([16, 20])('aligns the sidebar and file toolbar dividers at a %s px root 
   }
 });
 
+it.each([360, 640, 1100])('keeps the header and content geometry stable while filtering at %s px', async width => {
+  await page.viewport(1280, 850);
+  const host = document.createElement('div');
+  host.style.cssText = `width:${width}px;height:560px`;
+  document.body.append(host);
+  dispose = render(() => <FloeConfigProvider><LayoutProvider>
+    <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={[
+      { id: 'readme', name: 'README.md', type: 'file', path: '/README.md' },
+      { id: 'notes', name: 'notes.txt', type: 'file', path: '/notes.txt' },
+    ]} currentPath="/" initialPath="/" instanceId="filter-geometry" resetKey={0} open={false} />
+  </LayoutProvider></FloeConfigProvider>, host);
+  const header = host.querySelector<HTMLElement>('.file-workspace-header')!;
+  const toolbar = host.querySelector<HTMLElement>('[data-toolbar-layout]')!;
+  const content = host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+  const statusBar = host.querySelector<HTMLElement>('[data-file-browser-status-bar="true"]')!;
+  const filter = host.querySelector<HTMLInputElement>('input[aria-label="Filter files"]')!;
+  await expect.poll(() => toolbar.dataset.toolbarLayout).toBe(width >= 800 ? 'inline' : 'stacked');
+  await document.fonts.ready;
+  await paint();
+  const geometry = () => [header, content].map(element => {
+    const rect = element.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom, height: rect.height };
+  });
+  const before = geometry();
+  for (const [query, count] of [['README', '1 item'], ['missing', '0 items'], ['', '2 items']]) {
+    filter.value = query;
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true, data: query }));
+    await expect.poll(() => statusBar.textContent).toContain(count);
+    await paint();
+    expect(geometry()).toEqual(before);
+    expect(host.querySelector('[data-testid="file-browser-header-status"]')).toBeNull();
+    expect(statusBar.textContent?.includes('Filtered view')).toBe(Boolean(query));
+    expect(content.textContent?.includes('README.md')).toBe(query !== 'missing');
+    expect(content.textContent?.includes('notes.txt')).toBe(query === '');
+  }
+});
+
 it('retains action geometry across width changes and adjacent insertions', async () => {
   await page.viewport(1280, 850);
   const host = document.createElement('div');

@@ -124,10 +124,6 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
     return path !== '/' && path !== '';
   };
   const toolbarLayout = createMemo(() => resolveFileBrowserToolbarLayout(toolbarSize()?.width ?? 0));
-  const hasHeaderStatus = () => (
-    Boolean(browser.filterQueryApplied().trim())
-    || Boolean(props.pathStatusText?.trim())
-  );
 
   return (
     <div class={cn('file-workspace-header shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
@@ -237,17 +233,9 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
         </div>
       </div>
 
-      <Show when={hasHeaderStatus()}>
+      <Show when={props.pathStatusText?.trim()}>
         <div data-testid="file-browser-header-status" class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-          <Show when={browser.filterQueryApplied().trim()}>
-            <span>{i18n.t('files.filterActive')}</span>
-          </Show>
-          <Show when={props.pathStatusText?.trim()}>
-            <Show when={Boolean(browser.filterQueryApplied().trim())}>
-              <span aria-hidden="true">·</span>
-            </Show>
-            <span id={pathStatusId} class={props.pathStatusTone === 'error' ? 'text-destructive' : undefined}>{props.pathStatusText}</span>
-          </Show>
+          <span id={pathStatusId} class={props.pathStatusTone === 'error' ? 'text-destructive' : undefined}>{props.pathStatusText}</span>
         </div>
       </Show>
     </div>
