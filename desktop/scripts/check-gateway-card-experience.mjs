@@ -46,15 +46,21 @@ try {
     await card.waitFor();
     const rows = await library.locator('[data-gateway-id]').evaluateAll(cards => cards.map(card => {
       const rect = card.getBoundingClientRect();
-      return { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width, parentWidth: card.parentElement.getBoundingClientRect().width };
+      const parent = card.parentElement;
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width,
+        parentWidth: parent.getBoundingClientRect().width, columns: getComputedStyle(parent).gridTemplateColumns.split(' ').length };
     }));
     assert.equal(rows.length, 3);
     for (const [index, row] of rows.entries()) {
-      assert.ok(Math.abs(row.width - row.parentWidth) <= 2, 'Each Gateway fills one complete row');
-      if (index) assert.ok(row.top >= rows[index - 1].bottom, 'Gateways never share a row');
+      assert.ok(row.width <= row.parentWidth && Math.abs(row.width - rows[0].width) <= 1, 'Gateway columns have equal bounded widths');
+      if (row.columns === 1) assert.ok(Math.abs(row.width - row.parentWidth) <= 2, 'Narrow layouts use one full-width column');
+      if (index) {
+        const previous = rows[index - 1];
+        assert.ok(Math.abs(row.top - previous.top) <= 1 ? row.left >= previous.right : row.top >= previous.bottom, 'Card columns and rows never overlap');
+      }
     }
     assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.directoryPending')));
-    assert.equal(await card.locator('.redeven-gateway-card__add').count(), 0, 'Gateway access actions stay in More actions');
+    assert.equal(await card.locator('.redeven-gateway-enrollment-actions').count(), 1, 'Enrollment actions remain visible on managed Gateways');
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
     for (const button of await library.locator('button[data-floe-control="button"]').all()) {
       const geometry = await button.evaluate(el => ({ overflow: el.scrollWidth - el.clientWidth, enrollment: !!el.closest('.redeven-gateway-enrollment-actions'), whiteSpace: getComputedStyle(el).whiteSpace }));
@@ -133,7 +139,7 @@ try {
     await popover.locator('[aria-current="step"]').getByText(i18n.t('progress.preparingGatewayPackage'), { exact: true }).waitFor();
     assert.equal(await popover.locator('.redeven-environment-progress__step').count(), 2);
     const popoverBounds = await popover.boundingBox();
-    assert.ok(popoverBounds.y >= 0 && popoverBounds.y + popoverBounds.height <= 1050, 'Progress fits the viewport from its main-row anchor');
+    assert.ok(popoverBounds.y >= 0 && popoverBounds.y + popoverBounds.height <= 1050, 'Progress fits the viewport from its status-footer anchor');
     assert.equal(await trigger.locator('svg').count(), 1, 'Progress must retain one icon');
     assert.equal(await trigger.getAttribute('data-floe-progress-shimmer'), 'surface');
     assert.notEqual(await popover.evaluate(el => getComputedStyle(el).animationName), 'none');
