@@ -262,6 +262,48 @@ describe('continuous history navigation', () => {
       expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
     } finally { root.scroll.dispose(); root.dispose(); viewport.remove(); }
   });
+  it.each(['flower-chat-transcript', 'flower-subagent-detail-transcript'])('consumes automatic folding room with growth and releases it on explicit navigation in %s', async className => {
+    await page.viewport(1280, 900);
+    const viewport = document.createElement('div');
+    viewport.className = className;
+    viewport.style.cssText = 'position:fixed;inset:0 auto auto 0;width:600px;height:500px;display:block;padding:0;';
+    const stack = document.createElement('div');
+    stack.style.height = '1400px';
+    viewport.append(stack); document.body.append(viewport);
+    const root = createRoot(dispose => ({ dispose, scroll: createFlowerScrollTailController({
+      reducedMotionPreferred: () => false, requestAnimationFrame: callback => requestAnimationFrame(callback), cancelAnimationFrame: id => cancelAnimationFrame(id),
+    }) }));
+    root.scroll.bind(viewport); root.scroll.scrollToBottom();
+    const offset = viewport.scrollTop;
+    const space = () => parseFloat(viewport.style.getPropertyValue('--flower-reading-tail-space')) || 0;
+    try {
+      expect(offset).toBe(900);
+      root.scroll.preserveCollapseOffset(); stack.style.height = '1100px';
+      root.scroll.preserveCollapseOffset(); stack.style.height = '1000px';
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      expect(viewport.scrollTop).toBe(offset);
+      expect(space()).toBe(400);
+      stack.style.height = '1200px'; root.scroll.measureAfterLayout();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      expect(viewport.scrollTop).toBe(offset); expect(space()).toBe(200);
+      stack.style.height = '1500px'; root.scroll.measureAfterLayout();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      expect(viewport.scrollTop).toBe(1000); expect(space()).toBe(0);
+      root.scroll.preserveCollapseOffset(); stack.style.height = '1100px';
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      expect(space()).toBe(400);
+      root.scroll.onWheel({ target: viewport, deltaY: -200 } as unknown as WheelEvent);
+      viewport.scrollTop -= 200; root.scroll.onScroll(); root.scroll.measureAfterLayout();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      expect(viewport.scrollTop).toBe(800); expect(root.scroll.followingLatest()).toBe(false);
+      root.scroll.scrollToBottom({ smooth: true });
+      await waitFor(() => space() === 0);
+      expect(viewport.scrollTop).toBe(600);
+      root.scroll.preserveCollapseOffset(); root.scroll.dispose();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      expect(space()).toBe(0);
+    } finally { root.scroll.dispose(); root.dispose(); viewport.remove(); }
+  });
   it.each([1, 12])('keeps a short collapsed tail stationary while loading %i older turns', async count => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'short-collapsed-tail', messages: [] });

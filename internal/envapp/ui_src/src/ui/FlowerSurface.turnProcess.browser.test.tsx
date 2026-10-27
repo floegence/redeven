@@ -94,6 +94,23 @@ const hidden = (root: HTMLElement, id: string) => messageRow(root, id)?.querySel
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it('reserves the turn header while running and reveals it without shifting retained content', async () => {
+    const { root, live } = await mount();
+    const first = messageRow(root, 'thinking');
+    const header = first.querySelector<HTMLElement>('.flower-turn-summary');
+    expect(header).not.toBeNull();
+    expect(summary(root)).toBeNull();
+    const height = header!.getBoundingClientRect().height;
+    const toolButton = message(root, 'tool').querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
+    toolButton.focus({ preventScroll: true });
+    const top = message(root, 'progress').getBoundingClientRect().top;
+    live.push(current(true, { turns: [turn({ final_item_ids: ['final-a'] })], items: current(true).items!.filter(item => item.id !== 'final-b') }));
+    await waitFor(() => Boolean(summary(root)));
+    expect(first.querySelector('.flower-turn-summary')).toBe(header);
+    expect(header!.getBoundingClientRect().height).toBe(height);
+    expect(Math.abs(message(root, 'progress').getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+  });
+
   it('keeps the turn toggle before visible prose and independent of that row visibility', async () => {
     const done = current(true);
     const initial = { ...done, items: [done.items![0],

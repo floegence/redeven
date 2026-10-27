@@ -43,6 +43,7 @@ export type FlowerToolSequenceProjection = Readonly<{
   groups: ReadonlyMap<string, FlowerToolSequence>;
   members: ReadonlyMap<string, FlowerToolSequenceMember>;
   continuingEntries: ReadonlySet<string>;
+  headerKeys: ReadonlySet<string>;
 }>;
 
 function uniqueTurnsByID(turns: readonly FlowerRuntimeTurn[]): ReadonlyMap<string, FlowerRuntimeTurn> {
@@ -148,9 +149,13 @@ export function projectFlowerToolSequences(
   }
 
   const runs: { nodes: SequenceNode[]; outputComplete: boolean; countsComplete: boolean }[] = [];
+  const headerKeys = new Set<string>();
   let pending: SequenceNode[] = [];
   let startComplete = !coverage.hasBefore;
   const flush = (endComplete: boolean, completedScope = '') => {
+    // Reserve one header from the first candidate, including leading thinking.
+    // Its geometry cannot depend on a later tool proving this is a sequence.
+    if (pending.length) headerKeys.add(pending[0].key);
     if (pending.some(node => node.kind !== 'thinking')) runs.push({ nodes: pending,
       countsComplete: startComplete && endComplete,
       outputComplete: Boolean(completedScope) && pending[0].scope === completedScope });
@@ -224,7 +229,8 @@ export function projectFlowerToolSequences(
   const previousKeys = previous ? [...previous.groups.keys()] : [];
   if (previous && groups.size === previous.groups.size && members.size === previous.members.size
     && [...groups].every(([key, group], index) => previousKeys[index] === key && previous.groups.get(key) === group)
+    && headerKeys.size === previous.headerKeys.size && [...headerKeys].every(key => previous.headerKeys.has(key))
     && continuingEntries.size === previous.continuingEntries.size
     && [...continuingEntries].every(key => previous.continuingEntries.has(key))) return previous;
-  return { groups, members, continuingEntries };
+  return { groups, members, continuingEntries, headerKeys };
 }

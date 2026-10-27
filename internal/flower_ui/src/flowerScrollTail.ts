@@ -12,6 +12,7 @@ export type FlowerScrollTailController = Readonly<{
   followingLatest: Accessor<boolean>;
   viewport: () => HTMLDivElement | undefined;
   preserveLayoutAnchor: (title: HTMLElement) => void;
+  preserveCollapseOffset: () => void;
   restoreReadingAnchor: (title: HTMLElement, screenTop: number) => void;
   showLatest: Accessor<boolean>;
   latestPointerBlocked: Accessor<boolean>;
@@ -58,6 +59,10 @@ export function createFlowerScrollTailController(
   let knownScrollHeight = 0;
   let knownViewportHeight = 0;
   let readingTailSpace = 0;
+  // An automatic fold may shrink the scroll range. Keep its prior offset until
+  // new output fills the retained room or explicit navigation takes ownership.
+  let collapseOffset: number | undefined;
+  let collapseFlushQueued = false;
   let layoutFrame = 0;
   let pendingScroll: Readonly<{ smooth?: boolean; force?: boolean }> | undefined;
   let smoothScroll: { startedAt: number; startTop: number } | undefined;
@@ -157,6 +162,7 @@ export function createFlowerScrollTailController(
     if (title) anchor = readingAnchor(title);
   };
   const startFollowing = () => {
+    collapseOffset = undefined;
     clearAnchor();
     endUserScroll();
     cancelScheduledScroll();
@@ -172,6 +178,7 @@ export function createFlowerScrollTailController(
   const cancelScheduledScroll = () => { pendingScroll = undefined; };
   const cancelSmoothScroll = () => { smoothScroll = undefined; };
   const stopFollowing = () => {
+    collapseOffset = undefined;
     setFollowingLatest(false);
     userInterruptionRevision += 1;
     cancelScheduledScroll();
@@ -200,7 +207,7 @@ export function createFlowerScrollTailController(
     const extent = content.getBoundingClientRect().bottom - node.getBoundingClientRect().top
       - node.clientTop + node.scrollTop + (parseFloat(getComputedStyle(node).paddingBottom) || 0);
     const needed = Math.max(0, Math.ceil(top + node.clientHeight - extent));
-    setReadingTailSpace(anchor ? needed : Math.min(readingTailSpace, needed));
+    setReadingTailSpace(anchor || collapseOffset !== undefined ? needed : Math.min(readingTailSpace, needed));
   };
   // Resize, tail-follow, smooth scrolling and disclosure anchoring share one
   // read/write pass. Notifications never cancel and restart the frame deadline.
@@ -208,7 +215,7 @@ export function createFlowerScrollTailController(
     if (notify) layoutFrame = 0;
     const target = node;
     if (!target) return;
-    if (options.preparing?.()) setReadingTailSpace(0);
+    if (options.preparing?.()) { collapseOffset = undefined; setReadingTailSpace(0); }
     if (gesture() && !gesture()!.target.isConnected) finishGesture();
     const nativeDelta = target.scrollTop - knownScrollTop;
     // Native wheel scrolling can update scrollTop before dispatching scroll.
@@ -226,16 +233,17 @@ export function createFlowerScrollTailController(
     const anchorDelta = anchor ? anchor.title.getBoundingClientRect().top - anchor.top : 0;
     const request = pendingScroll;
     pendingScroll = undefined;
-    if (options.preparing?.()) cancelSmoothScroll();
+    if (options.preparing?.() || collapseOffset !== undefined) cancelSmoothScroll();
     else if (request?.smooth && !options.reducedMotionPreferred()) {
       smoothScroll = { startedAt: timestamp, startTop: scrollTop };
     }
-    let nextTop = scrollTop + anchorDelta;
-    if (!smoothScroll && (readingTailSpace || anchor && nextTop > Math.max(0, scrollHeight - viewportHeight))) {
+    let nextTop = collapseOffset ?? scrollTop + anchorDelta;
+    if (!smoothScroll && (collapseOffset !== undefined || readingTailSpace || anchor && nextTop > Math.max(0, scrollHeight - viewportHeight))) {
       preserveReadingRange(nextTop);
       scrollHeight = target.scrollHeight;
+      if (!readingTailSpace) collapseOffset = undefined;
     }
-    if (followingLatest() && (options.canFollowLatest?.() ?? true)) {
+    if (collapseOffset === undefined && followingLatest() && (options.canFollowLatest?.() ?? true)) {
       const returningWithSpace = Boolean(smoothScroll && readingTailSpace);
       const bottom = Math.max(0, scrollHeight - (returningWithSpace ? readingTailSpace : 0) - viewportHeight);
       if (smoothScroll && !options.reducedMotionPreferred()) {
@@ -433,6 +441,12 @@ export function createFlowerScrollTailController(
       input.viewportHeight = node.clientHeight;
       input.moved ||= moved;
       if (moved) {
+        // Empty reserved rows may have no hit-testable reading target. Move
+        // the existing anchor with the native input before trying to replace it.
+        if (anchor?.reading && externalDelta) {
+          anchor.top -= externalDelta;
+          for (const fallback of anchor.fallbacks ?? []) fallback.top -= externalDelta;
+        }
         direction = delta < 0 ? 'before' : 'after';
         options.onScrollIntent?.(direction);
         const current = gesture();
@@ -440,6 +454,10 @@ export function createFlowerScrollTailController(
         if (delta < 0) stopFollowing();
         if (delta > 0 && input.direction >= 0 && (isNearBottom() || reachedPreviousBottom)
           && (options.canFollowLatest?.() ?? true)) {
+          // Returning to the tail ends reading-anchor ownership. Otherwise
+          // a stale anchor can manufacture trailing room during the next page.
+          clearAnchor();
+          collapseOffset = undefined;
           setFollowingLatest(true);
           scheduleLayout();
         }
@@ -480,6 +498,7 @@ export function createFlowerScrollTailController(
     clearAnchor();
     endUserScroll();
     setReadingTailSpace(0);
+    collapseOffset = undefined;
     node = nextNode;
     knownScrollTop = node?.scrollTop ?? 0;
     knownScrollHeight = node?.scrollHeight ?? 0;
@@ -571,6 +590,22 @@ export function createFlowerScrollTailController(
     nearBottom,
     followingLatest,
     viewport: () => node,
+    preserveCollapseOffset: () => {
+      if (!node || !followingLatest() || options.preparing?.()) return;
+      collapseOffset ??= node.scrollTop;
+      // Disclosure effects settle in this checkpoint. Correct the shrunken
+      // range before rAF callbacks or the first exposed frame can observe it.
+      if (!collapseFlushQueued) {
+        collapseFlushQueued = true;
+        queueMicrotask(() => {
+          collapseFlushQueued = false;
+          if (collapseOffset !== undefined) flushLayout(false);
+        });
+      }
+      cancelSmoothScroll();
+      cancelScheduledScroll();
+      scheduleLayout();
+    },
     preserveLayoutAnchor: (title) => {
       if (!node?.contains(title) || followingLatest()) return;
       // Preserve the earliest uncorrected screen position across concurrent
@@ -611,6 +646,7 @@ export function createFlowerScrollTailController(
     scheduleTailScroll,
     scrollToBottom,
     dispose: () => {
+      collapseOffset = undefined;
       disconnect?.();
       setGesture(undefined);
       clearAnchor();
