@@ -17,12 +17,43 @@ function mount(perform: ReturnType<typeof vi.fn>) {
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   const [id, setID] = createSignal('gateway-one');
-  dispose = render(() => <GatewayClientsPanel gatewayID={id()} i18n={i18n} />, root);
+  const [enrolling, setEnrolling] = createSignal(false);
+  dispose = render(() => <GatewayClientsPanel gatewayID={id()} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
   return setID;
 }
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway client enrollment', () => {
+  it('requires an address and explicit issuance, preserves drafts, and copies complete client details', async () => {
+    const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [] });
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const [endpoints, setEndpoints] = createSignal([{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan' as const, priority: 0 }]);
+    const root = document.createElement('div'); document.body.append(root);
+    const [enrolling, setEnrolling] = createSignal(false);
+    dispose = render(() => <GatewayClientsPanel gatewayID="one" enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={endpoints()} i18n={i18n} />, root);
+    await settle(); button('gatewayExperience.connectClient').click();
+    const address = document.querySelector<HTMLInputElement>('input')!;
+    address.value = ''; address.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(button('gatewayClients.createCode').disabled).toBe(true);
+    address.value = 'https://draft.example:7443'; address.dispatchEvent(new Event('input', { bubbles: true }));
+    setEndpoints([{ ...endpoints()[0]!, address: 'https://new.example:7443' }]); await settle();
+    expect(address.value).toBe('https://draft.example:7443');
+    expect(perform).toHaveBeenCalledTimes(1);
+    perform.mockResolvedValueOnce({ ok: true, gateway_access_code: { access_code: 'client-only-code', expires_at_unix_ms: Date.now() + 600000 } });
+    button('gatewayClients.createCode').click(); await settle();
+    button('gatewayExperience.copyConnection').click(); await settle();
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('Gateway address: https://draft.example:7443\nClient access code: client-only-code');
+    button('gatewayJoin.back').click(); await settle();
+    expect(document.activeElement).toBe(button('gatewayExperience.connectClient'));
+    button('gatewayExperience.connectClient').click(); await settle();
+    expect(document.activeElement).toBe(address);
+    expect(address.value).toBe('https://draft.example:7443');
+    expect(document.body.textContent).toContain('client-only-code');
+    expect(perform).toHaveBeenCalledTimes(2);
+  });
+
   it('loads clients and requires a second action before revocation', async () => {
     const client = { client_key_id: 'client-one', client_name: 'Studio', paired_at_unix_ms: 1, last_verified_at_unix_ms: 2, revoked_at_unix_ms: 0 };
     const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [client] });
@@ -43,6 +74,7 @@ describe('Gateway client enrollment', () => {
     mount(perform); await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector('details')?.open).toBe(false);
     perform.mockResolvedValueOnce({ ok: true, gateway_access_code: { access_code: 'one-use', expires_at_unix_ms: Date.now() + 600000 } });
+    button('gatewayExperience.connectClient').click();
     button('gatewayClients.createCode').click(); await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('10:00');
     expect(button('common.copy').disabled).toBe(false);

@@ -9,6 +9,7 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
 
 let dispose: (() => void) | undefined;
+let showMembers: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
 const i18n = createDesktopI18n('en-US');
 const gateway: DesktopGatewaySource = {
@@ -19,12 +20,16 @@ const gateway: DesktopGatewaySource = {
   permissions: catalogFixture.gateway.permissions, policy: catalogFixture.policy, member_endpoints: catalogFixture.gateway.member_endpoints, environments: [memberFixture],
 };
 function button(label: string) {
+  if (label === i18n.t('gatewayMembers.createInvitation') && !document.querySelector('[data-gateway-invite-others]:not([hidden])')) {
+    document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')?.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="' + i18n.t('gatewayExperience.otherRuntime') + '"]')?.click();
+  }
   const found = [...document.querySelectorAll('button')].find(el => controlText(el) === label && !el.closest('[hidden], [aria-hidden="true"]'));
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
 async function select(element: HTMLElement, value: 'allow' | 'inherit' | 'deny') {
-  element.click(); await settle();
+  showMembers?.(); await settle(); element.click(); await settle();
   const menu = document.getElementById(element.getAttribute('aria-controls')!)!;
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(item => item.textContent?.trim() === i18n.t('gatewayMembers.' + value as 'gatewayMembers.allow'));
   expect(item).toBeTruthy(); item!.click(); await settle();
@@ -33,11 +38,13 @@ function mount(perform: ReturnType<typeof vi.fn>, refresh = vi.fn(async () => {}
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   const [current, setCurrent] = createSignal<DesktopGatewaySource | undefined>(source);
-  dispose = render(() => <GatewayMembersPanel gateway={current()} section={section} i18n={i18n} refresh={refresh} />, root);
+  const [enrolling, setEnrolling] = createSignal(false);
+  showMembers = () => setEnrolling(false);
+  dispose = render(() => <><GatewayMembersPanel gateway={current()} section={section} enrolling={enrolling()} onEnrollmentChange={setEnrolling} onEnroll={() => {}} i18n={i18n} refresh={refresh} />{section === 'runtimes' && <GatewayMembersPanel gateway={current()} section="policy" i18n={i18n} refresh={refresh} />}</>, root);
   return setCurrent;
 }
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
-afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { showMembers = undefined; dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('Gateway member management', () => {
   it.each([
@@ -60,7 +67,8 @@ describe('Gateway member management', () => {
       : { ok: true, outcome: 'gateway_members_updated', gateway_member_results: [{ member_id: memberFixture.member_id, error_code: 'MEMBER_VERSION_CONFLICT' }] });
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const root = document.createElement('div'); document.body.append(root);
-    dispose = render(() => <GatewayMembersPanel gateway={gateway} section="runtimes" i18n={localized} refresh={async () => {}} />, root);
+    const [enrolling, setEnrolling] = createSignal(false);
+    dispose = render(() => <><GatewayMembersPanel gateway={gateway} section="runtimes" enrolling={enrolling()} onEnrollmentChange={setEnrolling} onEnroll={() => {}} i18n={localized} refresh={async () => {}} /><GatewayMembersPanel gateway={gateway} section="policy" i18n={localized} refresh={async () => {}} /></>, root);
     await settle();
     for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookCloudPublication'] as const) {
       expect(document.body.textContent).toContain(localized.t(`gatewayMembers.${key}`));
@@ -78,6 +86,8 @@ describe('Gateway member management', () => {
     expect(diagnostic.hasAttribute('open')).toBe(false);
     expect(diagnostic.querySelector('summary')?.textContent).toBe(localized.t('gatewayJoin.technicalDetails'));
     expect(diagnostic.querySelector('code')?.textContent).toBe('MEMBER_VERSION_CONFLICT');
+    setEnrolling(true); await settle();
+    document.querySelector<HTMLButtonElement>('[aria-label="' + localized.t('gatewayExperience.otherRuntime') + '"]')!.click(); await settle();
     button(localized.t('gatewayMembers.createInvitation')).click(); await settle();
     expect(document.querySelector('[role="timer"]')?.textContent).toBe(localized.tn('gatewayJoin.expiresIn', 1));
   });
@@ -86,15 +96,28 @@ describe('Gateway member management', () => {
     const enroll = vi.fn();
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const root = document.createElement('div'); document.body.append(root);
-    dispose = render(() => <GatewayMembersPanel gateway={gateway} section="runtimes" i18n={i18n} refresh={async () => {}} onEnroll={enroll} />, root);
+    const [enrolling, setEnrolling] = createSignal(false);
+    dispose = render(() => <GatewayMembersPanel gateway={gateway} section="runtimes" enrolling={enrolling()} onEnrollmentChange={setEnrolling} i18n={i18n} refresh={async () => {}} onEnroll={enroll} />, root);
     await settle();
     const add = document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]');
     expect(add).not.toBeNull();
-    add!.click();
+    add!.click(); await settle();
+    expect(enroll).not.toHaveBeenCalled();
+    const owned = document.querySelector<HTMLButtonElement>('[aria-label="' + i18n.t('gatewayExperience.ownedRuntime') + '"]')!;
+    const other = document.querySelector<HTMLButtonElement>('[aria-label="' + i18n.t('gatewayExperience.otherRuntime') + '"]')!;
+    expect(document.activeElement).toBe(owned);
+    other.click(); await settle();
+    expect(document.activeElement?.textContent).toBe(i18n.t('gatewayMembers.invite'));
+    button(i18n.t('gatewayJoin.back')).click(); await settle();
+    expect(document.activeElement).toBe(other);
+    button(i18n.t('gatewayJoin.back')).click(); await settle();
+    expect(document.activeElement).toBe(add);
+    add!.click(); await settle();
+    owned.click();
     expect(enroll).toHaveBeenCalledExactlyOnceWith();
     expect(perform).not.toHaveBeenCalled();
     expect(document.querySelector('.redeven-gateway-join-layout')).toBeNull();
-    expect(document.querySelector('[data-gateway-invite-others]')?.tagName).toBe('DETAILS');
+    expect(document.querySelector('[data-gateway-invite-others]')?.hasAttribute('hidden')).toBe(true);
   });
   it('shows an HTTPS host and port example on an empty access address', async () => {
     mount(vi.fn(), undefined, gateway, 'connection'); await settle();
@@ -196,7 +219,7 @@ describe('Gateway member management', () => {
   it('disables member and Cloud mutations for access-only pairing', async () => {
     const perform = vi.fn();
     mount(perform, undefined, { ...gateway, permissions: { access: true, manage_members: false, configure_cloud: false } }); await settle();
-    expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
+    expect(document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')?.disabled).toBe(true);
     expect(button(i18n.t('gatewayMembers.remove')).disabled).toBe(true);
     expect(button(i18n.t('gatewayMembers.reevaluate')).disabled).toBe(true);
     expect([...document.querySelectorAll('[data-floe-dropdown-trigger]')].every(element => element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true')).toBe(true);

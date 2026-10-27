@@ -1,18 +1,27 @@
-import { KeyedFor, Button } from '@floegence/floe-webapp-core/ui';
+import { KeyedFor, Button, Input } from '@floegence/floe-webapp-core/ui';
 import { Copy, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from 'solid-js';
+import { gatewayConnectionOrigin } from '../shared/gatewayNetworkSettings';
 import type { DesktopI18n } from '../shared/i18n';
-import type { GatewayAuthorizedClient, GatewayClientAccessCode } from '../shared/gatewayMembership';
+import type { GatewayAuthorizedClient, GatewayClientAccessCode, GatewayEndpoint } from '../shared/gatewayMembership';
 import type { DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 
-export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatewayID: string; i18n: DesktopI18n }>) {
+export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatewayID: string; endpoints?: readonly GatewayEndpoint[]; enrolling: boolean; onEnrollmentChange: (value: boolean) => void; i18n: DesktopI18n }>) {
+  const enrolling = () => props.enrolling;
+  let enrollmentTrigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined;
+  const setEnrollment = (value: boolean) => {
+    props.onEnrollmentChange(value);
+    queueMicrotask(() => (value ? addressInput : enrollmentTrigger)?.focus());
+  };
+  const [address, setAddress] = createSignal('');
+  const validAddress = () => gatewayConnectionOrigin(address());
   const [clients, setClients] = createSignal<readonly GatewayAuthorizedClient[]>([]);
   const [code, setCode] = createSignal<GatewayClientAccessCode>();
   const [now, setNow] = createSignal(Date.now());
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const [revoking, setRevoking] = createSignal('');
-  const [copied, setCopied] = createSignal(false);
+  const [copied, setCopied] = createSignal<'code' | 'address' | 'all'>();
   const currentGatewayID = createMemo(() => props.gatewayID);
   let generation = 0;
   const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -26,14 +35,14 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatew
       if (current !== generation) return;
       if (!result?.ok) throw new Error();
       if (result.gateway_clients) setClients(result.gateway_clients);
-      if (result.gateway_access_code) { setNow(Date.now()); setCode(result.gateway_access_code); setCopied(false); }
+      if (result.gateway_access_code) { setNow(Date.now()); setCode(result.gateway_access_code); setCopied(undefined); }
       setRevoking('');
     } catch { if (current === generation) setError(props.i18n.t('gatewayMembers.failed')); }
     finally { if (current === generation) setBusy(false); }
   }
   createEffect(() => {
     const gatewayID = currentGatewayID();
-    generation++; setBusy(false); setClients([]); setCode(undefined); setRevoking('');
+    generation++; setBusy(false); setClients([]); setCode(undefined); setRevoking(''); setAddress(untrack(() => props.endpoints?.[0]?.address ?? ''));
     untrack(() => void perform({ kind: 'list_gateway_clients', gateway_id: gatewayID }));
   });
   createEffect(on(() => props.available, value => {
@@ -42,27 +51,34 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatew
     setError(props.i18n.t('interactionContinuity.unavailable'));
   }, { defer: true }));
   const remaining = () => Math.max(0, Math.ceil(((code()?.expires_at_unix_ms ?? 0) - now()) / 1000));
-  async function copyCode() {
+  async function copyCode(kind: 'code' | 'address' | 'all' = 'code') {
+    if (!remaining() || props.available === false || !validAddress()) return;
     const current = generation;
     try {
-      await navigator.clipboard.writeText(code()?.access_code ?? '');
-      if (current === generation) setCopied(true);
+      await navigator.clipboard.writeText(kind === 'address' ? validAddress()! : kind === 'all'
+        ? props.i18n.t('gatewayExperience.clientDelivery', { address: validAddress()!, code: code()?.access_code ?? '' }) : code()?.access_code ?? '');
+      if (current === generation) setCopied(kind);
     } catch { if (current === generation) setError(props.i18n.t('gatewayMembers.failed')); }
   }
   return <div class="redeven-gateway-clients-panel">
-    <section class="redeven-gateway-client-access">
+    <div class="redeven-gateway-section-heading" hidden={enrolling()}><h3>{props.i18n.t('gatewayExperience.clients')}</h3><Button ref={enrollmentTrigger} size="sm" icon={Plus} disabled={props.available === false} onClick={() => setEnrollment(true)}>{props.i18n.t('gatewayExperience.connectClient')}</Button></div>
+    <section class="redeven-gateway-client-access" data-gateway-client-enrollment hidden={!enrolling()}>
+      <Button class="self-start" variant="ghost" size="sm" onClick={() => setEnrollment(false)}>{props.i18n.t('gatewayJoin.back')}</Button>
       <div class="redeven-gateway-section-heading">
-        <div><h3>{props.i18n.t('gatewayClients.clientAccess')}</h3></div>
-        <Button size="sm" icon={Plus} disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'issue_gateway_access_code', gateway_id: props.gatewayID })}>{props.i18n.t('gatewayClients.createCode')}</Button>
+        <div><h3>{props.i18n.t('gatewayExperience.connectClient')}</h3></div>
+        <Button size="sm" icon={Plus} disabled={props.available === false || busy() || !validAddress()} onClick={() => void perform({ kind: 'issue_gateway_access_code', gateway_id: props.gatewayID })}>{props.i18n.t('gatewayClients.createCode')}</Button>
       </div>
+      <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder={props.i18n.t('gatewayNetwork.addressPlaceholder')} aria-invalid={address() !== '' && !validAddress() || undefined} disabled={props.available === false || busy()} onInput={event => { setAddress(event.currentTarget.value); setCopied(undefined); }} /></label>
       <details class="redeven-gateway-disclosure text-xs text-muted-foreground"><summary class="cursor-pointer">{props.i18n.t('gatewayClients.codeHelpTitle')}</summary><p class="pt-2 leading-relaxed">{props.i18n.t('gatewayClients.codeHelp')}</p></details>
       <Show when={code()}>{value => <div class="redeven-gateway-content-enter redeven-gateway-access-code">
         <code>{value().access_code}</code>
-          <Button variant="outline" size="sm" icon={Copy} disabled={!remaining()} onClick={() => void copyCode()}>{props.i18n.t(copied() ? 'environmentCenter.copied' : 'common.copy')}</Button>
+          <Button variant="outline" size="sm" icon={Copy} disabled={!remaining() || !validAddress() || props.available === false} onClick={() => void copyCode('code')}>{props.i18n.t(copied() === 'code' ? 'environmentCenter.copied' : 'common.copy')}</Button>
+        <Button variant="outline" size="sm" disabled={!remaining() || !validAddress() || props.available === false} onClick={() => void copyCode('address')}>{props.i18n.t(copied() === 'address' ? 'gatewayJoin.copied' : 'gatewayJoin.copyAddress')}</Button>
+        <Button variant="outline" size="sm" disabled={!remaining() || !validAddress() || props.available === false} onClick={() => void copyCode('all')}>{props.i18n.t(copied() === 'all' ? 'gatewayJoin.copied' : 'gatewayExperience.copyConnection')}</Button>
         <p class="basis-full text-xs text-muted-foreground" role="status">{remaining() ? props.i18n.t('gatewayClients.codeExpires', { time: `${Math.floor(remaining() / 60)}:${String(remaining() % 60).padStart(2, '0')}` }) : props.i18n.t('gatewayClients.codeExpired')}</p>
       </div>}</Show>
     </section>
-    <section class="redeven-gateway-settings-section">
+    <section class="redeven-gateway-settings-section" hidden={enrolling()}>
       <div class="redeven-gateway-section-heading"><div><h3>{props.i18n.t('gatewayClients.authorizedClients')}</h3></div>
         <Button variant="ghost" size="sm" disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', gateway_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>
       <Show when={clients().length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayClients.emptyClients')}</p>}>

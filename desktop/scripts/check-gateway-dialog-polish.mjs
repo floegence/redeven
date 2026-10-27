@@ -32,9 +32,11 @@ async function checkDisclosure(detail, reducedMotion) {
 }
 async function checkDialog(dialog, width) {
   await dialog.waitFor();
+  // The shared presence owner animates scale in JavaScript, outside getAnimations().
+  await dialog.page().waitForFunction(element => Math.abs(element.getBoundingClientRect().width - element.offsetWidth) < 1, await dialog.elementHandle());
   const bounds = await dialog.boundingBox();
   assert.ok(bounds.width <= width - 16);
-  if (width > 1000) assert.ok(bounds.width >= (await dialog.evaluate(element => element.classList.contains('redeven-gateway-wizard-dialog')) ? 560 : 760), 'Desktop dialogs respect management and focused-task widths');
+  if (width > 1000) assert.ok(bounds.width >= (await dialog.evaluate(element => element.classList.contains('redeven-gateway-wizard-dialog')) ? 560 : 760), 'Desktop dialogs respect management and focused-task widths: ' + JSON.stringify(bounds));
   assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
 }
 async function capture(page, filename) {
@@ -103,8 +105,10 @@ try {
         assert.equal(await dialog.locator('#gateway-access-code').count(), 1);
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), snapshot);
-        assert.equal(await card.getByRole('button', { name: i18n.t('gatewayCloud.title'), exact: true }).count(), 1);
-        await card.getByRole('button', { name: i18n.t('gatewayCloud.title'), exact: true }).click();
+        assert.equal(await card.getByRole('button', { name: i18n.t('gatewayExperience.connectClient'), exact: true }).count(), 1);
+        assert.equal(await card.getByRole('button', { name: i18n.t('gatewayExperience.connectRuntime'), exact: true }).count(), 1);
+        await more.click();
+        await page.getByRole('menuitem', { name: i18n.t('gatewayCloud.title'), exact: true }).click();
         dialog = page.getByRole('dialog');
         await checkDialog(dialog, width);
         await dialog.getByText(i18n.t('gatewayCloud.unconfigured'), { exact: true }).waitFor();
@@ -121,7 +125,7 @@ try {
         const fixedHeight = (await dialog.boundingBox()).height;
         assert.equal(await dialog.locator('.redeven-gateway-settings-dialog__content').evaluate(element => getComputedStyle(element).overflowY), 'hidden');
         assert.equal(await dialog.locator('.redeven-gateway-settings-panels').evaluate(element => getComputedStyle(element).overflowY), 'auto');
-        for (const translationKey of ['gatewayExperience.overview', 'environmentCenter.environmentsSection', 'gatewayExperience.access', 'common.settings']) {
+        for (const translationKey of ['gatewayExperience.overview', 'gatewayExperience.clients', 'gatewayClients.runtimes', 'gatewayExperience.cloud', 'common.settings']) {
           const tab = dialog.getByRole('tab', { name: i18n.t(translationKey), exact: true });
           await tab.click();
           await page.waitForTimeout(240);
@@ -132,8 +136,10 @@ try {
           });
           assert.deepEqual(underline, { left: '0px', right: '0px', opacity: '1' }, 'Selected tab underline spans the full tab button');
         }
-        await dialog.getByRole('tab', { name: i18n.t('gatewayExperience.access'), exact: true }).click();
+        await dialog.getByRole('tab', { name: i18n.t('gatewayExperience.clients'), exact: true }).click();
         await dialog.getByText('Studio Desktop', { exact: true }).waitFor();
+        await dialog.getByRole('button', { name: i18n.t('gatewayExperience.connectClient'), exact: true }).click();
+        await dialog.getByRole('textbox', { name: i18n.t('gatewayJoin.address'), exact: true }).fill('https://gateway.example:7443');
         await dialog.getByRole('button', { name: i18n.t('gatewayClients.createCode'), exact: true }).click();
         await dialog.getByText('studio-access-42', { exact: true }).waitFor();
         await capture(page, `${locale}-${width}-${reducedMotion}-clients`);
@@ -174,8 +180,10 @@ try {
         });
         if (!reducedMotion) assert.ok(tabOpacityFrames.some(opacity => opacity > 0.05 && opacity < 0.95), 'Tab panels cross-fade smoothly');
         assert.equal(await panelScroller.evaluate(element => element.scrollTop), 0, 'Tab changes start at the top of the selected panel');
-        await dialog.locator('[data-gateway-invite-others] summary').click();
+        await dialog.getByRole('button', { name: i18n.t('gatewayExperience.connectRuntime'), exact: true }).click();
+        await dialog.getByRole('button', { name: i18n.t('gatewayExperience.otherRuntime'), exact: true }).click();
         await dialog.getByRole('heading', { name: i18n.t('gatewayMembers.invite'), exact: true }).waitFor();
+        await dialog.getByRole('tab', { name: i18n.t('gatewayExperience.cloud'), exact: true }).click();
         const policy = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayMembers.policy') }) }).first();
         await capture(page, `${locale}-${width}-${reducedMotion}-members-compact`);
         const policyOpening = await checkDisclosure(policy, reducedMotion);
