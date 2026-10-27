@@ -349,24 +349,37 @@ describe('native Containers responsive product surface', () => {
     expect(document.querySelector('[data-container-operations]')).toBeNull();
   });
 
-  it.each([390, 1440])('keeps reviewed service impact visible without internal hashes at %spx', async (width) => {
+  it.each([
+    [390, 'en-US', 'stop'], [1440, 'en-US', 'stop'],
+    [390, 'en-US', 'restart'], [1440, 'en-US', 'restart'],
+    [390, 'zh-CN', 'stop'], [1440, 'zh-CN', 'restart'],
+    [390, 'zh-TW', 'restart'],
+  ] as const)('confirms service impact once at %spx in %s for %s', async (width, locale, action) => {
     await page.viewport(width, 900);
-    browserHarness.preflight.mockResolvedValue({
-      method: 'container.services.stop', engine: 'docker', resource_kind: 'container_service',
+    window.localStorage.setItem('redeven_ui_language_preference', locale);
+    const api = await import('../services/containerResourcesApi');
+    const catalog = locale === 'en-US' ? (await import('../i18n/locales/en-US')).enUS : (await import(`../i18n/locales/catalogs/${locale}.json`)).default;
+    const actionLabel = catalog.containers.actions[action];
+    const preflight = {
+      method: `container.services.${action}`, engine: 'docker' as const, resource_kind: 'container_service' as const,
       request_hash: 'sha256:' + 'a'.repeat(64), plan_hash: 'sha256:' + 'b'.repeat(64),
-      plan: { method: 'container.services.stop', target: { name: 'Docker Engine', running_container_count: 3, affected_web_service_count: 1, affected_web_services: ['Customer Portal'] },
-        risk_level: 'high', requires_admin: true, summary: ['Internal lifecycle description'],
+      plan: { method: `container.services.${action}`, target: { name: 'Docker Engine', running_container_count: 3, affected_web_service_count: 1, affected_web_services: ['Customer Portal'] },
+        risk_level: 'high' as const, requires_admin: true, summary: ['Internal lifecycle description'],
         risk_flags: [{ id: 'container_service_interruption', title: 'Raw risk title', detail: 'Raw risk detail' }] },
-    });
+    };
+    browserHarness.preflight.mockResolvedValue(preflight);
+    vi.mocked(api.createContainerOperation).mockClear().mockResolvedValue({ operation_id: 'reviewed-service', request_id: 'service-request', request_hash: preflight.request_hash, plan_hash: preflight.plan_hash, cancel_requested: false, method: preflight.method, engine: 'docker', resource_kind: 'container_service', resource_identity: 'container_service_docker', state: 'queued', created_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now() });
+    vi.mocked(api.subscribeContainerOperation).mockResolvedValue(undefined);
     const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
     await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
-    await page.getByRole('button', { name: 'Container services', exact: true }).click();
+    await page.getByRole('button', { name: catalog.containers.services.title, exact: true }).click();
     await expect.poll(() => mounted.host.querySelector('.container-service-card')?.textContent).toContain('Docker Engine');
-    await page.getByRole('button', { name: 'Stop', exact: true }).click();
-    await page.getByRole('dialog').getByRole('textbox').fill('Docker Engine');
-    await page.getByRole('dialog').getByRole('button', { name: 'Review', exact: true }).click();
+    await page.getByRole('button', { name: actionLabel, exact: true }).click();
     await expect.poll(() => document.querySelector('.container-operation-review')).not.toBeNull();
     const review = document.querySelector<HTMLElement>('.container-operation-review')!;
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(review.closest('[role="dialog"]')?.querySelector('input')).toBeNull();
+    expect(api.createContainerOperation).not.toHaveBeenCalled();
     for (const animation of document.getAnimations()) {
       if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
     }
@@ -374,14 +387,19 @@ describe('native Containers responsive product surface', () => {
     const reviewBody = review.closest<HTMLElement>('[data-floe-dialog-body]')!;
     expect(reviewBody.scrollWidth).toBeLessThanOrEqual(reviewBody.clientWidth + 1);
     expect(review.textContent).toContain('Docker Engine');
-    expect(review.textContent).toContain('High risk');
+    expect(review.textContent).toContain(catalog.containers.review.risk.high);
     expect(review.textContent).toContain('Customer Portal');
-    expect(review.textContent).toContain('Running containers and dependent Web Services');
+    expect(review.textContent).toContain(catalog.containers.services.interruptionMessage);
     expect(review.textContent).not.toContain('sha256:');
     expect(review.textContent).not.toContain('Raw risk');
     expect(review.textContent).not.toContain('Internal lifecycle');
     expect(review.scrollWidth).toBeLessThanOrEqual(review.clientWidth + 1);
-    await page.screenshot({ path: '__screenshots__/container-service-review-' + width + '.png' });
+    await page.screenshot({ path: '__screenshots__/container-service-confirm-' + width + '-' + locale + '-' + action + '.png' });
+    await page.getByRole('dialog').getByRole('button', { name: actionLabel, exact: true }).click();
+    await expect.poll(() => vi.mocked(api.createContainerOperation).mock.calls.length).toBe(1);
+    expect(api.createContainerOperation).toHaveBeenCalledWith(preflight, { engine: 'docker', service_id: 'container_service_docker', confirmation_name: 'Docker Engine' });
+    await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('[data-container-operations]')).toBeNull();
   });
 
   it.each(['activity', 'workbench'] as const)('replaces loading with stopped runtime feedback and retries in %s', async (variant) => {

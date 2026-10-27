@@ -3174,7 +3174,8 @@
         "desktopRecovery": "Docker Desktop ist noch nicht bereit. Öffnen Sie Docker Desktop auf diesem Computer, schließen Sie die Einrichtung ab oder beheben Sie den Startfehler und prüfen Sie dann hier den Status.",
         "checkStatus": "Status prüfen",
         "history": "Aktionsverlauf"
-      }
+      },
+      "confirmAction": "{action}: {name}"
     },
     "views": {
       "containers": "Container",

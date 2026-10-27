@@ -3174,7 +3174,8 @@
         "desktopRecovery": "Docker Desktop 尚未就緒。請在這部電腦上開啟 Docker Desktop，完成設定或處理啟動錯誤後，再檢查狀態。",
         "checkStatus": "檢查狀態",
         "history": "操作記錄"
-      }
+      },
+      "confirmAction": "{action} {name}"
     },
     "views": {
       "containers": "容器",

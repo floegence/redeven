@@ -3174,7 +3174,8 @@
         "desktopRecovery": "Docker Desktop の準備が完了していません。このコンピューターで Docker Desktop を開き、設定を完了するか起動エラーを解決してから、状態を確認してください。",
         "checkStatus": "状態を確認",
         "history": "操作履歴"
-      }
+      },
+      "confirmAction": "{name}：{action}"
     },
     "views": {
       "containers": "コンテナ",

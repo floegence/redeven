@@ -3174,7 +3174,8 @@
         "desktopRecovery": "Docker Desktop aún no está listo. Abre Docker Desktop en este equipo, completa la configuración o resuelve el error de inicio y comprueba el estado aquí.",
         "checkStatus": "Comprobar estado",
         "history": "Historial de acciones"
-      }
+      },
+      "confirmAction": "{action}: {name}"
     },
     "views": {
       "containers": "Contenedores",

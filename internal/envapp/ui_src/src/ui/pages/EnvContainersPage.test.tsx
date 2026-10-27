@@ -536,7 +536,7 @@ describe('native Containers page', () => {
     expect(dialog.textContent).not.toContain('Apply the reviewed lifecycle');
     expect(dialog.querySelector('.container-service-impact')).toBeNull();
     Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
-      .find(button => button.textContent?.includes('containers.actions.run'))?.click();
+      .find(button => button.textContent?.includes('containers.actions.start'))?.click();
     await settle();
     expect(harness.createOperation).toHaveBeenCalledWith(preflight, { engine: 'docker', service_id: 'container_service_docker' });
   });
@@ -685,6 +685,76 @@ describe('native Containers page', () => {
     expect(servicePage.getAttribute('aria-busy')).toBe('false');
   });
 
+  it.each(['stop', 'restart'] as const)('reviews service %s once without requiring a typed name', async (action) => {
+    harness.listServices.mockResolvedValue([{
+      service_id: 'desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'running',
+      capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine'] },
+    }]);
+    const preflight = {
+      method: `container.services.${action}`, engine: 'docker', resource_kind: 'container_service',
+      request_hash: 'reviewed-request', plan_hash: 'reviewed-plan',
+      plan: { method: `container.services.${action}`, target: { name: 'Docker Desktop', running_container_count: 3, affected_web_service_count: 1, affected_web_services: ['Customer Portal'] },
+        risk_level: 'high', requires_admin: true, risk_flags: [{ id: 'container_service_interruption', title: 'Raw risk', detail: 'Raw detail' }] },
+    };
+    harness.preflight.mockResolvedValue(preflight);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host); await settle();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click(); await settle();
+    const actionButton = () => Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card__actions button'))
+      .find(button => button.textContent?.includes(`containers.actions.${action}`))!;
+    actionButton().click(); await settle();
+    const request = { engine: 'docker', service_id: 'desktop', confirmation_name: 'Docker Desktop' };
+    expect(harness.preflight).toHaveBeenCalledWith(`container.services.${action}`, request);
+    expect(host.querySelectorAll('[data-dialog]')).toHaveLength(1);
+    let dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
+    expect(dialog.querySelector('input')).toBeNull();
+    expect(dialog.textContent).toContain('Customer Portal');
+    expect(dialog.textContent).toContain('containers.services.interruptionMessage');
+    expect(harness.createOperation).not.toHaveBeenCalled();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'containers.actions.cancel')!.click();
+    await settle();
+    expect(host.querySelector('[data-dialog]')).toBeNull();
+    expect(harness.createOperation).not.toHaveBeenCalled();
+    actionButton().click(); await settle();
+    dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
+    const confirm = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === `containers.actions.${action}`)!;
+    const pending = deferred<{ operation_id: string; state: string }>();
+    harness.createOperation.mockReturnValueOnce(pending.promise);
+    confirm.click(); confirm.click();
+    expect(harness.createOperation).toHaveBeenCalledExactlyOnceWith(preflight, request);
+    expect(confirm.disabled).toBe(true);
+    pending.resolve({ operation_id: 'service-operation', state: 'queued' }); await settle();
+    expect(host.querySelector('[data-dialog]')).toBeNull();
+    expect(host.querySelector('[data-drawer]')).toBeNull();
+  });
+
+  it.each(['save', 'save_and_restart'] as const)('confirms configuration %s once and preserves the draft on cancel', async (applyMode) => {
+    const preflight = {
+      method: 'container.services.configuration.update', resource_kind: 'container_service', request_hash: 'request', plan_hash: 'plan',
+      plan: { method: 'container.services.configuration.update', target: { name: 'Docker Engine' }, risk_level: 'high', requires_admin: true,
+        risk_flags: [{ id: 'container_service_configuration', title: 'Raw configuration', detail: 'Raw risk' }] },
+    };
+    harness.preflight.mockResolvedValue(preflight);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host); await settle();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click(); await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button')).find(button => button.textContent === 'containers.services.configure')!.click(); await settle();
+    const label = applyMode === 'save' ? 'containers.services.save' : 'containers.services.saveRestart';
+    const save = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button')).find(button => button.textContent === label)!;
+    save().click(); await settle();
+    expect(host.querySelectorAll('[data-dialog]')).toHaveLength(1);
+    expect(host.querySelector('[data-dialog] input')).toBeNull();
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.configurationRisk');
+    expect(harness.preflight).toHaveBeenCalledWith('container.services.configuration.update', expect.objectContaining({ confirmation_name: 'Docker Engine', apply_mode: applyMode, base_revision: 'sha256:engine' }));
+    expect(harness.createOperation).not.toHaveBeenCalled();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button')).find(button => button.textContent === 'containers.actions.cancel')!.click(); await settle();
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
+    save().click(); await settle();
+    save().click(); await settle();
+    expect(harness.createOperation).toHaveBeenCalledExactlyOnceWith(preflight, harness.preflight.mock.calls.at(-1)?.[1]);
+    expect(host.querySelector('[data-dialog]')).toBeNull();
+  });
+
   it('edits one complete Docker CLI document without exposing registry credentials', async () => {
     harness.listServices.mockResolvedValue([{
       service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'running',
@@ -736,16 +806,11 @@ describe('native Containers page', () => {
     expect(save?.disabled).toBe(false);
     save?.click();
     await settle();
-    const confirmation = host.querySelector<HTMLInputElement>('[data-dialog] input');
-    expect(confirmation).not.toBeNull();
-    confirmation!.value = 'Docker Desktop';
-    confirmation!.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button'))
-      .find((button) => button.textContent?.includes('containers.actions.review'))
-      ?.click();
-    await settle();
+    expect(host.querySelector('[data-dialog] input')).toBeNull();
+    expect(harness.createOperation).not.toHaveBeenCalled();
     expect(harness.preflight).toHaveBeenCalledWith('container.services.configuration.update', expect.objectContaining({
       source_id: 'docker_cli',
+      confirmation_name: 'Docker Desktop',
       base_revision: 'sha256:client',
       mode: 'document',
       apply_mode: 'save',

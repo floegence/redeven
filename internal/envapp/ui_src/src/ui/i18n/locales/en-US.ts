@@ -3401,6 +3401,7 @@ export const enUS = defineDictionary({
     },
     services: {
       open: 'Manage services', title: 'Container services',
+      confirmAction: '{action}: {name}',
       lifecycle: {
         starting: "Starting…",
         stopping: "Stopping…",

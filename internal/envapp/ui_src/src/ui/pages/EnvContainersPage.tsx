@@ -2349,6 +2349,15 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     i18n.t(`containers.operationStates.${state}` as Parameters<typeof i18n.t>[0])
   );
 
+  const serviceReviewActionLabel = (): string => {
+    const current = review();
+    if (current?.preflight.resource_kind !== 'container_service') return '';
+    if (current.preflight.method === 'container.services.configuration.update') {
+      return i18n.t(current.request.apply_mode === 'save_and_restart' ? 'containers.services.saveRestart' : 'containers.services.save');
+    }
+    return operationLabel(current.preflight.method);
+  };
+
   const operationPhaseLabel = (phase: string): string => {
     const normalized = compact(phase) || 'queued';
     const known = new Set(['queued', 'running', 'executing', 'resolving', 'pulling', 'extracting', 'verifying', 'reconciling', 'succeeded', 'failed', 'cancel_requested', 'canceling', 'canceled', 'interrupted']);
@@ -2443,7 +2452,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
 
   const runReviewedOperation = async () => {
     const current = review();
-    if (!resources.ready() || !current || (current.preflight.plan.requires_admin && !canAdmin())) return;
+    if (mutationBusy() || !resources.ready() || !current || (current.preflight.plan.requires_admin && !canAdmin())) return;
     setMutationBusy(true);
     try {
       const operation = await createContainerOperation(current.preflight, current.request);
@@ -2547,10 +2556,11 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     const method = `container.services.${action}`;
     beginMutation({
       method,
-      request: { engine: service.engine, service_id: service.service_id },
-      ...(action === 'stop' || action === 'restart'
-        ? { confirmationLabel: service.name, confirmationValue: service.name }
-        : {}),
+      // Bind the displayed service identity before review; the user confirms
+      // the resulting risks once rather than retyping an already known name.
+      request: { engine: service.engine, service_id: service.service_id,
+        ...(action === 'stop' || action === 'restart' ? { confirmation_name: service.name } : {}),
+      },
     });
   };
 
@@ -2564,6 +2574,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
       engine: service.engine,
       service_id: service.service_id,
       source_id: source.source_id,
+      confirmation_name: service.name,
       base_revision: source.base_revision,
       mode: source.source_id === 'docker_cli' || mode === 'advanced' ? 'document' : 'proxy',
       apply_mode: applyMode,
@@ -2575,8 +2586,6 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     beginMutation({
       method: 'container.services.configuration.update',
       request,
-      confirmationLabel: service.name,
-      confirmationValue: service.name,
     });
   };
 
@@ -4156,9 +4165,9 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
       <Dialog
         open={review() !== null}
         onOpenChange={(open) => { if (!open) cancelReview(); }}
-        title={reviewedPrune() ? i18n.t('containers.prune.reviewTitle') : i18n.t('containers.review.title')}
+        title={reviewedPrune() ? i18n.t('containers.prune.reviewTitle') : serviceReviewActionLabel() ? i18n.t('containers.services.confirmAction', { action: serviceReviewActionLabel(), name: String(review()?.preflight.plan.target.name ?? '') }) : i18n.t('containers.review.title')}
         class={reviewedPrune() ? 'container-prune-review-dialog' : undefined}
-        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" variant={reviewedPrune() ? 'destructive' : 'default'} onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin()) || Boolean(reviewedPrune() && !reviewedPrune()?.complete)}><Show when={reviewedPrune()}><Trash class="mr-1.5 h-3.5 w-3.5" /></Show>{reviewedPrune() ? i18n.t('containers.prune.confirm') : i18n.t('containers.actions.run')}</Button></div>}
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" variant={reviewedPrune() || review()?.preflight.plan.risk_flags?.some(flag => flag.id === 'container_service_interruption') ? 'destructive' : 'default'} onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin()) || Boolean(reviewedPrune() && !reviewedPrune()?.complete)}><Show when={reviewedPrune()}><Trash class="mr-1.5 h-3.5 w-3.5" /></Show>{reviewedPrune() ? i18n.t('containers.prune.confirm') : serviceReviewActionLabel() || i18n.t('containers.actions.run')}</Button></div>}
       >
         <Show when={review()} keyed>{(current) => <Show when={reviewedPrune()} fallback={
           <div class="container-operation-review space-y-3">
