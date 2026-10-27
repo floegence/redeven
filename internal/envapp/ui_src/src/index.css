@@ -6,8 +6,6 @@
 @import './styles/mobile-navigation.css';
 @import './ui/plugins/plugin-motion.css';
 @import './ui/plugins/plugin-center.css';
-@import './ui/pages/service-template-center.css';
-@import './ui/pages/resource-header.css';
 @import './ui/activity-flower-shell.css';
 
 @source './**/*.{ts,tsx,html}';

@@ -20,8 +20,11 @@ Pins are Floe Webapp Boot, Core, and Protocol v0.86.63 (Env App Core v0.86.63), 
 
 ## Mechanism
 
-CodeSpace and Web Service modules own their styles. Vite loads these with lazy
-page chunks; the root stylesheet avoids duplicate imports to retain the initial CSS budget.
+CodeSpace, Web Service and service-template catalog modules own their styles.
+Vite loads feature styles with their lazy page chunks. Resource presentation
+components import their shared header stylesheet; the root stylesheet does not
+duplicate these imports. Every document retains the enforced 122 KiB gzip
+initial CSS budget, including Desktop development builds.
 
 Floe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).
 
