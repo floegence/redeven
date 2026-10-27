@@ -95,7 +95,14 @@ describe('Gateway product navigation', () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
     await openGatewayAccess(); input('gateway-listen-addresses', '127.0.0.1:7555');
+    const page = document.querySelector('[data-desktop-page="environments"]')!;
+    const content = [...page.children];
     button('Overview').click(); await settle();
+    document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());
+    button('Close').click();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-wizard-dialog')).toBeNull());
+    expect([...page.children]).toEqual(content);
     document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')!.click();
     await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());
     button('Cancel').click(); await settle();

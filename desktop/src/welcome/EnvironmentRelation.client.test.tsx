@@ -348,6 +348,39 @@ describe('linked environment owner interactions', () => {
     expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: f.environment.provider_runtime_link_target!.id, operation: 'status' });
   });
+  it('resumes a dismissed enrollment through its existing card action without adding Welcome content', async () => {
+    const f = runtimeGatewayAccessFixture('ssh');
+    await mount(f.snapshot);
+    const perform = vi.fn(async (_request: DesktopLauncherActionRequest) => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    const page = document.querySelector('[data-desktop-page="environments"]')!;
+    const content = [...page.children];
+    const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
+    const openEnrollment = async () => {
+      button(card, 'Actions').click(); await settle();
+      button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+    };
+    await openEnrollment();
+    const dialog = document.querySelector('.redeven-gateway-wizard-dialog')!;
+    button(dialog, 'Connect and continue').click(); await settle();
+    for (const [index, value] of ['https://office.example:7443', 'retained-code'].entries()) {
+      const input = dialog.querySelectorAll<HTMLInputElement>('input')[index];
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    button(dialog, 'Close').click();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-wizard-dialog')).toBeNull());
+    expect([...page.children]).toEqual(content);
+    expect(perform).toHaveBeenCalledWith(expect.objectContaining({ kind: 'close_runtime_gateway' }));
+    await openEnrollment();
+    const resumed = document.querySelector('.redeven-gateway-wizard-dialog')!;
+    expect([...resumed.querySelectorAll<HTMLInputElement>('input')].map(input => input.value)).toEqual(['https://office.example:7443', 'retained-code']);
+    expect(perform.mock.calls.filter(([request]) => request.kind === 'manage_runtime_gateway')).toHaveLength(1);
+    button(resumed, 'Restore connection').click(); await settle();
+    expect(perform.mock.calls.filter(([request]) => request.kind === 'manage_runtime_gateway')).toHaveLength(2);
+    button(resumed, 'Cancel').click();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-wizard-dialog')).toBeNull());
+    expect([...page.children]).toEqual(content);
+  });
   it('preserves the card enrollment draft and revokes verification while settings covers its shared owner', async () => {
     const f = runtimeGatewayAccessFixture('ssh');
     await mount(f.snapshot);

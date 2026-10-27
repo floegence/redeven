@@ -11,7 +11,6 @@
     "inviteOthers": "邀請其他人",
     "chooseEnvironmentHelp": "選擇一個環境。即使尚未開啟環境視窗，Desktop 也會在這裡完成準備和連線。",
     "noManagedEnvironments": "請先在 Welcome 中新增可管理的本機或遠端環境。",
-    "resumeEnrollment": "繼續環境加入流程",
     "connectExisting": "連接現有閘道",
     "connectExistingHelp": "使用服務位址與既有授權，或管理員提供的存取碼。",
     "deployNew": "部署新閘道",

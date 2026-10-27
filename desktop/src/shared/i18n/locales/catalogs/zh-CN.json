@@ -11,7 +11,6 @@
     "inviteOthers": "邀请其他人",
     "chooseEnvironmentHelp": "选择一个环境。即使尚未打开环境窗口，Desktop 也会在这里完成准备和连接。",
     "noManagedEnvironments": "请先在 Welcome 中添加可管理的本机或远程环境。",
-    "resumeEnrollment": "继续环境接入",
     "connectExisting": "接入已有网关",
     "connectExistingHelp": "使用服务地址及已有授权，或管理员提供的访问码。",
     "deployNew": "部署新网关",

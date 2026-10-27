@@ -6525,7 +6525,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <Show when={environmentsVisited()}>
           <div class="h-full min-h-0" style={{ display: environmentsVisible() ? undefined : 'none' }}
             data-desktop-page="environments" aria-hidden={!environmentsVisible() ? 'true' : undefined} inert={!environmentsVisible()}>
-            <Show when={gatewayEnrollment() && !gatewayEnrollment()?.visible}><div class="redeven-gateway-resume"><Button variant="outline" onClick={() => setGatewayEnrollment(current => current && { ...current, visible: true })}>{i18n().t('gatewayExperience.resumeEnrollment')}</Button></div></Show>
             <ConnectEnvironmentSurface
               i18n={i18n()}
               visible={environmentsVisible()}

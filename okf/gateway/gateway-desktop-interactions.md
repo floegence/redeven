@@ -5,7 +5,7 @@ description: Gateway enrollment, connection ownership and consent.
 tags: [gateway, desktop, interaction, validation]
 timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -37,7 +37,7 @@ Preserve the existing Welcome toolbar, horizontal Environment / Redeven Cloud / 
 
 Creation starts with an explicit existing-service or new-deployment intent. URL pairing and host/container preparation have separate transport choices. A successful save returns the exact saved registration ID and leads to its overview, with observed status and the next supported service action. Saving a connection never claims deployment or connectivity; starting remains explicit through the existing lifecycle executor.
 
-Gateway-side Add environment and environment-side Add Gateway access enter one application-owned enrollment session, preselecting the corresponding object. The picker includes stopped and unopened managed environments. The old member-dialog nested enrollment is removed. Switching between management and enrollment waits for the outgoing modal presence to finish; drafts and return context survive. Hiding an enrollment exposes a resume entry and retains an admitted membership submission. Resumption reacquires the management connection and revokes obsolete consent rather than reusing a released lease.
+Gateway-side Add environment and environment-side Add Gateway access enter one application-owned enrollment session, preselecting the corresponding object. The picker includes stopped and unopened managed environments. The old member-dialog nested enrollment is removed. Switching between management and enrollment waits for the outgoing modal presence to finish; drafts and return context survive. Hiding enrollment retains its draft and any admitted submission. Reopen it through the existing Environment card Add Gateway access or Gateway settings Add environment action; no global resume banner or extra Welcome content row is added. Resumption reacquires the management connection and revokes obsolete consent rather than reusing a released lease.
 
 An accepted enrollment shows a result instead of immediately disappearing. Membership and live connectivity remain distinct. An uncertain submission queries the exact Gateway membership; it cannot submit the same invitation again. A positive status completes the result; an authoritative absence clears consumed/uncertain invitation material and returns to verification. Ordinary checks never consume invitations. Done returns to the initiating context.
 

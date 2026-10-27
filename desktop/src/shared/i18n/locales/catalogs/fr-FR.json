@@ -11,7 +11,6 @@
     "inviteOthers": "Inviter une autre personne",
     "chooseEnvironmentHelp": "Choisissez un environnement. Desktop peut le préparer et le connecter ici, même si sa fenêtre est fermée.",
     "noManagedEnvironments": "Ajoutez d’abord un environnement local ou distant administrable à Welcome.",
-    "resumeEnrollment": "Poursuivre l’inscription de l’environnement",
     "connectExisting": "Connecter un Gateway existant",
     "connectExistingHelp": "Utilisez l’adresse du service et votre autorisation existante ou un code d’accès fourni par l’administrateur.",
     "deployNew": "Déployer un nouveau Gateway",

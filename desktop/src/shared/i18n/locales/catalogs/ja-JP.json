@@ -11,7 +11,6 @@
     "inviteOthers": "ほかのユーザーを招待",
     "chooseEnvironmentHelp": "環境を選択してください。環境ウィンドウを開いていなくても、Desktop がここで準備と接続を行います。",
     "noManagedEnvironments": "まず Welcome に管理可能なローカル環境またはリモート環境を追加してください。",
-    "resumeEnrollment": "環境の登録を続ける",
     "connectExisting": "既存の Gateway に接続",
     "connectExistingHelp": "サービスアドレスと既存の認証情報、または管理者からのアクセスコードを使用します。",
     "deployNew": "新しい Gateway を配置",
