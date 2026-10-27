@@ -74,6 +74,8 @@ One floating stack owns connection/unconfirmed status, settings reads, initial/d
 Streams, queues and cache are bounded ephemeral observation, never durable cursors
 or another lifecycle. Database kinds and all released migration edges remain.
 
+Explicit wheel, touch or keyboard intent can page from canonical history-window edges even when every loaded body is folded and no message anchor is visible. A visible message is only a layout anchor, never an admission requirement for paging. One coalesced input demand reads one bounded page; completion and idle layout cannot recursively traverse collapsed history.
+
 # Evidence
 
 - [Electron startup](../../desktop/scripts/check-flower-startup.mjs) and [localized navigation](../../desktop/scripts/check-flower-navigation.mjs): partial/final baselines, selection, drafts, one stream, no duplicate list scan, owned cleanup.

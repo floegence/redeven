@@ -768,12 +768,12 @@ describe('completed turn process disclosure', () => {
       ],
     });
     const { root } = await mount(initial);
-    const overview = () => root.querySelector<HTMLElement>('.flower-turn-summary-static');
+    const overview = () => summary(root);
     const toolGroups = () => [...root.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle')];
     await waitFor(() => overview()?.textContent?.includes('4 tool calls') === true && toolGroups().length === 2
       && toolGroups().every((button) => button.getAttribute('aria-expanded') === 'false'));
 
-    expect(summary(root)).toBeNull();
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     expect(overview()?.textContent).toContain('1 user response');
     expect(overview()?.textContent).toContain('1 failed tool call');
     expect(hidden(root, 'before-one')).toBe(false);
@@ -791,8 +791,16 @@ describe('completed turn process disclosure', () => {
     expect(afterSequence?.getAttribute('aria-hidden')).toBe('true');
     expect(afterSequence?.hasAttribute('inert')).toBe(true);
 
+    await userEvent.click(page.elementLocator(summary(root)!));
+    await waitFor(() => hidden(root, 'before-one') && hidden(root, 'after-one'));
+    expect(hidden(root, 'answer')).toBe(false);
+    expect(message(root, 'answer').textContent).toContain('Scenic');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => !hidden(root, 'before-one') && !hidden(root, 'after-one'));
+    expect(toolGroups()[0]?.getAttribute('aria-expanded')).toBe('true');
+    expect(toolGroups()[1]?.getAttribute('aria-expanded')).toBe('false');
     await page.viewport(390, 844);
-    const label = overview()!.querySelector<HTMLElement>('.flower-turn-overview-copy')!;
+    const label = overview()!.querySelector<HTMLElement>('span')!;
     expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(root.getBoundingClientRect().right + 1);
   });
   it('keeps continuation-run tools folded while preserving the answered checkpoint', async () => {
@@ -823,7 +831,7 @@ describe('completed turn process disclosure', () => {
       ],
     });
     const { root } = await mount(initial);
-    const overview = () => root.querySelector<HTMLElement>('.flower-turn-summary-static');
+    const overview = () => summary(root);
     const toolGroups = () => [...root.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle')];
     await waitFor(() => overview()?.textContent?.includes('4 tool calls') === true && toolGroups().length === 2
       && toolGroups().every((button) => button.getAttribute('aria-expanded') === 'false'));

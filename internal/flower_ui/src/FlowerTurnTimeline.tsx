@@ -205,12 +205,16 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const threadID = props.thread?.thread_id;
     const value = projectFlowerTurnProcess(props.entries, props.thread?.turns,
       props.thread?.current_execution && ['running', 'waiting_user', 'waiting_approval'].includes(props.thread.status)
-        ? [props.thread.current_execution.turn_id] : [], previousProjection && previousProjection.threadID === threadID ? previousProjection.value : undefined);
+        ? [props.thread.current_execution.turn_id] : [], previousProjection && previousProjection.threadID === threadID ? previousProjection.value : undefined, {
+        hasBefore: props.thread?.history_window?.has_before ?? false,
+        hasAfter: props.thread?.history_window?.has_after ?? false,
+        readingBreaks: props.readingBreaks, missingEvents: props.missingEvents,
+      });
     // Protect newly classified process before any row can become inert or hidden.
     const previous = previousProjection;
     if (previous && previous.threadID === threadID) untrack(() => {
       for (const group of value.groups.values()) {
-        if (group.staticOverview && !previous.value.groups.get(group.turnID)?.staticOverview) {
+        if (group.interleavedInputs && !previous.value.groups.get(group.turnID)?.interleavedInputs) {
           preserveReadingAnchor(group.processKeys);
         }
         const newlyFoldable = group.processKeys.filter((key) => previous.value.rows.has(key)
@@ -344,7 +348,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   const row = (key: string, entry: Accessor<FlowerTimelineEntry>) => {
     const group = createMemo(() => processes().rows.get(key));
     const process = createMemo(() => group()?.processKeys.includes(key) ?? false);
-    const expanded = createMemo(() => !process() || retainedRows().has(key) || group()?.staticOverview === true
+    const expanded = createMemo(() => !process() || retainedRows().has(key)
       || props.choices.expanded(identity(group()!.turnID), group()!.disclosure));
     const ended = createMemo(() => {
       const current = group();
@@ -358,12 +362,12 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const historical = untrack(() => Boolean(group()?.turn?.ended_at));
     const settled = createMemo(() => historical && !process());
     // Decide protection and capture the anchor before inserting summary height.
-    const summary = createMemo(() => group()?.summaryKey === key && (group()?.staticOverview
-      || group()?.disclosure !== 'none' && props.choices.settled(identity(group()!.turnID))));
+    const summary = createMemo(() => group()?.summaryKey === key && group()?.disclosure !== 'none'
+      && props.choices.settled(identity(group()!.turnID)));
     const summaryLabel = () => {
       const current = group()!;
       const worked = props.copy.worked(duration(current.turn!.work_duration_ms));
-      const details = current.staticOverview ? [
+      const details = !current.countsComplete ? [] : current.interleavedInputs ? [
         current.toolCallCount ? props.copy.toolCalls(current.toolCallCount) : '',
         current.inputResponseCount ? props.copy.userResponses(current.inputResponseCount) : '',
         current.failedCallCount ? props.copy.failedCalls(current.failedCallCount) : '',
@@ -373,7 +377,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     };
     const interactionCheckpoint = createMemo(() => {
       const current = entry();
-      return group()?.staticOverview === true && current.type === 'message'
+      return group()?.interleavedInputs === true && current.type === 'message'
         && current.blocks.some((block) => block.type === 'input_response');
     });
     const motion = createFlowerActivityDisclosureMotion(expanded, {
@@ -418,18 +422,14 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         data-flower-sequence-continues={sequences().continuingEntries.has(key) ? 'true' : undefined}
         data-flower-turn-settled={settled() ? 'true' : undefined}>
         <Show when={summary()}>
-          <div class="flower-turn-summary" classList={{ 'flower-turn-summary-static': group()?.staticOverview === true }}>
-            <Show when={group()?.staticOverview} fallback={(
-              <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
-                aria-expanded={expanded()} aria-controls={group()!.processKeys.map(contentID).join(' ')}
-                aria-label={`${expanded() ? props.copy.collapse : props.copy.expand}: ${summaryLabel()}`}
-                onClick={(event) => toggle(event.currentTarget)}>
-                <span>{summaryLabel()}</span>
-                <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
-              </button>
-            )}>
-              <span class="flower-turn-overview-copy">{summaryLabel()}</span>
-            </Show>
+          <div class="flower-turn-summary">
+            <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
+              aria-expanded={expanded()} aria-controls={group()!.processKeys.map(contentID).join(' ')}
+              aria-label={`${expanded() ? props.copy.collapse : props.copy.expand}: ${summaryLabel()}`}
+              onClick={(event) => toggle(event.currentTarget)}>
+              <span>{summaryLabel()}</span>
+              <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
+            </button>
           </div>
         </Show>
         <div id={contentID(key)} class="flower-turn-row-viewport" ref={motion.bindViewport}

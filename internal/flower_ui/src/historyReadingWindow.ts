@@ -23,10 +23,9 @@ export function historyReadingItemBytes(item: FlowerRuntimeCurrentItem): number 
 
 // Edge reads acquire an adjacent page without changing the installed interest.
 // The accepted selection then contains the retained interval and that page.
-export function historyReadingRequest(window: FlowerHistoryWindow | undefined, anchorID: string | undefined,
-  geometry: Readonly<{ top: number; height: number; viewport: number }>,
+export function historyReadingRequest(window: FlowerHistoryWindow | undefined, geometry: Readonly<{ top: number; height: number; viewport: number }>,
   following: boolean, direction: 'before' | 'after' | undefined, accepted?: FlowerHistoryRequest): FlowerHistoryRequest | undefined {
-  if (!window || !anchorID || geometry.viewport <= 0) return;
+  if (!window || geometry.viewport <= 0) return;
   if (!window.has_after && (accepted?.anchor_id || accepted?.item_ids?.length) && direction === 'after'
     && geometry.height - geometry.top - geometry.viewport <= 2) return { direction: 'before', limit: HISTORY_READING_ITEMS };
   const before = window.has_before && geometry.top < HISTORY_EDGE_MARGIN_PX;
@@ -36,7 +35,9 @@ export function historyReadingRequest(window: FlowerHistoryWindow | undefined, a
   if (following && !window.has_after) return;
   if (direction === 'before' ? !before : direction === 'after' ? !after : !before && !after) return;
   const edge = direction ?? (before ? 'before' : 'after');
-  return { anchor_id: edge === 'before' ? window.first_item_id : window.last_item_id, direction: edge, limit: HISTORY_PAGE_ITEMS };
+  const anchorID = edge === 'before' ? window.first_item_id : window.last_item_id;
+  if (!anchorID) return;
+  return { anchor_id: anchorID, direction: edge, limit: HISTORY_PAGE_ITEMS };
 }
 
 // A settled read can yield the same bounded edges (start/end or no progress).

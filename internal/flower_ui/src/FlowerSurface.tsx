@@ -4306,8 +4306,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // Consume one coalesced user demand. Layout/HTTP completion may service a
     // newer demand, but cannot recursively walk collapsed history by itself.
     historyReadingPending = false;
-    const anchor = visibleHistoryAnchor(transcriptScroll);
-    const input = historyGapRequest(viewport, historyScrollDirection) ?? historyReadingRequest(window, anchor?.dataset.flowerMessageId,
+    const input = historyGapRequest(viewport, historyScrollDirection) ?? historyReadingRequest(window,
       { top: viewport.scrollTop, height: viewport.scrollHeight, viewport: viewport.clientHeight },
       transcriptScroll.followingLatest(), historyScrollDirection, historyReadingInput);
     if (!input) return;
@@ -6102,8 +6101,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const viewport = subagentDetailScroll.viewport();
     if (!subagentReadingPending || !active || !window || !viewport || !props.adapter.loadHistory || active.requestStatus === 'loading' || subagentTailPreparing()) return;
     subagentReadingPending = false;
-    const anchor = visibleHistoryAnchor(subagentDetailScroll);
-    const input = historyGapRequest(viewport, subagentHistoryDirection) ?? historyReadingRequest(window, anchor?.dataset.flowerMessageId,
+    const input = historyGapRequest(viewport, subagentHistoryDirection) ?? historyReadingRequest(window,
       { top: viewport.scrollTop, height: viewport.scrollHeight, viewport: viewport.clientHeight },
       subagentDetailScroll.followingLatest(), subagentHistoryDirection, subagentReadingInput);
     if (!input) return;

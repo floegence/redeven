@@ -151,28 +151,42 @@ describe('canonical turn process presentation', () => {
     expect(result.groups.get('turn')?.summaryKey).toBe('progress');
     expect(result.groups.get('turn')?.disclosure).toBe('automatic');
   });
-  it('shows a static overview when an answered interaction separates work segments', () => {
+  it('reports whole-turn counts only with complete loaded boundaries and no gaps', () => {
+    const rows = [entry('user', 'user'), toolEntry('before'), inputResponse(), toolEntry('after')];
+    const project = (values: readonly FlowerTimelineEntry[], coverage: Parameters<typeof projectFlowerTurnProcess>[4]) =>
+      projectFlowerTurnProcess(values, [turn()], [], undefined, coverage).groups.get('turn');
+    expect(project(rows, { hasBefore: true, hasAfter: false })?.countsComplete).toBe(true);
+    expect(project(rows.slice(1), { hasBefore: true, hasAfter: false })?.countsComplete).toBe(false);
+    expect(project(rows, { hasBefore: false, hasAfter: true })?.countsComplete).toBe(false);
+    expect(project(rows, { hasBefore: false, hasAfter: false, readingBreaks: new Set(['after']) })?.countsComplete).toBe(false);
+    expect(project(rows, { hasBefore: false, hasAfter: false, missingEvents: [{ after: 1, before: 10 }] })?.countsComplete).toBe(false);
+    expect(project(rows, { hasBefore: false, hasAfter: false })?.countsComplete).toBe(true);
+    const neighbor = { ...entry('neighbor', 'user'), message: { ...entry('neighbor', 'user').message, turn_id: 'neighbor' } };
+    expect(project([neighbor, ...rows.slice(1)], { hasBefore: true, hasAfter: false, readingBreaks: new Set(['before']) })?.countsComplete).toBe(false);
+    expect(project([...rows, neighbor], { hasBefore: false, hasAfter: true, readingBreaks: new Set(['neighbor']) })?.countsComplete).toBe(false);
+  });
+  it('allows manual folding when an answered interaction separates work segments', () => {
     const before = [toolEntry('before-one'), toolEntry('before-two')];
     const after = [toolEntry('after-one'), toolEntry('after-two', 'error')];
     const result = projectFlowerTurnProcess([...before, inputResponse(), ...after], [turn({
       outcome: 'interrupted', ended_at: '2026-10-11T12:02:18Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false,
     })]).groups.get('turn');
     expect(result).toMatchObject({
-      disclosure: 'none', staticOverview: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1,
+      disclosure: 'manual', interleavedInputs: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1,
       processKeys: [...before, ...after].map(value => value.key),
     });
   });
-  it('keeps a static overview and counts work across a continuation run', () => {
+  it('allows manual folding and counts work across a continuation run', () => {
     const before = [withRun(toolEntry('before-one'), 'run-a'), withRun(toolEntry('before-two'), 'run-a')];
     const answer = withRun(inputResponse(), 'run-a');
     const after = [withRun(toolEntry('after-one'), 'run-b'), withRun(toolEntry('after-two', 'error'), 'run-b')];
     const result = projectFlowerTurnProcess([...before, answer, ...after], [turn({ run_id: 'run-b', outcome: 'interrupted',
       ended_at: '2026-10-11T12:02:18Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
-    expect(result).toMatchObject({ disclosure: 'none', staticOverview: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1 });
+    expect(result).toMatchObject({ disclosure: 'manual', interleavedInputs: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1 });
   });
   it('keeps ordinary dialogue outside the process without changing its disclosure', () => {
     const result = projectFlowerTurnProcess([toolEntry('before-one'), toolEntry('before-two'), entry('ordinary-user', 'user'), toolEntry('after-one')], [turn()]).groups.get('turn');
-    expect(result?.staticOverview).toBe(false);
+    expect(result?.interleavedInputs).toBe(false);
     expect(result?.disclosure).toBe('automatic');
   });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s turns expanded', (outcome) => {

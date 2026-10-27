@@ -8,7 +8,8 @@ export type FlowerTurnProcess = Readonly<{
   turn?: FlowerRuntimeTurn;
   processKeys: readonly string[];
   parentEventCount: number;
-  staticOverview: boolean;
+  interleavedInputs: boolean;
+  countsComplete: boolean;
   inputResponseCount: number;
   toolCallCount: number;
   failedCallCount: number;
@@ -22,16 +23,21 @@ export type FlowerTurnProcessProjection = Readonly<{
   rows: ReadonlyMap<string, FlowerTurnProcess>;
 }>;
 
-export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[], turns: readonly FlowerRuntimeTurn[] = [], pendingTurnIDs: readonly string[] = [], previous?: FlowerTurnProcessProjection): FlowerTurnProcessProjection {
+export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[], turns: readonly FlowerRuntimeTurn[] = [], pendingTurnIDs: readonly string[] = [], previous?: FlowerTurnProcessProjection,
+  coverage: Readonly<{ hasBefore: boolean; hasAfter: boolean; readingBreaks?: ReadonlySet<string>; missingEvents?: readonly Readonly<{ after: number; before: number }>[] }> = { hasBefore: false, hasAfter: false }): FlowerTurnProcessProjection {
   const facts = new Map(turns.map((turn) => [turn.turn_id, turn]));
   const groups = new Map<string, string[]>();
   const rowTurns = new Map<string, string>();
   const eventCounts = new Map<string, number>();
   const terminalKeys = new Map<string, string>();
   const inputResponses = new Map<string, string[]>();
-  for (const entry of entries) {
+  const turnBounds = new Map<string, { first: number; last: number }>();
+  for (const [index, entry] of entries.entries()) {
     const id = entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event' ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
     if (!id) continue;
+    const bounds = turnBounds.get(id);
+    if (bounds) bounds.last = index;
+    else turnBounds.set(id, { first: index, last: index });
     rowTurns.set(entry.key, id);
     if (!groups.has(id)) groups.set(id, []);
     if (entry.type === 'parent_event') {
@@ -82,7 +88,20 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
       const position = positions.get(key);
       return position !== undefined && position > firstProcess && position < lastProcess;
     }).length;
-    const staticOverview = disclosable && inputResponseCount > 0;
+    const interleavedInputs = disclosable && inputResponseCount > 0;
+    const { first, last } = turnBounds.get(turnID)!;
+    const beginning = entries[first];
+    const startsWithRequest = beginning?.type === 'message' && beginning.message.role === 'user'
+      && !beginning.blocks.some(block => block.type === 'input_response');
+    const ordinal = (entry: FlowerTimelineEntry | undefined) => entry?.type === 'message' ? entry.message.canonical_ordinal
+      : entry?.type === 'parent_event' ? entry.event.canonical_ordinal
+        : entry?.type === 'context_compaction' ? entry.decoration.compaction.canonical_ordinal : undefined;
+    const lower = first > 0 ? ordinal(entries[first - 1]) : -Infinity;
+    const upper = last + 1 < entries.length ? ordinal(entries[last + 1]) : Infinity;
+    const countsComplete = (startsWithRequest || (first > 0 ? !coverage.readingBreaks?.has(entries[first].key) : !coverage.hasBefore))
+      && (last < entries.length - 1 ? !coverage.readingBreaks?.has(entries[last + 1].key) : !coverage.hasAfter)
+      && !entries.slice(first + 1, last + 1).some(entry => coverage.readingBreaks?.has(entry.key))
+      && !coverage.missingEvents?.some(gap => lower === undefined || upper === undefined || lower < gap.before && upper > gap.after);
     let toolCallCount = 0;
     let failedCallCount = 0;
     for (const key of processKeys) {
@@ -102,13 +121,13 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     const onlyProcess = processKeys.length === 1 ? entries[positions.get(processKeys[0]) ?? -1] : undefined;
     const thinkingOnly = onlyProcess?.type === 'message' && onlyProcess.blocks.length === 1
       && onlyProcess.blocks[0].type === 'content' && onlyProcess.blocks[0].block_type === 'thinking';
-    const disclosure: FlowerTurnDisclosurePolicy = !disclosable || staticOverview || thinkingOnly ? 'none' : 'automatic';
-    const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, staticOverview, inputResponseCount,
+    const disclosure: FlowerTurnDisclosurePolicy = !disclosable || thinkingOnly ? 'none' : interleavedInputs ? 'manual' : 'automatic';
+    const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, interleavedInputs, countsComplete, inputResponseCount,
       toolCallCount, failedCallCount, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure };
     const prior = previous?.groups.get(turnID);
     return [turnID, prior && prior.turn === turn && prior.disclosure === disclosure
       && prior.parentEventCount === next.parentEventCount && prior.terminalKey === next.terminalKey
-      && prior.staticOverview === staticOverview && prior.inputResponseCount === inputResponseCount
+      && prior.interleavedInputs === interleavedInputs && prior.countsComplete === countsComplete && prior.inputResponseCount === inputResponseCount
       && prior.toolCallCount === toolCallCount && prior.failedCallCount === failedCallCount
       && prior.processKeys.length === processKeys.length && prior.processKeys.every((key, index) => key === processKeys[index]) ? prior : next];
   }));
