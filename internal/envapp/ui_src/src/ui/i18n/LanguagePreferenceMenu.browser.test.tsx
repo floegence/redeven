@@ -19,7 +19,7 @@ it.each([320, 360, 393, 430])('keeps the unlock language menu inside a %s px vie
   expect(menu.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
   expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(430);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
-  expect(menu.querySelector('button')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  await expect.poll(() => menu.querySelector('button')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   await userEvent.keyboard('{End}');
   expect(document.activeElement?.getAttribute('data-envapp-language-option')).toBe('ru-RU');
   await userEvent.keyboard('{Escape}');

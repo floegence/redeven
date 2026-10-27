@@ -216,7 +216,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
                     aria-checked={selected()}
                     data-envapp-language-option={option.value}
                     class={cn(
-                      'flex min-h-[var(--floe-row-height)] w-full cursor-pointer items-center gap-2 rounded-sm px-2 text-left',
+                      'flex min-h-[max(44px,var(--floe-row-height))] w-full cursor-pointer items-center gap-2 rounded-sm px-2 text-left',
                       'text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]',
                       'transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)]',
                       'hover:bg-[var(--floe-state-hover)] focus:bg-[var(--floe-state-hover)] hover:text-[var(--floe-ink)] focus:text-[var(--floe-ink)] focus:outline-none',
