@@ -1537,6 +1537,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const viewport = scroll.viewport();
     if (!viewport?.isConnected || viewport.clientHeight <= 0
       || threadCache().views.get(threadID)?.thread.history_window?.has_after) return false;
+    if (!scroll.prepareDestination()) return false;
     scroll.scrollToBottom({ smooth: false });
     // Prepare only text in the positioned destination, newest first. Earlier
     // placeholders must not occupy read slots ahead of the visible tail.
@@ -11604,7 +11605,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       disclosureControl.toggle();
     };
     const disclosure = createFlowerActivityDisclosureMotion(open, {
-      reducedMotion: reducedMotionPreferred,
+      reducedMotion: () => viewportScope.isPreparing() || reducedMotionPreferred(),
       onLayoutFrame: viewportScope.measureAfterLayout,
       onMotionEnd: () => { if (toggleButtonRef) viewportScope.finishDisclosure(toggleButtonRef); },
       onBeforeClose: () => {

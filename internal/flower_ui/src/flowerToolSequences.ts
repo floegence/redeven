@@ -10,6 +10,7 @@ type SequenceNode = Readonly<{
   scope: string;
   turnID?: string;
   kind: 'tool' | 'thinking' | 'subagent_event';
+  label?: string;
   active: boolean;
   failed: boolean;
 }>;
@@ -26,6 +27,7 @@ export type FlowerToolSequence = Readonly<{
   nodeKeys: readonly string[];
   entryKeys: readonly string[];
   toolCount: number;
+  latestToolLabel?: string;
   failedCount: number;
   failedSubagentEventCount: number;
   thinkingCount: number;
@@ -101,7 +103,7 @@ export function projectFlowerToolSequences(
       } else if (block.type === 'tool_preview') {
         const call = block.block.call;
         tokens.push(sameScope(call.thread_id, call.turn_id, call.run_id) && isSequenceTool(call.name)
-          ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'tool', active: true, failed: false } : null);
+          ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'tool', label: call.preview?.display_name || call.name, active: true, failed: false } : null);
       } else if (block.type === 'activity') {
         for (const item of block.block.items) {
           const failed = item.status === 'error';
@@ -127,7 +129,7 @@ export function projectFlowerToolSequences(
           tokens.push(foldable ? {
             key: flowerActivityIdentity({ threadID: block.block.thread_id, runID: block.block.run_id, turnID: block.block.turn_id,
               itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
-            entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'tool',
+            entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'tool', label: item.label || item.tool_name,
             active: item.status === 'pending' || item.status === 'running' || subagentWait,
             failed,
           } : null);
@@ -174,6 +176,7 @@ export function projectFlowerToolSequences(
       nodeKeys: nodes.map(node => node.key),
       entryKeys,
       toolCount: tools.length,
+      latestToolLabel: tools.at(-1)?.label,
       failedCount: tools.filter(node => node.failed).length,
       failedSubagentEventCount: subagentEvents.filter(node => node.failed).length,
       thinkingCount: thinking.length,

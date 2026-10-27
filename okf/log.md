@@ -11,6 +11,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-26
 
+- Share input-aware following between the transcript and [tool sequences](ui/flower-tool-sequences.md), reveal both tails together on [thread selection](ui/flower-thread-selection.md), retain folded activity previews and fit ten compact desktop rows.
+
 - Verify [Runtime asset notices](desktop/desktop-development-bundles.md) only after parallel package tasks finish, preserving clean-source dependency ordering and build failures.
 
 - Separate complete browser locator resolution from [bounded observations](ai/computer-use-semantics.md), preserve [script diagnostics and envelope capacity](ai/computer-use-scripts.md), correlate downloads with their trigger boundary, and qualify scoped tasks using the real configured [DeepSeek model](ai/computer-use-qualification.md).
