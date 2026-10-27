@@ -494,8 +494,7 @@
       "confirm": "Confirmar",
       "connected": "Conectado",
       "disconnected": "Desconectado",
-      "connecting": "Conectando...",
-      "error": "Erro"
+      "connecting": "Conectando..."
     },
     "status": {
       "localRuntime": "Tempo de execução local",

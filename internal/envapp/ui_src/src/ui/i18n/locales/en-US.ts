@@ -1775,7 +1775,6 @@ export const enUS = defineDictionary({
       connected: 'Connected',
       disconnected: 'Disconnected',
       connecting: 'Connecting',
-      error: 'Error',
     },
     status: {
       localRuntime: 'Local runtime',

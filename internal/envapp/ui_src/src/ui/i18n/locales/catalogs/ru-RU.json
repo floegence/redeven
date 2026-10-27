@@ -494,8 +494,7 @@
       "confirm": "Подтвердить",
       "connected": "Подключено",
       "disconnected": "Отключено",
-      "connecting": "Подключение...",
-      "error": "Ошибка"
+      "connecting": "Подключение..."
     },
     "status": {
       "localRuntime": "Локальная среда выполнения",

@@ -744,7 +744,6 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
               )}
           </For>
         </div>
-        <Show when={props.bottomBarMode !== 'hidden'}><footer data-floe-shell-slot="bottom-bar">{props.bottomBarItems}</footer></Show>
         {layoutIsMobile && props.mobileAccessory}
         <div
           data-testid="mock-env-context-state"

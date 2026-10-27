@@ -4237,7 +4237,9 @@ describe("GitBranchesPanel interactions", () => {
         'button[aria-label="Close"]',
       ) as HTMLButtonElement | null | undefined;
       expect(closeButton).toBeTruthy();
-      expect(closeButton?.className).toContain("hover:bg-error");
+      expect(closeButton?.className).toContain(
+        "hover:bg-[color-mix(in_srgb,var(--error)_12%,transparent)]",
+      );
       expect(closeButton?.className).not.toContain("hover:bg-muted/80");
 
       const changedFilesScrollRegion = Array.from(

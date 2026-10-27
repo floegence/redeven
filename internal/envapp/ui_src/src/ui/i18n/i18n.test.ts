@@ -933,13 +933,12 @@ describe('Env App and Desktop i18n contract', () => {
     const appSource = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/App.tsx'), 'utf8');
     const shellSource = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/EnvAppShell.tsx'), 'utf8');
     expect(appSource).toContain("searchPlaceholder: t('shell.framework.searchCommands')");
-    expect(appSource).toContain("error: t('shell.framework.error')");
+    expect(appSource).not.toContain('statusIndicator');
     expect(shellSource).toContain("label: i18n.t('uiCopy.plugin.panelTitle')");
     expect(shellSource).not.toContain("label: 'Plugins'");
     expect(dictionaries['zh-CN'].shell.framework).toMatchObject({
       searchCommands: '搜索命令...',
       disconnected: '未连接',
-      error: '错误',
     });
     expect(Object.fromEntries(SUPPORTED_LOCALES.map((locale) => [
       locale,
