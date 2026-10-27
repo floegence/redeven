@@ -4,7 +4,17 @@ import type { JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ActivityBarPortsIcon, ActivityBarSettingsIcon, ActivityBarSwitchIcon } from './ActivityBarDockIcons';
+import {
+  ActivityBarCodespacesIcon,
+  ActivityBarContainersIcon,
+  ActivityBarFolderIcon,
+  ActivityBarHostApplicationsIcon,
+  ActivityBarMonitorIcon,
+  ActivityBarPortsIcon,
+  ActivityBarSettingsIcon,
+  ActivityBarSwitchIcon,
+  ActivityBarTerminalIcon,
+} from './ActivityBarDockIcons';
 
 function renderIcon(Icon: (props: { class?: string }) => JSX.Element): SVGSVGElement {
   const host = document.createElement('div');
@@ -41,6 +51,38 @@ describe('Activity Bar bottom icons', () => {
     expect(icon.getAttribute('stroke-linejoin')).toBe('round');
     expect(icon.querySelector('[fill], [fill-opacity], [stroke-opacity]')).toBeNull();
     expect(icon.querySelector('title, [tabindex]')).toBeNull();
+  });
+
+  it('draws every rail glyph in one frame, at one ink weight', () => {
+    const icons = [
+      ActivityBarTerminalIcon,
+      ActivityBarFolderIcon,
+      ActivityBarMonitorIcon,
+      ActivityBarCodespacesIcon,
+      ActivityBarPortsIcon,
+      ActivityBarHostApplicationsIcon,
+      ActivityBarContainersIcon,
+      ActivityBarSwitchIcon,
+      ActivityBarSettingsIcon,
+    ];
+
+    for (const Icon of icons) {
+      const icon = renderIcon(Icon);
+      expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
+      expect(icon.getAttribute('stroke-width')).toBe('1.5');
+      expect(icon.getAttribute('stroke')).toBe('currentColor');
+      // Filled glyphs opt out of the inherited stroke per shape; the frame
+      // itself always strokes, so a missing stroke would be a regression.
+      for (const shape of icon.querySelectorAll<SVGElement>('path, circle, rect, line')) {
+        expect(['', 'none', 'currentColor']).toContain(shape.getAttribute('stroke') ?? '');
+      }
+      // Fills are allowed for solid silhouettes, but never a second colour and
+      // never an opacity trick on stroke.
+      for (const filled of icon.querySelectorAll('[fill]')) {
+        expect(filled.getAttribute('fill')).toBe('currentColor');
+      }
+      expect(icon.querySelector('[stroke-opacity]')).toBeNull();
+    }
   });
 
   it('keeps the globe glyph for Web Services', () => {

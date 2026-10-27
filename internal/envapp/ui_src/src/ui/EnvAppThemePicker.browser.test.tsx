@@ -1,7 +1,7 @@
 import '../index.css';
 import { BUILT_IN_SHELL_THEME_DEFAULTS, builtInShellThemePresets, FloeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { EnvAppThemePicker } from './EnvAppThemePicker';
 
@@ -57,7 +57,8 @@ it('paints feedback and keeps the workspace usable while the actual theme provid
   expect(status.textContent).toContain('Switching appearance');
   await expect.poll(() => writes).toBe(1);
   trigger.click();
-  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  // The dialog plays floe's floating-menu exit before it unmounts.
+  await expect.poll(() => host.querySelector('[role="dialog"]')).toBeNull();
   // Closing restores the trigger first; subsequent user input owns focus.
   await Promise.resolve();
   draft.focus();
@@ -72,6 +73,40 @@ it('paints feedback and keeps the workspace usable while the actual theme provid
   host.querySelector<HTMLButtonElement>('[id$="-mode-light"]')!.click();
   await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe('porcelain-light');
   expect(host.querySelector<HTMLElement>('[data-envapp-theme-preset]')?.dataset.envappThemePreset).toBe('porcelain-light');
+});
+
+it('opens and closes on floe\'s floating-menu motion, the contract the download panel uses', async () => {
+  await page.viewport(1100, 800);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  function Workspace() {
+    return <EnvAppThemePicker onSourceChange={() => true} onShellThemeChange={() => true} />;
+  }
+  dispose = render(() => <FloeProvider config={{ storage: { enabled: false }, theme: { defaultTheme: 'dark', shellPresets: builtInShellThemePresets, defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS } }}><Workspace /></FloeProvider>, host);
+
+  const trigger = host.querySelector<HTMLButtonElement>('[data-envapp-theme-trigger]')!;
+  trigger.click();
+  const menu = await vi.waitFor(() => {
+    const found = host.querySelector<HTMLElement>('[data-envapp-theme-menu="topbar"]');
+    expect(found).toBeTruthy();
+    return found!;
+  });
+
+  // Same class contract and same presence attribute as DownloadTaskButton.
+  expect(menu.classList.contains('floe-floating-presence')).toBe(true);
+  expect(menu.classList.contains('floe-floating-menu')).toBe(true);
+  expect(['entering', 'open']).toContain(menu.getAttribute('data-floating-presence'));
+  // floe's menu origin is the top edge, so the panel grows downward from the
+  // trigger rather than from its centre.
+  const origin = getComputedStyle(menu).transformOrigin.split(' ').map(part => part.trim());
+  expect(origin[1]).toBe('0px');
+
+  await expect.poll(() => menu.getAttribute('data-floating-presence')).toBe('open');
+
+  trigger.click();
+  // The layer stays mounted through the exit instead of disappearing at once.
+  expect(menu.getAttribute('data-floating-presence')).toBe('exiting');
+  await expect.poll(() => host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeNull();
 });
 
 it.each([
