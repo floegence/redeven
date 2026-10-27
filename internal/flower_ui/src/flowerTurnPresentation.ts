@@ -30,6 +30,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
   const rowTurns = new Map<string, string>();
   const eventCounts = new Map<string, number>();
   const terminalKeys = new Map<string, string>();
+  const summaryKeys = new Map<string, string>();
   const inputResponses = new Map<string, string[]>();
   const turnBounds = new Map<string, { first: number; last: number }>();
   for (const [index, entry] of entries.entries()) {
@@ -39,6 +40,10 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     if (bounds) bounds.last = index;
     else turnBounds.set(id, { first: index, last: index });
     rowTurns.set(entry.key, id);
+    // Header placement follows turn order, independently of which rows fold.
+    const request = entry.type === 'message' && entry.message.role === 'user'
+      && !entry.blocks.some(block => block.type === 'input_response');
+    if (!request && !summaryKeys.has(id)) summaryKeys.set(id, entry.key);
     if (!groups.has(id)) groups.set(id, []);
     if (entry.type === 'parent_event') {
       const event = entry.event;
@@ -66,12 +71,11 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     const turn = facts.get(id);
     const final = turn?.final_item_ids.includes(entry.message.id);
     const goalProcess = entry.message.role === 'system' && Boolean(entry.message.goal)
-      && Boolean(turn && turn.run_id === entry.message.run_id);
+      && Boolean(turn && entry.message.run_id);
     const dialogue = entry.message.role !== 'assistant' || entry.blocks.some((block) => block.type === 'input_response');
     // Only the canonical owner can classify prose as superseded. Unknown and
     // trailing partial output stay visible regardless of terminal outcome.
-    const intermediate = turn?.run_id === entry.message.run_id
-      && turn?.intermediate_item_ids?.includes(entry.message.id) && !entry.message.live;
+    const intermediate = turn?.intermediate_item_ids?.includes(entry.message.id) && !entry.message.live;
     const explicitProcess = entry.blocks.length > 0 && entry.blocks.every((block) => block.type === 'activity'
       || block.type === 'content' && block.block_type === 'thinking');
     if (!final && (goalProcess || !dialogue && (intermediate || explicitProcess))) groups.get(id)!.push(entry.key);
@@ -123,10 +127,10 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
       && onlyProcess.blocks[0].type === 'content' && onlyProcess.blocks[0].block_type === 'thinking';
     const disclosure: FlowerTurnDisclosurePolicy = !disclosable || thinkingOnly ? 'none' : interleavedInputs ? 'manual' : 'automatic';
     const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, interleavedInputs, countsComplete, inputResponseCount,
-      toolCallCount, failedCallCount, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure };
+      toolCallCount, failedCallCount, summaryKey: summaryKeys.get(turnID), terminalKey: terminalKeys.get(turnID), disclosure };
     const prior = previous?.groups.get(turnID);
     return [turnID, prior && prior.turn === turn && prior.disclosure === disclosure
-      && prior.parentEventCount === next.parentEventCount && prior.terminalKey === next.terminalKey
+      && prior.parentEventCount === next.parentEventCount && prior.terminalKey === next.terminalKey && prior.summaryKey === next.summaryKey
       && prior.interleavedInputs === interleavedInputs && prior.countsComplete === countsComplete && prior.inputResponseCount === inputResponseCount
       && prior.toolCallCount === toolCallCount && prior.failedCallCount === failedCallCount
       && prior.processKeys.length === processKeys.length && prior.processKeys.every((key, index) => key === processKeys[index]) ? prior : next];

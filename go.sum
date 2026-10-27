@@ -166,8 +166,8 @@ github.com/floegence/floe-native-apps v0.24.0 h1:TARAdb4kBS3evOoDwpssO2ZS6Q67j0R
 github.com/floegence/floe-native-apps v0.24.0/go.mod h1:bhum1digz3s8aaQcF7pO6iqsxLAsYATeDu3E3AWsmN0=
 github.com/floegence/floeterm/terminal-go v0.19.2 h1:BCqhXYaxEMcjpXl4jNY6aldyqj0DHqqUtwS9X6KaJkI=
 github.com/floegence/floeterm/terminal-go v0.19.2/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
-github.com/floegence/floret/v7 v7.87.4 h1:btma6lXjRBCQJcw8ZETjXTqZ0sz050xxNSOOnzXzeAc=
-github.com/floegence/floret/v7 v7.87.4/go.mod h1:eEJ+ozGisEqpEigTFMY0v62c/r0iRRr0NePX9MaIhXo=
+github.com/floegence/floret/v7 v7.87.5 h1:RxnbOE6K1FC9HhcyzNCEVD1QXboYS9rvlefQz987SdM=
+github.com/floegence/floret/v7 v7.87.5/go.mod h1:eEJ+ozGisEqpEigTFMY0v62c/r0iRRr0NePX9MaIhXo=
 github.com/floegence/flowersec/flowersec-go/v5 v5.11.1 h1:eMqkpqpVCGQ+rbcNKe9SI+aEimAQLZTmzkwOXxiCpRw=
 github.com/floegence/flowersec/flowersec-go/v5 v5.11.1/go.mod h1:3wcvWklYumBaa/mlY/9TDMKlyJvi8ZziIy/NbEEmdsc=
 github.com/floegence/redeven-service-templates v0.7.0 h1:8sSbDNi7S8rodecHHoek+nDxZKJlwsyf2+xdSRL+V3M=

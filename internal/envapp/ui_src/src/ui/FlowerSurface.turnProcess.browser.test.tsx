@@ -94,6 +94,44 @@ const hidden = (root: HTMLElement, id: string) => messageRow(root, id)?.querySel
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it('keeps the turn toggle before visible prose and independent of that row visibility', async () => {
+    const done = current(true);
+    const initial = { ...done, items: [done.items![0],
+      { id: 'unknown-opening', turn_id: 'turn', run_id: 'old-run', ordinal: 1.5, kind: 'assistant' as const, text: 'Unconfirmed earlier response.' },
+      ...done.items!.slice(1)].map((item, index) => ({ ...item, ordinal: index + 1 })) };
+    const { root } = await mount(initial);
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    expect(summary(root)!.closest('.flower-turn-row')).toBe(messageRow(root, 'unknown-opening'));
+    expect(hidden(root, 'unknown-opening')).toBe(false);
+    expect(summary(root)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(message(root, 'unknown-opening').getBoundingClientRect().top + 1);
+    summary(root)!.click();
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true' && !hidden(root, 'progress'));
+    summary(root)!.click();
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false' && hidden(root, 'progress'));
+    expect(hidden(root, 'unknown-opening')).toBe(false);
+    expect(hidden(root, 'final-a')).toBe(false);
+  });
+
+  it('retains focus and the closed choice when a prepend relocates the header', async () => {
+    const done = current(true, { turns: [turn({ intermediate_item_ids: [] })] });
+    const initial = { ...done, items: done.items!.filter(item => ['tool', 'final-a', 'final-b'].includes(item.id)) };
+    const { root, live } = await mount(initial);
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    const prior = summary(root)!;
+    prior.focus({ preventScroll: true });
+    live.push({ ...done, view_version: 3, items: [done.items![0],
+      { id: 'earlier-prose', turn_id: 'turn', run_id: 'old-run', kind: 'assistant', ordinal: 2, text: 'Earlier unconfirmed output.' },
+      ...initial.items] });
+    await waitFor(() => summary(root)?.closest('.flower-turn-row') === messageRow(root, 'earlier-prose'));
+    expect(document.activeElement).toBe(summary(root));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    expect(hidden(root, 'tool')).toBe(true);
+    expect(hidden(root, 'earlier-prose')).toBe(false);
+    summary(root)!.click();
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
+    expect(hidden(root, 'tool')).toBe(false);
+  });
+
   it('mounts process content on demand and preserves inspected nodes while folded', async () => {
     const { root } = await mount(current(true));
     await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
@@ -821,14 +859,16 @@ describe('completed turn process disclosure', () => {
     } };
     const initial = current(true, {
       run_id: 'run-b', last_outcome: 'interrupted',
-      turns: [turn({ run_id: 'run-b', outcome: 'interrupted', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
+      turns: [turn({ run_id: 'run-b', outcome: 'interrupted', intermediate_item_ids: ['old-intro'], final_item_ids: [], final_boundary_complete: false })],
       items: [
         { ...sourceUser, run_id: 'run-a', ordinal: 1 },
+        { id: 'old-intro', kind: 'assistant' as const, turn_id: 'turn', run_id: 'run-a', ordinal: 2, text: 'Opening before the interaction.' },
+        { id: 'old-goal', kind: 'goal' as const, turn_id: 'turn', run_id: 'run-a', ordinal: 3, goal: { actor: 'model' as const, operation: 'set' as const, at: '2026-10-11T12:00:00Z', goal: { version: 1, text: 'Inspect the route', status: 'active' as const, actor: 'model' as const } } },
         toolItem('before-one', 2, 'run-a'), toolItem('before-two', 3, 'run-a'), receipt,
         toolItem('after-one', 5, 'run-b'), toolItem('after-two', 6, 'run-b', 'error'),
         { ...done.items!.find((item) => item.id === 'final-a')!, turn_id: 'turn', run_id: 'run-b', ordinal: 7,
           text: 'The run stopped after the response.' },
-      ],
+      ].map((item, index) => ({ ...item, ordinal: index + 1 })),
     });
     const { root } = await mount(initial);
     const overview = () => summary(root);
@@ -841,6 +881,16 @@ describe('completed turn process disclosure', () => {
     expect(messageRow(root, 'answer').dataset.flowerInputCheckpoint).toBe('true');
     expect(message(root, 'before-one')).not.toBeNull();
     expect(message(root, 'after-one')).not.toBeNull();
+    expect(overview()!.closest('.flower-turn-row')).toBe(messageRow(root, 'old-intro'));
+    overview()!.click();
+    await waitFor(() => overview()?.getAttribute('aria-expanded') === 'false');
+    expect(hidden(root, 'old-intro')).toBe(true);
+    expect(hidden(root, 'old-goal')).toBe(true);
+    expect(hidden(root, 'answer')).toBe(false);
+    overview()!.click();
+    await waitFor(() => overview()?.getAttribute('aria-expanded') === 'true');
+    expect(hidden(root, 'old-intro')).toBe(false);
+    expect(hidden(root, 'old-goal')).toBe(false);
   });
   it.each(['canonical', 'legacy'] as const)('defaults %s child work to collapsed while preserving the parent background entry', async (history) => {
     await page.viewport(1280, 900);

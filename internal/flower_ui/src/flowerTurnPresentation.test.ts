@@ -60,15 +60,15 @@ describe('canonical turn process presentation', () => {
     expect(projectFlowerTurnProcess([thinking, ...entries], [old, next]).groups.get('turn')?.disclosure).toBe('automatic');
     expect(projectFlowerTurnProcess([thinking, ...entries], [old, turn({ turn_id: 'compact', kind: 'context_compaction' })]).groups.get('turn')?.disclosure).toBe('automatic');
   });
-  it.each(['set', 'completed', 'delete'] as const)('folds canonical in-turn Goal %s facts and leaves unowned or mismatched edits visible', operation => {
+  it.each(['set', 'completed', 'delete'] as const)('folds canonical in-turn Goal %s facts across runs and leaves unowned edits visible', operation => {
     const goal = { goal: { version: 1, text: 'Verify changes', status: 'active' as const, actor: 'model' as const }, actor: 'model' as const, operation, at: '2026-10-18T12:00:00Z' };
     const model: MessageEntry = { ...entry('goal'), message: { ...entry('goal').message, role: 'system', goal } };
     const independent: MessageEntry = { ...model, key: 'independent-goal', message: { ...model.message, id: 'independent-goal', turn_id: undefined, run_id: undefined } };
     const mismatched: MessageEntry = { ...model, key: 'mismatched-goal', message: { ...model.message, id: 'mismatched-goal', run_id: 'other-run' } };
     const projected = projectFlowerTurnProcess([entries[0], model, thinking, independent, mismatched, ...entries.slice(1)], [turn()]);
-    expect(projected.groups.get('turn')?.processKeys).toEqual(['goal', 'thinking', 'progress']);
+    expect(projected.groups.get('turn')?.processKeys).toEqual(['goal', 'thinking', 'mismatched-goal', 'progress']);
     expect(projected.rows.has('independent-goal')).toBe(false);
-    expect(projected.rows.get('mismatched-goal')?.processKeys).not.toContain('mismatched-goal');
+    expect(projected.rows.get('mismatched-goal')?.processKeys).toContain('mismatched-goal');
   });
 
   const events: FlowerTimelineEntry[] = parentProcessEvents.map((event) => ({ type: 'parent_event', key: 'parent-event:' + event.id, event }));
@@ -175,6 +175,26 @@ describe('canonical turn process presentation', () => {
       disclosure: 'manual', interleavedInputs: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1,
       processKeys: [...before, ...after].map(value => value.key),
     });
+  });
+  it('anchors before old-run prose while folding only canonically confirmed work', () => {
+    const intro = withRun(entry('intro'), 'run-a');
+    const unknown = withRun(entry('unknown'), 'run-a');
+    const goal: MessageEntry = { ...entry('goal'), message: { ...entry('goal').message, role: 'system', run_id: 'run-a',
+      goal: { actor: 'model', operation: 'set', at: '2026-10-18T12:00:00Z', goal: { version: 1, text: 'Inspect', status: 'active', actor: 'model' } } } };
+    const rows = [entry('user', 'user'), unknown, intro, goal, withRun(toolEntry('before'), 'run-a'), inputResponse(), withRun(toolEntry('after'), 'run-b')];
+    const result = projectFlowerTurnProcess(rows, [turn({ run_id: 'run-b', intermediate_item_ids: ['intro'] })]).groups.get('turn');
+    expect(result?.summaryKey).toBe('unknown');
+    expect(result?.processKeys).toEqual(['intro', 'goal', 'before', 'after']);
+    expect(result?.interleavedInputs).toBe(true);
+  });
+  it('moves the header when pagination prepends visible prose without changing process membership', () => {
+    const facts = [turn({ intermediate_item_ids: [] })];
+    const tail = [toolEntry('tool')];
+    const first = projectFlowerTurnProcess(tail, facts, [], undefined, { hasBefore: true, hasAfter: false });
+    const next = projectFlowerTurnProcess([entry('user', 'user'), entry('unknown'), ...tail], facts, [], first);
+    expect(first.groups.get('turn')?.summaryKey).toBe('tool');
+    expect(next.groups.get('turn')?.summaryKey).toBe('unknown');
+    expect(next.groups.get('turn')).not.toBe(first.groups.get('turn'));
   });
   it('allows manual folding and counts work across a continuation run', () => {
     const before = [withRun(toolEntry('before-one'), 'run-a'), withRun(toolEntry('before-two'), 'run-a')];

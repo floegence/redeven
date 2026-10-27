@@ -464,6 +464,29 @@ describe('continuous visible bodies', () => {
 
 
 describe('visited history presentation', () => {
+  it('retains confirmed archived process across a new run without carrying old final facts', () => {
+    const { current, initial } = fixture();
+    const make = (id: string, ordinal: number) => ({ ...current.items![0], id, ordinal, canonical_ordinal: ordinal * 10, live: false, text: id });
+    const one = make('one', 1), oldFinal = make('old-final', 2), shared = make('shared', 3);
+    const turn = { turn_id: 'turn', run_id: 'run', started_at: '2026-10-11T12:00:00Z', elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0,
+      intermediate_item_ids: ['one', 'shared'], final_item_ids: ['old-final'], final_boundary_complete: true,
+      outcome: 'completed' as const, ended_at: '2026-10-11T12:00:00Z' };
+    const firstPage = { ...current, turns: [turn], items: [one, oldFinal, shared], window: { leaf_id: 'before', first_item_id: one.id, last_item_id: shared.id, has_before: false, has_after: false } };
+    const first = createRuntimeThreadRecord(firstPage, applyFlowerRuntimeCurrentView(initial, firstPage));
+    const nextItem = { ...make('new-progress', 4), run_id: 'new-run' };
+    const nextPage = { ...current, run_id: 'new-run', turns: [{ ...turn, run_id: 'new-run', intermediate_item_ids: ['new-progress'],
+      final_item_ids: [], final_boundary_complete: false, outcome: undefined, ended_at: undefined }],
+      items: [shared, nextItem], window: { ...firstPage.window, leaf_id: 'after', first_item_id: shared.id, last_item_id: nextItem.id, has_before: true } };
+    const next = createRuntimeThreadRecord(nextPage, applyFlowerRuntimeCurrentView(initial, nextPage), first);
+    expect(next.initializeThread().turns![0].intermediate_item_ids).toEqual(['one', 'new-progress']);
+    expect(next.initializeThread().turns![0].final_item_ids).toEqual([]);
+    expect(next.initializeThread().turns![0].final_boundary_complete).toBe(false);
+    expect(next.readingItemIDs()).toEqual(['one', 'old-final', 'shared', 'new-progress']);
+    const replaced = { ...nextPage, items: [nextItem] };
+    const withoutPrefix = createRuntimeThreadRecord(replaced, applyFlowerRuntimeCurrentView(initial, replaced), first);
+    expect(withoutPrefix.initializeThread().turns![0].intermediate_item_ids).toEqual(['new-progress']);
+  });
+
   it('retains only the canonically confirmed prefix when live publication advances or replaces the leaf', () => {
     const { current, initial } = fixture();
     const make = (id: string, ordinal: number) => ({ ...current.items![0], id, ordinal, canonical_ordinal: ordinal * 10, live: false, text: id });

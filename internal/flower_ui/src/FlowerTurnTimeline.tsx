@@ -214,6 +214,19 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const previous = previousProjection;
     if (previous && previous.threadID === threadID) untrack(() => {
       for (const group of value.groups.values()) {
+        const prior = previous.value.groups.get(group.turnID);
+        if (prior?.summaryKey && prior.summaryKey !== group.summaryKey) {
+          const button = nodes.get(prior.summaryKey)?.closest('.flower-turn-row')?.querySelector<HTMLButtonElement>('.flower-turn-summary-button');
+          if (button && document.activeElement === button) {
+            const top = button.getBoundingClientRect().top;
+            queueMicrotask(() => {
+              const next = group.summaryKey ? nodes.get(group.summaryKey)?.closest('.flower-turn-row')?.querySelector<HTMLButtonElement>('.flower-turn-summary-button') : undefined;
+              if (!next?.isConnected) return;
+              next.focus({ preventScroll: true });
+              props.scroll.restoreReadingAnchor(next, top);
+            });
+          }
+        }
         if (group.interleavedInputs && !previous.value.groups.get(group.turnID)?.interleavedInputs) {
           preserveReadingAnchor(group.processKeys);
         }
@@ -348,8 +361,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   const row = (key: string, entry: Accessor<FlowerTimelineEntry>) => {
     const group = createMemo(() => processes().rows.get(key));
     const process = createMemo(() => group()?.processKeys.includes(key) ?? false);
-    const expanded = createMemo(() => !process() || retainedRows().has(key)
-      || props.choices.expanded(identity(group()!.turnID), group()!.disclosure));
+    const turnExpanded = createMemo(() => !group() || props.choices.expanded(identity(group()!.turnID), group()!.disclosure));
+    const expanded = createMemo(() => !process() || retainedRows().has(key) || turnExpanded());
     const ended = createMemo(() => {
       const current = group();
       const outcome = current?.turn?.outcome;
@@ -393,7 +406,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const toggle = (button: HTMLButtonElement) => {
       const current = group();
       if (!current || current.disclosure === 'none') return;
-      if (expanded()) {
+      if (turnExpanded()) {
         const focus = document.activeElement;
         if (current.processKeys.some((id) => focus && nodes.get(id)?.contains(focus))) button.focus({ preventScroll: true });
       }
@@ -424,8 +437,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         <Show when={summary()}>
           <div class="flower-turn-summary">
             <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
-              aria-expanded={expanded()} aria-controls={group()!.processKeys.map(contentID).join(' ')}
-              aria-label={`${expanded() ? props.copy.collapse : props.copy.expand}: ${summaryLabel()}`}
+              aria-expanded={turnExpanded()} aria-controls={group()!.processKeys.map(contentID).join(' ')}
+              aria-label={`${turnExpanded() ? props.copy.collapse : props.copy.expand}: ${summaryLabel()}`}
               onClick={(event) => toggle(event.currentTarget)}>
               <span>{summaryLabel()}</span>
               <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />

@@ -591,7 +591,7 @@ export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
     for (const id of turn.intermediate_item_ids ?? []) {
       const item = items.get(id);
       if (!trim(id) || intermediates.has(id) || refs.has(id) || duplicateItems.has(id) || !item || item.kind !== 'assistant'
-        || !trim(item.text) || item.turn_id !== turn.turn_id || item.run_id !== turn.run_id || item.ordinal < intermediateOrdinal) failure();
+        || !trim(item.text) || item.turn_id !== turn.turn_id || !trim(item.run_id) || item.ordinal < intermediateOrdinal) failure();
       intermediates.add(id); intermediateOrdinal = item!.ordinal;
     }
     return { ...turn, final_item_ids: [...turn.final_item_ids], ...(turn.intermediate_item_ids ? { intermediate_item_ids: [...turn.intermediate_item_ids] } : {}) };
