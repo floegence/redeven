@@ -3,19 +3,22 @@ import type { JSX } from 'solid-js';
 import { CodespacesActivityBarGlyph } from './CodespacesIcon';
 
 /* ======================================================================
-   Activity rail glyphs, redrawn in floe's published rail language.
+   Activity rail glyphs.
 
-   These match `ActivityRailIcons` in @floegence/floe-webapp-core exactly:
+   Drawn in floe's rail frame:
 
      - 24 viewBox with stroke-width 1.5, so a 20px slot carries ~1.25px of
        ink — the same weight as the rest of the shell
-     - ink confined to the 3.5..20.5 box, so every tile shares a cap height
-       and the rail reads as one column
-     - one stroke colour (currentColor), no fill, no opacity tricks; state
-       is carried by the plate and the wrapper's colour transition
-     - geometry on whole/half units so hairlines land on pixel boundaries
-     - size comes from `width`/`height` attributes, letting the rail's
-       `w-5 h-5` class govern the rendered box instead of an inline style
+     - ink held inside the 3.5..20.5 box, so every tile shares a cap height
+       and the rail reads as one column rather than a pile
+     - size comes from `width`/`height` attributes, letting the rail's class
+       govern the rendered box instead of an inline style
+
+   Silhouettes keep the proportions the rail already had: a terminal with a
+   readable chevron, a *filled* folder, a monitor that is only a trace. A
+   glyph may opt out of the inherited stroke with `stroke="none"` when it is
+   built from fills, and filled shapes below the rail weight carry a
+   `fill-opacity` so they sit behind the stroke work instead of over it.
    ====================================================================== */
 
 const RAIL_INK = 1.5;
@@ -49,36 +52,54 @@ function DockGlyph(props: {
 export function ActivityBarTerminalIcon(props: { class?: string }) {
   return (
     <DockGlyph class={props.class}>
-      <path d="m7 8.5 3.5 3.5L7 15.5" />
-      <path d="M12.75 15.5h4.75" />
+      <path d="M5.5 6.5 13 12 5.5 17.5" />
+      <path d="M15.5 17.5h4" />
     </DockGlyph>
   );
 }
 
-/** Files — the floe rail folder, one silhouette. */
+/** Files — a filled folder whose front sheet sits over the tab band. */
 export function ActivityBarFolderIcon(props: { class?: string }) {
   return (
     <DockGlyph class={props.class}>
-      <path d="M3.5 17.5V6.5a2 2 0 0 1 2-2h3.35a2 2 0 0 1 1.6.8l1 1.35a2 2 0 0 0 1.6.8h3.45a2 2 0 0 1 2 2v8.05a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z" />
+      <path
+        d="M3.5 8a2 2 0 0 1 2-2h3.15a2 2 0 0 1 1.6.8l.95 1.3a2 2 0 0 0 1.6.8h5.7a2 2 0 0 1 2 2v6.6a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"
+        fill="currentColor"
+        fill-opacity=".76"
+        stroke="none"
+      />
+      <path
+        d="M3.5 12.25h17v4.25a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"
+        fill="currentColor"
+        fill-opacity=".95"
+        stroke="none"
+      />
     </DockGlyph>
   );
 }
 
-/** Monitor — a monitor frame carrying a pulse trace. */
+/** Monitor — a pulse trace with a soft area fill, and no frame of its own. */
 export function ActivityBarMonitorIcon(props: { class?: string }) {
   return (
     <DockGlyph class={props.class}>
-      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
-      <path d="M6.5 12h2.25l1.75 4 2.25-8 1.75 4h2.5" />
+      <path
+        d="M3.5 15.5h2.4l2.3-8.5 2.6 12 2.4-8 1.8 4.5h5.5V19.6H3.5Z"
+        fill="currentColor"
+        fill-opacity=".16"
+        stroke="none"
+      />
+      <path d="M3.5 15.5h2.4l2.3-8.5 2.6 12 2.4-8 1.8 4.5h5.5" />
     </DockGlyph>
   );
 }
 
-/** Codespaces — the product mark, already authored for this rail size. */
+/** Codespaces — the product mark, drawn from fills only. */
 export function ActivityBarCodespacesIcon(props: { class?: string }) {
   return (
     <DockGlyph class={props.class}>
-      <CodespacesActivityBarGlyph />
+      <g stroke="none" transform="translate(1.2 1.2) scale(0.9)">
+        <CodespacesActivityBarGlyph />
+      </g>
     </DockGlyph>
   );
 }
@@ -87,9 +108,9 @@ export function ActivityBarCodespacesIcon(props: { class?: string }) {
 export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
     <DockGlyph class={props.class} identity="web-services">
-      <circle cx="12" cy="12" r="8.5" />
-      <line x1="3.5" y1="12" x2="20.5" y2="12" />
-      <path d="M12 3.5a12 8.5 0 0 1 0 17a12 8.5 0 0 1 0-17Z" />
+      <circle cx="12" cy="12" r="7.5" />
+      <line x1="4.5" y1="12" x2="19.5" y2="12" />
+      <path d="M12 4.5a3.4 7.5 0 0 1 0 15a3.4 7.5 0 0 1 0-15Z" />
     </DockGlyph>
   );
 }
@@ -120,10 +141,10 @@ export function ActivityBarContainersIcon(props: { class?: string }) {
 export function ActivityBarSwitchIcon(props: { class?: string }) {
   return (
     <DockGlyph class={props.class} identity="switch-environment">
-      <path d="M4.5 8.5h13" />
-      <path d="m14.5 5.5 3 3-3 3" />
-      <path d="M19.5 15.5h-13" />
-      <path d="m9.5 12.5-3 3 3 3" />
+      <path d="M3.5 8h14" />
+      <path d="m14.5 5 3 3-3 3" />
+      <path d="M20.5 16h-14" />
+      <path d="m9.5 13-3 3 3 3" />
     </DockGlyph>
   );
 }
@@ -132,12 +153,12 @@ export function ActivityBarSwitchIcon(props: { class?: string }) {
 export function ActivityBarSettingsIcon(props: { class?: string }) {
   return (
     <DockGlyph class={props.class} identity="runtime-settings">
-      <path d="M4 8.5h5" />
-      <path d="M13.5 8.5H20" />
-      <circle cx="11.25" cy="8.5" r="2.25" />
-      <path d="M4 15.5h9.5" />
-      <path d="M18 15.5h2" />
-      <circle cx="16" cy="15.5" r="2.25" />
+      <path d="M4 7h5" />
+      <path d="M13.5 7H20" />
+      <circle cx="11.25" cy="7" r="2.25" />
+      <path d="M4 17h9.5" />
+      <path d="M18 17h2" />
+      <circle cx="16" cy="17" r="2.25" />
     </DockGlyph>
   );
 }

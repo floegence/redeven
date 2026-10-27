@@ -12,6 +12,7 @@ import {
 import { Check, Highlighter, X } from '@floegence/floe-webapp-core/icons';
 import { cn } from '@floegence/floe-webapp-core';
 import { TopBarIconButton } from '@floegence/floe-webapp-core/layout';
+import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n, type EnvAppTranslationKey } from './i18n';
 
@@ -122,6 +123,11 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
   const i18n = useI18n();
   const [popoverOpen, setOpen] = createSignal(false);
   const open = () => props.presentation === 'inline' || popoverOpen();
+  // The popover enters and leaves on floe's floating-menu motion, the same
+  // contract the download panel uses, so both dropdowns in the top bar move
+  // alike. The inline presentation is a static region and takes no motion.
+  const popoverPresence = createFloatingPresence({ open: popoverOpen, element: () => dialogEl });
+  const popoverVisible = () => props.presentation === 'inline' || popoverPresence.mounted();
   const [error, setError] = createSignal('');
   const [pending, setPending] = createSignal('');
   let disposed = false;
@@ -299,7 +305,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
         </span>
       </TopBarIconButton></Show>
 
-      <Show when={open()}>
+      <Show when={popoverVisible()}>
         <div
           ref={(element) => {
             dialogEl = element;
@@ -310,7 +316,10 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
           aria-label={i18n.t('shell.themePicker.title')}
           data-floe-surface="floating"
           data-envapp-theme-menu={props.presentation === 'inline' ? 'inline' : 'topbar'}
-          class={props.presentation === 'inline' ? 'p-4' : 'absolute top-[calc(100%+0.5rem)] right-0 z-[90] w-[min(30rem,calc(100vw-1rem))] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl max-sm:fixed max-sm:top-12 max-sm:right-2 max-sm:left-2 max-sm:w-auto'}
+          data-floating-presence={props.presentation === 'inline' ? undefined : popoverPresence.state()}
+          class={props.presentation === 'inline' ? 'p-4' : cn(
+            'floe-floating-presence floe-floating-menu absolute top-[calc(100%+0.5rem)] right-0 z-[90] w-[min(30rem,calc(100vw-1rem))] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl max-sm:fixed max-sm:top-12 max-sm:right-2 max-sm:left-2 max-sm:w-auto',
+          )}
           onFocusOut={(event) => {
             if (props.presentation === 'inline') return;
             const nextTarget = event.relatedTarget;

@@ -120,7 +120,9 @@ describe('EnvAppThemePicker', () => {
       target.click();
       await vi.waitFor(() => expect(onShellThemeChange).toHaveBeenCalledTimes(1));
       trigger.click();
-      expect(host.querySelector('[role="dialog"]')).toBeNull();
+      // Closing runs floe's floating-menu exit; the dialog stays mounted while
+      // it animates out, then leaves.
+      await vi.waitFor(() => expect(host.querySelector('[role="dialog"]')).toBeNull());
       resolve(false);
       await vi.waitFor(() => expect(trigger.getAttribute('aria-busy')).not.toBe('true'));
       trigger.click();
@@ -220,8 +222,11 @@ describe('EnvAppThemePicker', () => {
 
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await Promise.resolve();
-      expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeNull();
+      // Focus returns at once; the menu itself animates out through floe's
+      // floating presence before it unmounts.
       expect(document.activeElement).toBe(trigger);
+      expect(host.querySelector('[data-envapp-theme-menu="topbar"]')?.getAttribute('data-floating-presence')).toBe('exiting');
+      await vi.waitFor(() => expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeNull());
     } finally {
       dispose();
     }
@@ -244,7 +249,7 @@ describe('EnvAppThemePicker', () => {
       mode.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: outside }));
       outside.focus();
       await Promise.resolve();
-      expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeNull();
+      await vi.waitFor(() => expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeNull());
       expect(document.activeElement).not.toBe(host.querySelector('[data-envapp-theme-trigger="topbar"]'));
     } finally {
       dispose();
@@ -260,7 +265,7 @@ describe('EnvAppThemePicker', () => {
       )!;
       mode.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: trigger }));
       await Promise.resolve();
-      expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeNull();
+      await vi.waitFor(() => expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeNull());
     } finally {
       dispose();
     }
