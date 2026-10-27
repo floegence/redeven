@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, createUniqueId, onCleanup, onMount, type Component } from 'solid-js';
+import { For, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
   SurfaceFloatingLayer,
@@ -80,6 +80,10 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   let lastFocusedItemId: string | null = null;
   let lastFocusedItemIndex = 0;
   const disabledDescriptionPrefix = createUniqueId();
+  // floe's floating-presence contract: start in `entering`, then settle to
+  // `open` on the next frame so the enter transition actually runs. Dismissal
+  // unmounts the layer, so there is no exit state to hold.
+  const [presence, setPresence] = createSignal<'entering' | 'open'>('entering');
   const itemsById = createMemo(() => new Map(props.items.map((item) => [item.id, item])));
 
   const dismiss = (reason: FloatingContextMenuDismissReason) => {
@@ -96,6 +100,11 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   };
 
   onMount(() => {
+    // Two frames: one to paint the `entering` geometry, one to promote it.
+    const enterFrame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setPresence('open'));
+    });
+    onCleanup(() => cancelAnimationFrame(enterFrame));
     let focusDismissalArmed = false;
     let viewportDismissalArmed = false;
     const frame = requestAnimationFrame(() => {
@@ -212,10 +221,15 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
           ),
         )}px`,
       }}
+      // The floating surface uses the same frame, elevation and enter motion as
+      // floe's own menus, so a context menu and a dropdown read as one control.
       class={cn(
-        'min-w-[180px] overflow-y-auto py-1 border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100',
+        'min-w-[180px] overflow-y-auto p-1',
+        'border border-[var(--floe-line)] rounded-panel shadow-[var(--floe-elevation-float)]',
+        'floe-floating-presence floe-floating-menu',
         redevenSurfaceRoleClass('overlay'),
       )}
+      data-floating-presence={presence()}
       onContextMenu={(event) => event.preventDefault()}
       onFocusIn={(event) => {
         const item = (event.target as Element | null)?.closest<HTMLElement>('[data-floating-menu-item-id]');
@@ -236,7 +250,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         {(itemId, index) => {
           const item = () => itemsById().get(itemId)!;
           if (!isActionItem(item())) {
-            return <div role="separator" aria-orientation="horizontal" class={cn('my-1 border-t', redevenDividerRoleClass('strong'))} />;
+            return <div role="separator" aria-orientation="horizontal" class={cn('my-1 h-px border-0 bg-[var(--floe-line-quiet)]', redevenDividerRoleClass('strong'))} />;
           }
 
           const actionItem = () => item() as FloatingContextMenuActionItem;
@@ -247,8 +261,8 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
             ? `${disabledDescriptionPrefix}-disabled-${index()}`
             : undefined;
           const itemClass = () => actionItem().destructive
-            ? 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
-            : 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
+            ? 'w-full flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer rounded-sm transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
+            : 'w-full flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer rounded-sm transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 hover:bg-[var(--floe-state-hover)] hover:text-[var(--floe-ink)] focus-visible:bg-[var(--floe-state-hover)] focus-visible:text-[var(--floe-ink)]';
           return (
             <button
               type="button"
@@ -263,7 +277,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
                 if (!itemDisabled()) actionItem().onSelect();
               }}
             >
-              <Icon class="w-3.5 h-3.5 opacity-60" />
+              <Icon class="w-3.5 h-3.5 shrink-0 text-[var(--floe-ink-quiet)]" />
               <span class={props.width ? 'min-w-0 flex-1 truncate text-left' : 'flex-1 text-left'}>{actionItem().label}</span>
               {actionItem().disabledReason ? (
                 <span id={disabledDescriptionID()} class="sr-only">{actionItem().disabledReason}</span>

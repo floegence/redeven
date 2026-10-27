@@ -726,7 +726,7 @@ export function ManagedServiceSettingsDrawer(props: {
                           {settingText("accessMode")}
                         </span>
                         <select
-                          class="h-9 w-full cursor-pointer rounded-md border bg-background px-2 text-xs"
+                          class="h-8 w-full cursor-pointer"
                           value={resolved().access_mode}
                           onChange={(event) =>
                             updateDraft((value) => {
@@ -832,7 +832,7 @@ export function ManagedServiceSettingsDrawer(props: {
                               {settingText("restartPolicy")}
                             </span>
                             <select
-                              class="h-8 w-full cursor-pointer rounded-md border bg-background px-2 text-xs"
+                              class="h-8 w-full cursor-pointer"
                               value={container.restart_policy ?? "no"}
                               onChange={(event) =>
                                 updateContainer((value) => {
@@ -1132,7 +1132,7 @@ export function ManagedServiceSettingsDrawer(props: {
                           {(mount, index) => (
                             <div class="grid grid-cols-[7rem_minmax(9rem,1fr)_minmax(8rem,0.8fr)_auto_auto] items-center gap-2 border-b px-3 py-2 last:border-b-0">
                               <select
-                                class="h-8 cursor-pointer rounded-md border bg-background px-2 text-xs"
+                                class="h-8 cursor-pointer"
                                 value={mount.type}
                                 disabled={managedMountLocked(
                                   mount.resource_id,
@@ -1446,7 +1446,7 @@ export function ManagedServiceSettingsDrawer(props: {
                                 }
                               />
                               <select
-                                class="h-8 cursor-pointer rounded-md border bg-background px-2 text-xs"
+                                class="h-8 cursor-pointer"
                                 value={port.protocol ?? "tcp"}
                                 onChange={(event) =>
                                   updateContainer((value) => {

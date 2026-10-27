@@ -2,7 +2,7 @@ import './runtime-settings-compact.css';
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { ChevronLeft, ChevronRight, Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import { Button, Select, SettingsLayout, SettingsNavigation } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, Select, SettingsLayout, SettingsNavigation } from '@floegence/floe-webapp-core/ui';
 
 import { EnvSettingsPageCtx, EnvSettingsPageProvider, useEnvSettingsPage, type EnvSettingsPageContextValue } from './settings/EnvSettingsPageContext';
 import { SETTINGS_NAV_ITEMS, SETTINGS_GROUPS, type SettingsGroupID, type SettingsNavItem } from './settings/settingsStructure';
@@ -167,11 +167,17 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
             })),
           }))}
           search={<div class="relative">
-            <Search class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input type="search" value={ctx.searchQuery()} onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
-              aria-label={i18n.t('settings.searchPlaceholder')} placeholder={i18n.t('settings.searchPlaceholder')}
-              class="redeven-settings-search w-full rounded-md border py-2 pl-8 pr-7 text-xs" />
-            <Show when={ctx.searchQuery()}><button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground"
+            <Input
+              type="search"
+              size="sm"
+              value={ctx.searchQuery()}
+              onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
+              aria-label={i18n.t('settings.searchPlaceholder')}
+              placeholder={i18n.t('settings.searchPlaceholder')}
+              leftIcon={<Search class="h-3.5 w-3.5" />}
+              class="redeven-settings-search pr-8 text-xs"
+            />
+            <Show when={ctx.searchQuery()}><button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-[var(--floe-ink-quiet)] transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)] hover:text-[var(--floe-ink)]"
               aria-label={i18n.t('settingsDesign.clearSearch')} onClick={() => ctx.setSearchQuery('')}><X class="h-3 w-3" /></button></Show>
           </div>}
           empty={<p role="status" class="px-3 py-5 text-xs text-muted-foreground">{i18n.t('settings.filteredSections', { visible: 0, total: SETTINGS_NAV_ITEMS.length })}</p>}

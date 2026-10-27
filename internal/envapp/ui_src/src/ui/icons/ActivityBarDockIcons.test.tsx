@@ -21,7 +21,7 @@ describe('Activity Bar bottom icons', () => {
   it.each([
     ['Switch Environment', ActivityBarSwitchIcon, 'switch-environment'],
     ['Runtime Settings', ActivityBarSettingsIcon, 'runtime-settings'],
-  ] as const)('renders %s as compact, theme-inheriting decorative line art', (_label, Icon, identity) => {
+  ] as const)('renders %s in the shared rail language', (_label, Icon, identity) => {
     const icon = renderIcon(Icon);
 
     expect(icon.getAttribute('data-activity-bar-icon')).toBe(identity);
@@ -29,10 +29,14 @@ describe('Activity Bar bottom icons', () => {
     expect(icon.getAttribute('fill')).toBe('none');
     expect(icon.getAttribute('aria-hidden')).toBe('true');
     expect(icon.getAttribute('class')).toBe('activity-icon');
-    expect(icon.style.width).toBe('18px');
-    expect(icon.style.height).toBe('18px');
+    // Size comes from the rail's own class, not an inline style that would
+    // outrank it; the attributes only keep a standalone render proportionate.
+    expect(icon.getAttribute('width')).toBe('24');
+    expect(icon.getAttribute('height')).toBe('24');
+    expect(icon.style.width).toBe('');
+    expect(icon.style.height).toBe('');
     expect(icon.getAttribute('stroke')).toBe('currentColor');
-    expect(icon.getAttribute('stroke-width')).toBe('1.6');
+    expect(icon.getAttribute('stroke-width')).toBe('1.5');
     expect(icon.getAttribute('stroke-linecap')).toBe('round');
     expect(icon.getAttribute('stroke-linejoin')).toBe('round');
     expect(icon.querySelector('[fill], [fill-opacity], [stroke-opacity]')).toBeNull();
@@ -48,5 +52,4 @@ describe('Activity Bar bottom icons', () => {
     expect(icon.querySelector('rect')).toBeNull();
     expect(icon.getAttribute('aria-hidden')).toBe('true');
   });
-
 });

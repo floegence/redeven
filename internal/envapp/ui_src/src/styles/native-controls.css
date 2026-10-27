@@ -1,0 +1,63 @@
+/* Native `<select>` adopts floe's published field face.
+ *
+ * Floe's own `Select` trigger is a filled well with a whisper edge,
+ * `--floe-radius-field` corners and the control type scale. A surface that
+ * keeps a native `<select>` for its platform menu must land on that same face,
+ * otherwise one dialog shows two dropdown languages side by side.
+ *
+ * Scope notes:
+ *  - Only `select`. Text inputs already come from floe's `Input`/`AffixInput`
+ *    or a surface's own field skin; a blanket rule here would repaint
+ *    deliberately borderless editors (search-in-header, composers) as wells.
+ *  - Zero specificity (`:where`) plus the `.floe-field` / `[data-floe-input-surface]`
+ *    exclusions, so floe primitives and compound controls keep their own face.
+ *  - Focus is never touched: `input-focus.css` owns the border-colour-only
+ *    contract and stays the only rule that reacts to focus.
+ */
+:where(select):not(
+  .floe-field,
+  [data-floe-input-surface],
+  [data-floe-input-surface] *,
+  [data-plugin-launcher-category-filter]
+) {
+  min-height: var(--floe-control-height-md, 2rem);
+  padding-inline: 0.625rem;
+  border: 1px solid var(--floe-field-edge);
+  border-radius: var(--floe-radius-field);
+  background-color: var(--floe-field-fill);
+  color: var(--floe-ink);
+  font-family: var(--font-sans);
+  font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
+  transition:
+    background-color var(--floe-duration-fast) var(--floe-ease-out),
+    border-color var(--floe-duration-fast) var(--floe-ease-out);
+}
+
+:where(select):not(
+  .floe-field,
+  [data-floe-input-surface],
+  [data-floe-input-surface] *,
+  [data-plugin-launcher-category-filter]
+):hover:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--floe-field-edge-hover);
+}
+
+:where(select):not(.floe-field):is(:disabled, [aria-disabled='true']) {
+  border-color: var(--floe-line);
+  background-color: var(--floe-plane);
+  color: var(--floe-ink-soft);
+}
+
+/* Coarse pointers get the same touch target as every other control. */
+@media (pointer: coarse) {
+  :where(select):not(
+    .floe-field,
+    [data-floe-input-surface],
+    [data-floe-input-surface] *,
+    [data-plugin-launcher-category-filter]
+  ) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

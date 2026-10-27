@@ -41,6 +41,18 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
   let rootEl: HTMLDivElement | undefined;
   let triggerEl: HTMLButtonElement | undefined;
   let menuEl: HTMLDivElement | undefined;
+  // Enter motion only: the layer unmounts with `open()`, exactly as before, so
+  // dismissal timing is unchanged while the reveal still uses floe's menu timing.
+  const [menuEntered, setMenuEntered] = createSignal(false);
+  createEffect(() => {
+    if (open()) {
+      setMenuEntered(false);
+      const frame = requestAnimationFrame(() => setMenuEntered(true));
+      onCleanup(() => cancelAnimationFrame(frame));
+      return;
+    }
+    setMenuEntered(false);
+  });
   const [placement, setPlacement] = createSignal({ x: 0, y: 0, width: 256, height: 480 });
   const surfaceSize = useResizeObserver(() => triggerEl?.closest<HTMLElement>('[data-floe-surface-portal-layer]') ?? undefined);
   let lastOpenRequestSeq = props.openRequestSeq?.() ?? 0;
@@ -204,8 +216,10 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
                     aria-checked={selected()}
                     data-envapp-language-option={option.value}
                     class={cn(
-                      'flex min-h-[44px] w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors duration-75',
-                      'hover:bg-accent focus:bg-accent focus:outline-none',
+                      'flex min-h-[var(--floe-row-height)] w-full cursor-pointer items-center gap-2 rounded-sm px-2 text-left',
+                      'text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]',
+                      'transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)]',
+                      'hover:bg-[var(--floe-state-hover)] focus:bg-[var(--floe-state-hover)] hover:text-[var(--floe-ink)] focus:text-[var(--floe-ink)] focus:outline-none',
                       selected() && 'font-medium text-foreground',
                     )}
                   onClick={() => void selectLanguage(option.value)}
@@ -251,11 +265,12 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
           <div
             ref={(el) => { menuEl = el; }}
             data-envapp-language-menu={props.variant}
+            data-floating-presence={menuEntered() ? 'open' : 'entering'}
             role="menu"
             aria-label={i18n.t('language.optionsLabel')}
             class={cn(
-              'overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md',
-              'animate-in fade-in [animation-duration:150ms] transition-none',
+              'overflow-auto rounded-panel border border-[var(--floe-line)] bg-popover p-1 text-popover-foreground shadow-[var(--floe-elevation-float)]',
+              'floe-floating-presence floe-floating-menu',
             )}
             style={{ width: `${placement().width}px`, 'max-height': `${placement().height}px` }}
             onKeyDown={handleOptionsKeyDown}
@@ -266,7 +281,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
                 {i18n.t('language.currentResolved', { language: selectedLabel() })}
               </div>
             </div>
-            <div class="my-1 h-px bg-border" />
+            <div class="my-1 h-px bg-[var(--floe-line-quiet)]" />
             {languageOptions()}
           </div>
           </SurfaceFloatingLayer>

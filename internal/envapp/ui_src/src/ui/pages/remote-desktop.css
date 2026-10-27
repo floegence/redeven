@@ -18,12 +18,14 @@
 .remote-desktop-display { display: grid; gap: 7px; margin-top: 20px; }
 .remote-desktop-display > span:first-child { font-weight: 500; }
 .remote-desktop-select { position: relative; display: block; min-width: 0; }
-.remote-desktop-select select { appearance: none; box-sizing: border-box; display: block; width: 100%; min-width: 0; max-width: 100%; padding-block: 9px; padding-inline: 10px 36px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); cursor: pointer; text-overflow: ellipsis; }
+/* Geometry only: the shared native-select face owns the field recipe; this
+ * surface keeps an overlaid chevron, so the text reserves room for it. */
+.remote-desktop-select select { appearance: none; box-sizing: border-box; display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 2.25rem; padding-block: 0; padding-inline: 0.625rem 36px; cursor: pointer; text-overflow: ellipsis; }
 .remote-desktop-select-icon { position: absolute; inset-inline-end: 12px; top: 50%; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
 .remote-desktop-select-icon > svg { display: block; }
 .remote-desktop-select select:disabled { cursor: not-allowed; opacity: .5; }
 .remote-desktop-select select:disabled + .remote-desktop-select-icon { opacity: .5; }
-.remote-desktop-display select { height: 36px; padding-block: 0; }
+.remote-desktop-display select { height: 2.25rem; padding-block: 0; }
 .remote-desktop-options { margin-top: 20px; border-top: 1px solid var(--border); }
 .remote-desktop-options > summary { display: flex; align-items: center; gap: 7px; padding: 14px 0; list-style: none; cursor: pointer; font-size: 12px; color: var(--muted-foreground); }
 .remote-desktop-options > summary::-webkit-details-marker { display: none; }

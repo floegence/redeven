@@ -237,7 +237,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
         <div class="pdf-search-panel absolute inset-x-2 bottom-2 z-20 mx-auto max-w-xl rounded-lg border border-border/60 bg-background/95 p-2 shadow-sm backdrop-blur-sm">
           <Show when={searchOpen()}>
             <div class="flex items-center gap-1">
-              <input ref={searchInput} type="search" aria-label={i18n.t('filePreview.pdf.search')} placeholder={i18n.t('filePreview.pdf.search')} value={query()} class="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs"
+              <input ref={searchInput} type="search" aria-label={i18n.t('filePreview.pdf.search')} placeholder={i18n.t('filePreview.pdf.search')} value={query()} class="floe-field h-8 min-w-0 flex-1 px-2 text-xs"
                 onInput={event => { setQuery(event.currentTarget.value); session()?.search(query()); }}
                 onKeyDown={event => {
                   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeSearch(); }
