@@ -3046,7 +3046,7 @@
       "retry": "Verificar novamente"
     },
     "runtimeStatus": {
-      "title": "Status dos serviços de contêiner"
+      "title": "Status dos serviços de motores de contêineres"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "Falha na detecção"
     },
     "services": {
-      "open": "Gerenciar serviços",
-      "title": "Serviços de contêiner",
-      "description": "Gerencie os serviços Docker e Podman ativos neste ambiente.",
-      "loadFailed": "Não foi possível carregar os serviços de contêiner",
+      "open": "Gerenciar serviços dos motores",
+      "title": "Serviços de motores de contêineres",
+      "description": "Gerencie os serviços dos motores Docker e Podman neste ambiente.",
+      "loadFailed": "Não foi possível carregar os serviços de motores de contêineres",
       "configure": "Configurar",
       "rootless": "Sem privilégios",
       "restartRequired": "É necessário reiniciar para aplicar a configuração salva",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "Iniciar, parar ou reiniciar pode levar até dois minutos. Você pode continuar trabalhando enquanto a operação é concluída.",
       "interruptionTitle": "Interrupção do serviço",
       "interruptionMessage": "Os contêineres em execução e os serviços Web dependentes podem ser interrompidos.",
-      "configurationRisk": "Configurações inválidas podem impedir a inicialização do serviço de contêineres.",
+      "configurationRisk": "Configurações inválidas podem impedir a inicialização do serviço do motor de contêineres.",
       "lifecycle": {
         "starting": "Iniciando…",
         "stopping": "Parando…",
         "restarting": "Reiniciando…",
         "updating": "Aplicando alterações…",
-        "waiting": "Aguardando a resposta do serviço. Você pode continuar trabalhando; este cartão é atualizado automaticamente.",
+        "waiting": "Aguardando o motor. O status é atualizado automaticamente.",
         "desktopRecovery": "O Docker Desktop ainda não está pronto. Abra o Docker Desktop neste computador, conclua a configuração ou resolva o erro de inicialização e verifique o status aqui.",
         "checkStatus": "Verificar status",
         "history": "Histórico de operações"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "Nenhum recurso encontrado",
-      "description": "Nenhum serviço de contêiner ativo oferece recursos desta categoria no momento.",
+      "description": "Nenhum serviço ativo de motor de contêineres oferece recursos nesta categoria.",
       "filteredTitle": "Nenhum recurso correspondente",
       "filteredDescription": "Ajuste a pesquisa ou os filtros para ver mais recursos."
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "Política de reinicialização",
       "cpus": "CPUs",
       "memory": "Memória (MiB)",
-      "runtime": "Serviço de contêiner"
+      "runtime": "Motor de contêineres"
     },
     "detailTabs": {
       "overview": "Visão geral",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}s",
       "minutes": "{count}min",
       "layers": "camadas",
-      "service": "Serviço",
+      "service": "Motor de contêineres",
       "duration": "Duração",
       "started": "Início",
       "errorTitle": "Falha na operação",
@@ -3540,7 +3540,7 @@
         "canceled": "A operação foi cancelada.",
         "engine_timeout": "O serviço não respondeu a tempo. Ele ainda pode estar iniciando ou parando. Atualize o status antes de tentar novamente.",
         "engine_permission_denied": "Acesso negado. Verifique as permissões do usuário atual.",
-        "engine_unavailable": "O serviço de contêineres está indisponível. Verifique o status e tente novamente.",
+        "engine_unavailable": "O serviço do motor de contêineres está indisponível. Verifique o status e tente novamente.",
         "container_service_configuration_conflict": "A configuração foi alterada. Recarregue-a antes de salvar.",
         "service_recovery_required": "Não foi possível recuperar o serviço. Verifique a configuração na ferramenta de gerenciamento do host.",
         "insufficient_storage": "Não há espaço suficiente. Libere espaço e tente novamente.",

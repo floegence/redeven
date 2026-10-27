@@ -3046,7 +3046,7 @@
       "retry": "Erneut prüfen"
     },
     "runtimeStatus": {
-      "title": "Status der Container-Dienste"
+      "title": "Status der Container-Engine-Dienste"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "Erkennung fehlgeschlagen"
     },
     "services": {
-      "open": "Dienste verwalten",
-      "title": "Container-Dienste",
-      "description": "Verwalten Sie die aktiven Docker- und Podman-Dienste dieser Umgebung.",
-      "loadFailed": "Container-Dienste konnten nicht geladen werden",
+      "open": "Engine-Dienste verwalten",
+      "title": "Container-Engine-Dienste",
+      "description": "Verwalten Sie die Docker- und Podman-Engine-Dienste dieser Umgebung.",
+      "loadFailed": "Container-Engine-Dienste konnten nicht geladen werden",
       "configure": "Konfigurieren",
       "rootless": "Rootless",
       "restartRequired": "Zum Anwenden der gespeicherten Konfiguration ist ein Neustart erforderlich",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "Starten, Stoppen oder Neustarten kann bis zu zwei Minuten dauern. Währenddessen können Sie weiterarbeiten.",
       "interruptionTitle": "Dienstunterbrechung",
       "interruptionMessage": "Laufende Container und abhängige Webdienste können unterbrochen werden.",
-      "configurationRisk": "Ungültige Einstellungen können den Start des Containerdienstes verhindern.",
+      "configurationRisk": "Ungültige Einstellungen können den Start des Container-Engine-Dienstes verhindern.",
       "lifecycle": {
         "starting": "Wird gestartet…",
         "stopping": "Wird gestoppt…",
         "restarting": "Wird neu gestartet…",
         "updating": "Änderungen werden angewendet…",
-        "waiting": "Warten auf die Antwort des Dienstes. Sie können weiterarbeiten; diese Karte wird automatisch aktualisiert.",
+        "waiting": "Warten auf die Engine. Der Status wird automatisch aktualisiert.",
         "desktopRecovery": "Docker Desktop ist noch nicht bereit. Öffnen Sie Docker Desktop auf diesem Computer, schließen Sie die Einrichtung ab oder beheben Sie den Startfehler und prüfen Sie dann hier den Status.",
         "checkStatus": "Status prüfen",
         "history": "Aktionsverlauf"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "Keine Ressourcen gefunden",
-      "description": "Kein aktiver Container-Dienst stellt derzeit Ressourcen dieser Kategorie bereit.",
+      "description": "Derzeit stellt kein aktiver Container-Engine-Dienst Ressourcen dieser Kategorie bereit.",
       "filteredTitle": "Keine passenden Ressourcen",
       "filteredDescription": "Passen Sie Suche oder Filter an, um weitere Ressourcen anzuzeigen."
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "Neustartrichtlinie",
       "cpus": "CPUs",
       "memory": "Arbeitsspeicher (MiB)",
-      "runtime": "Container-Dienst"
+      "runtime": "Container-Engine"
     },
     "detailTabs": {
       "overview": "Übersicht",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}s",
       "minutes": "{count}m",
       "layers": "Layer",
-      "service": "Dienst",
+      "service": "Container-Engine",
       "duration": "Dauer",
       "started": "Gestartet",
       "errorTitle": "Vorgang fehlgeschlagen",
@@ -3540,7 +3540,7 @@
         "canceled": "Der Vorgang wurde abgebrochen.",
         "engine_timeout": "Der Dienst hat nicht rechtzeitig geantwortet. Er wird möglicherweise noch gestartet oder gestoppt. Aktualisieren Sie vor einem erneuten Versuch den Status.",
         "engine_permission_denied": "Zugriff verweigert. Prüfen Sie die Berechtigungen des aktuellen Benutzers.",
-        "engine_unavailable": "Der Containerdienst ist nicht verfügbar. Prüfen Sie den Status und versuchen Sie es erneut.",
+        "engine_unavailable": "Der Container-Engine-Dienst ist nicht verfügbar. Prüfen Sie den Status und versuchen Sie es erneut.",
         "container_service_configuration_conflict": "Die Konfiguration wurde geändert. Laden Sie sie vor dem Speichern neu.",
         "service_recovery_required": "Der Dienst konnte nicht wiederhergestellt werden. Prüfen Sie die Konfiguration im Verwaltungstool des Hosts.",
         "insufficient_storage": "Nicht genügend Speicherplatz. Geben Sie Speicherplatz frei und versuchen Sie es erneut.",

@@ -587,6 +587,17 @@ export default mergeConfig(viteConfig, defineConfig({
           const after = await region.evaluate((element) => element.scrollTop);
           return { before, after };
         },
+        installContainerServiceIconRoutes: async ({ page }) => {
+          await page.route('**/_redeven_proxy/env/container-service-icons/*.svg', async (route) => {
+            const fileName = new URL(route.request().url()).pathname.split('/').at(-1);
+            if (fileName !== 'docker-default.svg' && fileName !== 'podman-default.svg') {
+              await route.abort();
+              return;
+            }
+            const body = await readFile(new URL(`./public/container-service-icons/${fileName}`, import.meta.url));
+            await route.fulfill({ status: 200, contentType: 'image/svg+xml', body });
+          });
+        },
         installTerminalAgentIconRoutes: async ({ page }) => {
           await page.route('**/_redeven_proxy/env/agent-cli-icons/*.svg', async (route) => {
             const fileName = new URL(route.request().url()).pathname.split('/').at(-1) ?? '';

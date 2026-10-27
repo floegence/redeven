@@ -36,7 +36,7 @@ The operation is never replayed, regardless of whether the resource appears pres
 ## UI observation
 Inventory requests and streams are fenced by source runtime, endpoint, resource view, and request generation. A superseded response cannot replace current data.
 
-Mobile and desktop expose the same state and cancellation authority. Service lifecycle feedback stays on its card; history is secondary. Polling terminal transitions refresh authoritative service/runtime facts even when the event stream was lost. The portaled operation drawer owns its responsive container; narrow drawers stack history and details without horizontal overflow.
+Mobile and desktop expose the same state and cancellation authority. Service lifecycle feedback stays on its card; history is secondary. Polling terminal transitions refresh authoritative service/runtime facts even when the event stream was lost. The portaled history drawer owns its responsive container and independent scrolling. Desktop uses a history sidebar; narrow drawers place a horizontal history strip above details. Rows use stable operation IDs and pressed selection; polling preserves focus and detail nodes. Details separate identity, live cancellation, duration/current health and timeline. The active final timeline step uses a pending indicator, never a completed check.
 
 # Boundaries
 

@@ -3046,7 +3046,7 @@
       "retry": "다시 확인"
     },
     "runtimeStatus": {
-      "title": "컨테이너 서비스 상태"
+      "title": "컨테이너 엔진 서비스 상태"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "감지 실패"
     },
     "services": {
-      "open": "서비스 관리",
-      "title": "컨테이너 서비스",
-      "description": "이 환경에서 사용 중인 Docker와 Podman 서비스를 관리합니다.",
-      "loadFailed": "컨테이너 서비스를 불러올 수 없습니다",
+      "open": "엔진 서비스 관리",
+      "title": "컨테이너 엔진 서비스",
+      "description": "이 환경의 Docker 및 Podman 컨테이너 엔진 서비스를 관리합니다.",
+      "loadFailed": "컨테이너 엔진 서비스를 불러올 수 없습니다",
       "configure": "구성",
       "rootless": "Rootless",
       "restartRequired": "저장된 구성을 적용하려면 다시 시작해야 합니다",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "시작, 중지 또는 다시 시작하는 데 최대 2분이 걸릴 수 있습니다. 기다리는 동안 다른 기능을 사용할 수 있습니다.",
       "interruptionTitle": "서비스 중단",
       "interruptionMessage": "실행 중인 컨테이너와 이에 의존하는 Web 서비스가 중단될 수 있습니다.",
-      "configurationRisk": "잘못된 설정으로 컨테이너 서비스가 시작되지 않을 수 있습니다.",
+      "configurationRisk": "설정이 올바르지 않으면 컨테이너 엔진 서비스가 시작되지 않을 수 있습니다.",
       "lifecycle": {
         "starting": "시작 중…",
         "stopping": "중지 중…",
         "restarting": "다시 시작 중…",
         "updating": "변경 사항 적용 중…",
-        "waiting": "서비스 응답을 기다리고 있습니다. 다른 작업을 계속해도 됩니다. 이 카드는 자동으로 업데이트됩니다.",
+        "waiting": "엔진 응답을 기다리고 있습니다. 상태는 자동으로 업데이트됩니다.",
         "desktopRecovery": "Docker Desktop이 아직 준비되지 않았습니다. 이 컴퓨터에서 Docker Desktop을 열어 설정을 완료하거나 시작 오류를 해결한 후 상태를 확인하세요.",
         "checkStatus": "상태 확인",
         "history": "작업 기록"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "리소스가 없습니다",
-      "description": "현재 이 범주의 리소스를 제공하는 활성 컨테이너 서비스가 없습니다.",
+      "description": "현재 이 범주의 리소스를 제공하는 활성 컨테이너 엔진 서비스가 없습니다.",
       "filteredTitle": "일치하는 리소스가 없습니다",
       "filteredDescription": "검색어나 필터를 조정하여 더 많은 리소스를 확인하세요."
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "재시작 정책",
       "cpus": "CPU",
       "memory": "메모리 (MiB)",
-      "runtime": "컨테이너 서비스"
+      "runtime": "컨테이너 엔진"
     },
     "detailTabs": {
       "overview": "개요",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}초",
       "minutes": "{count}분",
       "layers": "레이어",
-      "service": "서비스",
+      "service": "컨테이너 엔진",
       "duration": "소요 시간",
       "started": "시작",
       "errorTitle": "작업 실패",
@@ -3540,7 +3540,7 @@
         "canceled": "작업이 취소되었습니다.",
         "engine_timeout": "서비스가 제한 시간 내에 응답하지 않았습니다. 아직 시작 또는 중지 중일 수 있습니다. 다시 시도하기 전에 상태를 새로 고치세요.",
         "engine_permission_denied": "접근이 거부되었습니다. 현재 사용자의 권한을 확인하세요.",
-        "engine_unavailable": "컨테이너 서비스를 사용할 수 없습니다. 상태를 확인하고 다시 시도하세요.",
+        "engine_unavailable": "컨테이너 엔진 서비스를 사용할 수 없습니다. 상태를 확인한 후 다시 시도하세요.",
         "container_service_configuration_conflict": "설정이 변경되었습니다. 다시 불러온 후 저장하세요.",
         "service_recovery_required": "서비스를 복구하지 못했습니다. 호스트 관리 도구에서 설정을 확인하세요.",
         "insufficient_storage": "저장 공간이 부족합니다. 공간을 확보한 후 다시 시도하세요.",

@@ -3039,14 +3039,14 @@
     "resourceNavigation": "容器资源",
     "loading": "正在加载容器资源…",
     "engineState": {
-      "unavailableTitle": "未检测到容器服务",
+      "unavailableTitle": "未检测到容器引擎服务",
       "unavailableDescription": "系统中未安装、未启动或无法连接 {engine}。",
-      "permissionTitle": "无权访问容器服务",
-      "permissionDescription": "Redeven 无法访问 {engine}，请检查当前用户的容器服务权限。",
+      "permissionTitle": "无权访问容器引擎服务",
+      "permissionDescription": "Redeven 无法访问 {engine}，请检查当前用户的容器引擎服务权限。",
       "retry": "重新检测"
     },
     "runtimeStatus": {
-      "title": "容器服务状态"
+      "title": "容器引擎服务状态"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "检测失败"
     },
     "services": {
-      "open": "管理服务",
-      "title": "容器服务",
-      "description": "管理此环境中正在使用的 Docker 和 Podman 服务。",
-      "loadFailed": "无法加载容器服务",
+      "open": "管理引擎服务",
+      "title": "容器引擎服务",
+      "description": "管理此环境中的 Docker 和 Podman 容器引擎服务。",
+      "loadFailed": "无法加载容器引擎服务",
       "configure": "配置",
       "rootless": "无根模式",
       "restartRequired": "需要重启才能应用已保存的配置",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "启动、停止或重启最多可能需要两分钟。等待期间可继续使用其他功能。",
       "interruptionTitle": "服务中断",
       "interruptionMessage": "正在运行的容器及依赖它们的 Web 服务可能会中断。",
-      "configurationRisk": "无效配置可能导致容器服务无法启动。",
+      "configurationRisk": "无效配置可能导致容器引擎服务无法启动。",
       "lifecycle": {
         "starting": "正在启动…",
         "stopping": "正在停止…",
         "restarting": "正在重启…",
         "updating": "正在应用更改…",
-        "waiting": "正在等待服务响应。你可以继续其他工作，此卡片会自动更新。",
+        "waiting": "正在等待引擎响应，状态会自动更新。",
         "desktopRecovery": "Docker Desktop 尚未就绪。请在此电脑上打开 Docker Desktop，完成设置或处理启动错误后，再检查状态。",
         "checkStatus": "检查状态",
         "history": "操作记录"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "未找到资源",
-      "description": "当前没有可用的容器服务提供此类资源。",
+      "description": "当前没有可用的容器引擎服务提供此类资源。",
       "filteredTitle": "没有匹配的资源",
       "filteredDescription": "调整搜索词或筛选条件，查看更多资源。"
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "重启策略",
       "cpus": "CPU",
       "memory": "内存 (MiB)",
-      "runtime": "容器服务"
+      "runtime": "容器引擎服务"
     },
     "detailTabs": {
       "overview": "概览",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}秒",
       "minutes": "{count}分钟",
       "layers": "层",
-      "service": "容器服务",
+      "service": "容器引擎",
       "duration": "耗时",
       "started": "开始时间",
       "errorTitle": "操作失败",
@@ -3540,7 +3540,7 @@
         "canceled": "操作已取消。",
         "engine_timeout": "服务未在规定时间内响应，可能仍在启动或停止。请先刷新状态，再决定是否重试。",
         "engine_permission_denied": "访问被拒绝。请检查当前用户的权限。",
-        "engine_unavailable": "容器服务不可用。请检查状态后重试。",
+        "engine_unavailable": "容器引擎服务不可用。请检查状态后重试。",
         "container_service_configuration_conflict": "配置已发生变化。请重新加载后再保存。",
         "service_recovery_required": "服务未能恢复。请在主机管理工具中检查配置。",
         "insufficient_storage": "存储空间不足。请释放空间后重试。",

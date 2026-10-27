@@ -3046,7 +3046,7 @@
       "retry": "Comprobar de nuevo"
     },
     "runtimeStatus": {
-      "title": "Estado de los servicios de contenedores"
+      "title": "Estado de los servicios de motores de contenedores"
     },
     "runtimeNames": {
       "docker": "Docker",
@@ -3061,10 +3061,10 @@
       "error": "Falló la detección"
     },
     "services": {
-      "open": "Gestionar servicios",
-      "title": "Servicios de contenedores",
-      "description": "Gestiona los servicios Docker y Podman activos de este entorno.",
-      "loadFailed": "No se pudieron cargar los servicios de contenedores",
+      "open": "Gestionar servicios del motor",
+      "title": "Servicios de motores de contenedores",
+      "description": "Gestiona los servicios de los motores Docker y Podman de este entorno.",
+      "loadFailed": "No se pudieron cargar los servicios de motores de contenedores",
       "configure": "Configurar",
       "rootless": "Sin privilegios",
       "restartRequired": "Es necesario reiniciar para aplicar la configuración guardada",
@@ -3164,13 +3164,13 @@
       "lifecycleWait": "Iniciar, detener o reiniciar puede tardar hasta dos minutos. Puede seguir trabajando mientras termina la operación.",
       "interruptionTitle": "Interrupción del servicio",
       "interruptionMessage": "Los contenedores en ejecución y los servicios Web dependientes pueden interrumpirse.",
-      "configurationRisk": "Una configuración no válida puede impedir que se inicie el servicio de contenedores.",
+      "configurationRisk": "Una configuración no válida puede impedir que se inicie el servicio del motor de contenedores.",
       "lifecycle": {
         "starting": "Iniciando…",
         "stopping": "Deteniendo…",
         "restarting": "Reiniciando…",
         "updating": "Aplicando cambios…",
-        "waiting": "Esperando la respuesta del servicio. Puedes seguir trabajando; esta tarjeta se actualiza automáticamente.",
+        "waiting": "Esperando al motor. El estado se actualiza automáticamente.",
         "desktopRecovery": "Docker Desktop aún no está listo. Abre Docker Desktop en este equipo, completa la configuración o resuelve el error de inicio y comprueba el estado aquí.",
         "checkStatus": "Comprobar estado",
         "history": "Historial de acciones"
@@ -3250,7 +3250,7 @@
     },
     "empty": {
       "title": "No se encontraron recursos",
-      "description": "Ningún servicio de contenedores activo ofrece recursos de esta categoría.",
+      "description": "Ningún servicio activo de motor de contenedores ofrece recursos de esta categoría.",
       "filteredTitle": "No hay recursos coincidentes",
       "filteredDescription": "Ajusta la búsqueda o los filtros para ver más recursos."
     },
@@ -3393,7 +3393,7 @@
       "restartPolicy": "Política de reinicio",
       "cpus": "CPU",
       "memory": "Memoria (MiB)",
-      "runtime": "Servicio de contenedores"
+      "runtime": "Motor de contenedores"
     },
     "detailTabs": {
       "overview": "Resumen",
@@ -3530,7 +3530,7 @@
       "seconds": "{count}s",
       "minutes": "{count}min",
       "layers": "capas",
-      "service": "Servicio",
+      "service": "Motor de contenedores",
       "duration": "Duración",
       "started": "Inicio",
       "errorTitle": "Falló la operación",
@@ -3540,7 +3540,7 @@
         "canceled": "Se canceló la operación.",
         "engine_timeout": "El servicio no respondió a tiempo. Puede que aún se esté iniciando o deteniendo. Actualice su estado antes de volver a intentarlo.",
         "engine_permission_denied": "Acceso denegado. Revise los permisos del usuario actual.",
-        "engine_unavailable": "El servicio de contenedores no está disponible. Revise su estado y vuelva a intentarlo.",
+        "engine_unavailable": "El servicio del motor de contenedores no está disponible. Comprueba su estado y vuelve a intentarlo.",
         "container_service_configuration_conflict": "La configuración cambió. Vuelva a cargarla antes de guardarla.",
         "service_recovery_required": "No se pudo recuperar el servicio. Revise su configuración en la herramienta de administración del host.",
         "insufficient_storage": "No hay suficiente almacenamiento. Libere espacio y vuelva a intentarlo.",
