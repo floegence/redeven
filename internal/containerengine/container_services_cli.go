@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/floegence/redeven/internal/processenv"
 	toml "github.com/pelletier/go-toml/v2"
@@ -25,6 +26,8 @@ import (
 type CommandEnvironmentRunner interface {
 	RunEnv(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
 }
+
+const containerServiceDiscoveryTimeout = 2 * time.Second
 
 type containerServiceConfigurationSourceDefinition struct {
 	sourceID        ContainerServiceConfigurationSourceID
@@ -40,11 +43,15 @@ func (c *CLIClient) ContainerServices(ctx context.Context) ([]ContainerService, 
 	services := make([]ContainerService, 2)
 	done := make(chan struct{}, 2)
 	go func() {
-		services[0] = c.discoverDockerService(ctx)
+		probe, cancel := context.WithTimeout(ctx, containerServiceDiscoveryTimeout)
+		defer cancel()
+		services[0] = c.discoverDockerService(probe)
 		done <- struct{}{}
 	}()
 	go func() {
-		services[1] = c.discoverPodmanService(ctx)
+		probe, cancel := context.WithTimeout(ctx, containerServiceDiscoveryTimeout)
+		defer cancel()
+		services[1] = c.discoverPodmanService(probe)
 		done <- struct{}{}
 	}()
 	for range services {
@@ -84,17 +91,20 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 			ConfigurationAccess: unavailableContainerServiceConfiguration(),
 		}
 	}
-	bound, _, bindErr := c.BindEndpoint(ctx, EngineDocker, endpoint.EndpointID)
-	status, statusErr := EngineStatus{Engine: EngineDocker}, bindErr
-	if bindErr == nil {
-		status, statusErr = c.Status(bound, EngineDocker)
-	}
-	if desktopState, ok := c.dockerDesktopState(ctx); ok {
-		state := desktopState
-		if statusErr == nil && status.Available {
-			state = ContainerServiceStateRunning
+	// Ownership comes from the selected official context, never from a health
+	// probe. Desktop status can block for many seconds even while stopped.
+	if dockerDesktopEndpoint(*endpoint, endpoints) {
+		status := EngineStatus{Engine: EngineDocker}
+		managementErr := c.dockerDesktopManagement(ctx)
+		statusErr := managementErr
+		if managementErr == nil {
+			status, statusErr = c.Status(bindEngineEndpoint(ctx, *endpoint), EngineDocker)
 		}
-		return ContainerService{
+		state := containerServiceStateFromStatus(status, statusErr)
+		if managementErr != nil && state == ContainerServiceStateStopped {
+			state = ContainerServiceStateError
+		}
+		service := ContainerService{
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerDesktop, "local"), Engine: EngineDocker,
 			Name: "Docker Desktop", Implementation: ContainerServiceDockerDesktop, State: state, Version: status.Version,
 			Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
@@ -106,7 +116,12 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 				c.dockerCLIConfigurationSource(),
 			},
 		}
+		if state != ContainerServiceStateRunning && state != ContainerServiceStateStopped {
+			service.GuidanceCode = containerServiceGuidance(state)
+		}
+		return service
 	}
+	status, statusErr := c.Status(bindEngineEndpoint(ctx, *endpoint), EngineDocker)
 	service := ContainerService{
 		ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerEngine, "local"), Engine: EngineDocker,
 		Name: "Docker Engine", Implementation: ContainerServiceDockerEngine, State: containerServiceStateFromStatus(status, statusErr),
@@ -163,15 +178,19 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 		base.GuidanceCode = ContainerServiceGuidanceStartOfficial
 		return base
 	}
-	bound, _, bindErr := c.BindEndpoint(ctx, EnginePodman, endpoint.EndpointID)
-	status, statusErr := EngineStatus{Engine: EnginePodman}, bindErr
+	// Resolve local machine ownership before a slow remote health request can
+	// exhaust this engine's budget.
+	var machine podmanMachineMatch
+	var matched bool
+	if endpoint.Remote {
+		machine, matched = c.podmanMachineForConnection(ctx, endpoint.Address)
+	}
+	bound := bindEngineEndpoint(ctx, *endpoint)
+	status, statusErr := c.Status(bound, EnginePodman)
 	var rootless *bool
-	if bindErr == nil {
-		status, statusErr = c.Status(bound, EnginePodman)
-		if statusErr == nil {
-			if metadata, metadataErr := c.EndpointMetadata(bound, *endpoint); metadataErr == nil {
-				rootless = metadata.Rootless
-			}
+	if statusErr == nil {
+		if metadata, metadataErr := c.EndpointMetadata(bound, *endpoint); metadataErr == nil {
+			rootless = metadata.Rootless
 		}
 	}
 	if !endpoint.Remote {
@@ -189,7 +208,6 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 		}
 		return service
 	}
-	machine, matched := c.podmanMachineForConnection(ctx, endpoint.Address)
 	if !matched {
 		return ContainerService{
 			ServiceID: containerServiceID(EnginePodman, ContainerServiceRemote, string(endpoint.EndpointID)), Engine: EnginePodman,
@@ -300,11 +318,7 @@ func activeEndpoint(items []EngineEndpoint) *EngineEndpoint {
 }
 
 func (c *CLIClient) endpointServiceState(ctx context.Context, endpoint EngineEndpoint) ContainerServiceState {
-	bound, _, err := c.BindEndpoint(ctx, endpoint.Engine, endpoint.EndpointID)
-	if err != nil {
-		return containerServiceStateFromError(err)
-	}
-	status, err := c.Status(bound, endpoint.Engine)
+	status, err := c.Status(bindEngineEndpoint(ctx, endpoint), endpoint.Engine)
 	return containerServiceStateFromStatus(status, err)
 }
 
@@ -350,22 +364,28 @@ func serviceGeneration(version string, state ContainerServiceState) string {
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
-func (c *CLIClient) dockerDesktopState(ctx context.Context) (ContainerServiceState, bool) {
-	raw, err := c.runHostCommand(ctx, "docker", "desktop", "status", "--format", "json")
-	if errors.Is(err, ErrDaemonStopped) {
-		return ContainerServiceStateStopped, true
+func dockerDesktopEndpoint(active EngineEndpoint, endpoints []EngineEndpoint) bool {
+	for _, endpoint := range endpoints {
+		if endpoint.Remote || (endpoint.DisplayName != "desktop-linux" && endpoint.DisplayName != "desktop-windows") {
+			continue
+		}
+		if endpoint.EndpointID == active.EndpointID || (endpoint.Address != "" && endpoint.Address == active.Address) {
+			return true
+		}
 	}
+	return false
+}
+
+func (c *CLIClient) dockerDesktopManagement(ctx context.Context) error {
+	raw, err := c.runHostCommand(ctx, "docker", "desktop", "version", "--format", "json")
 	if err != nil {
-		return "", false
+		return err
 	}
-	value := strings.ToLower(strings.TrimSpace(string(raw)))
-	if strings.Contains(value, "stopped") || strings.Contains(value, "not running") {
-		return ContainerServiceStateStopped, true
+	var version struct{ Version string }
+	if json.Unmarshal(raw, &version) != nil || strings.TrimSpace(version.Version) == "" {
+		return errors.New("Docker Desktop management version is invalid")
 	}
-	if strings.Contains(value, "running") {
-		return ContainerServiceStateRunning, true
-	}
-	return ContainerServiceStateError, true
+	return nil
 }
 
 func (c *CLIClient) detectDockerSystemdUnit(ctx context.Context) (string, bool) {
@@ -502,7 +522,7 @@ func (c *CLIClient) containerServiceConfigurationSource(ctx context.Context, ser
 		Sections:   append([]ContainerServiceConfigurationSection(nil), definition.sections...),
 		ApplyModes: []ContainerServiceApplyMode{ContainerServiceSave},
 	}
-	if definition.supportsRestart && service.Capabilities.Restart {
+	if definition.supportsRestart && serviceSupportsConfigurationRestart(service) {
 		result.ApplyModes = append(result.ApplyModes, ContainerServiceSaveAndRestart)
 	}
 	if definition.path == "" || !safeConfigPath(definition.path) {
@@ -642,6 +662,9 @@ func (c *CLIClient) UpdateContainerServiceConfiguration(ctx context.Context, req
 	if err != nil {
 		return ContainerServiceActionResult{}, err
 	}
+	if req.ApplyMode == ContainerServiceSaveAndRestart && (!definition.supportsRestart || !serviceSupportsConfigurationRestart(service)) {
+		return ContainerServiceActionResult{}, ErrContainerServiceActionUnsupported
+	}
 	current, currentRevision, err := readContainerServiceConfiguration(definition.path, definition.kind)
 	if err != nil {
 		return ContainerServiceActionResult{}, err
@@ -666,9 +689,6 @@ func (c *CLIClient) UpdateContainerServiceConfiguration(ctx context.Context, req
 	if req.ApplyMode == ContainerServiceSave {
 		return ContainerServiceActionResult{ServiceID: service.ServiceID, State: service.State, Revision: revision, RestartRequired: definition.supportsRestart}, nil
 	}
-	if !definition.supportsRestart || !service.Capabilities.Restart {
-		return ContainerServiceActionResult{}, ErrContainerServiceActionUnsupported
-	}
 	if err := c.runContainerServiceAction(ctx, service, MethodContainerServicesRestart); err != nil {
 		rollbackErr := writeContainerServiceConfiguration(definition.path, candidate, current)
 		restartErr := c.runContainerServiceAction(ctx, service, MethodContainerServicesRestart)
@@ -688,6 +708,9 @@ func (c *CLIClient) ValidateContainerServiceConfiguration(ctx context.Context, r
 	definition, err := resolveContainerServiceConfigurationSource(service, req.SourceID)
 	if err != nil {
 		return err
+	}
+	if req.ApplyMode == ContainerServiceSaveAndRestart && (!definition.supportsRestart || !serviceSupportsConfigurationRestart(service)) {
+		return ErrContainerServiceActionUnsupported
 	}
 	current, currentRevision, err := readContainerServiceConfiguration(definition.path, definition.kind)
 	if err != nil {
