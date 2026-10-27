@@ -57,7 +57,7 @@ Context compaction decorations travel only with their visible anchors plus the l
 
 ThreadCache evicts inactive detail at twelve threads or 32 MiB estimated detail bytes; lightweight navigation summaries survive eviction. Selected, retained and in-flight owners are protected until release. Append logs retain at most 256 chunks / 256 KiB, with absolute cursors and exact-source catch-up for a paused Markdown consumer. These are cache budgets, not a cap on an explicitly active document or selected text.
 
-Upward history loading uses the sidebar running indicator's four animated wave bars with localized status text, accessible live status and reduced-motion support. The notice overlays the transcript without changing its scroll geometry.
+Upward history loading and terminal-summary catch-up share one floating notice with the sidebar's four animated wave bars, localized loading text, accessible live status and reduced-motion support. The notice stays outside the transcript flow, preserving message geometry. Terminal catch-up reuses the 200 ms loading-feedback deadline; fast completion never mounts a notice. Data publication is not delayed, and overlapping reads cannot create duplicate notices.
 
 ## Immediate send feedback
 [Command/composer ownership](flower-turn-launcher.md) renders captured input immediately,

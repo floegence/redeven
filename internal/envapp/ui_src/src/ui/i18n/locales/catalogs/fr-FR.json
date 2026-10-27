@@ -5471,7 +5471,6 @@
       "threadLoadErrorTitle": "La discussion n’a pas pu se charger.",
       "threadLoading": "Chargement de la discussion...",
       "threadEmpty": "Cette conversation ne contient encore aucun contenu.",
-      "threadSyncingLatest": "Synchronisation de la dernière réponse...",
       "threadSyncFailed": "Flower n’a pas pu synchroniser la dernière réponse. Réessayez.",
       "syncConnecting": "Connexion aux mises à jour en direct. L’état affiché peut être obsolète.",
       "syncReconnecting": "Reconnexion aux mises à jour en direct. L’état affiché peut être obsolète.",

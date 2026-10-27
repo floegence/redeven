@@ -331,7 +331,6 @@ export const flowerSurfaceEnUS = {
     threadLoadErrorTitle: 'Conversation could not load.',
     threadLoading: 'Loading conversation...',
     threadEmpty: 'This conversation has no content yet.',
-    threadSyncingLatest: 'Syncing the latest reply...',
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
     syncConnecting: "Connecting live updates. Displayed state may be outdated.",
     syncReconnecting: "Reconnecting live updates. Displayed state may be outdated.",

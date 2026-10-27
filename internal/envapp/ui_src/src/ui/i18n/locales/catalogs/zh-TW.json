@@ -5471,7 +5471,6 @@
       "threadLoadErrorTitle": "對話載入失敗。",
       "threadLoading": "正在載入對話...",
       "threadEmpty": "此對話目前沒有內容。",
-      "threadSyncingLatest": "正在同步最新回覆...",
       "threadSyncFailed": "Flower 無法同步最新回覆，請再試一次。",
       "syncConnecting": "正在連線即時更新，顯示的狀態可能已過時。",
       "syncReconnecting": "正在重新連線即時更新，顯示的狀態可能已過時。",

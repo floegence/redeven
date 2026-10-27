@@ -1828,7 +1828,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const threadLoadingFeedbackKey = createMemo(() => {
     if (threadLoadError()) return null;
     if (selectedThreadTailPreparing()) return selectedThreadTailReveal();
-    return selectedThreadDetailPending() ? selectedThreadID() : null;
+    return selectedThreadDetailPending() || selectedThreadTerminalSyncing() ? selectedThreadID() : null;
   });
   const [visibleThreadLoadingKey, setVisibleThreadLoadingKey] = createSignal<ReturnType<typeof threadLoadingFeedbackKey>>(null);
   createEffect(on(threadLoadingFeedbackKey, (key) => {
@@ -13142,13 +13142,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         );
   };
 
-  const threadSyncingLatestState = () => (
-    <div class="flower-thread-syncing-latest" role="status" aria-live="polite">
-      <Refresh class="h-4 w-4" aria-hidden="true" />
-      <span>{copy().chat.threadSyncingLatest}</span>
-    </div>
-  );
-
   const initialConversationFailureMessage = () => {
     const error = liveSyncState().error as { status?: number; code?: string } | undefined;
     if (props.adapter.connectLiveStream) {
@@ -14791,9 +14784,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }}
         >
           <div class="flower-transcript-stack" inert={selectedThreadTailPreparing()}>
-            <Show when={livePresentationConfirmed() && selectedThreadTerminalSyncing() && !threadLoadError()}>
-              {threadSyncingLatestState()}
-            </Show>
             <Show
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
               fallback={selectedThreadFallbackState()}
@@ -14815,7 +14805,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={parentEventReading.recovering()} fallback={threadLoadingState()}>{receiptReadNotice(parentEventReading)}</Show>
           </div>
         </Show>
-        <Show when={!selectedThreadTailPreparing() && (historyBusy() || !parentEventReading.initialReady())}>
+        <Show when={!selectedThreadTailPreparing() && (historyBusy() || !parentEventReading.initialReady()
+          || livePresentationConfirmed() && selectedThreadTerminalSyncing() && !threadLoadError() && threadLoadingFeedbackVisible())}>
           <div class="flower-history-loading-notice" role="status" aria-live="polite">
             <FlowerThreadWave />
             <span>{copy().chat.history.loading}</span>
