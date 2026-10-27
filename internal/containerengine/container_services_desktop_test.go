@@ -16,6 +16,111 @@ import (
 
 const stoppedDockerDesktopDiagnostic = "Could not retrieve status. Is Docker Desktop running?\nYou can start Docker Desktop by running 'docker desktop start'.\n"
 
+type desktopEnvironmentRunner struct {
+	CommandRunner
+	runEnv func(context.Context, []string, string, ...string) ([]byte, error)
+}
+
+func (r desktopEnvironmentRunner) RunEnv(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+	if r.runEnv != nil {
+		return r.runEnv(ctx, env, name, args...)
+	}
+	return r.Run(ctx, name, args...)
+}
+
+func TestDockerDesktopApplicationEnvironmentPreservesUserSettings(t *testing.T) {
+	t.Parallel()
+	want := []string{
+		"HOME=/Users/example", "USER=example", "LOGNAME=example", "PATH=/opt/homebrew/bin:/usr/bin:/bin",
+		"TMPDIR=/private/tmp/example", "SHELL=/bin/zsh", "LANG=en_US.UTF-8", "LANGUAGE=en",
+		"LC_ALL=en_US.UTF-8", "LC_MESSAGES=en_US.UTF-8", "TZ=America/Los_Angeles", "__CF_USER_TEXT_ENCODING=0x0:0:0",
+		"HTTP_PROXY=http://proxy.example:8080", "HTTPS_PROXY=http://proxy.example:8080", "ALL_PROXY=socks5://proxy.example:1080", "NO_PROXY=localhost",
+		"http_proxy=http://proxy.example:8080", "https_proxy=http://proxy.example:8080", "all_proxy=socks5://proxy.example:1080", "no_proxy=localhost",
+		"SSL_CERT_FILE=/certs/corporate.pem", "SSL_CERT_DIR=/certs",
+	}
+	input := append(slices.Clone(want), "REDEVEN_STATE_ROOT=/private/runtime", "REDEVEN_BOOTSTRAP_TICKET=secret", "NODE_OPTIONS=--inspect", "ELECTRON_RUN_AS_NODE=1", "DOCKER_HOST=ssh://other-host", "DOCKER_CONTEXT=other-host", "UNRELATED_SECRET=secret", "MALFORMED")
+	before := slices.Clone(input)
+	if got := dockerDesktopApplicationEnvironment(input); !slices.Equal(got, want) {
+		t.Fatalf("application environment = %v, want %v", got, want)
+	}
+	if !slices.Equal(input, before) {
+		t.Fatal("filter changed the runtime environment")
+	}
+}
+
+func TestDockerDesktopApplicationEmptyEnvironmentDoesNotInherit(t *testing.T) {
+	t.Parallel()
+	called := false
+	client := &CLIClient{Runner: desktopEnvironmentRunner{
+		CommandRunner: CommandRunnerFunc(func(context.Context, string, ...string) ([]byte, error) {
+			t.Fatal("empty application environment fell back to runtime inheritance")
+			return nil, nil
+		}),
+		runEnv: func(_ context.Context, env []string, _ string, _ ...string) ([]byte, error) {
+			if env == nil || len(env) != 0 {
+				t.Fatal("explicit empty environment was not preserved")
+			}
+			called = true
+			return nil, nil
+		},
+	}}
+	env := dockerDesktopApplicationEnvironment([]string{"REDEVEN_STATE_ROOT=/private/runtime"})
+	if _, err := client.runHostCommandEnv(context.Background(), env, "/usr/bin/open", "-g", "-b", "com.docker.docker"); err != nil || !called {
+		t.Fatalf("isolated launch called=%v error=%v", called, err)
+	}
+}
+
+func TestDockerDesktopMacLaunchIsolatesRuntimeEnvironment(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", "/opt/homebrew/bin:/usr/bin:/bin")
+	for _, key := range []string{"REDEVEN_STATE_ROOT", "REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT", "REDEVEN_BOOTSTRAP_TICKET", "ELECTRON_RUN_AS_NODE", "NODE_OPTIONS", "DOCKER_CONTEXT", "UNRELATED_APP_SECRET"} {
+		t.Setenv(key, "private-runtime-value")
+	}
+	t.Setenv("REDEVEN_DESKTOP_BUNDLE_METADATA", strings.Repeat("x", 32*1024))
+	for _, method := range []Method{MethodContainerServicesStart, MethodContainerServicesRestart} {
+		t.Run(string(method), func(t *testing.T) {
+			launches, stops := 0, 0
+			runner := desktopEnvironmentRunner{CommandRunner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+				switch command := name + " " + strings.Join(args, " "); command {
+				case "docker context ls --format {{json .}}":
+					return []byte(`{"Name":"desktop-linux","Current":true,"DockerEndpoint":"unix:///desktop.sock"}`), nil
+				case "docker --context desktop-linux version --format {{json .}}":
+					return []byte(`{"Server":{"Version":"29.0.1"}}`), nil
+				case "docker desktop stop":
+					stops++
+					return nil, nil
+				default:
+					return nil, fmt.Errorf("command inherited the runtime environment: %s", command)
+				}
+			})}
+			runner.runEnv = func(_ context.Context, env []string, name string, args ...string) ([]byte, error) {
+				if name != "/usr/bin/open" || !slices.Equal(args, []string{"-g", "-b", "com.docker.docker"}) {
+					t.Fatalf("unexpected isolated command: %s %v", name, args)
+				}
+				for _, item := range env {
+					key, _, _ := strings.Cut(item, "=")
+					if strings.HasPrefix(key, "REDEVEN_") || strings.Contains(item, "private-runtime-value") {
+						t.Fatalf("application inherited runtime-only variable %s", key)
+					}
+				}
+				if !slices.Contains(env, "HOME="+os.Getenv("HOME")) || !slices.Contains(env, "PATH="+os.Getenv("PATH")) {
+					t.Fatal("application lost the user home or executable search path")
+				}
+				launches++
+				return nil, nil
+			}
+			client := &CLIClient{GOOS: "darwin", Runner: runner}
+			service := ContainerService{Engine: EngineDocker, Implementation: ContainerServiceDockerDesktop, endpointID: endpointID(EngineDocker, "desktop-linux")}
+			if err := client.runContainerServiceAction(context.Background(), service, method); err != nil {
+				t.Fatal(err)
+			}
+			if launches != 1 || (method == MethodContainerServicesRestart && stops != 1) {
+				t.Fatalf("launches=%d stops=%d", launches, stops)
+			}
+		})
+	}
+}
+
 func TestDockerDesktopDiscoverySeparatesOwnershipFromHealth(t *testing.T) {
 	home := t.TempDir()
 	var healthErr error = ErrDaemonStopped
@@ -239,7 +344,7 @@ func TestDockerDesktopMacStartUsesApplicationLaunchAndWaitsForEngine(t *testing.
 	synctest.Test(t, func(t *testing.T) {
 		var calls []string
 		probes := 0
-		client := &CLIClient{GOOS: "darwin", Runner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		client := &CLIClient{GOOS: "darwin", Runner: desktopEnvironmentRunner{CommandRunner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
 			command := name + " " + strings.Join(args, " ")
 			calls = append(calls, command)
 			switch command {
@@ -256,7 +361,7 @@ func TestDockerDesktopMacStartUsesApplicationLaunchAndWaitsForEngine(t *testing.
 			default:
 				return nil, fmt.Errorf("unexpected command: %s", command)
 			}
-		})}
+		})}}
 		service := ContainerService{Engine: EngineDocker, Implementation: ContainerServiceDockerDesktop, endpointID: endpointID(EngineDocker, "desktop-linux")}
 		if err := client.runContainerServiceAction(context.Background(), service, MethodContainerServicesStart); err != nil {
 			t.Fatal(err)
@@ -324,7 +429,7 @@ func TestDockerDesktopStoppedLifecyclePreservesServiceIdentity(t *testing.T) {
 		}
 	})
 	home := t.TempDir()
-	client := &CLIClient{Runner: runner, GOOS: "darwin", UserHomeDir: func() (string, error) { return home, nil }}
+	client := &CLIClient{Runner: desktopEnvironmentRunner{CommandRunner: runner}, GOOS: "darwin", UserHomeDir: func() (string, error) { return home, nil }}
 	services, err := client.ContainerServices(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -453,7 +558,7 @@ func TestDockerDesktopMacStartNeverConfusesLaunchWithReadiness(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				launches, stops, probes := 0, 0, 0
-				client := &CLIClient{GOOS: "darwin", Runner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+				client := &CLIClient{GOOS: "darwin", Runner: desktopEnvironmentRunner{CommandRunner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
 					command := name + " " + strings.Join(args, " ")
 					switch command {
 					case "docker context ls --format {{json .}}":
@@ -483,7 +588,7 @@ func TestDockerDesktopMacStartNeverConfusesLaunchWithReadiness(t *testing.T) {
 						t.Fatalf("unexpected command: %s", command)
 						return nil, nil
 					}
-				})}
+				})}}
 				service := ContainerService{Engine: EngineDocker, Implementation: ContainerServiceDockerDesktop, endpointID: endpointID(EngineDocker, "desktop-linux")}
 				method := MethodContainerServicesStart
 				want := error(context.DeadlineExceeded)

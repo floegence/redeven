@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,9 @@ func TestDockerDesktopHostLifecycleQualification(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("macOS Desktop qualification")
 	}
+	// Exercise the Desktop/dev launch boundary, not only a small shell
+	// environment. Runtime metadata must never reach the independent app.
+	t.Setenv("REDEVEN_DESKTOP_BUNDLE_METADATA", strings.Repeat("qualification-runtime-metadata", 2048))
 	ctx := context.Background()
 	client := containerengine.NewCLIClient()
 	adapter, err := containerengine.NewAdapter(client)
@@ -81,6 +85,7 @@ func TestDockerDesktopHostLifecycleQualification(t *testing.T) {
 		run(containerengine.MethodContainerServicesStop)
 	}
 	run(containerengine.MethodContainerServicesStart)
+	run(containerengine.MethodContainerServicesRestart)
 	final, err := adapter.ContainerService(ctx, desktop.ServiceID)
 	if err != nil || final.State != containerengine.ContainerServiceStateRunning {
 		t.Fatalf("final service = %+v, error=%v", final, err)

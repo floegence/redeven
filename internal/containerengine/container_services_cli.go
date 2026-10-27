@@ -819,7 +819,7 @@ func (c *CLIClient) startDockerDesktopApplication(ctx context.Context, service C
 			return err
 		}
 	}
-	if _, err := c.runHostCommand(ctx, "/usr/bin/open", "-g", "-b", "com.docker.docker"); err != nil {
+	if _, err := c.runHostCommandEnv(ctx, dockerDesktopApplicationEnvironment(processenv.Current()), "/usr/bin/open", "-g", "-b", "com.docker.docker"); err != nil {
 		return err
 	}
 	for {
@@ -841,6 +841,31 @@ func (c *CLIClient) startDockerDesktopApplication(ctx context.Context, service C
 		case <-time.After(time.Second):
 		}
 	}
+}
+
+// open passes its environment to the application. Docker Desktop is an
+// independent application, not a Redeven child tool: forwarding runtime/dev
+// metadata can break its macOS fork server before the engine starts. Retain
+// user, locale and network settings, never runtime controls or unrelated keys.
+func dockerDesktopApplicationEnvironment(environment []string) []string {
+	result := make([]string, 0, len(environment))
+	for _, item := range environment {
+		name, _, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		switch name {
+		case "HOME", "USER", "LOGNAME", "PATH", "TMPDIR", "SHELL", "LANG", "LANGUAGE", "TZ", "__CF_USER_TEXT_ENCODING",
+			"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+			"SSL_CERT_FILE", "SSL_CERT_DIR":
+			result = append(result, item)
+		default:
+			if strings.HasPrefix(name, "LC_") {
+				result = append(result, item)
+			}
+		}
+	}
+	return result
 }
 
 func (c *CLIClient) validateContainerServiceCandidate(ctx context.Context, service ContainerService, definition containerServiceConfigurationSourceDefinition, candidate []byte) error {
@@ -1232,7 +1257,7 @@ func (c *CLIClient) runHostCommandEnvWithTimeout(ctx context.Context, timeout ti
 	defer cancel()
 	var out []byte
 	var err error
-	if len(env) > 0 {
+	if env != nil {
 		envRunner, ok := runner.(CommandEnvironmentRunner)
 		if !ok {
 			return nil, ErrResourceCapabilityUnsupported
