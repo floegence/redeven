@@ -73,7 +73,8 @@ function terminalStream(summaries: readonly FlowerThreadSnapshot[], recoveredSum
 function expectNoticeFits(runtime: HTMLElement): HTMLButtonElement {
   const notice = runtime.querySelector<HTMLElement>('.flower-workspace-sync')!;
   const resync = notice.querySelector<HTMLButtonElement>('button')!;
-  expect(notice.getAttribute('role')).toBe('status');
+  expect(notice.getAttribute('role')).toBe('alert');
+  expect(notice.closest('.flower-chat-notices')).not.toBeNull();
   expect(notice.getAttribute('aria-live')).toBe('polite');
   expect(notice.textContent).toContain('Displayed state may be outdated.');
   expect(notice.scrollWidth - notice.clientWidth).toBeLessThanOrEqual(1);
@@ -170,7 +171,7 @@ it('retries a failed reading interest locally and preserves the draft', async ()
   const drafts = createFlowerComposerDraftCoordinator();
   const attempts: FlowerLiveStreamConnectInput[] = [];
   const loadHistory = vi.fn(async () => liveBootstrap(selected, 9));
-  loadHistory.mockRejectedValueOnce(Object.assign(new Error('temporary baseline failure'), { code: 'transport' }));
+  loadHistory.mockRejectedValueOnce(new Error('Baseline unavailable'));
   const runtime = renderSurfaceWithDraftCoordinator({
     ...adapter(true), loadHistory,
     async *connectLiveStream(input) {

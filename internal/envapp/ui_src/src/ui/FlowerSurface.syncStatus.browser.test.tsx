@@ -12,7 +12,7 @@ import { adapter, deferred, flush, liveBootstrap, renderSurfaceWithAdapterProps,
 afterEach(() => document.documentElement.classList.remove('dark'));
 
 it.each([['zh-CN', 1280, true], ['en-US', 320, false], ['de-DE', 390, true]] as const)(
-  'shows one centered %s loading failure with keyboard retry at %i pixels', async (locale, width, dark) => {
+  'shows one floating %s loading failure with keyboard retry at %i pixels', async (locale, width, dark) => {
     await page.viewport(width, 900);
     document.documentElement.classList.toggle('dark', dark);
     const i18n = createTestI18nHelpers(locale);
@@ -36,7 +36,8 @@ it.each([['zh-CN', 1280, true], ['en-US', 320, false], ['de-DE', 390, true]] as 
     surface.style.cssText = 'width:' + width + 'px;height:850px;position:relative;';
     await waitFor(() => Boolean(surface.querySelector('.flower-thread-loading')));
     expect(surface.querySelector('.flower-thread-loading button')).toBeNull();
-    expect(surface.querySelector('.flower-thread-loading [role="progressbar"]')?.getAttribute('aria-label')).toBe(copy.chat.threadLoading);
+    expect(surface.querySelectorAll('.flower-thread-loading .flower-thread-wave-bar')).toHaveLength(4);
+    expect(surface.querySelector('.flower-thread-loading')?.closest('.flower-chat-notices')).not.toBeNull();
     await page.screenshot({ element: surface, path: '__screenshots__/flower-thread-loading-' + locale + '.png' });
     const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
     editor.value = 'Preserved recovery draft'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -95,10 +96,17 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-kind]')));
     const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
     editor.value = 'Preserved draft'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const viewport = surface.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const before = viewport.getBoundingClientRect();
     failure.resolve();
-    await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-sync-state="failed"]')));
-    const status = surface.querySelector<HTMLElement>('.flower-model-status-sync')!;
-    expect(status.querySelector('[role="status"]')?.textContent).toBe(copy.chat.syncStatusFailed);
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-sync-state="failed"]')));
+    const status = surface.querySelector<HTMLElement>('.flower-workspace-sync')!;
+    expect(status.getAttribute('role')).toBe('alert');
+    expect(status.textContent).toContain(copy.chat.syncFailed);
+    expect(status.closest('.flower-chat-notices')).not.toBeNull();
+    expect(Math.abs(viewport.getBoundingClientRect().top - before.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(viewport.getBoundingClientRect().height - before.height)).toBeLessThanOrEqual(1);
     expect(status.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth + 1);
     expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
@@ -111,8 +119,9 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     await page.screenshot({ element: surface, path: '__screenshots__/flower-sync-status-' + locale + '.png' });
     await userEvent.keyboard('{Enter}');
     await waitFor(() => attempts === 2);
-    expect(surface.querySelector('.flower-model-status-sync [role="status"]')?.textContent).toBe(copy.chat.syncStatusConnecting);
-    expect(surface.querySelector('.flower-model-status-sync button')).toBeNull();
+    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toBe(copy.chat.history.loading);
+    expect(surface.querySelectorAll('.flower-workspace-sync .flower-thread-wave-bar')).toHaveLength(4);
+    expect(surface.querySelector('.flower-workspace-sync button')).toBeNull();
     ready.resolve();
     await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-kind]')) && !surface.querySelector('.flower-workspace-sync'));
     expect(surface.querySelector('.flower-model-status-sync')).toBeNull();

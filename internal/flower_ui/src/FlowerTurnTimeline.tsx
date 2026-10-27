@@ -306,6 +306,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     projection: sequences,
     expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
     manuallyExpanded: (group: FlowerToolSequence) => props.choices.manuallyExpanded(sequenceIdentity(group.key)),
+    manuallyControlled: (group: FlowerToolSequence) => props.choices.manuallyControlled(sequenceIdentity(group.key)),
     toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => {
       if (group.entryKeys.some(key => nodes.get(key)?.contains(document.activeElement))) button.focus({ preventScroll: true });
       layoutAnchor = button;
@@ -368,6 +369,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const motion = createFlowerActivityDisclosureMotion(expanded, {
       initialOpen: untrack(expanded),
       reducedMotion: props.reducedMotion,
+      animateClose: () => !group() || props.choices.manuallyControlled(identity(group()!.turnID)),
       onLayoutFrame: () => {
         if (motion.state() === 'opening' || motion.state() === 'closing') motions.add(key);
         props.scroll.measureAfterLayout();

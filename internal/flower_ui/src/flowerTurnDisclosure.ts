@@ -13,6 +13,9 @@ export function createFlowerTurnDisclosureStore() {
   const current = (key: string) => untrack(state(key)[0]);
   const update = (key: string, choice: Choice) => state(key)[1](choice);
   return {
+    manuallyControlled(key: string): boolean {
+      return Boolean(state(key)[0]()?.retained);
+    },
     manuallyExpanded(key: string): boolean {
       const choice = state(key)[0]();
       return Boolean(choice?.retained && choice.expanded);

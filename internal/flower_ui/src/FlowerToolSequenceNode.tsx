@@ -9,6 +9,7 @@ import { FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS } from './flowerScrollTail';
 export const FlowerToolSequenceContext = createContext<Readonly<{
   projection: Accessor<FlowerToolSequenceProjection>;
   manuallyExpanded: (group: FlowerToolSequence) => boolean;
+  manuallyControlled: (group: FlowerToolSequence) => boolean;
   expanded: (group: FlowerToolSequence) => boolean;
   toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => void;
   contentID: (key: string) => string;
@@ -76,6 +77,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const motionKey = `tools:${props.nodeKey}`;
   const motion = createFlowerActivityDisclosureMotion(expanded, {
     initialOpen: untrack(expanded), reducedMotion: context?.reducedMotion,
+    animateClose: () => !member() || !context || context.manuallyControlled(member()!.group),
     onLayoutFrame: () => {
       if (first() && expanded() && following) scrollToLatest();
       context?.onLayoutFrame(motionKey, motion.state() === 'opening' || motion.state() === 'closing');

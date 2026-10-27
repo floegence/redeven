@@ -5,7 +5,7 @@ description: Collapse terminal work while preserving valuable output, explicit c
 tags: [ui, flower, turns, disclosure, accessibility]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -16,13 +16,13 @@ Floret owns turn identity, outcome, timing and explicit final boundaries. Termin
 ## Canonical facts and eligibility
 Validated ThreadView/HistoryPage turn facts include exact TurnID/RunID, optional control kind, start/end, outcome, elapsed/wait/work durations, ordered intermediate/final item IDs and complete-final boundary. Summaries cannot author them or trigger collapse; unknown output remains visible.
 
-Summaries show at most two nonzero time units with subsecond copy. Interleaved answers use a static overview counting calls, failures and answered inputs, never a whole-turn toggle. [Sequences](flower-tool-sequences.md) independently fold settled work on each side.
+A single thinking-only process keeps its existing thinking disclosure and timing; it never gains a redundant work-duration summary or divider on completion. Eligibility follows typed process structure, not prompt text or elapsed-time heuristics. Other process summaries show at most two nonzero time units with subsecond copy. Interleaved answers use a static overview counting calls, failures and answered inputs, never a whole-turn toggle. [Sequences](flower-tool-sequences.md) independently fold settled work on each side.
 
 ## Reading and interface state
 Running/preparing/retrying/finalizing/waiting turns stay expanded without a toggle. After a canonical outcome and end time, confirmed intermediate/typed process rows fold automatically, including the latest failed/cancelled/interrupted turn. Final and trailing partial output remain visible. Focus, selection, gestures, open details/thinking and reading away from the tail retain inspected work; observation cannot later undo that protection. Capture an unaffected visible anchor only when a real automatic collapse starts, and correct geometry through the existing scroll owner. Open/closed choices survive pagination, reconnects and regrouping. A newly classified row under inspection remains visible until the next explicit group toggle, without reopening other folded rows. Only an explicit disclosure or navigation action can open a closed group. Inspected bodies stay mounted and inert when folded, preserving nested choices and offsets. Main, embedded and child views share rendering with separate scroll owners.
 
 ## Layout and accessibility
-Canonical Path order, never timestamps, positions messages/receipts. Dialogue, final segments and secret-answer redaction remain intact.
+Automatic turn/sequence folding settles summary insertion and process removal in one layout update before paint. Explicit manual open/close keeps the existing motion and reduced-motion preference; the disclosure owner retains the interaction choice. Canonical Path order, never timestamps, positions messages/receipts. Dialogue, final segments and secret-answer redaction remain intact.
 
 # Boundaries
 
@@ -36,4 +36,4 @@ Disclosure is ephemeral UI state. Final content and dialogue stay mounted and or
 
 - `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Validates and maps current turn facts.
 - `redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts` - Classifies interleaved answered inputs without changing ordinary turn disclosure.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Verifies the checkpoint stays ordered between independently folded tool sequences.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Verifies ordered checkpoints, stationary thinking-only completion, one-step automatic folding and preserved manual animation.

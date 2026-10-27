@@ -47,7 +47,7 @@ describe('Flower progress indicator', () => {
     const flowerMarkupIndex = src.indexOf('class="flower-model-status-flower"', indicatorMarkupIndex);
     const textMarkupIndex = src.indexOf('class="flower-model-status-text" data-floe-progress-shimmer="text"', flowerMarkupIndex);
 
-    expect(laneRule).toContain('min-height: 1.35rem');
+    expect(laneRule).toContain('min-height: 1.6rem');
     expect(laneRule).toContain('flex-wrap: wrap');
     expect(laneRule).toContain('align-items: center');
     expect(laneRule).toContain('gap: 0.38rem 0.62rem');

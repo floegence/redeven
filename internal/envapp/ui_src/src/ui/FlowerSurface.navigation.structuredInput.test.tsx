@@ -568,9 +568,9 @@ describe('FlowerSurface navigation structured input', () => {
     (runtime.querySelector('[data-thread-id="thread-summary-only"] button') as HTMLButtonElement).click();
     await waitFor(() => loadStarted && Boolean(runtime.querySelector('.flower-thread-loading')));
 
-    expect(runtime.querySelector('.flower-thread-loading')?.textContent).toContain('Loading conversation...');
-    expect(runtime.querySelector('.flower-thread-loading-panel')).toBeTruthy();
-    expect(runtime.querySelector('.flower-thread-loading-indicator')).toBeTruthy();
+    expect(runtime.querySelector('.flower-thread-loading')?.textContent).toContain('Loading…');
+    expect(runtime.querySelector('.flower-thread-loading')?.closest('.flower-chat-notices')).not.toBeNull();
+    expect(runtime.querySelectorAll('.flower-thread-loading .flower-thread-wave-bar')).toHaveLength(4);
     expect(runtime.querySelector('.flower-thread-loading-line')).toBeNull();
     expect(runtime.textContent).not.toContain('Flower can work from this runtime');
   });

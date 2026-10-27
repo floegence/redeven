@@ -165,7 +165,8 @@ describe('Flower initial conversation loading', () => {
       embeddedConversation: { scope: 'initial-embedded', threadID: focused.thread_id,
         render: parts => <div data-embedded>{parts.conversation}{parts.composer}</div> },
     });
-    await waitFor(() => Boolean(surface.querySelector('.flower-thread-loading')));
+    await waitFor(() => Boolean(surface.querySelector('.flower-chat-notices [role="status"]')));
+    expect(surface.querySelectorAll('.flower-chat-notices .flower-thread-wave-bar')).toHaveLength(4);
     expect(surface.querySelector('.flower-warmup')).toBeNull();
     detail.resolve(liveBootstrap(focused));
     await waitFor(() => Boolean(surface.querySelector('[data-flower-message-id]')));

@@ -97,7 +97,12 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
         }
       }
     }
-    const disclosure: FlowerTurnDisclosurePolicy = !disclosable || staticOverview ? 'none' : 'automatic';
+    // A single thinking row already has its own stable disclosure and timing.
+    // Wrapping it in another summary adds height without adding navigation.
+    const onlyProcess = processKeys.length === 1 ? entries[positions.get(processKeys[0]) ?? -1] : undefined;
+    const thinkingOnly = onlyProcess?.type === 'message' && onlyProcess.blocks.length === 1
+      && onlyProcess.blocks[0].type === 'content' && onlyProcess.blocks[0].block_type === 'thinking';
+    const disclosure: FlowerTurnDisclosurePolicy = !disclosable || staticOverview || thinkingOnly ? 'none' : 'automatic';
     const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, staticOverview, inputResponseCount,
       toolCallCount, failedCallCount, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure };
     const prior = previous?.groups.get(turnID);

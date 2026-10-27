@@ -1,11 +1,12 @@
 import { FeedbackIndicator, Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { JSX } from 'solid-js';
-import { For, Show } from 'solid-js';
+import { Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ChevronDown, Clock, Refresh } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerSubagentsCopy } from './copy';
 import { SubagentAvatar } from './SubagentAvatar';
+import { FlowerThreadWave } from './FlowerThreadWave';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerSubagentPanelStatus } from './flowerSubagentProjection';
 
@@ -88,37 +89,30 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             </Show>
           </div>
         </header>
-        {props.syncNotice}
-        {props.runProgress}
-
         <div class="flower-subagent-detail-transcript-region">
-        <Show when={props.preparationNotice}>{props.preparationNotice}</Show>
-        <Show when={props.loading && !props.detailAvailable || props.preparing && !props.preparationNotice}>
-          <div class="flower-subagent-detail-loading" data-overlay={props.detailAvailable ? 'true' : undefined} role="status" aria-label={props.threadLoadingLabel}>
-            <For each={[0, 1, 2, 3]}>
-              {() => (
-                <div class="flower-subagent-detail-loading-row">
-                  <span />
-                  <div><i /><i /></div>
+          <div class="flower-chat-notices">
+            {props.syncNotice}
+            {props.runProgress}
+            <Show when={props.preparationNotice}>{props.preparationNotice}</Show>
+            <Show when={!props.error && (props.loading && !props.detailAvailable || props.preparing && !props.preparationNotice)}>
+              <div class="flower-subagent-detail-loading flower-chat-notice" role="status" aria-live="polite" aria-label={props.threadLoadingLabel}>
+                <FlowerThreadWave /><span>{props.threadLoadingLabel}</span>
+              </div>
+            </Show>
+
+            <Show when={props.error && !props.detailAvailable}>
+              <div class="flower-subagent-detail-state flower-subagent-detail-state-error flower-chat-notice" role="alert">
+                <AlertTriangle class="h-4 w-4" />
+                <div class="flower-subagent-detail-state-copy">
+                  <span>{props.error}</span>
+                  <button type="button" class="flower-subagent-detail-retry" onClick={props.onRetryLoad}>
+                    <Refresh class="h-3.5 w-3.5" />
+                    <span>{props.copy.detailRetry}</span>
+                  </button>
                 </div>
-              )}
-            </For>
+              </div>
+            </Show>
           </div>
-        </Show>
-
-        <Show when={props.error && !props.detailAvailable}>
-          <div class="flower-subagent-detail-state flower-subagent-detail-state-error" role="alert">
-            <AlertTriangle class="h-4 w-4" />
-            <div class="flower-subagent-detail-state-copy">
-              <span>{props.error}</span>
-              <button type="button" class="flower-subagent-detail-retry" onClick={props.onRetryLoad}>
-                <Refresh class="h-3.5 w-3.5" />
-                <span>{props.copy.detailRetry}</span>
-              </button>
-            </div>
-          </div>
-        </Show>
-
         <Show when={props.detailAvailable}>
           <div
             ref={props.bindScroll}
