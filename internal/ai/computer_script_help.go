@@ -8,8 +8,8 @@ func computerScriptHelp(topic string, browser bool) (string, bool) {
 	common := `All operations are sequentially awaited. log(value) emits text; observations emit automatically unless emit:false; help always emits.
 ui.snapshot({root_ref?,limit?:1..1000,emit?:boolean}) -> {document_id,url?,title?,nodes,truncated}. Each node has ref, role, name, child_refs, states and optional value. role is canonical. Truncated content is unknown, not empty; narrow the scope.
 ui.ref(ref) or ui.getByRole(role,{name?,exact?,root_ref?}) -> locator. Names are strings, case-insensitive contains unless exact:true. Act only on an unambiguous observed element. Search fields have role searchbox.
-locator.node() -> node; locator.snapshot({limit?,emit?}) -> subtree snapshot.
-locator.click(), locator.fill(text) replaces contents, locator.press(key), locator.scroll(delta_y,delta_x=0).
+All reads are async: const node = await locator.node(); await locator.snapshot({limit?,emit?}) returns a subtree snapshot.
+locator.click(), locator.fill(text) replaces contents, locator.press(key), locator.scroll(delta_y,delta_x=0). For scroll measurements: const result = await locator.scroll(80); log(result.scroll_progress). before/after/measurement belong to this result, never to a node or snapshot; immediate_after_dispatch is not proof of settled UI.
 ui.type(text) inserts at current focus; ui.key(key) sends a character/named key or Alt/Control/Meta/Shift chord. Examples: Enter, ArrowDown, Meta+=. Equal is not a key name. Do not send whole text through key().
 locator.requireState({state:'visible'|'hidden'|'enabled',timeout_ms?:0..30000}) -> void; timeout stops the script before later actions.
 ui.screenshot() -> image; native ui.click(x,y), ui.doubleClick(x,y), ui.drag(x1,y1,x2,y2,duration_ms=0), ui.scroll(delta_y,delta_x=0) use target coordinates.

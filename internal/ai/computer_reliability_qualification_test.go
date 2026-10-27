@@ -311,15 +311,19 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							if err != nil || !found {
 								t.Fatalf("canonical result unavailable: %v", err)
 							}
-							var envelope struct{ Data map[string]any }
-							if err := json.Unmarshal([]byte(confirmed.Content), &envelope); err != nil {
-								t.Fatal("invalid canonical tool result")
+							data, err := computerQualificationResultData(confirmed)
+							if err != nil {
+								t.Fatalf("invalid canonical %s result (%s): %v", confirmed.ToolName, confirmed.Status, err)
 							}
-							code := anyToString(envelope.Data["script_error"])
+							code := anyToString(data["script_error"])
 							if code != "" {
 								scriptErrors[code]++
 							}
-							confirmedToolFacts = append(confirmedToolFacts, map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": envelope.Data["completed_actions"], "action_executed": envelope.Data["action_executed"]})
+							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
+							if data == nil && confirmed.Status == "error" {
+								fact["runtime_error_text"] = confirmed.Content
+							}
+							confirmedToolFacts = append(confirmedToolFacts, fact)
 						}
 						activity := publicActivityItem(*item.Activity)
 						toolEvidence.WriteString(activity.ToolName)
@@ -494,5 +498,45 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Floret's canonical error output prefixes the host JSON with "ERROR: ".
+// Decode only that published framing. Pre-dispatch runtime rejections can be
+// plain text; retain them separately and never infer a script diagnostic.
+func computerQualificationResultData(result flruntime.ThreadToolResult) (map[string]any, error) {
+	content := result.Content
+	if result.Status == "error" {
+		content = strings.TrimPrefix(content, "ERROR: ")
+		if !strings.HasPrefix(strings.TrimSpace(content), "{") {
+			return nil, nil
+		}
+	}
+	var envelope struct{ Data map[string]any }
+	if err := json.Unmarshal([]byte(content), &envelope); err != nil {
+		return nil, err
+	}
+	return envelope.Data, nil
+}
+
+func TestComputerQualificationCanonicalResultFraming(t *testing.T) {
+	for _, tc := range []struct {
+		name, status, content, code string
+		invalid                     bool
+	}{
+		{"success", "success", `{"data":{"action_executed":false}}`, "", false},
+		{"script failure", "error", `ERROR: {"data":{"script_error":"CONDITION_TIMEOUT"}}`, "CONDITION_TIMEOUT", false},
+		{"plain runtime rejection", "error", `ERROR: Tool call not executed.`, "", false},
+		{"plain diagnostic is not proof", "error", `ERROR: CONDITION_TIMEOUT`, "", false},
+		{"malformed host envelope", "error", `ERROR: {broken`, "", true},
+		{"wrong status", "success", `ERROR: {"data":{"script_error":"CONDITION_TIMEOUT"}}`, "", true},
+		{"echoed script", "success", `{"data":{"logs":["CONDITION_TIMEOUT"]}}`, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := computerQualificationResultData(flruntime.ThreadToolResult{Status: tc.status, Content: tc.content})
+			if (err != nil) != tc.invalid || anyToString(data["script_error"]) != tc.code {
+				t.Fatalf("data=%v error=%v", data, err)
+			}
+		})
 	}
 }
