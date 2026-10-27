@@ -9,20 +9,41 @@ await mkdir(output, { recursive: true });
 const server = await createSSHSettingsPreviewServer(0);
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
-const report = { cases: [], errors: [] };
+const report = { cases: [], errors: [], scroll: [] };
+async function measureScrollExtent(dialog, context) {
+  const metrics = await dialog.locator('.redeven-gateway-settings-panels').evaluate(async scroller => {
+    scroller.scrollTop = scroller.scrollHeight;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const active = scroller.querySelector(':scope > [role="tabpanel"]:not([aria-hidden="true"])');
+    const contentEnd = active.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop;
+    const expectedHeight = Math.max(scroller.clientHeight, Math.ceil(contentEnd));
+    return { tab: active.id, viewportHeight: scroller.clientHeight, contentHeight: contentEnd, scrollHeight: scroller.scrollHeight, excess: scroller.scrollHeight - expectedHeight };
+  });
+  report.scroll.push({ ...context, ...metrics });
+  return metrics;
+}
+function assertScrollExtent(metrics, context) {
+  assert.ok(Math.abs(metrics.excess) <= 2, `${context}: only active content defines scroll extent: ${JSON.stringify(metrics)}`);
+}
+async function checkScrollExtent(dialog, context) {
+  const metrics = await measureScrollExtent(dialog, context);
+  assertScrollExtent(metrics, JSON.stringify(context));
+}
 try {
   const load = relative => server.ssrLoadModule(fileURLToPath(new URL(relative, import.meta.url)));
   const { compactEnvironmentPreviewFixture } = await load('../src/testSupport/compactEnvironmentPreviewFixture.ts');
+  const { catalogFixture } = await load('../src/testSupport/gatewayMembershipFixture.ts');
   const { createDesktopI18n } = await load('../src/shared/i18n/index.ts');
   const source = compactEnvironmentPreviewFixture().coverage;
   const gateway = { ...source.gateway_sources[0], display_name: 'Office Gateway', sync_state: 'ready',
     connection_kind: 'local_host', management_capability: 'managed_local_host',
+    policy: catalogFixture.policy,
     permissions: { access: true, manage_members: true, configure_cloud: true }, environments: [] };
   const snapshot = { ...source, gateway_sources: [gateway] };
   for (const locale of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'es-ES', 'fr-FR', 'pt-BR', 'ru-RU']) {
     const i18n = createDesktopI18n(locale);
-    for (const width of [1280, 430]) {
-      const context = await browser.newContext({ viewport: { width, height: 1050 }, colorScheme: width === 430 ? 'dark' : 'light' });
+    for (const { width, height } of [{ width: 1280, height: 1050 }, { width: 430, height: 740 }, { width: 1280, height: 600 }]) {
+      const context = await browser.newContext({ viewport: { width, height }, colorScheme: width === 430 ? 'dark' : 'light' });
       try {
         const page = await context.newPage();
         page.on('pageerror', error => report.errors.push(error.message));
@@ -57,11 +78,20 @@ try {
         const bounds = await dialog.boundingBox();
         assert.ok(bounds.width <= width - 16 && (width < 1000 || bounds.width >= 760));
         const fixedHeight = bounds.height;
+        // Keep a long Settings draft mounted while measuring shorter tabs.
+        await dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true }).click();
+        await dialog.locator('#gateway-name').fill('Unsaved Gateway name');
+        for (let index = 0; index < 4; index++) await dialog.getByRole('button', { name: i18n.t('gatewayMembers.addAddress'), exact: true }).click();
+        const scrollMetrics = [];
         for (const translationKey of ['gatewayExperience.overview', 'environmentCenter.environmentsSection', 'gatewayExperience.access', 'common.settings']) {
           await dialog.getByRole('tab', { name: i18n.t(translationKey), exact: true }).click();
           await page.waitForTimeout(240);
           assert.ok(Math.abs((await dialog.boundingBox()).height - fixedHeight) < 1, `${locale}/${width}: fixed dialog height across tabs`);
+          scrollMetrics.push(await measureScrollExtent(dialog, { locale, width, height, stage: 'initial' }));
+          await page.screenshot({ path: output + '/' + locale + '-' + width + '-' + height + '-' + translationKey.split('.').at(-1) + '-scroll.png' });
         }
+        for (const metrics of scrollMetrics) assertScrollExtent(metrics, `${locale}/${width}`);
+        assert.equal(await dialog.locator('#gateway-name').inputValue(), 'Unsaved Gateway name', 'Tab changes retain unsaved fields');
         assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
         const connection = dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true });
         await connection.focus(); await page.keyboard.press('ArrowLeft');
@@ -78,7 +108,15 @@ try {
         await detail.locator('summary').focus(); await page.keyboard.press('Enter'); await page.waitForTimeout(280);
         assert.equal(await detail.getAttribute('open'), '');
         assert.equal(await detail.locator('summary').evaluate(element => getComputedStyle(element).cursor), 'pointer');
+        await checkScrollExtent(dialog, { locale, width, height, stage: 'access-expanded' });
+        await detail.locator('summary').click(); await page.waitForTimeout(280);
+        await checkScrollExtent(dialog, { locale, width, height, stage: 'access-collapsed' });
         await dialog.getByRole('tab', { name: i18n.t('environmentCenter.environmentsSection'), exact: true }).click();
+        const policy = dialog.locator('#gateway-settings-panel-runtimes details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayMembers.policy') }) }).first();
+        await policy.locator(':scope > summary').click(); await page.waitForTimeout(280);
+        await checkScrollExtent(dialog, { locale, width, height, stage: 'environments-expanded' });
+        await policy.locator(':scope > summary').click(); await page.waitForTimeout(280);
+        await checkScrollExtent(dialog, { locale, width, height, stage: 'environments-collapsed' });
         await clientsTab.click();
         assert.equal(await dialog.getByText('private-one-time-code', { exact: true }).isVisible(), true, 'Tab changes retain an issued code');
         const beforeRevoke = await page.evaluate(() => window.settingsFixture.requests.length);
@@ -89,7 +127,7 @@ try {
         await dialog.getByRole('button', { name: i18n.t('gatewayClients.confirmRevoke'), exact: true }).click();
         await dialog.getByText(i18n.t('gatewayClients.revoked'), { exact: true }).waitFor();
         assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
-        await page.screenshot({ path: output + '/' + locale + '-' + width + '-host.png' });
+        await page.screenshot({ path: output + '/' + locale + '-' + width + '-' + height + '-host.png' });
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         await page.waitForFunction(element => element === document.activeElement, await more.elementHandle(), { timeout: 3000 });
         await page.evaluate(({ snapshot, gateway }) => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{
@@ -108,8 +146,8 @@ try {
         assert.equal(saved.kind, 'upsert_gateway');
         assert.equal(saved.permissions, undefined);
         assert.equal(saved.access_code, undefined, 'A paired URL client reconnects without a new code');
-        await page.screenshot({ path: output + '/' + locale + '-' + width + '-client.png' });
-        report.cases.push({ locale, width, fixedHostAuthority: true, consumerOnly: true, keyboardTabs: true, codeRetained: true, revokeConfirmation: true, focusRestored: true, viewportBounded: true });
+        await page.screenshot({ path: output + '/' + locale + '-' + width + '-' + height + '-client.png' });
+        report.cases.push({ locale, width, height, fixedHostAuthority: true, consumerOnly: true, keyboardTabs: true, codeRetained: true, draftRetained: true, activeScrollExtent: true, revokeConfirmation: true, focusRestored: true, viewportBounded: true });
       } finally { await context.close(); }
     }
   }

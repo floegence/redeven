@@ -43,6 +43,8 @@ An accepted enrollment shows a result instead of immediately disappearing. Membe
 
 ## Management and presentation
 
+Management keeps a stable dialog height, fixed navigation and footer, and one scroll container sized by the active tab alone. Inactive panels stay mounted to retain drafts and issued codes but generate no layout boxes or scroll overflow. Switching tabs starts at the top and animates the entering panel; reduced motion disables that animation. Expanding or collapsing details updates the same scroll extent without leaving a blank tail.
+
 Readiness follows the observed service and verified Gateway protocol, not equality with the Desktop build. Refresh, pairing and invitation issuance reuse compatible installed Gateways. Package repair must never produce a start-required error. Pairing rejection cannot be reclassified as an update requirement from release or commit differences; [Gateway service](gateway-service.md) owns compatibility and package integrity.
 
 The Environments group puts members and Add environment first; invitation delivery for another person is a collapsed secondary task. Member, publication and endpoint choices share the published Dropdown. Refresh failure retains lists/invitations; cancellation cannot reopen dialogs or discard drafts. Settings/client-code import grant no Runtime permission or Namespace approval. [Network settings](gateway-network-settings.md) separates share endpoints, listeners and collapsed Host restrictions and owns validation/restart.
@@ -61,6 +63,7 @@ UI state and observations cannot expand authority or imply completion.
 
 # Evidence
 
+- `redeven:desktop/scripts/check-gateway-permissions-ui.mjs` — Active-only scroll extent across ten locales and desktop, narrow and short viewports; expanded/collapsed details, retained drafts/codes and stable dialog geometry.
 - `redeven:desktop/src/shared/i18n/desktopI18n.test.ts` — Explicit ten-locale catalogs, placeholders, dynamic Gateway states, and invitation plural forms.
 - `redeven:desktop/src/welcome/GatewayMembersDialog.client.test.tsx` — Ten-locale member errors, collapsed diagnostics, policy labels, and invitation timers.
 - `redeven:desktop/scripts/check-gateway-access-ui.mjs` — Browser checks for localized errors, expiry, policy labels, and bounded multilingual layouts.
