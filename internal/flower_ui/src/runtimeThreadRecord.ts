@@ -6,7 +6,7 @@ import { retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 import { retainThinkingTiming } from './thinkingTiming';
 import { createMessageTextSource } from './messageTextSource';
-import { historyItemConfirmsPrefix, historyWindowForItems, type PreparedHistoryPage } from './historyTurnPreparation';
+import { historyItemConfirmsPrefix, historyWindowForItems } from './historyWindowRetention';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
 
 type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean; displayText?: string };
@@ -75,7 +75,7 @@ type PreviousRecord = {
 
 // ThreadCache owns these records. There is no second raw current snapshot or
 // lifecycle: components supply the shared projection, and items are indexed once.
-export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: PreviousRecord, prepared: readonly PreparedHistoryPage[] = []) {
+export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: PreviousRecord) {
   const threadID = current.thread_id;
   if (previous?.threadID !== threadID) previous = undefined;
   let acceptedVersion = current.view_version;
@@ -106,30 +106,14 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       archive.set(record.item.id, record);
     }
   }
-  const preparedMessages = new Map<string, FlowerChatMessage>();
-  for (const page of prepared) {
-    if (page.current.thread_id !== threadID || page.current.window?.leaf_id !== current.window?.leaf_id) invalid('prepared history source differs');
-    const pageMessages = new Map(runtimeMessages(page.thread, page.current).map(message => [message.id, message]));
-    for (const item of page.current.items ?? []) {
-      if (items.has(item.id) || item.live) continue;
-      const record = previous?.retainedItem(item) ?? { item, bytes: utf8.encode(item.text ?? '').length };
-      archive.set(item.id, record);
-      const message = pageMessages.get(item.id);
-      if (message) preparedMessages.set(item.id, message);
-    }
-  }
-  const retainedWindows = [...prepared.flatMap(page => page.current.window ? [page.current.window] : []),
-    ...(retainedPrefix && priorWindow ? [priorWindow] : [])];
-  const preparedTurns = prepared.flatMap(page => page.current.turns ?? []);
+  const retainedWindows = retainedPrefix && priorWindow ? [priorWindow] : [];
   const compactions = new Map([...(retainedPrefix ? priorReading?.context_compactions?.filter(value => sameLeaf || value.canonical_ordinal <= sharedCanonicalOrdinal) ?? [] : []),
-    ...prepared.flatMap(page => page.thread.context_compactions ?? []), ...initial.context_compactions ?? []].map(value => [value.operation_id, value]));
+    ...initial.context_compactions ?? []].map(value => [value.operation_id, value]));
   const decorations = new Map([...(retainedPrefix ? priorReading?.timeline_decorations ?? [] : []),
-    ...prepared.flatMap(page => page.thread.timeline_decorations ?? []), ...initial.timeline_decorations ?? []].map(value => [value.decoration_id, value]));
+    ...initial.timeline_decorations ?? []].map(value => [value.decoration_id, value]));
   let lastCompactions = priorReading?.context_compactions;
   let lastDecorations = priorReading?.timeline_decorations;
   priorReading = undefined;
-  // Do not retain all source pages through closures after indexing their facts.
-  prepared = [];
   const readingDecorations = (source: FlowerThreadSnapshot) => {
     // Current-window metadata is authoritative, including explicit clearing.
     // Retain only metadata whose canonical anchor belongs to archived history.
@@ -161,7 +145,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     const ids = new Set(readingRecords().map(record => record.item.turn_id));
     const byID = new Map((retainedPrefix ? priorTurns : []).filter(turn => ids.has(turn.turn_id)).map(turn => [turn.turn_id, turn]));
     const available = new Set(readingRecords().map(record => record.item.id));
-    for (const turn of [...preparedTurns, ...turns ?? []]) {
+    for (const turn of turns ?? []) {
       const prior = byID.get(turn.turn_id);
       byID.set(turn.turn_id, prior?.run_id === turn.run_id ? { ...turn,
         final_boundary_complete: turn.final_boundary_complete || sameLeaf && prior.final_boundary_complete,
@@ -200,15 +184,8 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   let projectedMessages: readonly FlowerChatMessage[] = initial.messages.map(message =>
     makeMessage(retainThinkingTiming(retainedMessages.get(message.id) ?? message, message)).value);
   for (const [id] of archive) {
-    const preparedMessage = preparedMessages.get(id);
-    if (preparedMessage) {
-      const record = archive.get(id)!;
-      const projected = record.preview ? runtimeMessages(initial, { ...current, items: [record.item] })[0] : preparedMessage;
-      makeMessage(present(record, projected));
-    } else {
-      const message = previous?.findMessage(id);
-      if (message) messages.set(id, message);
-    }
+    const message = previous?.findMessage(id);
+    if (message) messages.set(id, message);
   }
   const withReadingMessages = (observed: readonly FlowerChatMessage[]) => archive.size
     ? [...readingRecords().flatMap(record => messages.has(record.item.id) ? [messages.get(record.item.id)!.value] : []),

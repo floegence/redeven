@@ -16,6 +16,7 @@ import type { FlowerProviderTypeLabels } from './settings/providerTypeLabels';
 import { localizedFlowerProviderTypeLabels } from './settings/providerTypeLabels';
 
 export type FlowerTurnProcessCopy = Readonly<{
+  continuousTools: string;
   toolCalls: (count: number) => string;
   failedCalls: (count: number) => string;
   effectUncertain: string;
@@ -1200,6 +1201,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     syncTimeout: "Synchronization timed out after 15 seconds. Try again.",
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {
+      continuousTools: 'Consecutive tool calls',
       effectUncertain: toolActivityEnUS.effectUncertain,
       toolCalls: count => `${count} ${count === 1 ? 'tool call' : 'tool calls'}`,
       failedCalls: count => `${count} ${count === 1 ? 'failed tool call' : 'failed tool calls'}`,

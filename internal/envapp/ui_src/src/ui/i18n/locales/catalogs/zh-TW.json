@@ -5736,6 +5736,7 @@
           "one": "{count} 則子任務動態",
           "other": "{count} 則子任務動態"
         },
+        "continuousTools": "連續工具呼叫",
         "toolCalls": {
           "one": "{count} 次工具呼叫",
           "other": "{count} 次工具呼叫"

@@ -839,6 +839,7 @@
             "other": "{count} Unteraufgaben-Updates"
           }
         },
+        "continuousTools": "Aufeinanderfolgende Werkzeugaufrufe",
         "toolCalls": {
           "kind": "plural",
           "forms": {

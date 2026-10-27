@@ -839,6 +839,7 @@
             "other": "サブタスクの更新 {count} 件"
           }
         },
+        "continuousTools": "連続したツール呼び出し",
         "toolCalls": {
           "kind": "plural",
           "forms": {

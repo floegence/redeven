@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 
 describe('stable disclosure state', () => {
+  it('shares a prepended group choice with the canonical anchor used after navigation', () => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    store.observe('partial', 'automatic');
+    store.toggle('partial', 'automatic');
+    store.alias('full', 'partial');
+    expect(store.manuallyExpanded('full')).toBe(true);
+    store.toggle('partial', 'automatic');
+    expect(store.expanded('full', 'automatic')).toBe(false);
+    store.toggle('full', 'automatic');
+    expect(store.expanded('partial', 'automatic')).toBe(true);
+    dispose();
+  }));
   it.each(['none', 'manual', 'automatic'] as const)('settles the %s default once without reopening on observation', initial => createRoot(dispose => {
     const store = createFlowerTurnDisclosureStore();
     store.observe('turn', initial);

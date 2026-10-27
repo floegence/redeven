@@ -44,6 +44,49 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
+  it('reports counts only when the loaded sequence has both boundaries', () => {
+    const entries = [tool('a'), tool('b')];
+    for (const [hasBefore, hasAfter, complete] of [[true, false, false], [false, true, false], [true, true, false], [false, false, true]]) {
+      const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(), { hasBefore, hasAfter });
+      expect([...value.groups.values()][0].countsComplete).toBe(complete);
+    }
+    const bounded = projectFlowerToolSequences([text('before'), ...entries, text('after')], 'thread', [], undefined, new Set(), { hasBefore: true, hasAfter: true });
+    expect([...bounded.groups.values()][0].countsComplete).toBe(true);
+  });
+  it('does not mistake an unloaded interval for a known sequence boundary', () => {
+    const value = projectFlowerToolSequences([tool('a'), tool('b'), tool('c'), tool('d')], 'thread', [], undefined, new Set(['c']));
+    expect([...value.groups.values()].map(group => group.countsComplete)).toEqual([false, false]);
+    const bounded = projectFlowerToolSequences([tool('a'), tool('b'), text('before'), tool('c'), tool('d'), text('after')], 'thread', [], undefined, new Set(['before']));
+    expect([...bounded.groups.values()].map(group => group.countsComplete)).toEqual([false, true]);
+  });
+  it('counts complete running sequences without requiring a settled turn or full bodies', () => {
+    const entries = [text('before'), tool('a'), tool('b', { status: 'running' }), { ...text('thinking', true), message: { ...text('thinking', true).message, live: true, status: 'streaming' as const } }];
+    const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(), { hasBefore: true, hasAfter: false });
+    expect([...value.groups.values()][0]).toMatchObject({ countsComplete: true, toolCount: 2, thinkingCount: 1, runningCount: 1 });
+  });
+  it('retains a partial group identity when normal pagination completes its prefix', () => {
+    const first = projectFlowerToolSequences([tool('c'), tool('d')], 'thread', [], undefined, new Set(), { hasBefore: true, hasAfter: false });
+    const prior = [...first.groups.values()][0];
+    const next = projectFlowerToolSequences([text('boundary'), tool('a'), tool('b'), tool('c'), tool('d')], 'thread', [], first, new Set(), { hasBefore: true, hasAfter: false });
+    expect([...next.groups.values()][0]).toMatchObject({ key: prior.key, countsComplete: true, toolCount: 4 });
+    expect(prior.countsComplete).toBe(false);
+  });
+  it('keeps empty pending text uncertain without downloading its body for counts', () => {
+    const pending = { ...emptyLiveText('pending'), message: { ...text('pending').message, body_pending: { kind: 'text' as const, bytes: 8000 } } };
+    const value = projectFlowerToolSequences([tool('a'), tool('b'), pending, tool('c'), tool('d')]);
+    expect([...value.groups.values()].map(group => group.countsComplete)).toEqual([false, false]);
+  });
+  it('withholds only groups that overlap missing parent event intervals', () => {
+    const entries = [text('start'), tool('a'), tool('b'), text('middle'), tool('c'), tool('d'), text('end')]
+      .map((entry, index) => ({ ...entry, message: { ...entry.message, canonical_ordinal: index * 10 + 10 } }));
+    for (const missingEvents of [[{ after: 15, before: 35 }], [{ after: -Infinity, before: 15 }]]) {
+      const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(), { hasBefore: false, hasAfter: false, missingEvents });
+      expect([...value.groups.values()].map(group => group.countsComplete)).toEqual([false, true]);
+    }
+    const complete = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(), { hasBefore: true, hasAfter: true,
+      missingEvents: [{ after: -Infinity, before: 10 }, { after: 70, before: Infinity }] });
+    expect([...complete.groups.values()].map(group => group.countsComplete)).toEqual([true, true]);
+  });
   it('waits through tool gaps and streaming prose, then folds after output completes', () => {
     const calls = [tool('a'), tool('b')];
     const policy = (entries: FlowerTimelineEntry[], turns: FlowerRuntimeTurn[] = []) =>

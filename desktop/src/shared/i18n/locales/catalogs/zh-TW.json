@@ -839,6 +839,7 @@
             "other": "{count} 則子任務動態"
           }
         },
+        "continuousTools": "連續工具呼叫",
         "toolCalls": {
           "kind": "plural",
           "forms": {

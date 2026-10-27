@@ -839,6 +839,7 @@
             "other": "{count} mises à jour de sous-tâches"
           }
         },
+        "continuousTools": "Appels d’outils consécutifs",
         "toolCalls": {
           "kind": "plural",
           "forms": {

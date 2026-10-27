@@ -1,11 +1,18 @@
 # Redeven OKF Update Log
 
+## 2026-10-27 — Bounded history and honest tool statistics
+
+Remove whole-turn and dense-receipt backfill for [tool statistics](ui/flower-tool-sequences.md).
+Incomplete groups show a generic localized label; complete groups retain exact
+counts, including active groups. [Reading](ui/flower-live-timeline.md) stays bounded,
+with ordinary pagination preserving disclosure, focus and selected text.
+
 ## 2026-10-27 — Larger initial Flower history window
 
 Increase the default [history window](ui/flower-live-timeline.md) from 24 to
 50 preview items while retaining the 1 KiB text previews, deferred activity
-bodies and existing byte budgets. Turn completeness still belongs to history
-preparation, independently of the initial page size.
+bodies and existing byte budgets. Count completeness depends on already-loaded group boundaries, independently
+of the initial page size.
 
 ## 2026-10-27 — Browser coordinates and explicit script contracts
 

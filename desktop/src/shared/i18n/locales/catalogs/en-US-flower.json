@@ -653,6 +653,7 @@
           "other": "{count} subtask updates"
         }
       },
+      "continuousTools": "Consecutive tool calls",
       "toolCalls": {
         "kind": "plural",
         "forms": {

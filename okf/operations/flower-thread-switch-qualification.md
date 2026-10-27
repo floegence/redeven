@@ -5,7 +5,7 @@ description: Reproduce point-read scaling, bounded read recovery and actual side
 tags: [flower, performance, qualification, navigation]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -57,6 +57,26 @@ failures and report their scope; passing focused suites cannot recertify other k
 failing fixtures. Canonical history remains complete.
 
 # Evidence
+
+## Bounded statistics and retained reading, 2026-10-27
+
+An isolated consistent copy of the user-selected long conversation opened through
+the production HTTP decoder in 685.2 ms, including one 92,602-byte history response.
+The first 90 displayed frames retained the same tail node with zero displacement.
+Sixty native wheel gestures in both directions advanced canonical reading; eight
+idle checkpoints made no additional history requests. Expanded command and output
+matched authorized source values, and detail state survived scrolling. The opening
+sample included an 85 ms long task; these local samples are not population latency.
+
+The 680-call synthetic case opens with one bounded request and a generic group
+label. Explicit scrolling completes the count while retaining the manual disclosure,
+focused tool and selected text. Dense parent-event alignment reads one bounded page
+instead of nineteen; incomplete receipt coverage withholds group statistics.
+Count presentation itself never acquires history or unopened bodies. Sixteen
+production browser/Electron profiles cover closed/toggled disclosures, 72/500
+messages, 20/100 tools and 30/60 Hz updates. Frame P95 stayed at or below 17.7 ms
+and click P95 at or below 33 ms, with no streaming-sample long tasks or continuity
+flashes. Closed disclosures acquired no details and mounted no hidden bodies.
 
 ## Immediate send and history continuity, 2026-10-26
 

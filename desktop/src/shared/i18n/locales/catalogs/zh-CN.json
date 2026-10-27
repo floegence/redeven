@@ -839,6 +839,7 @@
             "other": "{count} 条子任务动态"
           }
         },
+        "continuousTools": "连续工具调用",
         "toolCalls": {
           "kind": "plural",
           "forms": {

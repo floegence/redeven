@@ -130,7 +130,7 @@ main() {
       internal/flower_ui/src/activityTextWindow.test.ts \
       internal/flower_ui/src/historyHandoffQueue.test.ts \
       internal/flower_ui/src/historyReadRecovery.test.ts \
-      internal/flower_ui/src/historyTurnPreparation.test.ts \
+      internal/flower_ui/src/historyWindowRetention.test.ts \
       internal/flower_ui/src/historyReadingWindow.test.ts \
       internal/flower_ui/src/conversationPreferences.test.ts \
       internal/flower_ui/src/providerRequestProgress.test.ts \
@@ -177,6 +177,7 @@ main() {
       internal/flower_ui/src/threadSelectionSchedule.test.ts \
       internal/flower_ui/src/flowerTurnPresentation.test.ts \
       internal/flower_ui/src/flowerTurnDisclosure.test.ts \
+      internal/flower_ui/src/flowerToolSequences.test.ts \
       internal/flower_ui/src/subagentAvatarCatalog.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \

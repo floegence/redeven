@@ -5736,6 +5736,7 @@
           "one": "{count} atualização de subtarefa",
           "other": "{count} atualizações de subtarefas"
         },
+        "continuousTools": "Chamadas consecutivas de ferramentas",
         "toolCalls": {
           "one": "{count} chamada de ferramenta",
           "other": "{count} chamadas de ferramentas"

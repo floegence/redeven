@@ -5736,6 +5736,7 @@
           "one": "{count} 条子任务动态",
           "other": "{count} 条子任务动态"
         },
+        "continuousTools": "连续工具调用",
         "toolCalls": {
           "one": "{count} 次工具调用",
           "other": "{count} 次工具调用"

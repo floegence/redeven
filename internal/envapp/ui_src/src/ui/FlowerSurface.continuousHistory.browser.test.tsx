@@ -363,7 +363,7 @@ describe('continuous history navigation', () => {
       expect(viewport().scrollHeight - viewport().clientHeight - viewport().scrollTop).toBeLessThanOrEqual(1);
     } finally { sampling = false; held.resolve(); }
   });
-  it('holds an ordered live baseline until its historical tool group is complete', async () => {
+  it('publishes a partial ordered baseline without fetching the rest of its tool group', async () => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'atomic-history', messages: [] });
     const held = deferred<void>();
@@ -422,11 +422,11 @@ describe('continuous history navigation', () => {
     await waitFor(() => Boolean(root.querySelector('[data-flower-turn-id="large"] .flower-turn-summary-button')));
     const summary = root.querySelector<HTMLButtonElement>('[data-flower-turn-id="large"] .flower-turn-summary-button')!;
     summary.click();
-    await waitFor(() => root.querySelector('.flower-tool-sequence-toggle')?.textContent?.includes('180 tool calls') === true);
+    await waitFor(() => root.querySelector('.flower-tool-sequence-toggle')?.textContent?.includes('Consecutive tool calls') === true);
     expect(root.querySelector('[data-flower-message-id="tail-final"]')).toBe(retained);
     expect(root.querySelector('[role="alert"]')).toBeNull();
   });
-  it('publishes a complete 680-call turn and retains its inspected rows on warm scrolling', async () => {
+  it('opens a 680-call turn with one bounded read and completes counts only through scrolling', async () => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'complete-turn-history', messages: [] });
     const held = deferred<void>();
@@ -462,22 +462,45 @@ describe('continuous history navigation', () => {
       },
     }, { focusThreadRequest: { request_id: 'complete-history', thread_id: seed.thread_id } });
     root.style.height = '780px';
-    await waitFor(() => history.mock.calls.length >= 2);
-    expect(root.querySelector('.flower-tool-sequence-label')).toBeNull();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="tail-answer"]')));
+    expect(history).toHaveBeenCalledOnce();
     held.resolve();
     await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="tail-answer"]')));
     await waitFor(() => Boolean(root.querySelector('[data-flower-turn-id="large"] .flower-turn-summary-button')));
     const summary = root.querySelector<HTMLButtonElement>('[data-flower-turn-id="large"] .flower-turn-summary-button')!;
     summary.click();
     await waitFor(() => Boolean(root.querySelector('.flower-tool-sequence-toggle')));
-    const group = root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
-    expect(group.textContent).toContain('680 tool calls');
-    expect(group.textContent).toContain('1 thinking segment');
+    let group = root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+    expect(group.textContent).toBe('Consecutive tool calls');
+    expect(history).toHaveBeenCalledOnce();
     if (group.getAttribute('aria-expanded') === 'false') group.click();
     await waitFor(() => group.closest('.flower-tool-sequence-node')?.getAttribute('data-state') === 'open');
     const inspected = root.querySelector('[data-flower-activity-item-id="tool-679"]');
     expect(inspected).not.toBeNull();
     const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+    const identity = group.closest<HTMLElement>('.flower-tool-sequence-node')!.dataset.flowerSequence;
+    const focused = inspected!.querySelector<HTMLButtonElement>('button')!;
+    focused.focus({ preventScroll: true });
+    const selected = inspected!.querySelector('.flower-activity-inline-title')!;
+    const range = document.createRange(); range.selectNodeContents(selected);
+    document.getSelection()!.removeAllRanges(); document.getSelection()!.addRange(range);
+    const selectedText = document.getSelection()!.toString();
+    // Explicit user scrolling, not opening or expanding, acquires older pages.
+    for (let pass = 0; pass < 25 && !root.querySelector('[data-flower-message-id="large-user"]'); pass++) {
+      const before = history.mock.calls.length;
+      viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -900, bubbles: true }));
+      viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+      await waitFor(() => history.mock.calls.length > before);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    await waitFor(() => root.querySelector('.flower-tool-sequence-toggle')?.textContent?.includes('680 tool calls') === true);
+    group = root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+    expect(group.closest<HTMLElement>('.flower-tool-sequence-node')!.dataset.flowerSequence).toBe(identity);
+    expect(group.getAttribute('aria-expanded')).toBe('true');
+    expect(group.textContent).toContain('1 thinking segment');
+    expect(document.activeElement).toBe(focused);
+    expect(document.getSelection()!.toString()).toBe(selectedText);
+    document.getSelection()!.removeAllRanges();
     const calls = history.mock.calls.length;
     for (let pass = 0; pass < 3; pass++) {
       viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
