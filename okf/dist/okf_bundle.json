@@ -8085,7 +8085,7 @@
         "title": "Computer use qualification evidence",
         "type": "Verification Evidence"
       },
-      "body_length": 10066,
+      "body_length": 10498,
       "summary": "The production qualification runners establish scope-specific outcomes under\n[the acceptance contract](computer-use-qualification.md). The following results\ninclude September and October 2026 runs. A passing worktree run does not replace the exact-main\npre-push gate, certify arbitrary applications, or turn earlier failed runs into\nsuccesses. Private text and pixels are excluded from retained diagnostics.",
       "sections": [
         {
@@ -33779,5 +33779,5 @@
       ]
     }
   ],
-  "source_sha256": "14e0844c4a42ae0fbbcafc1c05431713dd00ec1315afd037729b33e7e856faa0"
+  "source_sha256": "8ebd670271be3f13a7547fbda3b3d0c90259ef7f6f8ee036c7c0fc7d1beb8076"
 }

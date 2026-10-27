@@ -537,9 +537,17 @@ it.each([1440, 390])('shows compact historical screenshot thumbnails with saved-
   document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
   const row = (index: number) => document.querySelector<HTMLElement>(`[data-flower-activity-item-id="history-frame-${index}"]`);
+  const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number }) => Promise<unknown> };
+  const revealPreview = (index: number) => wheel.wheelScrollRegion({
+    regionSelector: '.flower-chat-transcript',
+    targetSelector: `[data-flower-activity-item-id="history-frame-${index}"] .flower-activity-image-thumbnail`,
+    deltaY: -1,
+  });
   for (const [index, frame] of [FRAME_REF, newerFrame].entries()) {
+    await waitFor(() => Boolean(row(index)));
+    await waitFor(() => Boolean(row(index)?.querySelector('.flower-activity-image-thumbnail')));
+    await revealPreview(index);
     await waitFor(() => Boolean(row(index)?.querySelector('.chat-media-image-button')));
-    row(index)!.scrollIntoView();
     await waitFor(() => row(index)!.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
     const thumbnail = row(index)!.querySelector<HTMLElement>('.flower-activity-image-thumbnail')!;
     const viewport = thumbnail.querySelector<HTMLElement>('.chat-media-viewport')!;
@@ -558,6 +566,8 @@ it.each([1440, 390])('shows compact historical screenshot thumbnails with saved-
     await waitFor(() => row(index)!.dataset.state === 'closed');
     expect(row(index)!.querySelector('.flower-activity-image-thumbnail')).toBeNull();
     row(index)!.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+    await waitFor(() => row(index)!.dataset.state === 'open');
+    await revealPreview(index);
     await waitFor(() => row(index)!.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
   }
   expect(setComputerViewer).not.toHaveBeenCalled();
