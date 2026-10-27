@@ -385,7 +385,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	if call.ToolName == "computer.action" {
 		resolved, err := resolveComputerCanonicalSelector(call)
 		if err != nil {
-			return TargetToolResult{}, err
+			return TargetToolResult{Result: map[string]any{"action_executed": false, "diagnostic": map[string]any{"phase": "validation", "field": "selector", "expected": "canonical_role_or_observed_ref", "recovery": "correct_arguments"}}}, err
 		}
 		call = resolved
 	}

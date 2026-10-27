@@ -274,7 +274,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       const shot=await execute('computer.screenshot');
       assert.ok(shot.result.frame_geometry,JSON.stringify(shot.result));
       const g=shot.result.frame_geometry;
-      assert.equal(g.image.width/g.viewport.width,2);
+      assert.equal(g.image.width/g.viewport.capture_width,2);
       const invalid=await execute('computer.key',{key:'Meta+Equal'});
       assert.equal(invalid.error,'INVALID_REQUEST');assert.equal(invalid.result.action_executed,false);assert.equal(invalid.result.diagnostic.field,'key');
       const point={x:0,y:0,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id};

@@ -79,10 +79,10 @@ func TestComputerScriptNamespaceLifetimeAndPartialResult(t *testing.T) {
 	if payload["failed_operation_index"] != 1 || payload["failed_action"] != "click" || payload["needs_observation"] != true || payload["effect_outcome_unknown"] != false {
 		t.Fatalf("recovery facts lost: %#v", payload)
 	}
-	if len(runtime.scripts) != 0 {
-		t.Fatal("failed script namespace survived")
+	if len(runtime.scripts) != 0 || payload["context_reset"] != true {
+		t.Fatal("failed invocation retained its namespace")
 	}
-	_, err = executeTestScript(t.Context(), runtime, call, `globalThis.count = 12;`)
+	_, err = executeTestScript(t.Context(), runtime, call, `ui.assert(typeof count === "undefined"); globalThis.count = 12;`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,5 +439,96 @@ func TestComputerScriptCompactSnapshotAndNativeCapability(t *testing.T) {
 	_, err = runtime.ExecuteTargetTool(t.Context(), call)
 	if err == nil || calls != 1 {
 		t.Fatalf("native table dispatched: %d %v", calls, err)
+	}
+}
+
+func TestComputerScriptReferenceDiagnosticReportsContextReset(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
+		return TargetToolResult{Result: map[string]any{}}, nil
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "globalThis.pages=[1,2,3];\nawait ui.observe();\nsetTimeout(()=>{},1)")
+	if err == nil {
+		t.Fatal("expected reference rejection")
+	}
+	payload := result.Result.(map[string]any)
+	diagnostic, _ := payload["diagnostic"].(map[string]any)
+	if payload["context_reset"] != true || diagnostic["line"] != 3 || diagnostic["symbol"] != "setTimeout" {
+		t.Fatalf("missing recovery facts: %#v", payload)
+	}
+	next, err := executeTestScript(t.Context(), runtime, call, "ui.assert(typeof pages==='undefined')")
+	if err != nil || next.Result.(map[string]any)["completed"] != true {
+		t.Fatalf("lost data: %#v %v", next, err)
+	}
+}
+
+func TestComputerCompactObservationBoundsAndDetailedReads(t *testing.T) {
+	nodes := []any{}
+	for i := 0; i < 450; i++ {
+		node := semanticFixtureNode(fmt.Sprintf("r%016x", i), "cell", fmt.Sprintf("Value %d", i))
+		node["frame_id"] = "internal-frame"
+		node["bounds"] = map[string]any{"x": 1, "y": 2, "width": 30, "height": 40}
+		nodes = append(nodes, node)
+	}
+	tree := map[string]any{"document_id": "fixture:1", "nodes": nodes, "truncated": false, "total": 450}
+	var output computerObservationOutput
+	compact := output.render(tree, "all", false).(map[string]any)
+	body, _ := json.Marshal(compact)
+	if len(body) > 32768 || compact["detail"] != "compact" || strings.Contains(string(body), "internal-frame") {
+		t.Fatalf("invalid compact output: %d bytes", len(body))
+	}
+	if len(compact["nodes"].([]any)) < 450 && compact["output_truncated"] != true {
+		t.Fatal("undisclosed omitted nodes")
+	}
+	full := output.render(tree, "all", true).(map[string]any)
+	if len(full["nodes"].([]any)) != 450 || full["nodes"].([]any)[0].(map[string]any)["bounds"] == nil {
+		t.Fatal("detailed read lost facts")
+	}
+	if nodes[0].(map[string]any)["bounds"] == nil {
+		t.Fatal("projection mutated authority")
+	}
+	t.Logf("450-node compact observation: %d bytes", len(body))
+}
+
+func TestComputerScriptFailureDiscardsDormantPromise(t *testing.T) {
+	calls := 0
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
+		calls++
+		return TargetToolResult{Result: map[string]any{}}, nil
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, `globalThis.wake=undefined; new Promise(resolve=>{globalThis.wake=resolve}).then(()=>ui.click(1,2)); missingSymbol();`)
+	if err == nil || result.Result.(map[string]any)["context_reset"] != true {
+		t.Fatalf("failure retained namespace: %v %v", result, err)
+	}
+	_, err = executeTestScript(t.Context(), runtime, call, `ui.assert(typeof wake==='undefined'); await ui.observe();`)
+	if err != nil || calls != 1 {
+		t.Fatalf("dormant promise crossed invocation: calls=%d error=%v", calls, err)
+	}
+}
+
+func TestComputerCompactObservationTruncationAndModeBoundary(t *testing.T) {
+	nodes := []any{map[string]any{"ref": "root", "role": "table", "name": "Data", "child_refs": []any{}, "states": map[string]any{}}}
+	for i := 0; i < 250; i++ {
+		ref := fmt.Sprintf("r%016x", i)
+		node := semanticFixtureNode(ref, "cell", strings.Repeat("content", 50))
+		node["parent_ref"] = "root"
+		nodes = append(nodes, node)
+		nodes[0].(map[string]any)["child_refs"] = append(nodes[0].(map[string]any)["child_refs"].([]any), ref)
+	}
+	tree := map[string]any{"document_id": "fixture:1", "nodes": nodes, "truncated": false, "focus_ref": "r00000000000000f9"}
+	var output computerObservationOutput
+	compact := output.render(tree, "all", false).(map[string]any)
+	body, _ := json.Marshal(compact)
+	if len(body) > 32768 || compact["output_truncated"] != true || compact["focus_ref"] != nil || compact["nodes"].([]any)[0].(map[string]any)["children_truncated"] != true {
+		t.Fatalf("invalid truncated projection: %d bytes", len(body))
+	}
+	for _, raw := range compact["nodes"].([]any)[1:] {
+		if raw.(map[string]any)["parent_ref"] != "root" {
+			t.Fatal("lost parent")
+		}
+	}
+	small := map[string]any{"document_id": "fixture:1", "nodes": nodes[:1], "truncated": false}
+	output.render(small, "all", true)
+	if next := output.render(small, "all", false).(map[string]any); next["format"] != "full" {
+		t.Fatalf("detail switch reused diff baseline: %#v", next)
 	}
 }

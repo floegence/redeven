@@ -17,7 +17,7 @@ export async function createComputerScript({ browser = true } = {}) {
     handle.dispose();
   };
   install('__invalidArgument', () => {
-    if (active) active.diagnostic = 'SCRIPT_ARGUMENT_ERROR';
+    if (active) { active.sealed = true; active.diagnostic = 'SCRIPT_ARGUMENT_ERROR'; }
     return { error: vm.newError('SCRIPT_ARGUMENT_ERROR') };
   });
   install('__conditionTimeout', () => {
@@ -47,6 +47,7 @@ export async function createComputerScript({ browser = true } = {}) {
       },
     ).catch(() => {
       execution.sealed = true;
+      execution.hostStopped = true;
       const handle = vm.newError('HOST_OPERATION_STOPPED');
       deferred.reject(handle);
       handle.dispose();
@@ -82,8 +83,9 @@ export async function createComputerScript({ browser = true } = {}) {
       const string = (value) => { if (typeof value !== 'string') invalid(); return value; };
       const number = (value) => { if (!Number.isFinite(value)) invalid(); return value; };
       const waitOptions = (value) => {
-        options(value, ['state', 'timeout_ms']);
-        if (value.state !== undefined && !['visible', 'hidden', 'enabled'].includes(value.state)) invalid();
+        options(value, ['state', 'equals', 'timeout_ms']);
+        if (value.state !== undefined && !['visible', 'hidden', 'enabled', ...(${browser ? 'true' : 'false'} ? ['text','value']:[])].includes(value.state)) invalid();
+        if (['text','value'].includes(value.state) ? typeof value.equals!=='string'||value.equals.length>2000 : value.equals!==undefined) invalid();
         if (value.timeout_ms !== undefined && (!Number.isInteger(value.timeout_ms) || value.timeout_ms < 0 || value.timeout_ms > 30000)) invalid();
         return value;
       };
@@ -206,13 +208,25 @@ export async function createComputerScript({ browser = true } = {}) {
       active = { dispatch, deadline: Date.now() + Math.min(timeout, 30000), pending: new Set(), deferred: [], count: 0, logs: [], outputBytes: 0, sealed: false };
       const execution = active;
       const diagnose = error => {
-        if (execution.diagnostic) return;
+        execution.sealed = true;
         const name = vm.getProp(error, 'name');
+        const stack = vm.getProp(error, 'stack');
+        const message = vm.getProp(error, 'message');
         try {
-          execution.diagnostic = ({ReferenceError: 'SCRIPT_REFERENCE_ERROR', TypeError: 'SCRIPT_TYPE_ERROR', SyntaxError: 'SCRIPT_SYNTAX_ERROR'})[vm.getString(name)] || 'SCRIPT_RUNTIME_ERROR';
-        } finally { name.dispose(); }
+          execution.diagnostic ||= ({ReferenceError: 'SCRIPT_REFERENCE_ERROR', TypeError: 'SCRIPT_TYPE_ERROR', SyntaxError: 'SCRIPT_SYNTAX_ERROR'})[vm.getString(name)] || 'SCRIPT_RUNTIME_ERROR';
+          diagnostic.phase = execution.diagnostic==='SCRIPT_SYNTAX_ERROR'?'parse':execution.hostStopped?'host_operation':'execution';
+          const location = /computer-script\.js:(\d+)(?::(\d+))?/u.exec(vm.getString(stack));
+          const line = location ? Number(location[1])-1 : 0;
+          if (line>0 && line<=code.split('\n').length) {
+            diagnostic.line=line;
+            if (location[2] && Number(location[2])>0) diagnostic.column=Number(location[2]);
+          }
+          const symbol = /^'([A-Za-z_$][\w$]{0,79})' is not defined$/u.exec(vm.getString(message))?.[1];
+          if (execution.diagnostic==='SCRIPT_REFERENCE_ERROR' && symbol && code.match(/[A-Za-z_$][\w$]*/gu)?.includes(symbol)) diagnostic.symbol=symbol;
+        } finally { name.dispose(); stack.dispose(); message.dispose(); }
       };
       let handle;
+      const diagnostic = {phase:'execution'};
       try {
         const evaluated = vm.evalCode(`(async () => {\n${code}\n})()`, 'computer-script.js');
         if (evaluated.error) { diagnose(evaluated.error); evaluated.error.dispose(); throw new Error('SCRIPT_FAILED'); }
@@ -232,11 +246,12 @@ export async function createComputerScript({ browser = true } = {}) {
           if (Date.now() >= execution.deadline) throw new Error('SCRIPT_TIMEOUT');
         }
       } catch (error) {
+        execution.sealed = true;
         if (['SCRIPT_TIMEOUT', 'SCRIPT_NO_PROGRESS', 'SCRIPT_UNFINISHED_OPERATIONS'].includes(error.message)) execution.diagnostic ||= error.message;
         // Preserve bounded output without exposing guest exception text, which
         // can include values from the page or sensitive input.
         const failure = new Error('SCRIPT_FAILED');
-        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
+        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
         throw failure;
       } finally {
         execution.sealed = true;
@@ -277,7 +292,11 @@ async function main() {
       send({ type: 'operation', id, operation });
     })).then(
       (result) => { running = false; send({ type: 'result', id: message.id, result }); },
-      (failure) => { send({ type: 'error', id: message.id, error: 'SCRIPT_FAILED', result: failure.result }); process.exitCode = 1; lines.close(); },
+      (failure) => {
+        running = false;
+        send({ type: 'error', id: message.id, error: 'SCRIPT_FAILED', result: failure.result });
+        process.exitCode = 1; lines.close();
+      },
     );
   });
   lines.on('close', () => {

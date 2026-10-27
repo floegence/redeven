@@ -34,6 +34,15 @@ Download association uses `browser.downloadCursor()` before the triggering input
 
 The guest cannot choose filesystem destinations or read file bytes; a later authorized file/command tool handles data processing.
 
+Hit tests translate viewport CSS points into the owning CDP session document
+coordinates, including scrolled frames. Cross-process frame input checks every
+embedding document for overlays. An unavailable protocol hit test returns
+`TARGET_OBSERVATION_UNAVAILABLE` with `observation_stage:hit_test`, without
+claiming the element is covered. Screenshot capture uses the native viewport
+including non-overlay scrollbars and derives the immutable image transform from
+captured dimensions. Geometry must remain stable before/after capture. Scoped
+scroll uses the control center and verifies its hit target before dispatch.
+
 ## Chrome extension and explicit CDP
 The MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact tab.
 

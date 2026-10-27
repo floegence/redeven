@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { validateBrowserAction } from './computerBrowserArguments.mjs';
+import { documentHitPoint } from './computerBrowserFrame.mjs';
 
 export const navigationURL = value => {
   if (typeof value !== 'string' || !value.trim() || value.length > 4096 || /\p{Cc}/u.test(value)) throw new Error('INVALID_REQUEST');
@@ -416,7 +417,11 @@ export class BrowserComputerPage {
   }
 
   rememberNode(frame, node, retain = true) {
-    const ref = `${this.prefix}:${this.revision}:${frame.frame.id}:${node.backendDOMNodeId}`;
+    // Opaque refs stay in the existing controller/document reference table.
+    const identity = [this.prefix,this.revision,frame.frame.id,node.backendDOMNodeId];
+    const ref = 'r'+createHash('sha256').update(JSON.stringify(identity)).digest('base64url').slice(0,16);
+    const existing = this.references.get(ref);
+    if (existing && (existing.revision!==this.revision || existing.frame.frame.id!==frame.frame.id || existing.backendNodeId!==node.backendDOMNodeId)) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
     const entry = { ref, frame, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', name: Array.from(node.name?.value || '').slice(0, 2000).join(''), revision: this.revision };
     if (!retain) return entry;
     if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
@@ -559,8 +564,8 @@ export class BrowserComputerPage {
     return {attribute:name,value:value===null?null:Array.from(value).slice(0,2000).join('')};
   }
 
-  async wait(selector, { state = 'visible', timeout_ms = 10000 } = {}) {
-    if (!['visible', 'hidden', 'enabled'].includes(state) || !Number.isInteger(timeout_ms) || timeout_ms < 0 || timeout_ms > 30000) throw new Error('INVALID_REQUEST');
+  async wait(selector, { state = 'visible', equals, timeout_ms = 10000 } = {}) {
+    validateBrowserAction({action:'wait',selector,state,...(equals===undefined?{}:{equals}),timeout_ms});
     const deadline = Date.now() + timeout_ms;
     for (;;) {
       let changed;
@@ -569,15 +574,25 @@ export class BrowserComputerPage {
       try {
         let found = false;
         let enabled = false;
+        let matches = false;
         try {
           const element = await this.resolve(selector);
           const current = await this.elementState(element);
           found = current.visible;
           enabled = current.visible && current.enabled;
+          if (found && ['text','value'].includes(state)) {
+            const {executionContextId}=await element.frame.session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
+            const {object}=await element.frame.session.send('DOM.resolveNode',{backendNodeId:element.backendNodeId,executionContextId});
+            try {
+              const result=await element.frame.session.send('Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,arguments:[{value:state},{value:equals}],functionDeclaration:'function(state,expected){return (state==="value"?this.value:this.textContent)===expected;}'});
+              if (result.exceptionDetails) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+              matches=result.result?.value===true;
+            } finally {if(object.objectId)await element.frame.session.send('Runtime.releaseObject',{objectId:object.objectId});}
+          }
         } catch (error) {
           if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
         }
-        if ((state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled)) return { state };
+        if (matches || (state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled)) return { state };
         if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
         if (Date.now() >= deadline) return { state: 'timeout', requested_state: state, last_known: { found, enabled } };
         // CSS transitions do not necessarily emit accessibility events.
@@ -636,9 +651,8 @@ export class BrowserComputerPage {
     const session = element.frame.session;
     const objects = [];
     try {
-      // CDP hit testing shares the input session's coordinates, including
-      // nested frames. Local DOM rectangles alone cannot validate that point.
-      const hit = await session.send('DOM.getNodeForLocation', { x: Math.floor(x), y: Math.floor(y), includeUserAgentShadowDOM: true });
+      const point = await documentHitPoint(session, x, y);
+      const hit = await session.send('DOM.getNodeForLocation', { ...point, includeUserAgentShadowDOM: true });
       const { executionContextId } = await session.send('Page.createIsolatedWorld', { frameId: element.frame.frame.id, worldName: 'flower-observation' });
       for (const backendNodeId of [element.backendNodeId, hit.backendNodeId]) {
         const { object } = await session.send('DOM.resolveNode', { backendNodeId, executionContextId });
@@ -646,8 +660,33 @@ export class BrowserComputerPage {
       }
       const result = await session.send('Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
         functionDeclaration: 'function(hit){for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===this)return true;return false;}' });
-      return !result.exceptionDetails && result.result?.value === true;
-    } catch { return false; }
+      if (result.exceptionDetails) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+      if (result.result?.value !== true) return false;
+      // An OOPIF session cannot see an overlay in its embedding document.
+      // Validate the same point through each embedding session before input.
+      let current=session;
+      const frames=await this.frames();
+      for (;;) {
+        const {frameTree}=await current.send('Page.getFrameTree');
+        const root=frameTree.frame;
+        if (!root.parentId) return true;
+        const parent=frames.find(candidate=>candidate.frame.id===root.parentId);
+        if (!parent || parent.session===current) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+        const {backendNodeId}=await parent.session.send('DOM.getFrameOwner',{frameId:root.id});
+        const {quads}=await parent.session.send('DOM.getContentQuads',{backendNodeId});
+        const {cssLayoutViewport:v}=await current.send('Page.getLayoutMetrics');
+        const q=quads?.[0];
+        if (!q || !v || v.clientWidth<=0 || v.clientHeight<=0) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+        const u=x/v.clientWidth,w=y/v.clientHeight;
+        x=(1-u)*(1-w)*q[0]+u*(1-w)*q[2]+u*w*q[4]+(1-u)*w*q[6];
+        y=(1-u)*(1-w)*q[1]+u*(1-w)*q[3]+u*w*q[5]+(1-u)*w*q[7];
+        const hit=await parent.session.send('DOM.getNodeForLocation',{...await documentHitPoint(parent.session,x,y),includeUserAgentShadowDOM:true});
+        if (hit.backendNodeId!==backendNodeId && hit.frameId!==root.id) return false;
+        current=parent.session;
+      }
+    } catch {
+      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test' });
+    }
     finally { for (const objectId of objects) if (objectId) await session.send('Runtime.releaseObject', { objectId }); }
   }
 
@@ -793,7 +832,7 @@ export class BrowserComputerPage {
     const cursor = crypto.randomUUID();
     if (this.downloadCursors.size >= 32) this.downloadCursors.delete(this.downloadCursors.keys().next().value);
     this.downloadCursors.set(cursor, this.downloadSequence);
-    return { cursor };
+    return { cursor, downloads: [...this.downloads.values()] };
   }
 
   async waitForDownload({ id, after, timeout_ms = 10000 } = {}) {
@@ -877,11 +916,13 @@ export class BrowserComputerPage {
     } else if (args.action === 'scroll') {
       if (!Number.isFinite(args.delta_y) || !Number.isFinite(args.delta_x ?? 0)) throw new Error('INVALID_REQUEST');
       const target = element?.frame.session || this.transport;
+      if (element) await this.actionable(element,true);
       const model = element ? (await target.send('DOM.getBoxModel', { backendNodeId: element.backendNodeId })).model : undefined;
       const explicitPoint = args.x !== undefined || args.y !== undefined;
       if (explicitPoint && (!Number.isFinite(args.x) || !Number.isFinite(args.y) || args.x < 0 || args.y < 0)) throw new Error('INVALID_REQUEST');
-      const x = model ? model.content[0] + 1 : explicitPoint ? args.x : 1;
-      const y = model ? model.content[1] + 1 : explicitPoint ? args.y : 1;
+      const x = model ? (model.content[0]+model.content[2]+model.content[4]+model.content[6])/4 : explicitPoint ? args.x : 1;
+      const y = model ? (model.content[1]+model.content[3]+model.content[5]+model.content[7])/4 : explicitPoint ? args.y : 1;
+      if(element && !await this.receivesPoint(element,x,y)) throw new Error('ELEMENT_NOT_ACTIONABLE');
       const before=await this.scrollPosition(element);
       await this.input(target, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaY: args.delta_y, deltaX: args.delta_x || 0 });
       const after=await this.scrollPosition(element);

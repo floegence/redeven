@@ -5,19 +5,19 @@ import "strings"
 // Runtime help and selection share one authored contract. No page content or
 // user data enters documentation. Existing script signatures remain unchanged.
 func computerScriptHelp(topic string, browser bool) (string, bool) {
-	common := `All operations are sequentially awaited. log(value) emits text; observations emit automatically unless emit:false; help always emits.
-ui.snapshot({root_ref?,limit?:1..1000,emit?:boolean}) -> {document_id,url?,title?,nodes,truncated}. Each node has ref, role, name, child_refs, states and optional value. role is canonical. Truncated content is unknown, not empty; narrow the scope.
-ui.ref(ref) or ui.getByRole(role,{name?,exact?,root_ref?}) -> locator. Names are strings, case-insensitive contains unless exact:true. Act only on an unambiguous observed element. Search fields have role searchbox.
+	common := `Await every operation. No setTimeout/setInterval, DOM or Node. const/let are local to one call; globalThis.pages=[] persists within this turn/target. log(value) emits text; observations emit automatically unless emit:false; help always emits.
+ui.snapshot({root_ref?,limit?:1..1000,emit?:boolean,full?:boolean}) -> {document_id,url?,title?,nodes,truncated}. The returned tree includes ref, canonical role, name, child_refs, states and optional value. Automatic model output is compact (32 KiB); full:true emits details, and locator.node() reads one full node. Compact output uses parent_ref; omitted geometry/child_refs are available in detailed reads. Truncated content is unknown, not empty; narrow the scope.
+ui.ref(ref) or ui.getByRole(role,{name?,exact?,root_ref?}) -> locator. Names are strings, case-insensitive contains unless exact:true. Act only on an unambiguous observed element. Search fields have role searchbox; pagination landmarks use navigation. Unknown role other is ref-only: ui.ref(node.ref).
 All reads are async: const node = await locator.node(); await locator.snapshot({limit?,emit?}) returns a subtree snapshot.
 locator.click(), locator.fill(text) replaces contents, locator.press(key), locator.scroll(delta_y,delta_x=0). For scroll measurements: const result = await locator.scroll(80); log(result.scroll_progress). before/after/measurement belong to this result, never to a node or snapshot; immediate_after_dispatch is not proof of settled UI.
 ui.type(text) inserts at current focus; ui.key(key) sends a character/named key or Alt/Control/Meta/Shift chord. Use ui.key('PageDown') for page keys. locator.press requires a focusable element; document roots are not elements. Examples: Enter, ArrowDown, Meta+=. Equal is not a key name. Do not send whole text through key().
 locator.requireState({state:'visible'|'hidden'|'enabled',timeout_ms?:0..30000}) -> void; timeout stops the script before later actions.
-ui.screenshot() -> image; native ui.click(x,y), ui.doubleClick(x,y), ui.drag(x1,y1,x2,y2,duration_ms=0), ui.scroll(delta_y,delta_x=0) use target coordinates.
-A failed script clears its variables. completed_actions records the prefix, not a rollback. Observe before deciding what remains. ui.help('read'|'visual'|'downloads') provides focused extensions.`
+globalThis.image=await ui.screenshot(); native ui.click(x,y), ui.doubleClick(x,y), ui.drag(x1,y1,x2,y2,duration_ms=0), ui.scroll(delta_y,delta_x=0) use target coordinates.
+A failed invocation clears its namespace (context_reset:true); prior effects remain. completed_actions records the prefix, not a rollback. Observe before deciding what remains. ui.help('read'|'visual'|'downloads') provides focused extensions.`
 	switch topic {
 	case "core":
 		if browser {
-			return common + "\nBrowser: browser.navigate(url), back(), reload(). image.click(x,y), doubleClick(x,y), drag(x1,y1,x2,y2,duration_ms=0), scroll(x,y,delta_y,delta_x=0) use the returned image pixels. Never convert DPR. Use ui.help('read') for collections/tables and ui.help('downloads') for exports.", true
+			return common + "\nBrowser waits also accept {state:'text'|'value',equals:string,timeout_ms?} for exact textContent/value; waits only read and never repeat input. After saving globalThis.image=await ui.screenshot(), inspect the image and call await image.click(x,y) in the next call; recapture after scrolling. browser.navigate(url), back(), reload(). image.click(x,y), doubleClick(x,y), drag(x1,y1,x2,y2,duration_ms=0), scroll(x,y,delta_y,delta_x=0) use the returned image pixels. Never convert DPR. Use ui.help('read') for collections/tables and ui.help('downloads') for exports.", true
 		}
 		return common + "\nNative: browser, collection/attribute reads and image-bound input are unavailable; image contains the screenshot metadata only.", true
 	case "read":
@@ -37,7 +37,7 @@ locator.node() returns one canonical node; locator.snapshot() returns a flat can
 		if !browser {
 			return "Downloads are browser-only.", true
 		}
-		return `globalThis.pendingDownload=await browser.downloadCursor(); log(pendingDownload); await ui.ref(exportRef).click(); const r=await pendingDownload.wait({timeout_ms:10000}); log(r); Verify r.download.state==='completed'. The handle captures its cursor; do not pass the whole handle as after. Legacy waitForDownload({after:cursor,timeout_ms?}) accepts a cursor STRING; {id,timeout_ms?} waits for an identified download. If a later operation fails after the click, do not click again: inspect (await browser.downloadCursor()).downloads and wait for the exact existing id. Multiple new downloads are ambiguous; inspect returned downloads and select the exact id. Do not repeat export, choose the latest filename, or invent browser.downloads()/readFile(). Managed completed downloads include their saved path; file tools, when available and authorized, read files.`, true
+		return `globalThis.pendingDownload=await browser.downloadCursor(); log(pendingDownload); await ui.ref(exportRef).click(); const r=await pendingDownload.wait({timeout_ms:10000}); log(r); Verify r.download.state==='completed'. The handle captures its cursor; do not pass the whole handle as after. Legacy waitForDownload({after:cursor,timeout_ms?}) accepts a cursor STRING; {id,timeout_ms?} waits for an identified download. If a later operation fails after the click, do not click again: inspect (await browser.downloadCursor()).downloads (always an array, empty when none) and wait for the exact existing id. Multiple new downloads are ambiguous; inspect returned downloads and select the exact id. Do not repeat export, choose the latest filename, or invent browser.downloads()/readFile(). Managed completed downloads include their saved path; file tools, when available and authorized, read files.`, true
 	case "legacy":
 		return computerLegacyScriptDocumentation, true
 	default:

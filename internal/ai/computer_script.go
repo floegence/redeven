@@ -212,6 +212,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		output.executionFacts.completedActions = append([]string(nil), completed...)
 		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted || errors.Is(outputErr, errComputerEffectUnknown)
 		if payload, ok := output.Result.(map[string]any); ok {
+			payload["context_reset"] = !healthy
 			if failureStage != "" {
 				payload["stage"] = failureStage
 				payload["reason"] = failureReason
@@ -450,6 +451,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				delete(result.Result.(map[string]any), "logs")
 				return result, navigationFailure
 			}
+			if lastObservation != nil && observationFailureStage == "" {
+				result.Result.(map[string]any)["observation"] = p.observations.render(lastObservation, observationScope, fullObservation)
+			}
 			if stopped != nil || msg.Type == "error" {
 				code := "SCRIPT_STOPPED"
 				if diagnostic, ok := msg.Result["diagnostic"].(map[string]any); ok && stopped == nil {
@@ -463,12 +467,15 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					code = strings.ToUpper(failure.code)
 				}
 				result.Result.(map[string]any)["script_error"] = code
+				if stopped == nil {
+					if diagnostic := computerScriptDiagnostic(msg.Result["diagnostic"], args.Code); diagnostic != nil {
+						result.Result.(map[string]any)["diagnostic"] = diagnostic
+					}
+				}
+				result.Result.(map[string]any)["recovery"] = "Inspect current state and completed_actions before deciding what remains; do not replay input."
 				return result, &computerScriptExecutionError{code: code}
 			}
 			healthy = true
-			if lastObservation != nil {
-				result.Result.(map[string]any)["observation"] = p.observations.render(lastObservation, observationScope, fullObservation)
-			}
 			return result, nil
 		default:
 			return result, errors.New("invalid computer script protocol")

@@ -1,3 +1,4 @@
+/* global window */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { chromium } from 'playwright';
@@ -187,5 +188,23 @@ test('table content and page budgets explicitly mark omitted cells and text',asy
   assert.equal(result.total,2);assert.equal(result.rows[0].cells_truncated,true);assert.equal(result.rows[0].cells[0].text_truncated,true);assert.ok(Buffer.byteLength(JSON.stringify(result))<48000);
   const second=await controller.page.action({action:'table',selector:{role:'table',name:'Huge'},cursor:result.next_cursor});assert.equal(second.rows[0].cells[0].text,'Tail');
   controller.close();
+ }finally{await browser.close();}
+});
+
+test('content waits observe asynchronous changes without repeating input', async () => {
+ const browser=await chromium.launch({headless:true});
+ try {
+  const tab=await browser.newPage();await tab.setContent('<input aria-label="Page"><output aria-label="Status">old</output><button onclick="window.hits=(window.hits||0)+1;setTimeout(()=>{document.querySelector(\'input\').value=\'2\';document.querySelector(\'output\').textContent=\'new\'},150)">Next</button>');
+  const controller=new BrowserComputerController(await tab.context().newCDPSession(tab));await controller.initialize();
+  const call=args=>controller.execute({tool_name:'computer.action',args,script_operation:true});
+  assert.deepEqual((await controller.execute({tool_name:'browser.download_cursor',script_operation:true})).result.downloads,[]);
+  assert.equal((await call({action:'click',selector:{role:'button',name:'Next'}})).error,undefined);
+  for(const [role,name,state,equals] of [['textbox','Page','value','2'],['status','Status','text','new']]){
+   const result=await call({action:'wait',selector:{role,name},state,equals,timeout_ms:1000});
+   assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.result.state,state);
+  }
+  assert.equal(await tab.evaluate(()=>window.hits),1);
+  const timed=await call({action:'wait',selector:{role:'textbox',name:'Page'},state:'value',equals:'3',timeout_ms:0});assert.equal(timed.result.state,'timeout');
+  const invalid=await call({action:'wait',selector:{role:'textbox'},state:'value'});assert.equal(invalid.result.diagnostic.field,'equals');controller.close();
  }finally{await browser.close();}
 });

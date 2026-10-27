@@ -168,3 +168,28 @@ test('download cursor exposes an immutable waiter bound before the click', async
   assert.deepEqual(calls[2],{action:'wait_for_download',after:'original',timeout_ms:1000});
  } finally { vm.dispose(); }
 });
+
+test('reference errors expose safe source locations without claiming context reuse', async () => {
+ const script=await createComputerScript();
+ try {
+  await assert.rejects(script.execute("globalThis.pages=[1,2];\nawait ui.type('confirmed');\nsetTimeout(()=>{},1);",async()=>({})),e=>{
+   assert.deepEqual(e.result.diagnostic,{phase:'execution',line:3,column:1,symbol:'setTimeout',code:'SCRIPT_REFERENCE_ERROR'});
+   assert.equal(e.result.context_reusable,undefined);return true;
+  });
+  assert.deepEqual((await script.execute('log(pages.length)',async()=>({}))).logs,[[2]]);
+  await assert.rejects(script.execute("throw new Error('private-secret')",async()=>({})),e=>{
+   assert.equal(e.result.context_reusable,undefined);assert.ok(!JSON.stringify(e.result).includes('private-secret'));return true;
+  });
+ }finally{script.dispose();}
+});
+
+test('caught invalid arguments seal later input and native waits reject browser conditions',async()=>{
+ for(const browser of [true,false]) {
+  const script=await createComputerScript({browser});let calls=0;
+  try {
+   await assert.rejects(script.execute("try { await ui.key(42); } catch {} await ui.type('must not run')",async()=>{calls++;return {};}));
+   assert.equal(calls,0);
+   if(!browser)await assert.rejects(script.execute("await ui.ref('r').requireState({state:'value',equals:'ready'})",async()=>assert.fail('native dispatch')));
+  }finally{script.dispose();}
+ }
+});

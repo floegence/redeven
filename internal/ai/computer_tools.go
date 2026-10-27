@@ -78,6 +78,6 @@ func builtInComputerToolDefinitions() []ToolDef {
 	return defs
 }
 
-const computerScriptDocumentation = `Execute JavaScript against the selected target. Send one computer call per batch. Use ui.snapshot() to inspect, ui.ref(observedRef).click()/fill(text)/press(key) to act, and inspect the result. Use browser.navigate(url) for browser navigation. Await each operation; log(value) returns concise text. Variables on globalThis persist only within this turn and target; a failed script clears them.
+const computerScriptDocumentation = `Execute JavaScript against the selected target. Send one computer call per batch. Use ui.snapshot() to inspect, ui.ref(observedRef).click()/fill(text)/press(key) to act, and inspect the result. Use browser.navigate(url) for browser navigation. Await each operation; log(value) returns concise text. Variables on globalThis persist only within this turn and target; check context_reset after a failure. Local const/let variables do not persist.
 First use: await ui.help('core') returns exact signatures. Other topics: read, visual, downloads. Read a topic when needed instead of guessing methods. Browser methods exist only on browser targets. Select a candidate first; target can be omitted afterward.
 Execute only actions authorized by the user. Stop at a changed target or permission request. Earlier effects are not rolled back: inspect current state before continuing and never replay completed or uncertain input. Limits: 50 operations, 30 seconds, 64 MiB heap, 64 KiB logs. No DOM, Node, filesystem, network or raw CDP.`
