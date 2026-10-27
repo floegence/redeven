@@ -3403,6 +3403,10 @@ export const enUS = defineDictionary({
     },
     services: {
       open: 'Manage services', title: 'Container services',
+      lifecycleWait: "Starting, stopping, or restarting can take up to two minutes. You can keep working while it completes.",
+      interruptionTitle: "Service interruption",
+      interruptionMessage: "Running containers and dependent Web Services may be interrupted.",
+      configurationRisk: "Invalid settings can prevent the container service from starting.",
       description: 'Manage the active Docker and Podman services for this environment.',
       loadFailed: 'Container services could not be loaded', configure: 'Configure',
       rootless: 'Rootless', restartRequired: 'Restart required to apply the saved configuration',
@@ -3550,6 +3554,22 @@ export const enUS = defineDictionary({
     },
     stats: { cpu: 'CPU', memory: 'Memory', networkIn: 'Network in', networkOut: 'Network out', waiting: 'Waiting for the first sample…', refreshUnavailable: 'Live statistics are unavailable' },
     operations: {
+      errors: {
+        canceled: "The operation was canceled.",
+        engine_timeout: "The service did not respond in time. It may still be starting or stopping. Refresh its status before trying again.",
+        engine_permission_denied: "Access denied. Check the current user’s permissions.",
+        engine_unavailable: "The container service is unavailable. Check its status and try again.",
+        container_service_configuration_conflict: "The configuration changed. Reload it before saving.",
+        service_recovery_required: "The service could not recover. Check its configuration in the host management tool.",
+        insufficient_storage: "Not enough storage. Free up space and try again.",
+        registry_rate_limited: "The image registry rate limit was reached. Sign in or try again later.",
+        image_not_found: "The image or platform was not found. Check the image name and platform.",
+        registry_access_denied: "The image registry denied access. Check the image name and sign-in.",
+        registry_unavailable: "The image registry is unreachable. Check the network.",
+        preflight_stale: "The resource changed after review. Refresh and review the operation again.",
+        reconciliation_required: "The final state could not be confirmed. Refresh the service status before trying again.",
+        operation_failed: "The operation could not be completed. Check the service status and try again.",
+      },
       title: 'Operations', description: 'Audited container operations and their current state.', empty: 'No container operations yet.',
       phases: {
         queued: 'Waiting', running: 'Starting', executing: 'Executing', resolving: 'Resolving image', pulling: 'Pulling layers',
@@ -3568,7 +3588,7 @@ export const enUS = defineDictionary({
       title: 'Confirm high-risk operation', warning: 'This operation can permanently remove or interrupt resources.',
       typeName: 'Type “{name}” exactly to continue.',
     },
-    review: { title: 'Review operation', operation: 'Operation' },
+    review: { title: 'Review operation', operation: 'Operation', risk: {"low": "Low risk", "medium": "Medium risk", "high": "High risk", "critical": "Critical risk"} },
     prune: {
       moreActions: 'More actions', resources: 'Resources', reclaimable: 'Reclaimable',
       reviewTitle: 'Review cleanup', permanentTitle: 'These resources will be permanently removed',

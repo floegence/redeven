@@ -3161,7 +3161,11 @@
       "outputFormatPlaceholder": "table {{.ID}}\t{{.Names}}",
       "proxyURLPlaceholder": "http://proxy.example.com:3128",
       "proxyBypassPlaceholder": "localhost,127.0.0.1,.example.com",
-      "credentialStorePlaceholder": "desktop"
+      "credentialStorePlaceholder": "desktop",
+      "lifecycleWait": "启动、停止或重启最多可能需要两分钟。等待期间可继续使用其他功能。",
+      "interruptionTitle": "服务中断",
+      "interruptionMessage": "正在运行的容器及依赖它们的 Web 服务可能会中断。",
+      "configurationRisk": "无效配置可能导致容器服务无法启动。"
     },
     "views": {
       "containers": "容器",
@@ -3520,7 +3524,23 @@
       "started": "开始时间",
       "errorTitle": "操作失败",
       "progressTitle": "执行进度",
-      "loadingProgress": "正在加载进度…"
+      "loadingProgress": "正在加载进度…",
+      "errors": {
+        "canceled": "操作已取消。",
+        "engine_timeout": "服务未在规定时间内响应，可能仍在启动或停止。请先刷新状态，再决定是否重试。",
+        "engine_permission_denied": "访问被拒绝。请检查当前用户的权限。",
+        "engine_unavailable": "容器服务不可用。请检查状态后重试。",
+        "container_service_configuration_conflict": "配置已发生变化。请重新加载后再保存。",
+        "service_recovery_required": "服务未能恢复。请在主机管理工具中检查配置。",
+        "insufficient_storage": "存储空间不足。请释放空间后重试。",
+        "registry_rate_limited": "镜像仓库请求次数已达上限。请登录或稍后重试。",
+        "image_not_found": "未找到镜像或所需平台。请检查镜像名称和平台。",
+        "registry_access_denied": "镜像仓库拒绝访问。请检查镜像名称和登录状态。",
+        "registry_unavailable": "无法连接镜像仓库。请检查网络。",
+        "preflight_stale": "资源在确认后发生变化。请刷新并重新确认操作。",
+        "reconciliation_required": "无法确认最终状态。请先刷新服务状态，再决定是否重试。",
+        "operation_failed": "操作未能完成。请检查服务状态后重试。"
+      }
     },
     "operationStates": {
       "queued": "等待中",
@@ -3544,7 +3564,13 @@
     },
     "review": {
       "title": "审查操作",
-      "operation": "操作"
+      "operation": "操作",
+      "risk": {
+        "low": "低风险",
+        "medium": "中等风险",
+        "high": "高风险",
+        "critical": "严重风险"
+      }
     },
     "prune": {
       "moreActions": "更多操作",

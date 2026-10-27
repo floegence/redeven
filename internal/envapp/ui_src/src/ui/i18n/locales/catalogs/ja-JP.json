@@ -3161,7 +3161,11 @@
       "outputFormatPlaceholder": "table {{.ID}}\t{{.Names}}",
       "proxyURLPlaceholder": "http://proxy.example.com:3128",
       "proxyBypassPlaceholder": "localhost,127.0.0.1,.example.com",
-      "credentialStorePlaceholder": "desktop"
+      "credentialStorePlaceholder": "desktop",
+      "lifecycleWait": "起動、停止、再起動には最大2分かかる場合があります。完了を待つ間も他の機能を利用できます。",
+      "interruptionTitle": "サービスの中断",
+      "interruptionMessage": "実行中のコンテナと依存する Web サービスが中断される場合があります。",
+      "configurationRisk": "無効な設定はコンテナサービスの起動を妨げることがあります。"
     },
     "views": {
       "containers": "コンテナ",
@@ -3520,7 +3524,23 @@
       "started": "開始時刻",
       "errorTitle": "操作に失敗しました",
       "progressTitle": "進行状況",
-      "loadingProgress": "進行状況を読み込み中…"
+      "loadingProgress": "進行状況を読み込み中…",
+      "errors": {
+        "canceled": "操作はキャンセルされました。",
+        "engine_timeout": "サービスが時間内に応答しませんでした。起動や停止が続いている可能性があります。再試行の前に状態を更新してください。",
+        "engine_permission_denied": "アクセスが拒否されました。現在のユーザーの権限を確認してください。",
+        "engine_unavailable": "コンテナサービスを利用できません。状態を確認して再試行してください。",
+        "container_service_configuration_conflict": "設定が変更されました。再読み込みしてから保存してください。",
+        "service_recovery_required": "サービスを復旧できませんでした。ホストの管理ツールで設定を確認してください。",
+        "insufficient_storage": "容量が不足しています。空き容量を確保して再試行してください。",
+        "registry_rate_limited": "イメージレジストリのリクエスト上限に達しました。サインインするか、後で再試行してください。",
+        "image_not_found": "イメージまたはプラットフォームが見つかりません。名前とプラットフォームを確認してください。",
+        "registry_access_denied": "イメージレジストリへのアクセスが拒否されました。イメージ名とサインイン状態を確認してください。",
+        "registry_unavailable": "イメージレジストリに接続できません。ネットワークを確認してください。",
+        "preflight_stale": "確認後にリソースが変更されました。更新して操作を再確認してください。",
+        "reconciliation_required": "最終状態を確認できませんでした。再試行の前にサービスの状態を更新してください。",
+        "operation_failed": "操作を完了できませんでした。サービスの状態を確認して再試行してください。"
+      }
     },
     "operationStates": {
       "queued": "待機中",
@@ -3544,7 +3564,13 @@
     },
     "review": {
       "title": "操作を確認",
-      "operation": "操作"
+      "operation": "操作",
+      "risk": {
+        "low": "低リスク",
+        "medium": "中リスク",
+        "high": "高リスク",
+        "critical": "重大なリスク"
+      }
     },
     "prune": {
       "moreActions": "その他の操作",

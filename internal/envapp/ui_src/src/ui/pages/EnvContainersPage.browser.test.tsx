@@ -256,6 +256,74 @@ describe('native Containers responsive product surface', () => {
     await page.viewport(1280, 720);
   });
 
+  it.each([390, 1440])('keeps service operation feedback readable without horizontal overflow at %spx', async (width) => {
+    await page.viewport(width, 900);
+    browserHarness.listOperations.mockResolvedValue([{
+      operation_id: 'service-failed', method: 'container.services.start', engine: 'docker',
+      resource_kind: 'container_service', resource_identity: 'container_service_' + 'a'.repeat(64),
+      state: 'failed', error_code: 'engine_timeout', error_message: 'Internal English timeout diagnostic',
+      created_at_unix_ms: 1, updated_at_unix_ms: 11_001, finished_at_unix_ms: 11_001,
+    }]);
+    const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
+    await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
+    await page.getByRole('button', { name: 'Operations', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect.element(dialog).toBeVisible();
+    const workspace = document.querySelector<HTMLElement>('[data-container-operations]')!;
+    for (const animation of document.getAnimations()) {
+      if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    }
+    await settle();
+    const drawerBody = workspace.closest<HTMLElement>('[data-floe-dialog-body]')!;
+    expect(drawerBody.scrollWidth).toBeLessThanOrEqual(drawerBody.clientWidth + 1);
+    expect(workspace.textContent).not.toContain('container_service_');
+    expect(workspace.textContent).not.toContain('engine_timeout');
+    expect(workspace.textContent).not.toContain('Internal English');
+    expect(workspace.querySelector('.container-operation-error')?.textContent).toContain('Refresh its status');
+    for (const element of [workspace, ...workspace.querySelectorAll<HTMLElement>('.container-operation-detail, .container-operation-card')]) {
+      expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    if (width === 390) expect(workspace.querySelector<HTMLElement>('.container-operation-detail')!.getBoundingClientRect().width).toBeGreaterThan(300);
+    const status = workspace.querySelector<HTMLElement>('.container-operation-detail > header > :last-child')!;
+    expect(status.getBoundingClientRect().width).toBeGreaterThan(35);
+    await page.screenshot({ path: '__screenshots__/container-service-feedback-' + width + '.png' });
+  });
+
+  it.each([390, 1440])('keeps reviewed service impact visible without internal hashes at %spx', async (width) => {
+    await page.viewport(width, 900);
+    browserHarness.preflight.mockResolvedValue({
+      method: 'container.services.stop', engine: 'docker', resource_kind: 'container_service',
+      request_hash: 'sha256:' + 'a'.repeat(64), plan_hash: 'sha256:' + 'b'.repeat(64),
+      plan: { method: 'container.services.stop', target: { name: 'Docker Engine', running_container_count: 3, affected_web_service_count: 1, affected_web_services: ['Customer Portal'] },
+        risk_level: 'high', requires_admin: true, summary: ['Internal lifecycle description'],
+        risk_flags: [{ id: 'container_service_interruption', title: 'Raw risk title', detail: 'Raw risk detail' }] },
+    });
+    const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
+    await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
+    await page.getByRole('button', { name: 'Container services', exact: true }).click();
+    await expect.poll(() => mounted.host.querySelector('.container-service-card')?.textContent).toContain('Docker Engine');
+    await page.getByRole('button', { name: 'Stop', exact: true }).click();
+    await page.getByRole('dialog').getByRole('textbox').fill('Docker Engine');
+    await page.getByRole('dialog').getByRole('button', { name: 'Review', exact: true }).click();
+    await expect.poll(() => document.querySelector('.container-operation-review')).not.toBeNull();
+    const review = document.querySelector<HTMLElement>('.container-operation-review')!;
+    for (const animation of document.getAnimations()) {
+      if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    }
+    await settle();
+    const reviewBody = review.closest<HTMLElement>('[data-floe-dialog-body]')!;
+    expect(reviewBody.scrollWidth).toBeLessThanOrEqual(reviewBody.clientWidth + 1);
+    expect(review.textContent).toContain('Docker Engine');
+    expect(review.textContent).toContain('High risk');
+    expect(review.textContent).toContain('Customer Portal');
+    expect(review.textContent).toContain('Running containers and dependent Web Services');
+    expect(review.textContent).not.toContain('sha256:');
+    expect(review.textContent).not.toContain('Raw risk');
+    expect(review.textContent).not.toContain('Internal lifecycle');
+    expect(review.scrollWidth).toBeLessThanOrEqual(review.clientWidth + 1);
+    await page.screenshot({ path: '__screenshots__/container-service-review-' + width + '.png' });
+  });
+
   it.each(['activity', 'workbench'] as const)('replaces loading with stopped runtime feedback and retries in %s', async (variant) => {
     const detection = deferred<readonly unknown[]>();
     browserHarness.listRuntimes.mockReturnValueOnce(detection.promise);

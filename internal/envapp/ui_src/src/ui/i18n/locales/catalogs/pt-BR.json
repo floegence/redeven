@@ -3161,7 +3161,11 @@
       "outputFormatPlaceholder": "table {{.ID}}\t{{.Names}}",
       "proxyURLPlaceholder": "http://proxy.example.com:3128",
       "proxyBypassPlaceholder": "localhost,127.0.0.1,.example.com",
-      "credentialStorePlaceholder": "desktop"
+      "credentialStorePlaceholder": "desktop",
+      "lifecycleWait": "Iniciar, parar ou reiniciar pode levar até dois minutos. Você pode continuar trabalhando enquanto a operação é concluída.",
+      "interruptionTitle": "Interrupção do serviço",
+      "interruptionMessage": "Os contêineres em execução e os serviços Web dependentes podem ser interrompidos.",
+      "configurationRisk": "Configurações inválidas podem impedir a inicialização do serviço de contêineres."
     },
     "views": {
       "containers": "Contêineres",
@@ -3520,7 +3524,23 @@
       "started": "Início",
       "errorTitle": "Falha na operação",
       "progressTitle": "Progresso",
-      "loadingProgress": "Carregando progresso…"
+      "loadingProgress": "Carregando progresso…",
+      "errors": {
+        "canceled": "A operação foi cancelada.",
+        "engine_timeout": "O serviço não respondeu a tempo. Ele ainda pode estar iniciando ou parando. Atualize o status antes de tentar novamente.",
+        "engine_permission_denied": "Acesso negado. Verifique as permissões do usuário atual.",
+        "engine_unavailable": "O serviço de contêineres está indisponível. Verifique o status e tente novamente.",
+        "container_service_configuration_conflict": "A configuração foi alterada. Recarregue-a antes de salvar.",
+        "service_recovery_required": "Não foi possível recuperar o serviço. Verifique a configuração na ferramenta de gerenciamento do host.",
+        "insufficient_storage": "Não há espaço suficiente. Libere espaço e tente novamente.",
+        "registry_rate_limited": "O limite de solicitações do registro de imagens foi atingido. Entre na conta ou tente mais tarde.",
+        "image_not_found": "A imagem ou a plataforma não foi encontrada. Verifique o nome da imagem e a plataforma.",
+        "registry_access_denied": "O registro de imagens negou acesso. Verifique o nome da imagem e o login.",
+        "registry_unavailable": "O registro de imagens está inacessível. Verifique a rede.",
+        "preflight_stale": "O recurso mudou após a revisão. Atualize e revise a operação novamente.",
+        "reconciliation_required": "Não foi possível confirmar o estado final. Atualize o status do serviço antes de tentar novamente.",
+        "operation_failed": "Não foi possível concluir a operação. Verifique o status do serviço e tente novamente."
+      }
     },
     "operationStates": {
       "queued": "Na fila",
@@ -3544,7 +3564,13 @@
     },
     "review": {
       "title": "Revisar operação",
-      "operation": "Operação"
+      "operation": "Operação",
+      "risk": {
+        "low": "Risco baixo",
+        "medium": "Risco médio",
+        "high": "Risco alto",
+        "critical": "Risco crítico"
+      }
     },
     "prune": {
       "moreActions": "Mais ações",

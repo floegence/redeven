@@ -2244,6 +2244,40 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     return target;
   };
 
+  const operationResourceName = (operation: ContainerOperation): string => operation.resource_kind === 'container_service'
+    ? servicesByID().get(operation.resource_identity)?.name ?? runtimeName(operation.engine)
+    : operation.resource_identity;
+
+  const operationErrorMessage = (operation: ContainerOperation): string => {
+    switch (operation.error_code) {
+      case 'canceled': return i18n.t('containers.operations.errors.canceled');
+      case 'engine_timeout': return i18n.t('containers.operations.errors.engine_timeout');
+      case 'engine_permission_denied': return i18n.t('containers.operations.errors.engine_permission_denied');
+      case 'engine_unavailable': return i18n.t('containers.operations.errors.engine_unavailable');
+      case 'container_service_configuration_conflict': return i18n.t('containers.operations.errors.container_service_configuration_conflict');
+      case 'service_recovery_required': return i18n.t('containers.operations.errors.service_recovery_required');
+      case 'insufficient_storage': return i18n.t('containers.operations.errors.insufficient_storage');
+      case 'registry_rate_limited': return i18n.t('containers.operations.errors.registry_rate_limited');
+      case 'image_not_found': return i18n.t('containers.operations.errors.image_not_found');
+      case 'registry_access_denied': return i18n.t('containers.operations.errors.registry_access_denied');
+      case 'registry_unavailable': return i18n.t('containers.operations.errors.registry_unavailable');
+      case 'preflight_stale': return i18n.t('containers.operations.errors.preflight_stale');
+      case 'reconciliation_required': return i18n.t('containers.operations.errors.reconciliation_required');
+      case 'operation_failed': return i18n.t('containers.operations.errors.operation_failed');
+      default: return i18n.t('containers.operations.errors.operation_failed');
+    }
+  };
+
+  const reviewRiskLabel = (risk: string): string => {
+    switch (risk) {
+      case 'low': return i18n.t('containers.review.risk.low');
+      case 'medium': return i18n.t('containers.review.risk.medium');
+      case 'high': return i18n.t('containers.review.risk.high');
+      case 'critical': return i18n.t('containers.review.risk.critical');
+      default: return i18n.t('containers.review.title');
+    }
+  };
+
   const operationLabel = (method: string): string => {
     const labels: Readonly<Record<string, Parameters<typeof i18n.t>[0]>> = {
       'containers.create': 'containers.create.container',
@@ -3816,24 +3850,24 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
         </Show>}>{renderContainerServicesPage()}</Show>
       </main>
 
-      <EnvAppDrawer open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} bodyDescription={i18n.t('containers.operations.description')} bodyClass="min-h-0">
+      <EnvAppDrawer class="container-operations-drawer" open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} bodyDescription={i18n.t('containers.operations.description')} bodyClass="min-h-0">
         <div class="container-operations-workspace" data-container-operations>
           <Show when={operations().length > 0} fallback={<div class="py-12 text-center text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('containers.operations.empty')}</div>}>
             <div class="container-operation-list" role="listbox" aria-label={i18n.t('containers.operations.title')}>
-              <For each={operations()}>{(operation) => <button type="button" role="option" aria-selected={selectedOperationID() === operation.operation_id} class="container-operation-card" data-state={operation.state} onClick={() => setSelectedOperationID(operation.operation_id)}><span class="container-operation-card__state" aria-hidden="true" /><span class="min-w-0 flex-1 text-left"><strong>{operationLabel(operation.method)}</strong><small class="font-mono">{operation.resource_identity}</small><small>{i18n.formatRelativeTime(operation.updated_at_unix_ms)}</small></span><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></button>}</For>
+              <For each={operations()}>{(operation) => <button type="button" role="option" aria-selected={selectedOperationID() === operation.operation_id} class="container-operation-card" data-state={operation.state} onClick={() => setSelectedOperationID(operation.operation_id)}><span class="container-operation-card__state" aria-hidden="true" /><span class="min-w-0 flex-1 text-left"><strong>{operationLabel(operation.method)}</strong><small>{operationResourceName(operation)}</small><small>{i18n.formatRelativeTime(operation.updated_at_unix_ms)}</small></span><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></button>}</For>
             </div>
             <Show when={selectedOperation()} keyed>{(operation) => {
               const progress = () => latestOperationProgress();
               const phase = () => operationActive(operation) ? (progress().phase || operation.state) : operation.state;
               const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().current / progress().total) * 100)) : 0;
               return <section class="container-operation-detail" data-state={operation.state}>
-                <header><div><span>{operationLabel(operation.method)}</span><h3>{operation.resource_identity}</h3></div><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></header>
+                <header><div><span>{operationLabel(operation.method)}</span><h3>{operationResourceName(operation)}</h3></div><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></header>
                 <div class="container-operation-progress" data-indeterminate={operationActive(operation) && progress().total === 0 ? 'true' : 'false'}>
                   <div><strong>{operationPhaseLabel(phase())}</strong><Show when={operationActive(operation) && progress().total > 0}><span>{progress().summary}</span></Show></div>
                   <div class="container-operation-progress__track" role="progressbar" aria-label={operationPhaseLabel(phase())} aria-valuemin={0} aria-valuemax={operationActive(operation) && progress().total ? progress().total : 100} aria-valuenow={operation.state === 'succeeded' ? 100 : operationActive(operation) && progress().total ? progress().current : undefined}><span style={{ width: operation.state === 'succeeded' ? '100%' : progress().total ? `${percent()}%` : undefined }} /></div>
                 </div>
                 <dl class="container-operation-facts"><div><dt>{i18n.t('containers.operations.service')}</dt><dd>{runtimeName(operation.engine)}</dd></div><div><dt>{i18n.t('containers.operations.duration')}</dt><dd>{operationDuration(operation)}</dd></div><div><dt>{i18n.t('containers.operations.started')}</dt><dd>{formatDate(operation.started_at_unix_ms || operation.created_at_unix_ms)}</dd></div></dl>
-                <Show when={operation.error_message}><div class="container-operation-error" role="alert"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.operations.errorTitle')}</strong><p>{operation.error_message}</p><Show when={operation.error_code}><code>{operation.error_code}</code></Show></div></div></Show>
+                <Show when={operation.error_code || operation.error_message}><div class="container-operation-error" role="alert"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.operations.errorTitle')}</strong><p>{operationErrorMessage(operation)}</p></div></div></Show>
                 <div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading()} fallback={<div class="container-operation-timeline__loading">{i18n.t('containers.operations.loadingProgress')}</div>}><For each={operationEvents()}>{(event) => { const item = progressFromEvent(event); return <div class="container-operation-step" data-state={event.state}><span aria-hidden="true">{TERMINAL_OPERATION_STATES.has(event.state) && event.state !== 'succeeded' ? <X class="h-3 w-3" /> : <Check class="h-3 w-3" />}</span><div><strong>{operationPhaseLabel(item.phase)}</strong><Show when={item.total > 0}><small>{item.summary}</small></Show></div><time>{i18n.formatRelativeTime(event.created_at_unix_ms)}</time></div>; }}</For></Show></div>
                 <Show when={operationActive(operation)}><div class="container-operation-detail__actions"><Button size="sm" variant="outline" onClick={() => void cancelContainerOperation(operation.operation_id).then(loadOperations)} disabled={!canExecute()}>{i18n.t('containers.actions.cancel')}</Button></div></Show>
               </section>;
@@ -4080,7 +4114,35 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
         class={reviewedPrune() ? 'container-prune-review-dialog' : undefined}
         footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" variant={reviewedPrune() ? 'destructive' : 'default'} onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin()) || Boolean(reviewedPrune() && !reviewedPrune()?.complete)}><Show when={reviewedPrune()}><Trash class="mr-1.5 h-3.5 w-3.5" /></Show>{reviewedPrune() ? i18n.t('containers.prune.confirm') : i18n.t('containers.actions.run')}</Button></div>}
       >
-        <Show when={review()} keyed>{(current) => <Show when={reviewedPrune()} fallback={<div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-[length:var(--floe-type-body)]">{operationLabel(current.preflight.method)}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><Show when={current.preflight.resource_kind === 'container_service'}><div class="container-service-impact"><div><span>{i18n.t('containers.services.runningContainers')}</span><strong>{Number(current.preflight.plan.target.running_container_count ?? 0)}</strong></div><div><span>{i18n.t('containers.services.affectedServices')}</span><strong>{Number(current.preflight.plan.target.affected_web_service_count ?? 0)}</strong></div><Show when={Array.isArray(current.preflight.plan.target.affected_web_service_names) && (current.preflight.plan.target.affected_web_service_names as string[]).length > 0}><p>{(current.preflight.plan.target.affected_web_service_names as string[]).join(', ')}</p></Show></div></Show><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-[length:var(--floe-type-body)] font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-[length:var(--floe-type-body)] text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>}>{(model) => <PruneReviewPanel model={model()} />}</Show>}</Show>
+        <Show when={review()} keyed>{(current) => <Show when={reviewedPrune()} fallback={
+          <div class="container-operation-review space-y-3">
+            <div class="flex min-w-0 items-center justify-between gap-3 rounded-lg border p-3">
+              <div class="min-w-0">
+                <div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div>
+                <div class="mt-1 text-[length:var(--floe-type-body)] font-medium">{operationLabel(current.preflight.method)}</div>
+                <Show when={current.preflight.resource_kind === 'container_service'}><p class="mt-1 text-xs text-muted-foreground">{String(current.preflight.plan.target.name ?? runtimeName(current.preflight.engine))}</p></Show>
+              </div>
+              <Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{reviewRiskLabel(current.preflight.plan.risk_level)}</Tag>
+            </div>
+            <Show when={current.preflight.resource_kind === 'container_service'} fallback={
+              <For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{summary}</p>}</For>
+            }>
+              <Show when={current.preflight.method !== 'container.services.configuration.update' || current.request.apply_mode === 'save_and_restart'}><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('containers.services.lifecycleWait')}</p></Show>
+              <Show when={typeof current.preflight.plan.target.running_container_count === 'number' && typeof current.preflight.plan.target.affected_web_service_count === 'number'}>
+                <div class="container-service-impact">
+                  <div><span>{i18n.t('containers.services.runningContainers')}</span><strong>{Number(current.preflight.plan.target.running_container_count)}</strong></div>
+                  <div><span>{i18n.t('containers.services.affectedServices')}</span><strong>{Number(current.preflight.plan.target.affected_web_service_count)}</strong></div>
+                  <Show when={Array.isArray(current.preflight.plan.target.affected_web_services) && (current.preflight.plan.target.affected_web_services as string[]).length > 0}><p>{(current.preflight.plan.target.affected_web_services as string[]).join(', ')}</p></Show>
+                </div>
+              </Show>
+            </Show>
+            <For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3">
+              <div class="text-[length:var(--floe-type-body)] font-medium text-[var(--redeven-status-warning-foreground)]">{flag.id === 'container_service_interruption' ? i18n.t('containers.services.interruptionTitle') : flag.id === 'container_service_configuration' ? i18n.t('containers.services.updateConfiguration') : flag.title}</div>
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.id === 'container_service_interruption' ? i18n.t('containers.services.interruptionMessage') : flag.id === 'container_service_configuration' ? i18n.t('containers.services.configurationRisk') : flag.detail}</p>
+            </div>}</For>
+            <Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-[length:var(--floe-type-body)] text-destructive">{i18n.t('containers.permissions.admin')}</p></Show>
+          </div>
+        }>{(model) => <PruneReviewPanel model={model()} />}</Show>}</Show>
       </Dialog>
     </div>
   );

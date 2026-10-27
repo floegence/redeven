@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -322,5 +323,91 @@ func TestDockerDesktopStoppedLifecyclePreservesServiceIdentity(t *testing.T) {
 	defer mu.Unlock()
 	if got := strings.Join(lifecycleCalls, ","); got != "docker desktop start,docker desktop stop,docker desktop start" {
 		t.Fatalf("lifecycle calls = %s", got)
+	}
+}
+
+func TestContainerServiceLifecycleHasDedicatedBudget(t *testing.T) {
+	for _, implementation := range []ContainerServiceImplementation{ContainerServiceDockerDesktop, ContainerServiceDockerEngine, ContainerServicePodmanMachine} {
+		for _, method := range []Method{MethodContainerServicesStart, MethodContainerServicesStop, MethodContainerServicesRestart} {
+			t.Run(string(implementation)+"/"+string(method), func(t *testing.T) {
+				var deadlines []time.Time
+				client := &CLIClient{Timeout: time.Millisecond, Runner: CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+					deadline, ok := ctx.Deadline()
+					if !ok || time.Until(deadline) < 119*time.Second || time.Until(deadline) > 120*time.Second {
+						t.Errorf("lifecycle command budget = %v, want a dedicated two-minute budget", time.Until(deadline))
+					}
+					deadlines = append(deadlines, deadline)
+					return nil, nil
+				})}
+				service := ContainerService{Implementation: implementation, serviceUnit: "docker.service", machineName: "podman-default"}
+				if err := client.runContainerServiceAction(context.Background(), service, method); err != nil {
+					t.Fatal(err)
+				}
+				if len(deadlines) == 0 {
+					t.Fatal("no lifecycle command executed")
+				}
+				for _, deadline := range deadlines[1:] {
+					if !deadline.Equal(deadlines[0]) {
+						t.Fatal("restart steps did not share one lifecycle deadline")
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestContainerServiceLifecycleHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &CLIClient{Runner: CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+		cancel()
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})}
+	err := client.runContainerServiceAction(ctx, ContainerService{Implementation: ContainerServiceDockerDesktop}, MethodContainerServicesStart)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled lifecycle = %v", err)
+	}
+}
+
+func TestContainerServiceLifecycleOutlivesQueryTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := NewCLIClient()
+		client.Runner = CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+			select {
+			case <-time.After(11 * time.Second):
+				return nil, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		})
+		if err := client.runContainerServiceAction(context.Background(), ContainerService{Implementation: ContainerServiceDockerDesktop}, MethodContainerServicesStart); err != nil {
+			t.Fatalf("eleven-second Desktop start must succeed: %v", err)
+		}
+		if _, err := client.runHostCommand(context.Background(), "docker", "desktop", "version", "--format", "json"); !errors.Is(err, ErrEngineTimeout) {
+			t.Fatalf("ordinary command must retain its ten-second timeout: %v", err)
+		}
+	})
+}
+
+func TestContainerServiceLifecycleDeadlineRemainsBounded(t *testing.T) {
+	for _, parentBudget := range []time.Duration{time.Second, 3 * time.Minute} {
+		t.Run(parentBudget.String(), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(context.Background(), parentBudget)
+				defer cancel()
+				client := NewCLIClient()
+				calls := 0
+				client.Runner = CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+					calls++
+					<-ctx.Done()
+					return nil, ctx.Err()
+				})
+				start := time.Now()
+				err := client.runContainerServiceAction(ctx, ContainerService{Implementation: ContainerServicePodmanMachine, machineName: "podman-default"}, MethodContainerServicesRestart)
+				if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) != min(parentBudget, 2*time.Minute) || calls != 1 {
+					t.Fatalf("deadline result: err=%v elapsed=%v calls=%d", err, time.Since(start), calls)
+				}
+			})
+		})
 	}
 }
