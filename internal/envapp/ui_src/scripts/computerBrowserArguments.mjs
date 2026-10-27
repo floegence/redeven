@@ -10,7 +10,7 @@ export function validateBrowserAction(args, privateInput = false) {
     click: ['selector'], pointer_click: ['x', 'y'], double_click: ['x', 'y'],
     scroll: ['selector', 'x', 'y', 'delta_x', 'delta_y'],
     drag: ['from_x', 'from_y', 'to_x', 'to_y', 'duration_ms'],
-    wait: ['selector', 'state', 'timeout_ms'], query: ['selector', 'limit', 'cursor'], table: ['selector', 'limit', 'cursor'],
+    wait: ['selector', 'state', 'equals', 'timeout_ms'], query: ['selector', 'limit', 'cursor'], table: ['selector', 'limit', 'cursor'],
     attribute: ['selector', 'attribute'], read: ['selector'],
   };
   const allowed = fields[args.action];
@@ -48,7 +48,8 @@ export function validateBrowserAction(args, privateInput = false) {
       if (args.duration_ms !== undefined && (!Number.isInteger(args.duration_ms) || args.duration_ms < 0 || args.duration_ms > 5000)) throw argumentFailure('duration_ms', 'integer_0_5000');
       break;
     case 'wait':
-      if (args.state !== undefined && !['visible','hidden','enabled'].includes(args.state)) throw argumentFailure('state', 'visible_hidden_enabled');
+      if (args.state !== undefined && !['visible','hidden','enabled','text','value'].includes(args.state)) throw argumentFailure('state', 'documented_condition');
+      if (['text','value'].includes(args.state) ? typeof args.equals!=='string'||args.equals.length>2000 : args.equals!==undefined) throw argumentFailure('equals','condition_text_max_2000');
       if (args.timeout_ms !== undefined && (!Number.isInteger(args.timeout_ms) || args.timeout_ms < 0 || args.timeout_ms > 30000)) throw argumentFailure('timeout_ms', 'integer_0_30000');
       break;
     case 'query': case 'table':

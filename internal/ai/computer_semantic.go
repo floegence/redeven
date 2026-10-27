@@ -98,6 +98,21 @@ var computerRoleAliases = map[string][]string{
 	"slider":           {"slider", "AXSlider"},
 	"progressbar":      {"progressbar", "progress bar", "AXProgressIndicator"},
 	"spinbutton":       {"spinbutton", "spin button"},
+	"navigation":       {"navigation", "landmark navigation"},
+	"main":             {"main", "landmark main"},
+	"banner":           {"banner", "landmark banner"},
+	"contentinfo":      {"contentinfo", "landmark content info"},
+	"complementary":    {"complementary", "landmark complementary"},
+	"search":           {"search", "landmark search"},
+	"article":          {"article"},
+	"toolbar":          {"toolbar", "tool bar", "AXToolbar"},
+	"rowgroup":         {"rowgroup"},
+	"gridcell":         {"gridcell"},
+	"treegrid":         {"treegrid"},
+	"log":              {"log"},
+	"timer":            {"timer"},
+	"marquee":          {"marquee"},
+	"meter":            {"meter", "AXLevelIndicator"},
 }
 
 func computerCanonicalRole(role string) string {

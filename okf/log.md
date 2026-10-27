@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-27 — Browser coordinates and explicit script contracts
+
+Fix scrolled hit tests, real browser zoom and parent-frame overlays; clarify
+[script failure recovery](ai/computer-use-scripts.md), compact observations,
+canonical roles and content waits. Record 57/57 local real-DeepSeek scenarios
+and qualification boundaries in [evidence](ai/computer-use-qualification-evidence.md).
+
 ## 2026-10-27 — Browser effect certainty and tool continuity
 
 Distinguish confirmed focus rejections from missing effect acknowledgements in

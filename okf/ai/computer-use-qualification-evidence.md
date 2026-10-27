@@ -28,6 +28,41 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 
 # Evidence
 
+## Browser coordinates and explicit script contracts, October 27
+
+The contract repair qualifies the production Service, Floret v7.87.4, local
+DeepSeek V4.1 Flash (1017) profile (wire deepseek-flash), and catalog-installed
+Chromium 153.0.8010.12 on macOS arm64. Nineteen scenarios repeated three times
+pass 57/57. Median case time is 6,916 ms; 244 tool activities include 34
+error-status activities, including intentional negative cases and recovered
+model-call errors. Completion is not a zero-error or general success-rate claim.
+Canonical results verify strict content waits, safe source diagnostics and
+namespace reset; fixture counters verify one save/click without replay.
+Configuration hashes remain unchanged and every case uses task-owned state.
+
+A deterministic browser matrix uses real chrome.tabs.setZoom at 80, 100, 125,
+150, 200 and 220 percent, device scales 1/2 and page offsets 0/1500. Decoded PNG
+pixels and counted events verify image and semantic input, including scrollbars,
+same-process/cross-process frames, nested scrollers, shadow roots and parent
+overlays. This supplements the earlier emulated-scale evidence. A 450-node
+compact snapshot fits in 27,478 bytes; full guest/detail reads retain their
+canonical data. Truncation and detail-mode changes have separate regression tests.
+
+The initial exploratory batch passes 18/19 before a malformed synthetic onclick
+fixture is corrected. Its temporary VM-retention design is rejected: a dormant
+Promise could retain a prior invocation callback. The final design resets every
+failed namespace and has a dedicated isolation regression. Earlier reports are
+not relabeled as final qualification.
+
+Shared base system prompt content remains unchanged. The three default entry
+points remain targets, select_target and exec. Changes are in exec wording and
+the shared selection/runtime help: local/global variable lifetime, failure reset,
+exact browser text/value waits, canonical roles, image capture/input and compact
+versus detailed observations. No storage migration or Floret API changes occur.
+The real-provider lane qualifies managed Chromium. Separate real extension and
+Native Messaging fixtures do not constitute one built Desktop/Service/extension
+end-to-end real-model run. Native foreground and Linux desktop are outside it.
+
 ## Compact script surface, October 27
 Source commit 1140a827feb2d6acba7bc876337b93d4a698e99f qualifies the production
 Service, Floret v7.87.3, the local DeepSeek V4.1 Flash (1017) profile (wire model

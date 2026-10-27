@@ -102,7 +102,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait"} {
+		for _, scenario := range []string{"large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -145,6 +145,15 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					w.Header().Set("Content-Type", "text/html")
 					_, _ = io.WriteString(w, "<!doctype html><title>Orchid domain console</title><style>body{font:16px system-ui;padding:20px}td,th{padding:4px 12px}button,input,a{margin:8px}#noise{height:100px;overflow:auto}</style><h1>Account: Orchid</h1><a href='/other'>Switch to Birch account</a><a href='/export'>Export domains</a><button id='save' onclick=\"fetch('/submit',{method:'POST'}).then(()=>document.getElementById('saved').textContent='Saved once')\">Save once</button><output id='saved' aria-label='Save status'></output>")
+					if scenario == "scrolled_click" {
+						_, _ = io.WriteString(w, "<style>#save{position:absolute;top:1800px;left:200px}body{height:4000px}</style>")
+					}
+					if scenario == "content_wait" {
+						_, _ = io.WriteString(w, `<nav aria-label="Pagination"><input id="page-number" aria-label="Page number" value="1"><button onclick="fetch('/entered',{method:'POST'});setTimeout(()=>document.getElementById('page-number').value='2',250)">Next page</button></nav>`)
+					}
+					if scenario == "canonical_navigation" {
+						_, _ = io.WriteString(w, "<nav aria-label='Pagination'><button>Previous page</button><button>Next page</button></nav>")
+					}
 					if r.URL.Path == "/unrelated" {
 						_, _ = io.WriteString(w, "<h2>Unrelated user work</h2>")
 						return
@@ -240,6 +249,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "scrolled_click":
+					prompt = "On the selected page, find Save once (below the fold), click it exactly once, and verify Save status. Do not click any other control or use shell/network tools."
+				case "content_wait":
+					prompt = "On the selected page, inspect the Pagination navigation region, click Next page once, wait until Page number has value 2, then read and report its value. The update is asynchronous. Use a condition wait; do not repeat the click or use shell/network tools."
+				case "canonical_navigation":
+					prompt = "Inspect the selected page and find its Pagination navigation landmark by canonical role. Report the number and names of buttons scoped to that landmark. Do not click anything or use shell/network tools."
+				case "namespace_reset":
+					prompt = "Run this intentional diagnostic once as one computer.exec: globalThis.collected=[7,11,13]; await ui.getByRole('button',{name:'Save once',exact:true}).click(); setTimeout(()=>{},1); . After its error, inspect context_reset, use a separate call to log(typeof collected), and verify Save status. Report the diagnostic location and reset. Never repeat the click or rebuild collected."
 				case "natural_input":
 					prompt = "On the selected page, enter exactly Orchid acceptance 1017 in Probe, then press Enter once. Verify the field's exact contents and report them. Do not save, switch accounts or use shell/network tools."
 				case "natural_read":
@@ -303,6 +320,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				var toolEvidence strings.Builder
 				scriptErrors := map[string]int{}
 				var confirmedToolFacts []map[string]any
+				contentWaitConfirmed, resetConfirmed := false, false
 				reader := svc.threadRuntime.(flruntime.ThreadToolResultReader)
 				for _, item := range history.Items {
 					if item.Activity != nil {
@@ -320,6 +338,19 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 								scriptErrors[code]++
 							}
 							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
+							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
+							if code == "SCRIPT_REFERENCE_ERROR" && data["context_reset"] == true {
+								diagnostic, _ := data["diagnostic"].(map[string]any)
+								resetConfirmed = diagnostic["symbol"] == "setTimeout" && diagnostic["line"] != nil
+							}
+							if data["completed"] == true {
+								for _, action := range toAnySlice(data["completed_actions"]) {
+									if action == "wait" {
+										contentWaitConfirmed = true
+									}
+								}
+							}
+
 							if data == nil && confirmed.Status == "error" {
 								fact["runtime_error_text"] = confirmed.Content
 							}
@@ -391,6 +422,22 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "scrolled_click":
+					if submissions.Load() != 1 || scriptErrors["ELEMENT_NOT_ACTIONABLE"] != 0 || !strings.Contains(text, "Saved once") {
+						t.Errorf("scrolled click failed: submissions=%d errors=%v", submissions.Load(), scriptErrors)
+					}
+				case "content_wait":
+					if !contentWaitConfirmed || entered.Load() != 1 || !strings.Contains(text, "value") || !strings.Contains(finalText, "2") {
+						t.Errorf("content wait failed: next=%d", entered.Load())
+					}
+				case "canonical_navigation":
+					if pointerClicks.Load() != 0 || !strings.Contains(text, "navigation") || !strings.Contains(finalText, "Previous page") || !strings.Contains(finalText, "Next page") {
+						t.Error("canonical navigation read failed")
+					}
+				case "namespace_reset":
+					if !resetConfirmed || submissions.Load() != 1 || scriptErrors["SCRIPT_REFERENCE_ERROR"] != 1 || !strings.Contains(text, "undefined") {
+						t.Errorf("namespace reset failed: submissions=%d errors=%v", submissions.Load(), scriptErrors)
+					}
 				case "natural_input":
 					if typedValue.Load() != "Orchid acceptance 1017" || entered.Load() != 1 || !strings.Contains(finalText, "Orchid acceptance 1017") || submissions.Load() != 0 {
 						t.Errorf("input verification failed: typed=%v enter=%d", typedValue.Load(), entered.Load())

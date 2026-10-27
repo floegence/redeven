@@ -5,7 +5,7 @@ description: Normalize browser, AX and AT-SPI facts into bounded, revision-scope
 tags: [ai, computer-use, accessibility, protocol]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -30,6 +30,13 @@ Both directions of every parent/child edge must agree. An observation describes 
 
 ## Roles, states and relationships
 One Runtime alias inventory owns normalization and canonical selector expansion.
+Standard landmarks including navigation, main, banner, contentinfo and
+complementary, plus supported structural/live-region roles, round-trip through
+this inventory. Unknown `other` remains reference-only, never a wildcard. Invalid
+canonical selectors return safe field/expected/recovery diagnostics before dispatch.
+Browser references are opaque bounded hashes of controller, document revision,
+frame and native node identity. The existing reference table remains their sole
+owner; no second alias registry exists.
 
 An ignored or truncated target has no invented reference; a platform-computed name or safe description may still be available.
 

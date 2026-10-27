@@ -16,7 +16,9 @@ export class BrowserComputerController {
   cancel() { this.page.cancel(); }
   async capture(targetID) {
     const before = targetID ? await viewportGeometry(this.transport) : undefined;
-    const { data } = await this.transport.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false, ...(before ? {clip:{x:before.page_x,y:before.page_y,width:before.width,height:before.height,scale:1}} : {}) });
+    // Let Chromium capture its complete rendered viewport. A CSS-sized clip is
+    // not a screenshot-pixel rectangle under browser zoom or device scaling.
+    const { data } = await this.transport.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
     if (!before) return { mime: 'image/png', data };
     const after = await viewportGeometry(this.transport);
     if (!sameGeometry(before,after)) throw new Error('OBSERVATION_INVALIDATED');

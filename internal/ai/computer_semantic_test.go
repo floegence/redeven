@@ -160,7 +160,7 @@ func TestComputerSemanticByteBudgetPreservesTree(t *testing.T) {
 }
 
 func TestComputerSemanticPortableSelectorUsesAuthoritativeRoles(t *testing.T) {
-	for _, role := range []string{"tabpanel", "listbox", "option", "radiogroup", "tooltip", "separator"} {
+	for _, role := range []string{"tabpanel", "listbox", "option", "radiogroup", "tooltip", "separator", "navigation", "main", "banner", "contentinfo", "complementary", "search", "article", "toolbar", "rowgroup", "gridcell", "treegrid", "log", "timer", "marquee", "meter"} {
 		if computerCanonicalRole(role) != role {
 			t.Fatalf("product semantic role %q is not portable", role)
 		}
@@ -263,5 +263,22 @@ func TestComputerSemanticRuntimeRejectsContentWithoutReplayingEffect(t *testing.
 	}
 	if !slices.Contains(payload["completed_actions"].([]string), "pointer_click") {
 		t.Fatal("confirmed effect lost")
+	}
+}
+
+func TestComputerSemanticInvalidRoleReturnsDiagnosticBeforeDispatch(t *testing.T) {
+	calls := 0
+	host, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
+		calls++
+		return TargetToolResult{}, nil
+	})
+	result, err := executeTestScript(t.Context(), host, call, "try {await ui.getByRole('other',{name:'Unknown'}).click();} catch {} await ui.click(1,2);")
+	if err == nil || calls != 0 {
+		t.Fatalf("invalid role reached adapter: calls=%d error=%v", calls, err)
+	}
+	payload := result.Result.(map[string]any)
+	diagnostic, _ := payload["diagnostic"].(map[string]any)
+	if payload["script_error"] != "INVALID_COMPUTER_ARGUMENTS" || payload["context_reset"] != true || diagnostic["field"] != "selector" || diagnostic["expected"] != "canonical_role_or_observed_ref" {
+		t.Fatalf("missing safe diagnostic: %#v", payload)
 	}
 }

@@ -263,7 +263,7 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 
 func computerObservationStage(stage string) string {
 	switch stage {
-	case "frame_inventory", "safety_scan", "semantic_read", "capture", "metadata":
+	case "frame_inventory", "safety_scan", "semantic_read", "capture", "metadata", "hit_test":
 		return stage
 	default:
 		return "unknown"
