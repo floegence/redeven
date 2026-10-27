@@ -116,15 +116,16 @@
 .redeven-settings-shell .floe-setting-row__label p { font-size: 12px; line-height: 1.65; margin-top: 3px; }
 .redeven-settings-shell .floe-setting-row__icon {
   display: flex; align-items: center; justify-content: center; flex: none;
-  width: 34px; height: 34px; padding: 8px; border: 1px solid var(--redeven-settings-inset-border);
-  border-radius: 8px; background: transparent; color: var(--muted-foreground);
+  width: var(--floe-control-height-md); height: var(--floe-control-height-md); padding: 7px;
+  border: 1px solid var(--redeven-settings-inset-border);
+  border-radius: var(--floe-radius-md); background: transparent; color: var(--muted-foreground);
 }
-.redeven-settings-shell .floe-setting-row__icon > svg { width: 17px; height: 17px; }
-.redeven-settings-shell .settings-provider-row .floe-setting-row__icon { padding: 6px; background: var(--redeven-settings-field-bg); color: var(--foreground); }
+.redeven-settings-shell .floe-setting-row__icon > svg { width: 16px; height: 16px; }
+.redeven-settings-shell .settings-provider-row .floe-setting-row__icon { padding: 5px; background: var(--redeven-settings-field-bg); color: var(--foreground); }
 .redeven-settings-shell .settings-provider-row .floe-setting-row__icon > svg { width: 20px; height: 20px; }
 .redeven-settings-shell .floe-setting-row__control > .relative:has(> input[data-floe-control='input']) { width: 258px; max-width: 100%; }
 
-.redeven-settings-shell .floe-setting-row__control > input:not([type='checkbox']):not([type='radio']) { width: 258px; height: 34px; font-size: 12px; }
+.redeven-settings-shell .floe-setting-row__control > input:not([type='checkbox']):not([type='radio']) { width: 258px; height: var(--floe-control-height-md); font-size: 12px; }
 @container redeven-settings (max-width: 767px) {
   .redeven-settings-shell .floe-settings-layout__sidebar { display: none; }
   .redeven-settings-shell .redeven-settings-page { padding: 28px 20px 48px; }
@@ -153,7 +154,7 @@
 .runtime-filesystem-root .floe-setting-row__label p { overflow-wrap: anywhere; font-family: var(--font-mono); }
 .settings-port-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .settings-port-pair { display: flex; align-items: center; gap: 8px; }
-.settings-port-pair input { width: 88px; min-width: 0; height: 34px; font-size: 12px; }
+.settings-port-pair input { width: 88px; min-width: 0; height: var(--floe-control-height-md); font-size: 12px; }
 .settings-technical-details { color: var(--redeven-settings-note-fg); font-size: 12px; }
 .settings-technical-details > summary { cursor: pointer; min-height: 32px; padding: 6px 8px; border-radius: 6px; }
 .settings-technical-details > summary:hover { background: var(--redeven-settings-row-hover-bg); }

@@ -12,7 +12,7 @@
   overflow: hidden;
   padding: 0 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--floe-radius-sm);
   background: var(--muted);
   color: var(--foreground);
 }
@@ -806,7 +806,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: 5px;
+  border-radius: var(--floe-radius-xs);
   color: var(--muted-foreground);
   cursor: pointer;
   transition: background-color 150ms, color 150ms;
@@ -2645,7 +2645,7 @@ html.dark .git-changes-table-pending {
 .chat-shell-output-toggle:focus-visible {
   outline: 1px solid color-mix(in srgb, var(--primary) 52%, transparent);
   outline-offset: 1px;
-  border-radius: 0.22rem;
+  border-radius: var(--floe-radius-xs);
 }
 
 .chat-shell-output-toggle-open .chat-shell-toggle-label {
@@ -4092,7 +4092,7 @@ a.chat-sources-cell-url:focus-visible {
 .git-content-skeleton__code-line {
   width: min(42rem, 74%);
   height: 0.4375rem;
-  border-radius: 0.1875rem;
+  border-radius: var(--floe-radius-xs);
 }
 
 .git-content-skeleton__code-row[data-skeleton-row='1'] .git-content-skeleton__code-line,
@@ -4544,7 +4544,7 @@ html.dark .git-content-skeleton__block {
   justify-content: center;
   gap: 0.45rem;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 0.3rem;
+  border-radius: var(--floe-radius-sm);
   background: color-mix(in srgb, var(--background) 72%, transparent);
   padding: 0.48rem 0.65rem;
   font-size: 0.7rem;
@@ -4792,7 +4792,7 @@ html.dark .git-content-skeleton__block {
   height: 0.3rem;
   overflow: hidden;
   margin-top: 0.5rem;
-  border-radius: 0.15rem;
+  border-radius: var(--floe-radius-xs);
   background: color-mix(in srgb, var(--border) 62%, transparent);
 }
 
@@ -5233,7 +5233,7 @@ html.dark .git-content-skeleton__block {
   padding: 0 6px;
   overflow: hidden;
   border: 1px solid var(--redeven-status-info-border, var(--border));
-  border-radius: 4px;
+  border-radius: var(--floe-radius-xs);
   background: var(--redeven-status-info-soft, var(--muted));
   color: var(--redeven-status-info-foreground, var(--muted-foreground));
   white-space: nowrap;
@@ -5277,7 +5277,7 @@ html.dark .git-content-skeleton__block {
 .terminal-shared-geometry-notice--mobile .terminal-shared-geometry-notice__chrome {
   height: 28px;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--floe-radius-sm);
   padding-inline: 8px;
   font-size: 11px;
 }
@@ -5298,7 +5298,7 @@ html.dark .git-content-skeleton__block {
 .terminal-shared-geometry-disclosure {
   width: 320px;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--floe-radius-md);
   color: var(--popover-foreground, var(--foreground));
 }
 
@@ -5508,7 +5508,7 @@ html.dark .git-content-skeleton__block {
   height: 28px;
   gap: 6px;
   padding-inline: 8px;
-  border-radius: 5px;
+  border-radius: var(--floe-radius-xs);
   color: var(--muted-foreground);
   background: transparent;
   font-size: 12px;

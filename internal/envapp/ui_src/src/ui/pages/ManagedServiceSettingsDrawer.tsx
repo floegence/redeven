@@ -962,9 +962,9 @@ export function ManagedServiceSettingsDrawer(props: {
                                     }
                                   />
                                   <Button
-                                    size="sm"
+                                    size="icon"
                                     variant="ghost"
-                                    class="h-8 w-8 cursor-pointer px-0"
+                                    class="cursor-pointer px-0"
                                     aria-label={settingText("remove")}
                                     onClick={() =>
                                       updateContainer((next) => {
@@ -1066,9 +1066,9 @@ export function ManagedServiceSettingsDrawer(props: {
                                 {settingText("secret")}
                               </label>
                               <Button
-                                size="sm"
+                                size="icon"
                                 variant="ghost"
-                                class="h-8 w-8 cursor-pointer px-0"
+                                class="cursor-pointer px-0"
                                 aria-label={settingText("remove")}
                                 onClick={() =>
                                   updateContainer((value) => {
@@ -1202,9 +1202,9 @@ export function ManagedServiceSettingsDrawer(props: {
                                 />
                                 <Show when={mount.type === "bind"}>
                                   <Button
-                                    size="sm"
+                                    size="icon"
                                     variant="ghost"
-                                    class="h-8 w-8 shrink-0 cursor-pointer px-0"
+                                    class="shrink-0 cursor-pointer px-0"
                                     onClick={() =>
                                       openPathPicker(mount.resource_id)
                                     }
@@ -1240,9 +1240,9 @@ export function ManagedServiceSettingsDrawer(props: {
                                 RO
                               </label>
                               <Button
-                                size="sm"
+                                size="icon"
                                 variant="ghost"
-                                class="h-8 w-8 cursor-pointer px-0"
+                                class="cursor-pointer px-0"
                                 disabled={
                                   managedMountLocked(mount.resource_id)
                                 }
@@ -1459,9 +1459,9 @@ export function ManagedServiceSettingsDrawer(props: {
                                 <option>udp</option>
                               </select>
                               <Button
-                                size="sm"
+                                size="icon"
                                 variant="ghost"
-                                class="h-8 w-8 cursor-pointer px-0"
+                                class="cursor-pointer px-0"
                                 onClick={() =>
                                   updateContainer((value) => {
                                     value.ports = value.ports!.filter(
@@ -1643,9 +1643,9 @@ export function ManagedServiceSettingsDrawer(props: {
                                   }
                                 />
                                 <Button
-                                  size="sm"
+                                  size="icon"
                                   variant="ghost"
-                                  class="h-8 w-8 cursor-pointer px-0"
+                                  class="cursor-pointer px-0"
                                   disabled={
                                     resolved().template_source === "builtin"
                                   }

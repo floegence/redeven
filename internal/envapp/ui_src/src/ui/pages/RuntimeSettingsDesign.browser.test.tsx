@@ -45,8 +45,8 @@ it.each([false, true])('coordinates settings fields and selects with the surroun
   const runtime = await openSection('runtime');
   const input = runtime.querySelector<HTMLInputElement>('input[data-floe-control="input"]')!;
   const style = getComputedStyle(input);
-  expect(style.borderRadius).toBe('8px');
-  expect(input.getBoundingClientRect().height).toBe(34);
+  expect(style.borderRadius).toBe('10px');
+  expect(input.getBoundingClientRect().height).toBe(32);
   // Upstream ring-0 serializes as a transparent zero-area shadow in Chromium.
   expect(['none', 'rgba(0, 0, 0, 0) 0px 0px 0px 0px']).toContain(style.boxShadow);
   expectSingleInputFocus(input);
@@ -62,8 +62,8 @@ it.each([false, true])('coordinates settings fields and selects with the surroun
   } finally { await media.emulateTouchInput(false); }
   const models = await openSection('ai');
   const select = models.querySelector<HTMLElement>('[data-floe-input-surface]')!;
-  expect(getComputedStyle(select).borderRadius).toBe('8px');
-  expect(select.getBoundingClientRect().height).toBe(34);
+  expect(getComputedStyle(select).borderRadius).toBe('10px');
+  expect(select.getBoundingClientRect().height).toBe(32);
   expect(['none', 'rgba(0, 0, 0, 0) 0px 0px 0px 0px']).toContain(getComputedStyle(select).boxShadow);
   select.focus();
   await userEvent.keyboard('{Enter}');
@@ -72,8 +72,8 @@ it.each([false, true])('coordinates settings fields and selects with the surroun
   await page.getByRole('button', { name: 'Edit provider', exact: true }).click();
   await userEvent.click(document.querySelector('[data-provider-dialog-step="connection"]')!);
   const dialogInput = document.querySelector<HTMLInputElement>('[role="dialog"] input[data-floe-control="input"]')!;
-  expect(getComputedStyle(dialogInput).borderRadius).toBe('8px');
-  expect(dialogInput.getBoundingClientRect().height).toBe(34);
+  expect(getComputedStyle(dialogInput).borderRadius).toBe('10px');
+  expect(dialogInput.getBoundingClientRect().height).toBe(32);
   expectSingleInputFocus(dialogInput);
   await page.screenshot({ path: `../../../dist/control-harmony/provider-${dark ? 'dark' : 'light'}.png` });
 });
@@ -86,8 +86,8 @@ it.each([false, true])('identifies filesystem roots and every model provider wit
   for (const root of roots) {
     const icon = root.querySelector<HTMLElement>('.floe-setting-row__icon')!;
     expect(icon, 'directory identity has an icon').not.toBeNull();
-    expect(icon.getBoundingClientRect().width).toBe(34);
-    expect(getComputedStyle(icon).padding).toBe('8px');
+    expect(icon.getBoundingClientRect().width).toBe(32);
+    expect(getComputedStyle(icon).padding).toBe('7px');
   }
   const settings = fixture.settings();
   fixture.context.mutateSettings({ ...settings, ai: { ...settings.ai!, providers: FLOWER_PROVIDER_TYPES.map(({ value }) => ({ ...settings.ai!.providers![0], id: value, type: value, name: value })) } });
@@ -95,8 +95,8 @@ it.each([false, true])('identifies filesystem roots and every model provider wit
   for (const { value } of FLOWER_PROVIDER_TYPES) {
     const icon = models.querySelector<HTMLElement>(`.settings-provider-row [data-provider-brand="${value}"]`)!;
     expect(icon, `${value} uses its catalog brand`).not.toBeNull();
-    expect(icon.getBoundingClientRect().width).toBe(34);
-    expect(getComputedStyle(icon).padding).toBe('6px');
+    expect(icon.getBoundingClientRect().width).toBe(32);
+    expect(getComputedStyle(icon).padding).toBe('5px');
     if (['openrouter', 'xai', 'ollama'].includes(value)) {
       expect(getComputedStyle(icon).color).toBe(getComputedStyle(models.querySelector('.floe-setting-row__title')!).color);
     }

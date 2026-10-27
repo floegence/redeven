@@ -851,7 +851,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
+                  class="w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
                   data-testid="terminal-sidebar-refresh"
                   onClick={props.onRefresh}
                   disabled={!props.connected || props.refreshing}
@@ -864,7 +864,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    class="h-7 w-7 cursor-pointer p-0"
+                    class="w-7 cursor-pointer p-0"
                     data-testid="terminal-session-drawer-close"
                     onClick={props.onCloseDrawer}
                     title={i18n.t('terminal.closeSessions')}

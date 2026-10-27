@@ -662,14 +662,14 @@ export function ServiceTemplateDetailsPane(props: {
 
       <div class="service-template-details__actions flex items-center gap-2">
 		<Show when={props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm)}>
-			<Button size="sm" variant="outline" class="min-h-11 shrink-0 px-3 sm:min-h-9" onClick={() => props.onVersions?.()} disabled={!props.canManage}>
+			<Button size="lg" variant="outline" class="min-h-11 shrink-0 px-3" onClick={() => props.onVersions?.()} disabled={!props.canManage}>
 				<Package class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.versions')}
 			</Button>
 		</Show>
         <Button
-          size="sm"
+          size="lg"
           variant="default"
-          class="service-template-primary min-h-11 min-w-0 flex-1 sm:min-h-9"
+          class="service-template-primary min-h-11 min-w-0 flex-1"
           data-testid="service-template-primary"
           onClick={props.onDeploy}
           disabled={!props.template.available || props.template.installed || !props.canManage}
@@ -776,7 +776,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
               aria-label={i18n.t('webServices.managed.searchTemplates')}
             />
           </div>
-          <Show when={props.onImport}><Button size="sm" variant="outline" class="min-h-9 shrink-0" disabled={!props.canManage} onClick={() => props.onImport?.()}>{i18n.t('webServices.sources.import')}</Button></Show>
+          <Show when={props.onImport}><Button size="lg" variant="outline" class="shrink-0" disabled={!props.canManage} onClick={() => props.onImport?.()}>{i18n.t('webServices.sources.import')}</Button></Show>
           <Dropdown
             align="end"
             items={createItems()}
@@ -784,7 +784,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
             triggerAriaLabel={i18n.t('webServices.managed.newTemplate')}
             triggerClass="service-template-create-trigger shrink-0 rounded-md"
             trigger={(
-              <Button size="sm" variant="default" class="min-h-9 gap-1.5" data-testid="service-template-create-menu" disabled={!props.canManage}>
+              <Button size="lg" variant="default" class="gap-1.5" data-testid="service-template-create-menu" disabled={!props.canManage}>
                 <Plus class="h-4 w-4" aria-hidden="true" />
                 <span>{i18n.t('webServices.managed.newTemplate')}</span>
                 <ChevronDown class="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />

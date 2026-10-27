@@ -297,7 +297,7 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
               <Button
                 type="button"
                 variant="outline"
-                class="h-9 w-9 shrink-0 p-0"
+                class="h-[var(--floe-control-height-lg)] w-[var(--floe-control-height-lg)] shrink-0 p-0"
                 title={i18n.t('files.archiveExtraction.browseDestination')}
                 aria-label={i18n.t('files.archiveExtraction.browseDestination')}
                 disabled={busy() || multipart()}

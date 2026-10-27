@@ -17,7 +17,7 @@ Env App owns runtime settings destinations, localized drafts and API adapters; p
 Destinations are Config File, Connection, Runtime Status, Shell & Workspace, Codespaces & Tooling, Logging, Permission Policy, Flower and Debug Console. Page-owned geometry avoids competing global/lazy styles. Full padded diagnostic summaries toggle native disclosure with neutral hover and visible keyboard focus.
 
 ## Settings controls and identity
-Runtime, Desktop environment, Flower, terminal and managed-service fields share 34px minimum height, 8px corners, 12px text, quiet fill and subdued 1px border. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.
+Runtime, Desktop environment, Flower, terminal and managed-service fields share the published Floe control height (32px, `--floe-control-height-md`), `--floe-radius-field` corners, 12px text, quiet fill and subdued 1px border. Row identity icons and provider brands occupy the same 32px square on `--floe-radius-md`, so icon, field and select edges stay concentric within a row. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.
 
 ## Configuration editing
 Existing autosave/restart rules govern shell, filesystem, logging, ports and permissions. Settings PUT accepts flat fields, never response-group wrappers such as `runtime`/`logging`/`codespaces`. Health, diagnostics, backup/restore use right-column actions without bypassing permission/confirmation.

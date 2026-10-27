@@ -88,7 +88,7 @@ export function TerminalGroupEditorDialog(props: {
               <Button
                 type="button"
                 variant="outline"
-                class="h-9 cursor-pointer gap-1.5 px-2.5 text-xs"
+                size="lg" class="cursor-pointer gap-1.5 px-2.5 text-[length:var(--floe-type-caption)]"
                 title={i18n.t('terminal.browseGroupPath')}
                 aria-label={i18n.t('terminal.browseGroupPath')}
                 data-testid="terminal-group-path-picker-trigger"

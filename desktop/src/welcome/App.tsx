@@ -12862,7 +12862,7 @@ function ContainerPicker(props: Readonly<{
           type="button"
           variant="ghost"
           size="sm"
-          class="h-7 px-2 text-[11px]"
+          class="px-2 text-[length:var(--floe-type-caption)]"
           loading={props.loading}
           disabled={props.disabled || props.loading}
           onClick={props.onRefresh}

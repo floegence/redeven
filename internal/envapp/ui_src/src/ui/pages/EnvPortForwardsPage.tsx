@@ -805,11 +805,11 @@ export function PortForwardRow(props: {
           reason={props.openUnavailableReason} onOpen={props.onOpen} />
         <Tooltip content={i18n.t('webServices.actions.editServiceTooltip')} placement="top" anchorClass="web-service-manage">
           <Button
-            size="sm"
+            size="icon"
             variant="ghost"
             onClick={props.onEdit}
             disabled={props.busy}
-            class="h-8 w-8 px-0 text-muted-foreground hover:text-foreground"
+            class="text-muted-foreground hover:text-foreground"
             aria-label={`${props.forward.name}: ${i18n.t('webServices.actions.editServiceTooltip')}`}
           >
             <Pencil class="h-3.5 w-3.5" />
@@ -817,11 +817,11 @@ export function PortForwardRow(props: {
         </Tooltip>
         <Tooltip content={i18n.t('webServices.actions.deleteServiceTooltip')} placement="top" anchorClass="web-service-more">
           <Button
-            size="sm"
+            size="icon"
             variant="ghost"
             onClick={props.onDelete}
             disabled={props.busy}
-            class="h-8 w-8 px-0 text-muted-foreground hover:text-destructive"
+            class="text-muted-foreground hover:text-destructive"
             aria-label={`${props.forward.name}: ${i18n.t('webServices.actions.deleteServiceTooltip')}`}
           >
             <Trash class="h-3.5 w-3.5" />
@@ -3414,11 +3414,11 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       <WebServicesHeader actions={<>
 
             <Button
-              size="sm"
+              size="md"
               variant="outline"
               onClick={openTemplateCatalog}
               disabled={managedLoading() || (permissionReady() && !canRead())}
-              class={cn('h-8', outlineControlClass)}
+              class={cn(outlineControlClass)}
               aria-label={i18n.t('webServices.managed.serviceTemplates')}
               title={i18n.t('webServices.managed.serviceTemplates')}
               data-testid="service-templates-button"
@@ -3427,9 +3427,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
               <span>{i18n.t('webServices.managed.serviceTemplates')}</span>
             </Button>
             <Button
-              size="sm"
+              size="md"
               variant="default"
-              class="h-8"
               onClick={() => setCreateOpen(true)}
               disabled={permissionReady() && !ctx.env()?.permissions?.can_execute}
               aria-label={i18n.t('webServices.actions.addService')}
@@ -3481,9 +3480,9 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                   />
                   <Button
                     type="submit"
-                    size="sm"
+                    size="icon"
                     variant="ghost"
-                    class="web-service-address-submit absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 p-0 text-foreground/80 transition-colors hover:text-foreground focus-visible:text-foreground"
+                    class="web-service-address-submit absolute right-1 top-1/2 -translate-y-1/2 p-0 text-foreground/80 transition-colors hover:text-foreground focus-visible:text-foreground"
                     disabled={!canExecute() || addressOpening()}
                     aria-busy={addressOpening() || undefined}
                     aria-label={addressOpening() ? openStatus('new-session') : i18n.t('webServices.actions.openAddress')}
@@ -3496,7 +3495,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                   </Button>
                 </div>
                 <Tooltip clickToToggle content={i18n.t('webServices.address.scopeDescription')} anchorClass="web-services-address-help">
-                  <Button type="button" variant="ghost" size="sm" class="h-8 w-8 p-0" aria-label={i18n.t('webServices.address.scopeTitle')}><Globe class="h-4 w-4" /></Button>
+                  <Button type="button" variant="ghost" size="icon" aria-label={i18n.t('webServices.address.scopeTitle')}><Globe class="h-4 w-4" /></Button>
                 </Tooltip>
               </div>
               <div
@@ -3536,7 +3535,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                       <Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.session.temporary')}</Tag>
                       <span class="truncate font-mono text-xs text-foreground">{session.forward.target_url}{session.app_path === '/' ? '' : session.app_path}</span>
                     </div>
-                    <Button type="button" size="sm" variant="ghost" class="h-8 shrink-0" onClick={() => setForwardMetadataTarget({ mode: 'save', session })} disabled={forwardMetadataSaving()}>
+                    <Button type="button" size="md" variant="ghost" class="shrink-0" onClick={() => setForwardMetadataTarget({ mode: 'save', session })} disabled={forwardMetadataSaving()}>
                       <Save class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                       {i18n.t('webServices.actions.saveService')}
                     </Button>
@@ -3568,7 +3567,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                 </div>
                 <div class="web-services-toolbar-actions" data-testid="web-services-toolbar-actions">
 
-                  <Show when={archiveView() !== 'active'}><Button variant="ghost" size="sm" class="h-8 w-8 px-0" onClick={() => setArchiveView('active')} aria-label={i18n.t('webServices.collection.back')}><ArrowLeft class="h-4 w-4" /></Button></Show>
+                  <Show when={archiveView() !== 'active'}><Button variant="ghost" size="icon" onClick={() => setArchiveView('active')} aria-label={i18n.t('webServices.collection.back')}><ArrowLeft class="h-4 w-4" /></Button></Show>
                   <div class="web-services-search" data-testid="web-services-search">
                     <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                     <Input
@@ -3895,7 +3894,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                     type="button"
                     size="sm"
                     variant="ghost"
-                    class="mt-1.5 h-7 gap-1.5 px-2 text-xs"
+                    class="mt-1.5 gap-1.5 px-2 text-xs"
                     onClick={() => setWorkspacePath(template.default_workspace_path)}
                     disabled={managedInstallSubmitting()}
                   >
