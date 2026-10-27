@@ -849,6 +849,12 @@ func classifyCommandFailure(args []string, cause error, stderr ...[]byte) error 
 			return ErrPermissionDenied
 		}
 	}
+	// Desktop's status command exits nonzero while stopped instead of emitting JSON.
+	if len(args) >= 2 && args[0] == "desktop" && args[1] == "status" &&
+		strings.Contains(detail, "could not retrieve status. is docker desktop running?") &&
+		strings.Contains(detail, "you can start docker desktop by running 'docker desktop start'") {
+		return ErrDaemonStopped
+	}
 	for _, marker := range []string{"is the docker daemon running", "daemon is not running", "podman socket is not running", "podman machine is not running"} {
 		if strings.Contains(detail, marker) {
 			return ErrDaemonStopped

@@ -5,7 +5,7 @@ description: Detect and safely manage the active local Docker or Podman implemen
 tags: [architecture, containers, docker, podman, host-control]
 timestamp: 2026-09-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -14,6 +14,7 @@ One `ContainerServiceController` owns Docker/Podman service discovery, lifecycle
 # Contract
 
 - Independently detect one service per engine without scanning/fallback. [Resource readiness](container-resources-capability.md) stays bounded independently of slow host management.
+- Docker Desktop's explicit stopped-status diagnostic is a stopped service even when its CLI exits nonzero. Preserve Desktop identity and lifecycle capabilities across stop/start; missing CLI, permission, timeout, and unrecognized failures do not establish a stopped Desktop.
 - Start/stop/restart use typed service actions. Never invoke sudo/pkexec/polkit, prompt for elevation, alter groups or socket permissions. Keep operation locked until fresh authoritative final state.
 - Read-gated `GET /_redeven_proxy/api/container-resources/services` exposes access mode/source IDs; one source failure cannot hide another. Contiguous migrations map legacy state to `engine` and `client_proxy` to `docker_cli`.
 - One Container services Settings action carries warnings. Refresh retains cards, animates only its indicator and reports inline errors. Operation completion reloads authoritative service, runtime, inventory and Web Service facts.
@@ -29,3 +30,5 @@ One `ContainerServiceController` owns Docker/Podman service discovery, lifecycle
 - `redeven:internal/containerengine/container_services_cli.go` - Implements official discovery, exact lifecycle argv, validation, atomic writes, and rollback.
 
 - `redeven:internal/containerengine/container_services_test.go` - Proves independent detection, systemd non-elevation, machine inspect association, revision conflict, and symlink rejection.
+
+- `redeven:internal/containerengine/container_services_desktop_test.go` - Covers stopped CLI diagnostics, failure boundaries, and start/stop/start with stable Desktop identity.
