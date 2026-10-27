@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-27 — Larger initial Flower history window
+
+Increase the default [history window](ui/flower-live-timeline.md) from 24 to
+50 preview items while retaining the 1 KiB text previews, deferred activity
+bodies and existing byte budgets. Turn completeness still belongs to history
+preparation, independently of the initial page size.
+
 ## 2026-10-27 — Browser coordinates and explicit script contracts
 
 Fix scrolled hit tests, real browser zoom and parent-frame overlays; clarify

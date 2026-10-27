@@ -235,8 +235,17 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		}
 		if pages == 0 {
 			firstBytes = len(encoded)
+			if len(page.Current.Items) != 50 {
+				t.Fatalf("initial history window: got %d items, want 50", len(page.Current.Items))
+			}
 		}
 		for _, item := range page.Current.Items {
+			if len(item.Text) > 1024 {
+				t.Fatalf("history preview exceeded 1 KiB: item=%s bytes=%d", item.ID, len(item.Text))
+			}
+			if item.ActivitySummary != nil && item.Activity != nil && item.Activity.Presentation != nil {
+				t.Fatalf("history summary included an unopened activity body: %s", item.ID)
+			}
 			if seen[item.ID] {
 				t.Fatalf("duplicate pagination item %s", item.ID)
 			}

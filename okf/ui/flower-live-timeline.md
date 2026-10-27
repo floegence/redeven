@@ -5,7 +5,7 @@ description: One workspace facts stream, two bounded reading interests, and one 
 tags: [ui, flower, live, threads]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -27,7 +27,7 @@ Merge pages immediately; prune only at completion, preserving selection/local cr
 ## Reading, bodies and delivery
 Foreground history waits for the current live observer. Ready installs its baseline before releasing navigation into the shared loader. A covered response coalesces later baseline demand; explicit command confirmation remains forced. Navigation, disposal and transport changes cancel obsolete waiters. Reconnect binds a fresh read to the new observer while retaining accepted content, scroll state and unsent drafts.
 
-Root/child slots have independent monotonic revisions. Baseline and deltas share a subscription; replacing a page replaces its interest and fences older revisions. First reads select 24 items with 1 KiB text previews and Activity field summaries. Explicit earlier/newer reads select at most 150 items within 512 KiB; receipts refresh the accepted interval, never replace historical reading with Latest.
+Root/child slots have independent monotonic revisions. Baseline and deltas share a subscription; replacing a page replaces its interest and fences older revisions. First reads select up to 50 items with 1 KiB text previews and Activity field summaries, subject to the window byte budget. Explicit earlier/newer reads select at most 150 items within 512 KiB; receipts refresh the accepted interval, never replace historical reading with Latest.
 
 Collapsed patch rows use Activity summary display name/change type for one mutation, or localized mutation count for multiple files, without detail reads or invented diff rows/targets. Expansion retains titles, patch totals and each file's statistics.
 

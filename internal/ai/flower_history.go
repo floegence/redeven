@@ -18,7 +18,7 @@ import (
 
 // Opening a conversation needs one viewport, not the retained-history capacity.
 // Explicit pagination and protected selections retain their requested bounds.
-const flowerInitialHistoryItems = 24
+const flowerInitialHistoryItems = 50
 
 func flowerHistoryWindowInput(threadID identity.ThreadID, input FlowerHistoryRequest) flruntime.ThreadWindowInput {
 	limit := input.Limit
