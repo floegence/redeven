@@ -20,7 +20,7 @@ export interface GitHistoryModeSwitchProps {
 export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
   const i18n = useI18n();
   const buttonBaseClass =
-    'relative z-10 flex h-7 min-w-0 w-full flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border border-transparent px-2 text-center text-xs font-medium transition-[color,opacity] duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55';
+    'relative z-10 flex h-full min-w-0 w-full flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border border-transparent px-2 text-center text-xs font-medium transition-[color,opacity] duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55';
   const gitDisabledReason = () => String(props.gitHistoryDisabledReason ?? '').trim();
   const previewGitMode = () => {
     if (props.gitHistoryDisabled) return;
@@ -77,8 +77,8 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
         when={props.gitHistoryDisabled && gitDisabledReason()}
         fallback={renderGitButton()}
       >
-        <Tooltip content={gitDisabledReason()} placement="top" delay={0}>
-          <span class="flex min-w-0 flex-1">{renderGitButton()}</span>
+        <Tooltip content={gitDisabledReason()} placement="top" delay={0} anchorClass="h-full min-w-0">
+          <span class="flex h-full min-w-0 flex-1">{renderGitButton()}</span>
         </Tooltip>
       </Show>
     </div>

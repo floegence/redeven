@@ -727,7 +727,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 .browser-mode-switch {
   position: relative;
   isolation: isolate;
-  min-height: 2rem;
+  height: var(--floe-control-height-md);
   overflow: hidden;
 }
 

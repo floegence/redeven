@@ -1,6 +1,7 @@
 import '../../index.css';
 import axe from 'axe-core';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it } from 'vitest';
 import { commands, page } from 'vitest/browser';
@@ -10,9 +11,48 @@ let dispose: (() => void) | undefined;
 afterEach(() => {
   dispose?.();
   document.body.replaceChildren();
+  document.documentElement.style.removeProperty('font-size');
 });
 
 const paint = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+it.each([16, 20])('aligns the sidebar and file toolbar dividers at a %s px root size', async rootSize => {
+  await page.viewport(1800, 850);
+  document.documentElement.style.fontSize = `${rootSize}px`;
+  const host = document.createElement('div');
+  host.style.cssText = 'width:1700px;height:560px';
+  document.body.append(host);
+  const [sidebarWidth, setSidebarWidth] = createSignal(240);
+  const [gitDisabled, setGitDisabled] = createSignal(false);
+  dispose = render(() => <FloeConfigProvider config={{ layout: { mobileQuery: 'not all' } }}><LayoutProvider>
+    <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={[]}
+      currentPath="/" initialPath="/" instanceId="header-alignment" resetKey={0}
+      width={sidebarWidth()} open gitHistoryDisabled={gitDisabled()}
+      gitHistoryDisabledReason="Git is unavailable" />
+  </LayoutProvider></FloeConfigProvider>, host);
+  const toolbar = host.querySelector<HTMLElement>('[data-toolbar-layout]')!;
+  await expect.poll(() => toolbar.dataset.toolbarLayout).toBe('inline');
+  await document.fonts.ready;
+  for (const width of [180, 240, 520]) {
+    setSidebarWidth(width);
+    for (const disabled of [false, true]) {
+      setGitDisabled(disabled);
+      await paint();
+      const modeSwitch = host.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+      const sidebarHeader = modeSwitch.closest<HTMLElement>('.sticky')!;
+      const contentHeader = host.querySelector<HTMLElement>('.file-workspace-header')!;
+      expect(Math.abs(sidebarHeader.getBoundingClientRect().bottom - contentHeader.getBoundingClientRect().bottom)).toBeLessThan(0.5);
+      const field = toolbar.querySelector('label')!;
+      expect(modeSwitch.getBoundingClientRect().height).toBe(field.getBoundingClientRect().height);
+      const [filesButton, gitButton] = Array.from(modeSwitch.querySelectorAll('button'));
+      expect(gitButton.getBoundingClientRect().height).toBe(filesButton.getBoundingClientRect().height);
+      expect(gitButton.getBoundingClientRect().top).toBe(filesButton.getBoundingClientRect().top);
+      for (const button of [filesButton, gitButton]) {
+        expect(button.getBoundingClientRect().bottom).toBeLessThan(modeSwitch.getBoundingClientRect().bottom);
+      }
+    }
+  }
+});
 
 it('retains action geometry across width changes and adjacent insertions', async () => {
   await page.viewport(1280, 850);

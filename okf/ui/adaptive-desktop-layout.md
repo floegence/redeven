@@ -29,7 +29,7 @@ A hidden toolbar action must retain an explicit reachable entry.
 ## Temporary desktop navigation
 Shell, Flower conversations, Files/Git navigation, and Terminal sessions measure their own shared navigation/content region. When that region cannot fit the current sidebar width plus 480 CSS pixels of main content, the sidebar becomes a transient left side drawer.
 
-Files/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.
+Files/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The switch uses the published field height, including its border and padding, so the sidebar and single-row file toolbar dividers align at every interface scale. The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.
 
 Mobile navigation retains its product-specific bottom/side panel behavior under the [mobile Shell](mobile-shell-navigation.md) and [Flower](flower-mobile-navigation.md) contracts.
 
@@ -49,3 +49,5 @@ Narrow layouts may ellipsize selection titles; explanations remain normal prose 
 - `redeven:internal/envapp/ui_src/src/ui/mobileViewportPolicy.ts` - Defines the browser product query.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Checks compact sidebar geometry, mobile dismissal, and retained navigation across inline/drawer transitions.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.toolbar.browser.test.tsx` - Checks divider alignment at standard and enlarged root sizes across sidebar widths, plus responsive toolbar geometry.
