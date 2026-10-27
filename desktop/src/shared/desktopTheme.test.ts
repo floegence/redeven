@@ -8,8 +8,8 @@ import {
 } from './desktopTheme';
 
 describe('desktop shell theme contract', () => {
-  it('defaults to Porcelain without rewriting explicit Classic choices', () => {
-    expect(DESKTOP_SHELL_THEME_DEFAULTS).toEqual({ version: 1, light: 'porcelain-light', dark: 'porcelain-dark' });
+  it('defaults to Classic without rewriting explicit Classic choices', () => {
+    expect(DESKTOP_SHELL_THEME_DEFAULTS).toEqual({ version: 1, light: 'classic-light', dark: 'classic-dark' });
     const stored = { version: 1, light: 'classic-light', dark: 'classic-dark' };
     expect(normalizeDesktopShellThemeSelection(stored)).toEqual(stored);
   });

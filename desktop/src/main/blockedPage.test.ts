@@ -34,8 +34,8 @@ describe('blockedPage', () => {
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-label="Blocked page actions"');
     expect(html).toContain('env(titlebar-area-height, 40px)');
-    expect(html).toContain('data-floe-shell-theme="porcelain-light"');
-    expect(html).toContain('--blocked-bg: #F4F1ED');
+    expect(html).toContain('data-floe-shell-theme="classic-light"');
+    expect(html).toContain('--blocked-bg: #f6f4ef');
   });
 
   it('renders the selected preset semantic palette instead of fixed page colors', () => {
