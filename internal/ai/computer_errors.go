@@ -107,7 +107,7 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 			result.Result.(map[string]any)["stage"] = "focus"
 			result.Result.(map[string]any)["reason"] = "not_focusable"
 		}
-		if diagnostic := computerArgumentDiagnostic(payload["diagnostic"]); diagnostic != nil {
+		if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil {
 			result.Result.(map[string]any)["diagnostic"] = diagnostic
 		}
 		if code == "ELEMENT_NOT_ACTIONABLE" && payload["preparation_executed"] == true {

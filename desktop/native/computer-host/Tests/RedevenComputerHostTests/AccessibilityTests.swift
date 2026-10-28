@@ -12,6 +12,22 @@ final class AccessibilityTests: XCTestCase {
         }
     }
 
+    func testFieldBudgetsPreserveIntegrityAndFullNameIdentity() {
+        for character in ["x", "中", "🙂"] {
+            for count in [1999, 2000, 2100] {
+                let full = String(repeating: character, count: count)
+                var output: [String: Any] = [:]
+                for field in ["name", "description", "value"] {
+                    setAXText(field, full, in: &output)
+                    XCTAssertEqual(output[field] as? String, String(repeating: character, count: min(count, 2000)))
+                    XCTAssertEqual(output[field + "_truncated"] as? Bool == true, count > 2000)
+                }
+                XCTAssertEqual(axNameIdentity(full), axNameIdentity(full))
+                XCTAssertNotEqual(axNameIdentity(full + "A"), axNameIdentity(full + "B"))
+            }
+        }
+    }
+
     func testSemanticTextBudgetCountsScalarsWithoutSplittingUTF16() {
         let text = String(repeating: "e\u{301}🙂", count: 1000)
         let bounded = boundedAXText(text)

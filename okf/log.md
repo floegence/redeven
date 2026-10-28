@@ -4,6 +4,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-27
 
+- Preserve field-level truncation through [semantic snapshots](ai/computer-use-semantics.md), bind references/cursors to complete names, and reject oversized scalar attributes through [script read diagnostics](ai/computer-use-scripts.md). Retain deterministic and real-provider results separately in [qualification evidence](ai/computer-use-qualification-evidence.md).
+
 - Remove the final-frame cut from [sequence folding](ui/flower-tool-sequences.md): settle at shared-row height, crossfade the summary, then fade in stationary prose. Terminal closure owns one outer fold and carries any interrupted inner opacity into that motion.
 - Finish [sequence folding](ui/flower-tool-sequences.md) before revealing fresh prose, retain streaming/reading continuity, and clip orphan connectors at the scrolling edge with bounded work. Reuse the existing motion and scroll owners.
 - Share the [tool-sequence control](ui/flower-tool-sequences.md) with the first activity line. Remove blank title rows while retaining candidate width, accessible summaries, manual choices and reading anchors across desktop and touch layouts.

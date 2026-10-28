@@ -373,7 +373,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				stopped = ErrInteractionTakeoverRequired
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
-				argumentDiagnostic = computerArgumentDiagnostic(payload["diagnostic"])
+				argumentDiagnostic = computerOperationDiagnostic(payload["diagnostic"])
 				if payload["needs_observation"] == true {
 					needsObservation = true
 				}

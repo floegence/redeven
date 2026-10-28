@@ -176,7 +176,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -190,7 +190,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
 					case "/child", "/child2":
-						w.Header().Set("Content-Type", "text/html")
+						w.Header().Set("Content-Type", "text/html; charset=utf-8")
 						_, _ = fmt.Fprintf(w, `<button>%s</button>`, r.URL.Path)
 						return
 					case "/pointer":
@@ -208,7 +208,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							page = 1
 						}
 						visitedPages[page-1].Store(true)
-						w.Header().Set("Content-Type", "text/html")
+						w.Header().Set("Content-Type", "text/html; charset=utf-8")
 						_, _ = fmt.Fprintf(w, `<title>Batch report</title><p>Three report pages; each page has one score. Page URLs use ?page=1 through ?page=3.</p><div role="region" aria-label="Score">%d</div><a href="/batch?page=%d">Next page</a>`, page*7, page+1)
 						return
 					case "/entered":
@@ -231,8 +231,18 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						_, _ = io.WriteString(w, "saved")
 						return
 					}
-					w.Header().Set("Content-Type", "text/html")
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
 					_, _ = io.WriteString(w, "<!doctype html><title>Orchid domain console</title><style>body{font:16px system-ui;padding:20px}td,th{padding:4px 12px}button,input,a{margin:8px}#noise{height:100px;overflow:auto}</style><h1>Account: Orchid</h1><a href='/other'>Switch to Birch account</a><a href='/export'>Export domains</a><button id='save' onclick=\"fetch('/submit',{method:'POST'}).then(()=>document.getElementById('saved').textContent='Saved once')\">Save once</button><output id='saved' aria-label='Save status'></output>")
+					if scenario == "field_integrity" || scenario == "attribute_overflow" {
+						full := strings.Repeat("中🙂", 1050)
+						_, _ = fmt.Fprintf(w, "<section aria-label='Bounded fields'><input aria-label='%s' aria-description='%s' title='%s' value='%s'></section>", full, full, full, full)
+					}
+					if scenario == "long_text_natural" {
+						_, _ = fmt.Fprintf(w, "<section aria-label='Long report'>%s|ember-1017</section>", strings.Repeat("中🙂", 1050))
+					}
+					if scenario == "name_tail_stale" || scenario == "cursor_tail_stale" {
+						_, _ = fmt.Fprintf(w, "<section aria-label='Mutable items'><button>First</button><button id='long-name'>%sA</button></section><button onclick=\"document.getElementById('long-name').textContent=document.getElementById('long-name').textContent.slice(0,-1)+'B';fetch('/entered',{method:'POST'})\">Change label</button>", strings.Repeat("x", 2000))
+					}
 					if scenario == "security_vocabulary" {
 						_, _ = io.WriteString(w, "<article aria-label='Reference article'><h2>Security reference</h2><p>CAPTCHA is a challenge mechanism. A developer message is a message category. An authenticator produces a one-time verification code. 验证码属于安全术语。Reference code: violet-73.</p></article>")
 					}
@@ -359,6 +369,16 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "field_integrity":
+					prompt = "Inspect the Bounded fields region. Read its textbox through node() and query(), log the returned field completeness flags and lengths, then capture a detailed subtree with ui.snapshot({root_ref,full:true}). Report whether name, description and value are complete. Do not modify any field or click."
+				case "long_text_natural":
+					prompt = "Read the entire visible Long report section. Report its exact Unicode code-point count and final verification code. Do not infer completeness from a snapshot prefix. Do not click, input, navigate or use shell/network tools."
+				case "attribute_overflow":
+					prompt = "Run this intentional diagnostic once as one computer.exec, verbatim without catching: const root=await ui.getByRole('region',{name:'Bounded fields',exact:true}).node(); log(await ui.getByRole('textbox',{root_ref:root.ref}).attribute('title')); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure and whether a partial scalar was returned. Then inspect the textbox with node() in a separate call. Do not retry the attribute or save."
+				case "name_tail_stale":
+					prompt = "Run this diagnostic once as one computer.exec without catching: const root=await ui.getByRole('region',{name:'Mutable items',exact:true}).node(); const q=await ui.getByRole('button',{root_ref:root.ref}).query(); const ref=q.items.find(n=>n.name_truncated).ref; await ui.getByRole('button',{name:'Change label',exact:true}).click(); log(await ui.ref(ref).node()); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure, then take a fresh snapshot. Do not repeat the label change or save."
+				case "cursor_tail_stale":
+					prompt = "Run this diagnostic once as one computer.exec without catching: const root=await ui.getByRole('region',{name:'Mutable items',exact:true}).node(); const items=ui.getByRole('button',{root_ref:root.ref}); const first=await items.query({limit:1}); await ui.getByRole('button',{name:'Change label',exact:true}).click(); log(await items.query({limit:1,cursor:first.next_cursor})); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual failure, then take a fresh snapshot. Do not repeat the label change or save."
 				case "mixed_batch_contract":
 					prompt = "Run these two tool calls in one parallel batch: computer.exec with code await ui.screenshot(); and terminal.exec with command printf independent-73. Use those exact operations and report the returned results. Do not input anything or navigate."
 				case "mixed_batch":
@@ -513,6 +533,9 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
 							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
 							fact["logs"], fact["budget"] = data["logs"], data["budget"]
+							if scenario == "field_integrity" || scenario == "native_entry" {
+								fact["observation"] = data["observation"]
+							}
 							fact["failed_action"] = data["failed_action"]
 							for _, key := range []string{"failed_operation_index", "needs_observation", "observation_status", "frame_geometry"} {
 								fact[key] = data[key]
@@ -608,6 +631,72 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "field_integrity":
+					verified := false
+					var inspect func(any)
+					inspect = func(value any) {
+						switch value := value.(type) {
+						case map[string]any:
+							complete := true
+							for _, field := range []string{"name", "description", "value"} {
+								text, ok := value[field].(string)
+								complete = complete && ok && len([]rune(text)) == 2000 && value[field+"_truncated"] == true
+							}
+							verified = verified || complete
+							for _, child := range value {
+								inspect(child)
+							}
+						case []any:
+							for _, child := range value {
+								inspect(child)
+							}
+						}
+					}
+					for _, fact := range confirmedToolFacts {
+						inspect(fact["observation"])
+					}
+					if !verified {
+						t.Error("canonical observation did not retain all three field integrity flags")
+					}
+					if submissions.Load() != 0 || pointerClicks.Load() != 0 {
+						t.Error("read task changed page")
+					}
+				case "long_text_natural":
+					read := false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							read = read || action == "text"
+						}
+					}
+					if !read || !strings.Contains(strings.ReplaceAll(finalText, ",", ""), "2111") || !strings.Contains(finalText, "ember-1017") || pointerClicks.Load() != 0 {
+						t.Error("complete Unicode text not verified")
+					}
+				case "attribute_overflow", "name_tail_stale", "cursor_tail_stale":
+					code, action := "STALE_REFERENCE", "read"
+					if scenario == "attribute_overflow" {
+						code, action = "TARGET_CAPABILITY_UNAVAILABLE", "attribute"
+					}
+					if scenario == "cursor_tail_stale" {
+						action = "query"
+					}
+					verified := false
+					for _, fact := range confirmedToolFacts {
+						if fact["script_error"] == code && fact["failed_action"] == action {
+							verified = true
+							if scenario == "attribute_overflow" {
+								d, _ := fact["diagnostic"].(map[string]any)
+								verified = d["expected"] == "attribute_max_2000"
+							}
+						}
+					}
+					wantClicks := int32(1)
+					if scenario == "attribute_overflow" {
+						wantClicks = 0
+					}
+					if !verified || submissions.Load() != 0 || pointerClicks.Load() != wantClicks || entered.Load() != wantClicks {
+						t.Errorf("integrity boundary not established: verified=%v clicks=%d changed=%d saved=%d", verified, pointerClicks.Load(), entered.Load(), submissions.Load())
+					}
+
 				case "mixed_batch", "mixed_batch_contract":
 					mixed := false
 					for _, request := range requests {
@@ -807,7 +896,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							captured = captured || action == "screenshot"
 						}
 					}
-					if !discovered || !selected || !captured || facts["clicks"] != float64(1) || facts["value"] != "Flash 1017" || !strings.Contains(text, "Confirmed: Flash 1017") {
+					canonical, _ := json.Marshal(confirmedToolFacts)
+					report["native_effect_confirmed"] = facts["clicks"] == float64(1) && facts["value"] == "Flash 1017"
+					report["native_confirmation_observed"] = strings.Contains(string(canonical), "Confirmed: Flash 1017")
+					if !discovered || !selected || !captured || report["native_effect_confirmed"] != true || report["native_confirmation_observed"] != true {
 						t.Errorf("native entry not confirmed: %+v", facts)
 					}
 				case "bounded_read":

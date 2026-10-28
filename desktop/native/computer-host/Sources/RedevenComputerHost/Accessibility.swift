@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CryptoKit
 
 func axValue(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -25,8 +26,18 @@ func axRect(_ element: AXUIElement) -> CGRect? {
     return CGRect(origin: point, size: dimensions)
 }
 
+func axNameIdentity(_ text: String) -> SHA256.Digest {
+    SHA256.hash(data: Data(text.utf8))
+}
+
+func setAXText(_ field: String, _ full: String, in output: inout [String: Any]) {
+    let text = boundedAXText(full)
+    output[field] = text
+    if text != full { output[field + "_truncated"] = true }
+}
+
 final class NativeWindow {
-    struct Reference { let element: AXUIElement; let role: String; let name: String }
+    struct Reference { let element: AXUIElement; let role: String; let nameIdentity: SHA256.Digest }
     let id: String
     private(set) var destructionObserved = false
     let app: NSRunningApplication
@@ -132,18 +143,20 @@ final class NativeWindow {
     func name(_ node: AXUIElement) -> String {
         for attribute in [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute] {
             let text = axString(node, attribute)
-            if !text.isEmpty { return boundedAXText(text) }
+            if !text.isEmpty { return text }
         }
         return ""
     }
 
     func describe(_ node: AXUIElement) -> [String: Any] {
         let role = axString(node, kAXRoleAttribute)
+        let fullName = name(node)
+        let identity = axNameIdentity(fullName)
         let ref: String
-        if let existing = references.first(where: { CFEqual($0.value.element, node) && $0.value.role == role && $0.value.name == name(node) }) { ref = existing.key }
+        if let existing = references.first(where: { CFEqual($0.value.element, node) && $0.value.role == role && $0.value.nameIdentity == identity }) { ref = existing.key }
         else {
             if references.count >= 2000 { clearReferences() }
-            ref = "\(id):\(revision):\(UUID().uuidString)"; references[ref] = Reference(element: node, role: role, name: name(node))
+            ref = "\(id):\(revision):\(UUID().uuidString)"; references[ref] = Reference(element: node, role: role, nameIdentity: identity)
             if let observer, !CFEqual(node, element), !CFEqual(node, application) {
                 for notification in [kAXUIElementDestroyedNotification, kAXValueChangedNotification, kAXTitleChangedNotification] {
                     AXObserverAddNotification(observer, node, notification as CFString, Unmanaged.passUnretained(self).toOpaque())
@@ -170,14 +183,15 @@ final class NativeWindow {
             var settable = DarwinBoolean(false)
             if AXUIElementIsAttributeSettable(node, kAXValueAttribute as CFString, &settable) == .success { states["readonly"] = !settable.boolValue }
         }
-        var output: [String: Any] = ["ref": ref, "child_refs": [String](), "role": role, "platform_role": role, "name": name(node), "states": states, "actions": operations, "platform_actions": supported]
+        var output: [String: Any] = ["ref": ref, "child_refs": [String](), "role": role, "platform_role": role, "states": states, "actions": operations, "platform_actions": supported]
+        setAXText("name", fullName, in: &output)
         let subrole = axString(node, kAXSubroleAttribute)
         if !subrole.isEmpty { output["platform_subrole"] = subrole }
         let help = axString(node, kAXHelpAttribute)
         let description = help.isEmpty ? axString(node, kAXDescriptionAttribute) : help
-        if !description.isEmpty && description != name(node) { output["description"] = boundedAXText(description) }
+        if !description.isEmpty && description != fullName { setAXText("description", description, in: &output) }
         if subrole != kAXSecureTextFieldSubrole {
-            if let value = axValue(node, kAXValueAttribute) as? String { output["value"] = boundedAXText(value) }
+            if let value = axValue(node, kAXValueAttribute) as? String { setAXText("value", value, in: &output) }
             else if let value = axValue(node, kAXValueAttribute) as? NSNumber { output["value"] = value }
         }
         if let bounds = axRect(node), let window = axRect(element) {
@@ -225,7 +239,7 @@ final class NativeWindow {
     func resolve(_ selector: [String: Any]) throws -> AXUIElement {
         try validate()
         if let ref = selector["ref"] as? String {
-            guard let reference = references[ref], contains(reference.element), reference.role == axString(reference.element, kAXRoleAttribute), reference.name == name(reference.element) else { throw HostFailure(code: "STALE_REFERENCE", message: "Observe the window again.") }
+            guard let reference = references[ref], contains(reference.element), reference.role == axString(reference.element, kAXRoleAttribute), reference.nameIdentity == axNameIdentity(name(reference.element)) else { throw HostFailure(code: "STALE_REFERENCE", message: "Observe the window again.") }
             return reference.element
         }
         let roles = (selector["roles"] as? [String]) ?? (selector["role"] as? String).map { [$0] } ?? []

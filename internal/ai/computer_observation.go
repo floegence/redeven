@@ -117,7 +117,7 @@ func compactComputerObservation(current map[string]any) map[string]any {
 				continue
 			}
 			item := map[string]any{}
-			for _, key := range []string{"ref", "parent_ref", "role", "name", "value", "description", "children_truncated"} {
+			for _, key := range []string{"ref", "parent_ref", "role", "name", "value", "description", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
 				if value, exists := node[key]; exists {
 					item[key] = value
 				}

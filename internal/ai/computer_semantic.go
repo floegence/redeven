@@ -15,23 +15,26 @@ const computerSemanticMaxBytes = 262144
 // Platform adapters collect native facts. This is the single model-visible
 // schema boundary; unsupported facts are omitted rather than inferred.
 type computerSemanticNode struct {
-	Ref               string                  `json:"ref"`
-	ParentRef         string                  `json:"parent_ref,omitempty"`
-	ChildRefs         []string                `json:"child_refs"`
-	ChildrenTruncated bool                    `json:"children_truncated,omitempty"`
-	FrameID           string                  `json:"frame_id,omitempty"`
-	Role              string                  `json:"role"`
-	PlatformRole      string                  `json:"platform_role"`
-	CanonicalRole     string                  `json:"canonical_role"`
-	Name              string                  `json:"name"`
-	Description       string                  `json:"description,omitempty"`
-	Relations         map[string][]string     `json:"relations,omitempty"`
-	States            map[string]any          `json:"states"`
-	Actions           []string                `json:"actions"`
-	PlatformActions   []string                `json:"platform_actions,omitempty"`
-	Value             any                     `json:"value,omitempty"`
-	Bounds            *computerSemanticBounds `json:"bounds,omitempty"`
-	Subrole           string                  `json:"platform_subrole,omitempty"`
+	Ref                  string                  `json:"ref"`
+	ParentRef            string                  `json:"parent_ref,omitempty"`
+	ChildRefs            []string                `json:"child_refs"`
+	ChildrenTruncated    bool                    `json:"children_truncated,omitempty"`
+	FrameID              string                  `json:"frame_id,omitempty"`
+	Role                 string                  `json:"role"`
+	PlatformRole         string                  `json:"platform_role"`
+	CanonicalRole        string                  `json:"canonical_role"`
+	NameTruncated        bool                    `json:"name_truncated,omitempty"`
+	DescriptionTruncated bool                    `json:"description_truncated,omitempty"`
+	ValueTruncated       bool                    `json:"value_truncated,omitempty"`
+	Name                 string                  `json:"name"`
+	Description          string                  `json:"description,omitempty"`
+	Relations            map[string][]string     `json:"relations,omitempty"`
+	States               map[string]any          `json:"states"`
+	Actions              []string                `json:"actions"`
+	PlatformActions      []string                `json:"platform_actions,omitempty"`
+	Value                any                     `json:"value,omitempty"`
+	Bounds               *computerSemanticBounds `json:"bounds,omitempty"`
+	Subrole              string                  `json:"platform_subrole,omitempty"`
 }
 type computerSemanticBounds struct {
 	X      float64 `json:"x"`
@@ -151,6 +154,15 @@ func normalizeComputerSemanticNode(node *computerSemanticNode) error {
 	for _, value := range []string{node.Name, node.Description} {
 		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > 2000 {
 			return errors.New("semantic text exceeds its limit")
+		}
+	}
+	if node.NameTruncated && utf8.RuneCountInString(node.Name) != 2000 || node.DescriptionTruncated && utf8.RuneCountInString(node.Description) != 2000 {
+		return errors.New("invalid semantic text truncation")
+	}
+	if node.ValueTruncated {
+		value, ok := node.Value.(string)
+		if !ok || utf8.RuneCountInString(value) != 2000 {
+			return errors.New("invalid semantic value truncation")
 		}
 	}
 	if len(node.ChildRefs) > 1000 || len(node.Actions) > 16 || len(node.PlatformActions) > 64 {

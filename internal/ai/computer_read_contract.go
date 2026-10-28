@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"math"
+	"unicode/utf8"
 )
 
 // Read success is an operation contract, independent of the target adapter.
@@ -64,8 +65,8 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 		return stringField(p, "text", false) && stringField(p, "scope", true) && boolField(p, "truncated")
 	case "attribute":
 		value, exists := p["value"]
-		_, text := value.(string)
-		return exists && (value == nil || text) && p["attribute"] == args["attribute"]
+		text, isText := value.(string)
+		return exists && (value == nil || isText && utf8.ValidString(text) && utf8.RuneCountInString(text) <= 2000) && p["attribute"] == args["attribute"]
 	case "wait":
 		state, ok := p["state"].(string)
 		requested, _ := args["state"].(string)
@@ -94,6 +95,16 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 			if operation == "query" {
 				if !stringField(item, "role", true) || !stringField(item, "name", false) {
 					return false
+				}
+				name := item["name"].(string)
+				if !utf8.ValidString(name) || utf8.RuneCountInString(name) > 2000 {
+					return false
+				}
+				if raw, exists := item["name_truncated"]; exists {
+					truncated, ok := raw.(bool)
+					if !ok || truncated && utf8.RuneCountInString(name) != 2000 {
+						return false
+					}
 				}
 			} else {
 				cells, ok := item["cells"].([]any)

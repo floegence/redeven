@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -23,9 +24,10 @@ type atspiObject struct {
 	Path dbus.ObjectPath
 }
 type atspiReference struct {
-	object     atspiObject
-	role, name string
-	revision   uint64
+	object       atspiObject
+	role         string
+	nameIdentity [32]byte
+	revision     uint64
 }
 type atspiClient struct {
 	connection *dbus.Conn
@@ -134,7 +136,7 @@ func (c *atspiClient) name(ctx context.Context, object atspiObject) (string, err
 	if !ok {
 		return "", errors.New("invalid AT-SPI name")
 	}
-	return truncateATSPITerm(name, 2000), nil
+	return name, nil
 }
 
 func truncateATSPITerm(value string, limit int) string {
@@ -227,11 +229,12 @@ func (c *atspiClient) describe(ctx context.Context, object atspiObject) (map[str
 		return nil, err
 	}
 	revision := c.revision.Load()
-	ref := fmt.Sprintf("%s:%d:%s:%s", c.prefix, revision, object.Bus, object.Path)
+	identity := sha256.Sum256([]byte(name))
+	ref := fmt.Sprintf("%s:%d:%s:%s:%x", c.prefix, revision, object.Bus, object.Path, sha256.Sum256([]byte(role+"\x00"+name)))
 	if len(c.references) >= 2000 {
 		clear(c.references)
 	}
-	c.references[ref] = atspiReference{object, role, name, revision}
+	c.references[ref] = atspiReference{object, role, identity, revision}
 	actions := []string{"read"}
 	if slices.Contains(interfaces, "org.a11y.atspi.Action") && state["enabled"] {
 		actions = append(actions, "click")
@@ -249,7 +252,10 @@ func (c *atspiClient) describe(ctx context.Context, object atspiObject) (map[str
 	if state["indeterminate"] {
 		semanticStates["checked"] = "mixed"
 	}
-	output := map[string]any{"ref": ref, "child_refs": []string{}, "role": role, "platform_role": role, "name": name, "states": semanticStates, "actions": actions}
+	output := map[string]any{"ref": ref, "child_refs": []string{}, "role": role, "platform_role": role, "name": truncateATSPITerm(name, 2000), "states": semanticStates, "actions": actions}
+	if output["name"] != name {
+		output["name_truncated"] = true
+	}
 	var description dbus.Variant
 	if err := c.call(ctx, object, "org.freedesktop.DBus.Properties.Get", atspiAccessible, "Description").Store(&description); err != nil {
 		if !atspiUnsupportedProperty(err) {
@@ -257,6 +263,9 @@ func (c *atspiClient) describe(ctx context.Context, object atspiObject) (map[str
 		}
 	} else if text, ok := description.Value().(string); ok && text != "" {
 		output["description"] = truncateATSPITerm(text, 2000)
+		if output["description"] != text {
+			output["description_truncated"] = true
+		}
 	}
 	if slices.Contains(interfaces, "org.a11y.atspi.Component") {
 		var rect struct{ X, Y, Width, Height int32 }
@@ -278,6 +287,9 @@ func (c *atspiClient) describe(ctx context.Context, object atspiObject) (map[str
 			return nil, err
 		}
 		output["value"] = text
+		if length > 2000 {
+			output["value_truncated"] = true
+		}
 	}
 	return output, nil
 }
@@ -392,7 +404,7 @@ func (c *atspiClient) resolve(ctx context.Context, selector map[string]any) (ats
 		role, roleErr := c.role(ctx, entry.object)
 		name, nameErr := c.name(ctx, entry.object)
 		state, stateErr := c.state(ctx, entry.object)
-		if roleErr != nil || nameErr != nil || stateErr != nil || state["defunct"] || role != entry.role || name != entry.name {
+		if roleErr != nil || nameErr != nil || stateErr != nil || state["defunct"] || role != entry.role || sha256.Sum256([]byte(name)) != entry.nameIdentity {
 			return atspiReference{}, errors.New("STALE_REFERENCE")
 		}
 		return entry, nil
@@ -428,10 +440,19 @@ func (c *atspiClient) resolve(ctx context.Context, selector map[string]any) (ats
 	}
 	var matches []atspiReference
 	for _, node := range observed["nodes"].([]map[string]any) {
-		roleMatch := slices.Contains(roles, node["role"].(string))
-		candidateName, _ := node["name"].(string)
+		if !slices.Contains(roles, node["role"].(string)) {
+			continue
+		}
+		entry := c.references[node["ref"].(string)]
+		candidateName, err := c.name(ctx, entry.object)
+		if err != nil {
+			return atspiReference{}, err
+		}
+		if sha256.Sum256([]byte(candidateName)) != entry.nameIdentity {
+			return atspiReference{}, errors.New("STALE_REFERENCE")
+		}
 		nameMatch := !nameOK || (exact && candidateName == name) || (!exact && strings.Contains(strings.ToLower(candidateName), strings.ToLower(name)))
-		if roleMatch && nameMatch {
+		if nameMatch {
 			matches = append(matches, c.references[node["ref"].(string)])
 		}
 	}

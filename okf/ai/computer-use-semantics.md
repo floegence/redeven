@@ -26,6 +26,20 @@ Browser role resolution scans the complete authorized AX scope independently of 
 
 `children_truncated` marks exported nodes with omitted descendants, including Runtime byte pruning. It is not evidence of empty rows or virtualization. Agents can read a row or table subtree through `root_ref`; completeness claims require checking the returned truncation facts.
 
+Name, description and string value have a 2,000 Unicode code-point budget.
+name_truncated, description_truncated and value_truncated are true only when
+the adapter omitted part of that field; snapshot truncated continues to describe
+omitted nodes. Runtime validates these flags and preserves them in compact,
+detailed, diff and single-node output. A detailed read does not remove field limits.
+Browser query items also carry name_truncated when needed.
+
+References compare the full native name through a bounded SHA-256 digest, never
+the displayed prefix. Changed names receive different tokens so a fresh observation
+cannot rebind an old reference. Browser collection cursors include complete-name digests
+for every match, including items outside the current page. The existing reference
+table and cursor owner remain authoritative; no additional lifecycle or replay
+state exists. Semantic selectors match full names, including on native adapters.
+
 Both directions of every parent/child edge must agree. An observation describes the bounded returned tree, not an exhaustive view of every application node.
 
 ## Roles, states and relationships
@@ -35,7 +49,7 @@ complementary, plus supported structural/live-region roles, round-trip through
 this inventory. Unknown `other` remains reference-only, never a wildcard. Invalid
 canonical selectors return safe field/expected/recovery diagnostics before dispatch.
 Browser references are opaque bounded hashes of controller, document revision,
-frame and native node identity. The existing reference table remains their sole
+frame, native node identity, role and complete-name digest. The existing reference table remains their sole
 owner; no second alias registry exists.
 
 An ignored or truncated target has no invented reference; a platform-computed name or safe description may still be available.
@@ -52,3 +66,5 @@ Confirmed actions survive an observation failure; failed content never enters mo
 - `redeven:internal/ai/computer_semantic.go` - Runtime schema validation, role inventory, byte pruning and focus projection.
 
 - `redeven:internal/ai/computer_semantic_test.go` - graph, relationship, state, diff, selector and privacy assertions.
+- `redeven:internal/ai/computer_field_integrity_test.go` - normalization, compact/detailed/diff/guest preservation, scalar bounds and diagnostics.
+- `redeven:internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs` - real Chromium Unicode boundaries and full-name reference/cursor checks.

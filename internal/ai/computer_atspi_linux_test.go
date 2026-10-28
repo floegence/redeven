@@ -267,3 +267,80 @@ Gtk.main()
 		t.Fatal("private value entered the result")
 	}
 }
+
+func TestATSPIFieldIntegrityAndFullNameIdentity(t *testing.T) {
+	if os.Getenv("REDEVEN_XVFB_INTEGRATION") != "1" {
+		t.Skip("requires isolated Linux qualification image")
+	}
+	e := NewXvfbTargetExecutor(t.TempDir())
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	if err := e.EnsureTargetReady(ctx, "xvfb-main"); err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	c := e.atspi
+	object := atspiObject{c.connection.Names()[0], "/fixture/integrity"}
+	c.root = object
+	var current atomic.Value
+	current.Store("")
+	for iface, methods := range map[string]map[string]interface{}{
+		atspiAccessible: {
+			"GetRoleName":   func() (string, *dbus.Error) { return "button", nil },
+			"GetInterfaces": func() ([]string, *dbus.Error) { return []string{"org.a11y.atspi.Text"}, nil },
+			"GetChildren":   func() ([]atspiObject, *dbus.Error) { return nil, nil },
+			"GetState":      func() ([]uint32, *dbus.Error) { return []uint32{1<<8 | 1<<25 | 1<<30, 0}, nil },
+		},
+		"org.freedesktop.DBus.Properties": {
+			"Get": func(_ string, property string) (dbus.Variant, *dbus.Error) {
+				full := current.Load().(string)
+				if property == "CharacterCount" {
+					return dbus.MakeVariant(int32(len([]rune(full)))), nil
+				}
+				return dbus.MakeVariant(full), nil
+			},
+		},
+		"org.a11y.atspi.Text": {
+			"GetText": func(start, end int32) (string, *dbus.Error) {
+				return string([]rune(current.Load().(string))[start:end]), nil
+			},
+		},
+	} {
+		if err := c.connection.ExportMethodTable(methods, object.Path, iface); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, character := range []string{"x", "中", "🙂"} {
+		for _, length := range []int{1999, 2000, 2100} {
+			full := strings.Repeat(character, length)
+			current.Store(full)
+			node, err := c.describe(ctx, object)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, field := range []string{"name", "description", "value"} {
+				if node[field] != strings.Repeat(character, min(length, 2000)) || (node[field+"_truncated"] == true) != (length > 2000) {
+					t.Fatalf("incorrect %s budget at %d", field, length)
+				}
+			}
+			if _, err := c.resolve(ctx, map[string]any{"ref": node["ref"]}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.resolve(ctx, map[string]any{"role": "button", "name": full, "exact": true}); err != nil {
+				t.Fatal(err)
+			}
+			if length > 2000 {
+				if _, err := c.resolve(ctx, map[string]any{"role": "button", "name": node["name"], "exact": true}); err == nil || err.Error() != "ELEMENT_NOT_FOUND" {
+					t.Fatalf("prefix matched full name: %v", err)
+				}
+				current.Store(full + "changed")
+				if _, err := c.describe(ctx, object); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := c.resolve(ctx, map[string]any{"ref": node["ref"]}); err == nil || err.Error() != "STALE_REFERENCE" {
+					t.Fatalf("accepted changed tail: %v", err)
+				}
+			}
+		}
+	}
+}

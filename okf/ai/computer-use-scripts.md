@@ -59,7 +59,7 @@ Semantic snapshots retain their 256 KiB output budget. The script response allow
 
 `context_reset` explicitly reports namespace retirement after failure. Safe diagnostics include phase and submitted-source line/column/symbol when available; raw exception text and stacks stay private. Failed namespaces cannot retain dormant Promise callbacks. A caught argument error seals further operations. `const`/`let` are invocation-local; explicit `globalThis` values last only within a healthy turn/target namespace. Timers are unavailable.
 
-Default `ui.snapshot` automatic output uses a compact 32 KiB presentation budget, short opaque browser references and parent links. Truncation marks omitted nodes and children; omitted content is unknown. Guest reads retain the canonical 256 KiB budget. `full:true` and `locator.node()` provide details. Changing detail mode resets the diff baseline; failures use the same bounded output projection.
+Default `ui.snapshot` automatic output uses a compact 32 KiB presentation budget, short opaque browser references and parent links. Truncation marks omitted nodes and children; omitted content is unknown. Guest reads retain the canonical 256 KiB budget. `full:true` and `locator.node()` provide details with the same 2,000-code-point field budgets and explicit name/description/value truncation flags. Changing detail mode resets the diff baseline; failures use the same bounded output projection.
 
 Browser waits additionally accept `{state:'text'|'value',equals:string,timeout_ms?}` for exact visible-element textContent/value matching. They only sample state and never resend input. Native targets reject these conditions. Download cursors always include a `downloads` array, including when empty.
 
@@ -74,10 +74,15 @@ Missing released query metadata is prepared once through Floret Host before the
 query is retried. It does not expand unrelated retries or create a second history store. Without exec permission,
 primitive read-only consumers keep their existing tools.
 
-Computer calls other than inventory must be sent alone. The Floret authorization
-request carries batch metadata into the host handler; a multiple-call batch returns
-paired INVALID_REQUEST feedback before any target operation. It does not stop the
-turn, replay input, change target binding or disable unrelated tool concurrency.
+Only one selected-target computer call may occupy a prepared batch. Independent
+tools may share that batch; Floret owns conflict admission. Rejection never replays
+input or changes target binding.
+
+Scalar attribute reads preserve string|null: an attribute over 2,000 Unicode
+code points returns TARGET_CAPABILITY_UNAVAILABLE, never a silent prefix. Closed
+read diagnostics retain method, expected capability and choose_supported_read
+through the browser, Runtime and script result. They do not infer a replacement
+element, widen scope or repeat input. The model chooses another explicit read.
 
 ## Successful reads and argument counts
 All guest methods, including image and download-cursor methods, validate explicit

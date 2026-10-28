@@ -2,6 +2,13 @@ import { createHash } from 'node:crypto';
 import { validateBrowserAction } from './computerBrowserArguments.mjs';
 import { documentHitPoint } from './computerBrowserFrame.mjs';
 
+// Display budgets never define reference or collection identity.
+const nameIdentity = text => createHash('sha256').update(text).digest('hex');
+function boundedField(field, full) {
+  const text = Array.from(full).slice(0, 2000).join('');
+  return {[field]:text, ...(text !== full ? {[field+'_truncated']:true} : {})};
+}
+
 export const navigationURL = value => {
   if (typeof value !== 'string' || !value.trim() || value.length > 4096 || /\p{Cc}/u.test(value)) throw new Error('INVALID_REQUEST');
   let parsed;
@@ -409,9 +416,9 @@ export class BrowserComputerPage {
         const actions = ['read'];
         if (!states.disabled && (states.focusable || ['button','link','checkbox','radio','switch','tab','menuitem','menuitemcheckbox','menuitemradio','treeitem','slider','scrollbar','canvas'].includes(role))) actions.push('click');
         if (['textbox', 'searchbox', 'combobox'].includes(role) && !states.readonly && !states.disabled) actions.push('fill');
-        const output = { ref, child_refs: [], role, platform_role: role, frame_id: frame.frame.id, name: entry.name, states, actions };
-        if (node.description?.value) output.description = Array.from(node.description.value).slice(0, 2000).join('');
-        if (node.value?.value !== undefined) output.value = Array.from(String(node.value.value)).slice(0, 2000).join('');
+        const output = { ref, child_refs: [], role, platform_role: role, frame_id: frame.frame.id, ...boundedField('name', node.name?.value || ''), states, actions };
+        if (node.description?.value) Object.assign(output, boundedField('description', node.description.value));
+        if (node.value?.value !== undefined) Object.assign(output, boundedField('value', String(node.value.value)));
         if (boundsByNode.has(node.backendDOMNodeId)) output.bounds = boundsByNode.get(node.backendDOMNodeId);
         represented.set(node.nodeId, output);
         backendRefs.set(node.backendDOMNodeId, ref);
@@ -453,11 +460,12 @@ export class BrowserComputerPage {
     // Opaque refs stay in the existing controller/document reference table.
     const document = this.observedFrames.get(frame.frame.id);
     if (!document || document.session !== frame.session) throw new Error('STALE_REFERENCE');
-    const identity = [this.prefix,document.revision,frame.frame.id,node.backendDOMNodeId];
+    const fullNameIdentity = nameIdentity(node.name?.value || '');
+    const identity = [this.prefix,document.revision,frame.frame.id,node.backendDOMNodeId,node.role?.value || 'unknown',fullNameIdentity];
     const ref = 'r'+createHash('sha256').update(JSON.stringify(identity)).digest('base64url').slice(0,16);
     const existing = this.references.get(ref);
     if (existing && (existing.document !== document || existing.backendNodeId!==node.backendDOMNodeId)) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-    const entry = { ref, frame, document, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', name: Array.from(node.name?.value || '').slice(0, 2000).join('') };
+    const entry = { ref, frame, document, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', ...boundedField('name', node.name?.value || ''), nameIdentity: fullNameIdentity };
     if (!retain) return entry;
     if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
     this.references.set(ref, entry);
@@ -471,7 +479,7 @@ export class BrowserComputerPage {
     if (typeof selector.ref === 'string') {
       entry = this.references.get(selector.ref);
       if (!entry || entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
-      if (selector.name !== undefined && typeof selector.name === 'string' && selector.exact === true && entry.name !== selector.name) throw new Error('STALE_REFERENCE');
+      if (selector.name !== undefined && typeof selector.name === 'string' && selector.exact === true && entry.nameIdentity !== nameIdentity(selector.name)) throw new Error('STALE_REFERENCE');
     } else {
       const roles = selector.roles || [selector.role];
       if (!Array.isArray(roles) || !roles.length || roles.some(role => typeof role !== 'string')) throw new Error('INVALID_REQUEST');
@@ -516,7 +524,7 @@ export class BrowserComputerPage {
       if (!node || !node.nodeName) throw new Error('missing');
       const { nodes } = await entry.frame.session.send('Accessibility.getPartialAXTree', { backendNodeId: entry.backendNodeId, fetchRelatives: false });
       const current = nodes.find(node => node.backendDOMNodeId === entry.backendNodeId);
-      if (!current || current.ignored || current.role?.value !== entry.role || Array.from(current.name?.value || '').slice(0, 2000).join('') !== entry.name) throw new Error('changed');
+      if (!current || current.ignored || current.role?.value !== entry.role || nameIdentity(current.name?.value || '') !== entry.nameIdentity) throw new Error('changed');
     } catch { this.references.delete(entry.ref); throw new Error('STALE_REFERENCE'); }
     if (entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
     return collect ? [entry] : entry;
@@ -524,8 +532,8 @@ export class BrowserComputerPage {
 
   async query(selector, {limit=50,cursor} = {}) {
     const matches = await this.resolve(selector,true);
-    const items = matches.map(({ref,role,name})=>({ref,role,name}));
-    return this.collectionPage(selector, items, matches, {limit,cursor}, 'items');
+    const items = matches.map(({ref,role,name,name_truncated})=>({ref,role,name,...(name_truncated?{name_truncated:true}:{})}));
+    return this.collectionPage(selector, items, matches, {limit,cursor}, 'items', matches.map(({ref,role,nameIdentity})=>[ref,role,nameIdentity]));
   }
 
   collectionPage(selector, items, entries, {limit=50,cursor}, key, contentIdentity = items) {
@@ -597,7 +605,10 @@ export class BrowserComputerPage {
         else { url.username='';url.password='';url.search='';url.hash='';value=url.href; }
       } catch { value=null; }
     }
-    return {attribute:name,value:value===null?null:Array.from(value).slice(0,2000).join('')};
+    if (value !== null && Array.from(value).length > 2000) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
+      diagnostic: {phase:'read', method:'locator.attribute', expected:'attribute_max_2000', recovery:'choose_supported_read'},
+    });
+    return {attribute:name,value};
   }
 
   async text(element) {
@@ -609,7 +620,7 @@ export class BrowserComputerPage {
         functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.getClientRects().length&&getComputedStyle(this).visibility!=="hidden"?this.innerText||"":"";let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"rendered_element"};text+=character;}return {text,truncated:false,scope:"rendered_element"};}'});
       if (result.exceptionDetails || !result.result?.value) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
       if (result.result.value.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
-        diagnostic: { method: 'locator.text', expected: 'html_element', recovery: 'Choose an observed HTML element; document and text nodes do not support rendered_element reads.' },
+        diagnostic: {phase:'read', method:'locator.text', expected:'html_element', recovery:'choose_supported_read'},
       });
       return result.result.value;
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }

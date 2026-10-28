@@ -27,7 +27,7 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 	}
 	validation := cloneAnyMap(raw)
 	validation["phase"] = "validation"
-	if details := computerArgumentDiagnostic(validation); details != nil {
+	if details := computerOperationDiagnostic(validation); details != nil {
 		for key, value := range details {
 			if key != "phase" {
 				out[key] = value
@@ -47,8 +47,15 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 }
 
 // Closed product-authored diagnostics. Never retain raw page errors or arguments.
-func computerArgumentDiagnostic(value any) map[string]any {
+func computerOperationDiagnostic(value any) map[string]any {
 	raw, _ := value.(map[string]any)
+	if raw["phase"] == "read" && raw["recovery"] == "choose_supported_read" {
+		method, expected := anyToString(raw["method"]), anyToString(raw["expected"])
+		if method == "locator.attribute" && expected == "attribute_max_2000" || method == "locator.text" && expected == "html_element" {
+			return map[string]any{"phase": "read", "method": method, "expected": expected, "recovery": "choose_supported_read"}
+		}
+		return nil
+	}
 	if raw["phase"] != "validation" && raw["phase"] != "execution" || raw["recovery"] != "correct_arguments" {
 		return nil
 	}

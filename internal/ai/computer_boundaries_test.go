@@ -78,7 +78,7 @@ func TestComputerContractScriptPreservesFrameAndDiagnostic(t *testing.T) {
 	})
 	result, err := executeTestScript(t.Context(), host, call, "await ui.screenshot(); await ui.key('Meta+Equal');")
 	payload := result.Result.(map[string]any)
-	if err == nil || calls != 2 || payload["frame_geometry"] == nil || computerArgumentDiagnostic(payload["diagnostic"]) == nil {
+	if err == nil || calls != 2 || payload["frame_geometry"] == nil || computerOperationDiagnostic(payload["diagnostic"]) == nil {
 		t.Fatalf("script facts lost: %#v %v calls=%d", payload, err, calls)
 	}
 }

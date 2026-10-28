@@ -28,6 +28,45 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 
 # Evidence
 
+## Field integrity qualification — 2026-10-27
+
+Browser, AX and AT-SPI report per-field truncation within the existing 2,000-code-
+point budget. Full-name digests bind references and query cursors; fresh reads
+cannot rebind an old token to a renamed element. Oversized scalar attributes fail
+explicitly, and closed read diagnostics survive Runtime and guest boundaries.
+No page-specific readiness, JSON repair, scope substitution or input replay exists.
+Default system prompt and three tool definitions are unchanged; shared core/read
+help explains field budgets and scalar rejection.
+
+Deterministic regressions first failed on missing flags, tail-only mutations and
+fresh-observation reference rebinding. Final Chromium, Go normalization/guest/diff,
+Swift and isolated Linux AT-SPI tests pass. Full computer execution qualification
+passes 226 Node tests with one existing optional install skip; ten packaging/
+browser/UI suites pass 314 tests without skips. Swift passes 36 tests; native
+protocol, host safety, bundle staging, full ai/appserver packages and focused race
+checks pass. Linux qualification includes Unicode boundaries, selector matching,
+reference invalidation, private-display actions and object replacement.
+
+Configured local DeepSeek V4.1 Flash (1017), wire deepseek-flash, completes the
+final 46-scenario batch with 45 strict assertion passes (236 requests, 196 tool
+activities, 35 errors including requested negatives). The native case fills the
+exact value, clicks once and captures a screenshot after a model-authored pending
+Promise is stopped. It fails the retained text-output assertion. Supplemental
+canonical assertions across field integrity, natural Unicode reads and native
+entry pass 8/9 (77 requests, 67 activities, six errors). All six field/text repeats
+pass; native passes 2/3. The remaining native model hides snapshots with emit:false
+and filters canonical nodes by an absent platform_role, yielding empty logs; exact
+input, one click and screenshot are confirmed, text observation is not. No
+production compatibility alias or special recovery is added for this model error.
+
+Earlier 11/15 and 14/15 batches remain failed evidence: missing UTF-8 fixture
+headers, dependence on model-authored log key names, and a numeric assertion that
+rejected the correct formatted count 2,111. Fixtures/assertions were corrected;
+original reports are retained. Missing build assets/catalog environment variables
+were preflight failures, not provider successes. Credential/config hashes are
+unchanged. These isolated tasks establish measured contracts, not universal model
+reliability or proof of remote weights. No real user thread was continued.
+
 ## Generic contract qualification — 2026-10-27
 
 Published Floret v7.88.0 owns batch exclusion; Redeven only declares its shared
