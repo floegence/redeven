@@ -6,6 +6,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 - Gate [thread entry](ui/flower-thread-selection.md) on the current bounded baseline and prepared destination. Settle restored [tool titles and folds](ui/flower-activity-interaction.md) statically, preserve manual choices and reading input, and retain genuine post-ready motion across root/child views and reconnect. Record focused regression and paired rendering [qualification](operations/flower-thread-switch-qualification.md), including retained baseline failures.
 
+- Keep single-target [SubAgent operation capsules](ui/flower-subagent-detail.md) on the title line through deferred identity reads, with stable narrow/touch geometry and unchanged read ownership. Retain informational portraits without granting child navigation.
+
 - Normalize [tool disclosure](ui/flower-activity-interaction.md) chevrons to right when collapsed and down when expanded using existing accessible state. Remove absent-observation filler from BrowserUse/ComputerUse while preserving meaningful outcomes and failure notices.
 
 - Replace the right group action with a left folding rail and inline summary disclosure. Remove per-row connector hit testing, keep tool icons and stable indentation, align Goal history with prose, and place individual controls next to their text. Preserve reading, touch targets and fold sequencing; qualify [activity interaction](ui/flower-activity-interaction.md) and [sequence behavior](ui/flower-tool-sequences.md).

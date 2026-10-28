@@ -27,6 +27,7 @@ export function ActivityFieldRows(props: {
   revision?: unknown;
   active?: boolean;
   connection?: unknown;
+  inline?: boolean;
   renderValue?: (value: unknown, index: number) => JSX.Element;
   renderTargetActions?: (target: FlowerActivityTargetRef) => JSX.Element;
 }) {
@@ -220,10 +221,10 @@ export function ActivityFieldRows(props: {
     onCleanup(() => { observer.disconnect(); resize.disconnect(); globalThis.removeEventListener('online', online); });
   });
   onCleanup(() => { disposed = true; scope.abort(); cancelAnimationFrame(frame); });
-  return <section class="flower-activity-field-rows" data-activity-section={props.section}>
-    <div ref={viewport} class="flower-activity-field-rows-viewport" tabindex={0} role="region"
-      aria-label={props.section === 'inputs' ? props.copy.toolActivity.inputs : props.copy.toolActivity.results}
-      style={{ 'max-height': '28rem', overflow: 'auto', 'overflow-anchor': 'none' }}
+  return <section class="flower-activity-field-rows" data-activity-section={props.section} data-inline={props.inline || undefined}>
+    <div ref={viewport} class="flower-activity-field-rows-viewport" tabindex={props.inline ? undefined : 0} role={props.inline ? undefined : 'region'}
+      aria-label={props.inline ? undefined : props.section === 'inputs' ? props.copy.toolActivity.inputs : props.copy.toolActivity.results}
+      style={{ 'max-height': '28rem', overflow: props.inline ? 'hidden' : 'auto', 'overflow-anchor': 'none' }}
       onScroll={() => {
         if (Math.abs(viewport.scrollTop - previousTop) > 1) direction = viewport.scrollTop < previousTop ? 'before' : 'after';
         previousTop = viewport.scrollTop; schedule();
@@ -241,7 +242,7 @@ export function ActivityFieldRows(props: {
             failedLabel={props.copy.history.failed} active={active()} connection={props.connection} /> : undefined} />}>{render => render()(row().raw, index)}</Show></div></>;
       }}</For>
     </div>
-    <Show when={failed()}><span role="status">{props.copy.history.failed}</span></Show>
-    <Show when={loading() && !rows().length}><span role="status">{props.copy.history.loading}</span></Show>
+    <Show when={failed()}><span role="status" title={props.inline ? props.copy.history.failed : undefined}>{props.copy.history.failed}</span></Show>
+    <Show when={loading() && !rows().length}><span role="status" title={props.inline ? props.copy.history.loading : undefined}>{props.copy.history.loading}</span></Show>
   </section>;
 }

@@ -6763,6 +6763,13 @@ button.flower-composer-context-source:focus-visible,
   background: color-mix(in srgb, var(--primary) 7%, var(--background));
 }
 
+.flower-subagent-capsule-static,
+.flower-subagent-capsule-static:hover {
+  cursor: default;
+  border-color: var(--flower-chat-surface-border);
+  background: var(--flower-chat-surface-elevated);
+}
+
 .flower-subagent-capsule .flower-subagent-capsule-avatar {
   width: 1.625rem;
   height: 1.625rem;
@@ -6796,7 +6803,37 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-inline-row-single-subagent .flower-activity-inline-title {
   width: auto;
+  max-width: 60%;
   flex: 0 0 auto;
+}
+
+/* Reserve the target's single line before its existing field read resolves.
+   Loading and failure text share the slot instead of growing a second row. */
+.flower-activity-field-rows[data-inline='true'] {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 1.5rem;
+  max-width: 100%;
+  height: 1.5rem;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+.flower-activity-field-rows[data-inline='true'] > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.flower-activity-field-rows[data-inline='true'] > .flower-activity-field-rows-viewport {
+  height: 100%;
+}
+
+.flower-activity-field-rows[data-inline='true'] > [role='status'] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flower-activity-inline-row-single-subagent .flower-activity-subagents-panel {
@@ -6848,6 +6885,14 @@ button.flower-composer-context-source:focus-visible,
 }
 
 @media (pointer: coarse) {
+  .flower-activity-inline-row-single-subagent .flower-activity-inline-button {
+    min-height: 3rem;
+  }
+
+  .flower-activity-field-rows[data-inline='true'] {
+    height: 2.75rem;
+  }
+
   .flower-subagent-capsule,
   .flower-activity-inline-row-single-subagent .flower-subagent-capsule,
   .flower-subagent-switch {

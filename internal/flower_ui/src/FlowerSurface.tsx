@@ -11351,17 +11351,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             const current = createMemo(() => selectedSubagentItems().find((item) => item.threadID === agent().open_messages?.thread_id));
             const status = () => normalizeSubagentPanelStatus(agent().raw_status);
             const title = () => [agent().name, subagentStatusLabel(status()), subagentsCopy().openThread].join('. ');
+            const identity = <>
+              <SubagentAvatar threadID={agent().thread_id} class="flower-subagent-capsule-avatar" />
+              <span class="flower-subagent-capsule-name">{presentSubagentTaskName(agent().name)}</span>
+              <span class="flower-subagent-capsule-status" aria-hidden="true">{subagentStatusIndicator(status())}</span>
+            </>;
             return <div class="flower-activity-subagents-item" role="listitem">
-              <Show when={agent().open_messages && current()} fallback={<span class="flower-activity-subagent-unavailable">{agent().name}</span>}>
+              <Show when={agent().open_messages && current()} fallback={
+                <Show when={agent().thread_id} fallback={<span class="flower-activity-subagent-unavailable">{agent().name}</span>}>
+                  <span class="flower-subagent-capsule flower-subagent-capsule-static"
+                    data-flower-subagent-identity={agent().thread_id}
+                    title={[agent().name, subagentStatusLabel(status()), agent().description].filter(Boolean).join('\n')}>
+                    {identity}
+                  </span>
+                </Show>
+              }>
                 <button type="button" class="flower-subagent-capsule"
+                  data-flower-subagent-identity={agent().thread_id}
                   data-flower-subagent-capsule={agent().open_messages?.thread_id}
                   data-flower-subagent-status={status()}
                   aria-label={title()} title={[title(), agent().description].filter(Boolean).join('\n')}
                   aria-pressed={activeSubagentID() === agent().open_messages?.thread_id}
                   onClick={() => openSubagentMessages(agent())}>
-                  <SubagentAvatar threadID={agent().open_messages!.thread_id} class="flower-subagent-capsule-avatar" />
-                  <span class="flower-subagent-capsule-name">{presentSubagentTaskName(agent().name)}</span>
-                  <span class="flower-subagent-capsule-status" aria-hidden="true">{subagentStatusIndicator(status())}</span>
+                  {identity}
                 </button>
               </Show>
             </div>;
@@ -11457,6 +11469,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   }> = fieldProps => {
     const blocks = createMemo(() => {
       const item = fieldProps.item;
+      // Target and action are independent existing reads. Keep the target's
+      // reserved slot until its operation can pass the canonical validator.
+      if (item.renderer === 'subagent_operation' && !item.payload?.action) return [];
       const key = fieldProps.path.slice('/payload/'.length);
       const selected = mapFlowerActivityItem({ ...item, label: undefined, description: undefined, renderer: undefined, chips: undefined, target_refs: undefined, payload: undefined,
         presentation: { label: item.label, description: item.description, renderer: item.renderer, chips: item.chips, target_refs: item.target_refs,
@@ -11579,18 +11594,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const fieldGoal = createMemo(() => item().tool_name === 'goal'
       && Boolean(item().field_summary?.fields.some(field => field.path === '/payload/goal' && field.kind === 'object')));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0 || fieldCollections().length > 0 || otherFieldCollections().length > 0 || fieldGoal());
-    const renderFieldCollections = () => <For each={otherFieldCollections().map(field => field.path)}>{path => {
+    const subagentOperation = () => item().renderer === 'subagent' || item().renderer === 'subagent_operation';
+    // The field summary fixes placement before either request completes. Keep
+    // one reader mounted here as its target and parent membership arrive.
+    const inlineSubagentField = createMemo(() => subagentOperation()
+      ? otherFieldCollections().find(field => field.path === '/payload/targets' && field.count === 1) : undefined);
+    const renderFieldCollections = (inline = false) => <For each={otherFieldCollections()
+      .filter(field => (field.path === inlineSubagentField()?.path) === inline).map(field => field.path)}>{path => {
       const field = createMemo(() => otherFieldCollections().find(value => value.path === path)!);
       return <ActivityFieldRows reader={activityFields} threadID={timeline().thread_id ?? ''} itemID={messageID()}
-        item={fieldPresentation.item()} field={field()} section="results" copy={copy().chat} revision={item().field_summary?.version}
+        item={fieldPresentation.item()} field={field()} section="results" copy={copy().chat} revision={item().field_summary?.version} inline={inline}
         active={visible() && (open() || subagentOperation() || compactReports())} connection={liveSyncState().connectionEpoch}
         renderValue={value => <FieldCollectionValue value={value} path={path} item={fieldPresentation.item()} media={media()}
           subagentSummaries={timeline().thread_id === selectedThreadID() ? selectedSubagentSummaries() ?? [] : []} />} />;
     }}</For>;
 
-    const subagentOperation = () => item().renderer === 'subagent' || item().renderer === 'subagent_operation';
     const inlineSubagent = createMemo(() => presentation().detailBlocks.find((block) => (
-      block.kind === 'subagents' && block.subagents.items.length === 1 && Boolean(block.subagents.items[0]?.open_messages)
+      block.kind === 'subagents' && block.subagents.items.length === 1 && Boolean(block.subagents.items[0]?.thread_id)
     )));
     const compactReports = () => item().tool_name === 'subagent_events';
     const subagentReadHint = () => {
@@ -11699,6 +11719,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <Show when={inlineSubagent()}>{(block) => (
             <ActivityDetailBlock media={media()} block={block() as FlowerNonTerminalDetailBlock} />
           )}</Show>
+          {renderFieldCollections(true)}
           <Show when={!subagentOperation() && presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
           </Show>
@@ -11715,7 +11736,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (
       <div
         ref={activityNode}
-        class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
+        class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', (inlineSubagent() || inlineSubagentField()) && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
         title={subagentReadHint()}
         aria-description={subagentReadHint()}

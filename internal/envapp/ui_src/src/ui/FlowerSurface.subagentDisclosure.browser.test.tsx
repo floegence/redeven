@@ -1,9 +1,10 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { page, userEvent } from 'vitest/browser';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { commands, page, userEvent } from 'vitest/browser';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { FlowerActivityItem, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const parentID = 'capsule-parent';
@@ -51,9 +52,176 @@ function row(runtime: HTMLElement, id: string) {
   return runtime.querySelector<HTMLElement>('[data-flower-activity-item-id="' + id + '"]')!;
 }
 
-afterEach(() => document.documentElement.classList.remove('dark', 'light'));
+const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+afterEach(async () => {
+  document.documentElement.classList.remove('dark', 'light');
+  document.documentElement.style.fontSize = '';
+  await touch.emulateTouchInput(false);
+});
 
 describe('Subagent inline capsules', () => {
+  it.each([
+    { width: 1100, coarse: false, fontSize: 16, theme: 'light' },
+    { width: 320, coarse: false, fontSize: 16, theme: 'dark' },
+    { width: 540, coarse: true, fontSize: 20, theme: 'light' },
+  ])('keeps delayed creation fields on one stable title line without additional reads ($width, coarse=$coarse)', async ({ width, coarse, fontSize, theme }) => {
+    await page.viewport(width, 900);
+    document.documentElement.classList.add(theme);
+    document.documentElement.style.fontSize = fontSize + 'px';
+    await touch.emulateTouchInput(coarse);
+    const pending = deferred<(typeof targets)[number]>();
+    const action = deferred<{ action: string; requested_count: number }>();
+    const loadActivityValue = vi.fn(async (_thread: string, request: { item_id: string; path: string }) => ({
+      thread_id: parentID, item_id: request.item_id, turn_id: 'parent-turn', run_id: 'parent-run', path: request.path,
+      value: request.path === '/payload' ? await action.promise : await pending.promise,
+    }));
+    const { runtime, loadDetail } = mount([operation('delayed-spawn', 'spawn', 1, { payload: undefined,
+      field_summary: { version: 'spawn-v1', renderer: 'subagent_operation', fields: [
+        { path: '/payload/action', kind: 'string', bytes: 5 },
+        { path: '/payload/requested_count', kind: 'scalar', value: 1 },
+        { path: '/payload/targets', kind: 'array', count: 1 },
+      ] },
+    }), operation('following', 'spawn', 1)], 1, { loadActivityValue });
+    await waitFor(() => loadActivityValue.mock.calls.length === 2);
+    const activity = row(runtime, 'delayed-spawn');
+    const line = activity.querySelector<HTMLElement>('.flower-activity-inline-line')!;
+    const field = activity.querySelector<HTMLElement>('.flower-activity-field-rows')!;
+    const height = activity.getBoundingClientRect().height;
+    const followingTop = row(runtime, 'following').getBoundingClientRect().top;
+    expect(line.contains(field)).toBe(true);
+    expect(height).toBe(fontSize * (coarse ? 3 : 2));
+    const frames: { height: number; following: number }[] = [];
+    let sampling = true;
+    onTestFinished(() => { sampling = false; });
+    const sample = () => {
+      if (!sampling || !activity.isConnected) return;
+      frames.push({ height: activity.getBoundingClientRect().height, following: row(runtime, 'following').getBoundingClientRect().top });
+      if (sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    const longName = targets[7]!.task_name;
+    pending.resolve({ ...targets[0]!, task_name: longName });
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(activity.getBoundingClientRect().height).toBe(height);
+    action.resolve({ action: 'spawn', requested_count: 1 });
+    await waitFor(() => activity.textContent?.includes('Created subagent') === true && Boolean(activity.querySelector('[data-flower-subagent-capsule]')));
+    const capsule = activity.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!;
+    expect(line.contains(capsule)).toBe(true);
+    expect(activity.querySelector('.flower-activity-field-rows')).toBe(field);
+    expect(activity.getBoundingClientRect().height).toBe(height);
+    expect(row(runtime, 'following').getBoundingClientRect().top).toBe(followingTop);
+    expect(activity.querySelectorAll('.flower-subagent-capsule-name')).toHaveLength(1);
+    expect(capsule.querySelector('[data-flower-subagent-avatar]')).not.toBeNull();
+    expect(capsule.getAttribute('aria-label')).toContain(longName);
+    expect(activity.scrollWidth).toBeLessThanOrEqual(activity.clientWidth + 1);
+    expect(capsule.getBoundingClientRect().right).toBeLessThanOrEqual(line.getBoundingClientRect().right);
+    expect(getComputedStyle(capsule.querySelector('.flower-subagent-capsule-name')!).textOverflow).toBe('ellipsis');
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => { sampling = false; resolve(); })));
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames.every(frame => frame.height === height && Math.abs(frame.following - followingTop) <= 1)).toBe(true);
+    expect(loadActivityValue.mock.calls.map(call => call[1].path).sort()).toEqual(['/payload', '/payload/targets/0']);
+    expect(loadDetail).not.toHaveBeenCalled();
+    await page.screenshot({ path: '__screenshots__/subagent-capsules/field-inline-' + width + '.png' });
+    capsule.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => loadDetail.mock.calls.length === 1);
+    expect(loadActivityValue).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps consecutive deferred creations stable while reading and reopening their sequence', async () => {
+    await page.viewport(1100, 900);
+    const pending = targets.slice(0, 4).map(() => deferred<(typeof targets)[number]>());
+    const loadActivityValue = vi.fn(async (_thread: string, request: { item_id: string; path: string }) => ({
+      thread_id: parentID, item_id: request.item_id, turn_id: 'parent-turn', run_id: 'parent-run', path: request.path,
+      value: request.path === '/payload' ? { action: 'spawn', requested_count: 1 }
+        : await pending[Number(request.item_id.slice(-1))]!.promise,
+    }));
+    const messages = [
+      ...Array.from({ length: 16 }, (_, index) => operation('earlier-' + index, 'spawn', 1)),
+      ...pending.map((_, index) => operation('batch-' + index, 'spawn', 1, { payload: undefined,
+        field_summary: { version: 'batch-v1', renderer: 'subagent_operation', fields: [
+          { path: '/payload/action', kind: 'string', bytes: 5 },
+          { path: '/payload/requested_count', kind: 'scalar', value: 1 },
+          { path: '/payload/targets', kind: 'array', count: 1 },
+        ] },
+      })),
+    ];
+    const snapshot = thread({ thread_id: parentID, status: 'running', active_run_id: 'parent-run', messages,
+      subagents: targets.slice(0, 4).map(target => subagentSummary({ ...target, parent_thread_id: parentID })),
+      turns: [{ turn_id: 'parent-turn', run_id: 'parent-run', started_at: '2026-10-28T10:00:00Z',
+        elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }],
+    });
+    const current = { ...liveBootstrap(snapshot).current, items: messages.map((message, index) => {
+      const { renderer, payload, field_summary, ...activity } = message.blocks[0]!.items[0]!;
+      return { id: activity.item_id, kind: 'tool' as const, turn_id: 'parent-turn', run_id: 'parent-run', ordinal: index + 1,
+        activity: { ...activity, ...(field_summary ? {} : { presentation: { renderer, payload } }) },
+        ...(field_summary ? { activity_summary: field_summary } : {}),
+      };
+    }) };
+    const projected = applyFlowerRuntimeCurrentView(snapshot, current);
+    const loadDetail = vi.fn();
+    const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), loadActivityValue, loadSubagentDetail: loadDetail,
+      listThreads: vi.fn(async () => [projected]), loadThread: vi.fn(async () => ({ thread: projected, current })),
+    }, { focusThreadRequest: { request_id: 'focus-batch', thread_id: parentID } });
+    runtime.style.height = '850px';
+    await waitFor(() => loadActivityValue.mock.calls.filter(call => call[1].path === '/payload/targets/0').length === 2);
+    const body = runtime.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    body.dispatchEvent(new WheelEvent('wheel', { deltaY: -24 }));
+    body.scrollTop -= 24;
+    body.dispatchEvent(new Event('scroll'));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const scrollTop = body.scrollTop;
+    const geometry = pending.map((_, index) => {
+      const rect = row(runtime, 'batch-' + index).getBoundingClientRect();
+      return { top: rect.top, height: rect.height };
+    });
+    for (const index of [0, 1, 2, 3]) {
+      pending[index]!.resolve(targets[index]!);
+      await waitFor(() => Boolean(row(runtime, 'batch-' + index).querySelector('[data-flower-subagent-capsule]')));
+      expect(body.scrollTop).toBe(scrollTop);
+      for (let i = 0; i < pending.length; i++) {
+        const rect = row(runtime, 'batch-' + i).getBoundingClientRect();
+        expect(rect.height).toBe(geometry[i]!.height);
+        expect(Math.abs(rect.top - geometry[i]!.top)).toBeLessThanOrEqual(1);
+      }
+    }
+    const field = row(runtime, 'batch-3').querySelector('.flower-activity-field-rows');
+    const toggle = runtime.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+    toggle.click();
+    await waitFor(() => toggle.getAttribute('aria-expanded') === 'false');
+    toggle.click();
+    await waitFor(() => toggle.getAttribute('aria-expanded') === 'true');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(row(runtime, 'batch-3').querySelector('.flower-activity-field-rows')).toBe(field);
+    expect(loadActivityValue).toHaveBeenCalledTimes(8);
+    expect(loadDetail).not.toHaveBeenCalled();
+  });
+
+  it('keeps a target read failure in the reserved line without retrying or hiding it', async () => {
+    const pending = deferred<never>();
+    const loadActivityValue = vi.fn(async (_thread: string, request: { item_id: string; path: string }) => ({
+      thread_id: parentID, item_id: request.item_id, turn_id: 'parent-turn', run_id: 'parent-run', path: request.path,
+      value: request.path === '/payload' ? { action: 'spawn', requested_count: 1 } : await pending.promise,
+    }));
+    const { runtime, loadDetail } = mount([operation('failed-field', 'spawn', 1, { payload: undefined,
+      field_summary: { version: 'failure-v1', renderer: 'subagent_operation', fields: [
+        { path: '/payload/action', kind: 'string', bytes: 5 },
+        { path: '/payload/targets', kind: 'array', count: 1 },
+      ] },
+    })], 1, { loadActivityValue });
+    await waitFor(() => loadActivityValue.mock.calls.length === 2);
+    const activity = row(runtime, 'failed-field');
+    const height = activity.getBoundingClientRect().height;
+    pending.reject(new Error('Unavailable target'));
+    await waitFor(() => activity.querySelector('[role="status"]')?.textContent?.includes('Could not load') === true);
+    expect(activity.getBoundingClientRect().height).toBe(height);
+    expect(activity.querySelector('.flower-activity-inline-line')!.contains(activity.querySelector('[role="status"]'))).toBe(true);
+    expect(activity.querySelector('[data-flower-subagent-capsule]')).toBeNull();
+    expect(loadActivityValue).toHaveBeenCalledTimes(2);
+    expect(loadDetail).not.toHaveBeenCalled();
+  });
+
   it('preserves child navigation when operation targets arrive as visible fields', async () => {
     const loadActivityValue = vi.fn(async (_thread: string, request: { item_id: string; path: string }) => ({
       thread_id: parentID, item_id: request.item_id, turn_id: 'parent-turn', run_id: 'parent-run', path: request.path,
@@ -85,8 +253,16 @@ describe('Subagent inline capsules', () => {
         { path: '/payload/targets', kind: 'array', count: 1 },
       ] },
     })], 0, { loadActivityValue });
-    await waitFor(() => Boolean(row(runtime, 'foreign-field-child')?.textContent?.includes(targets[0]!.task_name)));
-    expect(row(runtime, 'foreign-field-child').querySelector('[data-flower-subagent-capsule]')).toBeNull();
+    await waitFor(() => Boolean(row(runtime, 'foreign-field-child')?.querySelector('[data-flower-subagent-identity]')));
+    const activity = row(runtime, 'foreign-field-child');
+    const identity = activity.querySelector<HTMLElement>('[data-flower-subagent-identity]')!;
+    expect(identity.title).toContain(targets[0]!.task_name);
+    expect(identity.querySelector('[data-flower-subagent-avatar]')).not.toBeNull();
+    expect(activity.querySelector('.flower-activity-inline-line')!.contains(identity)).toBe(true);
+    expect(activity.querySelector('[data-flower-subagent-capsule]')).toBeNull();
+    expect(identity.tagName).toBe('SPAN');
+    expect(identity.hasAttribute('tabindex')).toBe(false);
+    expect(loadActivityValue).toHaveBeenCalledTimes(2);
     expect(loadDetail).not.toHaveBeenCalled();
   });
 
@@ -105,7 +281,8 @@ describe('Subagent inline capsules', () => {
     const loadDetail = vi.fn();
     const { runtime } = mount([operation('inherited', 'spawn', 1)], 0, { loadSubagentDetail: loadDetail });
     await waitFor(() => Boolean(row(runtime, 'inherited')));
-    expect(row(runtime, 'inherited').textContent).toContain(targets[0]!.task_name);
+    expect(row(runtime, 'inherited').querySelector('[data-flower-subagent-identity]')?.getAttribute('title')).toContain(targets[0]!.task_name);
+    expect(row(runtime, 'inherited').querySelector('[data-flower-subagent-avatar]')).not.toBeNull();
     expect(row(runtime, 'inherited').querySelector('[data-flower-subagent-capsule]')).toBeNull();
     expect(document.querySelector('[data-flower-subagent-detail="open"]')).toBeNull();
     expect(loadDetail).not.toHaveBeenCalled();

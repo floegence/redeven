@@ -29286,7 +29286,7 @@
       "frontmatter": {
         "description": "Parent header membership, canonical thread routing, and child execution detail and canonical input controls.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-28",
         "tags": [
           "ai",
           "flower",
@@ -29297,15 +29297,15 @@
         "title": "Flower subagent detail presentation",
         "type": "UI Contract"
       },
-      "body_length": 1318,
+      "body_length": 2268,
       "summary": "Floret parent-scoped ThreadRuntime.List owns membership; complete child ThreadView alone owns details. Open a stable immediate live window without polling/layout-changing sync UI. Routes use thread_id and explicit task_name, never inferred aliases. Malformed identity/contracts or parent-child mismatch fail rather than accepting legacy substitutes.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The parent header replaces the numeric robot badge with at most three circular canonical portraits and a separate `+N` remainder.\n\n[Subagent detail window](flower-subagent-detail-window.md) owns complete current-view reads, live replacement, Activity rendering, child navigation, and queued-input controls.",
-          "char_count": 306
+          "body": "The parent header replaces the numeric robot badge with at most three circular canonical portraits and a separate `+N` remainder.\n\nSingle-target operations place the compact portrait/name capsule beside the action title. A deferred target field reserves the same line from its summary, before action or identity reads finish. Loading and read failures stay in that slot; long names truncate without wrapping. Touch targets and enlarged fonts retain stable row geometry. Creation failures retain their error details.\n\nThe existing field reader remains the sole read owner. Header rendering adds no request, polling, measurement loop, or child-detail prefetch. Portraits use bundled SVG selected by canonical `thread_id`. An identity without authorized parent membership remains informational; only the existing parent inventory enables child navigation.\n\n[Subagent detail window](flower-subagent-detail-window.md) owns complete current-view reads, live replacement, Activity rendering, child navigation, and queued-input controls.",
+          "char_count": 1029
         },
         {
           "id": "boundaries",
@@ -29316,6 +29316,11 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx:0:verifies delayed-field row geometry, narrow/touch layouts, request counts, informational identities, and explicit child navigation.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx",
+          "description": "Verifies delayed-field row geometry, narrow/touch layouts, request counts, informational identities, and explicit child navigation."
+        },
         {
           "id": "redeven:internal/flower_ui/src/SubagentAvatarStack.tsx:0:owns bounded portrait rotation and local motion cleanup.",
           "source": "redeven:internal/flower_ui/src/SubagentAvatarStack.tsx",
@@ -32410,5 +32415,5 @@
       ]
     }
   ],
-  "source_sha256": "da26acbed17f65909de3074941f2b12907cd0544f130de6a5164b6d2053b2cb7"
+  "source_sha256": "8035e37a1e6f96b6bb001efcfb01036dcece738345922625dcafc0fe08229fc5"
 }
