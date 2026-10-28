@@ -166,8 +166,8 @@ github.com/floegence/floe-native-apps v0.25.1 h1:QIoP1RBGPSrUsHaRdL+q+GXaWddSiRH
 github.com/floegence/floe-native-apps v0.25.1/go.mod h1:uj1f8bbY9m4MgrK7OJ3JGt722oYRWYOpaEWqmtJnF4c=
 github.com/floegence/floeterm/terminal-go v0.19.2 h1:BCqhXYaxEMcjpXl4jNY6aldyqj0DHqqUtwS9X6KaJkI=
 github.com/floegence/floeterm/terminal-go v0.19.2/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
-github.com/floegence/floret/v7 v7.88.0 h1:/NyqoTwQXxjQknsq8+4yUK3toBYk8KNi/8LhY1ckWfY=
-github.com/floegence/floret/v7 v7.88.0/go.mod h1:eEJ+ozGisEqpEigTFMY0v62c/r0iRRr0NePX9MaIhXo=
+github.com/floegence/floret/v7 v7.89.1 h1:UcVA7+ZQm5nK/7NrZP0AIRvx/hZ89aL2ggJVLi9u3pg=
+github.com/floegence/floret/v7 v7.89.1/go.mod h1:BGS8jsrPjqyn0WwMkKo84soksxKqFAM4p4R9UdRoTM0=
 github.com/floegence/flowersec/flowersec-go/v5 v5.11.1 h1:eMqkpqpVCGQ+rbcNKe9SI+aEimAQLZTmzkwOXxiCpRw=
 github.com/floegence/flowersec/flowersec-go/v5 v5.11.1/go.mod h1:3wcvWklYumBaa/mlY/9TDMKlyJvi8ZziIy/NbEEmdsc=
 github.com/floegence/redeven-service-templates v0.7.0 h1:8sSbDNi7S8rodecHHoek+nDxZKJlwsyf2+xdSRL+V3M=
@@ -723,8 +723,8 @@ golang.org/x/net v0.0.0-20220225172249-27dd8689420f/go.mod h1:CfG3xpIq0wQ8r1q4Su
 golang.org/x/net v0.0.0-20220607020251-c690dde0001d/go.mod h1:XRhObCWvk6IyKnWLug+ECip1KBveYUHfp+8e9klMJ9c=
 golang.org/x/net v0.0.0-20220722155237-a158d28d115b/go.mod h1:XRhObCWvk6IyKnWLug+ECip1KBveYUHfp+8e9klMJ9c=
 golang.org/x/net v0.7.0/go.mod h1:2Tu9+aMcznHK/AK1HMvgo6xiTLG5rD5rZLDS+rp2Bjs=
-golang.org/x/net v0.61.0 h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
-golang.org/x/net v0.61.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
+golang.org/x/net v0.62.0 h1:18ELalfM5+XNRwzM2nYqXsZQ9ByS1uhj2O/U7+5jqRY=
+golang.org/x/net v0.62.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
 golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=
 golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
 golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=

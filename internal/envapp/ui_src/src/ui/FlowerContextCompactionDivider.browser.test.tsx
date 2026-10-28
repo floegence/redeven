@@ -89,7 +89,7 @@ it('uses the local floating layer inside a transformed Workbench and stays dismi
   const surface = host.querySelector<HTMLElement>('[data-testid="surface-host"]')!;
   expect(tooltip.closest('[data-floe-surface-portal-layer="true"]')).toBe(trigger.closest('[data-floe-surface-portal-layer="true"]'));
   expect(getComputedStyle(tooltip.closest('[data-floe-surface-floating-layer]')!).position).toBe('absolute');
-  expect(tooltip.textContent).toBe('≈ 159.1k → 17.5k tokens');
+  expect(tooltip.textContent).toBe('Message text estimate: ≈ 159.1k → 17.5k tokens');
   expect(tooltip.scrollHeight).toBeLessThanOrEqual(tooltip.clientHeight);
   expect(tooltip.style.position).toBe('');
   expect(tooltip.style.left).toBe('');
@@ -209,11 +209,11 @@ it('updates a concise open detail through running, cancelled, failed and success
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('.flower-compaction-divider-pill')!;
   trigger.focus();
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Preparing summary · 128.4k tokens');
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Preparing summary · Message text estimate: ≈ 128.4k tokens');
   for (const [status, detail] of [
     ['cancelled', 'Compression stopped.'],
     ['failed', 'No summary was generated.'],
-    ['compacted', '≈ 128.4k → 24.6k tokens'],
+    ['compacted', 'Message text estimate: ≈ 128.4k → 24.6k tokens'],
   ] as const) {
     setCompaction(value => ({ ...value, status, phase: 'complete', tokens_after_estimate: 24600 }));
     const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
@@ -221,4 +221,31 @@ it('updates a concise open detail through running, cancelled, failed and success
     await expect.poll(() => tooltip.getBoundingClientRect().bottom).toBeLessThanOrEqual(trigger.getBoundingClientRect().top - 4);
     expect(tooltip.getBoundingClientRect().height).toBeLessThan(52);
   }
+});
+
+it.each(['en-US', 'zh-CN', 'de-DE'] as const)('explains byte capacity without clipping on a narrow screen in %s', async locale => {
+  await page.viewport(360, 640);
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;inset:0;padding:260px 16px 16px';
+  document.body.append(host);
+  dispose = render(() => <FlowerContextCompactionDivider copy={copy} decoration={{
+    decoration_id: 'context-compaction:bytes', kind: 'context_compaction', ordinal: 0,
+    anchor: { target_kind: 'message', message_id: 'message-1', edge: 'after' },
+    compaction: { operation_id: 'bytes', turn_id: 'turn', canonical_ordinal: 1, phase: 'start', status: 'compacting', tokens_before: 169238, updated_at_ms: 1,
+      decision: { pressure: { pressure_signal: 'request_bytes' }, capacity: { kind: 'request_bytes', stage: 'prepare', source: 'host_policy', actual_bytes: 34716156, limit_bytes: 33554432 } },
+    },
+  }} />, host);
+  const trigger = host.querySelector<HTMLElement>('.flower-compaction-divider-pill')!;
+  trigger.focus();
+  const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+  await expect.poll(() => tooltip.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+  expect(tooltip.textContent).toContain(copy.chat.compactionDivider.requestBytes('33.11', '32.00'));
+  expect(tooltip.scrollHeight).toBeLessThanOrEqual(tooltip.clientHeight);
+  expect(tooltip.scrollWidth).toBeLessThanOrEqual(tooltip.clientWidth);
+  expect(tooltip.getBoundingClientRect().right).toBeLessThanOrEqual(360);
+  expect(tooltip.getBoundingClientRect().bottom).toBeLessThanOrEqual(640);
+  await userEvent.keyboard('{Escape}');
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
 });

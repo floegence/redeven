@@ -15,6 +15,7 @@ import (
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
 	openAIConnections    *openAIResponsesPool
+	deepSeekImageFiles   *deepSeekImageFileOwners
 	webProvider          func(string) (config.AIProvider, bool)
 	queryThreads         func(context.Context, *session.Meta, string, map[string]any) (any, error)
 	tessiven             *tessiven.Service
@@ -82,7 +83,8 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 		return runHostCapabilities{}, err
 	}
 	return runHostCapabilities{
-		openAIConnections: s.openAIConnectionPool(),
+		openAIConnections:  s.openAIConnectionPool(),
+		deepSeekImageFiles: s.deepSeekFiles(),
 		webProvider: func(id string) (config.AIProvider, bool) {
 			s.mu.Lock()
 			defer s.mu.Unlock()

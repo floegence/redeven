@@ -521,3 +521,23 @@ it('validates current Goal states without truncating user text', () => {
     { version: 2, status: 'absent', actor: 'user', text: 'Retained text' },
   ]) expect(() => mapFlowerGoal(goal)).toThrow('invalid Goal state');
 });
+
+describe('request byte capacity contract', () => {
+  const pressure = { pressure_signal: 'request_bytes', pressure_source: 'request_capacity' };
+  const base = { operation_id: 'capacity', turn_id: 'turn', canonical_ordinal: 1, phase: 'start', status: 'compacting', updated_at_ms: 1 };
+  it('preserves cause-only evidence through live and reloaded mappings', () => {
+    const capacity = { kind: 'request_bytes', stage: 'prepare', source: 'host_policy', actual_bytes: 34716156, limit_bytes: 33554432 };
+    const wire = [{ ...base, decision: { pressure, capacity } }];
+    expect(mapFlowerContextCompactions(wire)?.[0].decision?.capacity).toEqual(capacity);
+    expect(mapFlowerContextCompactions(JSON.parse(JSON.stringify(wire)))).toEqual(mapFlowerContextCompactions(wire));
+    const server = { kind: 'request_bytes', stage: 'response', source: 'provider' };
+    expect(mapFlowerContextCompactions([{ ...base, decision: { pressure, capacity: server } }])?.[0].decision?.capacity).toEqual(server);
+  });
+  it.each([
+    { kind: 'request_bytes', stage: 'prepare', source: 'host_policy', actual_bytes: 1, limit_bytes: 2 },
+    { kind: 'request_bytes', stage: 'response', source: 'provider', actual_bytes: 42 },
+    { kind: 'request_bytes', stage: 'prepare', source: 'provider' },
+  ])('rejects ambiguous or fabricated evidence %j', capacity => {
+    expect(() => mapFlowerContextCompactions([{ ...base, decision: { pressure, capacity } }])).toThrow('capacity evidence');
+  });
+});

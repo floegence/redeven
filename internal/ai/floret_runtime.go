@@ -63,6 +63,11 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	configureChatGPTAdapter(adapter, providerCfg, r.chatGPT)
 	configureResponsesContinuation(adapter, providerCfg)
 	configureOpenAIConnections(adapter, providerCfg.ID, providerCfg.BaseURL, string(providerCfg.EffectiveAuthMethod())+":"+providerCfg.AccountID, r.host.openAIConnections)
+	if r.host.deepSeekImageFiles != nil {
+		if err := r.host.deepSeekImageFiles.configure(adapter, providerCfg.ID); err != nil {
+			return nil, err
+		}
+	}
 
 	webSearchCapability := config.ResolveAIWebSearch(providerCfg, modelName, true)
 	if webSearchCapability.Mode == config.AIWebSearchBrave {

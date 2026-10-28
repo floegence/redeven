@@ -61,3 +61,5 @@ Condense repeated summaries, source inventories and historical prose; retain own
 ## 2026-10-28 — Conversation file lifecycle repairs
 
 Unify failed Fork publication/restart recovery around product ownership and the existing file gates; let deleted-thread cleanup progress independently. Use one bounded canonical attachment discovery and verify consumer snapshots without duplicate whole-history reads or prehashing work copies. Add deterministic failure, restart, pagination, integrity and full tool-path performance coverage.
+
+- 2026-10-28: Qualify published Floret temporary image transport, independent byte-capacity presentation, and Runtime/Desktop ownership.

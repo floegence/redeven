@@ -5,7 +5,7 @@ description: Keep provider-visible model history, tool surface refresh, and rend
 tags: [ai, models, providers, history]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -39,3 +39,20 @@ Redeven maps product model and permission state into Floret's typed surface. It 
 - `redeven:internal/ai/floret_runtime.go` - Hosted Agents receive the current prompt, tools, model, reasoning, and context policy.
 
 - `redeven:internal/ai/floret_bootstrap.go` - Restart uses canonical Turn input and provider-safe state.
+
+## Temporary DeepSeek image transport
+
+Published Floret v7.89.1 owns Files API upload, media validation, expiring reuse,
+visual token accounting and frozen replay. Redeven enables this only for the
+explicit official HTTPS API root (including /v1), with one-hour expiry and the
+48 MiB official request limit. Custom endpoints retain the existing inline
+transport and 32 MiB host policy. Runtime Service and Desktop executor each keep
+bounded provider-identity owners; credential or endpoint changes select a new
+owner. Original attachments remain canonical and authorized on every new
+preparation. Neither host persists temporary file IDs or migrates Floret data.
+Explicit missing/expired reference errors allow one upstream re-preparation;
+quota, upload and invalid media failures cannot trigger summary loops.
+
+Evidence: `redeven:internal/ai/model_gateway_deepseek_files_test.go` covers
+23 image occurrences, visual accounting, cross-preparation reuse, credential
+isolation, custom endpoints and typed Desktop error round trips.

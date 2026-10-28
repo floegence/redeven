@@ -169,7 +169,16 @@ type FlowerCompactionRequestSnapshot struct {
 	CalibrationRequestID string                      `json:"calibration_request_id,omitempty"`
 }
 
+type FlowerCompactionCapacity struct {
+	Kind        string `json:"kind"`
+	Stage       string `json:"stage"`
+	Source      string `json:"source"`
+	ActualBytes int64  `json:"actual_bytes,omitempty"`
+	LimitBytes  int64  `json:"limit_bytes,omitempty"`
+}
+
 type FlowerCompactionDecision struct {
+	Capacity *FlowerCompactionCapacity        `json:"capacity,omitempty"`
 	Pressure flconfig.ContextPressure         `json:"pressure"`
 	Before   *FlowerCompactionRequestSnapshot `json:"before,omitempty"`
 	After    *FlowerCompactionRequestSnapshot `json:"after,omitempty"`

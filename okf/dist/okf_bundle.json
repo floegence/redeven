@@ -10412,7 +10412,7 @@
       "frontmatter": {
         "description": "Canonical compaction evidence, context usage, and timeline presentation.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-24",
+        "reviewed_at": "2026-10-28",
         "tags": [
           "ai",
           "compaction",
@@ -10423,15 +10423,15 @@
         "title": "Model context usage and compaction",
         "type": "AI Runtime Contract"
       },
-      "body_length": 1907,
+      "body_length": 2487,
       "summary": "Published Floret owns context, compaction and usage; Redeven displays typed snapshots. [Compaction lifecycle](flower-context-compaction.md) owns intent through recovery; [qualification](../operations/flower-compaction-qualification.md) covers deterministic, historical-copy and real-provider checks.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Evidence and projection\nLifecycle evidence may retain frozen trigger candidates, pressure and validated replacement. Floret installs complete actor-owned context before publishing its version. Changed context bypasses text cadence; equal snapshots coalesce text in bounded queues. Redeven neither accumulates usage nor reconstructs lifecycle facts, invents budgets or infers capacity from weights.\n\n## Timeline\nOne row between short separators uses a compact surface-owned tooltip without expansion or reflow. Success shows only canonical message counts as ≈ {before} → {after} tokens, never provider-request estimates. Localize missing-count, running and cancelled explanations. Wrap original errors without clipping; localize the fallback only when absent.\n\nThe tooltip follows the active surface and global theme outside chat. Prefer above, or below near the top boundary. Delay pointer-exit dismissal for hovering/selection. Escape, Tab, blur and outside clicks dismiss it; the visibility owner closes it on process collapse. Retain keyboard/touch access and independent retry.",
-          "char_count": 1084
+          "body": "## Evidence and projection\nLifecycle evidence may retain frozen trigger candidates, pressure and validated replacement. Floret installs complete actor-owned context before publishing its version. Changed context bypasses text cadence; equal snapshots coalesce text in bounded queues. Redeven neither accumulates usage nor reconstructs lifecycle facts, invents budgets or infers capacity from weights.\n\n## Independent capacity evidence\nPublished Floret v7.89.1 supplies optional typed request-byte evidence alongside\ncompaction decisions. Host preparation failures include exact actual/limit byte\ncounts; server HTTP 413 carries no guessed counts. Both can occur while the last\nmeasured token ratio is low. The indicator retains that confirmed ratio, while\nthe divider explains the independent capacity cause and message-text estimate.\nCause-only events, reloads and Desktop RPC retain this distinction. Historical\nrecords without this evidence remain unknown; no error-text inference is used.\n\n## Timeline\nOne row between short separators uses a compact surface-owned tooltip without expansion or reflow. Success labels canonical message text estimates explicitly, never as full provider-request input. Localize missing-count, running and cancelled explanations. Wrap original errors without clipping; localize the fallback only when absent.\n\nThe tooltip follows the active surface and global theme outside chat. Prefer above, or below near the top boundary. Delay pointer-exit dismissal for hovering/selection. Escape, Tab, blur and outside clicks dismiss it; the visibility owner closes it on process collapse. Retain keyboard/touch access and independent retry.",
+          "char_count": 1664
         },
         {
           "id": "boundaries",
@@ -10606,7 +10606,7 @@
       "frontmatter": {
         "description": "Keep provider-visible model history, tool surface refresh, and render lineage under Floret ownership.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-28",
         "tags": [
           "ai",
           "history",
@@ -10617,7 +10617,7 @@
         "title": "Model provider surface and history",
         "type": "AI Runtime Contract"
       },
-      "body_length": 2600,
+      "body_length": 3631,
       "summary": "Floret owns the provider-visible history and render lineage for each Turn. Redeven supplies the current model surface, prompt, permission snapshot, and ephemeral overlays at the declared boundaries. Historical tool facts remain readable without reintroducing removed tools or rewriting canonical history; provider-surface changes create a new compatible lineage and never become a second continuation store.",
       "sections": [
         {
@@ -32429,5 +32429,5 @@
       ]
     }
   ],
-  "source_sha256": "a6abce8c04c81c44ea9593603383d9aadedbb3c3e330e919a85d183bdbe9199d"
+  "source_sha256": "1e21b3b3826fc91e73b7bb0a75e1f715e93d90bca815de1a984567c218930dba"
 }

@@ -507,7 +507,16 @@ export type FlowerCompactionRequestSnapshot = Readonly<{
   calibration_request_id?: string;
 }>;
 
+export type FlowerCompactionCapacity = Readonly<{
+  kind: 'request_bytes';
+  stage: 'prepare' | 'response';
+  source: 'host_policy' | 'provider';
+  actual_bytes?: number;
+  limit_bytes?: number;
+}>;
+
 export type FlowerCompactionDecision = Readonly<{
+  capacity?: FlowerCompactionCapacity;
   pressure: FlowerCompactionPressure;
   before?: FlowerCompactionRequestSnapshot;
   after?: FlowerCompactionRequestSnapshot;

@@ -158,7 +158,7 @@ describe('flower context presentation', () => {
       tokens_before: 60_000,
       tokens_after_estimate: 488,
       error: 'ignored',
-    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('≈ 60k → 488 tokens');
+    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Message text estimate: ≈ 60k → 488 tokens');
     expect(compactionDividerDetail(compaction({
       tokens_before: undefined,
       tokens_after_estimate: undefined,
@@ -218,17 +218,36 @@ describe('request source attribution', () => {
 it('keeps canonical decision diagnostics out of the concise message estimate', () => {
   const candidate = { payload_fingerprint: 'frozen', provider: 'test', model: 'model', estimated_input_tokens: 470382, source: 'fixture_v5', estimate_method: 'provider_rendered_payload_estimate', estimate_confidence: 'conservative', pressure: {} };
   const decision = { pressure: { projected_input_tokens: 480000, threshold_tokens: 472500, request_safe_limit_tokens: 500000, pressure_signal: 'projected_request', pressure_source: 'usage_anchored_delta' }, before: candidate, after: { ...candidate, estimated_input_tokens: 37594 } };
-  expect(compactionDividerDetail(compaction({ tokens_before: 159143, tokens_after_estimate: 17462, decision }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('≈ 159.1k → 17.5k tokens');
+  expect(compactionDividerDetail(compaction({ tokens_before: 159143, tokens_after_estimate: 17462, decision }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Message text estimate: ≈ 159.1k → 17.5k tokens');
   expect(compactionDividerDetail(compaction({ decision }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Token counts unavailable.');
 });
 
 it('keeps every lifecycle detail short without claiming unsuccessful token savings', () => {
   const copy = DEFAULT_FLOWER_SURFACE_COPY;
-  expect(compactionDividerDetail(compaction({ status: 'compacting', tokens_before: 128400 }), copy)).toBe('Preparing summary · 128.4k tokens');
+  expect(compactionDividerDetail(compaction({ status: 'compacting', tokens_before: 128400 }), copy)).toBe('Preparing summary · Message text estimate: ≈ 128.4k tokens');
   expect(compactionDividerDetail(compaction({ status: 'compacting' }), copy)).toBe('Preparing summary');
   expect(compactionDividerDetail(compaction({ status: 'cancelled', tokens_before: 128400, tokens_after_estimate: 24600 }), copy)).toBe('Compression stopped.');
   expect(compactionDividerDetail(compaction({ status: 'failed' }), copy)).toBe('No summary was generated.');
-  expect(compactionDividerDetail(compaction({ tokens_before: 128400, tokens_after_estimate: 24600 }), copy)).toBe('≈ 128.4k → 24.6k tokens');
+  expect(compactionDividerDetail(compaction({ tokens_before: 128400, tokens_after_estimate: 24600 }), copy)).toBe('Message text estimate: ≈ 128.4k → 24.6k tokens');
   const error = 'tool history message 2 has unmatched result "call_00_Qt94NlrrbYFkmB4OBGuS4234"';
   expect(compactionDividerDetail(compaction({ status: 'failed', error }), copy)).toBe(error);
+});
+
+describe('independent request byte capacity', () => {
+  it('explains byte compaction while keeping last measured token usage at thirty percent', () => {
+    const view = buildFlowerComposerContextIndicatorView(usage({ input_tokens: 283747, context_window_tokens: 950000, used_ratio: 283747 / 950000 }), DEFAULT_FLOWER_SURFACE_COPY);
+    expect(view.ratioValue).toBe('30%');
+    const detail = compactionDividerDetail(compaction({ status: 'compacting', tokens_before: 169238, decision: {
+      pressure: {}, capacity: { kind: 'request_bytes', stage: 'prepare', source: 'host_policy', actual_bytes: 34716156, limit_bytes: 33554432 },
+    } }), DEFAULT_FLOWER_SURFACE_COPY);
+    expect(detail).toContain('33.11 MiB');
+    expect(detail).toContain('32.00 MiB');
+    expect(detail).toContain('Message text estimate');
+    expect(detail).not.toContain('100%');
+  });
+  it('does not fabricate server byte counts and labels historical message estimates', () => {
+    const detail = compactionDividerDetail(compaction({ decision: { pressure: {}, capacity: { kind: 'request_bytes', stage: 'response', source: 'provider' } } }), DEFAULT_FLOWER_SURFACE_COPY);
+    expect(detail).toContain('HTTP 413'); expect(detail).not.toContain('MiB');
+    expect(compactionDividerDetail(compaction({ tokens_before: 100, tokens_after_estimate: 50 }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Message text estimate: ≈ 100 → 50 tokens');
+  });
 });

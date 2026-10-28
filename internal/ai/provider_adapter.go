@@ -64,6 +64,9 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 	configureChatGPTAdapter(adapter, resolved.Provider, s.chatGPT)
 	configureResponsesContinuation(adapter, resolved.Provider)
 	configureOpenAIConnections(adapter, resolved.Provider.ID, resolved.Provider.BaseURL, string(resolved.Provider.EffectiveAuthMethod())+":"+resolved.Provider.AccountID, s.openAIConnectionPool())
+	if err := s.deepSeekFiles().configure(adapter, resolved.Provider.ID); err != nil {
+		return resolvedProviderAdapter{}, err
+	}
 	return resolvedProviderAdapter{Adapter: adapter, ProviderType: providerType, ModelName: modelName}, nil
 }
 

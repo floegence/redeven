@@ -461,8 +461,20 @@ function mapCompactionDecision(raw: unknown): FlowerCompactionDecision | undefin
   if (!record) throw new Error('Flower contract error: compaction decision must be an object.');
   const before = mapCompactionRequestSnapshot(record.before);
   const after = mapCompactionRequestSnapshot(record.after);
-  if (!before && !after) throw new Error('Flower contract error: compaction decision requires a candidate.');
-  return { pressure: mapCompactionPressure(record.pressure), ...(before ? { before } : {}), ...(after ? { after } : {}) };
+  let capacity: FlowerCompactionDecision['capacity'];
+  if (record.capacity !== undefined) {
+    const value = plainRecordValue(record.capacity);
+    if (!value || value.kind !== 'request_bytes') throw new Error('Flower contract error: invalid capacity evidence.');
+    const actual = value.actual_bytes === undefined ? 0 : nonNegativeInteger(value.actual_bytes, 'capacity.actual_bytes');
+    const limit = value.limit_bytes === undefined ? 0 : nonNegativeInteger(value.limit_bytes, 'capacity.limit_bytes');
+    if (value.stage === 'prepare' && value.source === 'host_policy' && limit > 0 && actual > limit) {
+      capacity = { kind: 'request_bytes', stage: 'prepare', source: 'host_policy', actual_bytes: actual, limit_bytes: limit };
+    } else if (value.stage === 'response' && value.source === 'provider' && actual === 0 && limit === 0) {
+      capacity = { kind: 'request_bytes', stage: 'response', source: 'provider' };
+    } else throw new Error('Flower contract error: invalid capacity evidence.');
+  }
+  if (!before && !after && !capacity) throw new Error('Flower contract error: compaction decision requires a candidate or capacity evidence.');
+  return { ...(capacity ? { capacity } : {}), pressure: mapCompactionPressure(record.pressure), ...(before ? { before } : {}), ...(after ? { after } : {}) };
 }
 
 function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {

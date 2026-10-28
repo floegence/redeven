@@ -462,6 +462,52 @@ export const redevenWireSchemas = {
                 "decision": {
                   "kind": "object",
                   "properties": {
+                    "capacity": {
+                      "kind": "object",
+                      "properties": {
+                        "kind": {
+                          "kind": "literal",
+                          "value": "request_bytes"
+                        },
+                        "stage": {
+                          "kind": "union",
+                          "options": [
+                            {
+                              "kind": "literal",
+                              "value": "prepare"
+                            },
+                            {
+                              "kind": "literal",
+                              "value": "response"
+                            }
+                          ]
+                        },
+                        "source": {
+                          "kind": "union",
+                          "options": [
+                            {
+                              "kind": "literal",
+                              "value": "host_policy"
+                            },
+                            {
+                              "kind": "literal",
+                              "value": "provider"
+                            }
+                          ]
+                        },
+                        "actual_bytes": {
+                          "kind": "number"
+                        },
+                        "limit_bytes": {
+                          "kind": "number"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "source",
+                        "stage"
+                      ]
+                    },
                     "pressure": {
                       "kind": "object",
                       "properties": {

@@ -164,9 +164,28 @@ type DesktopModelSourceRPCFrame struct {
 }
 
 type DesktopModelSourceRPCError struct {
-	Code        string                  `json:"code,omitempty"`
-	Message     string                  `json:"message,omitempty"`
-	RetryAdvice *flprovider.RetryAdvice `json:"retry_advice,omitempty"`
+	Capacity    *FlowerCompactionCapacity `json:"capacity,omitempty"`
+	Reprepare   bool                      `json:"reprepare,omitempty"`
+	Code        string                    `json:"code,omitempty"`
+	Message     string                    `json:"message,omitempty"`
+	RetryAdvice *flprovider.RetryAdvice   `json:"retry_advice,omitempty"`
+}
+
+// Reconstruct only typed provider facts; prose is never recovery authority.
+func (e *DesktopModelSourceRPCError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	if c := e.Capacity; c != nil {
+		if c.Source == "host_policy" {
+			return &flprovider.RequestByteLimitError{ActualBytes: c.ActualBytes, LimitBytes: c.LimitBytes}
+		}
+		return errors.Join(&flprovider.ProviderHTTPError{StatusCode: 413}, flprovider.ErrContextOverflow)
+	}
+	if e.Reprepare {
+		return &flprovider.RequestPreparationError{Cause: errors.New("temporary image reference unavailable")}
+	}
+	return nil
 }
 
 func (e *DesktopModelSourceRPCError) ProviderRetryAdvice() flprovider.RetryAdvice {
@@ -178,6 +197,16 @@ func (e *DesktopModelSourceRPCError) ProviderRetryAdvice() flprovider.RetryAdvic
 func validateDesktopModelSourceRPCError(e *DesktopModelSourceRPCError, model bool) error {
 	if e == nil || strings.TrimSpace(e.Code) == "" || strings.TrimSpace(e.Message) == "" || (model && e.RetryAdvice == nil) {
 		return fmt.Errorf("%w: missing error facts", errDesktopModelSourceProtocol)
+	}
+	if e.Capacity != nil {
+		c := e.Capacity
+		valid := c.Kind == "request_bytes" && ((c.Source == "host_policy" && c.Stage == "prepare" && c.LimitBytes > 0 && c.ActualBytes > c.LimitBytes) || (c.Source == "provider" && c.Stage == "response" && c.LimitBytes == 0 && c.ActualBytes == 0))
+		if !model || !valid || e.Reprepare {
+			return fmt.Errorf("%w: invalid capacity evidence", errDesktopModelSourceProtocol)
+		}
+	}
+	if e.Reprepare && !model {
+		return fmt.Errorf("%w: unexpected preparation evidence", errDesktopModelSourceProtocol)
 	}
 	if model {
 		if _, ok := parseProviderFailure(e.Message); !ok {
@@ -1184,12 +1213,13 @@ func desktopModelSourceConnectionErrorRetryable(err error) bool {
 }
 
 type desktopModelSourceExecutor struct {
-	poolMu        sync.Mutex
-	responsesPool *openAIResponsesPool
-	log           *slog.Logger
-	configPath    string
-	secretsPath   string
-	session       DesktopModelSourceSession
+	poolMu             sync.Mutex
+	responsesPool      *openAIResponsesPool
+	deepSeekImageFiles *deepSeekImageFileOwners
+	log                *slog.Logger
+	configPath         string
+	secretsPath        string
+	session            DesktopModelSourceSession
 }
 
 func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Conn) error {
@@ -1312,6 +1342,17 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 	sendErr := func(code string, err error) {
 		failure := &DesktopModelSourceRPCError{Code: code, Message: "Desktop model source request failed."}
 		if frame.Method == "ai.turn.stream" {
+			var bytes *flprovider.RequestByteLimitError
+			var httpError *flprovider.ProviderHTTPError
+			var reprepare *flprovider.RequestPreparationError
+			switch {
+			case errors.As(err, &bytes):
+				failure.Capacity = &FlowerCompactionCapacity{Kind: "request_bytes", Stage: "prepare", Source: "host_policy", ActualBytes: bytes.ActualBytes, LimitBytes: bytes.LimitBytes}
+			case errors.As(err, &httpError) && httpError.StatusCode == 413 && errors.Is(err, flprovider.ErrContextOverflow):
+				failure.Capacity = &FlowerCompactionCapacity{Kind: "request_bytes", Stage: "response", Source: "provider"}
+			case errors.As(err, &reprepare):
+				failure.Reprepare = true
+			}
 			err = providerTransportFailure(err, "unknown")
 			if _, ok := parseProviderFailure(err.Error()); ok {
 				failure.Message = err.Error()
@@ -1439,6 +1480,9 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	configureChatGPTAdapter(adapter, entry.ProviderCfg, chatgpt.New(secretStore))
 	configureResponsesContinuation(adapter, entry.ProviderCfg)
 	configureOpenAIConnections(adapter, entry.ProviderCfg.ID, entry.ProviderCfg.BaseURL, string(entry.ProviderCfg.EffectiveAuthMethod())+":"+entry.ProviderCfg.AccountID, e.openAIConnectionPool())
+	if err := e.deepSeekFiles().configure(adapter, entry.ProviderCfg.ID); err != nil {
+		return ModelGatewayResult{}, err
+	}
 	req := body.Request
 	req.Model = strings.TrimSpace(entry.WireModelName)
 	result, err = adapter.StreamTurn(ctx, req, func(ev StreamEvent) {

@@ -367,7 +367,11 @@ func flowerCompactionDecision(decision *observation.CompactionDecision) *FlowerC
 			Pressure: snapshot.Pressure, CalibrationRequestID: snapshot.CalibrationRequestID,
 		}
 	}
-	return &FlowerCompactionDecision{Pressure: decision.Pressure, Before: candidate(decision.Before), After: candidate(decision.After)}
+	var capacity *FlowerCompactionCapacity
+	if c := decision.Capacity; c != nil {
+		capacity = &FlowerCompactionCapacity{Kind: c.Kind, Stage: c.Stage, Source: c.Source, ActualBytes: c.ActualBytes, LimitBytes: c.LimitBytes}
+	}
+	return &FlowerCompactionDecision{Capacity: capacity, Pressure: decision.Pressure, Before: candidate(decision.Before), After: candidate(decision.After)}
 }
 
 func normalizeFlowerContextUsagePhase(phase observation.ContextPhase) (string, error) {

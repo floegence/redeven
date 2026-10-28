@@ -2755,7 +2755,7 @@ SOFTWARE.
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floe-native-apps | v0.25.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.25.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.88.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.88.0 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.89.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.89.1 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.7.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.37 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.37 | Floegence first-party dependency. |
@@ -2885,7 +2885,7 @@ SOFTWARE.
 | golang.org/x/crypto | v0.58.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.58.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.47.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.42.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.42.0 | Detected from LICENSE. |
-| golang.org/x/net | v0.61.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.61.0 | Detected from LICENSE. |
+| golang.org/x/net | v0.62.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.62.0 | Detected from LICENSE. |
 | golang.org/x/oauth2 | v0.36.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.36.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.24.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.24.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.49.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.49.0 | Detected from LICENSE. |

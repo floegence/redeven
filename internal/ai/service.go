@@ -106,6 +106,7 @@ type Options struct {
 
 type Service struct {
 	openAIConnections      *openAIResponsesPool
+	deepSeekImageFiles     *deepSeekImageFileOwners
 	chatGPT                *chatgpt.Client
 	accountMu              sync.Mutex
 	accountTasks           map[string]accountTaskWatch

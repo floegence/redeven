@@ -17,7 +17,7 @@ it('shows only a concise message estimate and dismisses by keyboard, outside poi
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="button"]')!;
   trigger.focus();
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('≈ 159.1k → 17.5k tokens');
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Message text estimate: ≈ 159.1k → 17.5k tokens');
   trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
   expect(document.activeElement).toBe(trigger);
@@ -147,5 +147,5 @@ it('updates an open tooltip when canonical estimates become unavailable and retu
   expect(trigger.hasAttribute('aria-describedby')).toBe(true);
   expect(trigger.tabIndex).toBe(0);
   setTokens(21000);
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('≈ 150k → 21k tokens');
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Message text estimate: ≈ 150k → 21k tokens');
 });

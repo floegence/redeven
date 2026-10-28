@@ -220,15 +220,19 @@ export function compactionDividerDetail(compaction: FlowerContextCompaction, cop
   const before = formatContextTokenCount(compaction.tokens_before);
   const after = formatContextTokenCount(compaction.tokens_after_estimate);
   const labels = copy.chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
-  if (compaction.status === 'compacted' && before && after) return labels.tokenChange(before, after);
+  const capacity = compaction.decision?.capacity;
+  const cause = capacity?.source === 'host_policy'
+    ? labels.requestBytes(((capacity.actual_bytes ?? 0) / 1048576).toFixed(2), ((capacity.limit_bytes ?? 0) / 1048576).toFixed(2))
+    : capacity?.source === 'provider' ? labels.providerBytes : '';
+  if (compaction.status === 'compacted' && before && after) return [cause, labels.tokenChange(before, after)].filter(Boolean).join(' · ');
   const error = trimString(compaction.error);
-  if (error) return error;
+  if (error) return [cause, error].filter(Boolean).join(' · ');
   switch (compaction.status) {
     case 'compacting':
-      return before ? labels.compactingDetail + ' · ' + copy.chat.contextIndicator.tokens(before) : labels.compactingDetail;
-    case 'cancelled': return labels.cancelledDetail;
-    case 'failed': return labels.failedDetail;
-    case 'compacted': return labels.unavailableDetail;
+      return [labels.compactingDetail, cause, before ? labels.messageEstimate(before) : ''].filter(Boolean).join(' · ');
+    case 'cancelled': return [cause, labels.cancelledDetail].filter(Boolean).join(' · ');
+    case 'failed': return [cause, labels.failedDetail].filter(Boolean).join(' · ');
+    case 'compacted': return [cause, labels.unavailableDetail].filter(Boolean).join(' · ');
     default: return '';
   }
 }

@@ -19,6 +19,7 @@ import (
 // DeepSeek wire rendering, stream parsing, and opaque history are owned by
 // Floret. This adapter only maps Flower's product-neutral model DTOs.
 type deepSeekProvider struct {
+	imageFiles      *flprovider.DeepSeekImageFiles
 	baseURL, apiKey string
 	strictTools     bool
 	client          *http.Client
@@ -57,7 +58,11 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		}
 		return data, nil
 	}
-	gateway, err := flprovider.NewDeepSeek(flprovider.DeepSeekOptions{MaxRequestBytes: flowerModelRequestMaxBytes, Model: req.Model, BaseURL: p.baseURL, APIKey: p.apiKey, StateCompatibilityKey: "deepseek-responses-v1:" + p.baseURL + ":" + req.Model, HTTPClient: p.client, ResolveAttachment: resolveImage, Temperature: req.ProviderControls.Temperature, TopP: req.ProviderControls.TopP, ResponseFormat: req.ProviderControls.ResponseFormat})
+	requestLimit := int64(flowerModelRequestMaxBytes)
+	if officialDeepSeekEndpoint(p.baseURL) {
+		requestLimit = 48 << 20
+	}
+	gateway, err := flprovider.NewDeepSeek(flprovider.DeepSeekOptions{ImageFiles: p.imageFiles, MaxRequestBytes: requestLimit, Model: req.Model, BaseURL: p.baseURL, APIKey: p.apiKey, StateCompatibilityKey: "deepseek-responses-v1:" + p.baseURL + ":" + req.Model, HTTPClient: p.client, ResolveAttachment: resolveImage, Temperature: req.ProviderControls.Temperature, TopP: req.ProviderControls.TopP, ResponseFormat: req.ProviderControls.ResponseFormat})
 	if err != nil {
 		return nil, err
 	}

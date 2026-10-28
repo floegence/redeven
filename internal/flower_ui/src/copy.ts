@@ -771,6 +771,9 @@ export type FlowerSurfaceCopy = Readonly<{
       failedDetail: string;
       unavailableDetail: string;
       tokenChange: (before: string, after: string) => string;
+      messageEstimate: (tokens: string) => string;
+      requestBytes: (actual: string, limit: string) => string;
+      providerBytes: string;
     }>;
     projectionUnavailable: Readonly<{
       title: string;
@@ -1301,7 +1304,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       cancelledDetail: 'Compression stopped.',
       failedDetail: 'No summary was generated.',
       unavailableDetail: 'Token counts unavailable.',
-      tokenChange: (before, after) => `≈ ${before} → ${after} tokens`,
+      tokenChange: (before, after) => 'Message text estimate: ≈ ' + before + ' → ' + after + ' tokens',
+      messageEstimate: (tokens) => 'Message text estimate: ≈ ' + tokens + ' tokens',
+      requestBytes: (actual, limit) => 'Request size ' + actual + ' MiB exceeds the ' + limit + ' MiB transport limit',
+      providerBytes: 'The model provider rejected the request size (HTTP 413). Token usage is a separate limit.',
     },
     projectionUnavailable: {
       title: 'Response unavailable',
