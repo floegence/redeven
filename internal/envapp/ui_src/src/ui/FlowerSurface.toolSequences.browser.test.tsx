@@ -10,6 +10,7 @@ import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import type { EnvAppTranslationKey } from './i18n';
 import { flowerActivityIdentity } from '../../../../flower_ui/src/flowerActivityIdentity';
+import { createFlowerSequenceConnectorClip } from '../../../../flower_ui/src/flowerSequenceConnectorClip';
 import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void>; emulateMediaPreferences: (input: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void> };
@@ -58,8 +59,11 @@ async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly Flowe
   root.querySelector<HTMLButtonElement>('[data-thread-id="sequences"] button')!.click();
   await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id], .flower-thinking-disclosure, .flower-tool-sequence-toggle')));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
-  return { root, push(next: FlowerRuntimeCurrentItem[], nextPreviews: readonly FlowerToolCallPreview[] = []) {
+  return { root, push(next: FlowerRuntimeCurrentItem[], nextPreviews: readonly FlowerToolCallPreview[] = [], terminal = false) {
     latest = { ...current(next, latest.view_version + 1), ...(window ? { window } : {}), ...(nextPreviews.length ? { tool_call_previews: nextPreviews } : {}) };
+    if (terminal) latest = { ...latest, activity: 'idle', run_progress: undefined, last_outcome: 'completed',
+      turns: [{ ...latest.turns![0], ended_at: '2026-10-21T10:01:00Z', outcome: 'completed', elapsed_ms: 60000, work_duration_ms: 60000,
+        final_item_ids: next.filter(value => value.kind === 'assistant').map(value => value.id), final_boundary_complete: true }] };
     values.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'sequences', current: latest }); wake?.();
   } };
 }
@@ -93,6 +97,183 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { await media.emulateTouchInput(false); document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it.each([false, true])('finishes one automatic fold before revealing prose (terminal=%s)', async terminal => {
+    const calls = Array.from({ length: 24 }, (_, i) => tool('ordered-' + i));
+    const { root, push } = await mount(calls);
+    const node = group(root, 'ordered-0');
+    const viewport = node.querySelector<HTMLElement>('.flower-tool-sequence-viewport')!;
+    const before = viewport.getBoundingClientRect().height;
+    const prose = { ...item('ordered-prose', 'assistant', 'A result that must not jump.'), live: !terminal };
+    const samples: { state: string | undefined; height: number; visible: boolean; top?: number; animations: number }[] = [];
+    push([...calls, prose], [], terminal);
+    for (let frame = 0; frame < 24; frame++) {
+      await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      const text = root.querySelector<HTMLElement>('[data-flower-message-id="ordered-prose"] .flower-message-bubble');
+      samples.push({ state: node.dataset.state, height: viewport.getBoundingClientRect().height,
+        visible: Boolean(text?.checkVisibility({ visibilityProperty: true })),
+        top: text?.getBoundingClientRect().top,
+        animations: node.getAnimations({ subtree: true }).filter(animation =>
+          (animation.effect as KeyframeEffect).getKeyframes().some(keyframe => 'height' in keyframe)).length });
+    }
+    expect(samples.some(sample => sample.state === 'closing' && sample.height > 0 && sample.height < before), JSON.stringify(samples)).toBe(true);
+    expect(samples.filter(sample => sample.state !== 'closed').every(sample => !sample.visible), JSON.stringify(samples)).toBe(true);
+    expect(Math.max(...samples.map(sample => sample.animations))).toBe(1);
+    expect(samples.at(-1)).toMatchObject({ state: 'closed', visible: true });
+    const visibleTops = samples.filter(sample => sample.visible).map(sample => sample.top!);
+    expect(Math.max(...visibleTops) - Math.min(...visibleTops), JSON.stringify(samples)).toBeLessThanOrEqual(1);
+  });
+
+  it.each([false, true])('holds every following prose block until folding settles (later arrival=%s)', async later => {
+    const calls = [tool('burst-a'), tool('burst-b')];
+    const { root, push } = await mount(calls);
+    const first = { ...item('burst-first', 'assistant', 'First paragraph.'), live: true };
+    const second = { ...item('burst-second', 'assistant', 'Second paragraph.'), live: true };
+    push([...calls, first, ...(later ? [] : [second])]);
+    const node = group(root, 'burst-a');
+    await waitFor(() => node.dataset.state === 'closing');
+    const animation = node.getAnimations({ subtree: true }).find(value =>
+      (value.effect as KeyframeEffect).getKeyframes().some(frame => 'height' in frame))!;
+    animation.pause();
+    try {
+      if (later) push([...calls, first, second]);
+      await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="burst-second"] .flower-message-bubble')));
+      for (const id of ['burst-first', 'burst-second']) {
+        expect(root.querySelector<HTMLElement>('[data-flower-message-id="' + id + '"] .flower-message-bubble')!
+          .checkVisibility({ visibilityProperty: true }), id).toBe(false);
+      }
+    } finally { animation.play(); }
+    await waitFor(() => node.dataset.state === 'closed');
+    for (const id of ['burst-first', 'burst-second']) {
+      expect(root.querySelector<HTMLElement>('[data-flower-message-id="' + id + '"] .flower-message-bubble')!
+        .checkVisibility({ visibilityProperty: true }), id).toBe(true);
+    }
+  });
+
+  it('keeps fresh prose hidden when a user reverses an automatic fold', async () => {
+    const calls = [tool('reverse-a'), tool('reverse-b')];
+    const { root, push } = await mount(calls);
+    push([...calls, { ...item('reverse-prose', 'assistant', 'Reveal after the interaction settles.'), live: true }]);
+    const node = group(root, 'reverse-a');
+    await waitFor(() => node.dataset.state === 'closing');
+    toggle(root, 'reverse-a').click();
+    expect(node.dataset.state).toBe('opening');
+    const bubble = root.querySelector<HTMLElement>('[data-flower-message-id="reverse-prose"] .flower-message-bubble')!;
+    expect(bubble.checkVisibility({ visibilityProperty: true })).toBe(false);
+    await waitFor(() => node.dataset.state === 'open');
+    expect(bubble.checkVisibility({ visibilityProperty: true })).toBe(true);
+  });
+
+  it('settles pending prose when reduced motion changes during a fold', async () => {
+    const calls = [tool('reduce-a'), tool('reduce-b')];
+    const { root, push } = await mount(calls);
+    push([...calls, { ...item('reduce-prose', 'assistant', 'Visible when motion is disabled.'), live: true }]);
+    const node = group(root, 'reduce-a');
+    await waitFor(() => node.dataset.state === 'closing');
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    await waitFor(() => node.dataset.state === 'closed');
+    expect(root.querySelector<HTMLElement>('[data-flower-message-id="reduce-prose"] .flower-message-bubble')!
+      .checkVisibility({ visibilityProperty: true })).toBe(true);
+    expect(node.getAnimations({ subtree: true })).toHaveLength(0);
+  });
+
+  it.each([false, true])('clips only orphan connectors during repeated native upward scrolling (touch=%s)', async touch => {
+    await media.emulateTouchInput(touch);
+    const { root } = await mount(Array.from({ length: 24 }, (_, i) => tool('clipped-' + i)));
+    const body = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    const rowHeight = touch ? 44 : 32;
+    body.dispatchEvent(new WheelEvent('wheel', { deltaY: -6 }));
+    body.scrollTop = rowHeight * 10 - 6;
+    body.dispatchEvent(new Event('scroll'));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const clipped = body.querySelector<HTMLElement>('[data-flower-connector-clipped]');
+    expect(clipped).not.toBeNull();
+    expect(getComputedStyle(clipped!, '::after').visibility).toBe('hidden');
+    for (let offset = rowHeight * 10 - 6; offset >= 0; offset -= rowHeight) {
+      body.scrollTop = offset;
+      body.dispatchEvent(new Event('scroll'));
+      await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      expect(body.querySelectorAll('[data-flower-connector-clipped]').length).toBeLessThanOrEqual(1);
+      const hidden = body.querySelector<HTMLElement>('[data-flower-connector-clipped]');
+      expect(hidden).not.toBeNull();
+      expect(getComputedStyle(hidden!, '::after').visibility).toBe('hidden');
+    }
+    body.scrollTop = 0; body.dispatchEvent(new Event('scroll'));
+    expect(body.querySelector('[data-flower-connector-clipped]')).toBeNull();
+    expectConnectorBetween(root, 'clipped-0', 'clipped-1');
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-sequence-clipped.png' });
+  });
+
+  it.each(['reduce', 'no-preference'] as const)('retains new prose while folding and respects %s motion', async reducedMotion => {
+    await media.emulateMediaPreferences({ reducedMotion });
+    const calls = [tool('growing-a'), tool('growing-b')];
+    const { root, push } = await mount(calls);
+    const prose = { ...item('growing-prose', 'assistant', 'First words.'), live: true };
+    push([...calls, prose]);
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="growing-prose"] .flower-message-bubble')));
+    const bubble = root.querySelector<HTMLElement>('[data-flower-message-id="growing-prose"] .flower-message-bubble')!;
+    push([...calls, { ...prose, text: 'First words. The newest streamed words remain intact.' }]);
+    await waitFor(() => group(root, 'growing-a').dataset.state === 'closed');
+    await waitFor(() => bubble.textContent!.includes('newest streamed words'));
+    expect(bubble.checkVisibility({ visibilityProperty: true })).toBe(true);
+    expect(bubble).toBe(root.querySelector('[data-flower-message-id="growing-prose"] .flower-message-bubble'));
+  });
+
+  it.each(['manual', 'reading', 'details'] as const)('does not hold prose when %s inspection keeps the sequence open', async protection => {
+    const calls = Array.from({ length: 24 }, (_, i) => tool('protected-' + i));
+    const { root, push } = await mount(calls);
+    if (protection === 'manual') {
+      toggle(root, 'protected-0').click();
+      await waitFor(() => group(root, 'protected-0').dataset.state === 'closed');
+      toggle(root, 'protected-0').click();
+      await waitFor(() => group(root, 'protected-0').dataset.state === 'open');
+    } else if (protection === 'details') {
+      row(root, 'protected-23').querySelector<HTMLButtonElement>('button')!.click();
+    } else {
+      const body = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+      body.dispatchEvent(new WheelEvent('wheel', { deltaY: -120 }));
+      body.scrollTop -= 120; body.dispatchEvent(new Event('scroll'));
+    }
+    push([...calls, { ...item('protected-prose', 'assistant', 'Visible without waiting.'), live: true }]);
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="protected-prose"] .flower-message-bubble')));
+    expect(root.querySelector<HTMLElement>('[data-flower-message-id="protected-prose"] .flower-message-bubble')!.checkVisibility({ visibilityProperty: true })).toBe(true);
+    expect(group(root, 'protected-0').dataset.state).toBe('open');
+  });
+
+  it('bounds connector work to the viewport edge and avoids unchanged DOM writes', async () => {
+    const { root } = await mount(Array.from({ length: 300 }, (_, i) => tool('bounded-' + i)));
+    const body = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    body.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    body.scrollTop = 320 - 6; body.dispatchEvent(new Event('scroll'));
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    const clip = createFlowerSequenceConnectorClip();
+    clip.update(body);
+    const changed: MutationRecord[] = [];
+    const observer = new MutationObserver(records => changed.push(...records));
+    observer.observe(body, { subtree: true, attributes: true, attributeFilter: ['data-flower-connector-clipped'] });
+    const measure = vi.spyOn(Element.prototype, 'getBoundingClientRect');
+    const hit = vi.spyOn(document, 'elementFromPoint');
+    const scan = vi.spyOn(Element.prototype, 'querySelectorAll');
+    try {
+      for (let i = 0; i < 60; i++) clip.update(body);
+      expect(measure.mock.calls.length).toBeLessThanOrEqual(180);
+      expect(hit).toHaveBeenCalledTimes(60);
+      expect(scan).not.toHaveBeenCalled();
+      await Promise.resolve();
+      expect(changed).toHaveLength(0);
+    } finally { observer.disconnect(); measure.mockRestore(); hit.mockRestore(); scan.mockRestore(); clip.clear(); }
+  });
+
+  it('releases pending prose when navigation disposes the folding sequence', async () => {
+    const calls = [tool('leave-a'), tool('leave-b')];
+    const { root, push } = await mount(calls);
+    push([...calls, { ...item('leave-prose', 'assistant', 'Retained after navigation.'), live: true }]);
+    await waitFor(() => group(root, 'leave-a').dataset.state === 'closing');
+    root.querySelector<HTMLButtonElement>('[data-thread-id="peer"] button')!.click();
+    await waitFor(() => !root.querySelector('[data-flower-message-id="leave-prose"]'));
+    root.querySelector<HTMLButtonElement>('[data-thread-id="sequences"] button')!.click();
+    await waitFor(() => root.querySelector<HTMLElement>('[data-flower-message-id="leave-prose"] .flower-message-bubble')?.checkVisibility({ visibilityProperty: true }) === true);
+    expect(group(root, 'leave-a').dataset.state).toBe('closed');
+  });
   it.each([{ width: 1280, touch: false }, { width: 360, touch: false }, { width: 360, touch: true }])('shares the first activity row without blank space or movement at $width pixels, touch=$touch', async ({ width, touch }) => {
     await media.emulateTouchInput(touch);
     const { root, push } = await mount([tool('reserve-first', 'running')]);
@@ -181,7 +362,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const prefix = item('stationary-prefix', 'assistant', 'Earlier visible content. '.repeat(160));
     const calls = Array.from({ length: 18 }, (_, i) => tool('stationary-' + i));
     const output = item('stationary-output', 'assistant', 'Final result.');
-    const { root, push } = await mount([prefix, ...calls, { ...output, live: true }]);
+    const { root, push } = await mount([prefix, ...calls]);
     const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
     const header = toggle(root, 'stationary-0');
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -190,14 +371,14 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(initialOffset).toBeGreaterThan(100);
     const samples: { top: number; offset: number }[] = [];
     let sampling = true;
-    const sample = () => { samples.push({ top: header.getBoundingClientRect().top, offset: viewport.scrollTop }); if (sampling) requestAnimationFrame(sample); };
-    requestAnimationFrame(sample);
-    push([prefix, ...calls, output]);
+    const sample = () => { samples.push({ top: header.getBoundingClientRect().top, offset: viewport.scrollTop }); if (sampling) requestAnimationFrame(() => setTimeout(sample, 0)); };
+    requestAnimationFrame(() => setTimeout(sample, 0));
+    push([prefix, ...calls, { ...output, live: true }]);
     await waitFor(() => collapsed(root, 'stationary-0'));
     await new Promise(resolve => setTimeout(resolve, 260));
     sampling = false;
     expect(samples.length).toBeGreaterThan(0);
-    expect(Math.max(...samples.map(value => Math.abs(value.top - initialTop)))).toBeLessThanOrEqual(1);
+    expect(Math.max(...samples.map(value => Math.abs(value.top - initialTop))), JSON.stringify({ initialTop, initialOffset, samples })).toBeLessThanOrEqual(1);
     expect(Math.max(...samples.map(value => Math.abs(value.offset - initialOffset)))).toBeLessThanOrEqual(1);
     expect(Number.parseFloat(viewport.style.getPropertyValue('--flower-reading-tail-space'))).toBeGreaterThan(0);
   });
@@ -331,7 +512,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(row(root, 'return-45').querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('folds completed tools after output finishes without flickering between consecutive calls', async () => {
+  it('folds completed tools when output starts without flickering between consecutive calls', async () => {
     const initial = [tool('auto-a'), tool('auto-b', 'running')];
     const { root, push } = await mount(initial);
     const header = toggle(root, 'auto-a');
@@ -346,7 +527,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const calls = [tool('auto-a'), tool('auto-b'), tool('auto-c')];
     push([...calls, { ...prose, live: true }]);
     await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="auto-output"]')));
-    expect(header.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => header.getAttribute('aria-expanded') === 'false');
     push([...calls, prose]);
     await waitFor(() => header.getAttribute('aria-expanded') === 'false');
     expect(header.textContent).toContain('3 tool calls');

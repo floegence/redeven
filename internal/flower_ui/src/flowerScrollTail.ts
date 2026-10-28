@@ -12,7 +12,7 @@ export type FlowerScrollTailController = Readonly<{
   followingLatest: Accessor<boolean>;
   viewport: () => HTMLDivElement | undefined;
   preserveLayoutAnchor: (title: HTMLElement) => void;
-  preserveCollapseOffset: () => void;
+  preserveCollapseOffset: (moving?: () => boolean) => void;
   restoreReadingAnchor: (title: HTMLElement, screenTop: number) => void;
   showLatest: Accessor<boolean>;
   latestPointerBlocked: Accessor<boolean>;
@@ -62,6 +62,8 @@ export function createFlowerScrollTailController(
   // An automatic fold may shrink the scroll range. Keep its prior offset until
   // new output fills the retained room or explicit navigation takes ownership.
   let collapseOffset: number | undefined;
+  let collapseMoving: (() => boolean) | undefined;
+  const clearCollapseOffset = () => { collapseOffset = undefined; collapseMoving = undefined; };
   let collapseFlushQueued = false;
   let layoutFrame = 0;
   let pendingScroll: Readonly<{ smooth?: boolean; force?: boolean }> | undefined;
@@ -162,7 +164,7 @@ export function createFlowerScrollTailController(
     if (title) anchor = readingAnchor(title);
   };
   const startFollowing = () => {
-    collapseOffset = undefined;
+    clearCollapseOffset();
     clearAnchor();
     endUserScroll();
     cancelScheduledScroll();
@@ -178,7 +180,7 @@ export function createFlowerScrollTailController(
   const cancelScheduledScroll = () => { pendingScroll = undefined; };
   const cancelSmoothScroll = () => { smoothScroll = undefined; };
   const stopFollowing = () => {
-    collapseOffset = undefined;
+    clearCollapseOffset();
     setFollowingLatest(false);
     userInterruptionRevision += 1;
     cancelScheduledScroll();
@@ -215,7 +217,7 @@ export function createFlowerScrollTailController(
     if (notify) layoutFrame = 0;
     const target = node;
     if (!target) return;
-    if (options.preparing?.()) { collapseOffset = undefined; setReadingTailSpace(0); }
+    if (options.preparing?.()) { clearCollapseOffset(); setReadingTailSpace(0); }
     if (gesture() && !gesture()!.target.isConnected) finishGesture();
     const nativeDelta = target.scrollTop - knownScrollTop;
     // Native wheel scrolling can update scrollTop before dispatching scroll.
@@ -241,7 +243,7 @@ export function createFlowerScrollTailController(
     if (!smoothScroll && (collapseOffset !== undefined || readingTailSpace || anchor && nextTop > Math.max(0, scrollHeight - viewportHeight))) {
       preserveReadingRange(nextTop);
       scrollHeight = target.scrollHeight;
-      if (!readingTailSpace) collapseOffset = undefined;
+      if (!readingTailSpace && !collapseMoving?.()) clearCollapseOffset();
     }
     if (collapseOffset === undefined && followingLatest() && (options.canFollowLatest?.() ?? true)) {
       const returningWithSpace = Boolean(smoothScroll && readingTailSpace);
@@ -457,7 +459,7 @@ export function createFlowerScrollTailController(
           // Returning to the tail ends reading-anchor ownership. Otherwise
           // a stale anchor can manufacture trailing room during the next page.
           clearAnchor();
-          collapseOffset = undefined;
+          clearCollapseOffset();
           setFollowingLatest(true);
           scheduleLayout();
         }
@@ -498,7 +500,7 @@ export function createFlowerScrollTailController(
     clearAnchor();
     endUserScroll();
     setReadingTailSpace(0);
-    collapseOffset = undefined;
+    clearCollapseOffset();
     node = nextNode;
     knownScrollTop = node?.scrollTop ?? 0;
     knownScrollHeight = node?.scrollHeight ?? 0;
@@ -590,9 +592,12 @@ export function createFlowerScrollTailController(
     nearBottom,
     followingLatest,
     viewport: () => node,
-    preserveCollapseOffset: () => {
+    preserveCollapseOffset: (moving) => {
       if (!node || !followingLatest() || options.preparing?.()) return;
       collapseOffset ??= node.scrollTop;
+      // Incoming prose can briefly add room before the animated fold removes
+      // it. Retain the same offset until its owner settles that motion.
+      collapseMoving = moving;
       // Disclosure effects settle in this checkpoint. Correct the shrunken
       // range before rAF callbacks or the first exposed frame can observe it.
       if (!collapseFlushQueued) {
@@ -646,7 +651,7 @@ export function createFlowerScrollTailController(
     scheduleTailScroll,
     scrollToBottom,
     dispose: () => {
-      collapseOffset = undefined;
+      clearCollapseOffset();
       disconnect?.();
       setGesture(undefined);
       clearAnchor();

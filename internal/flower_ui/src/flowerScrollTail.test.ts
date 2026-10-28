@@ -76,6 +76,22 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('retains the offset through incoming room while an automatic fold is moving', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport();
+    let moving = true;
+    controller.bind(metrics.viewport);
+    controller.preserveCollapseOffset(() => moving);
+    metrics.setScrollHeight(700);
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(400);
+    controller.flushLayout(false);
+    expect(metrics.scrollTop()).toBe(400);
+    moving = false;
+    controller.flushLayout(false);
+    expect(metrics.scrollTop()).toBe(600);
+    controller.dispose();
+  });
   it('suppresses late arrival animations until the destination is ready', () => {
     const raf = createRafHarness();
     let preparing = false;

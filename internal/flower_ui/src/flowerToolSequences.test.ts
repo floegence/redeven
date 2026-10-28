@@ -99,13 +99,14 @@ describe('consecutive tool presentation', () => {
       missingEvents: [{ after: -Infinity, before: 10 }, { after: 70, before: Infinity }] });
     expect([...complete.groups.values()].map(group => group.countsComplete)).toEqual([true, true]);
   });
-  it('waits through tool gaps and streaming prose, then folds after output completes', () => {
+  it('waits through empty tool gaps and folds when following prose starts', () => {
     const calls = [tool('a'), tool('b')];
     const policy = (entries: FlowerTimelineEntry[], turns: FlowerRuntimeTurn[] = []) =>
       [...projectFlowerToolSequences(entries, 'thread', turns).groups.values()][0].disclosure;
     expect(policy(calls)).toBe('manual');
     expect(policy([...calls, emptyLiveText('next')])).toBe('manual');
-    expect(policy([...calls, { ...text('next'), message: { ...text('next').message, live: true, status: 'streaming' } }])).toBe('manual');
+    expect(policy([...calls, { ...text('next'), message: { ...text('next').message, live: true, status: 'streaming' } }])).toBe('automatic');
+    expect(policy([tool('a', { status: 'running' }), tool('b'), text('next')])).toBe('manual');
     expect(policy([...calls, text('next')])).toBe('automatic');
     for (const outcome of ['completed', 'failed', 'cancelled', 'interrupted'] as const) {
       expect(policy(calls, [runtimeTurn({ outcome, ended_at: '2026-10-21T10:01:00Z' })])).toBe('automatic');
@@ -116,6 +117,16 @@ describe('consecutive tool presentation', () => {
     const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(['c']));
     expect([...value.groups.values()].map(group => group.toolCount)).toEqual([2, 2]);
     expect([...value.groups.values()].map(group => group.entryKeys)).toEqual([['a', 'b'], ['c', 'd']]);
+  });
+  it('tracks following prose blocks without crossing activity or execution boundaries', () => {
+    const paragraphs = { ...text('prose'), blocks: [...text('first').blocks, ...text('second').blocks] };
+    const entries = [tool('a'), tool('b'), paragraphs, text('third'), tool('c'), tool('d'), text('fourth'),
+      { ...text('other-run'), message: { ...text('other-run').message, run_id: 'other-run' } }, text('after-boundary')];
+    const first = projectFlowerToolSequences(entries, 'thread');
+    expect([...first.groups.values()].map(group => group.followingContentKeys)).toEqual([['first', 'second', 'third'], ['fourth']]);
+    const updated = entries.map(entry => entry !== paragraphs ? entry : { ...paragraphs,
+      blocks: paragraphs.blocks.map(block => block.type === 'content' ? { ...block, content: 'More streamed text.' } : block) });
+    expect(projectFlowerToolSequences(updated, 'thread', [], first)).toBe(first);
   });
   it('keeps field-backed safety facts identical to complete presentation boundaries', () => {
     for (const [complete, summary] of [
@@ -135,7 +146,9 @@ describe('consecutive tool presentation', () => {
   it('retains unchanged projections and replaces only changed groups', () => {
     const entries = [tool('a'), tool('b'), text('prose'), tool('c'), tool('d')];
     const first = projectFlowerToolSequences(entries, 'thread');
-    const contentOnly = [...entries, { ...text('streamed prose'), message: { ...text('streamed prose').message, live: true, status: 'streaming' as const } }];
+    const contentOnly = entries.map(entry => entry.key !== 'prose' ? entry : {
+      ...entry, blocks: [{ ...text('prose').blocks[0], content: 'Updated prose.' }],
+    });
     const unchanged = projectFlowerToolSequences(contentOnly, 'thread', [], first);
     expect(unchanged).toBe(first);
     const changed = projectFlowerToolSequences([tool('a'), tool('b'), text('prose'), tool('c'), tool('d', { status: 'running' })], 'thread', [], first);

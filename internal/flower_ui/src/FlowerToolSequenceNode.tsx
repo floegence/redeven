@@ -5,17 +5,18 @@ import type { FlowerToolSequence, FlowerToolSequenceProjection } from './flowerT
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 import type { FlowerToolSequenceElement } from './flowerToolSequenceLayout';
 import { createFlowerScrollTailController } from './flowerScrollTail';
+import { createFlowerSequenceConnectorClip } from './flowerSequenceConnectorClip';
 
 export const FlowerToolSequenceContext = createContext<Readonly<{
   projection: Accessor<FlowerToolSequenceProjection>;
   manuallyExpanded: (group: FlowerToolSequence) => boolean;
-  manuallyControlled: (group: FlowerToolSequence) => boolean;
   expanded: (group: FlowerToolSequence) => boolean;
   toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => void;
   contentID: (key: string) => string;
   copy: Accessor<FlowerTurnProcessCopy>;
   onLayoutFrame: (key: string, moving: boolean) => void;
   onMotionEnd: (key: string) => void;
+  contentPending: (key: string) => boolean;
   reducedMotion: Accessor<boolean>;
   preparing: Accessor<boolean>;
   register: (key: string, element: FlowerToolSequenceElement) => () => void;
@@ -41,6 +42,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   let slot!: HTMLDivElement;
   let node!: HTMLDivElement;
   let body!: HTMLDivElement;
+  const connectorClip = createFlowerSequenceConnectorClip();
   const scroll = createFlowerScrollTailController({
     preparing: () => context?.preparing() || motion.state() === 'opening',
     reducedMotionPreferred: () => context?.reducedMotion() ?? false,
@@ -48,6 +50,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     cancelAnimationFrame: handle => cancelAnimationFrame(handle),
     nearBottomThreshold: 24,
     observeChildren: true,
+    onLayout: () => { if (first() && body) connectorClip.update(body); },
   });
   const scrollToLatest = () => scroll.flushLayout(false);
   const prepareArrival = () => scroll.prepareArrival();
@@ -59,9 +62,12 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   };
   onCleanup(() => scroll.dispose());
   const motionKey = `tools:${props.nodeKey}`;
-  const motion = createFlowerActivityDisclosureMotion(expanded, {
-    initialOpen: untrack(expanded), reducedMotion: () => Boolean(context?.preparing() || context?.reducedMotion()),
-    animateClose: () => !member() || !context || context.manuallyControlled(member()!.group),
+  // Only the outer shared viewport animates. Nested rows retain their geometry
+  // throughout closing instead of compounding the same height animation.
+  const bodyExpanded = () => member() && !first() ? true : expanded();
+  const motion = createFlowerActivityDisclosureMotion(bodyExpanded, {
+    initialOpen: untrack(bodyExpanded), closeDurationMs: 180,
+    reducedMotion: () => Boolean(context?.preparing() || context?.reducedMotion()),
     onLayoutFrame: () => {
       if (first() && expanded() && scroll.followingLatest()) scrollToLatest();
       context?.onLayoutFrame(motionKey, motion.state() === 'opening' || motion.state() === 'closing');
@@ -82,7 +88,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   createEffect(() => {
     if (!first() || !expanded()) return;
     untrack(() => scroll.bind(body));
-    const onScroll = () => { scroll.onScroll(); };
+    const onScroll = () => { scroll.onScroll(); connectorClip.update(body); };
     body.addEventListener('scroll', onScroll);
     body.addEventListener('wheel', scroll.onWheel, { passive: true });
     body.addEventListener('pointerdown', scroll.onPointerDown);
@@ -90,7 +96,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     body.addEventListener('keydown', scroll.onKeyDown);
     // Placement completes in the same microtask checkpoint, before first paint.
     let cancelled = false;
-    queueMicrotask(() => { if (!cancelled) scroll.scrollToBottom(); });
+    queueMicrotask(() => { if (!cancelled) { scroll.scrollToBottom(); connectorClip.update(body); } });
     onCleanup(() => {
       cancelled = true;
       body.removeEventListener('scroll', onScroll);
@@ -99,6 +105,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
       body.removeEventListener('touchmove', scroll.onTouchMove);
       body.removeEventListener('keydown', scroll.onKeyDown);
       scroll.bind(undefined);
+      connectorClip.clear();
     });
   });
   const label = () => {

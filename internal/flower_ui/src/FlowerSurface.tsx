@@ -53,7 +53,7 @@ import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
+import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack, useContext } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
@@ -101,7 +101,7 @@ import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDi
 import { compactionDividerDetail } from './chat/flowerContextPresentation';
 import { SubagentAvatar } from './SubagentAvatar';
 import { SubagentAvatarStack } from './SubagentAvatarStack';
-import { FlowerToolSequenceNode } from './FlowerToolSequenceNode';
+import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { observeHistoryBodyLayout } from './historyBodyLayout';
@@ -12162,6 +12162,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 let shell!: HTMLDivElement;
                 const [thinkingElement, setThinkingElement] = createSignal<HTMLDivElement>();
                 const isThinking = createMemo(() => contentBlock().block_type === 'thinking');
+                const sequence = useContext(FlowerToolSequenceContext);
+                const pendingSequence = createMemo(() => !isThinking() && Boolean(sequence?.contentPending(contentBlock().key)));
                 // Sequence placement moves thinking out of its original shell.
                 // Observe the same displayed node across grouping and folding.
                 const readElement = () => isThinking() ? thinkingElement() : shell;
@@ -12215,7 +12217,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   const controller = readController();
                   if (controller) untrack(() => loadHistoryItem(tid, itemID, controller.signal, viewportScope, contentBlock().block_type === 'thinking' ? 'interactive' : undefined));
                 });
-                return <div ref={shell} class="flower-history-message"><div class="flower-history-message-content">
+                return <div ref={shell} class="flower-history-message" style={{ visibility: pendingSequence() ? 'hidden' : undefined }}
+                  inert={pendingSequence()} aria-hidden={pendingSequence() ? 'true' : undefined}><div class="flower-history-message-content">
                   <Show when={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media, viewportScope, setThinkingElement)}>
                     <div class={cn('flower-history-text-loading', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
                       <div class="flower-history-text-skeleton" aria-hidden="true"><span /><span /><span /></div>

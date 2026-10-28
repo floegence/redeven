@@ -187,7 +187,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     });
   };
   const preserveReadingAnchor = (processKeys: readonly string[]) => {
-    if (props.scroll.followingLatest()) { props.scroll.preserveCollapseOffset(); return; }
+    if (props.scroll.followingLatest()) { props.scroll.preserveCollapseOffset(() => motions.size > 0); return; }
     const bounds = props.scroll.viewport()?.getBoundingClientRect();
     if (!bounds) return;
     const hidden = new Set(processKeys);
@@ -243,6 +243,13 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     return value;
   });
   const sequenceIdentity = (key: string) => JSON.stringify([props.runtimeID, props.thread?.thread_id, 'tools', key]);
+  // Runtime facts keep flowing. Only fresh prose waits for its mounted group's
+  // presentation; the existing motion completion releases it without a timer.
+  const [pendingSequenceContent, setPendingSequenceContent] = createSignal<ReadonlyMap<string, string>>(new Map());
+  const releaseSequenceContent = (nodeKey: string) => setPendingSequenceContent(previous => {
+    if (![...previous.values()].includes(nodeKey)) return previous;
+    return new Map([...previous].filter(([, owner]) => owner !== nodeKey));
+  });
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
     const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
@@ -276,12 +283,36 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         }
       }
     });
+    if (next !== previous) untrack(() => {
+      const pending = new Map(pendingSequenceContent());
+      const owners = new Set([...next.groups.values()].map(group => group.nodeKeys[0]));
+      for (const [key, owner] of pending) if (!previous || !owners.has(owner)) pending.delete(key);
+      if (previous && props.liveConfirmed?.() && !props.reducedMotion() && !props.scroll.isPreparing()) {
+        for (const group of next.groups.values()) {
+          const prior = previous.groups.get(group.key);
+          const waiting = group.followingContentKeys.some(key => pending.get(key) === group.nodeKeys[0]);
+          if (waiting) for (const key of group.followingContentKeys) pending.set(key, group.nodeKeys[0]);
+          else if (group.followingContentKeys.length && group.followingContentKeys[0] !== prior?.followingContentKeys[0]
+            && group.disclosure === 'automatic' && previous.headerKeys.has(group.nodeKeys[0]) && sequenceLayout.element(group.nodeKeys[0])
+            && props.choices.expanded(sequenceIdentity(group.key), prior?.disclosure ?? 'manual')
+            && !props.choices.manuallyControlled(sequenceIdentity(group.key))) {
+            for (const key of group.followingContentKeys) pending.set(key, group.nodeKeys[0]);
+            // Capture before this snapshot mounts the following prose. Its
+            // measured height must not advance the transcript before folding.
+            props.scroll.preserveCollapseOffset(() => pendingSequenceContent().size > 0 || motions.size > 0);
+          }
+        }
+      }
+      setPendingSequenceContent(old => old.size === pending.size
+        && [...old].every(([key, owner]) => pending.get(key) === owner) ? old : pending);
+    });
     previousSequences = { threadID: props.thread?.thread_id, value: next };
     return next;
   });
   const sequenceLayout = createFlowerToolSequenceLayout(sequences);
   createEffect(() => {
     const groups = processes();
+    const pending = pendingSequenceContent();
     titleReveal.revealingEntries();
     const threadID = props.thread?.thread_id;
     const execution = props.thread?.current_execution;
@@ -297,7 +328,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       if (!threadID) return;
       for (const group of groups.groups.values()) {
         // Automatic folding must not hide a title that has just arrived.
-        if (group.disclosure === 'automatic' && group.processKeys.some(key => revealing.has(key))) continue;
+        if (group.disclosure === 'automatic' && (pending.size > 0 || group.processKeys.some(key => revealing.has(key)))) continue;
         props.choices.observe(identity(group.turnID), group.disclosure,
           () => inspectionProtected(group.turnID, group.processKeys, true), () => preserveReadingAnchor(group.processKeys));
       }
@@ -322,6 +353,9 @@ export function FlowerTurnTimeline(props: TimelineProps) {
           const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
           return inspectionProtected(turnID, group.entryKeys, true, inspectedNodes);
         }, () => preserveReadingAnchor(group.entryKeys));
+        if (props.choices.expanded(sequenceIdentity(group.key), group.disclosure) && !motions.has(`tools:${group.nodeKeys[0]}`)) {
+          releaseSequenceContent(group.nodeKeys[0]);
+        }
       }
     }));
   });
@@ -340,7 +374,6 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     preparing: props.scroll.isPreparing,
     expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
     manuallyExpanded: (group: FlowerToolSequence) => props.choices.manuallyExpanded(sequenceIdentity(group.key)),
-    manuallyControlled: (group: FlowerToolSequence) => props.choices.manuallyControlled(sequenceIdentity(group.key)),
     toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => {
       if (group.entryKeys.some(key => nodes.get(key)?.contains(document.activeElement))) button.focus({ preventScroll: true });
       layoutAnchor = button;
@@ -352,7 +385,11 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       if (moving) motions.add(key);
       props.scroll.measureAfterLayout();
     },
-    onMotionEnd: finishMotion,
+    onMotionEnd: (key: string) => {
+      finishMotion(key);
+      releaseSequenceContent(key.slice('tools:'.length));
+    },
+    contentPending: (key: string) => pendingSequenceContent().has(key),
     copy: () => props.copy,
     reducedMotion: props.reducedMotion,
   };

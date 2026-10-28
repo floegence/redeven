@@ -12417,6 +12417,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   content: ''; position: absolute; inset-inline-start: calc(0.75rem - 0.5px); top: 1.75rem; bottom: -0.25rem; width: 1px;
   background: var(--flower-activity-tool-row-foreground, var(--flower-reading-title)); opacity: 0.62; pointer-events: none;
 }
+.flower-tool-sequence-content[data-flower-connector-clipped]::after { visibility: hidden; }
 .flower-tool-sequence-node:has(> .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content > .flower-parent-event) .flower-parent-event {
   min-height: var(--flower-sequence-row-height, 2rem); margin: 0; padding: 0.5rem 0 0.5rem 0.25rem; box-sizing: border-box;
 }
