@@ -40,6 +40,9 @@ required; unavailable desktop/display prerequisites are failures, not skips.
 Fast suites protect indexed record stability, ordered live queue semantics,
 retention/reading windows, turn/disclosure identity, per-block content-boundary invalidation, keyed subscription disposal, local thinking
 updates, structural versus mutable field dependencies, sealed-body handoff and incremental Markdown.
+Tool sequence classification has one mounted owner per entry: retained rows reuse
+classified facts while live state, pending bodies, preview labels and the first
+non-whitespace prose boundary remain reactive. Removed entries dispose their owners.
 Structural batches publish ordered membership once after every affected record is
 ready; replacing many records must not rescan the full document for each record.
 Parent-event reading intervals track membership and coverage independently of

@@ -18,6 +18,9 @@ type SequenceNode = Readonly<{
   uncertain?: boolean;
 }>;
 
+type SequenceToken = SequenceNode | { outputScope: string; contentKey: string } | { gap: true } | null;
+type MessageEntry = Extract<FlowerTimelineEntry, { type: 'message' }>;
+
 const sequenceBoundaryToolNames = new Set(['ask_user']);
 const sequenceableParentEventKinds = new Set(['report', 'completed', 'failed', 'cancelled', 'interrupted', 'timed_out']);
 
@@ -64,6 +67,72 @@ function uniqueTurnsByID(turns: readonly FlowerRuntimeTurn[]): ReadonlyMap<strin
   return byID;
 }
 
+const sequenceScope = (threadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
+  threadID && turnID && runID ? JSON.stringify([threadID, turnID, runID]) : '';
+
+function messageSequenceTokens(entry: MessageEntry,
+  hasContent: (block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>) => boolean = block => Boolean(block.content.trim()),
+): readonly SequenceToken[] {
+  const tokens: SequenceToken[] = [];
+  const message = readPresentationValue(entry.message);
+  if (message.role !== 'assistant' || message.goal) return [null];
+  const scope = sequenceScope(message.thread_id, message.turn_id, message.run_id);
+  const sameScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
+    Boolean(scope) && scope === sequenceScope(ownerThreadID, turnID, runID);
+  for (const block of entry.blocks) {
+    if (block.type === 'content') {
+      if (block.block_type === 'thinking') {
+        tokens.push({ key: block.key, entryKey: entry.key, scope, turnID: message.turn_id, kind: 'thinking', active: entry.message.live === true, failed: false });
+      } else if (hasContent(block)) {
+        tokens.push({ outputScope: scope, contentKey: block.key });
+      } else if (entry.message.body_pending?.kind === 'text') {
+        tokens.push({ gap: true });
+      }
+    } else if (block.type === 'tool_preview') {
+      // Preview calls advance in place; retain that narrow subscription.
+      const source = block.block.call;
+      const call = readPresentationValue(source);
+      tokens.push(sameScope(call.thread_id, call.turn_id, call.run_id) && isSequenceTool(call.name)
+        ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, turnID: message.turn_id, kind: 'tool', label: source.preview?.display_name || call.name, active: true, failed: false } : null);
+    } else if (block.type === 'activity') {
+      const activity = readPresentationValue(block.block);
+      for (const item of activity.items) {
+        const failed = item.status === 'error';
+        const uncertain = Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
+        const attentionReasons = item.attention_reasons ?? [];
+        const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
+          && (item.field_summary?.action ?? item.payload?.action) === 'wait' && (item.status === 'running' || item.status === 'waiting');
+        const runningAttention = item.status === 'running' && attentionReasons.length > 0
+          && attentionReasons.every(reason => reason === 'running');
+        const waitingAttention = subagentWait && item.status === 'waiting'
+          && attentionReasons.every(reason => reason === 'waiting' || reason === 'running');
+        const attentionAllowed = failed || runningAttention || waitingAttention || !item.needs_attention && attentionReasons.length === 0;
+        const statusAllowed = ['success', 'pending', 'running'].includes(item.status) || failed || subagentWait;
+        const foldable = sameScope(activity.thread_id, activity.turn_id, activity.run_id)
+          && (item.kind === 'tool' || item.kind === 'hosted_tool')
+          && isSequenceTool(item.tool_name)
+          && statusAllowed
+          && attentionAllowed
+          && !item.requires_approval && !item.approval_state
+          && (!(item.field_summary?.has_error || item.payload?.error) || failed)
+          && (!['warning', 'error', 'blocking'].includes(item.severity) || failed || waitingAttention)
+          && (!uncertain || failed);
+        tokens.push(foldable ? {
+          key: flowerActivityIdentity({ threadID: activity.thread_id, runID: activity.run_id, turnID: activity.turn_id,
+            itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
+          entryKey: entry.key, scope, turnID: message.turn_id, kind: 'tool', label: item.label || item.tool_name,
+          active: item.status === 'pending' || item.status === 'running' || subagentWait,
+          failed,
+          uncertain,
+        } : null);
+      }
+    } else {
+      tokens.push(null);
+    }
+  }
+  return tokens;
+}
+
 // Presentation only: source entries and canonical execution facts are never changed.
 export function projectFlowerToolSequences(
   entries: readonly FlowerTimelineEntry[],
@@ -72,13 +141,11 @@ export function projectFlowerToolSequences(
   previous?: FlowerToolSequenceProjection,
   breakBefore: ReadonlySet<string> = new Set(),
   coverage: Readonly<{ hasBefore: boolean; hasAfter: boolean; missingEvents?: readonly Readonly<{ after: number; before: number }>[] }> = { hasBefore: false, hasAfter: false },
-  hasContent: (block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>) => boolean = block => Boolean(block.content.trim()),
+  messageTokens: (entry: MessageEntry) => readonly SequenceToken[] = messageSequenceTokens,
 ): FlowerToolSequenceProjection {
-  const tokens: (SequenceNode | { outputScope: string; contentKey: string } | { gap: true } | null)[] = [];
+  const tokens: SequenceToken[] = [];
   const turnsByID = uniqueTurnsByID(readPresentationValue(turns));
   const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
-  const sequenceScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
-    ownerThreadID && turnID && runID ? JSON.stringify([ownerThreadID, turnID, runID]) : '';
   const parentEventNode = (entry: Extract<FlowerTimelineEntry, { type: 'parent_event' }>): SequenceNode | null => {
     const { event } = entry;
     if (!threadID || event.parent_thread_id !== threadID || !event.parent_turn_id
@@ -95,64 +162,8 @@ export function projectFlowerToolSequences(
       tokens.push(parentEventNode(entry));
       continue;
     }
-    const message = entry.type === 'message' ? readPresentationValue(entry.message) : undefined;
-    if (entry.type !== 'message' || message!.role !== 'assistant' || message!.goal) {
-      tokens.push(null);
-      continue;
-    }
-    const scope = sequenceScope(message!.thread_id, message!.turn_id, message!.run_id);
-    const sameScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
-      Boolean(scope) && scope === sequenceScope(ownerThreadID, turnID, runID);
-    for (const block of entry.blocks) {
-      if (block.type === 'content') {
-        if (block.block_type === 'thinking') {
-          tokens.push({ key: block.key, entryKey: entry.key, scope, turnID: message!.turn_id, kind: 'thinking', active: message!.live === true, failed: false });
-        } else if (hasContent(block)) {
-          tokens.push({ outputScope: scope, contentKey: block.key });
-        } else if (entry.message.body_pending?.kind === 'text') {
-          tokens.push({ gap: true });
-        }
-      } else if (block.type === 'tool_preview') {
-        // Preview calls advance in place; retain that narrow subscription.
-        const call = readPresentationValue(block.block.call);
-        tokens.push(sameScope(call.thread_id, call.turn_id, call.run_id) && isSequenceTool(call.name)
-          ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, turnID: message!.turn_id, kind: 'tool', label: call.preview?.display_name || call.name, active: true, failed: false } : null);
-      } else if (block.type === 'activity') {
-        const activity = readPresentationValue(block.block);
-        for (const item of activity.items) {
-          const failed = item.status === 'error';
-          const uncertain = Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
-          const attentionReasons = item.attention_reasons ?? [];
-          const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
-            && (item.field_summary?.action ?? item.payload?.action) === 'wait' && (item.status === 'running' || item.status === 'waiting');
-          const runningAttention = item.status === 'running' && attentionReasons.length > 0
-            && attentionReasons.every(reason => reason === 'running');
-          const waitingAttention = subagentWait && item.status === 'waiting'
-            && attentionReasons.every(reason => reason === 'waiting' || reason === 'running');
-          const attentionAllowed = failed || runningAttention || waitingAttention || !item.needs_attention && attentionReasons.length === 0;
-          const statusAllowed = ['success', 'pending', 'running'].includes(item.status) || failed || subagentWait;
-          const foldable = sameScope(activity.thread_id, activity.turn_id, activity.run_id)
-            && (item.kind === 'tool' || item.kind === 'hosted_tool')
-            && isSequenceTool(item.tool_name)
-            && statusAllowed
-            && attentionAllowed
-            && !item.requires_approval && !item.approval_state
-            && (!(item.field_summary?.has_error || item.payload?.error) || failed)
-            && (!['warning', 'error', 'blocking'].includes(item.severity) || failed || waitingAttention)
-            && (!uncertain || failed);
-          tokens.push(foldable ? {
-            key: flowerActivityIdentity({ threadID: activity.thread_id, runID: activity.run_id, turnID: activity.turn_id,
-              itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
-            entryKey: entry.key, scope, turnID: message!.turn_id, kind: 'tool', label: item.label || item.tool_name,
-            active: item.status === 'pending' || item.status === 'running' || subagentWait,
-            failed,
-            uncertain,
-          } : null);
-        }
-      } else {
-        tokens.push(null);
-      }
-    }
+    if (entry.type === 'message') tokens.push(...messageTokens(entry));
+    else tokens.push(null);
   }
 
   const runs: { nodes: SequenceNode[]; followingContentKeys: string[]; countsComplete: boolean }[] = [];
@@ -253,13 +264,16 @@ export function projectFlowerToolSequences(
   return { groups, members, continuingEntries, headerKeys };
 }
 
-// Per-entry ownership keeps content updates local while preserving the first
-// non-whitespace output boundary which settles a preceding tool sequence.
-export function createFlowerSequenceContent(entries: Accessor<readonly FlowerTimelineEntry[]>) {
+// Each mounted entry classifies only its own mutable boundaries. Rebuilding the
+// ordered projection reuses completed tool/thinking facts without walking them
+// again. mapArray disposes subscriptions as entries leave the reading document.
+export function createFlowerSequenceTokens(entries: Accessor<readonly FlowerTimelineEntry[]>) {
   const records = mapArray(entries, entry => {
-    const blocks = entry.type === 'message' ? entry.blocks.filter((block): block is Extract<FlowerRenderableMessageBlock, { type: 'content' }> => block.type === 'content') : [];
-    return blocks.map(block => ({ block, present: createMemo(() => Boolean(block.content.trim())) }));
+    if (entry.type !== 'message') return undefined;
+    const content = new Map(entry.blocks.flatMap(block => block.type === 'content' && block.block_type !== 'thinking'
+      ? [[block, createMemo(() => Boolean(block.content.trim()))] as const] : []));
+    return { entry, tokens: createMemo(() => messageSequenceTokens(entry, block => content.get(block)!())) };
   });
-  const byBlock = createMemo(() => new Map(records().flat().map(value => [value.block, value.present])));
-  return (block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>) => byBlock().get(block)?.() ?? false;
+  const byEntry = createMemo(() => new Map(records().flatMap(value => value ? [[value.entry, value.tokens] as const] : [])));
+  return (entry: MessageEntry): readonly SequenceToken[] => byEntry().get(entry)!();
 }

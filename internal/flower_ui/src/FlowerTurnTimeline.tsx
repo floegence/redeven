@@ -8,7 +8,7 @@ import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolSequenceNode';
-import { createFlowerSequenceContent, projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
+import { createFlowerSequenceTokens, projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion, type FlowerActivityDisclosurePresentation } from './activityDisclosure';
 import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
@@ -282,7 +282,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     if (![...previous.values()].some(owner => owner.motionKey === motionKey)) return previous;
     return new Map([...previous].filter(([, owner]) => owner.motionKey !== motionKey));
   });
-  const hasSequenceContent = createFlowerSequenceContent(() => props.entries);
+  const sequenceTokens = createFlowerSequenceTokens(() => props.entries);
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
     const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
@@ -290,7 +290,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       hasBefore: props.thread?.history_window?.has_before ?? false,
       hasAfter: props.thread?.history_window?.has_after ?? false,
       missingEvents: props.missingEvents,
-    }, hasSequenceContent);
+    }, sequenceTokens);
     // The canonical first node may change on prepend. Share its choice so a
     // later navigation remount resolves the same manually controlled state.
     for (const group of next.groups.values()) props.choices.alias(sequenceIdentity(group.nodeKeys[0]), sequenceIdentity(group.key));

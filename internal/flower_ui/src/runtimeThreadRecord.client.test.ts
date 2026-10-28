@@ -5,7 +5,7 @@ import { readPresentationValue } from './presentationIdentity';
 import { createRuntimeThreadRecord } from './runtimeThreadRecord';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { projectFlowerTurnProcess } from './flowerTurnPresentation';
-import { createFlowerSequenceContent, projectFlowerToolSequences } from './flowerToolSequences';
+import { createFlowerSequenceTokens, projectFlowerToolSequences } from './flowerToolSequences';
 import { createFlowerTimelineProjection } from './flowerTimelineProjection';
 import type { FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 
@@ -175,10 +175,10 @@ it('keeps grouping structural while observing sealed prose and tool outcomes', (
       read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
     const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
     const thread = record.initializeThread(), project = createFlowerTimelineProjection();
-    const entries = createMemo(() => project(thread)), hasContent = createFlowerSequenceContent(entries);
+    const entries = createMemo(() => project(thread)), sequenceTokens = createFlowerSequenceTokens(entries);
     let processRuns = 0, sequenceRuns = 0;
     const process = createMemo(() => { processRuns++; return projectFlowerTurnProcess(entries(), thread.turns, ['turn']); });
-    const sequences = createMemo(() => { sequenceRuns++; return projectFlowerToolSequences(entries(), thread.thread_id, thread.turns, undefined, undefined, undefined, hasContent); });
+    const sequences = createMemo(() => { sequenceRuns++; return projectFlowerToolSequences(entries(), thread.thread_id, thread.turns, undefined, undefined, undefined, sequenceTokens); });
     createComputed(process); createComputed(sequences);
     let text = 'Answer', version = 1;
     const apply = (items: FlowerRuntimeUpdate['items']) => record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: version++, view_version: version,
