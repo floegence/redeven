@@ -227,6 +227,42 @@ export async function verifyWebEntryServices(): Promise<string[]> {
 }
 
 
+export async function createManualInputProbe() {
+  const { current } = await openRuntimeSession();
+  const rpc = async (type: number, payload: JsonValue) => {
+    const result = await current.rpc.call(type, payload, value => value, { signal: AbortSignal.timeout(10_000) });
+    if (!result.ok) throw new Error('Manual input probe RPC rejected: ' + type + ' ' + result.error.code);
+    return result.payload as Record<string, JsonValue>;
+  };
+  const owner = await rpc(1010, {});
+  const home = owner.agent_home_path_abs;
+  if (typeof home !== 'string' || !home) {
+    await current.close();
+    throw new Error('Manual input probe has no isolated home');
+  }
+  const inventory = await rpc(2002, {});
+  const priorSessions = (inventory.sessions as { id: string }[]).map(session => session.id);
+  const marker = 'CENTER_MANUAL_' + crypto.randomUUID().replaceAll('-', '');
+  const path = home + '/center-manual-' + crypto.randomUUID();
+  let created = false;
+  return {
+    path, marker, priorSessions,
+    async verify() {
+      const result = await current.rpc.call(1002, { path, encoding: 'utf8' }, value => value, { signal: AbortSignal.timeout(5000) });
+      if (!result.ok) return false;
+      created = true;
+      if ((result.payload as Record<string, JsonValue>).content !== marker) throw new Error('Manual terminal input changed the marker');
+      return true;
+    },
+    async close(sessionID: string) {
+      try {
+        if (sessionID && !priorSessions.includes(sessionID)) await rpc(2009, { session_id: sessionID });
+        if (created) await rpc(1006, { path });
+      } finally { await current.close(); }
+    },
+  };
+}
+
 export async function startControlledWorkload() {
   const { current, acquisition } = await openRuntimeSession();
   const rpc = async (type:number,payload:JsonValue) => {

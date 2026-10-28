@@ -55,3 +55,5 @@ The supported service templates require Linux and a trusted TLS identity. No ins
 # Evidence
 
 Optional test hooks are procedures, not completed-pass claims. The external Chinese task report tracks results and remaining gates. udesk26 Chrome acceptance on 2026-10-28 confirms display/input/disconnect; its published backend reports no clipboard/audio and supports manual text input. DPMS auto-wake and actual Safari remain unqualified; the user selected Chrome.
+
+`REDEVEN_CENTER_AUTH_BOUNDARIES=1` additionally exercises five incorrect Runtime passwords, the real cooldown, and five-minute challenge expiry through the browser UI. It waits on server wall time instead of replacing the browser clock. `REDEVEN_CENTER_PERMISSIONS=1` uses actual Chrome permission overrides to deny clipboard read/write, verifies the browser rejection, and types a terminal command using keyboard events. A separate Runtime read verifies the resulting file before task-owned terminal/file cleanup. These checks do not certify native file-picker cancellation, directory permission revocation, or every browser permission combination.

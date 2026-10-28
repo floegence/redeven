@@ -64,7 +64,7 @@ func TestCenterBrowserQualification(t *testing.T) {
 	if os.Getenv("REDEVEN_CENTER_LARGE_FILE") == "1" {
 		qualificationTimeout = 12 * time.Minute
 	}
-	if os.Getenv("REDEVEN_CENTER_REVOCATION_LATENCY") == "1" {
+	if os.Getenv("REDEVEN_CENTER_REVOCATION_LATENCY") == "1" || os.Getenv("REDEVEN_CENTER_AUTH_BOUNDARIES") == "1" {
 		qualificationTimeout = 15 * time.Minute
 	}
 	if value := os.Getenv("REDEVEN_CENTER_SOAK_SECONDS"); value != "" {

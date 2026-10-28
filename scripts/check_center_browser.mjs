@@ -97,6 +97,52 @@ async function verifyRuntimeWorkspace(page, navigate) {
   await page.locator('[data-workbench-dock-action="tessiven"]').waitFor({ state: 'visible', timeout: 30000 });
   await until(async () => await page.locator('[data-env-page-loading]:visible').count() === 0, 'Workbench did not recover after Activity navigation');
 }
+async function verifyDeniedClipboardManualInput(page, context, bundle) {
+  if (engine !== 'chromium') throw new Error('Permission qualification requires Chrome CDP');
+  const cdp = await context.newCDPSession(page);
+  const { targetInfo } = await cdp.send('Target.getTargetInfo');
+  await cdp.send('Browser.grantPermissions', { permissions: [], origin: new URL(page.url()).origin, browserContextId: targetInfo.browserContextId });
+  let sessionID = '';
+  let probeStarted = false;
+  try {
+    await page.bringToFront();
+    const permissions = await page.evaluate(async () => {
+      const states = await Promise.all(['clipboard-read', 'clipboard-write'].map(async name => ({ name, state: (await navigator.permissions.query({ name })).state })));
+      let readError = '';
+      try { await navigator.clipboard.readText(); } catch (error) { readError = error.name; }
+      return { states, readError };
+    });
+    if (permissions.states.some(item => item.state !== 'denied') || permissions.readError !== 'NotAllowedError') throw new Error('Chrome did not enforce clipboard denial: ' + JSON.stringify(permissions));
+    await page.addScriptTag({ path: bundle });
+    const probe = await page.evaluate(async () => {
+      window.manualInputProbe = await GatewayAcceptance.createManualInputProbe();
+      return { path: window.manualInputProbe.path, marker: window.manualInputProbe.marker, priorSessions: window.manualInputProbe.priorSessions };
+    });
+    probeStarted = true;
+    await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+    await page.locator('nav[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'Terminal', exact: true }).click();
+    const panel = page.locator('[data-terminal-panel-variant="panel"]:visible').last();
+    await panel.getByRole('button', { name: 'Create session', exact: true }).click();
+    const canvas = panel.locator('[data-terminal-semantic-canvas="true"]:visible').last();
+    await canvas.waitFor({ timeout: 15000 });
+    const terminal = canvas.locator('xpath=ancestor::*[@data-terminal-runtime-session][1]');
+    await until(async () => await terminal.getAttribute('aria-busy') === 'false' && Number(await terminal.getAttribute('data-terminal-presentation-sequence')) > 0, 'Manual terminal did not become interactive');
+    sessionID = await terminal.getAttribute('data-terminal-runtime-session');
+    if (!sessionID || probe.priorSessions.includes(sessionID)) throw new Error('Manual input did not create a task-owned terminal');
+    await terminal.locator('textarea[data-terminal-input-bridge="semantic"]').focus();
+    const quote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+    await page.keyboard.type('printf %s ' + quote(probe.marker) + ' > ' + quote(probe.path));
+    await page.keyboard.press('Enter');
+    await until(() => page.evaluate(() => window.manualInputProbe.verify()), 'Keyboard input did not reach the target Runtime while clipboard was denied');
+    if (await runtimeStatus(page) !== 200) throw new Error('Clipboard denial disrupted Runtime authority');
+    report.cases.push({ scope: 'Actual Chrome clipboard read/write permission denial and keyboard-only terminal command through Center', ...permissions, manualCommandVerified: true });
+  } finally {
+    try { if (probeStarted) await page.evaluate(id => window.manualInputProbe.close(id), sessionID); }
+    finally { await context.clearPermissions(); await cdp.detach(); }
+  }
+  await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
+  await verifyRuntimeWorkspace(page, false);
+}
 async function checkAccessibility(page) {
   await page.evaluate(await readFile(path.join(root, 'internal/envapp/ui_src/node_modules/axe-core/axe.min.js'), 'utf8'));
   const violations = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(item => ({ id: item.id, impact: item.impact, nodes: item.nodes.map(node => node.target) })));
@@ -131,6 +177,42 @@ async function runtimeLogin(page, target, recovery = false, negative = false) {
     privateFixture.recoveryCodes=target.recoveryCodes;
     await writeFile(file,JSON.stringify(privateFixture),{mode:0o600});
   }
+}
+async function verifyRuntimeAuthenticationBoundaries(page, target) {
+  const submit = async () => {
+    const [response] = await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/access/unlock')),
+      page.locator('button[type="submit"]').click(),
+    ]);
+    const body = await response.json();
+    return { status: response.status(), code: body.error?.code, factor: body.data?.second_factor_required };
+  };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await page.locator('input[autocomplete="current-password"]').fill('incorrect-qualification-password');
+    const result = await submit();
+    const expected = attempt === 4 ? 'ACCESS_PASSWORD_RETRY_LATER' : 'ACCESS_PASSWORD_INVALID';
+    if (result.code !== expected || await runtimeStatus(page) !== 423) throw new Error('Runtime password budget violated at ' + attempt + ': ' + JSON.stringify(result));
+  }
+  await page.getByText('Too many incorrect attempts. Wait for the cooldown, then try again.', { exact: true }).waitFor();
+  if (!await page.locator('button[type="submit"]').isDisabled()) throw new Error('Runtime cooldown left submit enabled');
+  await page.locator('input[autocomplete="current-password"]').fill('web-runtime-password');
+  await page.locator('button[type="submit"]').waitFor({ state: 'visible' });
+  const cooldownStarted = Date.now();
+  while (await page.locator('button[type="submit"]').isDisabled()) {
+    if (Date.now() - cooldownStarted > 45000) throw new Error('Runtime cooldown did not release');
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  const challenge = await submit();
+  if (challenge.status !== 200) throw new Error('Runtime password did not recover after cooldown');
+  await page.getByLabel('Authenticator code', { exact: true }).waitFor();
+  const issued = Date.now();
+  // Wait on the real server clock; browser fake time cannot certify expiry.
+  await new Promise(resolve => setTimeout(resolve, 305000));
+  await page.locator('input[autocomplete="one-time-code"]').fill(totp(target.secret));
+  const expired = await submit();
+  if (expired.code !== 'ACCESS_CHALLENGE_EXPIRED' || await runtimeStatus(page) !== 423) throw new Error('Expired Runtime challenge authorized business: ' + JSON.stringify(expired));
+  await page.locator('input[autocomplete="current-password"]').waitFor();
+  report.cases.push({ scope: 'Actual Runtime password throttling and challenge expiry through Chrome UI', passwordFailures: 5, cooldownObserved: true, challengeElapsedMs: Date.now() - issued, expiredCode: expired.code });
 }
 try {
   if (reportDir) await mkdir(reportDir, { recursive: true, mode: 0o700 });
@@ -281,12 +363,14 @@ try {
     console.log('QUALIFICATION_RUNTIME',target.runtimeID);
     const environment = await openEnvironment(portal, context, index);
     environments.push(environment);
+    if (index === 0 && process.env.REDEVEN_CENTER_AUTH_BOUNDARIES === '1') await verifyRuntimeAuthenticationBoundaries(environment, target);
     await runtimeLogin(environment, target, false, index === 0);
     await environment.addScriptTag({ path: bundled });
     report.cases.push({ runtime: target.runtimeID, assertions: await environment.evaluate(() => GatewayAcceptance.verifyWebEntryServices()) });
     await environment.reload({ waitUntil: 'domcontentloaded' });
     await until(async () => await runtimeStatus(environment) === 200, 'Reload lost valid Runtime session');
     await verifyRuntimeWorkspace(environment, index === 0);
+    if (index === 0 && process.env.REDEVEN_CENTER_PERMISSIONS === '1') await verifyDeniedClipboardManualInput(environment, context, bundled);
     const cookies = await context.cookies(target.origin);
     if (cookies.some(cookie => cookie.domain !== new URL(target.origin).hostname || !cookie.secure)) throw new Error('Cookies escaped environment HTTPS host');
     if (reportDir) await environment.screenshot({ path: path.join(reportDir, engine + '-runtime-' + index + '.png'), fullPage: true });
