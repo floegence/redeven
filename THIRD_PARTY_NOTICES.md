@@ -2753,7 +2753,7 @@ SOFTWARE.
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.1.0 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/floegence/floe-native-apps | v0.25.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.25.0 | Detected from LICENSE. |
+| github.com/floegence/floe-native-apps | v0.25.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.25.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.88.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.88.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.1 | Floegence first-party dependency. |

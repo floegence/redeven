@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/floegence/floe-native-apps.git",
       "state" : {
-        "revision" : "aefc0770ffadf6061a23fd2f3e3046c0145c5538",
-        "version" : "0.25.0"
+        "revision" : "621cdea7d67f072b0e31eec4e7988562477d1c9c",
+        "version" : "0.25.1"
       }
     }
   ],
