@@ -21,8 +21,11 @@ export async function createComputerScript({ browser = true } = {}) {
     if (active) { active.sealed = true; active.diagnostic = 'SCRIPT_ARGUMENT_ERROR'; active.argumentDiagnostic={method:vm.getString(method),field:vm.getString(field),expected:vm.getString(expected),recovery:'correct_arguments'}; }
     return { error: vm.newError('SCRIPT_ARGUMENT_ERROR') };
   });
-  install('__conditionTimeout', () => {
-    if (active) { active.sealed = true; active.diagnostic = 'CONDITION_TIMEOUT'; }
+  install('__conditionTimeout', (state, timeout) => {
+    if (active) {
+      active.sealed = true; active.diagnostic = 'CONDITION_TIMEOUT';
+      active.conditionDiagnostic = {method:'locator.requireState',state:vm.getString(state),timeout_ms:vm.getNumber(timeout),operation_index:active.count-1};
+    }
     return { error: vm.newError('CONDITION_TIMEOUT') };
   });
   install('__operation', (encoded) => {
@@ -83,7 +86,10 @@ export async function createComputerScript({ browser = true } = {}) {
       const expose = (prefix, methods) => Object.freeze(Object.fromEntries(Object.entries(methods).map(([name,method])=>[name,(...args)=>{currentMethod=prefix+'.'+name;return method(...args);}])));
       delete globalThis.__operation; delete globalThis.__log; delete globalThis.__invalidArgument; delete globalThis.__conditionTimeout; delete globalThis.__budget;
       const options = (value, keys) => {
-        if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some(key => !keys.includes(key))) invalid();
+        if (!value || Object.getPrototypeOf(value) !== Object.prototype) invalid();
+        const unknown = Object.keys(value).find(key => !keys.includes(key));
+        // Name only product-authored option keys; arbitrary keys may be secret.
+        if (unknown !== undefined) invalid(['state','equals','timeout_ms','limit','emit','full','screenshot','root_ref','cursor','coordinate_space','url','id','after'].includes(unknown) ? unknown : 'arguments');
         return value;
       };
       const string = (value,field='text') => { if (typeof value !== 'string') invalid(field,'string'); return value; };
@@ -165,7 +171,11 @@ export async function createComputerScript({ browser = true } = {}) {
         press: (key) => call({action: 'key', selector, key: string(key,'key')}),
         scroll: (delta_y, delta_x = 0) => call({action: 'scroll', selector, delta_y: number(delta_y), delta_x: number(delta_x)}),
         waitFor: (value = {}) => call({action: 'wait', selector, ...waitOptions(value)}),
-        requireState: async (value={}) => { const result=await call({action:'wait',selector,...waitOptions(value)}); if(result.state==='timeout') timedOut(); },
+        requireState: async (value={}) => {
+          const condition=waitOptions(value), state=condition.state ?? 'visible', timeout=condition.timeout_ms ?? 10000;
+          const result=await call({action:'wait',selector,...condition});
+          if(result.state==='timeout') timedOut(state,timeout);
+        },
       });
       Object.defineProperties(globalThis, {
         ui: {value: expose('ui',{
@@ -267,7 +277,7 @@ export async function createComputerScript({ browser = true } = {}) {
         // Preserve bounded output without exposing guest exception text, which
         // can include values from the page or sensitive input.
         const failure = new Error('SCRIPT_FAILED');
-        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, ...execution.argumentDiagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
+        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, ...execution.argumentDiagnostic, ...execution.conditionDiagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
         throw failure;
       } finally {
         execution.sealed = true;

@@ -14,8 +14,8 @@ func TestComputerContractCurrentIdentityAndFailureFacts(t *testing.T) {
 		name, status string
 	}{
 		{map[string]any{}, target.ID, "not_observed"},
-		{map[string]any{"title": "Current page"}, "Current page", "current"},
-		{map[string]any{"observation": map[string]any{"title": "New page"}}, "New page", "current"},
+		{map[string]any{"title": "Current page"}, "Current page", "not_observed"},
+		{map[string]any{"observation": map[string]any{"title": "New page", "document_id": "doc-1"}}, "New page", "current"},
 	} {
 		got := targetToolResultPayload(TargetToolResult{Result: tc.body}, target.ID, target).(map[string]any)
 		if got["target_name"] != tc.name || got["observation_status"] != tc.status || got["discovery_name"] != target.DisplayName {

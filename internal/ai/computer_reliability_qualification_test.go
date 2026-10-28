@@ -102,7 +102,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -115,6 +115,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				var typedValue atomic.Value
 				site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
+					case "/child", "/child2":
+						w.Header().Set("Content-Type", "text/html")
+						_, _ = fmt.Fprintf(w, `<button>%s</button>`, r.URL.Path)
+						return
 					case "/pointer":
 						pointerClicks.Add(1)
 						return
@@ -155,6 +159,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					w.Header().Set("Content-Type", "text/html")
 					_, _ = io.WriteString(w, "<!doctype html><title>Orchid domain console</title><style>body{font:16px system-ui;padding:20px}td,th{padding:4px 12px}button,input,a{margin:8px}#noise{height:100px;overflow:auto}</style><h1>Account: Orchid</h1><a href='/other'>Switch to Birch account</a><a href='/export'>Export domains</a><button id='save' onclick=\"fetch('/submit',{method:'POST'}).then(()=>document.getElementById('saved').textContent='Saved once')\">Save once</button><output id='saved' aria-label='Save status'></output>")
+					if scenario == "observation_capture" {
+						_, _ = io.WriteString(w, `<style>body{height:12000px}</style><script>document.addEventListener('keydown',e=>{if(e.key==='PageDown')fetch('/entered',{method:'POST'})})</script>`)
+					}
+					if scenario == "frame_refs" {
+						_, _ = io.WriteString(w, `<button onclick="document.querySelector('iframe').src='/child2'">Refresh child</button><iframe src="/child"></iframe>`)
+					}
 					if scenario == "scrolled_click" {
 						_, _ = io.WriteString(w, "<style>#save{position:absolute;top:1800px;left:200px}body{height:4000px}</style>")
 					}
@@ -271,6 +281,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "observation_capture":
+					prompt = "Run exactly one computer.exec containing: for(let i=0;i<4;i++) await ui.key('PageDown'); await ui.screenshot(); . Do not add waits or repeat any key. Report the tool's observation_status and needs_observation."
+				case "frame_refs":
+					prompt = "Execute this diagnostic as one computer.exec: const parent=await ui.getByRole('button',{name:'Save once',exact:true}).node(); await ui.getByRole('button',{name:'Refresh child',exact:true}).click(); await ui.getByRole('button',{name:'/child2',exact:true}).requireState({state:'visible',timeout_ms:3000}); await ui.ref(parent.ref).click(); await ui.snapshot({emit:false}); . Use the saved parent ref; do not reacquire it or repeat Save once. Report the tool facts."
+				case "option_field":
+					prompt = "Run this intentional diagnostic exactly once as one computer.exec: await ui.getByRole('button',{name:'Save once',exact:true}).snapshot({full:true}); . Do not remove the unsupported option. Report the returned method, field and expected form, then use a separate ui.snapshot() call. Do not click or save."
 				case "script_batch":
 					prompt = "Open " + site.URL + "/batch?page=1 in this task's page, read all three scores and calculate their total. Once the page structure is known, process the remaining pages in one computer script using a loop and return a screenshot of the last page. Keep the original browser page available; do not use network scraping."
 				case "native_entry":
@@ -375,6 +391,9 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
 							fact["logs"], fact["budget"] = data["logs"], data["budget"]
 							fact["failed_action"] = data["failed_action"]
+							for _, key := range []string{"failed_operation_index", "needs_observation", "observation_status", "frame_geometry"} {
+								fact[key] = data[key]
+							}
 							if code == "ELEMENT_NOT_ACTIONABLE" && data["failed_action"] == "click" {
 								clickRejected = true
 							}
@@ -461,6 +480,40 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "observation_capture", "frame_refs":
+					verified := false
+					for _, fact := range confirmedToolFacts {
+						if fact["tool"] != "computer.exec" || fact["status"] != "success" {
+							continue
+						}
+						keys, clicks := 0, 0
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							if action == "key" {
+								keys++
+							}
+							if action == "click" {
+								clicks++
+							}
+						}
+						if scenario == "observation_capture" {
+							verified = verified || keys == 4 && fact["frame_geometry"] != nil && fact["observation_status"] == "current" && fact["needs_observation"] == false
+						}
+						if scenario == "frame_refs" {
+							verified = verified || clicks == 2 && fact["observation_status"] == "current" && fact["needs_observation"] == false
+						}
+					}
+					if !verified || len(scriptErrors) != 0 || scenario == "observation_capture" && entered.Load() != 4 || scenario == "frame_refs" && submissions.Load() != 1 {
+						t.Errorf("observation tool contract failed: verified=%v keys=%d saves=%d errors=%v", verified, entered.Load(), submissions.Load(), scriptErrors)
+					}
+				case "option_field":
+					verified := false
+					for _, fact := range confirmedToolFacts {
+						d, _ := fact["diagnostic"].(map[string]any)
+						verified = verified || fact["script_error"] == "SCRIPT_ARGUMENT_ERROR" && d["method"] == "locator.snapshot" && d["field"] == "full" && d["expected"] == "documented_fields"
+					}
+					if !verified || submissions.Load() != 0 {
+						t.Error("precise unsupported-option diagnosis missing")
+					}
 				case "scrolled_click":
 					if submissions.Load() != 1 || clickRejected || !strings.Contains(text, "Saved once") {
 						t.Errorf("scrolled click failed: submissions=%d errors=%v", submissions.Load(), scriptErrors)
@@ -562,6 +615,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						t.Error("safe read facts missing")
 					}
 				case "strict_wait":
+					conditionVerified := false
+					for _, fact := range confirmedToolFacts {
+						d, _ := fact["diagnostic"].(map[string]any)
+						conditionVerified = conditionVerified || fact["failed_action"] == "wait" && fact["failed_operation_index"] == float64(1) && d["method"] == "locator.requireState" && d["state"] == "visible" && d["timeout_ms"] == float64(0)
+					}
+					if !conditionVerified {
+						t.Error("required wait lost its closed condition facts")
+					}
 					if scriptErrors["CONDITION_TIMEOUT"] == 0 || submissions.Load() != 0 {
 						t.Error("strict timeout failed to stop following input")
 					}

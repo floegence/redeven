@@ -21,7 +21,7 @@ export class BrowserComputerController {
     const { data } = await this.transport.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
     if (!before) return { mime: 'image/png', data };
     const after = await viewportGeometry(this.transport);
-    if (!sameGeometry(before,after)) throw new Error('OBSERVATION_INVALIDATED');
+    if (!sameGeometry(before,after)) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'capture', observationReason: 'viewport_unstable' });
     return { mime: 'image/png', data, geometry: screenshotGeometry(data,after,`${this.page.prefix}:${this.page.revision}`,targetID) };
   }
   pause(safety, executed) {
@@ -36,9 +36,10 @@ export class BrowserComputerController {
   }
   async readObservation(read, stage = 'semantic_read') {
     const revision = this.page.revision;
-    // Only repeat reads, never executeOperation or an input. Do not restart the
-    // privacy observer here: a secret transition remains latched after input.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const deadline = Date.now() + 1000;
+    // Generic transient reads retry once. Same-document viewport movement has
+    // a bounded settling window. Neither path replays input or resets privacy.
+    for (let attempt = 0;; attempt++) {
       try {
         const result = await read();
         // Confirmed privacy evidence wins over a concurrent frame change.
@@ -49,7 +50,15 @@ export class BrowserComputerController {
         if (this.page.invalid || this.page.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
         if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
         if (rejections.has(error.message)) throw error;
-        if (attempt === 1) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage });
+        if (error.observationReason === 'viewport_unstable') {
+          if (Date.now() >= deadline) throw error;
+          // Sample again within the invocation budget without replaying input
+          // or resetting the privacy latch. Cancellation interrupts the delay.
+          await this.page.delay(Math.min(32, deadline - Date.now()));
+          if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
+          continue;
+        }
+        if (attempt >= 1) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage });
       }
     }
   }
@@ -188,7 +197,7 @@ export class BrowserComputerController {
         result: { action_executed: dispatched(), needs_observation: true, observation_stage: 'semantic_read' } };
       if (error.message === 'TARGET_OBSERVATION_UNAVAILABLE') return {
         error: 'TARGET_OBSERVATION_UNAVAILABLE',
-        result: { action_executed: dispatched(), observation_stage: error.observationStage },
+        result: { action_executed: dispatched(), needs_observation: true, observation_stage: error.observationStage, ...(error.observationReason === 'viewport_unstable' ? {reason:'viewport_unstable'} : {}) },
       };
       if (page.openedPages.length) return await this.targetChange(dispatched());
       if (error.message === 'OBSERVATION_INVALIDATED') return {
@@ -200,7 +209,7 @@ export class BrowserComputerController {
       if (error.message === 'ELEMENT_NOT_ACTIONABLE') return { error: error.message,
         result: { action_executed: false, needs_observation: dispatched(), preparation_executed: dispatched() } };
       return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',
-        result: { action_executed: dispatched(), needs_observation: dispatched(), ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
+        result: { action_executed: dispatched(), needs_observation: dispatched() || error.message === 'STALE_REFERENCE', ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
     }
   }
 }

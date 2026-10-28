@@ -589,7 +589,7 @@ test('safety reads recover once and persistent failure preserves effects without
       return send(method, parameters);
     };
     const focusFailure = await controller.execute({ tool_name: 'computer.type', args: { text: 'Unsent' } });
-    assert.deepEqual(focusFailure, { error: 'TARGET_OBSERVATION_UNAVAILABLE', result: { action_executed: false, observation_stage: 'semantic_read' } });
+    assert.deepEqual(focusFailure, { error: 'TARGET_OBSERVATION_UNAVAILABLE', result: { action_executed: false, needs_observation: true, observation_stage: 'semantic_read' } });
     assert.equal(await page.locator('input').inputValue(), '');
   } finally { await browser.close(); }
 });

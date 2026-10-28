@@ -546,7 +546,7 @@ func TestExtensionObservationFailurePreservesOnlyConfirmedProgress(t *testing.T)
 				t.Fatalf("read failure misclassified: %v", err)
 			}
 			payload := result.Result.(map[string]any)
-			if len(payload) != 2 || payload["action_executed"] != executed || len(result.Attachments) != 0 || len(result.frameBytes) != 0 {
+			if len(payload) != 3 || payload["needs_observation"] != true || payload["action_executed"] != executed || len(result.Attachments) != 0 || len(result.frameBytes) != 0 {
 				t.Fatalf("unsafe failure payload: %+v", result)
 			}
 		})

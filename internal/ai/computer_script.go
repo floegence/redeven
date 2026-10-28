@@ -198,6 +198,8 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var lastFrameGeometry any
 	var fullObservation bool
 	observationInvalidated := false
+	needsObservation := false
+	currentObservation := false
 	var observationFailureStage string
 	var failureStage, failureReason string
 	var navigationFailure *computerNavigationError
@@ -215,7 +217,8 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			output.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
 		}
 		output.executionFacts.completedActions = append([]string(nil), completed...)
-		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted || errors.Is(outputErr, errComputerEffectUnknown)
+		needsObservation = needsObservation || observationInvalidated || observationFailureStage != "" || errors.Is(outputErr, errComputerEffectUnknown) || pause != nil || targetChange != nil
+		output.executionFacts.needsObservation = needsObservation
 		if payload, ok := output.Result.(map[string]any); ok {
 			if ambiguousDownloads != nil && pause == nil {
 				payload["downloads"] = ambiguousDownloads
@@ -229,6 +232,8 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations)}
 			if failureStage != "" {
 				payload["stage"] = failureStage
+			}
+			if failureReason != "" {
 				payload["reason"] = failureReason
 			}
 			if preparationExecuted {
@@ -244,7 +249,11 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				payload["failed_operation_index"] = failedOperationIndex
 				payload["failed_action"] = failedAction
 			}
-			payload["needs_observation"] = observationInvalidated || observationFailureStage != "" || (actionExecuted && lastObservation == nil) || errors.Is(outputErr, errComputerEffectUnknown)
+			payload["needs_observation"] = needsObservation
+			payload["observation_status"] = "not_observed"
+			if currentObservation && !needsObservation {
+				payload["observation_status"] = "current"
+			}
 			payload["observation_invalidated"] = observationInvalidated
 			payload["effect_outcome_unknown"] = errors.Is(outputErr, errComputerEffectUnknown)
 			if requiredNavigationURL != "" {
@@ -347,6 +356,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					p.observations = computerObservationOutput{}
 				}
 				var failure *targetToolPolicyError
+				if errors.As(err, &failure) && failure.code == "stale_reference" {
+					needsObservation = true
+				}
 				if errors.As(err, &failure) && failure.code == "target_observation_unavailable" {
 					payload, _ := observed.Result.(map[string]any)
 					observationFailureStage = computerObservationStage(anyToString(payload["observation_stage"]))
@@ -362,6 +374,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
 				argumentDiagnostic = computerArgumentDiagnostic(payload["diagnostic"])
+				if payload["needs_observation"] == true {
+					needsObservation = true
+				}
 				if payload["preparation_executed"] == true {
 					preparationExecuted = true
 					observationInvalidated = true
@@ -377,11 +392,16 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				}
 				if payload["action_executed"] == true {
 					actionExecuted = true
+					needsObservation = true
+					currentObservation = false
 					lastObservation = nil
 					lastFrameGeometry = nil
 				}
 				if value, ok := payload["frame_geometry"]; ok {
 					lastFrameGeometry = value
+				}
+				if err == nil && (observed.Safety == nil || observed.Safety.SafeToSendToModel) && (payload["observation"] != nil || len(observed.Attachments) > 0) {
+					currentObservation, needsObservation, observationInvalidated = true, false, false
 				}
 				if observation, ok := payload["observation"]; ok {
 					if tree, ok := observation.(map[string]any); ok {
@@ -502,6 +522,11 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				if stopped == nil {
 					if diagnostic := computerScriptDiagnostic(msg.Result["diagnostic"], args.Code); diagnostic != nil {
 						result.Result.(map[string]any)["diagnostic"] = diagnostic
+						if code == "CONDITION_TIMEOUT" && diagnostic["method"] == "locator.requireState" {
+							if index, ok := diagnostic["operation_index"].(int); ok && index < len(completed) && completed[index] == "wait" {
+								failedOperationIndex, failedAction = index, "wait"
+							}
+						}
 					}
 				}
 				result.Result.(map[string]any)["recovery"] = "Inspect current state and completed_actions before deciding what remains; do not replay input."

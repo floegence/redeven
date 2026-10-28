@@ -31,6 +31,8 @@ discard content. Batch known steps across pages within the runtime budget; retur
 screenshots for model judgment when the next action depends on pixels. Argument
 diagnostics identify the method when known, field, expected form and fixed repair
 examples; raw errors remain private.
+Known unsupported option names are returned exactly; arbitrary keys and values
+are never echoed. locator.snapshot still accepts only limit and emit.
 
 Native ui.scroll uses the window center; ui.scrollAt(x,y,delta_y,delta_x=0)
 targets a region without clicking first. Selector scroll remains semantic.
@@ -81,6 +83,12 @@ frame/document identity; mutating returned metadata cannot retarget the handle.
 
 Private takeover keeps observations and pixels out of model history.
 
+needs_observation has one script-owned value for both execution facts and the
+model result. A safe snapshot (including emit:false) or screenshot clears it;
+later input, stale refs, observation failure or unknown effects require a fresh
+read. observation_status describes a safe current observation in this call,
+not the presence of a title. A title alone never establishes freshness.
+
 ## Validated inputs and bounded browser reads
 The browser adapter validates the complete operation before virtual focus,
 scroll preparation or input. Invalid arguments retain a closed diagnostic with
@@ -89,6 +97,10 @@ never copied into it. Keys use characters or documented names with
 Alt/Control/Meta/Shift modifiers; physical codes such as Equal are not names.
 Primitive computer.wait defaults to zero milliseconds and adds no settling
 promise. Legacy waitFor retains its returned state. requireState throws CONDITION_TIMEOUT and seals later host operations, even if guest code catches the error. Earlier completed input remains recorded.
+Its closed diagnostic retains method, requested state, timeout_ms and zero-based
+operation_index, mirrored in failed_action/failed_operation_index. Matching text
+and raw exceptions stay private. completed_actions records completed operations;
+a completed wait operation does not imply its requested condition was met.
 
 Browser locators expose query({limit,cursor}) over the authorized loaded AX
 scope and an attribute allowlist. Results carry total, truncation, document and

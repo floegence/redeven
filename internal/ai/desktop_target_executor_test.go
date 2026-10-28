@@ -165,7 +165,7 @@ done
 	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.click"})
 	classified := aitools.ClassifyError(aitools.Invocation{ToolName: "computer.click"}, err)
 	payload, _ := result.Result.(map[string]any)
-	if classified == nil || classified.Code != "TARGET_OBSERVATION_UNAVAILABLE" || takeoverResult(result, err) || payload["action_executed"] != true || payload["observation_stage"] != "safety_scan" || len(payload) != 2 {
+	if classified == nil || classified.Code != "TARGET_OBSERVATION_UNAVAILABLE" || takeoverResult(result, err) || payload["action_executed"] != true || payload["observation_stage"] != "safety_scan" || payload["needs_observation"] != true || len(payload) != 3 {
 		t.Fatalf("lost confirmed observation failure: %+v %+v", result, classified)
 	}
 }

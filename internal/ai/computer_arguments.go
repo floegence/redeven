@@ -17,6 +17,14 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 		return nil
 	}
 	out := map[string]any{"phase": phase}
+	if raw["code"] == "CONDITION_TIMEOUT" && raw["method"] == "locator.requireState" {
+		state := anyToString(raw["state"])
+		timeout, timeoutOK := raw["timeout_ms"].(float64)
+		index, indexOK := raw["operation_index"].(float64)
+		if slices.Contains([]string{"visible", "hidden", "enabled", "text", "value"}, state) && timeoutOK && timeout >= 0 && timeout <= 30000 && timeout == float64(int(timeout)) && indexOK && index >= 0 && index < 50 && index == float64(int(index)) {
+			out["method"], out["state"], out["timeout_ms"], out["operation_index"] = "locator.requireState", state, int(timeout), int(index)
+		}
+	}
 	validation := cloneAnyMap(raw)
 	validation["phase"] = "validation"
 	if details := computerArgumentDiagnostic(validation); details != nil {

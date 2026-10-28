@@ -97,7 +97,7 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location}
 	if known && payload != nil {
 		executed, _ := payload["action_executed"].(bool)
-		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed}
+		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed || code == "STALE_REFERENCE"}
 		if code == "AMBIGUOUS_DOWNLOAD" {
 			if downloads, ok := payload["downloads"].([]any); ok && len(downloads) <= 32 {
 				result.Result.(map[string]any)["downloads"] = downloads
@@ -259,7 +259,10 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 	if !confirmed || computerObservationStage(stage) == "unknown" {
 		return TargetToolResult{}, errors.New("invalid browser observation failure")
 	}
-	facts := map[string]any{"action_executed": executed, "observation_stage": stage}
+	facts := map[string]any{"action_executed": executed, "observation_stage": stage, "needs_observation": true}
+	if stage == "capture" && payload["reason"] == "viewport_unstable" {
+		facts["reason"] = "viewport_unstable"
+	}
 	if progress := computerInputProgress(payload["input_progress"]); len(progress) > 0 {
 		facts["input_progress"] = progress
 	}

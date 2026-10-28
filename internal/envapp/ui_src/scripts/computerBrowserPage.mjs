@@ -101,7 +101,7 @@ export class BrowserComputerPage {
     this.guardFailure = false;
     this.privateInput = false;
     this.userBrowsing = false;
-    this.observedFrames = new Set();
+    this.observedFrames = new Map();
     this.stopped = false;
     this.operationCancelled = false;
     this.invalid = false;
@@ -124,7 +124,25 @@ export class BrowserComputerPage {
   }
   allowsOrigin(origin) { return this.fullAccess || (origin !== 'null' && this.allowedOrigins.has(origin)); }
 
-  invalidate() { this.revision++; this.references.clear(); this.observedFrames.clear(); this.changed(); }
+  invalidate(frameIDs) {
+    this.revision++;
+    if (frameIDs === undefined) { this.references.clear(); this.observedFrames.clear(); }
+    else {
+      const removed = new Set(frameIDs);
+      // Reuse the observation inventory for frame ancestry and document
+      // identity. Child replacement does not revoke unchanged parent refs.
+      for (let size = -1; size !== removed.size;) {
+        size = removed.size;
+        for (const [id, record] of this.observedFrames) if (removed.has(record.frame.parentId)) removed.add(id);
+      }
+      for (const [ref, entry] of this.references) if (removed.has(entry.frame.frame.id)) this.references.delete(ref);
+      for (const id of removed) this.observedFrames.delete(id);
+    }
+    this.changed();
+  }
+  invalidateSession(session) {
+    this.invalidate([...this.observedFrames].filter(([,record]) => record.session === session).map(([id]) => id));
+  }
   changed() { for (const listener of this.listeners) listener(); }
   close() { this.invalid = true; this.invalidate(); }
   cancel(internal = false) {
@@ -146,7 +164,10 @@ export class BrowserComputerPage {
     };
     this.sessionDisposers.set(session, () => { for (const dispose of listeners) dispose(); });
     const ready = (async () => {
-      for (const event of ['Page.frameAttached', 'Page.frameDetached', 'Page.frameNavigated', 'DOM.documentUpdated']) listen(event, () => this.invalidate());
+      listen('Page.frameAttached', event => this.invalidate([event.frameId]));
+      listen('Page.frameDetached', event => this.invalidate([event.frameId]));
+      listen('Page.frameNavigated', event => this.invalidate(event.frame.parentId ? [event.frame.id] : session === this.transport ? undefined : [event.frame.id]));
+      listen('DOM.documentUpdated', () => this.invalidateSession(session));
       for (const event of ['DOM.childNodeRemoved', 'DOM.attributeModified', 'DOM.childNodeInserted', 'Accessibility.nodesUpdated', 'Page.lifecycleEvent']) listen(event, () => this.changed());
       listen('Page.windowOpen', event => {
         // Opening a page completes an action; choosing that page is the
@@ -207,7 +228,7 @@ export class BrowserComputerPage {
     this.sessionDisposers.delete(session);
     this.sessions.delete(session);
     this.focusedSessions.delete(session);
-    this.invalidate();
+    this.invalidateSession(session);
   }
 
   async preparePage() {
@@ -240,10 +261,14 @@ export class BrowserComputerPage {
       walk(frameTree);
     }
     for (const frame of result) {
-      if (this.observedFrames.has(frame.frame.id)) continue;
+      const previous = this.observedFrames.get(frame.frame.id);
+      if (previous?.session === frame.session && previous.frame.loaderId === frame.frame.loaderId) continue;
+      if (previous) this.invalidate([frame.frame.id]);
+      const revision = this.revision;
       const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
       await frame.session.send('Runtime.evaluate', { contextId: executionContextId, expression: privacyObserverSource });
-      this.observedFrames.add(frame.frame.id);
+      if (revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
+      this.observedFrames.set(frame.frame.id, {...frame, revision});
     }
     return result;
   }
@@ -429,11 +454,13 @@ export class BrowserComputerPage {
 
   rememberNode(frame, node, retain = true) {
     // Opaque refs stay in the existing controller/document reference table.
-    const identity = [this.prefix,this.revision,frame.frame.id,node.backendDOMNodeId];
+    const document = this.observedFrames.get(frame.frame.id);
+    if (!document || document.session !== frame.session) throw new Error('STALE_REFERENCE');
+    const identity = [this.prefix,document.revision,frame.frame.id,node.backendDOMNodeId];
     const ref = 'r'+createHash('sha256').update(JSON.stringify(identity)).digest('base64url').slice(0,16);
     const existing = this.references.get(ref);
-    if (existing && (existing.revision!==this.revision || existing.frame.frame.id!==frame.frame.id || existing.backendNodeId!==node.backendDOMNodeId)) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-    const entry = { ref, frame, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', name: Array.from(node.name?.value || '').slice(0, 2000).join(''), revision: this.revision };
+    if (existing && (existing.document !== document || existing.backendNodeId!==node.backendDOMNodeId)) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+    const entry = { ref, frame, document, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', name: Array.from(node.name?.value || '').slice(0, 2000).join('') };
     if (!retain) return entry;
     if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
     this.references.set(ref, entry);
@@ -446,7 +473,7 @@ export class BrowserComputerPage {
     const matches = [];
     if (typeof selector.ref === 'string') {
       entry = this.references.get(selector.ref);
-      if (!entry || entry.revision !== this.revision) throw new Error('STALE_REFERENCE');
+      if (!entry || entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
       if (selector.name !== undefined && typeof selector.name === 'string' && selector.exact === true && entry.name !== selector.name) throw new Error('STALE_REFERENCE');
     } else {
       const roles = selector.roles || [selector.role];
@@ -494,6 +521,7 @@ export class BrowserComputerPage {
       const current = nodes.find(node => node.backendDOMNodeId === entry.backendNodeId);
       if (!current || current.ignored || current.role?.value !== entry.role || Array.from(current.name?.value || '').slice(0, 2000).join('') !== entry.name) throw new Error('changed');
     } catch { this.references.delete(entry.ref); throw new Error('STALE_REFERENCE'); }
+    if (entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
     return collect ? [entry] : entry;
   }
 

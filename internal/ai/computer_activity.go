@@ -213,7 +213,7 @@ func computerDiagnosticValue(key string, value any) string {
 	text, _ := value.(string)
 	allowed := map[string][]string{
 		"stage":             {"preparation", "focus", "input_delivery", "input_release", "input_observed", "action", "helper_exchange"},
-		"reason":            {"unavailable", "not_focusable", "receipt_timeout", "cancelled", "target_unavailable", "target_not_ready", "permission_required", "invalid_request", "action_failed", "response_unavailable"},
+		"reason":            {"unavailable", "not_focusable", "receipt_timeout", "cancelled", "target_unavailable", "target_not_ready", "permission_required", "invalid_request", "action_failed", "response_unavailable", "viewport_unstable"},
 		"target_state":      {"available", "unavailable", "unknown"},
 		"observation_stage": {"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata", "hit_test"},
 	}
