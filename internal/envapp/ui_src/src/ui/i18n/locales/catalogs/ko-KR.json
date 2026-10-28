@@ -1,4 +1,8 @@
 {
+  "centerEntry": {
+    "expiringTitle": "진입 세션이 곧 만료됩니다",
+    "expiringMessage": "환경에서 작업을 계속하면 진입 세션이 유지됩니다. 최대 세션 시간이 지나면 다시 로그인해야 합니다."
+  },
   "sessionRestart": {
     "preparing": "다시 시작 준비 중",
     "restarting": "런타임 다시 시작 중",

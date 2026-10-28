@@ -30,6 +30,8 @@ No upstream platform capability changes are required for this product authentica
 
 # Boundaries
 
+Owner-approved Web entry binds ordinary credentials and artifact/resume admission to binding revision and Center device; child artifacts add exact resource scope. Center login cannot replace Runtime accessgate or create Desktop management. [Center security](web-center-access.md) owns the independent entry authority.
+
 Desktop Web Service handoff cookies are HttpOnly and SameSite=Strict.
 
 Cookies isolate presentation scopes but cannot extend or create authorization.

@@ -280,7 +280,11 @@ func newTestLocalUIDeviceCA(t *testing.T) *deviceCA {
 	return testDeviceCA
 }
 
-func newRuntimeHealthTestAgent(t *testing.T, cfgPath string, gate *accessgate.Gate) *agent.Agent {
+func newRuntimeHealthTestAgent(t *testing.T, cfgPath string, gate *accessgate.Gate, identities ...string) *agent.Agent {
+	identity := "runtime_local_ui_test"
+	if len(identities) > 0 {
+		identity = identities[0]
+	}
 	t.Helper()
 	if gate == nil {
 		t.Fatal("runtime fixture requires the Local UI authentication gate")
@@ -302,7 +306,7 @@ func newRuntimeHealthTestAgent(t *testing.T, cfgPath string, gate *accessgate.Ga
 	}
 	a, err := agent.New(agent.Options{
 		Config: &config.Config{
-			LocalEnvironmentPublicID: "runtime_local_ui_test",
+			LocalEnvironmentPublicID: identity,
 			AgentInstanceID:          "agent_local_ui_test",
 			AgentHomeDir:             t.TempDir(),
 			PermissionPolicy:         policy,

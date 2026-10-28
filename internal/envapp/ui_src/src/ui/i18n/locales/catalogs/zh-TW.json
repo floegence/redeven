@@ -1,4 +1,8 @@
 {
+  "centerEntry": {
+    "expiringTitle": "入口工作階段即將到期",
+    "expiringMessage": "繼續操作環境可保持入口工作階段有效。達到最長工作階段期限後仍需重新登入。"
+  },
   "sessionRestart": {
     "preparing": "正在準備重新啟動",
     "restarting": "正在重新啟動執行階段",

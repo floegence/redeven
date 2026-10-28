@@ -1,0 +1,1542 @@
+{
+  "$defs": {
+    "AddBookmarkRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "grant": {
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "url",
+            "expected_revision"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "grant",
+        "input"
+      ],
+      "type": "object"
+    },
+    "AddRouteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "grant": {
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "label": {
+              "type": "string"
+            },
+            "member_id": {
+              "type": "string"
+            },
+            "origin": {
+              "type": "string"
+            },
+            "runtime_id": {
+              "type": "string"
+            },
+            "source_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_id",
+            "member_id",
+            "runtime_id",
+            "origin",
+            "label",
+            "expected_revision"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "grant",
+        "input"
+      ],
+      "type": "object"
+    },
+    "ApplicationRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "kind",
+        "id",
+        "path"
+      ],
+      "type": "object"
+    },
+    "ApplicationResult": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "destination",
+        "origin"
+      ],
+      "type": "object"
+    },
+    "AuditEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "time": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "time",
+        "action",
+        "result",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "AuditEvents": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "time": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "time",
+          "action",
+          "result",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "Authentication": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "challenge": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "recovery_code": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "AuthenticationResult": {
+      "additionalProperties": false,
+      "properties": {
+        "challenge": {
+          "type": "string"
+        },
+        "device": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "expires_at": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "last_activity_at": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "created_at",
+            "last_activity_at",
+            "expires_at",
+            "current"
+          ],
+          "type": "object"
+        },
+        "grant": {
+          "type": "string"
+        },
+        "recovery_used": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "BeginPairRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "access_code": {
+          "type": "string"
+        },
+        "grant": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "name",
+        "access_code",
+        "grant"
+      ],
+      "type": "object"
+    },
+    "Binding": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_app_scope": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "public_key_sha256": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "runtime_public_id": {
+          "type": "string"
+        },
+        "updated_at": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "runtime_public_id",
+        "allowed_app_scope",
+        "id",
+        "origin",
+        "public_key_sha256",
+        "revision",
+        "enabled",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "Bookmark": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "url"
+      ],
+      "type": "object"
+    },
+    "BookmarkInput": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "expected_revision"
+      ],
+      "type": "object"
+    },
+    "CancelRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "Catalog": {
+      "additionalProperties": false,
+      "properties": {
+        "gateway": {
+          "additionalProperties": false,
+          "properties": {
+            "active_listener_addresses": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "allowed_hosts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "display_name": {
+              "type": "string"
+            },
+            "endpoint_last_used_at": {
+              "additionalProperties": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "gateway_id": {
+              "type": "string"
+            },
+            "gateway_public_key_fingerprint": {
+              "type": "string"
+            },
+            "listener_address": {
+              "type": "string"
+            },
+            "listener_addresses": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "listener_restart_required": {
+              "type": "boolean"
+            },
+            "listener_running": {
+              "type": "boolean"
+            },
+            "member_endpoints": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  },
+                  "endpoint_id": {
+                    "type": "string"
+                  },
+                  "priority": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "endpoint_id",
+                  "address",
+                  "scope",
+                  "priority"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "member_tls_root_pem": {
+              "type": "string"
+            },
+            "permissions": {
+              "additionalProperties": false,
+              "properties": {
+                "access": {
+                  "type": "boolean"
+                },
+                "configure_cloud": {
+                  "type": "boolean"
+                },
+                "manage_members": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "access",
+                "manage_members",
+                "configure_cloud"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "gateway_id",
+            "display_name",
+            "gateway_public_key_fingerprint",
+            "listener_address",
+            "listener_addresses",
+            "active_listener_addresses",
+            "allowed_hosts",
+            "listener_restart_required",
+            "listener_running",
+            "endpoint_last_used_at",
+            "member_endpoints",
+            "member_tls_root_pem",
+            "permissions"
+          ],
+          "type": "object"
+        },
+        "hook_status": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "members": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "cloud_permission": {
+                "type": "string"
+              },
+              "connected": {
+                "type": "boolean"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "effective_cloud_allowed": {
+                "type": "boolean"
+              },
+              "last_seen_at_unix_ms": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "member_id": {
+                "type": "string"
+              },
+              "member_version": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "arch": {
+                    "type": "string"
+                  },
+                  "hostname": {
+                    "type": "string"
+                  },
+                  "os": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hostname",
+                  "os",
+                  "arch",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "runtime_public_id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "member_id",
+              "runtime_public_id",
+              "member_version",
+              "display_name",
+              "state",
+              "connected",
+              "last_seen_at_unix_ms",
+              "cloud_permission",
+              "effective_cloud_allowed",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "policy": {
+          "additionalProperties": false,
+          "properties": {
+            "default_cloud_allowed": {
+              "type": "boolean"
+            },
+            "publication_mode": {
+              "type": "string"
+            },
+            "revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "revision",
+            "default_cloud_allowed",
+            "publication_mode"
+          ],
+          "type": "object"
+        },
+        "protocol_version": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "protocol_version",
+        "gateway",
+        "members",
+        "policy",
+        "revision",
+        "hook_status"
+      ],
+      "type": "object"
+    },
+    "CompletePairRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "operation",
+        "fingerprint",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "Device": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "current": {
+          "type": "boolean"
+        },
+        "expires_at": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "last_activity_at": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "created_at",
+        "last_activity_at",
+        "expires_at",
+        "current"
+      ],
+      "type": "object"
+    },
+    "Devices": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "last_activity_at": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "created_at",
+          "last_activity_at",
+          "expires_at",
+          "current"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "Directory": {
+      "additionalProperties": false,
+      "properties": {
+        "bookmarks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "url"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "routes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "binding_revision": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "favorite": {
+                "type": "boolean"
+              },
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "member_id": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "revision": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "runtime_id": {
+                "type": "string"
+              },
+              "source_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "source_id",
+              "member_id",
+              "runtime_id",
+              "origin",
+              "label",
+              "favorite",
+              "revision",
+              "binding_revision"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "gateway_id": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "url",
+              "gateway_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "bookmarks",
+        "revision",
+        "sources",
+        "routes"
+      ],
+      "type": "object"
+    },
+    "Empty": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "FavoriteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "value",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "GrantRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "grant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "grant"
+      ],
+      "type": "object"
+    },
+    "Member": {
+      "additionalProperties": false,
+      "properties": {
+        "cloud_permission": {
+          "type": "string"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "effective_cloud_allowed": {
+          "type": "boolean"
+        },
+        "last_seen_at_unix_ms": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "member_id": {
+          "type": "string"
+        },
+        "member_version": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "metadata": {
+          "additionalProperties": false,
+          "properties": {
+            "arch": {
+              "type": "string"
+            },
+            "hostname": {
+              "type": "string"
+            },
+            "os": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hostname",
+            "os",
+            "arch",
+            "version"
+          ],
+          "type": "object"
+        },
+        "runtime_public_id": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "member_id",
+        "runtime_public_id",
+        "member_version",
+        "display_name",
+        "state",
+        "connected",
+        "last_seen_at_unix_ms",
+        "cloud_permission",
+        "effective_cloud_allowed",
+        "metadata"
+      ],
+      "type": "object"
+    },
+    "OpenRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "route",
+        "request"
+      ],
+      "type": "object"
+    },
+    "Operation": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "route_id": {
+          "type": "string"
+        },
+        "sequence": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "connecting",
+            "ready",
+            "failed",
+            "canceled"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "sequence",
+        "id",
+        "request_id",
+        "route_id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "PairPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "type": "string"
+        },
+        "gateway_id": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "gateway_id",
+        "fingerprint",
+        "url"
+      ],
+      "type": "object"
+    },
+    "PasswordRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "grant": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "grant",
+        "password"
+      ],
+      "type": "object"
+    },
+    "RemoveBookmarkRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "RemoveSourceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "grant": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "grant",
+        "id",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "RevokeDeviceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "RotateRouteInput": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "expected_revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "expected_revision",
+        "binding_revision"
+      ],
+      "type": "object"
+    },
+    "RotateRouteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "grant": {
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "binding_revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "expected_revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "expected_revision",
+            "binding_revision"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "grant",
+        "input"
+      ],
+      "type": "object"
+    },
+    "Route": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "favorite": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "member_id": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "runtime_id": {
+          "type": "string"
+        },
+        "source_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "member_id",
+        "runtime_id",
+        "origin",
+        "label",
+        "favorite",
+        "revision",
+        "binding_revision"
+      ],
+      "type": "object"
+    },
+    "RouteInput": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "label": {
+          "type": "string"
+        },
+        "member_id": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "runtime_id": {
+          "type": "string"
+        },
+        "source_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "member_id",
+        "runtime_id",
+        "origin",
+        "label",
+        "expected_revision"
+      ],
+      "type": "object"
+    },
+    "RouteResult": {
+      "additionalProperties": false,
+      "properties": {
+        "binding": {
+          "additionalProperties": false,
+          "properties": {
+            "allowed_app_scope": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "origin": {
+              "type": "string"
+            },
+            "public_key_sha256": {
+              "type": "string"
+            },
+            "revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "runtime_public_id": {
+              "type": "string"
+            },
+            "updated_at": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "runtime_public_id",
+            "allowed_app_scope",
+            "id",
+            "origin",
+            "public_key_sha256",
+            "revision",
+            "enabled",
+            "updated_at"
+          ],
+          "type": "object"
+        },
+        "route": {
+          "additionalProperties": false,
+          "properties": {
+            "binding_revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "favorite": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "member_id": {
+              "type": "string"
+            },
+            "origin": {
+              "type": "string"
+            },
+            "revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "runtime_id": {
+              "type": "string"
+            },
+            "source_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "source_id",
+            "member_id",
+            "runtime_id",
+            "origin",
+            "label",
+            "favorite",
+            "revision",
+            "binding_revision"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "route",
+        "binding"
+      ],
+      "type": "object"
+    },
+    "Security": {
+      "additionalProperties": false,
+      "properties": {
+        "configured": {
+          "type": "boolean"
+        },
+        "recovery_pending": {
+          "type": "boolean"
+        },
+        "recovery_remaining": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "configured",
+        "recovery_pending"
+      ],
+      "type": "object"
+    },
+    "Setup": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "recovery_codes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "secret": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation"
+      ],
+      "type": "object"
+    },
+    "SetupRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "boolean"
+        },
+        "saved": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "gateway_id": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "url",
+        "gateway_id"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "additionalProperties": false,
+      "properties": {
+        "authenticated": {
+          "type": "boolean"
+        },
+        "device": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "expires_at": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "last_activity_at": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "created_at",
+            "last_activity_at",
+            "expires_at",
+            "current"
+          ],
+          "type": "object"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "security": {
+          "additionalProperties": false,
+          "properties": {
+            "configured": {
+              "type": "boolean"
+            },
+            "recovery_pending": {
+              "type": "boolean"
+            },
+            "recovery_remaining": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "revision": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "configured",
+            "recovery_pending"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "authenticated",
+        "security",
+        "device",
+        "origin"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

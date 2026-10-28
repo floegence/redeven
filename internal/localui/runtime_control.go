@@ -21,6 +21,7 @@ import (
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
+	"github.com/floegence/redeven/internal/webbinding"
 	"github.com/gorilla/websocket"
 )
 
@@ -42,6 +43,7 @@ func (s *runtimeControlServer) ownerSocketHandler() http.Handler {
 }
 
 type runtimeControlServer struct {
+	webBindings                  *webbinding.Store
 	lifecycleMu                  sync.Mutex
 	log                          logger
 	agent                        *agent.Agent
@@ -192,6 +194,7 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("GET /v2/runtime/health", s.handleRuntimeHealth)
 	mux.HandleFunc("/v2/runtime/access", s.handleRuntimeAccess)
 	mux.HandleFunc("/v2/runtime/security", s.handleRuntimeSecurity)
+	mux.HandleFunc("/v2/runtime/web-bindings", s.handleWebBindings)
 	return withLocalUISecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r == nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)

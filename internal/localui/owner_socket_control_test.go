@@ -2,15 +2,18 @@ package localui
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/webbinding"
 )
 
 func TestGatewayOnlyOwnerCanManageMembershipWithoutTCP(t *testing.T) {
@@ -63,5 +66,53 @@ func TestGatewayOnlyOwnerCanManageMembershipWithoutTCP(t *testing.T) {
 	s.runtimeControl.routes().ServeHTTP(record, request)
 	if record.Code != http.StatusUnauthorized {
 		t.Fatalf("application path acquired owner authority: %d", record.Code)
+	}
+}
+
+func TestWebBindingConsentRequiresOwnerSocket(t *testing.T) {
+	s := newTestServer(t, accessgate.New(accessgate.Options{Password: "test password"}))
+	s.a = newRuntimeHealthTestAgent(t, s.configPath, s.accessGate)
+	store, err := webbinding.Open(t.TempDir(), s.a.RuntimePublicID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	control, err := newRuntimeControlServer(s.a, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control.webBindings = store
+	cert := webConnectorCertificate(t)
+	binding := webbinding.Binding{ID: "entry", RuntimeID: s.a.RuntimePublicID(), AppScope: "envapp", Origin: "https://env.example.com", PublicKeySHA256: webbinding.PublicKeyFingerprint(cert.Leaf), Enabled: true}
+	raw, _ := json.Marshal(binding)
+	call := func(owner bool, origin, token string, body []byte) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("PUT", "http://127.0.0.1:1/v2/runtime/web-bindings", strings.NewReader(string(body)))
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("X-Redeven-Runtime-Control-Protocol", runtimeControlProtocolVersion)
+		rec := httptest.NewRecorder()
+		if owner {
+			control.ownerSocketHandler().ServeHTTP(rec, req)
+		} else {
+			control.routes().ServeHTTP(rec, req)
+		}
+		return rec
+	}
+	if rec := call(false, "", control.token, raw); rec.Code != 403 {
+		t.Fatalf("native token acquired binding authority: %d", rec.Code)
+	}
+	if rec := call(true, "https://env.example.com", "", raw); rec.Code != 403 {
+		t.Fatal("browser acquired owner authority")
+	}
+	if rec := call(true, "", "", raw); rec.Code != 200 {
+		t.Fatalf("owner binding: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(true, "", "", raw); rec.Code != 409 {
+		t.Fatal("stale consent accepted")
+	}
+	binding.RuntimeID = "different-runtime"
+	raw, _ = json.Marshal(binding)
+	if rec := call(true, "", "", raw); rec.Code != 400 {
+		t.Fatal("foreign Runtime accepted")
 	}
 }

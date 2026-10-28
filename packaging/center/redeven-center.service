@@ -1,0 +1,26 @@
+[Unit]
+Description=Redeven Web Environment Center
+After=network-online.target redeven-center-connector.service
+Wants=network-online.target redeven-center-connector.service
+
+[Service]
+Type=simple
+User=redeven-center
+Group=redeven-center
+StateDirectory=redeven-center
+StateDirectoryMode=0700
+EnvironmentFile=/etc/redeven-center/center.env
+ExecStart=/opt/redeven-center/redeven-center serve --state-root /var/lib/redeven-center --origin ${CENTER_ORIGIN} --listen ${CENTER_LISTEN} --tls-cert ${CENTER_TLS_CERT} --tls-key ${CENTER_TLS_KEY} --assets /opt/redeven-center/ui --connector-socket /run/redeven-connector/connector.sock --connector-user redeven-connector
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/redeven-center
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

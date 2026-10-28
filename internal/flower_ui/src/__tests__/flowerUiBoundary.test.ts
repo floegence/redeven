@@ -106,7 +106,7 @@ describe('shared Flower UI boundary', () => {
     expect(appSrc).toContain('createMemo(() => createDesktopFlowerSurfaceCopy(i18n()))');
     expect(appSrc).toContain('copy={flowerSurfaceCopy()}');
     expect(appSrc).toContain("get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); }");
-    expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
+    expect(appSrc).toContain('<FlowerIcon class="h-4 w-4" />');
     expect(appSrc).toContain('createLocalEnvironmentFlowerSurfaceAdapter(');
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
     expect(appSrc).not.toContain('aria-label="Compose with Flower"');
@@ -311,7 +311,7 @@ describe('shared Flower UI boundary', () => {
     const envShellSrc = readText(path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'EnvAppShell.tsx'));
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
 
-    expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
+    expect(appSrc).toContain('<FlowerIcon class="h-4 w-4" />');
     expect(envShellSrc).toContain('icon: FlowerNavigationIcon');
     expect(envShellSrc).not.toContain("activeTab === 'ai' && canUseFlower()");
     expect(surfaceSrc).toContain('<FlowerIcon class="h-5 w-5 text-primary" />');

@@ -178,8 +178,8 @@ describe('DesktopThemePicker', () => {
   it('keeps the picker responsive, readable, pointer-friendly, and accessible', () => {
     const styles = readWelcomeStyles();
 
-    expect(styles).toContain('width: min(36rem, calc(100vw - 1rem));');
-    expect(styles).toContain('max-height: min(44rem, calc(100dvh - var(--redeven-desktop-titlebar-height) - 1.5rem));');
+    expect(styles).toContain('width: min(26rem, calc(100vw - 1rem));');
+    expect(styles).toContain('max-height: min(34rem, calc(100dvh - var(--redeven-desktop-titlebar-height) - 1.5rem));');
     expect(styles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('@media (max-width: 34rem)');
     expect(styles).toContain('grid-template-columns: minmax(0, 1fr);');

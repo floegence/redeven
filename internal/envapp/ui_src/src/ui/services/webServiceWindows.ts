@@ -1,3 +1,4 @@
+import { prepareCenterApplication } from './centerApplication';
 import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp, type LocalRuntimeInfo } from './controlplaneApi';
 import type { DesktopSessionContextSnapshot } from './desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from './floeproxyContract';
@@ -11,6 +12,7 @@ type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
 export class WebServiceWindowOpenError extends Error {}
 
 export type WebServiceOpenRoute =
+  | Readonly<{ kind: 'center_application'; forward_id: string; label: 'Secure tunnel' }>
   | Readonly<{ kind: 'local_proxy'; url: string; label: 'Local proxy' }>
   | Readonly<{ kind: 'e2ee_tunnel'; forward_id: string; label: 'Secure tunnel' }>;
 
@@ -68,6 +70,9 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
     return { kind: 'e2ee_tunnel', forward_id: forwardID, label: 'Secure tunnel' };
   }
 
+  if (args.localRuntime.web_entry === 'center-v1') {
+    return { kind: 'center_application', forward_id: forwardID, label: 'Secure tunnel' };
+  }
   const locationLike = args.browserLocation ?? window.location;
   const desktopPrivateBridge = args.presentation !== 'application' && args.presentation !== 'desktop'
     && args.desktopWindowAvailable === true
@@ -142,7 +147,11 @@ export async function openWebServiceRoute(
   managedEntrance?: ManagedWebEntranceContext,
 ): Promise<void> {
   let browserTargetURL: string;
-  if (route.kind === 'e2ee_tunnel') {
+  if (route.kind === 'center_application') {
+    await touchWebService(forwardID, setStatus, copy);
+    setStatus(copy.opening);
+    browserTargetURL = await prepareCenterApplication('pf', forwardID, normalizeAppPath(appPath));
+  } else if (route.kind === 'e2ee_tunnel') {
     const prepared = await preparePortForwardTunnel(forwardID, appPath, setStatus, copy);
     browserTargetURL = prepared.url;
     if (win) registerSandboxWindow(win, { origin: prepared.origin, floe_app: FLOE_APP_PORT_FORWARD, code_space_id: forwardID, app_path: normalizeAppPath(appPath) });

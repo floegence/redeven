@@ -149,6 +149,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     gateway_environment_id: snapshot.gateway_environment_id,
     started_at_unix_ms: snapshot.started_at_unix_ms,
     updated_at_unix_ms: snapshot.updated_at_unix_ms,
+    operation_revision: snapshot.operation_revision,
     status: snapshot.status,
     phase: snapshot.phase,
     title: snapshot.title,
@@ -384,6 +385,7 @@ export class LauncherOperationRegistry {
       cloud_id: compact(input.cloud_id) || undefined,
       started_at_unix_ms: startedAtUnixMs,
       updated_at_unix_ms: startedAtUnixMs,
+      operation_revision: 1,
       status: input.status ?? 'running',
       phase: compact(input.phase),
       title: compact(input.title),
@@ -469,6 +471,7 @@ export class LauncherOperationRegistry {
       ...(nextOpenTiming ? { open_timing: nextOpenTiming } : {}),
       ...(nextStepProgress ? { step_progress: nextStepProgress } : {}),
       updated_at_unix_ms: now,
+      operation_revision: (current.operation_revision ?? 0) + 1,
     };
     const titlePresentationChanged = patch.status !== undefined
       || patch.phase !== undefined

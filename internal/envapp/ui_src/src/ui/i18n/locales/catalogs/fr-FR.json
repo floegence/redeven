@@ -1,4 +1,8 @@
 {
+  "centerEntry": {
+    "expiringTitle": "La session d’accès expire bientôt",
+    "expiringMessage": "Continuez à interagir avec l’environnement pour maintenir la session d’accès active. Une nouvelle connexion reste nécessaire à la fin de sa durée maximale."
+  },
   "sessionRestart": {
     "preparing": "Préparation du redémarrage",
     "restarting": "Redémarrage de l’environnement d’exécution",

@@ -28,6 +28,8 @@ Terminal ownership, live framing, history, attachment arbitration, and warmup ar
 
 # Boundaries
 
+[Web Center](web-environment-center.md) composes the published Flowersec controller with pinned Runtime TLS through an in-process Connector. This adds no new wire protocol and does not replay business requests.
+
 Compatibility depends on these published transport and terminal interfaces staying aligned. Replacing or bypassing them can break placement multiplexing, liveness teardown, bounded RPC, TLS admission, terminal ownership, Presentation ordering, history generation, controller arbitration, or session lifecycle. History and session diagnostics are observability only; neither Redeven nor Floeterm uses session count to reject creation, close a PTY, or pause a running session.
 
 # Evidence

@@ -19,6 +19,8 @@ Web Services accepts ports or HTTP(S) deep links to the current Environment's lo
 
 # Boundaries
 
+[Web Center](web-environment-center.md) opens services/editor on resource-specific sibling origins. Parent Runtime credentials stay in the server; child browsers cannot invoke Env APIs. Editor admission pins its running instance and authenticated Runtime frame policy permits its same-origin worker iframe.
+
 Temporary forwards are memory-only until Save; expired/unknown identities cannot be recreated from request fields. Browser-only Env App retains its popup route; no direct-target fallback or device heuristic changes registry authority.
 
 # Evidence

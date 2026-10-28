@@ -281,7 +281,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("when={!flowerVisible()}");
     expect(appSrc).toContain('class="redeven-flower-topbar-button"');
     expect(appSrc).not.toContain("class={cn('rounded-full'");
-    expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
+    expect(appSrc).toContain('<FlowerIcon class="h-4 w-4" />');
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
     expect(appSrc).toContain('const flowerSurfaceCopy = createMemo(() => createDesktopFlowerSurfaceCopy(i18n()));');
     expect(appSrc).toContain('copy={flowerSurfaceCopy()}');
@@ -472,7 +472,9 @@ describe('DesktopWelcomeShell', () => {
     );
     expect(appSrc).toContain("kind: 'open_gateway_environment'");
     expect(appSrc).toContain('gateway_id: gatewayID');
-    expect(appSrc).toContain('gateway_env_id: gatewayEnvID');
+    expect(appSrc).toContain('createEnvironmentOpenController(');
+    const controller = fs.readFileSync(path.join(__dirname, '..', 'envcenter', 'controller.ts'), 'utf8');
+    expect(controller).toContain('projectEnvironment(environment, presentationEnvironmentID).target');
     expect(appSrc).toContain("case 'resolve_gateway':\n        if (environment.kind === 'gateway_environment') {");
     expect(appSrc).toContain('openCreateGatewaySetup(gateway);');
     expect(appSrc).not.toContain("case 'resolve_gateway':\n        await pairGateway(environment.gateway_id ?? '');");
@@ -1058,7 +1060,7 @@ describe('DesktopWelcomeShell', () => {
     );
     expect(listboxSrc).toContain("import { Portal } from 'solid-js/web';");
     expect(listboxSrc).toContain('<Portal>');
-    expect(listboxSrc).toContain("'fixed z-[240] flex flex-col overflow-hidden");
+    expect(listboxSrc).toContain("fixed z-[240] flex flex-col overflow-hidden");
     expect(listboxSrc).toContain('style={{');
     expect(listboxSrc).toContain('width?: number;');
     expect(listboxSrc).toContain('resolveDesktopAnchoredListboxGeometry');
@@ -1724,7 +1726,7 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toMatch(/return \w+\(\) \? "surface" : "global";/);
     expect(dialogSrc).toContain('"global"');
     expect(dialogSrc).toContain('"fixed box-border p-4"');
-    expect(dialogSrc).toMatch(/observeViewport as \w+, viewportStyle as \w+/u);
+    expect(dialogSrc).toMatch(/observeViewport as [\w$]+, viewportStyle as [\w$]+/u);
     expect(dialogSrc).toContain('"--floe-dialog-safe-top"');
     expect(dialogSrc).toMatch(/\w+\(\) === void 0 && "z-50"/u);
     expect(dialogSrc).toMatch(/"z-index": \w+\(\)/u);

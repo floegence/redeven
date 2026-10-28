@@ -8,8 +8,10 @@
 @import '../../../internal/flower_ui/src/styles/flower.css';
 @import './EnvironmentSettingsDialog.css';
 @import './GatewayConnectionDialogs.css';
+@import '../envcenter/environment-list.css';
 
 @source './**/*.{ts,tsx,html}';
+@source '../envcenter/**/*.{ts,tsx,html}';
 @source '../../../internal/flower_ui/src/**/*.{ts,tsx,html}';
 
 :root {
@@ -3641,24 +3643,6 @@ pre,
 
 .redeven-gateway-card__directory-link[aria-expanded='true'] .redeven-gateway-card__disclosure { transform: rotate(90deg); }
 
-.redeven-gateway-environments {
-  display: grid;
-  max-height: 24rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  margin-top: 0;
-}
-
-.redeven-gateway-environment { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding-block: 1rem; }
-.redeven-gateway-environment + .redeven-gateway-environment { border-top: 1px solid var(--border); }
-.redeven-gateway-environment__identity { display: grid; flex: 1 1 15rem; min-width: 0; gap: .25rem; }
-.redeven-gateway-environment__identity strong { font-size: var(--floe-type-control); font-weight: 500; }
-.redeven-gateway-environment__identity span { color: var(--muted-foreground); font-size: var(--floe-type-caption); }
-.redeven-gateway-environment__identity > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.redeven-gateway-environment__controls { display: flex; flex: 0 0 auto; gap: .25rem; }
-.redeven-gateway-environment__actions { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; margin-inline-start: auto; }
-.redeven-gateway-environment__mode { font-size: var(--floe-type-caption); color: var(--muted-foreground); }
-
 .redeven-gateway-context { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 0.5rem; background: var(--muted); }
 .redeven-gateway-context .redeven-gateway-mark { width: 2rem; height: 2rem; }
 .redeven-gateway-context > div { display: grid; min-width: 0; gap: 0.125rem; }
@@ -3715,9 +3699,6 @@ pre,
   .redeven-gateway-card__statusbar { padding-inline: 1rem; }
   .redeven-gateway-card__directory { flex-basis: auto; padding-inline-start: 0; border-inline-start: 0; }
   .redeven-gateway-card__environments { padding-inline: 1rem; }
-  .redeven-gateway-environment { gap: .75rem; }
-  .redeven-gateway-environment__identity { flex-basis: 100%; }
-  .redeven-gateway-environment__actions { margin-inline-start: 0; flex: 1; }
   .redeven-gateway-card__explanation { margin-inline: 1rem; }
 }
 

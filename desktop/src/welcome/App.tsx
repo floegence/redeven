@@ -1,3 +1,5 @@
+import { createDesktopCenterHost, createDesktopCenterProgressAdapter } from './envCenterAdapter';
+import { createEnvironmentOpenController } from '../envcenter/controller';
 import { DevelopmentCredentialRecovery } from './DevelopmentCredentialRecovery';
 import { environmentInteractionIdentity, gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
@@ -30,7 +32,7 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 import { KeyedFor, handleMenuKeyboardNavigation } from '@floegence/floe-webapp-core/ui';
 import { GatewayMark } from './GatewayMark';
-import { GatewayEnvironmentList } from './GatewayEnvironmentList';
+import { GatewayEnvironmentList } from '../envcenter/GatewayEnvironmentList';
 import { GatewayClientsPanel } from './GatewayClientsPanel';
 import { GatewayMembersPanel } from './GatewayMembersDialog';
 import { EnvironmentAccessWorkflow } from './EnvironmentAccessWorkflow';
@@ -2926,6 +2928,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     clearLiveActionProgressTimer(key);
     setLiveActionProgress((current) => current.filter((progress) => launcherProgressIdentityKey(progress) !== key));
   };
+  const acceptCenterProgress = createDesktopCenterProgressAdapter();
   const rememberLiveActionProgress = (progress: DesktopLauncherActionProgress) => {
     if (!activeLauncherProgressIsRetainable(progress)) {
       return;
@@ -3190,6 +3193,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       const next = nextDesktopWelcomeSnapshot(current, nextSnapshot);
       if (next !== current) {
         setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, next.action_progress));
+        next.action_progress.forEach(acceptCenterProgress);
         pruneLiveActionProgressWithSnapshot(next.action_progress);
       }
       setRetainedGatewayFailures((failures) => {
@@ -3209,6 +3213,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
   onCleanup(unsubscribeSnapshot);
   const unsubscribeActionProgress = props.runtime.launcher.subscribeActionProgress?.((progress) => {
+    if (!acceptCenterProgress(progress)) return;
     rememberLiveActionProgress(progress);
     setBusyState((current) => busyStateWithActionProgress(current, progress));
   });
@@ -5923,28 +5928,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result;
   }
 
+  const gatewayOpenControllers = new Map<'connect' | 'dialog', ReturnType<typeof createEnvironmentOpenController>>();
   async function openGatewayEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
     presentationEnvironmentID?: string,
   ): Promise<boolean> {
-    if (environment.is_open && environment.open_session_key) {
-      return focusEnvironmentWindow(environment.open_session_key, errorTarget);
+    let controller = gatewayOpenControllers.get(errorTarget);
+    if (!controller) {
+      controller = createEnvironmentOpenController(createDesktopCenterHost({
+        focus: key => focusEnvironmentWindow(key, errorTarget),
+        invalidTarget: () => setErrorMessage(errorTarget, i18n().t('environmentCenter.resolveGatewayError')),
+        open: async target => {
+          const result = await performLauncherAction({ kind: 'open_gateway_environment', ...target }, errorTarget);
+          return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+        },
+      }));
+      gatewayOpenControllers.set(errorTarget, controller);
     }
-    const gatewayID = trimString(environment.gateway_id);
-    const gatewayEnvID = trimString(environment.gateway_env_id);
-    if (gatewayID === '' || gatewayEnvID === '') {
-      setErrorMessage(errorTarget, i18n().t('environmentCenter.resolveGatewayError'));
-      return false;
-    }
-    const result = await performLauncherAction({
-      kind: 'open_gateway_environment',
-      environment_id: presentationEnvironmentID ?? environment.access_group_id ?? environment.id,
-      gateway_id: gatewayID,
-      gateway_env_id: gatewayEnvID,
-      label: environment.label,
-    }, errorTarget);
-    return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+    return controller.open(environment, presentationEnvironmentID);
   }
 
   function validateConnectionDialogFields(state: ConnectionDialogState): Partial<Record<string, string>> {

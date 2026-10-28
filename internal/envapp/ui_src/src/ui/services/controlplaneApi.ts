@@ -61,6 +61,7 @@ export type AgentLatestVersion = {
 };
 
 export type LocalRuntimeInfo = {
+  web_entry?: 'center-v1';
 	mode: 'local';
 	env_public_id: string;
   effective_run_mode?: 'local' | 'hybrid' | 'remote';
@@ -383,6 +384,7 @@ function normalizeLocalRuntimeInfo(raw: unknown): LocalRuntimeInfo {
     effective_run_mode: effectiveRunMode,
     remote_enabled: typeof data.remote_enabled === 'boolean' ? data.remote_enabled : undefined,
     runtime_service: data.runtime_service,
+    ...(data.web_entry === 'center-v1' ? { web_entry: 'center-v1' as const } : {}),
   };
 }
 

@@ -1,3 +1,4 @@
+import { matchesEnvironmentSearch, filterEnvironmentFacts } from '../envcenter/core';
 import { buildRuntimeConnectionRows, connectionAddressRows, reportedRuntimeURLs, type DesktopConnectionRow } from '../shared/desktopEnvironmentConnection';
 import type {
   DesktopEnvironmentEntry,
@@ -2296,11 +2297,7 @@ export function environmentMatchesLibrarySearch(
   environment: DesktopEnvironmentEntry,
   query: string,
 ): boolean {
-  const clean = query.trim().toLowerCase();
-  if (!clean) {
-    return true;
-  }
-  return environmentLibrarySearchText(environment).includes(clean);
+  return matchesEnvironmentSearch(environmentLibrarySearchText(environment), query);
 }
 
 export function environmentProviderFilterValue(environment: DesktopEnvironmentEntry): string {
@@ -2423,10 +2420,8 @@ export function filterGatewayEnvironmentEntries(
   query = '',
   sourceFilter = '',
 ): readonly DesktopEnvironmentEntry[] {
-  return gatewayEnvironmentEntries(snapshot).filter((entry) => (
-    environmentMatchesLibrarySearch(entry, query)
-    && environmentMatchesProviderFilter(entry, sourceFilter)
-  ));
+  return filterEnvironmentFacts(gatewayEnvironmentEntries(snapshot), query, environmentLibrarySearchText,
+    entry => environmentMatchesProviderFilter(entry, sourceFilter));
 }
 
 export function gatewayEnvironmentCount(

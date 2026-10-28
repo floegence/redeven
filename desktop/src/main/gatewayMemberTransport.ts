@@ -34,11 +34,11 @@ export function validateMemberService(service: GatewayMemberService, runtimeID: 
 
 export function verifyMemberServiceProof(service: GatewayMemberService, delegation: GatewayMemberDelegation, gatewayID: string, memberID: string, runtimeID: string): void {
   validateMemberService(service, runtimeID);
-  const version = delegation.protocol_version === 'redeven-gateway-v4' ? 'v4' : 'v5';
+  const version = 'v6';
   const member = createHash('sha256').update(`redeven.gateway.member.${version}\0${delegation.invitation_id}\0${delegation.public_key_b64u}`).digest('hex').slice(0, 48);
   const rawKey = Buffer.from(delegation.public_key_b64u, 'base64url');
   if (rawKey.length !== 32 || rawKey.toString('base64url') !== delegation.public_key_b64u
-    || (delegation.protocol_version !== GATEWAY_PROTOCOL_VERSION && delegation.protocol_version !== 'redeven-gateway-v4') || delegation.gateway_id !== gatewayID
+    || delegation.protocol_version !== GATEWAY_PROTOCOL_VERSION || delegation.gateway_id !== gatewayID
     || delegation.member_id !== memberID || memberID !== `member_${member}` || delegation.runtime_public_id !== runtimeID
     || !delegation.manage_access || !delegation.manage_cloud_publication || !Number.isSafeInteger(delegation.consented_at_unix_ms)
     || delegation.consented_at_unix_ms <= 0) throw new Error('Invalid member delegation.');

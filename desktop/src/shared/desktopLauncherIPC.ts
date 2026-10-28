@@ -1,3 +1,4 @@
+import { selectEnvironmentSnapshot } from '../envcenter/core';
 import {normalizeRuntimeCloudOperation, type RuntimeCloudOperation, type CloudRouteOperation} from './runtimeCloud';
 import { normalizeGatewayNetworkSettings } from './gatewayNetworkSettings';
 import type { GatewayNetworkSettings } from './gatewayMembership';
@@ -522,28 +523,9 @@ export function selectLatestDesktopWelcomeSnapshot<T extends Pick<
   current: T,
   next: T,
 ): T {
-  const currentGeneration = desktopWelcomeSnapshotGeneration(current);
-  const nextGeneration = desktopWelcomeSnapshotGeneration(next);
-  if (currentGeneration > 0 || nextGeneration > 0) {
-    if (nextGeneration === 0 && currentGeneration > 0) {
-      return current;
-    }
-    if (nextGeneration !== currentGeneration) {
-      return nextGeneration > currentGeneration ? next : current;
-    }
-  }
-
-  const currentRevision = desktopWelcomeSnapshotRevision(current);
-  const nextRevision = desktopWelcomeSnapshotRevision(next);
-  if (currentRevision > 0 || nextRevision > 0) {
-    if (nextRevision === 0 && currentRevision > 0) {
-      return current;
-    }
-    if (nextRevision <= currentRevision) {
-      return current;
-    }
-  }
-  return next;
+  return selectEnvironmentSnapshot(current, next, value => ({
+    generation: desktopWelcomeSnapshotGeneration(value), revision: desktopWelcomeSnapshotRevision(value),
+  }));
 }
 
 export type DesktopLauncherOperationSnapshot = Readonly<{
@@ -560,6 +542,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   cloud_id?: string;
   started_at_unix_ms: number;
   updated_at_unix_ms: number;
+  operation_revision?: number;
   status: DesktopLauncherOperationStatus;
   phase: string;
   title: string;
@@ -1017,6 +1000,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   subject_id?: string;
   started_at_unix_ms?: number;
   updated_at_unix_ms?: number;
+  operation_revision?: number;
   status?: DesktopLauncherOperationStatus;
   phase: string;
   title: string;

@@ -37,7 +37,7 @@ void app.whenReady().then(async () => {
   const catalog = await client.catalog(record);
   assert.equal(catalog.members.length, 2);
   assert.ok(catalog.members.every(member => member.connected));
-  cases.push('v5 client enrollment and automatic directory from two outbound Runtime members without Cloud');
+  cases.push('v6 client enrollment and automatic directory from two outbound Runtime members without Cloud');
   const open = async (memberID: string) => {
     const member = catalog.members.find(member => member.member_id === memberID)!;
     const access = await prepareGatewayEnvironmentAccess(record, member, catalog, client);

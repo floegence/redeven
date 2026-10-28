@@ -1,4 +1,8 @@
 {
+  "centerEntry": {
+    "expiringTitle": "A sessão de acesso expira em breve",
+    "expiringMessage": "Continue interagindo com o ambiente para manter a sessão de acesso ativa. Ao atingir a duração máxima, será necessário entrar novamente."
+  },
   "sessionRestart": {
     "preparing": "Preparando reinicialização",
     "restarting": "Reiniciando o ambiente de execução",

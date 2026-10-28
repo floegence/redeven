@@ -2,7 +2,7 @@ import { connect, createArtifactLease, parseArtifact, type JsonValue } from '@fl
 
 // Runs inside the real Runtime origin. All browser requests use its isolated
 // Gateway proxy partition and ordinary Runtime login cookies.
-export async function verifyRuntimeServices(): Promise<string[]> {
+export async function openRuntimeSession() {
   const response = await fetch('/api/local/direct/connect_artifact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   if (!response.ok) throw new Error(`Runtime artifact rejected: ${response.status}`);
   const envelope = await response.json();
@@ -18,17 +18,28 @@ export async function verifyRuntimeServices(): Promise<string[]> {
     if (!spent.ok) throw new Error(`Runtime artifact spend rejected: ${spent.status}`);
   });
   const current = await connect(lease, { connectTimeoutMs: 10_000 }).catch(error => { throw new Error(`${String(error)} (${stage})`); });
+  const ready = await fetch('/api/local/plugin/session/ready', { method:'POST',
+    headers:{'Content-Type':'application/json','X-Redeven-Plugin-Session':acquisition.plugin_session_credential},
+    body:JSON.stringify({channel_id:acquisition.channel_id}) });
+  if (ready.status !== 204) { await current.close(); throw new Error('Runtime plugin readiness rejected: ' + ready.status); }
+  return { current, acquisition };
+}
+
+export async function verifyRuntimeServices(): Promise<string[]> {
+  const { current, acquisition } = await openRuntimeSession();
   const rpc = async (id: number, payload: JsonValue) => {
     const result = await current.rpc.call(id, payload, value => value, { signal: AbortSignal.timeout(10_000) });
     if (!result.ok) throw new Error(`Runtime RPC ${id} failed: ${result.error.code}`);
     return result.payload as Record<string, JsonValue>;
   };
+  let terminalID = '';
   try {
     await current.probeLiveness({ signal: AbortSignal.timeout(5000) });
     const files = await rpc(1001, { path: '' });
     if (!Array.isArray(files.entries)) throw new Error('Runtime file listing missing');
     const terminal = await rpc(2001, { name: 'Gateway qualification' });
-    if (!(terminal.session as Record<string, JsonValue>)?.id) throw new Error('Runtime terminal creation failed');
+    terminalID = (terminal.session as Record<string, JsonValue>)?.id as string;
+    if (!terminalID) throw new Error('Runtime terminal creation failed');
     const sessions = await rpc(2002, {});
     if (!Array.isArray(sessions.sessions)) throw new Error('Runtime terminal listing missing');
     const headers = { 'X-Redeven-Plugin-Session': acquisition.plugin_session_credential };
@@ -42,5 +53,8 @@ export async function verifyRuntimeServices(): Promise<string[]> {
     abort.abort();
     if (!first.value?.length) throw new Error('Flower stream did not flush');
     return ['production Flowersec WSS handshake and liveness', 'Runtime file listing and terminal creation over Gateway', 'Flower thread list and workspace event stream over Gateway'];
-  } finally { await current.close(); }
+  } finally {
+    try { if (terminalID) await rpc(2009, { session_id: terminalID }); }
+    finally { await current.close(); }
+  }
 }

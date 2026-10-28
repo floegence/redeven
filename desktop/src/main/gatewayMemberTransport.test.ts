@@ -54,6 +54,10 @@ describe.runIf(process.env.REDEVEN_GATEWAY_INTEROP === '1')('Gateway Go/Node rev
       expect((data.endpoints as GatewayEndpoint[]).length).toBe(2);
       const offer = await command('offer') as GatewayMemberOffer;
       verifyMemberServiceProof(offer.service, offer.delegation, String(data.gateway_id), String(data.member_id), String(data.runtime_id));
+      for (const protocol_version of ['redeven-gateway-v4', 'redeven-gateway-v5', 'redeven-gateway-v7']) {
+        const invalid = { ...offer.delegation, protocol_version } as unknown as typeof offer.delegation;
+        expect(() => verifyMemberServiceProof(offer.service, invalid, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
+      }
       expect(() => verifyMemberServiceProof(offer.service, { ...offer.delegation, manage_cloud_publication: false }, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
       expect(() => verifyMemberServiceProof({ ...offer.service, certificate_sha256: '0'.repeat(64) }, offer.delegation, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
       transport = await createGatewayMemberTransport({

@@ -39,6 +39,7 @@ import (
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
+	"github.com/floegence/redeven/internal/webbinding"
 )
 
 const (
@@ -56,6 +57,7 @@ const (
 )
 
 type Options struct {
+	WebBindings              *webbinding.Store
 	Logger                   *slog.Logger
 	Bind                     BindSpec
 	Protocol                 string
@@ -97,6 +99,7 @@ type Options struct {
 }
 
 type Server struct {
+	webBindings       *webbinding.Store
 	closeMu           sync.Mutex
 	nativeBridges     sync.Map // *nativeRuntimeBridge -> context.CancelFunc
 	nativeBridgeCount atomic.Int32
@@ -173,6 +176,7 @@ type Server struct {
 }
 
 type pendingDirect struct {
+	entryScope                string
 	externalOrigin            string
 	pluginCredentialHash      [sha256.Size]byte
 	accessSessionID           string
@@ -228,6 +232,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc(localRuntimeBrowserMintPath, s.handleLocalRuntimeBrowserMint)
 	mux.HandleFunc("/cs/", s.handleCodeSpace)
 	mux.HandleFunc("/api/local/codespaces/", s.handleNativeCodeSpace)
+	mux.HandleFunc(webApplicationPath, s.handleWebApplication)
 	mux.HandleFunc("/pf/", s.handlePortForward)
 	// Browsers may request these root-level assets regardless of the actual SPA base path.
 	// Keep them available to avoid noisy 404s in Local UI mode.
@@ -255,7 +260,7 @@ func (s *Server) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Native editor responses own their CSP and embedding policy. The listener,
 		// resource permission, generation, and AccessGate checks still apply.
-		if strings.HasPrefix(r.URL.Path, "/api/local/codespaces/") {
+		if strings.HasPrefix(r.URL.Path, "/api/local/codespaces/") || strings.HasPrefix(r.URL.Path, webApplicationPath) {
 			handler.ServeHTTP(w, r)
 			return
 		}
@@ -482,6 +487,7 @@ func New(opts Options) (*Server, error) {
 		a:                         opts.Agent,
 		diag:                      opts.Diagnostics,
 		accessGate:                opts.AccessGate,
+		webBindings:               opts.WebBindings,
 		exposure:                  exposure,
 		pending:                   make(map[string]pendingDirect),
 		pluginAccess:              make(map[string]*pluginAccessSession),
@@ -526,9 +532,13 @@ func (s *Server) configureAcceptor() error {
 	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
 		CheckOrigin:       s.authorizePublicWebSocketRequest,
 		MaxInboundStreams: 32,
-		Authorize: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (controlplane.AuthorizationResponse, error) {
+		Authorize: func(ctx context.Context, request controlplane.RuntimeAuthorizationRequest) (controlplane.AuthorizationResponse, error) {
 			reserved, err := s.authStore.reserve(request)
 			if err != nil {
+				return controlplane.RejectRuntime("permission_denied", false)
+			}
+			if !webAuthorizationMatches(ctx, reserved.Binding.EntryScope, reserved.AccessSessionID) {
+				_ = s.authStore.burn(reserved.LookupKey, reserved.LeaseID)
 				return controlplane.RejectRuntime("permission_denied", false)
 			}
 			response, err := controlplane.AuthorizeRuntime(request, reserved.Record, reserved.LeaseID)
@@ -654,6 +664,7 @@ func (s *Server) configureAcceptor() error {
 	if err != nil {
 		return err
 	}
+	s.configureWebBindings()
 	s.acceptor = acceptor
 	return nil
 }
@@ -867,6 +878,7 @@ func (s *Server) startRuntimeStatusServer(ctx context.Context) error {
 	}
 	statusServer.NativeBridge = http.HandlerFunc(s.handleNativeRuntimeBridge)
 	if s.runtimeControl != nil {
+		s.runtimeControl.webBindings = s.webBindings
 		statusServer.Control = s.runtimeControl.ownerSocketHandler()
 	}
 	if err := statusServer.Start(ctx); err != nil {
@@ -1158,10 +1170,10 @@ func (s *Server) hasLocalAccess(r *http.Request) bool {
 		return true
 	}
 	token := s.localAccessToken(r)
-	if token != "" && s.accessGate.IsLocalSessionValid(token) {
+	if _, _, valid := s.accessGate.ResolveLocalSessionForScope(token, webEntryScope(r)); token != "" && valid {
 		return true
 	}
-	return s.accessGate.CanResumeMeta(s.localAccessResumeToken(r), localAccessResumeMeta()) || (token == "" && isTrustedLocalUIBridge(r))
+	return s.accessGate.CanResumeMetaForScope(s.localAccessResumeToken(r), localAccessResumeMeta(), webEntryScope(r)) || (token == "" && isTrustedLocalUIBridge(r))
 }
 
 func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Request) bool {
@@ -1172,7 +1184,7 @@ func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Re
 		return false
 	}
 
-	if token := s.localAccessToken(r); token != "" && s.accessGate.IsLocalSessionValid(token) {
+	if _, _, valid := s.accessGate.ResolveLocalSessionForScope(s.localAccessToken(r), webEntryScope(r)); valid {
 		return true
 	}
 
@@ -1181,7 +1193,17 @@ func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Re
 		return s.localAccessToken(r) == "" && isTrustedLocalUIBridge(r)
 	}
 
-	result, err := s.accessGate.MintLocalSessionFromResumeToken(resumeToken, localAccessResumeMeta())
+	var result *accessgate.LocalSessionResult
+	var err error
+	resume := func() error {
+		result, err = s.accessGate.MintLocalSessionFromResumeTokenForScope(resumeToken, localAccessResumeMeta(), webEntryScope(r))
+		return err
+	}
+	if lease := webEntry(r); lease != nil {
+		err = s.webBindings.WithCurrent(lease.Binding, resume)
+	} else {
+		err = resume()
+	}
 	if err != nil || result == nil || strings.TrimSpace(result.SessionToken) == "" || result.SessionExpiresAtUnix <= 0 {
 		return false
 	}
@@ -1216,7 +1238,7 @@ func (s *Server) resolveLocalAccessSession(r *http.Request) (string, time.Time, 
 	if token == "" && isTrustedLocalUIBridge(r) {
 		return "trusted-desktop", time.Time{}, true
 	}
-	accessSessionID, expiresAt, ok := s.accessGate.ResolveLocalSession(token)
+	accessSessionID, expiresAt, ok := s.accessGate.ResolveLocalSessionForScope(token, webEntryScope(r))
 	if !ok {
 		return "", time.Time{}, false
 	}
@@ -1488,6 +1510,10 @@ func (s *Server) closeActivePluginSessionBindingLocked(channelID string) (active
 }
 
 func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
+	if webEntry(r) != nil {
+		http.Error(w, "CENTER_APPLICATION_ORIGIN_REQUIRED", http.StatusForbidden)
+		return
+	}
 	if s == nil || w == nil || r == nil {
 		return
 	}
@@ -1521,6 +1547,10 @@ func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
+	if webEntry(r) != nil {
+		http.Error(w, "CENTER_APPLICATION_ORIGIN_REQUIRED", http.StatusForbidden)
+		return
+	}
 	if s == nil || w == nil || r == nil {
 		return
 	}
@@ -1706,7 +1736,7 @@ func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
 		binding = base64.RawURLEncoding.EncodeToString(raw)
 		http.SetCookie(w, &http.Cookie{Name: localAuthCookieName(r, localChallengeCookiePrefix), Value: binding, Path: "/api/local/access", Secure: r.TLS != nil, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 300})
 	}
-	result, err := s.accessGate.AuthenticateLocal(req, unlockAttemptSubject(r), binding)
+	result, err := s.authenticateLocalEntry(r, req, binding)
 	if err != nil {
 		writeUnlockError(w, err)
 		return
@@ -1725,11 +1755,16 @@ func (s *Server) handleAccessLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.accessEnabled() {
 		if token := s.localAccessToken(r); token != "" {
+			if _, _, valid := s.accessGate.ResolveLocalSessionForScope(token, webEntryScope(r)); !valid {
+				s.clearLocalAccessCookie(w, r)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 			if accessSessionID, ok := s.accessGate.TakeLocalSession(token); ok {
 				s.closePluginAccessSession(accessSessionID)
 			}
 		}
-		if resumeToken := s.localAccessResumeToken(r); resumeToken != "" {
+		if resumeToken := s.localAccessResumeToken(r); resumeToken != "" && s.accessGate.CanResumeMetaForScope(resumeToken, localAccessResumeMeta(), webEntryScope(r)) {
 			if accessSessionID, ok := s.accessGate.TakeAccessSessionByResumeToken(resumeToken); ok {
 				s.closePluginAccessSession(accessSessionID)
 			}
@@ -1866,6 +1901,7 @@ func localUIDiagnosticsRouteKind(path string) string {
 }
 
 type runtimeResp struct {
+	WebEntry         string                  `json:"web_entry,omitempty"`
 	Mode             string                  `json:"mode"`
 	EnvPublicID      string                  `json:"env_public_id"`
 	EffectiveRunMode string                  `json:"effective_run_mode,omitempty"`
@@ -1890,6 +1926,7 @@ func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 		EffectiveRunMode: s.resolvedEffectiveRunMode(),
 		RemoteEnabled:    s.remoteEnabled,
 		RuntimeService:   s.runtimeServiceSnapshot(),
+		WebEntry:         verifiedWebEntryProfile(r),
 	})
 }
 
@@ -2037,7 +2074,7 @@ type localIssuedPending struct {
 	ExpiresAt        time.Time
 }
 
-func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, accessSessionID string, accessExpiresAt time.Time, privateLoopback bool) (localIssuedPending, error) {
+func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, accessSessionID string, accessExpiresAt time.Time, privateLoopback bool, entryScopes ...string) (localIssuedPending, error) {
 	if s == nil {
 		return localIssuedPending{}, errors.New("server not ready")
 	}
@@ -2066,7 +2103,12 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 	if accessSessionID == "" {
 		accessSessionID = "direct:" + channelID
 	}
+	entryScope := ""
+	if len(entryScopes) > 0 {
+		entryScope = entryScopes[0]
+	}
 	pending := pendingDirect{
+		entryScope:                entryScope,
 		pluginCredentialHash:      pluginCredentialHash,
 		accessSessionID:           accessSessionID,
 		initExpireAtUnixS:         expiresAt.Unix(),
@@ -2287,7 +2329,17 @@ func (s *Server) handleConnectArtifactWithMeta(w http.ResponseWriter, r *http.Re
 		return
 	}
 	bridge := nativeRuntimeRequest(r)
-	acquisition, err := s.mintPending(meta, wsURL, spendOrigin, traceID, accessSessionID, accessExpiresAt, privateLoopback)
+	var acquisition localIssuedPending
+	issue := func() error {
+		var issueErr error
+		acquisition, issueErr = s.mintPending(meta, wsURL, spendOrigin, traceID, accessSessionID, accessExpiresAt, privateLoopback, webArtifactScope(r))
+		return issueErr
+	}
+	if lease := webEntry(r); lease != nil {
+		err = s.webBindings.WithCurrent(lease.Binding, issue)
+	} else {
+		err = issue()
+	}
 	if err != nil {
 		if s.log != nil {
 			s.log.Error("failed to mint connect artifact", "error", err)
@@ -2394,7 +2446,20 @@ func (s *Server) handleArtifactSpend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Code: "INVALID_SPEND_REQUEST", Message: "Invalid artifact spend request."}})
 		return
 	}
-	if err := s.authStore.spend(request); err != nil {
+	spend := func() error { return s.authStore.spend(request) }
+	if lease := webEntry(r); lease != nil {
+		accessID, _, ok := s.activeLocalAccessSession(r)
+		if !ok {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: &apiError{Code: "SPEND_OWNER_MISMATCH", Message: "Artifact spend requires its issuing session."}})
+			return
+		}
+		spend = func() error {
+			return s.webBindings.WithCurrent(lease.Binding, func() error {
+				return s.authStore.spendOwned(request, &localSpendOwner{AccessSessionID: accessID, EntryScope: webArtifactScope(r)})
+			})
+		}
+	}
+	if err := spend(); err != nil {
 		var spendErr *localSpendError
 		if !errors.As(err, &spendErr) {
 			spendErr = &localSpendError{Status: http.StatusServiceUnavailable, Code: "local_authority_unavailable"}

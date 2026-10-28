@@ -797,3 +797,25 @@ func testAttemptID(seed string) string { return attemptIDForTest(seed) }
 func randomTestToken() string {
 	return base64.RawURLEncoding.EncodeToString([]byte(time.Now().Format(time.RFC3339Nano)))
 }
+
+func TestWebArtifactSpendRequiresIssuingSession(t *testing.T) {
+	store := newTestAuthorizationStore(t, filepath.Join(t.TempDir(), "authority.sqlite"))
+	defer store.close()
+	issued, receipt, expires := issueTestAuthorization(t, store, "device-a")
+	request := testSpendRequest(issued, receipt, expires, "owner-check")
+	for _, owner := range []localSpendOwner{{AccessSessionID: "device-b"}, {AccessSessionID: "device-a", EntryScope: "web:other:1"}, {}} {
+		if err := store.spendOwned(request, &owner); err == nil {
+			t.Fatal("cross-session spend accepted", owner)
+		}
+	}
+	owner := &localSpendOwner{AccessSessionID: "device-a"}
+	if err := store.spendOwned(request, owner); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.spendOwned(request, owner); err != nil {
+		t.Fatal("same-owner retry must be idempotent", err)
+	}
+	if err := store.spendOwned(request, &localSpendOwner{AccessSessionID: "device-b"}); err == nil {
+		t.Fatal("spent receipt accepted from another device")
+	}
+}

@@ -1,3 +1,4 @@
+import { prepareCenterApplication } from '../services/centerApplication';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { StableText } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js";
@@ -327,7 +328,9 @@ async function openCodespace(
     }
 
     if (local) {
-      const url = buildLocalCodespaceURL(codeSpaceID, folder, copy.invalidUrl);
+      const url = local.web_entry === 'center-v1'
+        ? await prepareCenterApplication('cs', codeSpaceID, folder ? '/?folder=' + encodeURIComponent(folder) : '/')
+        : buildLocalCodespaceURL(codeSpaceID, folder, copy.invalidUrl);
       setStatus(copy.opening);
       navigateCodespaceBrowserPopup({
         strategy,

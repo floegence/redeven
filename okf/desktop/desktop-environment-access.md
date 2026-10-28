@@ -31,11 +31,13 @@ The existing main Open button uses the saved default. Implicit defaults use stab
 [Gateway access sessions](../gateway/gateway-access-sessions.md) owns transport isolation and same-route session reuse.
 
 ## Membership discovery and migration
-Members are discovered from the signed v5 directory and matched to trusted Runtime membership summaries.
+Members are discovered from the signed v6 directory and matched to trusted Runtime membership summaries.
 
 Existing Cloud-only Runtime configurations must rejoin and cannot silently gain the new member delegation. [Gateway Cloud access](../gateway/gateway-cloud-access.md) owns proof-based preservation of a formal environment ID.
 
 # Boundaries
+
+Desktop shares host-neutral environment contracts, projection/controller and Gateway list UI with [Web Center](../architecture/web-environment-center.md). Existing lifecycle/window owners and user interactions remain authoritative; no Center login/service dependency is introduced.
 
 This contract owns display association and route selection. Proof observation never upgrades those permissions.
 

@@ -160,6 +160,9 @@ check_focused_changed_tests() {
   node "$ROOT_DIR/scripts/check_interaction_continuity.mjs" --base "$base" --tip "$tip"
   local changed
   changed="$(git diff --name-only "${base}...${tip}")"
+  if printf '%s\n' "$changed" | grep -Eq '^(cmd/(redeven-center|center-contracts)/|internal/(environmentcenter|envcenter_web|webbinding|webconnector)/|desktop/src/envcenter/|desktop/tests/envCenterContract|scripts/check_center)'; then
+    "$ROOT_DIR/scripts/check_center.sh" --contracts-only
+  fi
   if printf '%s\n' "$changed" | grep -q '^desktop/'; then
     (
       cd "$ROOT_DIR/desktop"

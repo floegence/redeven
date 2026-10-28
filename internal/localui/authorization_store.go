@@ -103,6 +103,7 @@ type localAuthorizationKeyring struct {
 }
 
 type localAuthorizationBinding struct {
+	EntryScope                string       `json:"entry_scope,omitempty"`
 	ChannelID                 string       `json:"channel_id"`
 	AccessSessionID           string       `json:"access_session_id,omitempty"`
 	InitExpireAtUnixS         int64        `json:"init_expire_at_unix_s"`
@@ -494,7 +495,7 @@ func (store *localAuthorizationStore) issue(record controlplane.AuthorizationRec
 	hashText := base64.RawURLEncoding.EncodeToString(binding.pluginCredentialHash[:])
 	secret := localAuthorizationSecret{RecordEncoded: encoded, Binding: localAuthorizationBinding{
 		ChannelID: channelID, AccessSessionID: accessSessionID, InitExpireAtUnixS: expiresAt.Unix(),
-		Meta: binding.meta, TraceID: binding.traceID, ConnectArtifactIssuedAtMs: binding.connectArtifactIssuedAtMs, PluginCredentialHashB64u: hashText,
+		EntryScope: binding.entryScope, Meta: binding.meta, TraceID: binding.traceID, ConnectArtifactIssuedAtMs: binding.connectArtifactIssuedAtMs, PluginCredentialHashB64u: hashText,
 	}}
 	plain, err := json.Marshal(secret)
 	if err != nil {
@@ -931,10 +932,19 @@ func (store *localAuthorizationStore) bindingByQuery(predicate string, arg strin
 	}
 	var hash [sha256.Size]byte
 	copy(hash[:], hashBytes)
-	return pendingDirect{externalOrigin: externalOrigin, pluginCredentialHash: hash, accessSessionID: secret.Binding.AccessSessionID, initExpireAtUnixS: secret.Binding.InitExpireAtUnixS, meta: secret.Binding.Meta, traceID: secret.Binding.TraceID, connectArtifactIssuedAtMs: secret.Binding.ConnectArtifactIssuedAtMs}, storedChannel, true
+	return pendingDirect{entryScope: secret.Binding.EntryScope, externalOrigin: externalOrigin, pluginCredentialHash: hash, accessSessionID: secret.Binding.AccessSessionID, initExpireAtUnixS: secret.Binding.InitExpireAtUnixS, meta: secret.Binding.Meta, traceID: secret.Binding.TraceID, connectArtifactIssuedAtMs: secret.Binding.ConnectArtifactIssuedAtMs}, storedChannel, true
 }
 
 func (store *localAuthorizationStore) spend(request localSpendRequest) error {
+	return store.spendOwned(request, nil)
+}
+
+type localSpendOwner struct {
+	AccessSessionID string
+	EntryScope      string
+}
+
+func (store *localAuthorizationStore) spendOwned(request localSpendRequest, owner *localSpendOwner) error {
 	if store == nil || store.db == nil {
 		return &localSpendError{Status: 503, Code: "local_authority_unavailable"}
 	}
@@ -986,6 +996,21 @@ func (store *localAuthorizationStore) spend(request localSpendRequest) error {
 	_, storedReceiptHMAC, keyErr := store.receiptHMACForVersion(request.Receipt, receiptKeyVersion)
 	if keyErr != nil || !hmac.Equal(receiptHMAC, storedReceiptHMAC) {
 		return &localSpendError{Status: 400, Code: "invalid_spend_receipt"}
+	}
+	if owner != nil {
+		var lookup, channel, accessID string
+		var generation, expires int64
+		var keyVersion int
+		var ciphertext []byte
+		err := tx.QueryRow("SELECT lookup_key, channel_id, access_session_id, generation, expires_at_unix_s, key_version, record_ciphertext FROM local_authorization_records WHERE lookup_key = (SELECT lookup_key FROM local_browser_spends WHERE receipt_hmac = ?)", receiptHMAC).Scan(&lookup, &channel, &accessID, &generation, &expires, &keyVersion, &ciphertext)
+		if err != nil || owner.AccessSessionID == "" || accessID != owner.AccessSessionID || generation != store.generation {
+			return &localSpendError{Status: 403, Code: "spend_owner_mismatch"}
+		}
+		plain, err := store.decrypt(lookup, generation, channel, accessID, expires, keyVersion, ciphertext)
+		var secret localAuthorizationSecret
+		if err != nil || json.Unmarshal(plain, &secret) != nil || secret.Binding.AccessSessionID != accessID || secret.Binding.ChannelID != channel || secret.Binding.InitExpireAtUnixS != expires || secret.Binding.EntryScope != owner.EntryScope {
+			return &localSpendError{Status: 403, Code: "spend_owner_mismatch"}
+		}
 	}
 	requestExpiry, expiryErr := time.Parse(time.RFC3339Nano, request.ExpiresAt)
 	requestedTarget, targetErr := canonicalLocalJSON(request.TargetBinding)

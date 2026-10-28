@@ -8,6 +8,10 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
+- [Independent Web Environment Center](architecture/web-environment-center.md)
+- [Web Center access security](security/web-center-access.md)
+- [Web Center deployment](operations/web-center-deployment.md)
+
 - [Flower startup and recovery presentation](architecture/flower-startup-presentation.md)
 - [Flower startup performance acceptance](operations/flower-startup-performance.md)
 - [Flower conversation switch qualification](operations/flower-thread-switch-qualification.md)

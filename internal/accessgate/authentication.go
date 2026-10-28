@@ -98,6 +98,12 @@ func (g *Gate) AuthenticateChannel(channelID string, req AuthenticationRequest, 
 }
 
 func (g *Gate) AuthenticateLocal(req AuthenticationRequest, subject, binding string) (*LocalSessionResult, error) {
+	return g.AuthenticateLocalForScope(req, subject, binding, "")
+}
+
+// AuthenticateLocalForScope keeps credentials and challenges inside one
+// verified Runtime entry. The scope never grants management privileges.
+func (g *Gate) AuthenticateLocalForScope(req AuthenticationRequest, subject, binding, scope string) (*LocalSessionResult, error) {
 	if g == nil {
 		return &LocalSessionResult{Unlocked: true}, nil
 	}
@@ -109,7 +115,7 @@ func (g *Gate) AuthenticateLocal(req AuthenticationRequest, subject, binding str
 	if req.Delegation != "" || req.ResumeToken != "" {
 		return nil, ErrChallengeExpired
 	}
-	challenge, id, err := g.authenticateLocked(req, subject, "local:"+binding)
+	challenge, id, err := g.authenticateLocked(req, subject, "local:"+scope+":"+binding)
 	if err != nil {
 		return nil, err
 	}
@@ -117,13 +123,13 @@ func (g *Gate) AuthenticateLocal(req AuthenticationRequest, subject, binding str
 		return &LocalSessionResult{SecondFactorRequired: true, ChallengeID: id}, nil
 	}
 	if challenge != nil && challenge.local != nil {
-		if !g.IsLocalSessionValid(challenge.local.SessionToken) {
+		if _, _, valid := g.ResolveLocalSessionForScope(challenge.local.SessionToken, scope); !valid {
 			return nil, ErrChallengeExpired
 		}
 		copy := *challenge.local
 		return &copy, nil
 	}
-	result, err := g.issueLocalSession()
+	result, err := g.issueLocalSessionForScope(scope)
 	if err == nil && challenge != nil {
 		challenge.local = result
 	}

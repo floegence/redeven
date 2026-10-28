@@ -1,0 +1,27 @@
+services:
+  connector:
+    image: redeven-center:local
+    build: .
+    user: "10002:10001"
+    command: ["connector", "--connector-socket", "/run/redeven-connector/connector.sock", "--center-user", "10001"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes: ["connector-ipc:/run/redeven-connector"]
+    tmpfs: [/tmp]
+  center:
+    image: redeven-center:local
+    user: "10001:10001"
+    command: ["serve", "--state-root", "/var/lib/redeven-center", "--listen", "0.0.0.0:8443", "--assets", "/opt/redeven-center/ui", "--connector-socket", "/run/redeven-connector/connector.sock", "--connector-user", "10002", "--origin", "${CENTER_ORIGIN:?Set CENTER_ORIGIN}", "--tls-cert", "/tls/server.pem", "--tls-key", "/tls/server-key.pem"]
+    depends_on: [connector]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ports: ["8443:8443"]
+    volumes: ["center-state:/var/lib/redeven-center", "connector-ipc:/run/redeven-connector:ro", "./tls:/tls:ro"]
+    tmpfs: [/tmp]
+volumes:
+  center-state:
+  connector-ipc:

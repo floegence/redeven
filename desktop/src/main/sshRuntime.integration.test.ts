@@ -859,6 +859,7 @@ async function startWithFakeSSH(
   options: Readonly<{
     startupTimeoutMs?: number;
     target?: DesktopSSHEnvironmentDetails;
+    sshPassword?: string;
     sourceRuntimeRoot?: string;
     forceRuntimeUpdate?: boolean;
     runtimeProcessIntent?: 'start' | 'restart' | 'update';
@@ -873,6 +874,7 @@ async function startWithFakeSSH(
     sshTransportManager: fixture.transportManager,
     sshCredentialScope: fixture.root,
     target: options.target ?? targetFor(strategy),
+    sshPassword: options.sshPassword,
     runtimeReleaseTag: options.runtimeReleaseTag ?? 'v1.2.3',
     sshBinary: fixture.sshBinary,
     sourceRuntimeRoot: options.sourceRuntimeRoot,
@@ -1641,6 +1643,7 @@ describe('sshRuntime integration', () => {
     try {
       runtime = await startWithFakeSSH(fixture, 'auto', {
         target: targetForPasswordAuth('auto'),
+        sshPassword: 'fixture-password',
       });
     } finally {
       await runtime?.stop();

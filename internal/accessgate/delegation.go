@@ -46,7 +46,7 @@ func (g *Gate) DelegateCodeSpace(channelID, codeSpaceID string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	parent := &resumeTokenState{accessSessionID: st.accessSessionID, userPublicID: st.meta.UserPublicID, endpointID: st.meta.EndpointID, expiresAt: st.expiresAt}
+	parent := &resumeTokenState{scope: st.scope, accessSessionID: st.accessSessionID, userPublicID: st.meta.UserPublicID, endpointID: st.meta.EndpointID, expiresAt: st.expiresAt}
 	if parent.expiresAt.IsZero() && st.trusted {
 		parent.expiresAt = now.Add(g.resumeTTL)
 	}
@@ -61,7 +61,7 @@ func (g *Gate) consumeCodeSpaceLocked(channelID, token string) (*UnlockResult, e
 	g.cleanupExpiredLocked(now)
 	st := g.channels[channelID]
 	d := g.delegations[token]
-	if st == nil || d == nil || !now.Before(d.expires) || !now.Before(d.parent.expiresAt) || st.meta.FloeApp != "com.floegence.redeven.code" || st.meta.CodeSpaceID != d.codeSpaceID || st.meta.UserPublicID != d.parent.userPublicID || st.meta.EndpointID != d.parent.endpointID {
+	if st == nil || d == nil || !now.Before(d.expires) || !now.Before(d.parent.expiresAt) || st.meta.FloeApp != "com.floegence.redeven.code" || st.meta.CodeSpaceID != d.codeSpaceID || st.meta.UserPublicID != d.parent.userPublicID || st.meta.EndpointID != d.parent.endpointID || st.scope != d.parent.scope {
 		return nil, errors.New("editor authorization expired; reopen it from the environment")
 	}
 	if d.consumedChannel != "" {
@@ -75,6 +75,7 @@ func (g *Gate) consumeCodeSpaceLocked(channelID, token string) (*UnlockResult, e
 		return nil, err
 	}
 	g.resumeTokens[resume].expiresAt = d.parent.expiresAt
+	g.resumeTokens[resume].scope = d.parent.scope
 	st.unlocked = true
 	st.unlockedAt = now
 	st.expiresAt = d.parent.expiresAt

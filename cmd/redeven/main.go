@@ -26,6 +26,7 @@ import (
 	"github.com/floegence/redeven/internal/runtimepresentation"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/settings"
+	"github.com/floegence/redeven/internal/webbinding"
 )
 
 var (
@@ -73,6 +74,8 @@ func (c *cli) run(args []string) int {
 		return c.helpCmd(args[1:])
 	case "cloud":
 		return c.cloudCmd(args[1:])
+	case "web-binding":
+		return c.webBindingCmd(args[1:])
 	case "gateway":
 		return c.gatewayCmd(args[1:])
 	case "bootstrap":
@@ -848,6 +851,12 @@ func (c *cli) runCmd(args []string) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	webBindings, err := webbinding.Open(stateLayout.StateDir, cfg.LocalEnvironmentPublicID)
+	if err != nil {
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to open Web entry consent: %v", err))
+	}
+	defer webBindings.Close()
+
 	// Graceful shutdown on SIGINT/SIGTERM.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -856,7 +865,8 @@ func (c *cli) runCmd(args []string) int {
 		// Gateway membership is independent of the optional public Local UI
 		// listener. Inner TLS uses the member's signed service identity.
 		srv, err := localui.New(localui.Options{
-			Logger: localUILogger, Protocol: config.LocalUIProtocolHTTPS,
+			WebBindings: webBindings,
+			Logger:      localUILogger, Protocol: config.LocalUIProtocolHTTPS,
 			EffectiveRunMode: string(effectiveRunMode), RemoteEnabled: processRemoteEnabled,
 			AppServer: a.CodeAppServer(), Agent: a, ConfigPath: stateLayout.ConfigPath,
 			StateRoot: stateLayout.StateRoot, RuntimeControlSocketPath: stateLayout.RuntimeControlSocketPath,
@@ -886,6 +896,7 @@ func (c *cli) runCmd(args []string) int {
 		}
 
 		srv, err := localui.New(localui.Options{
+			WebBindings:              webBindings,
 			Logger:                   localUILogger,
 			Bind:                     localUIBind,
 			ConfiguredBind:           configuredLocalUIBind,

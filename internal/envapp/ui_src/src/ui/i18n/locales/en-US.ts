@@ -6,6 +6,7 @@ import { enUSActivityChrome } from './activityChrome';
 import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
+  centerEntry: { expiringTitle: "Entry session expires soon", expiringMessage: "Continue interacting with the environment to keep the entry session active. The absolute session deadline still requires sign-in." },
   remoteDesktop: {
     "deployEnsure": "Prepare remote desktop",
     "deployAuthMethod": "Administrator authorization",

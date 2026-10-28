@@ -1,4 +1,8 @@
 {
+  "centerEntry": {
+    "expiringTitle": "La sesión de acceso caduca pronto",
+    "expiringMessage": "Sigue interactuando con el entorno para mantener activa la sesión de acceso. Al alcanzar su duración máxima, tendrás que volver a iniciar sesión."
+  },
   "sessionRestart": {
     "preparing": "Preparando el reinicio",
     "restarting": "Reiniciando el tiempo de ejecución",

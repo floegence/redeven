@@ -78,7 +78,11 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 		}
 		runtime := newTestServer(t, gate)
 		runtime.log = slog.Default()
-		runtime.a = newRuntimeHealthTestAgent(t, runtime.configPath, gate)
+		identity := "gateway-browser-plain"
+		if mfa {
+			identity = "gateway-browser-secure"
+		}
+		runtime.a = newRuntimeHealthTestAgent(t, runtime.configPath, gate, identity)
 		runtime.appServer = runtime.a.CodeAppServer()
 		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v6/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v6"}`))
 		request.RemoteAddr = "127.0.0.1:1234"

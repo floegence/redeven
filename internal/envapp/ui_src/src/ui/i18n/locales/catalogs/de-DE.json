@@ -1,4 +1,8 @@
 {
+  "centerEntry": {
+    "expiringTitle": "Die Zugangssitzung läuft bald ab",
+    "expiringMessage": "Durch weitere Interaktionen in der Umgebung bleibt die Zugangssitzung aktiv. Nach Ablauf der maximalen Sitzungsdauer ist eine erneute Anmeldung erforderlich."
+  },
   "sessionRestart": {
     "preparing": "Neustart wird vorbereitet",
     "restarting": "Laufzeit wird neu gestartet",

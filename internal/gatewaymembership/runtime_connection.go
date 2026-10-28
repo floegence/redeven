@@ -27,6 +27,10 @@ type RuntimeApplication struct {
 	Handler                   http.Handler
 	WebSocketHandler          http.Handler
 	AuthorizeWebSocketRequest func(*http.Request) bool
+	// RequestClientCertificate collects proof for an explicitly registered Web
+	// connector. Application admission must verify its pinned public key.
+	// Existing clients without a certificate keep their ordinary public path.
+	RequestClientCertificate bool
 }
 
 type runtimeSource struct {
@@ -270,11 +274,15 @@ func (r *RuntimeConnection) serve(ctx context.Context, session flowersec.Session
 		}
 		defer listener.Close()
 		app := application(config.Service.Origin)
+		clientAuth := tls.NoClientCert
+		if app.RequestClientCertificate {
+			clientAuth = tls.RequestClientCert
+		}
 		server, err := flowersec.NewWebSocketHTTPServer(flowersec.WebSocketHTTPServerOptions{
 			Handler: app.WebSocketHandler, ApplicationHandler: app.Handler,
 			AuthorizeWebSocketRequest: app.AuthorizeWebSocketRequest,
 			ReadHeaderTimeout:         10 * time.Second, IdleTimeout: 2 * time.Minute,
-			TLSConfig: &tls.Config{Certificates: []tls.Certificate{pair}, MinVersion: tls.VersionTLS13, NextProtos: []string{"http/1.1"}},
+			TLSConfig: &tls.Config{Certificates: []tls.Certificate{pair}, MinVersion: tls.VersionTLS13, NextProtos: []string{"http/1.1"}, ClientAuth: clientAuth},
 		})
 		if err != nil {
 			return err

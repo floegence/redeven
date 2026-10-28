@@ -1,4 +1,8 @@
 {
+  "centerEntry": {
+    "expiringTitle": "入口会话即将到期",
+    "expiringMessage": "继续操作环境可保持入口会话活跃。达到最长会话期限后仍需重新登录。"
+  },
   "sessionRestart": {
     "preparing": "正在准备重启",
     "restarting": "正在重启运行时",

@@ -809,6 +809,8 @@ func lookupHelpText(args []string) (string, bool) {
 		return rootHelpText(), true
 	case "cloud":
 		return cloudHelp, true
+	case "web-binding":
+		return webBindingHelp, true
 	case "gateway":
 		return gatewayMembershipHelp, true
 	case "bootstrap":

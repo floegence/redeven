@@ -340,10 +340,17 @@ func requestOriginAuthority(r *http.Request, requireOrigin bool) (string, bool) 
 func canonicalRequestAuthority(r *http.Request, raw string) (string, error) {
 	if origin := gatewayMemberOrigin(r); origin != "" {
 		parsed, err := url.Parse(origin)
-		if err != nil || r.TLS == nil || parsed.Scheme != "https" || (raw != parsed.Host && raw != net.JoinHostPort(parsed.Hostname(), "443")) {
+		if err != nil {
 			return "", fmt.Errorf("invalid member authority")
 		}
-		return net.JoinHostPort(parsed.Hostname(), "443"), nil
+		port := parsed.Port()
+		if port == "" {
+			port = "443"
+		}
+		if r.TLS == nil || parsed.Scheme != "https" || (raw != parsed.Host && raw != net.JoinHostPort(parsed.Hostname(), port)) {
+			return "", fmt.Errorf("invalid member authority")
+		}
+		return net.JoinHostPort(parsed.Hostname(), port), nil
 	}
 	return canonicalPublicAuthority(raw, requestProtocol(r))
 }

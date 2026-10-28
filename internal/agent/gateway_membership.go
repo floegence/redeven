@@ -376,3 +376,16 @@ func (a *Agent) PublishGateway(ctx context.Context, gatewayID string) error {
 	}
 	return nil
 }
+
+// RuntimePublicID is the persistent local identity, independent of Cloud routes.
+func (a *Agent) RuntimePublicID() string {
+	if a == nil {
+		return ""
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg == nil {
+		return ""
+	}
+	return a.cfg.LocalEnvironmentPublicID
+}

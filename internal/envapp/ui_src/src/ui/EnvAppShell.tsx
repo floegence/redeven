@@ -1,3 +1,4 @@
+import { installCenterEntryActivity } from './services/centerEntryActivity';
 import { createFlowerPageContextRegistry, flowerPageContextSnapshot, type FlowerPageContextRegistrar } from './flower/flowerPageContext';
 import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
@@ -745,6 +746,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
+  createEffect(() => {
+    if (localRuntime()?.web_entry !== 'center-v1') return;
+    onCleanup(installCenterEntryActivity(() => {
+      protocol.disconnect();
+      setManualError(i18n.t('remoteDesktop.sessionExpired'));
+    }, () => notify.info(i18n.t('centerEntry.expiringTitle'), i18n.t('centerEntry.expiringMessage'))));
+  });
   const [tessivenOpenRequest, setTessivenOpenRequest] = createSignal<TessivenOpenRequest | null>(null);
   const tessivenVisible = () => viewMode() === 'activity' && layout.sidebarActiveTab() === ENV_TESSIVEN_ACTIVITY_ID && isLocalMode();
   const TessivenNavigationIcon = () => <TessivenIcon kind="tessiven"/>;

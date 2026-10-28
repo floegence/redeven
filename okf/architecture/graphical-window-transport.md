@@ -24,6 +24,8 @@ Generic Code App injection must not install a second transport on these marked g
 
 # Boundaries
 
+[Web Center](web-environment-center.md) viewers use this same scoped acquisition/spend contract. Verified child origin and parent credentials come from the trusted proxy; raw graphical bypass stays forbidden. Backend-advertised media/input availability remains authoritative.
+
 ## Resource authority
 Acquisition requires read, write and execute permissions and an active resource owned by the authenticated user. Its exact spend target identifies the window kind, environment, port-forward application and forward ID; launcher, Runtime and application origins must all match.
 

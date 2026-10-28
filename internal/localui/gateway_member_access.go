@@ -51,21 +51,43 @@ func (s *Server) gatewayMemberApplication(origin string) gatewaymembership.Runti
 	}
 	application := s.handler()
 	bindOrigin := func(r *http.Request) bool {
-		if r == nil || r.TLS == nil || r.Host != parsed.Host {
+		if r == nil || r.TLS == nil {
 			return false
+		}
+		if r.Host != parsed.Host {
+			return s.bindWebEntry(r, origin)
 		}
 		*r = *r.WithContext(context.WithValue(r.Context(), gatewayMemberOriginKey{}, origin))
 		return true
 	}
 	return gatewaymembership.RuntimeApplication{
-		WebSocketHandler: s.acceptor.Handler(),
+		RequestClientCertificate: s.webBindings != nil,
+		WebSocketHandler:         s.acceptor.Handler(),
 		AuthorizeWebSocketRequest: func(r *http.Request) bool {
-			return bindOrigin(r) && s.authorizePublicWebSocketRequest(r)
+			if !bindOrigin(r) || !bindWebApplicationCarrier(r) || !s.authorizePublicWebSocketRequest(r) {
+				if lease := webEntry(r); lease != nil {
+					lease.Close()
+				}
+				return false
+			}
+			if webEntry(r) != nil {
+				id, _, ok := s.activeLocalAccessSession(r)
+				if !ok {
+					webEntry(r).Close()
+					return false
+				}
+				*r = *r.WithContext(context.WithValue(r.Context(), webAdmissionKey{}, id))
+			}
+			return true
 		},
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Redeven-Web-Entry", "center-v1")
 			if !bindOrigin(r) {
 				http.Error(w, "Invalid member authority", http.StatusMisdirectedRequest)
 				return
+			}
+			if lease := webEntry(r); lease != nil {
+				defer lease.Close()
 			}
 			if !strictSameOriginWSRequest(r, r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions) {
 				http.Error(w, "Invalid member origin", http.StatusForbidden)

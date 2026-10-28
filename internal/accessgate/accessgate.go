@@ -63,6 +63,7 @@ type RegisterChannelOptions struct {
 }
 
 type channelState struct {
+	scope           string
 	trusted         bool
 	cancel          func()
 	expiryTimer     *time.Timer
@@ -74,6 +75,7 @@ type channelState struct {
 }
 
 type resumeTokenState struct {
+	scope           string
 	accessSessionID string
 	userPublicID    string
 	endpointID      string
@@ -84,6 +86,7 @@ type resumeTokenState struct {
 }
 
 type localSessionState struct {
+	scope           string
 	accessSessionID string
 	expiresAt       time.Time
 }
@@ -228,6 +231,7 @@ func (g *Gate) RegisterChannelWithOptions(meta session.Meta, opts RegisterChanne
 	if !state.unlocked && opts.AccessSessionID != "" {
 		for _, local := range g.localSessions {
 			if local.accessSessionID == opts.AccessSessionID && now.Before(local.expiresAt) {
+				state.scope = local.scope
 				state.unlocked = true
 				state.expiresAt = local.expiresAt
 				break
@@ -318,6 +322,7 @@ func (g *Gate) issueChannel(channelID string) (*UnlockResult, error) {
 		if err != nil {
 			return nil, err
 		}
+		g.resumeTokens[resumeToken].scope = st.scope
 		out.ResumeToken = resumeToken
 		out.ResumeExpiresAtUnix = expiresAt.UnixMilli()
 	}
@@ -334,6 +339,10 @@ func (g *Gate) MintLocalSession(password string) (*LocalSessionResult, error) {
 }
 
 func (g *Gate) issueLocalSession() (*LocalSessionResult, error) {
+	return g.issueLocalSessionForScope("")
+}
+
+func (g *Gate) issueLocalSessionForScope(scope string) (*LocalSessionResult, error) {
 	if g == nil || !g.enabled.Load() {
 		return &LocalSessionResult{Unlocked: true}, nil
 	}
@@ -348,6 +357,7 @@ func (g *Gate) issueLocalSession() (*LocalSessionResult, error) {
 		return nil, err
 	}
 
+	g.localSessions[sessionToken].scope = scope
 	resumeToken, resumeExpiresAt, err := g.mintResumeTokenLocked(now, session.Meta{
 		ChannelID:         "local-ui",
 		EndpointID:        "env_local",
@@ -361,6 +371,7 @@ func (g *Gate) issueLocalSession() (*LocalSessionResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	g.resumeTokens[resumeToken].scope = scope
 
 	return &LocalSessionResult{
 		Unlocked:             true,
@@ -373,6 +384,10 @@ func (g *Gate) issueLocalSession() (*LocalSessionResult, error) {
 }
 
 func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.Meta) (*LocalSessionResult, error) {
+	return g.MintLocalSessionFromResumeTokenForScope(resumeToken, meta, "")
+}
+
+func (g *Gate) MintLocalSessionFromResumeTokenForScope(resumeToken string, meta session.Meta, scope string) (*LocalSessionResult, error) {
 	if g == nil || !g.enabled.Load() {
 		return &LocalSessionResult{Unlocked: true}, nil
 	}
@@ -390,7 +405,7 @@ func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.
 		return nil, err
 	}
 	resume := g.resumeTokens[resumeToken]
-	if resume == nil || strings.TrimSpace(resume.accessSessionID) == "" {
+	if resume == nil || resume.scope != scope || strings.TrimSpace(resume.accessSessionID) == "" {
 		return nil, errors.New("resume token access session is unavailable")
 	}
 
@@ -398,6 +413,7 @@ func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.
 	if err != nil {
 		return nil, err
 	}
+	g.localSessions[sessionToken].scope = scope
 
 	return &LocalSessionResult{
 		Unlocked:             true,
@@ -423,6 +439,10 @@ func (g *Gate) LocalSessionExpiresAt(token string) (time.Time, bool) {
 }
 
 func (g *Gate) ResolveLocalSession(token string) (string, time.Time, bool) {
+	return g.ResolveLocalSessionForScope(token, "")
+}
+
+func (g *Gate) ResolveLocalSessionForScope(token, scope string) (string, time.Time, bool) {
 	if g == nil || !g.enabled.Load() {
 		return "", time.Time{}, false
 	}
@@ -435,7 +455,7 @@ func (g *Gate) ResolveLocalSession(token string) (string, time.Time, bool) {
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(now)
 	st := g.localSessions[token]
-	if st == nil || now.After(st.expiresAt) {
+	if st == nil || st.scope != scope || now.After(st.expiresAt) {
 		return "", time.Time{}, false
 	}
 	return st.accessSessionID, st.expiresAt, true
@@ -535,6 +555,10 @@ func (g *Gate) RevokeResumeToken(resumeToken string) {
 }
 
 func (g *Gate) CanResumeMeta(resumeToken string, meta session.Meta) bool {
+	return g.CanResumeMetaForScope(resumeToken, meta, "")
+}
+
+func (g *Gate) CanResumeMetaForScope(resumeToken string, meta session.Meta, scope string) bool {
 	if g == nil || !g.enabled.Load() {
 		return true
 	}
@@ -546,7 +570,7 @@ func (g *Gate) CanResumeMeta(resumeToken string, meta session.Meta) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(now)
-	return g.validateResumeTokenLocked(now, resumeToken, meta) == nil
+	return g.validateResumeTokenLocked(now, resumeToken, meta) == nil && g.resumeTokens[resumeToken].scope == scope
 }
 
 func (g *Gate) ResumeChannel(channelID string, resumeToken string) error {
@@ -569,6 +593,9 @@ func (g *Gate) ResumeChannel(channelID string, resumeToken string) error {
 	}
 	if err := g.validateResumeTokenLocked(now, resumeToken, st.meta); err != nil {
 		return err
+	}
+	if g.resumeTokens[resumeToken].scope != st.scope {
+		return errors.New("resume token entry scope mismatch")
 	}
 	st.unlocked = true
 	st.unlockedAt = now
