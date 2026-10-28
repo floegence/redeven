@@ -70,6 +70,9 @@ await session.run(async () => {
   const errors = [];
   page.on('pageerror', error => errors.push(String(error)));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('response', response => {
+    if (response.status() >= 400) errors.push({ status: response.status(), url: response.url(), at: Date.now() });
+  });
   await page.locator('.flower-composer textarea').waitFor({ timeout: 60000 });
   await page.locator('[data-flower-message-id]').first().waitFor({ state: 'attached' });
   await page.locator('.flower-composer textarea').fill('Keep the Flower draft');
@@ -146,6 +149,9 @@ await session.run(async () => {
     }
     const tools = canonical.items.filter(item => item.kind === 'tool');
     report.canonical = { exact_text: canonical.exact_text, exact_reasoning: canonical.exact_reasoning, updates: canonical.updates, tools: tools.length, exact_tools: tools.length === Math.floor(canonical.updates / workload.toolEvery) && tools.every((item, index) => item.activity?.status === 'success' && item.activity.tool_id === 'live-' + ((index + 1) * workload.toolEvery)), renderedIDs: canonical.items.filter(item => ['assistant', 'thinking'].includes(item.kind)).map(item => item.id) };
+    await writeFile(path.join(output, 'canonical.json'), JSON.stringify(canonical));
+    await writeFile(path.join(output, 'metrics.json'), JSON.stringify(report, null, 2));
+    console.log('Checking complete rendered content: ' + report.canonical.renderedIDs.length + ' items');
     // Close unrelated overlays before inspecting all canonical generated rows.
     await page.locator('[data-floe-floating-window-titlebar]').filter({ hasText: 'Long-thread preview' }).getByRole('button', { name: 'Close', exact: true }).click();
     await page.locator('[data-floe-floating-window-titlebar]').filter({ hasText: 'Synthetic build output' }).getByRole('button', { name: 'Close', exact: true }).click();

@@ -41,9 +41,10 @@ export async function verifyFlowerRendered({ page, visible, ui, output, bodySele
     if (await disclosure.count() && await disclosure.getAttribute('aria-expanded') === 'false') await disclosure.click();
     // Sequence members move into their first row's disclosure. Open that
     // parent before locating a member that has intentionally unmounted.
-    for (const sequence of await page.locator(turnSelector + ' .flower-tool-sequence-toggle').all()) {
-      if (await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
-    }
+    // Query only closed groups. Rechecking every already-open sequence for
+    // each item creates quadratic protocol traffic during long-turn checks.
+    const closedSequences = page.locator(turnSelector + ' .flower-tool-sequence-toggle[aria-expanded="false"]');
+    while (await closedSequences.count()) await closedSequences.first().click();
     const row = page.locator(bodySelector + (item.kind === 'thinking'
       ? '[data-flower-thinking-id=' + JSON.stringify(`${item.id}:block:0`) + ']'
       : '[data-flower-message-id=' + JSON.stringify(item.id) + ']')).first();
@@ -80,6 +81,7 @@ export async function verifyFlowerRendered({ page, visible, ui, output, bodySele
     const expectedCode = [];
     if (item.kind !== 'thinking') markdown.walkTokens(markdown.lexer(item.text ?? ''), token => { if (token.type === 'code') expectedCode.push(token.text); });
     rendered.push({ id: item.id, kind: item.kind, actual: hash(normalize(actual)), expected: hash(normalize(expected)), exact: normalize(actual) === normalize(expected) && JSON.stringify(actualCode) === JSON.stringify(expectedCode), codeBlocks: actualCode.length });
+    if (rendered.length % 50 === 0) console.log('Verified generated content items: ' + rendered.length);
   }
   return rendered;
 }
