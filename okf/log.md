@@ -53,3 +53,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 ## 2026-10-27 — Knowledge maintenance
 
 Condense repeated summaries, source inventories and historical prose; retain owning implementation/test entrypoints, active contracts, measured outcomes and failed qualification. Full change history remains in Git. The primary agent performs this review under the current user instruction prohibiting delegation.
+
+## 2026-10-28 — Conversation file lifecycle repairs
+
+Unify failed Fork publication/restart recovery around product ownership and the existing file gates; let deleted-thread cleanup progress independently. Use one bounded canonical attachment discovery and verify consumer snapshots without duplicate whole-history reads or prehashing work copies. Add deterministic failure, restart, pagination, integrity and full tool-path performance coverage.

@@ -169,6 +169,11 @@ func (service *Service) AdoptOrphanCanonicalRoot(ctx context.Context, req AdoptO
 	if err != nil || resolved.LogicalAbs != req.WorkingDir {
 		return 0, fmt.Errorf("resolve explicit working directory: %w", err)
 	}
+	releaseFiles, err := service.taskFiles.freeze(ctxOrBackground(ctx), req.ThreadID)
+	if err != nil {
+		return 0, err
+	}
+	defer releaseFiles()
 	_, orphans, err := service.orphanRootInventory(ctx)
 	if err != nil {
 		return 0, err
@@ -204,12 +209,21 @@ func (service *Service) DeleteOrphanCanonicalRoot(ctx context.Context, req Delet
 	if req.ThreadID == "" || req.OperatorPublicID == "" {
 		return 0, errors.New("orphan deletion requires canonical thread and operator identity")
 	}
+	releaseFiles, err := service.taskFiles.freeze(ctxOrBackground(ctx), req.ThreadID)
+	if err != nil {
+		return 0, err
+	}
+	defer releaseFiles()
 	_, orphans, err := service.orphanRootInventory(ctx)
 	if err != nil {
 		return 0, err
 	}
 	if !containsFloretThreadID(orphans, req.ThreadID) {
 		return 0, ErrCanonicalRootNotOrphaned
+	}
+	// Cleanup before canonical deletion keeps the orphan retryable on failure.
+	if err := service.removeUnpublishedForkFiles(ctxOrBackground(ctx), req.ThreadID); err != nil {
+		return 0, err
 	}
 	err = service.threadRuntime.Delete(ctxOrBackground(ctx), flruntime.DeleteThreadInput{
 		ThreadID: identity.ThreadID(req.ThreadID), RequestKey: flruntime.RequestKey("orphan-root-delete-" + req.ThreadID),

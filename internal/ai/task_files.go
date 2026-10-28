@@ -81,23 +81,9 @@ func (m *taskFileManager) freeze(ctx context.Context, id string) (func(), error)
 			m.changed = make(chan struct{})
 		}
 		if m.active[id] == 0 && m.frozen[id] == nil {
-			if m.frozen == nil {
-				m.frozen = map[string]chan struct{}{}
-			}
-			done := make(chan struct{})
-			m.frozen[id] = done
+			release := m.freezeLocked(id)
 			m.mu.Unlock()
-			var once sync.Once
-			return func() {
-				once.Do(func() {
-					m.mu.Lock()
-					delete(m.frozen, id)
-					close(done)
-					close(m.changed)
-					m.changed = make(chan struct{})
-					m.mu.Unlock()
-				})
-			}, nil
+			return release, nil
 		}
 		changed := m.changed
 		m.mu.Unlock()
@@ -108,6 +94,38 @@ func (m *taskFileManager) freeze(ctx context.Context, id string) (func(), error)
 		}
 	}
 }
+
+// Recovery skips active work instead of making one busy thread block the sweep.
+func (m *taskFileManager) tryFreeze(id string) (func(), bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.active[id] != 0 || m.frozen[id] != nil {
+		return nil, false
+	}
+	return m.freezeLocked(id), true
+}
+func (m *taskFileManager) freezeLocked(id string) func() {
+	if m.frozen == nil {
+		m.frozen = map[string]chan struct{}{}
+	}
+	if m.changed == nil {
+		m.changed = make(chan struct{})
+	}
+	done := make(chan struct{})
+	m.frozen[id] = done
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			delete(m.frozen, id)
+			close(done)
+			close(m.changed)
+			m.changed = make(chan struct{})
+		})
+	}
+}
+
 func (m *taskFileManager) waitIdle(ctx context.Context, id string) error {
 	for {
 		m.mu.Lock()

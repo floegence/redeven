@@ -667,6 +667,17 @@ func (s *Service) OpenLiveUpload(ctx context.Context, owner UploadOwner, threadI
 	if err != nil {
 		return nil, NewUploadError(UploadErrorStoreUnavailable, true, fmt.Errorf("read canonical attachment authority: %w", err))
 	}
+	upload, err := s.resolveLiveUpload(ctx, owner, threadID, turnID, uploadID, membership)
+	if err != nil {
+		return nil, err
+	}
+	return verifyOpenedLiveUpload(ctx, upload)
+}
+
+func (s *Service) resolveLiveUpload(ctx context.Context, owner UploadOwner, threadID, turnID, uploadID string, membership CanonicalAttachmentMembership) (*OpenUploadResult, error) {
+	if s == nil || owner.EndpointID == "" || len(owner.OwnerUserHash) != 64 || threadID == "" || turnID == "" || !validUploadID(uploadID) {
+		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
+	}
 	if strings.TrimSpace(membership.ThreadID) != threadID || strings.TrimSpace(membership.TurnID) != turnID || strings.TrimSpace(membership.AttachmentID) != uploadID || strings.TrimSpace(membership.ResourceRef) == "" {
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment membership is inconsistent"))
 	}
@@ -700,12 +711,21 @@ func (s *Service) OpenLiveUpload(ctx context.Context, owner UploadOwner, threadI
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment digest differs from the resource"))
 	}
 	filePath := filepath.Join(dir, filepath.Base(rec.StorageRelPath))
-	if err := verifyUploadArtifactAgainstDigest(rec, filePath, storedDigest); err != nil {
-		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("attachment failed integrity validation"))
-	}
+
 	resolved := *rec
 	resolved.ContentSHA256 = storedDigest
 	return &OpenUploadResult{Info: uploadResponseFromRecord(&resolved), FilePath: filePath}, nil
+}
+
+func verifyOpenedLiveUpload(ctx context.Context, upload *OpenUploadResult) (*OpenUploadResult, error) {
+	record := &threadstore.UploadRecord{SizeBytes: upload.Info.SizeBytes, ContentSHA256: upload.Info.ContentSHA256}
+	if _, err := digestUploadArtifactContext(ctxOrBackground(ctx), record, upload.FilePath); err != nil {
+		if ctx != nil && ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("attachment failed integrity validation"))
+	}
+	return upload, nil
 }
 
 func (s *Service) OpenQueuedUpload(ctx context.Context, owner UploadOwner, threadID, queueID, uploadID string) (*OpenUploadResult, error) {
@@ -757,6 +777,9 @@ func verifyUploadArtifactAgainstDigest(rec *threadstore.UploadRecord, filePath s
 }
 
 func digestUploadArtifact(rec *threadstore.UploadRecord, filePath string) (string, error) {
+	return digestUploadArtifactContext(context.Background(), rec, filePath)
+}
+func digestUploadArtifactContext(ctx context.Context, rec *threadstore.UploadRecord, filePath string) (string, error) {
 	if rec == nil {
 		return "", errors.New("missing attachment record")
 	}
@@ -765,8 +788,15 @@ func digestUploadArtifact(rec *threadstore.UploadRecord, filePath string) (strin
 		return "", err
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || rec.SizeBytes < 0 || rec.SizeBytes == int64(^uint64(0)>>1) || info.Size() != rec.SizeBytes {
+		return "", errors.New("attachment size differs from immutable metadata")
+	}
 	hasher := sha256.New()
-	written, err := io.Copy(hasher, f)
+	written, err := io.CopyBuffer(hasher, io.LimitReader(attachmentContextReader{ctx, f}, rec.SizeBytes+1), make([]byte, 32<<10))
 	if err != nil {
 		return "", err
 	}

@@ -130,3 +130,31 @@ func materializeAttachment(ctx context.Context, space taskFileSpace, source io.R
 	}
 	return map[string]any{"file_path": filepath.Join(space.Scratch, destination), "display_name": name, "mime_type": mime, "size_bytes": size, "sha256": actual}, nil
 }
+
+// In-memory consumers share bounded, cancellable reads and check the exact
+// snapshot digest themselves. Materialization streams directly to its work copy.
+func readAttachmentSnapshot(ctx context.Context, path string, size int64) ([]byte, error) {
+	if size < 0 || size == int64(^uint64(0)>>1) {
+		return nil, errors.New("invalid attachment size")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() != size {
+		return nil, errors.New("attachment size differs from immutable metadata")
+	}
+	body, err := io.ReadAll(io.LimitReader(attachmentContextReader{ctxOrBackground(ctx), file}, size+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) != size {
+		return nil, errors.New("attachment size differs from immutable metadata")
+	}
+	return body, ctxOrBackground(ctx).Err()
+}

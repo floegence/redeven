@@ -956,7 +956,7 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 	return s.ForkThreadWithOptions(ctx, meta, sourceThreadID, ForkThreadRequest{ClientRequestID: clientRequestID, Title: title})
 }
 
-func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta, sourceThreadID string, req ForkThreadRequest) (*ThreadView, error) {
+func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta, sourceThreadID string, req ForkThreadRequest) (_ *ThreadView, resultErr error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -1008,11 +1008,31 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, err
 	}
+	// The target gate also orders publication against orphan recovery/adoption.
+	releaseTarget, err := s.taskFiles.freeze(ctxOrBackground(ctx), current.ThreadID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer releaseTarget()
+	releaseStage, err := s.taskFiles.freeze(ctxOrBackground(ctx), forkTaskStagingName(sourceThreadID, clientRequestID))
+	if err != nil {
+		return nil, err
+	}
+	defer releaseStage()
 	existing, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, current.ThreadID.String())
 	if err != nil {
 		return nil, err
 	}
 	if existing == nil {
+		defer func() {
+			if resultErr != nil {
+				// Publication can fail after rename or after cancellation. Recheck
+				// durable ownership before removing only unadmitted working files.
+				cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				resultErr = errors.Join(resultErr, s.removeUnpublishedForkFiles(cleanupCtx, current.ThreadID.String()))
+			}
+		}()
 		// Canonical identity is idempotent; settings publish only after file preparation.
 		// A failed preparation stays unadmitted and the same request can finish it.
 		if s.taskFilesProcessesBusy(endpointID, sourceThreadID) {
@@ -1419,12 +1439,13 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		desktop.releaseThreadTransport(releaseCtx, deletedID.String())
 	}
 	releaseCancel()
+	var cleanupErrors []error
 	for _, deletedID := range transportThreadIDs {
-		if err := s.deleteTaskFiles(ctxOrBackground(ctx), endpointID, deletedID.String()); err != nil {
-			return err
+		if err := s.deleteThreadFilesAndProductData(ctxOrBackground(ctx), endpointID, deletedID.String()); err != nil {
+			cleanupErrors = append(cleanupErrors, err)
 		}
 	}
-	if err := db.DeleteThreadProductData(ctxOrBackground(ctx), endpointID, threadID); err != nil {
+	if err := errors.Join(cleanupErrors...); err != nil {
 		return err
 	}
 	if readStateCleaner != nil {

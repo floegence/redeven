@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -32,11 +31,11 @@ func (s *Service) readCanonicalThreadImage(ctx context.Context, meta *session.Me
 			err = errors.New("canonical image snapshot bytes are unavailable")
 		}
 	}()
-	view, err := s.authorizeToolMediaThread(ctx, meta, strings.TrimSpace(threadID))
+	scope, err := s.flowerHistoryScope(ctx, meta, strings.TrimSpace(threadID))
 	if err != nil {
 		return canonicalImageSnapshot{}, err
 	}
-	attachment, turnID, err := findCanonicalThreadAttachment(view, "", func(a flruntime.MessageAttachment) bool {
+	attachment, turnID, err := s.findCanonicalAttachment(ctx, scope, threadID, "", func(a flruntime.MessageAttachment) bool {
 		if locator != "" {
 			candidate, err := a.Locator()
 			return err == nil && candidate == locator
@@ -62,31 +61,26 @@ func (s *Service) readCanonicalThreadImage(ctx context.Context, meta *session.Me
 		body, err = s.resolveToolMedia(ctx, attachment.ResourceRef)
 		expected = toolMediaDescriptor(attachment.ResourceRef).SHA256
 	} else {
-		uploadID, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
+		membership, err := canonicalUploadMembership(threadID, turnID, attachment)
 		if err != nil {
 			return canonicalImageSnapshot{}, err
 		}
-		expected = digest
+		expected = membership.ContentSHA256
 		owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
 		if err != nil {
 			return canonicalImageSnapshot{}, err
 		}
-		upload, err := s.OpenCanonicalLiveAttachmentForTurn(ctx, owner, threadID, turnID, uploadID)
+		if err := s.retainCanonicalUploadForOwner(ctx, owner, threadID, membership); err != nil {
+			return canonicalImageSnapshot{}, err
+		}
+		upload, err := s.resolveLiveUpload(ctx, owner, threadID, turnID, membership.AttachmentID, membership)
 		if err != nil {
 			return canonicalImageSnapshot{}, err
 		}
 		if upload == nil || upload.Info == nil || upload.Info.Name != attachment.Name || normalizeMediaType(upload.Info.DetectedMediaType) != attachment.MIMEType || upload.Info.SizeBytes != attachment.SizeBytes || !strings.EqualFold(upload.Info.ContentSHA256, expected) {
 			return canonicalImageSnapshot{}, errors.New("canonical upload descriptor changed")
 		}
-		file, err := os.Open(upload.FilePath)
-		if err != nil {
-			return canonicalImageSnapshot{}, err
-		}
-		var readErr error
-		body, readErr = io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
-		if err := errors.Join(readErr, file.Close()); err != nil {
-			return canonicalImageSnapshot{}, err
-		}
+		body, err = readAttachmentSnapshot(ctx, upload.FilePath, attachment.SizeBytes)
 	}
 	if err != nil {
 		return canonicalImageSnapshot{}, err

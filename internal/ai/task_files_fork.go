@@ -19,6 +19,11 @@ type taskForkSource struct {
 	SourceItemID string `json:"source_item_id,omitempty"`
 }
 
+func forkTaskStagingName(sourceID, requestKey string) string {
+	hash := sha256.Sum256([]byte(sourceID + "\x00" + requestKey))
+	return ".fork-" + hex.EncodeToString(hash[:])
+}
+
 // stageForkTaskFiles prepares a private copy. Only complete directories are
 // renamed into a thread root, before settings publish the fork to the product.
 func stageForkTaskFiles(ctx context.Context, state, sourceID, requestKey, item string) (*os.Root, string, func(), error) {
@@ -30,8 +35,7 @@ func stageForkTaskFiles(ctx context.Context, state, sourceID, requestKey, item s
 	if err != nil {
 		return nil, "", nil, err
 	}
-	hash := sha256.Sum256([]byte(sourceID + "\x00" + requestKey))
-	staging := ".fork-" + hex.EncodeToString(hash[:])
+	staging := forkTaskStagingName(sourceID, requestKey)
 	cleanup := func() { _ = base.RemoveAll(staging); _ = base.Close() }
 	fail := func(e error) (*os.Root, string, func(), error) { cleanup(); return nil, "", nil, e }
 	if err = base.RemoveAll(staging); err != nil {

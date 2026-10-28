@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -205,7 +204,7 @@ func (r *run) resolveFloretMessageAttachment(ctx context.Context, attachment flr
 		MimeType: opened.Upload.Info.DetectedMediaType, SizeBytes: opened.Upload.Info.SizeBytes,
 		ContentSHA256: expectedDigest, State: threadstore.UploadStateLive,
 	}
-	part, actualDigest, err := providerContentPartAndDigestForPathWithDigest(attachment, record, opened.Upload.FilePath, expectedDigest)
+	part, actualDigest, err := providerContentPartAndDigestForPathContext(ctx, attachment, record, opened.Upload.FilePath, expectedDigest)
 	if err != nil {
 		return ContentPart{}, err
 	}
@@ -265,11 +264,11 @@ func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntim
 	return input, frozen, nil
 }
 
-func providerContentPartAndDigestForPathWithDigest(attachment flruntime.MessageAttachment, record threadstore.UploadRecord, path string, expectedDigest string) (ContentPart, string, error) {
+func providerContentPartAndDigestForPathContext(ctx context.Context, attachment flruntime.MessageAttachment, record threadstore.UploadRecord, path string, expectedDigest string) (ContentPart, string, error) {
 	if err := validateFloretAttachmentRecord(attachment, record, expectedDigest); err != nil {
 		return ContentPart{}, "", err
 	}
-	body, err := os.ReadFile(path)
+	body, err := readAttachmentSnapshot(ctx, path, record.SizeBytes)
 	if err != nil {
 		return ContentPart{}, "", fmt.Errorf("read attachment resource: %w", err)
 	}

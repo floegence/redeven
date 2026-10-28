@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -196,6 +195,9 @@ func (r *run) openToolAttachment(ctx context.Context, meta *session.Meta, locato
 		return openedCanonicalAttachment{}, errors.New("attachment read is unavailable")
 	}
 	opened, err := r.host.openLiveAttachment(ctxOrBackground(ctx), owner, attachmentID)
+	if ctx != nil && ctx.Err() != nil {
+		return openedCanonicalAttachment{}, ctx.Err()
+	}
 	if err != nil || opened.Upload == nil || opened.Upload.Info == nil {
 		return openedCanonicalAttachment{}, errors.New("attachment not found")
 	}
@@ -222,7 +224,7 @@ func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args a
 	if info.UnicodeCodePoints == nil || info.LogicalLineCount == nil || normalizeMediaType(info.DetectedMediaType) != "text/plain; charset=utf-8" {
 		return nil, errors.New("attachment.read supports only strict UTF-8 text attachments")
 	}
-	body, err := os.ReadFile(opened.Upload.FilePath)
+	body, err := readAttachmentSnapshot(ctx, opened.Upload.FilePath, info.SizeBytes)
 	if err != nil || !utf8.Valid(body) || strings.IndexByte(string(body), 0) >= 0 {
 		return nil, errors.New("attachment failed UTF-8 validation")
 	}

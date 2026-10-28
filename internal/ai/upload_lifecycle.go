@@ -523,6 +523,9 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	if err := s.sweepDeletedThreadFiles(ctx); err != nil && s.log != nil {
 		s.log.Warn("ai deleted thread file cleanup deferred", "reason", reason, "error", err)
 	}
+	if err := s.sweepUnpublishedForkFiles(ctx); err != nil && s.log != nil {
+		s.log.Warn("ai fork file recovery deferred", "reason", reason, "error", err)
+	}
 	s.maintainToolMedia(ctx, reason, false)
 	expiredScopes, expiredScopeErr := s.sweepExpiredUploadStagingScopes(ctx)
 	if expiredScopeErr != nil {

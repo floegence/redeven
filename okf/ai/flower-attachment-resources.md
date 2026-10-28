@@ -22,7 +22,7 @@ Retention ownership does not authorize canonical reads.
 ## Provider Preparation
 Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. Strict UTF-8 text may instead use the bounded `attachment.read` host tool.
 
-Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state.
+Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state. Upload/tool-image reads search current-path public Floret windows (50 items, 128-byte previews) through one authorized subscription, correlated to each requested page and a stable leaf. They never hydrate full history or authorize from retention inventory. The internal resolved handle certifies ownership and metadata only: materialization hashes while copying, text/provider/image consumers verify their exact snapshot, and public download opens verify bytes before returning a path. Thus upload materialization does not prehash and then reread the original. Reads honor cancellation and declared-size bounds; corruption never publishes a work copy.
 
 ## Canonical image recovery
 Floret v7.51.1 exposes user and confirmed tool attachment descriptors through one canonical view. Upload retention recognizes tool media separately and never parses tool image references as upload records.
