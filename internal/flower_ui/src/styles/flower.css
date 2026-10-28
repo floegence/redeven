@@ -11840,13 +11840,14 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-turn-row-content { display: flow-root; min-width: 0; padding-bottom: 1rem; }
 .flower-turn-summary {
   --flower-turn-foreground: oklch(from var(--muted-foreground) min(l, 0.48) c h);
+  opacity: 1; transition: opacity 100ms ease-out 140ms;
   min-height: calc(var(--flower-sequence-row-height, 2rem) + 0.5rem + 1px);
   box-sizing: border-box;
   margin: 0.125rem 0 0.625rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
 }
-.flower-turn-summary[data-reserved='true'] { visibility: hidden; }
+.flower-turn-summary[data-reserved='true'] { visibility: hidden; opacity: 0; }
 .flower-turn-summary-button {
   display: inline-flex;
   align-items: center;
@@ -11872,7 +11873,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-turn-summary-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
 .flower-turn-summary-chevron { width: 0.875rem; height: 0.875rem; flex-shrink: 0; transition: transform 140ms ease; }
 .flower-turn-summary-button[aria-expanded='true'] .flower-turn-summary-chevron { transform: rotate(90deg); }
-@media (prefers-reduced-motion: reduce) { .flower-turn-summary-button, .flower-turn-summary-chevron { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .flower-turn-summary, .flower-turn-summary-button, .flower-turn-summary-chevron { transition: none; } }
 .flower-turn-row[data-flower-input-checkpoint='true'] {
   position: relative;
   margin-block: 0.375rem;
@@ -12387,14 +12388,16 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 }
 .flower-tool-sequence-toggle:hover { color: var(--foreground); }
 .flower-tool-sequence-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-.flower-tool-sequence-toggle[aria-expanded='true'],
-.flower-tool-sequence-node[data-state='closing'] > .flower-tool-sequence-header > .flower-tool-sequence-toggle { width: var(--flower-sequence-control-width); }
-/* Keep the complete localized summary available to assistive technology while
-   expanded. Visible activity titles and their detail buttons own this line. */
-.flower-tool-sequence-toggle[aria-expanded='true'] > :not(.flower-tool-sequence-chevron),
-.flower-tool-sequence-node[data-state='closing'] > .flower-tool-sequence-header > .flower-tool-sequence-toggle > :not(.flower-tool-sequence-chevron) {
-  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
+/* One composited summary layer crossfades over the shared first line. Keeping
+   its bounds stable avoids swapping clipped text in at the last frame. */
+.flower-tool-sequence-toggle[aria-expanded='true'] { width: var(--flower-sequence-control-width); }
+.flower-tool-sequence-summary {
+  position: absolute; inset-block: 0; inset-inline-start: var(--flower-sequence-control-width); inset-inline-end: 0;
+  display: flex; align-items: center; min-width: 0; pointer-events: none;
+  opacity: 1; transition: opacity 100ms ease-out 140ms;
+}
+.flower-tool-sequence-toggle[aria-expanded='true'] > .flower-tool-sequence-summary {
+  opacity: 0; transition: opacity 140ms ease-out;
 }
 .flower-tool-sequence-current { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--flower-activity-tool-row-foreground-strong); }
 .flower-tool-sequence-current::before { content: '·'; margin-inline: 0.375rem; color: var(--flower-activity-tool-row-quiet); }
@@ -12438,7 +12441,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   .flower-turn-summary-button { min-height: 2.75rem; }
   .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after { top: 2.125rem; bottom: -0.625rem; }
 }
-@media (prefers-reduced-motion: reduce) { .flower-tool-sequence-chevron { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .flower-tool-sequence-chevron, .flower-tool-sequence-summary { transition: none; } }
 @media (forced-colors: active) {
   .flower-tool-sequence-toggle { color: ButtonText; }
   .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after { background: GrayText; opacity: 1; }
@@ -12504,6 +12507,10 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   font-size: 0.8125rem;
 }
 .flower-history-message { min-width: 0; }
+.flower-history-message[data-flower-sequence-arrival] { transition: opacity 160ms ease-out; }
+.flower-history-message[data-flower-sequence-pending] { visibility: hidden; opacity: 0; }
+.flower-chat-transcript[data-flower-tail-preparing='true'] :is(.flower-history-message, .flower-tool-sequence-summary, .flower-turn-summary) { transition: none; }
+@media (prefers-reduced-motion: reduce) { .flower-history-message[data-flower-sequence-arrival] { transition: none; } }
 .flower-history-message-content { display: flow-root; }
 .flower-message-block-stack-user > .flower-history-message {
   width: 100%;

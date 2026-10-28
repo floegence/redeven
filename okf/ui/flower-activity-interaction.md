@@ -5,7 +5,7 @@ description: Keep native tool activation, disclosure state, viewport following, 
 tags: [ai, flower, activity, interaction, accessibility]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -40,7 +40,7 @@ One viewport controller owns transcript position. Layout, focus, animation and g
 Floret's canonical first/last output-chunk receipt times survive hydration, reconnect, restart and Fork. They replace page observations; native continuation reopens the interval and completion ends at the last chunk. Tooltips distinguish received output from provider compute time. Show <1ms below one millisecond and localized Not recorded when absent; never infer timing from neighboring events or turn totals. Legacy page observations remain memory-only.
 
 ## Visual motion
-Confirmed live thinking fills five petals clockwise, then its center, holds and fades over 2.4 seconds. Sealed, cancelled and disconnected rows are static. Theme tokens, reduced motion, high contrast and forced colors own accessible variants; CSS needs no separate lifecycle. Disclosure uses one reversible Web Animation (180 ms open, 140 ms close); stale completions cannot change presence.
+Confirmed live thinking fills five petals clockwise, then its center, holds and fades over 2.4 seconds. Sealed, cancelled and disconnected rows are static. Theme tokens, reduced motion, high contrast and forced colors own accessible variants; CSS needs no separate lifecycle. Disclosure uses one reversible Web Animation (180 ms open, 140 ms default close); stale completions cannot change presence. Shared tool/turn handoffs use the [sequence motion contract](flower-tool-sequences.md#disclosure-and-bodies): one 260 ms geometry owner, composited summary crossfade and stationary prose arrival.
 
 Fresh tool, argument-preview and thinking titles reveal once over 168–360 ms, at most 32 width-adapted steps. Full text, geometry, accessible names and actions exist immediately. After sequence placement, viewport owners make room over 220 ms before reveal; growth retargets without extending the deadline. User scrolling interrupts; paused reading stays paused; reduced motion skips animation. Delivery, results and controls never wait. Concurrent arrivals remain independent; running glyph shimmer starts after reveal without typography changes.
 

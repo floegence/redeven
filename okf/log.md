@@ -4,6 +4,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-27
 
+- Remove the final-frame cut from [sequence folding](ui/flower-tool-sequences.md): settle at shared-row height, crossfade the summary, then fade in stationary prose. Terminal closure owns one outer fold and carries any interrupted inner opacity into that motion.
 - Finish [sequence folding](ui/flower-tool-sequences.md) before revealing fresh prose, retain streaming/reading continuity, and clip orphan connectors at the scrolling edge with bounded work. Reuse the existing motion and scroll owners.
 - Share the [tool-sequence control](ui/flower-tool-sequences.md) with the first activity line. Remove blank title rows while retaining candidate width, accessible summaries, manual choices and reading anchors across desktop and touch layouts.
 - Add bounded multi-page [scripts](ai/computer-use-scripts.md), exact-ID [download handoff](ai/computer-use-browser.md), and installed-app [selection](ai/computer-use-target-selection.md). Selection observes through the runtime gate and preserves completed launch/binding facts on failure. Runtime owns cancellation, validation and partial-file cleanup. Default discovery retains three tools.

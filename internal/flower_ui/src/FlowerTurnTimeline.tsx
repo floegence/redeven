@@ -7,10 +7,16 @@ import type { FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
-import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
+import { createFlowerActivityDisclosureMotion, type FlowerActivityDisclosurePresentation } from './activityDisclosure';
 import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
 import { createFlowerActivityTitleReveal, FlowerActivityTitleRevealContext } from './flowerActivityTitleReveal';
+
+type PendingSequenceContent = Readonly<{
+  nodeKey: string;
+  motionKey: string;
+  presentation?: Pick<FlowerActivityDisclosurePresentation, 'opacity' | 'transform'>;
+}>;
 
 type TimelineProps = Readonly<{
   thread: FlowerThreadSnapshot | null | undefined;
@@ -245,10 +251,10 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   const sequenceIdentity = (key: string) => JSON.stringify([props.runtimeID, props.thread?.thread_id, 'tools', key]);
   // Runtime facts keep flowing. Only fresh prose waits for its mounted group's
   // presentation; the existing motion completion releases it without a timer.
-  const [pendingSequenceContent, setPendingSequenceContent] = createSignal<ReadonlyMap<string, string>>(new Map());
-  const releaseSequenceContent = (nodeKey: string) => setPendingSequenceContent(previous => {
-    if (![...previous.values()].includes(nodeKey)) return previous;
-    return new Map([...previous].filter(([, owner]) => owner !== nodeKey));
+  const [pendingSequenceContent, setPendingSequenceContent] = createSignal<ReadonlyMap<string, PendingSequenceContent>>(new Map());
+  const releaseMotionContent = (motionKey: string) => setPendingSequenceContent(previous => {
+    if (![...previous.values()].some(owner => owner.motionKey === motionKey)) return previous;
+    return new Map([...previous].filter(([, owner]) => owner.motionKey !== motionKey));
   });
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
@@ -286,17 +292,18 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     if (next !== previous) untrack(() => {
       const pending = new Map(pendingSequenceContent());
       const owners = new Set([...next.groups.values()].map(group => group.nodeKeys[0]));
-      for (const [key, owner] of pending) if (!previous || !owners.has(owner)) pending.delete(key);
+      for (const [key, owner] of pending) if (!previous || !owners.has(owner.nodeKey)) pending.delete(key);
       if (previous && props.liveConfirmed?.() && !props.reducedMotion() && !props.scroll.isPreparing()) {
         for (const group of next.groups.values()) {
           const prior = previous.groups.get(group.key);
-          const waiting = group.followingContentKeys.some(key => pending.get(key) === group.nodeKeys[0]);
-          if (waiting) for (const key of group.followingContentKeys) pending.set(key, group.nodeKeys[0]);
+          const waiting = group.followingContentKeys.map(key => pending.get(key)).find(owner => owner?.nodeKey === group.nodeKeys[0]);
+          if (waiting) for (const key of group.followingContentKeys) pending.set(key, waiting);
           else if (group.followingContentKeys.length && group.followingContentKeys[0] !== prior?.followingContentKeys[0]
             && group.disclosure === 'automatic' && previous.headerKeys.has(group.nodeKeys[0]) && sequenceLayout.element(group.nodeKeys[0])
             && props.choices.expanded(sequenceIdentity(group.key), prior?.disclosure ?? 'manual')
             && !props.choices.manuallyControlled(sequenceIdentity(group.key))) {
-            for (const key of group.followingContentKeys) pending.set(key, group.nodeKeys[0]);
+            const owner = { nodeKey: group.nodeKeys[0], motionKey: 'tools:' + group.nodeKeys[0] };
+            for (const key of group.followingContentKeys) pending.set(key, owner);
             // Capture before this snapshot mounts the following prose. Its
             // measured height must not advance the transcript before folding.
             props.scroll.preserveCollapseOffset(() => pendingSequenceContent().size > 0 || motions.size > 0);
@@ -328,15 +335,36 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       if (!threadID) return;
       for (const group of groups.groups.values()) {
         // Automatic folding must not hide a title that has just arrived.
-        if (group.disclosure === 'automatic' && (pending.size > 0 || group.processKeys.some(key => revealing.has(key)))) continue;
+        if (group.disclosure === 'automatic' && group.processKeys.some(key => revealing.has(key))) continue;
         props.choices.observe(identity(group.turnID), group.disclosure,
-          () => inspectionProtected(group.turnID, group.processKeys, true), () => preserveReadingAnchor(group.processKeys));
+          () => inspectionProtected(group.turnID, group.processKeys, true), () => {
+            preserveReadingAnchor(group.processKeys);
+            // A terminal snapshot folds the enclosing process directly. Hand
+            // the same pending prose to that row instead of first shrinking
+            // its sequence and then abruptly deleting the remaining row.
+            const owners = new Map<string, PendingSequenceContent>();
+            if (pending.size) for (const sequence of sequences().groups.values()) {
+              const nodeKey = sequence.nodeKeys[0];
+              if (!group.processKeys.includes(sequence.entryKeys[0])) continue;
+              const viewport = sequenceLayout.element(nodeKey)?.querySelector<HTMLElement>(':scope > .flower-tool-sequence-viewport');
+              // If completion interrupts an existing fold, carry its painted
+              // opacity/transform into the outer owner before settling it.
+              const style = viewport && motions.has('tools:' + nodeKey) ? getComputedStyle(viewport) : undefined;
+              owners.set(nodeKey, { nodeKey, motionKey: sequence.entryKeys[0],
+                ...(style ? { presentation: { opacity: Number(style.opacity), transform: style.transform } } : {}) });
+            }
+            if ([...pending.values()].some(owner => owners.has(owner.nodeKey))) {
+              setPendingSequenceContent(previous => new Map([...previous].map(([key, owner]) =>
+                [key, owners.get(owner.nodeKey) ?? owner])));
+            }
+          });
       }
     }));
   });
 
   createEffect(() => {
     const projection = sequences();
+    pendingSequenceContent();
     titleReveal.revealingEntries();
     let cancelled = false;
     onCleanup(() => { cancelled = true; });
@@ -344,6 +372,10 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       if (cancelled) return;
       const revealing = titleReveal.revealingEntries();
       for (const group of projection.groups.values()) {
+        if (group.followingContentKeys.some(key => {
+          const owner = pendingSequenceContent().get(key);
+          return owner && owner.motionKey !== 'tools:' + owner.nodeKey;
+        })) continue;
         if (group.disclosure === 'automatic' && group.entryKeys.some(key => revealing.has(key))) continue;
         props.choices.observe(sequenceIdentity(group.key), group.disclosure, () => {
           const inspectedNodes = group.nodeKeys.flatMap(key => {
@@ -354,7 +386,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
           return inspectionProtected(turnID, group.entryKeys, true, inspectedNodes);
         }, () => preserveReadingAnchor(group.entryKeys));
         if (props.choices.expanded(sequenceIdentity(group.key), group.disclosure) && !motions.has(`tools:${group.nodeKeys[0]}`)) {
-          releaseSequenceContent(group.nodeKeys[0]);
+          releaseMotionContent('tools:' + group.nodeKeys[0]);
         }
       }
     }));
@@ -387,9 +419,17 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     },
     onMotionEnd: (key: string) => {
       finishMotion(key);
-      releaseSequenceContent(key.slice('tools:'.length));
+      releaseMotionContent(key);
     },
     contentPending: (key: string) => pendingSequenceContent().has(key),
+    parentFolding: (group: FlowerToolSequence) => group.followingContentKeys.some(key => {
+      const owner = pendingSequenceContent().get(key);
+      return Boolean(owner && owner.motionKey !== 'tools:' + owner.nodeKey);
+    }),
+    parentCollapsed: (group: FlowerToolSequence) => {
+      const turn = processes().rows.get(group.entryKeys[0]);
+      return Boolean(turn && !props.choices.expanded(identity(turn.turnID), turn.disclosure));
+    },
     copy: () => props.copy,
     reducedMotion: props.reducedMotion,
   };
@@ -440,12 +480,31 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const motion = createFlowerActivityDisclosureMotion(expanded, {
       initialOpen: untrack(expanded),
       reducedMotion: props.reducedMotion,
-      animateClose: () => !group() || props.choices.manuallyControlled(identity(group()!.turnID)),
+      animateClose: () => !group() || props.choices.manuallyControlled(identity(group()!.turnID))
+        || [...pendingSequenceContent().values()].some(owner => owner.motionKey === key),
+      closeDurationMs: 260,
+      closeEasing: 'cubic-bezier(0.32, 0, 0.2, 1)',
+      closePresentation: current => {
+        const prior = [...pendingSequenceContent().values()].find(owner => owner.motionKey === key)?.presentation;
+        return prior ? { ...current, opacity: current.opacity * prior.opacity, transform: prior.transform } : current;
+      },
       onLayoutFrame: () => {
         if (motion.state() === 'opening' || motion.state() === 'closing') motions.add(key);
         props.scroll.measureAfterLayout();
       },
-      onMotionEnd: () => finishMotion(key),
+      onMotionEnd: () => {
+        // Explicit reopening also retains the still-visible nested sequences;
+        // their deferred automatic default must not start another fold after
+        // prose has been released into the user's reading position.
+        if (expanded() && pendingSequenceContent().size) for (const sequence of sequences().groups.values()) {
+          if (sequence.entryKeys[0] !== key || !sequence.followingContentKeys.some(content =>
+            pendingSequenceContent().get(content)?.motionKey === key)) continue;
+          props.choices.observe(sequenceIdentity(sequence.key), 'manual');
+          props.choices.reveal(sequenceIdentity(sequence.key));
+        }
+        finishMotion(key);
+        releaseMotionContent(key);
+      },
     });
     const toggle = (button: HTMLButtonElement) => {
       const current = group();
@@ -459,7 +518,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       props.choices.toggle(identity(current.turnID), current.disclosure);
       setRetainedRows(previous => new Set([...previous].filter(key => !current.processKeys.includes(key))));
     };
-    onCleanup(() => { nodes.delete(key); motions.delete(key); });
+    onCleanup(() => { nodes.delete(key); motions.delete(key); releaseMotionContent(key); });
     // Retain inspected content while folded: reopening must preserve nested
     // disclosure choices, selections and the internal reading offset.
     const [contentMounted, setContentMounted] = createSignal(untrack(expanded));

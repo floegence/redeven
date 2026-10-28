@@ -17,6 +17,8 @@ export const FlowerToolSequenceContext = createContext<Readonly<{
   onLayoutFrame: (key: string, moving: boolean) => void;
   onMotionEnd: (key: string) => void;
   contentPending: (key: string) => boolean;
+  parentCollapsed: (group: FlowerToolSequence) => boolean;
+  parentFolding: (group: FlowerToolSequence) => boolean;
   reducedMotion: Accessor<boolean>;
   preparing: Accessor<boolean>;
   register: (key: string, element: FlowerToolSequenceElement) => () => void;
@@ -64,10 +66,16 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const motionKey = `tools:${props.nodeKey}`;
   // Only the outer shared viewport animates. Nested rows retain their geometry
   // throughout closing instead of compounding the same height animation.
-  const bodyExpanded = () => member() && !first() ? true : expanded();
+  const bodyExpanded = createMemo(() => member() && (!first() || context?.parentFolding(member()!.group)) ? true : expanded());
+  const reducedMotion = createMemo(() => Boolean(context?.preparing() || context?.reducedMotion()
+    || first() && context?.parentCollapsed(member()!.group)));
   const motion = createFlowerActivityDisclosureMotion(bodyExpanded, {
-    initialOpen: untrack(bodyExpanded), closeDurationMs: 180,
-    reducedMotion: () => Boolean(context?.preparing() || context?.reducedMotion()),
+    initialOpen: untrack(bodyExpanded), closeDurationMs: 260,
+    closeEasing: 'cubic-bezier(0.32, 0, 0.2, 1)',
+    // The summary occupies the same first row; never animate past that row
+    // into invisible space beneath the node's minimum height. Read once per fold.
+    collapsedHeight: () => first() ? trigger?.getBoundingClientRect().height ?? 0 : 0,
+    reducedMotion,
     onLayoutFrame: () => {
       if (first() && expanded() && scroll.followingLatest()) scrollToLatest();
       context?.onLayoutFrame(motionKey, motion.state() === 'opening' || motion.state() === 'closing');
@@ -141,20 +149,22 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         aria-label={`${expanded() ? context!.copy().collapseTools : context!.copy().expandTools}: ${[label(), currentLabel()].filter(Boolean).join(' · ')}`}
         onClick={event => context!.toggle(member()!.group, event.currentTarget)}>
         <ChevronRight class="flower-tool-sequence-chevron" aria-hidden="true" />
-        <span class="flower-tool-sequence-label">
-          <Show when={member()!.group.countsComplete} fallback={<span classList={{ 'flower-tool-sequence-failures': Boolean(member()!.group.failedCount || member()!.group.uncertainCount || member()!.group.failedSubagentEventCount) }}>{context!.copy().continuousTools}</span>}>
-          <Show when={member()!.group.toolCount}>{count => <span>{context!.copy().toolCalls(count())}</span>}</Show>
-          <Show when={member()!.group.failedCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().failedCalls(count())}</span>}</Show>
-          <Show when={member()!.group.uncertainCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().effectUncertain} · {count()}</span>}</Show>
-          <Show when={member()!.group.failedSubagentEventCount}>{count => <span class="flower-tool-sequence-subagent-failures">{context!.copy().failedSubtaskUpdates(count())}</span>}</Show>
-          <Show when={member()!.group.thinkingCount}>{count => <span class="flower-tool-sequence-thinking">{context!.copy().thinkingSegments(count())}</span>}</Show>
-          <Show when={member()!.group.subagentEventCount}>{count => <span class="flower-tool-sequence-subtasks">{context!.copy().subtaskUpdates(count())}</span>}</Show>
+        <span class="flower-tool-sequence-summary">
+          <span class="flower-tool-sequence-label">
+            <Show when={member()!.group.countsComplete} fallback={<span classList={{ 'flower-tool-sequence-failures': Boolean(member()!.group.failedCount || member()!.group.uncertainCount || member()!.group.failedSubagentEventCount) }}>{context!.copy().continuousTools}</span>}>
+            <Show when={member()!.group.toolCount}>{count => <span>{context!.copy().toolCalls(count())}</span>}</Show>
+            <Show when={member()!.group.failedCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().failedCalls(count())}</span>}</Show>
+            <Show when={member()!.group.uncertainCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().effectUncertain} · {count()}</span>}</Show>
+            <Show when={member()!.group.failedSubagentEventCount}>{count => <span class="flower-tool-sequence-subagent-failures">{context!.copy().failedSubtaskUpdates(count())}</span>}</Show>
+            <Show when={member()!.group.thinkingCount}>{count => <span class="flower-tool-sequence-thinking">{context!.copy().thinkingSegments(count())}</span>}</Show>
+            <Show when={member()!.group.subagentEventCount}>{count => <span class="flower-tool-sequence-subtasks">{context!.copy().subtaskUpdates(count())}</span>}</Show>
+            </Show>
+          </span>
+          <Show when={currentLabel()}>
+            {label => <span class="flower-tool-sequence-current" title={label()}>{label()}</span>}
           </Show>
+          <Show when={member()!.group.countsComplete && member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
         </span>
-        <Show when={currentLabel()}>
-          {label => <span class="flower-tool-sequence-current" title={label()}>{label()}</span>}
-        </Show>
-        <Show when={member()!.group.countsComplete && member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
       </button>
     );
   };

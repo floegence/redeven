@@ -72,6 +72,9 @@ export type FlowerActivityDisclosureMotionOptions = Readonly<{
   initialOpen?: boolean;
   openDurationMs?: number;
   closeDurationMs?: number;
+  closeEasing?: string;
+  collapsedHeight?: Accessor<number>;
+  closePresentation?: (current: FlowerActivityDisclosurePresentation) => FlowerActivityDisclosurePresentation;
   onBeforeClose?: () => void;
   onLayoutFrame?: () => void;
   onMotionEnd?: () => void;
@@ -158,7 +161,7 @@ export function createFlowerActivityDisclosureMotion(
     const owner = platform.animate(viewport, [
       { height: `${start.height}px`, opacity: String(start.opacity), transform: start.transform },
       { height: `${target}px`, opacity: closing ? '0' : '1', transform: closing ? CLOSED_TRANSFORM : OPEN_TRANSFORM },
-    ], { duration, easing: closing ? CLOSE_EASING : OPEN_EASING });
+    ], { duration, easing: closing ? options.closeEasing ?? CLOSE_EASING : OPEN_EASING });
     animation = owner;
     setHeight(`${target}px`);
     options.onLayoutFrame?.();
@@ -208,9 +211,10 @@ export function createFlowerActivityDisclosureMotion(
     } else if (mounted()) {
       options.onBeforeClose?.();
       stopMeasuring();
-      const start = presentation();
+      const current = presentation();
+      const start = options.closePresentation?.(current) ?? current;
       setState('closing');
-      animate(start, 0, reduced || options.animateClose?.() === false ? 0 : closeDurationMs, true);
+      animate(start, Math.max(0, options.collapsedHeight?.() ?? 0), reduced || options.animateClose?.() === false ? 0 : closeDurationMs, true);
     }
   }));
   onCleanup(() => { stopMeasuring(); cancelAnimation(); });

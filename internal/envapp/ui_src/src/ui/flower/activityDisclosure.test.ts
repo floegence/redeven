@@ -12,6 +12,7 @@ import {
   type FlowerActivityDisclosureController,
   type FlowerActivityDisclosureMotion,
   type FlowerActivityDisclosureMotionPlatform,
+  type FlowerActivityDisclosureMotionOptions,
   type FlowerActivityDisclosurePresentation,
 } from '../../../../../flower_ui/src/activityDisclosure';
 
@@ -212,7 +213,7 @@ type MotionHarness = Readonly<{
   platform: ReturnType<typeof createMotionPlatformHarness>;
 }>;
 
-function createMotionHarness(initialOpen = false, initialReducedMotion = false): MotionHarness {
+function createMotionHarness(initialOpen = false, initialReducedMotion = false, options: FlowerActivityDisclosureMotionOptions = {}): MotionHarness {
   const [open, setOpen] = createSignal(initialOpen);
   const [reducedMotion, setReducedMotion] = createSignal(initialReducedMotion);
   const viewport = document.createElement('div');
@@ -238,6 +239,7 @@ function createMotionHarness(initialOpen = false, initialReducedMotion = false):
   createRoot((rootDispose) => {
     dispose = rootDispose;
     motion = createFlowerActivityDisclosureMotion(open, {
+      ...options,
       reducedMotion,
       platform: platform.platform,
     });
@@ -318,6 +320,28 @@ describe('createFlowerActivityDisclosureMotion', () => {
     await Promise.resolve();
     expect(harness.motion.state()).toBe('closed');
     expect(harness.motion.mounted()).toBe(false);
+    harness.dispose();
+  });
+
+  it('measures a shared collapsed row once and reverses from its actual presentation', async () => {
+    const collapsedHeight = vi.fn(() => 32);
+    const harness = createMotionHarness(true, false, { collapsedHeight, closeDurationMs: 260, closeEasing: 'linear' });
+    harness.platform.flushFrame();
+    harness.platform.animations[0].finish();
+    await Promise.resolve();
+    harness.setOpen(false);
+    expect(collapsedHeight).toHaveBeenCalledTimes(1);
+    expect(harness.platform.animations[1].keyframes.at(-1)?.height).toBe('32px');
+    expect(harness.platform.animations[1].options).toMatchObject({ duration: 260, easing: 'linear' });
+    harness.platform.setPresentation({ height: 64, opacity: 0.5, transform: 'translateY(-1px)' });
+    harness.setOpen(true);
+    harness.platform.flushFrame();
+    expect(harness.platform.animations[2].keyframes[0].height).toBe('64px');
+    expect(collapsedHeight).toHaveBeenCalledTimes(1);
+    harness.setReducedMotion(true);
+    harness.setOpen(false);
+    expect(harness.motion.state()).toBe('closed');
+    expect(harness.platform.pendingFrames()).toBe(0);
     harness.dispose();
   });
 

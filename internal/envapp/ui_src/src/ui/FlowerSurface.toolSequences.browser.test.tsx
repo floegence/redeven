@@ -97,46 +97,148 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { await media.emulateTouchInput(false); document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it.each([false, true])('crossfades into the shared summary without a cut (touch=%s)', async touch => {
+    await media.emulateTouchInput(touch);
+    const calls = Array.from({ length: 24 }, (_, i) => tool('handoff-' + i));
+    const { root, push } = await mount(calls);
+    const node = group(root, 'handoff-0');
+    const viewport = node.querySelector<HTMLElement>('.flower-tool-sequence-viewport')!;
+    const label = node.querySelector<HTMLElement>('.flower-tool-sequence-summary')!;
+    push([...calls, { ...item('handoff-prose', 'assistant', 'A gentle handoff.'), live: true }]);
+    await waitFor(() => node.dataset.state === 'closing');
+    const animation = viewport.getAnimations().find(value =>
+      (value.effect as KeyframeEffect).getKeyframes().some(frame => 'height' in frame))!;
+    animation.pause();
+    try {
+      const frames = (animation.effect as KeyframeEffect).getKeyframes();
+      expect(Number.parseFloat(String(frames.at(-1)!.height))).toBe(touch ? 44 : 32);
+      const duration = Number(animation.effect!.getTiming().duration);
+      const samples: { progress: number; opacity: number; clipped: boolean; height: number }[] = [];
+      for (const progress of [0, 0.5, 0.75, 0.95]) {
+        for (const active of node.getAnimations({ subtree: true })) {
+          active.pause();
+          active.currentTime = Number(active.effect!.getComputedTiming().endTime) * progress;
+        }
+        animation.currentTime = duration * progress;
+        await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        const style = getComputedStyle(label);
+        if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-handoff-' + String(touch) + '-' + progress + '.png' });
+        samples.push({ progress, opacity: Number(style.opacity),
+          clipped: style.clipPath !== 'none' || label.getBoundingClientRect().width <= 1,
+          height: node.getBoundingClientRect().height });
+      }
+      expect(samples[0].opacity).toBe(0);
+      expect(samples.some(sample => !sample.clipped && sample.opacity > 0.05 && sample.opacity < 0.95), JSON.stringify(samples)).toBe(true);
+      expect(samples.at(-1)!.opacity).toBeGreaterThan(0.95);
+      expect(samples.every(sample => sample.height >= (touch ? 44 : 32))).toBe(true);
+    } finally { for (const active of node.getAnimations({ subtree: true })) active.play(); }
+    await waitFor(() => node.dataset.state === 'closed');
+  });
+
   it.each([false, true])('finishes one automatic fold before revealing prose (terminal=%s)', async terminal => {
     const calls = Array.from({ length: 24 }, (_, i) => tool('ordered-' + i));
     const { root, push } = await mount(calls);
     const node = group(root, 'ordered-0');
-    const viewport = node.querySelector<HTMLElement>('.flower-tool-sequence-viewport')!;
+    const viewport = terminal ? node.closest('.flower-turn-row')!.querySelector<HTMLElement>(':scope > .flower-turn-row-viewport')!
+      : node.querySelector<HTMLElement>('.flower-tool-sequence-viewport')!;
     const before = viewport.getBoundingClientRect().height;
     const prose = { ...item('ordered-prose', 'assistant', 'A result that must not jump.'), live: !terminal };
-    const samples: { state: string | undefined; height: number; visible: boolean; top?: number; animations: number }[] = [];
+    const samples: { state: string | undefined; height: number; visible: boolean; top?: number; opacity: number; animations: number }[] = [];
     push([...calls, prose], [], terminal);
-    for (let frame = 0; frame < 24; frame++) {
+    for (let frame = 0; frame < 36; frame++) {
       await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
       const text = root.querySelector<HTMLElement>('[data-flower-message-id="ordered-prose"] .flower-message-bubble');
-      samples.push({ state: node.dataset.state, height: viewport.getBoundingClientRect().height,
+      samples.push({ state: viewport.dataset.state, height: viewport.getBoundingClientRect().height,
         visible: Boolean(text?.checkVisibility({ visibilityProperty: true })),
         top: text?.getBoundingClientRect().top,
-        animations: node.getAnimations({ subtree: true }).filter(animation =>
+        opacity: text ? Number(getComputedStyle(text.closest('.flower-history-message')!).opacity) : 0,
+        animations: viewport.getAnimations({ subtree: true }).filter(animation =>
           (animation.effect as KeyframeEffect).getKeyframes().some(keyframe => 'height' in keyframe)).length });
     }
     expect(samples.some(sample => sample.state === 'closing' && sample.height > 0 && sample.height < before), JSON.stringify(samples)).toBe(true);
     expect(samples.filter(sample => sample.state !== 'closed').every(sample => !sample.visible), JSON.stringify(samples)).toBe(true);
     expect(Math.max(...samples.map(sample => sample.animations))).toBe(1);
-    expect(samples.at(-1)).toMatchObject({ state: 'closed', visible: true });
+    expect(samples.at(-1)).toMatchObject({ state: 'closed', visible: true, opacity: 1 });
+    expect(samples.some(sample => sample.visible && sample.opacity > 0 && sample.opacity < 1), JSON.stringify(samples)).toBe(true);
+    const lastMoving = samples.map(sample => sample.state).lastIndexOf('closing');
+    expect(Math.abs(samples[lastMoving].top! - samples[lastMoving + 1].top!), JSON.stringify(samples)).toBeLessThanOrEqual(2);
     const visibleTops = samples.filter(sample => sample.visible).map(sample => sample.top!);
     expect(Math.max(...visibleTops) - Math.min(...visibleTops), JSON.stringify(samples)).toBeLessThanOrEqual(1);
   });
 
-  it.each([false, true])('holds every following prose block until folding settles (later arrival=%s)', async later => {
+  it('continues smoothly when completion arrives midway through a sequence fold', async () => {
+    const calls = Array.from({ length: 24 }, (_, i) => tool('midway-' + i));
+    const { root, push } = await mount(calls);
+    const node = group(root, 'midway-0');
+    const outer = node.closest('.flower-turn-row')!.querySelector<HTMLElement>(':scope > .flower-turn-row-viewport')!;
+    const prose = { ...item('midway-prose', 'assistant', 'Still arriving.'), live: true };
+    push([...calls, prose]);
+    await waitFor(() => node.dataset.state === 'closing');
+    const animation = node.querySelector('.flower-tool-sequence-viewport')!.getAnimations()[0];
+    animation.pause(); animation.currentTime = 130;
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    const before = outer.getBoundingClientRect().height;
+    const innerOpacity = Number(getComputedStyle(node.querySelector('.flower-tool-sequence-viewport')!).opacity);
+    push([...calls, { ...prose, live: false }], [], true);
+    await waitFor(() => outer.dataset.state === 'closing');
+    const first = (outer.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0];
+    expect(Number.parseFloat(String(first.height))).toBeLessThanOrEqual(before + 1);
+    expect(Number(getComputedStyle(outer).opacity) * Number(getComputedStyle(node.querySelector('.flower-tool-sequence-viewport')!).opacity)).toBeLessThanOrEqual(innerOpacity + 0.02);
+    await waitFor(() => outer.dataset.state === 'closed');
+  });
+
+  it.each([false, true])('keeps terminal content coherent during the outer fold (reverse=%s)', async reverse => {
+    const calls = Array.from({ length: 24 }, (_, i) => tool('outer-' + i));
+    const { root, push } = await mount(calls);
+    const node = group(root, 'outer-0');
+    const viewport = node.closest('.flower-turn-row')!.querySelector<HTMLElement>(':scope > .flower-turn-row-viewport')!;
+    push([...calls, item('outer-prose', 'assistant', 'The final result.')], [], true);
+    await waitFor(() => viewport.dataset.state === 'closing');
+    const animation = viewport.getAnimations()[0];
+    animation.pause();
+    try {
+      expect(node.dataset.state).toBe('open');
+      expect(node.querySelector<HTMLElement>('.flower-tool-sequence-viewport')!.getBoundingClientRect().height).toBe(320);
+      expect(node.getAnimations({ subtree: true }).filter(active =>
+        (active.effect as KeyframeEffect).getKeyframes().some(frame => 'height' in frame))).toHaveLength(0);
+      const bubble = root.querySelector<HTMLElement>('[data-flower-message-id="outer-prose"] .flower-message-bubble')!;
+      expect(bubble.checkVisibility({ visibilityProperty: true })).toBe(false);
+      if (reverse) {
+        root.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!.click();
+        await waitFor(() => viewport.dataset.state === 'opening');
+        expect(bubble.checkVisibility({ visibilityProperty: true })).toBe(false);
+      }
+    } finally { if (!reverse) animation.play(); }
+    await waitFor(() => viewport.dataset.state === (reverse ? 'open' : 'closed'));
+    const bubble = root.querySelector<HTMLElement>('[data-flower-message-id="outer-prose"] .flower-message-bubble')!;
+    expect(bubble.checkVisibility({ visibilityProperty: true })).toBe(true);
+    if (reverse) {
+      const top = bubble.getBoundingClientRect().top;
+      for (let frame = 0; frame < 20; frame++) {
+        await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        expect(Math.abs(bubble.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+      }
+      expect(node.dataset.state).toBe('open');
+    }
+  });
+
+  it.each([[false, false], [true, false], [false, true], [true, true]])('holds every following prose block until folding settles (later arrival=%s, terminal=%s)', async (later, terminal) => {
     const calls = [tool('burst-a'), tool('burst-b')];
     const { root, push } = await mount(calls);
-    const first = { ...item('burst-first', 'assistant', 'First paragraph.'), live: true };
-    const second = { ...item('burst-second', 'assistant', 'Second paragraph.'), live: true };
-    push([...calls, first, ...(later ? [] : [second])]);
-    const node = group(root, 'burst-a');
+    const first = { ...item('burst-first', 'assistant', 'First paragraph.'), live: !terminal };
+    const second = { ...item('burst-second', 'assistant', 'Second paragraph.'), live: !terminal };
+    push([...calls, first, ...(later ? [] : [second])], [], terminal);
+    const sequence = group(root, 'burst-a');
+    const node = terminal ? sequence.closest('.flower-turn-row')!.querySelector<HTMLElement>(':scope > .flower-turn-row-viewport')! : sequence;
     await waitFor(() => node.dataset.state === 'closing');
     const animation = node.getAnimations({ subtree: true }).find(value =>
       (value.effect as KeyframeEffect).getKeyframes().some(frame => 'height' in frame))!;
     animation.pause();
     try {
-      if (later) push([...calls, first, second]);
+      if (later) push([...calls, first, second], [], terminal);
       await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="burst-second"] .flower-message-bubble')));
+      expect(node.getAnimations({ subtree: true }).find(value =>
+        (value.effect as KeyframeEffect).getKeyframes().some(frame => 'height' in frame))).toBe(animation);
       for (const id of ['burst-first', 'burst-second']) {
         expect(root.querySelector<HTMLElement>('[data-flower-message-id="' + id + '"] .flower-message-bubble')!
           .checkVisibility({ visibilityProperty: true }), id).toBe(false);
@@ -163,11 +265,12 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(bubble.checkVisibility({ visibilityProperty: true })).toBe(true);
   });
 
-  it('settles pending prose when reduced motion changes during a fold', async () => {
+  it.each([false, true])('settles pending prose when reduced motion changes during a fold (terminal=%s)', async terminal => {
     const calls = [tool('reduce-a'), tool('reduce-b')];
     const { root, push } = await mount(calls);
-    push([...calls, { ...item('reduce-prose', 'assistant', 'Visible when motion is disabled.'), live: true }]);
-    const node = group(root, 'reduce-a');
+    push([...calls, { ...item('reduce-prose', 'assistant', 'Visible when motion is disabled.'), live: !terminal }], [], terminal);
+    const sequence = group(root, 'reduce-a');
+    const node = terminal ? sequence.closest('.flower-turn-row')!.querySelector<HTMLElement>(':scope > .flower-turn-row-viewport')! : sequence;
     await waitFor(() => node.dataset.state === 'closing');
     await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
     await waitFor(() => node.dataset.state === 'closed');
@@ -329,22 +432,21 @@ describe('consecutive tools in the shared Flower surface', () => {
     const first = row(root, 'shared-first');
     const control = toggle(root, 'shared-first');
     const details = first.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
-    const label = control.querySelector<HTMLElement>('.flower-tool-sequence-label')!;
+    const label = control.querySelector<HTMLElement>('.flower-tool-sequence-summary')!;
     const top = control.getBoundingClientRect().top;
-    expect(getComputedStyle(label).clipPath).toBe('inset(50%)');
+    expect(getComputedStyle(label).opacity).toBe('0');
     await userEvent.click(details);
     await waitFor(() => details.getAttribute('aria-expanded') === 'true');
     expect(control.getAttribute('aria-expanded')).toBe('true');
     await userEvent.click(control);
     if (node.dataset.state === 'closing') {
-      expect(control.getBoundingClientRect().width).toBe(24);
-      expect(getComputedStyle(label).clipPath).toBe('inset(50%)');
+      expect(control.getBoundingClientRect().width).toBe(node.getBoundingClientRect().width);
     }
     await waitFor(() => node.dataset.state === 'closed');
     expect(Math.abs(control.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(node.getBoundingClientRect().height).toBe(32);
     expect(control.getBoundingClientRect().width).toBe(node.getBoundingClientRect().width);
-    expect(getComputedStyle(label).clipPath).toBe('none');
+    expect(getComputedStyle(label).opacity).toBe('1');
     expect(document.activeElement).toBe(control);
     push([tool('shared-first'), tool('shared-second'), tool('shared-third', 'running')]);
     await waitFor(() => control.textContent?.includes('3 tool calls') === true);
@@ -550,7 +652,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const inspectOpen = async () => {
       const samples: number[] = [];
       header.click();
-      for (let frame = 0; frame < 24; frame++) {
+      for (let frame = 0; frame < 36; frame++) {
         await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         const panel = body.parentElement!;
         if (panel.getBoundingClientRect().height > 1 && Number(getComputedStyle(panel).opacity) > 0.01) {

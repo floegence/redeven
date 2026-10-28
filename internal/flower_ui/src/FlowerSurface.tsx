@@ -12164,6 +12164,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const isThinking = createMemo(() => contentBlock().block_type === 'thinking');
                 const sequence = useContext(FlowerToolSequenceContext);
                 const pendingSequence = createMemo(() => !isThinking() && Boolean(sequence?.contentPending(contentBlock().key)));
+                // Only a block actually held by a fold gets transition styles;
+                // ordinary streamed/history messages stay on their existing path.
+                const sequenceArrival = createMemo(previous => previous || pendingSequence(), false);
                 // Sequence placement moves thinking out of its original shell.
                 // Observe the same displayed node across grouping and folding.
                 const readElement = () => isThinking() ? thinkingElement() : shell;
@@ -12217,7 +12220,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   const controller = readController();
                   if (controller) untrack(() => loadHistoryItem(tid, itemID, controller.signal, viewportScope, contentBlock().block_type === 'thinking' ? 'interactive' : undefined));
                 });
-                return <div ref={shell} class="flower-history-message" style={{ visibility: pendingSequence() ? 'hidden' : undefined }}
+                return <div ref={shell} class="flower-history-message" data-flower-sequence-arrival={sequenceArrival() ? '' : undefined} data-flower-sequence-pending={pendingSequence() ? '' : undefined}
                   inert={pendingSequence()} aria-hidden={pendingSequence() ? 'true' : undefined}><div class="flower-history-message-content">
                   <Show when={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media, viewportScope, setThinkingElement)}>
                     <div class={cn('flower-history-text-loading', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
