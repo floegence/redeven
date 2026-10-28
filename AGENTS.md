@@ -19,6 +19,7 @@ Canonical repository rules. Keep this file within 100 lines, including headings 
 - From a clean feature worktree, fetch and `git rebase origin/main`; never merge main into features or features into each other.
 - Resolve conflicts only in the feature worktree. Review both sides' substantive changes, preserve their intent, regenerate generated files, and never blindly use `--ours` or `--theirs`; abort if uncertain.
 - Use English Conventional Commits: `<type>(<scope>): <summary>`, with lowercase type/scope and an imperative lowercase summary. Preserve meaningful commits; organize history inside the feature branch, never squash it during integration.
+- Commit and PR text carries no AI attribution: no `Co-Authored-By: Claude`, no "Generated with Claude Code" footer. The human committer is the only author recorded.
 - Before integration, fetch, rebase, inspect `git diff origin/main...HEAD`, and run affected checks; then update main with `pull --ff-only` and integrate with `git merge --ff-only <branch>`.
 - Push the complete latest local `main` tip through its exact-tip pre-push gate; never partial-push main, update remote main through another branch, bypass checks, or forge validation results.
 - Verify `main == origin/main` and the corresponding Actions result, then remove this task's worktree and branch. Resolve temporary stashes; never leave detached HEAD worktrees as a substitute for cleanup.
