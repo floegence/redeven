@@ -26,6 +26,64 @@ function liveStream(summary: ReturnType<typeof thread>) {
 }
 
 describe('Flower streaming presentation stability', () => {
+  it.each(['no-preference', 'reduce'] as const)('follows long prose continuously and respects reading ownership (%s)', async reducedMotion => {
+    const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+    onTestFinished(() => media.emulateMediaPreferences({ reducedMotion: 'no-preference' }));
+    await media.emulateMediaPreferences({ reducedMotion });
+    const fixture = streamingFixture(8, 0);
+    const base = fixture.current();
+    fixture.replace({ ...base, view_version: 2, queue: [], tool_call_previews: [],
+      items: base.items!.map(item => item.id === 'streaming-tail' ? { ...item, text: 'Long text should remain comfortable to read while the answer grows. '.repeat(60) } : item),
+    });
+    const root = await mountFixture(fixture);
+    const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+    await waitFor(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1);
+    const paragraph = root.querySelector('[data-flower-message-id="streaming-tail"] p')!;
+    const textNode = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT).nextNode()!;
+    const samples: { top: number; time: number }[] = [];
+    let frame = 0;
+    const sample = (time: number) => { samples.push({ time, top: viewport.scrollTop }); frame = requestAnimationFrame(sample); };
+    frame = requestAnimationFrame(sample);
+    onTestFinished(() => cancelAnimationFrame(frame));
+    for (let i = 0; i < 24; i++) {
+      fixture.append(' Continue reading the answer.');
+      await new Promise(resolve => setTimeout(resolve, 33));
+    }
+    await waitFor(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    cancelAnimationFrame(frame);
+    const steps = samples.slice(1).map((value, i) => ({ delta: value.top - samples[i].top, dt: value.time - samples[i].time }));
+    expect(steps.every(step => step.delta >= 0)).toBe(true);
+    expect(samples.at(-1)!.top - samples[0].top).toBeGreaterThan(100);
+    if (reducedMotion === 'no-preference') {
+      // Evaluate normal display intervals independently of test-host stalls.
+      expect(Math.max(...steps.filter(step => step.dt <= 20).map(step => step.delta))).toBeLessThan(14);
+      expect(steps.filter(step => step.delta > 0 && step.delta < 12).length).toBeGreaterThan(20);
+    } else {
+      expect(steps.some(step => step.delta >= 20)).toBe(true);
+    }
+    expect(root.querySelector('[data-flower-message-id="streaming-tail"] p')).toBe(paragraph);
+    expect(document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT).nextNode()).toBe(textNode);
+    const selection = document.getSelection()!;
+    const range = document.createRange(); range.setStart(textNode!, 0); range.setEnd(textNode!, 20);
+    selection.removeAllRanges(); selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+    const top = viewport.scrollTop;
+    const screenTop = paragraph.getBoundingClientRect().top;
+    fixture.append(' Reading stays in place.'.repeat(40));
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(viewport.scrollTop).toBe(top);
+    expect(paragraph.getBoundingClientRect().top).toBe(screenTop);
+    expect(selection.toString()).toBe('Long text should rem');
+    selection.removeAllRanges();
+    document.dispatchEvent(new Event('selectionchange'));
+    fixture.append(' Still paused.'.repeat(40));
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(viewport.scrollTop).toBe(top);
+    root.querySelector<HTMLButtonElement>('[data-flower-scroll-to-latest]')!.click();
+    await waitFor(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1);
+  });
+
   it.each([false, true])('retains streamed billing bullets after approved tools and completion (snapshot correction: %s)', async correctSnapshot => {
     const answer = 'Added `api/internal/billing/limits_test.go`:\n\n'
       + '- **Under the limit** — 80 units are recorded normally.\n'

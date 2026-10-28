@@ -4,6 +4,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-27
 
+- Follow [streamed prose](ui/flower-activity-interaction.md) continuously using one viewport scheduler and cached animation geometry. Preserve reading/selection ownership, explicit return and tool-fold priority; verify frame displacement and bounded layout work.
+
 - Preserve field-level truncation through [semantic snapshots](ai/computer-use-semantics.md), bind references/cursors to complete names, and reject oversized scalar attributes through [script read diagnostics](ai/computer-use-scripts.md). Retain deterministic and real-provider results separately in [qualification evidence](ai/computer-use-qualification-evidence.md).
 
 - Remove the final-frame cut from [sequence folding](ui/flower-tool-sequences.md): settle at shared-row height, crossfade the summary, then fade in stationary prose. Terminal closure owns one outer fold and carries any interrupted inner opacity into that motion.

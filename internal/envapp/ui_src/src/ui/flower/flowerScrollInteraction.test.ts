@@ -6,7 +6,7 @@ import { createFlowerScrollTailController } from '../../../../../flower_ui/src/f
 const cleanups: (() => void)[] = [];
 afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); vi.unstubAllGlobals(); });
 
-function harness(options: { onLayout?: () => void } = {}) {
+function harness(options: { onLayout?: () => void; smoothContentGrowth?: boolean } = {}) {
   const frames = new Map<number, FrameRequestCallback>();
   let nextID = 0;
   const viewport = document.createElement('div');
@@ -21,7 +21,8 @@ function harness(options: { onLayout?: () => void } = {}) {
   viewport.scrollTop = 300;
   const controller = createFlowerScrollTailController({
     onLayout: options.onLayout,
-    reducedMotionPreferred: () => true,
+    smoothContentGrowth: options.smoothContentGrowth,
+    reducedMotionPreferred: () => !options.smoothContentGrowth,
     requestAnimationFrame: (callback) => { frames.set(++nextID, callback); return nextID; },
     cancelAnimationFrame: (id) => { frames.delete(id); },
   });
@@ -61,6 +62,66 @@ function touchMove(target: Element, clientY: number) {
 }
 
 describe('Flower viewport input ownership', () => {
+  it('retargets resize growth without measuring or notifying on animation-only frames', () => {
+    let resize!: () => void;
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    const onLayout = vi.fn();
+    const { controller, viewport, frame, pending } = harness({ onLayout, smoothContentGrowth: true });
+    controller.startFollowing(); controller.flushLayout(); onLayout.mockClear();
+    let reads = 0;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, get: () => { reads++; return 525; } });
+    controller.measureAfterLayout(); resize();
+    expect(viewport.scrollTop).toBe(400);
+    expect(pending()).toBe(1);
+    for (let i = 0; i < 16; i++) frame();
+    expect(viewport.scrollTop).toBe(425);
+    expect(reads).toBe(1);
+    expect(onLayout).toHaveBeenCalledTimes(1);
+    expect(pending()).toBe(0);
+  });
+
+  it('hands scrolling to text selection and never resumes on pointer release or selection clearing', () => {
+    const { controller, viewport, title, frame, pending } = harness({ smoothContentGrowth: true });
+    controller.startFollowing(); controller.flushLayout();
+    title.removeAttribute('data-flower-disclosure-trigger');
+    title.textContent = 'Select this answer';
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 550 });
+    controller.measureAfterLayout(); frame(); frame();
+    pointer(title, 'pointerdown');
+    const selection = document.getSelection()!;
+    selection.selectAllChildren(title);
+    document.dispatchEvent(new Event('selectionchange'));
+    const top = viewport.scrollTop;
+    pointer(title, 'pointerup');
+    selection.removeAllRanges();
+    document.dispatchEvent(new Event('selectionchange'));
+    for (let i = 0; i < 16; i++) frame();
+    expect(controller.followingLatest()).toBe(false);
+    expect(viewport.scrollTop).toBe(top);
+    expect(pending()).toBe(0);
+  });
+
+  it('suspends growth work while hidden and positions the current destination on return', () => {
+    const { controller, viewport, frame, pending } = harness({ smoothContentGrowth: true });
+    controller.startFollowing(); controller.flushLayout();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 550 });
+    controller.measureAfterLayout(); frame(); frame();
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(pending()).toBe(0);
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 800 });
+    controller.measureAfterLayout(); expect(pending()).toBe(0);
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event('visibilitychange')); frame();
+    expect(viewport.scrollTop).toBe(700);
+    expect(pending()).toBe(0);
+    hidden.mockRestore();
+  });
+
   it('positions resize geometry before paint while deferring presentation mutations and keeping reading ownership', async () => {
     let resize!: () => void;
     const observe = vi.fn();

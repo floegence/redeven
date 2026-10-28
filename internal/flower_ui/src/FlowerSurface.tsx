@@ -1455,6 +1455,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const detailDisclosureKey = (threadID: string, kind: string, id: string) =>
     JSON.stringify([props.adapter.runtime.runtime_id, threadID, kind, id]);
   const transcriptScroll = createFlowerScrollTailController({
+    smoothContentGrowth: true,
     preparing: () => selectedThreadTailPreparing(),
     canFollowLatest: () => !selectedThread()?.history_window?.has_after
       && (selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0),
@@ -1469,6 +1470,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
   const subagentDetailScroll = createFlowerScrollTailController({
+    smoothContentGrowth: true,
     preparing: () => subagentTailPreparing(),
     canFollowLatest: () => !subagentDetailThread()?.history_window?.has_after,
     onUserInteraction: () => cancelSubagentTailReveal(),
@@ -6144,6 +6146,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const updateSubagentHistoryScroll = () => {
     const direction = subagentDetailScroll.onScroll();
+    if (direction === 'following') return;
     if (direction) subagentHistoryDirection = direction;
     protectReadingHandoff(true);
     scheduleSubagentHistoryReading();
@@ -6923,6 +6926,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const updateTranscriptNearBottom = () => {
     const direction = transcriptScroll.onScroll();
+    if (direction === 'following') return;
     if (direction) historyScrollDirection = direction;
     protectReadingHandoff();
     scheduleHistoryReading();

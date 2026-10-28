@@ -36,6 +36,17 @@ Collapsed titles describe invocation intent, never substituted outcomes. Present
 ## Viewport and gesture ownership
 One viewport controller owns transcript position. Layout, focus, animation and growth cannot resume paused reading. [Sequence reading](flower-tool-sequences.md#disclosure-and-reading) owns native nested scrolling; hidden controls are neither focusable nor hit-testable. [SubAgent details](flower-subagent-detail.md) have an independent viewport.
 
+Transcript and SubAgent prose growth continuously approaches the current bottom;
+new chunks retarget without restarting the motion. A single line settles in about
+160 ms, with fractional position retained and no overshoot. Geometry changes
+share one scheduled frame; animation-only frames reuse measured geometry and
+skip history scans until the settled scroll event. No idle polling or delayed
+output delivery. Native scroll input and text selection immediately pause follow;
+clearing selection does not resume it. Initial positioning, navigation, viewport
+resize and shrinking ranges remain immediate. Explicit return keeps its 220 ms
+arrival motion; automatic folds retain offset ownership. Reduced motion bypasses
+animation, and hiding, rebinding or disposal cancels obsolete motion.
+
 ## Thinking duration
 Floret's canonical first/last output-chunk receipt times survive hydration, reconnect, restart and Fork. They replace page observations; native continuation reopens the interval and completion ends at the last chunk. Tooltips distinguish received output from provider compute time. Show <1ms below one millisecond and localized Not recorded when absent; never infer timing from neighboring events or turn totals. Legacy page observations remain memory-only.
 
@@ -51,6 +62,12 @@ Execution-scoped arrival claims exclude history, navigation, reconnect baselines
 This is Flower presentation policy, not a Floret public API or another execution lifecycle. Host-rendered safe details cannot reconstruct tool input or authorize file, process, or approval actions. Live transport continues during interaction.
 
 # Evidence
+
+- [Viewport controller](../../internal/flower_ui/src/flowerScrollTail.ts),
+  its deterministic frame tests, input-ownership tests and
+  [streaming browser checks](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx)
+  cover bounded layout work, burst retargeting, frame displacement, text identity,
+  selection, reduced motion and lifecycle cancellation.
 
 - `redeven:internal/ai/tool_activity_details.go` - Bounded product input/result mapping over the released Floret contract.
 

@@ -18,10 +18,10 @@ function createRafHarness() {
       queue.delete(id);
     },
     pending: () => queue.size,
-    flushFrame(): void {
+    flushFrame(milliseconds = 16): void {
       const callbacks = [...queue.values()];
       queue.clear();
-      timestamp += 16;
+      timestamp += milliseconds;
       callbacks.forEach(callback => callback(timestamp));
     },
     flushAll(): void {
@@ -76,6 +76,107 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('follows a new text line over several frames without repeating layout work', () => {
+    const raf = createRafHarness();
+    let notifications = 0;
+    const controller = createFlowerScrollTailController({ smoothContentGrowth: true, reducedMotionPreferred: () => false,
+      onLayout: () => { notifications++; }, requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport();
+    controller.bind(metrics.viewport); controller.flushLayout();
+    let reads = 0; let writes = 0;
+    Object.defineProperty(metrics.viewport, 'scrollHeight', { get: () => { reads++; return 525; } });
+    Object.defineProperty(metrics.viewport, 'scrollTop', { get: metrics.scrollTop, set: (value: number) => { writes++; metrics.setScrollTop(value); } });
+    notifications = 0;
+    for (let i = 0; i < 300; i++) controller.measureAfterLayout();
+    expect(raf.pending()).toBe(1);
+    raf.flushFrame();
+    expect(metrics.scrollTop()).toBeLessThan(425);
+    let previous = metrics.scrollTop();
+    for (let i = 0; i < 16; i++) {
+      const before = writes; raf.flushFrame();
+      expect(writes - before).toBeLessThanOrEqual(1);
+      expect(metrics.scrollTop() - previous).toBeGreaterThanOrEqual(0);
+      expect(metrics.scrollTop() - previous).toBeLessThanOrEqual(8);
+      previous = metrics.scrollTop();
+    }
+    expect(metrics.scrollTop()).toBe(425);
+    expect(reads).toBe(1);
+    expect(notifications).toBe(1);
+    expect(raf.pending()).toBe(0);
+    controller.dispose();
+  });
+
+  it.each([8, 16, 32])('retargets continuous growth without restarting at %s ms frames', milliseconds => {
+    const raf = createRafHarness();
+    const controller = createFlowerScrollTailController({ smoothContentGrowth: true, reducedMotionPreferred: () => false,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport();
+    controller.bind(metrics.viewport); controller.flushLayout();
+    let previous = metrics.scrollTop(); let height = 500;
+    for (let time = 0; time < 400; time += milliseconds) {
+      height = 525 + time; metrics.setScrollHeight(height);
+      controller.measureAfterLayout(); raf.flushFrame(milliseconds);
+      expect(metrics.scrollTop()).toBeGreaterThanOrEqual(previous);
+      expect(raf.pending()).toBe(1);
+      previous = metrics.scrollTop();
+    }
+    expect(metrics.scrollTop()).toBeGreaterThan(650);
+    for (let time = 0; time < 240; time += milliseconds) raf.flushFrame(milliseconds);
+    expect(metrics.scrollTop()).toBe(height - 100);
+    expect(raf.pending()).toBe(0);
+    controller.dispose();
+  });
+
+  it('skips intermediate scroll-event geometry but publishes the settled viewport', () => {
+    const raf = createRafHarness();
+    const controller = createFlowerScrollTailController({ smoothContentGrowth: true, reducedMotionPreferred: () => false,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport(); controller.bind(metrics.viewport); controller.flushLayout();
+    let reads = 0;
+    Object.defineProperty(metrics.viewport, 'scrollHeight', { get: () => { reads++; return 525; } });
+    controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame(); reads = 0;
+    expect(controller.onScroll()).toBe('following');
+    expect(reads).toBe(0);
+    raf.flushAll();
+    expect(controller.onScroll()).toBeUndefined();
+    expect(reads).toBeGreaterThan(0);
+    expect(metrics.scrollTop()).toBe(425);
+    controller.dispose();
+  });
+
+  it('corrects a shrinking range immediately and cancels the old destination', () => {
+    const raf = createRafHarness();
+    const controller = createFlowerScrollTailController({ smoothContentGrowth: true, reducedMotionPreferred: () => false,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport(); controller.bind(metrics.viewport); controller.flushLayout();
+    metrics.setScrollHeight(600); controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame();
+    metrics.setScrollHeight(450); controller.measureAfterLayout(); raf.flushFrame();
+    expect(metrics.scrollTop()).toBe(350);
+    expect(raf.pending()).toBe(0);
+    controller.dispose();
+  });
+
+  it('cancels growth motion for reading, navigation, reduced motion, and folding', () => {
+    const raf = createRafHarness(); let reduced = false;
+    const controller = createFlowerScrollTailController({ smoothContentGrowth: true, reducedMotionPreferred: () => reduced,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport(); controller.bind(metrics.viewport); controller.flushLayout();
+    metrics.setScrollHeight(550); controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame();
+    controller.stopFollowing(); const top = metrics.scrollTop(); raf.flushAll();
+    expect(metrics.scrollTop()).toBe(top);
+    controller.startFollowing(); controller.flushLayout(); expect(metrics.scrollTop()).toBe(450);
+    metrics.setScrollHeight(575); controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame();
+    reduced = true; raf.flushFrame(); expect(metrics.scrollTop()).toBe(475); expect(raf.pending()).toBe(0);
+    reduced = false; metrics.setScrollHeight(600); controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame();
+    controller.preserveCollapseOffset(() => true); const held = metrics.scrollTop();
+    raf.flushAll(); expect(metrics.scrollTop()).toBe(held);
+    controller.scrollToBottom(); expect(metrics.scrollTop()).toBe(500);
+    metrics.setScrollHeight(650); controller.measureAfterLayout(); raf.flushFrame();
+    const replacement = createViewport(900); replacement.setScrollTop(0); controller.bind(replacement.viewport);
+    controller.startFollowing(); controller.flushLayout(); expect(replacement.scrollTop()).toBe(800);
+    expect(raf.pending()).toBe(0); controller.dispose();
+  });
+
   it('retains the offset through incoming room while an automatic fold is moving', () => {
     const { controller, raf } = createController();
     const metrics = createViewport();
