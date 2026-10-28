@@ -17,6 +17,10 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   constrainToViewport?: boolean;
   allowMainAxisOverflow?: boolean;
   hideArrow?: boolean;
+  /** Floe's menu motion. Every anchored surface that is not a rich custom
+   * popover opts in, so an open menu moves the way the rest of the shell does
+   * instead of snapping into place. */
+  motion?: 'menu' | 'none';
   role?: JSX.HTMLAttributes<HTMLDivElement>['role'];
   ariaModal?: boolean;
   ariaLabel?: string;
@@ -42,6 +46,21 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   const [position, setPosition] = createSignal<DesktopAnchoredOverlayPosition | null>(null);
   const [overlayElement, setOverlayElement] = createSignal<HTMLDivElement | undefined>();
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
+  // Floe's presence states drive the menu motion: `entering` holds the offset,
+  // scale and transparency for the frame the surface first paints, then `open`
+  // releases them along the declared transition. A surface stays in `entering`
+  // until it has a measured position, because an unpositioned panel is hidden
+  // and would otherwise finish its motion off screen.
+  const [presence, setPresence] = createSignal<'entering' | 'open'>('entering');
+  createEffect(() => {
+    if (!props.open) {
+      setPresence('entering');
+      return;
+    }
+    if (!position()) return;
+    const frame = requestAnimationFrame(() => setPresence('open'));
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
 
   let frame = 0;
   let followUpFrames = 0;
@@ -194,9 +213,11 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
         data-floe-surface="floating"
         data-placement={resolvedPlacement()}
         data-placement-lock={props.placementLock}
+        data-floating-presence={props.motion === 'menu' ? presence() : undefined}
         class={cn(
           'fixed',
           props.interactive === true ? 'pointer-events-auto' : 'pointer-events-none',
+          props.motion === 'menu' && 'floe-floating-presence floe-floating-menu',
           props.class,
         )}
         style={{

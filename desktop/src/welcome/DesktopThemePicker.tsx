@@ -329,6 +329,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
           ariaLabel={props.i18n.t(translationKey('shell.themePicker.title'))}
           interactive
           hideArrow
+          motion="menu"
           class="redeven-theme-picker"
           onOverlayRef={(element) => {
             overlayRef = element;

@@ -1005,6 +1005,19 @@
 .redeven-gateway-workspace-nav button:focus-visible { outline: none; border-color: var(--primary); }
 .redeven-gateway-workspace-content { min-width: 0; border-inline-start: 1px solid var(--border); padding: 1.25rem 0 1.25rem 1.5rem; }
 .redeven-gateway-workspace-section, .redeven-gateway-connection-form { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
+/* The back affordance sits directly in the form column, so the column's stretch
+ * would give it the dialog's full width and centre a short label in empty space.
+ * It is a leading action, not a row. */
+.redeven-gateway-connection-form > [data-floe-control='button'] { align-self: start; justify-self: start; width: fit-content; }
+/* The transport choice reads as one more field group: the same 65px rows, the
+ * same hairline and surface as the container and SSH groups below it, so the
+ * dialog is a list of decisions rather than a card inside a form. */
+.redeven-gateway-transport-fieldset { margin: 0; padding: 0 var(--environment-settings-inset); border: 1px solid var(--environment-settings-border); border-radius: var(--environment-settings-radius); background: var(--environment-settings-surface); min-width: 0; }
+.redeven-gateway-transport-legend { padding-inline: .25rem; font-size: var(--floe-type-control); font-weight: 500; color: var(--foreground); }
+.redeven-gateway-transport-choice { display: flex; align-items: center; gap: .5rem; min-height: 65px; padding-block: 14px; color: var(--floe-ink-soft); font-size: var(--floe-type-control); cursor: pointer; }
+.redeven-gateway-transport-choice + .redeven-gateway-transport-choice { border-top: 1px solid var(--environment-settings-border); }
+.redeven-gateway-transport-choice input { flex: 0 0 auto; margin: 0; accent-color: var(--primary); }
+.redeven-gateway-transport-help { margin: 0 0 14px; color: var(--muted-foreground); font-size: var(--floe-type-supporting); line-height: 1.65; }
 .redeven-gateway-workspace [hidden], .redeven-center-content [hidden] { display: none !important; }
 .redeven-gateway-workspace-notice { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; font-size: var(--floe-type-control); }
 /* Labels and values share a stable reading edge across overview and maintenance. */

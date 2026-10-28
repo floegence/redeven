@@ -2364,10 +2364,15 @@ function DesktopLanguagePicker(props: Readonly<{
                     tabIndex={-1}
                     aria-selected={selected() ? 'true' : 'false'}
                     class={cn(
-                      'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                      // Floe's menu row: a reserved leading mark slot so every
+                      // label starts on the same column, the row height token,
+                      // and a soft ink that the highlight lifts to full weight.
+                      'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left',
+                      'min-h-[calc(var(--floe-row-height)+0.375rem)]',
+                      'transition-colors duration-[var(--floe-duration-fast)] ease-[var(--floe-ease-out)]',
                       highlighted()
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                        ? 'bg-[var(--floe-state-hover)] text-foreground'
+                        : 'text-[var(--floe-ink-soft)] hover:bg-[var(--floe-state-hover)] hover:text-foreground',
                     )}
                     title={`${option.label} - ${option.secondary}`}
                     onClick={() => selectPreference(option.preference)}
@@ -2383,13 +2388,15 @@ function DesktopLanguagePicker(props: Readonly<{
                       selectPreference(option.preference);
                     }}
                   >
-                    <span class="min-w-0">
-                      <span class="block truncate text-xs font-medium leading-snug">{option.label}</span>
-                      <span class="block truncate text-[11px] leading-snug text-muted-foreground">{option.secondary}</span>
+                    <span class="flex h-3.5 w-3.5 flex-none items-center justify-center">
+                      <Show when={selected()}>
+                        <Check class="h-3 w-3" />
+                      </Show>
                     </span>
-                    <Show when={selected()}>
-                      <Check class="h-3.5 w-3.5 shrink-0" />
-                    </Show>
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]">{option.label}</span>
+                      <span class="block truncate text-[length:var(--floe-type-caption)] leading-[var(--floe-line-caption,1rem)] text-[var(--floe-ink-quiet)]">{option.secondary}</span>
+                    </span>
                   </button>
                 );
               }}
@@ -6484,10 +6491,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 title={i18n().t('flowerSurface.chat.entryLabel')}
                 onClick={() => void openFlowerSurface()}
               >
-                <FlowerIcon class="h-5 w-5" />
+                <FlowerIcon class="h-4 w-4" />
               </button>
             </Show>
-            <Show when={!tessivenVisible()}><button type="button" class="redeven-flower-topbar-button" aria-label="Tessiven" title="Tessiven" onClick={() => navigateWelcomeSurface('tessiven')}><TessivenIcon kind="tessiven"/></button></Show>
+            <Show when={!tessivenVisible()}><button type="button" class="redeven-flower-topbar-button" aria-label="Tessiven" title="Tessiven" onClick={() => navigateWelcomeSurface('tessiven')}><TessivenIcon kind="tessiven" class="h-4 w-4" /></button></Show>
             <DesktopLanguagePicker
               openRequest={languagePickerOpenRequest()}
               snapshot={languageSnapshot()}
@@ -12557,7 +12564,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
         <section aria-label={props.i18n.t('settings.currentConnection')} class="environment-access-overview">
           <div class="environment-access-overview-header">
             <div class="environment-access-overview-identity">
-              <span class="environment-settings-icon" aria-hidden="true"><Link class="h-[18px] w-[18px]" /></span>
+              <span class="environment-settings-icon" aria-hidden="true"><Link class="h-4 w-4" /></span>
               <div class="environment-access-overview-heading">
                 <h3>{props.i18n.t('settings.currentConnection')}</h3>
                 <span class="environment-access-status" role="status" data-status-tone={props.runtimeStatusTone}>
@@ -12985,11 +12992,11 @@ function ConnectionDialog(props: ConnectionDialogProps) {
               {connectionKindDescription()}
             </div>
             <Show when={connectionKind() !== 'external_local_ui'}>
-              <fieldset class="space-y-2 rounded-md border border-border p-3 text-sm">
-                <legend class="px-1 text-xs font-medium">{props.i18n.t('gatewayJoin.title')}</legend>
-                <label class="flex cursor-pointer items-center gap-2"><input class="cursor-pointer" type="radio" name="new-runtime-gateway" checked={!props.joinGateway} onChange={() => props.setJoinGateway?.(false)} />{props.i18n.t('gatewayJoin.notNow')}</label>
-                <label class="flex cursor-pointer items-center gap-2"><input class="cursor-pointer" type="radio" name="new-runtime-gateway" checked={props.joinGateway === true} onChange={() => props.setJoinGateway?.(true)} />{props.i18n.t('gatewayJoin.joinGateway')}</label>
-                <Show when={props.joinGateway}><p class="text-xs text-muted-foreground">{props.i18n.t('gatewayJoin.setupHelp')}</p></Show>
+              <fieldset class="redeven-gateway-transport-fieldset">
+                <legend class="redeven-gateway-transport-legend">{props.i18n.t('gatewayJoin.title')}</legend>
+                <label class="redeven-gateway-transport-choice"><input class="cursor-pointer" type="radio" name="new-runtime-gateway" checked={!props.joinGateway} onChange={() => props.setJoinGateway?.(false)} />{props.i18n.t('gatewayJoin.notNow')}</label>
+                <label class="redeven-gateway-transport-choice"><input class="cursor-pointer" type="radio" name="new-runtime-gateway" checked={props.joinGateway === true} onChange={() => props.setJoinGateway?.(true)} />{props.i18n.t('gatewayJoin.joinGateway')}</label>
+                <Show when={props.joinGateway}><p class="redeven-gateway-transport-help">{props.i18n.t('gatewayJoin.setupHelp')}</p></Show>
               </fieldset>
             </Show>
           </div>

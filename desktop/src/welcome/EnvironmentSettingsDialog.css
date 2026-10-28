@@ -239,7 +239,12 @@
 .ssh-settings-field-label label, .ssh-settings-field-label > span, .ssh-settings-probe label { font-size: var(--floe-type-control); font-weight: 400; line-height: 1.6; }
 .ssh-settings-field-control { width: 258px; max-width: 56%; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
 .ssh-settings-field:has(#ssh-settings-ssh_port) .ssh-settings-field-control { width: 88px; }
-.ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { width: 100%; min-width: 0; height: var(--environment-settings-control-height); }
+/* Text-entry geometry only. A radio is a choice dot that keeps its intrinsic
+ * size, and the SSH form hosts the connection dialog's shared kind/gateway
+ * picker, so sweeping radios into the field rule stretched each one into a
+ * full-width box and pushed its label out of the row. */
+.ssh-settings-form input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
+.ssh-settings-form select { width: 100%; min-width: 0; height: var(--environment-settings-control-height); }
 .ssh-settings-help { font-size: var(--floe-type-supporting); line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: 3px; }
 .ssh-settings-help-link { color: var(--muted-foreground); font-size: var(--floe-type-supporting); text-align: left; width: fit-content; height: auto; min-height: 32px; }
 .ssh-settings-help-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
@@ -282,7 +287,8 @@
   .redeven-environment-settings-dialog .two-factor-manual-key button,
   .redeven-environment-settings-dialog .two-factor-recovery-actions button { min-height: 44px; }
   .environment-certificate-header > button { width: 44px; height: 44px; }
-  .ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { min-height: 44px; font-size: 16px; }
+  .ssh-settings-form input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
+  .ssh-settings-form select { min-height: 44px; font-size: 16px; }
   .environment-settings-tabs .environment-settings-tab-trigger,
   .ssh-settings-help-link, .ssh-settings-disclosure,
   .environment-access-advanced summary { min-height: 44px; }
@@ -308,6 +314,11 @@
 .environment-connection-fields > .environment-connection-fields { border-bottom: 1px solid var(--environment-settings-border); }
 .environment-connection-fields > .environment-connection-fields:last-child { border-bottom: 0; }
 .environment-connection-field > .environment-connection-help + button { justify-self: end; max-width: 100%; white-space: nowrap; }
+/* A segmented rail is sized by its segments, not by the value column. Stretching
+ * it to the 258px field column leaves a dead track after the last segment that
+ * reads as an empty control. */
+.environment-connection-field > .floe-segmented-control,
+.environment-connection-field > [role='radiogroup'] { justify-self: start; width: fit-content; max-width: 100%; }
 .environment-connection-probe { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
 .environment-connection-group .environment-connection-field { margin-block: 0; }
 .environment-connection-facts { margin: 0; }

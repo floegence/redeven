@@ -118,6 +118,21 @@ function readDesktopTitlebarTopInset(): number {
 
 export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
   const [geometry, setGeometry] = createSignal<DesktopAnchoredListboxGeometry | null>(null);
+  // Floe's menu motion, the same recipe the shell's own menus use: the panel
+  // holds its enter offset, scale and transparency for the first frame and then
+  // releases them along the declared transition. `entering` lasts until there is
+  // geometry to place the panel by — a hidden, unpositioned panel would otherwise
+  // finish its motion off screen and appear already settled.
+  const [presence, setPresence] = createSignal<'entering' | 'open'>('entering');
+  createEffect(() => {
+    if (!props.open) {
+      setPresence('entering');
+      return;
+    }
+    if (!geometry()) return;
+    const presenceFrame = requestAnimationFrame(() => setPresence('open'));
+    onCleanup(() => cancelAnimationFrame(presenceFrame));
+  });
   let frame = 0;
   let overlayRef: HTMLDivElement | undefined;
 
@@ -214,8 +229,9 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
         role={props.role}
         data-redeven-anchored-listbox=""
         data-placement={geometry()?.placement ?? 'bottom'}
+        data-floating-presence={presence()}
         class={cn(
-          'fixed z-[240] flex flex-col overflow-hidden rounded-md border border-border bg-popover shadow-xl',
+          'floe-floating-presence floe-floating-menu fixed z-[240] flex flex-col overflow-hidden rounded-panel border border-[var(--floe-line)] bg-popover text-popover-foreground shadow-[var(--floe-elevation-float)]',
           props.class,
         )}
         style={{
