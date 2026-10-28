@@ -634,7 +634,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							for _, value := range toAnySlice(line) {
 								values, ok := value.(map[string]any)
 								if !ok {
-									continue
+									// log(object) and log(JSON.stringify(object)) carry
+									// the same verified data; neither uses final prose.
+									encoded, text := value.(string)
+									if !text || json.Unmarshal([]byte(encoded), &values) != nil {
+										continue
+									}
 								}
 								items, itemsOK := values["empty_items"].([]any)
 								attr, hasAttr := values["null_attribute"]
