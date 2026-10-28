@@ -2,7 +2,7 @@ import { batch, createSignal } from 'solid-js';
 import { createStore, type SetStoreFunction } from 'solid-js/store';
 import type { FlowerChatMessage, FlowerHistoryBodyChunk, FlowerHistoryWindow, FlowerRuntimeTurn, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { FlowerLiveSyncError } from './flowerLiveWire';
-import { retainEqualValue } from './presentationIdentity';
+import { readPresentationValue, retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 import { retainThinkingTiming } from './thinkingTiming';
 import { createMessageTextSource } from './messageTextSource';
@@ -17,7 +17,7 @@ const utf8 = new TextEncoder();
 export type HistoryBodyAppendResult = 'applied' | 'covered' | 'superseded';
 
 function advanceMessage(prior: MessageRecord, message: FlowerChatMessage): boolean {
-  const before = prior.value;
+  const before = readPresentationValue(prior.value);
   if (before.id !== message.id || before.thread_id !== message.thread_id || before.turn_id !== message.turn_id
     || before.run_id !== message.run_id || before.role !== message.role
     || before.logical_request_id !== message.logical_request_id || before.attempt_epoch !== message.attempt_epoch
@@ -177,7 +177,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     const prior = messages.get(message.id) ?? previous?.findMessage(message.id);
     message = retainThinkingTiming(message, prior?.value);
     if (prior) {
-      const { text_source: _source, ...presentation } = prior.value;
+      const { text_source: _source, ...presentation } = readPresentationValue(prior.value);
       if (retainEqualValue(presentation, message) === presentation || advanceMessage(prior, message)) {
         messages.set(message.id, prior);
         return prior;
@@ -210,10 +210,10 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   previous = undefined;
   const [thread, setThread] = createStore<{ -readonly [K in keyof FlowerThreadSnapshot]: FlowerThreadSnapshot[K] }>({ ...initial, ...readingDecorations(initial), messages: projectedMessages, turns: mergeTurns(initial.turns), history_window: readingWindow(current.window) });
   projectedMessages = thread.messages;
-  const updateMessage = (message: FlowerChatMessage) => {
+  const updateMessage = (message: FlowerChatMessage, rebuildMembership = true) => {
     const prior = messages.get(message.id);
     const value = makeMessage(message).value;
-    if (value === prior?.value) return;
+    if (value === prior?.value || !rebuildMembership) return;
     projectedMessages = projectedMessages.map(previous => previous.id === value.id ? value : previous);
     setThread('messages', projectedMessages);
     projectedMessages = thread.messages;
@@ -428,9 +428,10 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       const turnsChanged = Boolean(update.turns) || structure || (update.items ?? []).some(change => change.kind === 'replace');
       if (turnsChanged) {
         const validated = validateFlowerRuntimeTurns({ ...next, items: nextOrder.map(id => read(id)!.item) });
-        const prior = new Map(base.turns?.map(turn => [turn.turn_id, turn]));
+        const priorTurns = base.turns && readPresentationValue(base.turns);
+        const prior = new Map(priorTurns?.map(turn => [turn.turn_id, readPresentationValue(turn)]));
         const retained = validated.map(turn => retainEqualValue(prior.get(turn.turn_id), turn));
-        turns = base.turns?.length === retained.length && retained.every((turn, index) => turn === base.turns![index])
+        turns = priorTurns?.length === retained.length && retained.every((turn, index) => turn === readPresentationValue(priorTurns[index]))
           ? base.turns : retained;
       }
       const projectionView = update.interactions ? { ...next, items: [...items.keys()].flatMap(id => {
@@ -466,7 +467,8 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
               for (const change of update.items ?? []) if (change.item_id === id && change.kind === 'append') previous.appendText(change.append!.text);
             }
           }
-          else if (previous) updateMessage(message);
+          // Structural replacements publish their complete ordered membership once below.
+          else if (previous) updateMessage(message, !(structure || update.item_order));
           else makeMessage(message);
         }
         if (structure || update.item_order) {

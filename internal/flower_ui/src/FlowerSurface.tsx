@@ -51,7 +51,7 @@ import { FLOE_HOT_INTERACTION_ATTR, secureRandomUUID, useOverlayMask } from '@fl
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { FlowerApprovalRow, FlowerApprovalDecisionActions } from './FlowerApprovalRow';
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
-import { retainEqualValue, retainKeyedItems } from './presentationIdentity';
+import { readPresentationValue, retainEqualValue, retainKeyedItems } from './presentationIdentity';
 import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
@@ -7019,9 +7019,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const parentReadingInterval = (thread: FlowerThreadSnapshot | null | undefined) => {
     if (!thread?.history_window) return;
-    const members = thread.messages.flatMap(message => message.canonical_ordinal !== undefined
-      && Number.isSafeInteger(message.canonical_ordinal) && message.canonical_ordinal > 0
-      ? [{ canonical: message.canonical_ordinal, ordinal: threadCache().runtimeItem(thread.thread_id, message.id)?.ordinal }] : [])
+    // Ordinals change with replaced membership, not cache-wide live text updates.
+    const cache = untrack(threadCache);
+    const members = readPresentationValue(thread.messages).flatMap(value => {
+      const message = readPresentationValue(value);
+      return message.canonical_ordinal !== undefined && Number.isSafeInteger(message.canonical_ordinal) && message.canonical_ordinal > 0
+        ? [{ canonical: message.canonical_ordinal, ordinal: cache.runtimeItem(thread.thread_id, message.id)?.ordinal }] : [];
+    })
       .sort((a, b) => a.canonical - b.canonical);
     if (!members.length) return;
     const spans: { first: number; last: number }[] = [];
@@ -7033,11 +7037,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return { first: members[0].canonical, last: members.at(-1)!.canonical, hasAfter: thread.history_window.has_after, spans };
   };
+  const selectedParentReadingInterval = createMemo(() => parentReadingInterval(selectedThread()));
+  const childParentReadingInterval = createMemo(() => subagentDetailOpen() ? parentReadingInterval(subagentDetailThread()) : undefined);
   const parentEventReading = createParentEventReading({
     scroll: transcriptScroll,
     get threadID() { return selectedThreadID(); },
     get page() { return selectedThread()?.parent_events; },
-    get interval() { const interval = parentReadingInterval(selectedThread()); return interval && { ...interval, revision: historyAcceptedReadingRevision }; },
+    get interval() { const interval = selectedParentReadingInterval(); return interval && { ...interval, revision: historyAcceptedReadingRevision }; },
     get read() { return props.adapter.readParentEvents; },
     get connectionEpoch() { return liveSyncState().connectionEpoch; },
     get timeoutMessage() { return subagentsCopy().events.readTimeout; },
@@ -7384,7 +7390,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scroll: subagentDetailScroll,
     get threadID() { return subagentDetailOpen() ? activeSubagentID() : ''; },
     get page() { return subagentDetailOpen() ? subagentDetailThread()?.parent_events : undefined; },
-    get interval() { const interval = subagentDetailOpen() ? parentReadingInterval(subagentDetailThread()) : undefined;
+    get interval() { const interval = childParentReadingInterval();
       return interval && { ...interval, revision: subagentAcceptedReadingRevision }; },
     get read() { return props.adapter.readParentEvents; },
     get connectionEpoch() { return liveSyncState().connectionEpoch; },

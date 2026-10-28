@@ -40,6 +40,10 @@ required; unavailable desktop/display prerequisites are failures, not skips.
 Fast suites protect indexed record stability, ordered live queue semantics,
 retention/reading windows, turn/disclosure identity, per-block content-boundary invalidation, keyed subscription disposal, local thinking
 updates, structural versus mutable field dependencies, sealed-body handoff and incremental Markdown.
+Structural batches publish ordered membership once after every affected record is
+ready; replacing many records must not rescan the full document for each record.
+Parent-event reading intervals track membership and coverage independently of
+cache-wide text updates; immutable turn facts do not allocate per-field subscriptions.
 Browser suites additionally exercise history navigation, reconnect, selection,
 disclosure ownership, input/approval and terminal states. The sustained scenario
 creates 500 real canonical turns through the product Service and the published

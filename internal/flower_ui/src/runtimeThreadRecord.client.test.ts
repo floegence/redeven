@@ -215,3 +215,35 @@ it('reads structural presentation values shallowly without changing ordinary inp
     expect(runs).toBe(1);
   } finally { dispose(); }
 }));
+
+it('publishes a structural batch without rescanning membership for each replaced message', () => createRoot(dispose => {
+  try {
+    const items = Array.from({ length: 80 }, (_, index) => ({ id: 'item-' + index, kind: 'thinking' as const,
+      ordinal: index + 1, turn_id: 'turn', run_id: 'run', text: 'Original reasoning', live: true }));
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, interactions: [], queue: [], turns: [], items };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread();
+    const firstMessage = thread.messages[0];
+    const membership = readPresentationValue(thread.messages);
+    const first = membership[0];
+    let scans = 0;
+    Object.defineProperty(membership, 0, { configurable: true, get() { scans++; return first; } });
+    const published: string[][] = [];
+    createComputed(() => published.push(thread.messages.map(message => message.id)));
+    scans = 0;
+    record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 1, view_version: 2,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: items.slice(1).map(item => ({ kind: 'replace', item_id: item.id, item: { ...item, text: 'Canonical reasoning', live: false } })) });
+    Object.defineProperty(membership, 0, { configurable: true, writable: true, value: first });
+    expect(scans).toBeLessThanOrEqual(2);
+    expect(published).toHaveLength(2);
+    expect(published[1]).toEqual(items.map(item => item.id));
+    expect(thread.messages[0]).toBe(firstMessage);
+    expect(thread.messages.slice(1).every(message => message.blocks?.[0]?.type === 'thinking'
+      && message.blocks[0].content === 'Canonical reasoning' && !message.live)).toBe(true);
+  } finally { dispose(); }
+}));

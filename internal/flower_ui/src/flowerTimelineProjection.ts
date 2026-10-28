@@ -1,4 +1,5 @@
 import { untrack } from 'solid-js';
+import { readPresentationValue } from './presentationIdentity';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 import type {
   FlowerActivityTimelineBlock,
@@ -417,7 +418,7 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
   const replaced = new Set<string>();
   for (const entry of entries) {
     if (entry.type !== 'message') continue;
-    const { message } = entry;
+    const message = readPresentationValue(entry.message);
     if (!message.turn_id || !message.run_id || message.canonical_ordinal === undefined) continue;
     const execution = JSON.stringify([message.turn_id, message.run_id]);
     if (message.goal) {
@@ -425,10 +426,10 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
       pending.delete(execution);
       if (message.goal.actor !== 'model' || candidates.length !== 1) continue;
       const candidate = candidates[0];
-      if (candidate.type !== 'message' || candidate.message.canonical_ordinal! >= message.canonical_ordinal) continue;
+      if (candidate.type !== 'message' || readPresentationValue(candidate.message).canonical_ordinal! >= message.canonical_ordinal) continue;
       const block = candidate.blocks[0];
       if (block.type !== 'activity') continue;
-      const item = block.block.items[0];
+      const item = readPresentationValue(block.block).items[0];
       if (item.status === 'success' && !item.needs_attention && !item.requires_approval
         && !item.approval_state && !item.attention_reasons?.length
         && !item.payload?.error && !item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain')
@@ -437,7 +438,7 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
     }
     if (entry.blocks.length !== 1) continue;
     const block = entry.blocks[0];
-    if (block.type !== 'activity' || block.block.items.length !== 1 || block.block.items[0].tool_name !== 'goal') continue;
+    if (block.type !== 'activity' || readPresentationValue(block.block).items.length !== 1 || readPresentationValue(block.block).items[0].tool_name !== 'goal') continue;
     const candidates = pending.get(execution) ?? [];
     candidates.push(entry);
     pending.set(execution, candidates);
@@ -448,9 +449,14 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
 function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events ? thread.parent_events.events : emptyParentEvents): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
   const threadRunning = thread.status === 'running';
-  const activeCursorMessageID = threadRunning
-    ? [...thread.messages].reverse().find((message) => message.role === 'assistant' && message.active_cursor === true)?.id ?? ''
-    : '';
+  let activeCursorMessageID = '';
+  if (threadRunning) {
+    const messages = readPresentationValue(thread.messages);
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = readPresentationValue(messages[index]);
+      if (message.role === 'assistant' && message.active_cursor === true) { activeCursorMessageID = message.id; break; }
+    }
+  }
   const sourceDecorations = thread.timeline_decorations ?? emptyDecorations;
   const input = thread.status === 'waiting_user' ? thread.input_request : undefined;
   const previous = timelineProjections.get(thread.messages);
@@ -477,19 +483,20 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
   const seenMessageIDs = new Set<string>();
   const positions = new Map<string, number>();
   const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
-    const messageID = trimString(message.id);
+    const facts = readPresentationValue(message);
+    const messageID = trimString(facts.id);
     if (!messageID || seenMessageIDs.has(messageID)) return [];
     seenMessageIDs.add(messageID);
-    const activeCursor = message.id === activeCursorMessageID;
+    const activeCursor = messageID === activeCursorMessageID;
     const prior = messageProjections.get(message);
-    const localDecorations = messageDecorations.get(message.id) ?? emptyDecorations;
+    const localDecorations = messageDecorations.get(messageID) ?? emptyDecorations;
     let entries: readonly FlowerTimelineEntry[];
     if (prior && prior.threadID === thread.thread_id && prior.activeCursor === activeCursor
       && prior.decorations.length === localDecorations.length
       && prior.decorations.every((value, index) => value === localDecorations[index])) {
       entries = prior.entries;
     } else {
-      const projectedMessage = activeCursor === (message.active_cursor === true)
+      const projectedMessage = activeCursor === (facts.active_cursor === true)
         ? message
         // Cursor decoration must not snapshot reactive text/body fields.
         // This view lives as long as the cached message projection.
@@ -497,11 +504,11 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
       entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
       messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: localDecorations, entries });
     }
-    if (message.canonical_ordinal !== undefined) {
+    if (facts.canonical_ordinal !== undefined) {
       for (const entry of entries) {
         const ordinal = entry.type === 'context_compaction' && entry.decoration.anchor.target_kind === 'message'
           && entry.decoration.anchor.edge === 'after'
-          ? entry.decoration.compaction.canonical_ordinal : message.canonical_ordinal;
+          ? entry.decoration.compaction.canonical_ordinal : facts.canonical_ordinal;
         positions.set(entry.key, ordinal);
       }
     }

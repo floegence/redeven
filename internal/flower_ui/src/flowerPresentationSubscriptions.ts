@@ -1,4 +1,5 @@
 import { batch, createComputed, createMemo, createSignal, onCleanup, untrack, type Accessor } from 'solid-js';
+import { readPresentationValue } from './presentationIdentity';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerTurnProcess, FlowerTurnProcessProjection } from './flowerTurnPresentation';
@@ -45,7 +46,7 @@ export function createFlowerFinalItemSubscriptions(thread: Accessor<Pick<FlowerT
   const subscribe = createFlowerKeyedSubscriptions(() => {
     const current = thread();
     const items = new Map<string, true>();
-    for (const turn of current?.turns ?? []) if (turn.final_boundary_complete) {
+    for (const turn of readPresentationValue(current?.turns ?? [])) if (turn.final_boundary_complete) {
       for (const id of turn.final_item_ids) items.set(JSON.stringify([current!.thread_id, turn.turn_id, turn.run_id, id]), true);
     }
     return items;
@@ -81,7 +82,7 @@ export function createFlowerMembershipSubscriptions(keys: Accessor<ReadonlySet<s
 export function createFlowerTurnEndSubscriptions(thread: Accessor<Pick<FlowerThreadSnapshot, 'thread_id' | 'turns'> | null | undefined>) {
   const subscribe = createFlowerKeyedSubscriptions(() => {
     const current = thread();
-    return new Map((current?.turns ?? []).map(turn => [JSON.stringify([current!.thread_id, turn.turn_id]), turn.ended_at]));
+    return new Map(readPresentationValue(current?.turns ?? []).map(turn => [JSON.stringify([current!.thread_id, turn.turn_id]), turn.ended_at]));
   });
   return (threadID: string | undefined, turnID: string | undefined) => subscribe(JSON.stringify([threadID, turnID]));
 }
