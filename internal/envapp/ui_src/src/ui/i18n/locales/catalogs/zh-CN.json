@@ -5376,8 +5376,7 @@
         "effectUncertain": "结果未确认",
         "computerInputRejected": "参数无效，未发送输入",
         "computerPreparedOnly": "已完成准备，未发送输入",
-        "computerEffectConfirmed": "已有操作完成，请先检查再继续",
-        "computerNoObservation": "本次没有新的页面观察"
+        "computerEffectConfirmed": "已有操作完成，请先检查再继续"
       },
       "toolActivityDetailsPending": "正在等待工具详情",
       "toolActivityNoAdditionalDetails": "没有更多详情",

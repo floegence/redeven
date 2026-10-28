@@ -5376,8 +5376,7 @@
         "effectUncertain": "결과 미확인",
         "computerInputRejected": "잘못된 인수로 입력을 보내지 않았습니다",
         "computerPreparedOnly": "준비가 완료되었지만 입력은 보내지 않았습니다",
-        "computerEffectConfirmed": "완료된 작업이 있습니다. 계속하기 전에 확인하세요",
-        "computerNoObservation": "새로운 페이지 관찰이 없습니다"
+        "computerEffectConfirmed": "완료된 작업이 있습니다. 계속하기 전에 확인하세요"
       },
       "toolActivityDetailsPending": "도구 세부 정보를 기다리는 중",
       "toolActivityNoAdditionalDetails": "추가 세부 정보 없음",

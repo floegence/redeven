@@ -11671,7 +11671,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
         </Show>
         <Show when={expandable()}>
-          <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
+          <ChevronRight class="flower-activity-inline-chevron h-3.5 w-3.5" aria-hidden="true" />
         </Show>
       </>
     );

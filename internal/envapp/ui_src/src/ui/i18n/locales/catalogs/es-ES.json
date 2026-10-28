@@ -5376,8 +5376,7 @@
         "effectUncertain": "Resultado sin confirmar",
         "computerInputRejected": "Argumentos no válidos; no se envió ninguna entrada",
         "computerPreparedOnly": "Preparación completada; no se envió ninguna entrada",
-        "computerEffectConfirmed": "Se completó una acción; compruebe antes de continuar",
-        "computerNoObservation": "No hay una nueva observación de la página"
+        "computerEffectConfirmed": "Se completó una acción; compruebe antes de continuar"
       },
       "toolActivityDetailsPending": "Esperando los detalles de la herramienta",
       "toolActivityNoAdditionalDetails": "No hay más detalles",

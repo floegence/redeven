@@ -5477,8 +5477,7 @@
         "effectUncertain": "Результат не подтверждён",
         "computerInputRejected": "Недопустимые аргументы; ввод не отправлен",
         "computerPreparedOnly": "Подготовка завершена; ввод не отправлен",
-        "computerEffectConfirmed": "Действие выполнено; проверьте результат перед продолжением",
-        "computerNoObservation": "Нет нового наблюдения страницы"
+        "computerEffectConfirmed": "Действие выполнено; проверьте результат перед продолжением"
       },
       "toolActivityDetailsPending": "Ожидание сведений об инструменте",
       "toolActivityNoAdditionalDetails": "Дополнительных сведений нет",

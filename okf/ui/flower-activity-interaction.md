@@ -17,7 +17,7 @@ Desktop and Env App share this contract.
 # Contract
 
 ## Stable disclosure and safe content
-The permanent left folding-rail gutter aligns prose, activity and progress before groups form. Goal history icons share the prose/tool leading edge; their expanded text aligns with the summary label. Individual tool and thinking metadata/disclosure controls follow the text tail with the same compact gap, retaining the full-row activation area.
+The permanent left folding-rail gutter aligns prose, activity and progress before groups form. Goal history icons share the prose/tool leading edge; their expanded text aligns with the summary label. Individual tool and thinking metadata/disclosure controls follow the text tail with the same compact gap, retaining the full-row activation area. Tool disclosure chevrons point right when collapsed and down when expanded, including initially open screenshots; CSS reads the trigger’s existing `aria-expanded` state without a second state owner.
 
 Activity identity is thread, run, turn and canonical item ID. [Tool sequences](flower-tool-sequences.md) own grouping and bounded thinking; individual details remain available.
 
@@ -35,7 +35,7 @@ Shared Desktop/Env App rows retain compact geometry and explicit glyphs for regi
 Tool/thinking icons, prose and the full/companion progress lane share one left edge. The composer/status column uses the transcript's native scrollbar gutter. Its existing resize observer reads gutter width only when viewport inline size changes; the existing scheduled layout phase publishes changed geometry. Row growth adds no width reads, observer or frame scheduler. Embedded hosts retain their own status/composer layout.
 
 ## Intent, inputs and results
-Collapsed titles describe invocation intent, never substituted outcomes. Presentation cannot supply execution input or authorization.
+Collapsed titles describe invocation intent, never substituted outcomes. Presentation cannot supply execution input or authorization. BrowserUse/ComputerUse rows omit absent-observation filler; typed failures, uncertain effects, blank pages and unavailable targets retain their meaningful status.
 
 ## Viewport and gesture ownership
 One viewport controller owns transcript position. Layout, focus, animation and growth cannot resume paused reading. [Sequence reading](flower-tool-sequences.md#disclosure-and-reading) owns native nested scrolling; hidden controls are neither focusable nor hit-testable. [SubAgent details](flower-subagent-detail.md) have an independent viewport.

@@ -5376,8 +5376,7 @@
         "effectUncertain": "結果未確認",
         "computerInputRejected": "參數無效，尚未傳送輸入",
         "computerPreparedOnly": "已完成準備，尚未傳送輸入",
-        "computerEffectConfirmed": "已有操作完成，請先檢查再繼續",
-        "computerNoObservation": "本次沒有新的頁面觀察"
+        "computerEffectConfirmed": "已有操作完成，請先檢查再繼續"
       },
       "toolActivityDetailsPending": "正在等待工具詳細資訊",
       "toolActivityNoAdditionalDetails": "沒有更多詳細資訊",

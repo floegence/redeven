@@ -6498,8 +6498,8 @@ button.flower-composer-context-source:focus-visible,
   transition: transform 160ms ease;
 }
 
-.flower-activity-inline-chevron-open {
-  transform: rotate(180deg);
+.flower-activity-inline-button[aria-expanded='true'] .flower-activity-inline-chevron {
+  transform: rotate(90deg);
 }
 
 .flower-activity-inline-row-subagents .flower-activity-inline-title,

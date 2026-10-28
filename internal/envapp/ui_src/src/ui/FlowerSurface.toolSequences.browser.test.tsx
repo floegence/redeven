@@ -93,6 +93,84 @@ function expectSharedRailBetween(root: HTMLElement, previousID: string, nextID: 
 afterEach(async () => { await media.emulateTouchInput(false); document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it.each([
+    ['terminal.exec', 'terminal'], ['web_search', 'web_search'],
+    ['computer.exec', 'computer'], ['browser.navigate', 'browser'], ['computer.screenshot', 'computer'],
+    ['read_files', 'structured'], ['extension.inspect', 'structured'],
+  ])('points the %s disclosure right when closed and down when open', async (name, renderer) => {
+    const base = tool('direction', 'success', name, renderer);
+    const defaultOpen = name === 'computer.screenshot';
+    const call = { ...base, activity: { ...base.activity!, presentation: { ...base.activity!.presentation as Record<string, unknown>,
+      ...(renderer === 'web_search' ? { payload: { operation: 'search', query: 'release', results_provided: true,
+        results: [{ title: 'Release notes', url: 'https://example.test/release', snippet: 'A useful result.' }] } } : {}),
+      ...(defaultOpen ? { target_refs: [{ kind: 'computer_frame', label: 'Screenshot', resource_ref: 'computer://page/' + 'a'.repeat(64) }] } : {}),
+    } } };
+    const { root, push } = await mount([call]);
+    const button = row(root, 'direction').querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
+    const chevron = button.querySelector<SVGSVGElement>('.flower-activity-inline-chevron')!;
+    const glyph = chevron.querySelector<SVGGeometryElement>('path, polyline')!;
+    // Assert the rendered direction, including the base glyph and CSS rotation.
+    const direction = () => {
+      const length = glyph.getTotalLength();
+      const start = glyph.getPointAtLength(0);
+      const end = glyph.getPointAtLength(length);
+      const tip = glyph.getPointAtLength(length / 2);
+      const vector = new DOMPoint(tip.x - (start.x + end.x) / 2, tip.y - (start.y + end.y) / 2);
+      const transformed = vector.matrixTransform(new DOMMatrix(getComputedStyle(chevron).transform));
+      return Math.abs(transformed.y) < 0.01 && transformed.x > 0 ? 'right'
+        : Math.abs(transformed.x) < 0.01 && transformed.y > 0 ? 'down' : 'other';
+    };
+    if (defaultOpen) {
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+      await waitFor(() => direction() === 'down');
+      await userEvent.click(button);
+      await waitFor(() => row(root, 'direction').dataset.state === 'closed');
+      await waitFor(() => direction() === 'right');
+    }
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(direction()).toBe('right');
+    await userEvent.click(button);
+    await waitFor(() => row(root, 'direction').dataset.state === 'open');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => direction() === 'down');
+    push([call]);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(row(root, 'direction').querySelector('.flower-activity-inline-chevron')).toBe(chevron);
+    expect(direction()).toBe('down');
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-direction-' + name + '.png' });
+    await userEvent.click(button);
+    await waitFor(() => row(root, 'direction').dataset.state === 'closed');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    await waitFor(() => direction() === 'right');
+  });
+
+  it.each(['zh-CN', 'en-US'] as const)('omits absent BrowserUse observation copy in %s', async locale => {
+    const i18n = createTestI18nHelpers(locale);
+    const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+      tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+    const base = tool('browser-clean', 'success', 'computer.exec', 'computer');
+    const call = { ...base, activity: { ...base.activity!, presentation: { ...base.activity!.presentation as Record<string, unknown>,
+      chips: [{ kind: 'browser_source', label: 'source', value: 'browser.managed' },
+        { kind: 'computer_observation', label: 'observation', value: 'not_observed' }],
+      payload: { rows_provided: true, inputs: [{ title: 'script', content: 'return 1;', format: 'code', language: 'javascript' }] },
+    } } };
+    const { root } = await mount([call], [], [], false, copy);
+    const browserRow = row(root, 'browser-clean');
+    expect(browserRow.textContent).toContain('BrowserUse');
+    expect(browserRow.querySelector('.flower-activity-inline-icon svg')).not.toBeNull();
+    const expectClean = () => {
+      expect(browserRow.textContent).not.toContain('本次没有新的页面观察');
+      expect(browserRow.textContent).not.toContain('No new page observation');
+      expect(browserRow.querySelector('.flower-activity-inline-detail')).toBeNull();
+    };
+    expectClean();
+    await userEvent.click(browserRow.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!);
+    await waitFor(() => browserRow.dataset.state === 'open');
+    expectClean();
+    expect(browserRow.textContent).toContain('return 1;');
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-browser-clean-' + locale + '.png' });
+  });
+
   it.each([false, true])('crossfades into the shared summary without a cut (touch=%s)', async touch => {
     await media.emulateTouchInput(touch);
     const calls = Array.from({ length: 24 }, (_, i) => tool('handoff-' + i));

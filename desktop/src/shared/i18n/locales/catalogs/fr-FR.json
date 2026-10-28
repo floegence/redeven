@@ -462,8 +462,7 @@
         "effectUncertain": "Résultat non confirmé",
         "computerInputRejected": "Arguments invalides ; aucune saisie envoyée",
         "computerPreparedOnly": "Préparation terminée ; aucune saisie envoyée",
-        "computerEffectConfirmed": "Une action a été effectuée ; vérifiez avant de continuer",
-        "computerNoObservation": "Aucune nouvelle observation de la page"
+        "computerEffectConfirmed": "Une action a été effectuée ; vérifiez avant de continuer"
       },
       "toolActivityDetailsPending": "En attente des détails de l’outil",
       "toolActivityNoAdditionalDetails": "Aucun détail supplémentaire",

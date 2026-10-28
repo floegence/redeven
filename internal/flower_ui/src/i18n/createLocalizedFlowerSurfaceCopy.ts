@@ -178,7 +178,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         computerInputRejected: t(i18n, k('chat.toolActivity.computerInputRejected')),
         computerPreparedOnly: t(i18n, k('chat.toolActivity.computerPreparedOnly')),
         computerEffectConfirmed: t(i18n, k('chat.toolActivity.computerEffectConfirmed')),
-        computerNoObservation: t(i18n, k('chat.toolActivity.computerNoObservation')),
         computerPageChanges: t(i18n, k('chat.toolActivity.computerPageChanges')),
         computerDefault: t(i18n, k('chat.toolActivity.computerDefault')),
         computerNewTab: t(i18n, k('chat.toolActivity.computerNewTab')),

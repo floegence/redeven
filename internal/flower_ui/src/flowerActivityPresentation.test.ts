@@ -1959,7 +1959,25 @@ it.each([
  const result=presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'computer',status:'error',chips:[{kind:'computer_failure_phase',label:'phase',value:phase}],payload:{rows_provided:true}}));
  expect(result.meta).toBe(toolActivityEnUS[key]);
 });
-it('labels a result without a fresh page observation', () => {
- const result=presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'computer',chips:[{kind:'computer_observation',label:'observation',value:'not_observed'}],payload:{rows_provided:true}}));
- expect(result.meta).toBe(toolActivityEnUS.computerNoObservation);
+describe('computer observation presentation', () => {
+  const observation = { kind: 'computer_observation', label: 'observation', value: 'not_observed' };
+  it.each(['computer.exec', 'browser.navigate'])('omits absent observation noise for %s', tool_name => {
+    const result = presentFlowerActivityItem(item({ tool_name, renderer: 'computer', chips: [observation], payload: { rows_provided: true } }));
+    expect(result.meta).toBe('');
+    expect(JSON.stringify(result)).not.toContain('No new page observation');
+  });
+  it.each([
+    ['computer_failure_phase', 'validation', 'computerInputRejected'],
+    ['computer_failure_phase', 'prepared', 'computerPreparedOnly'],
+    ['computer_failure_phase', 'effect_confirmed', 'computerEffectConfirmed'],
+    ['computer_failure_phase', 'unknown', 'effectUncertain'],
+    ['effect_outcome', 'uncertain', 'effectUncertain'],
+    ['computer_result', 'empty_page', 'computerBlankPage'],
+    ['computer_result', 'no_targets', 'computerNoTargets'],
+  ] as const)('retains meaningful %s=%s status without a fresh observation', (kind, value, key) => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'computer.exec', renderer: 'computer',
+      status: kind === 'computer_result' ? 'success' : 'error',
+      chips: [observation, { kind, label: kind, value }], payload: { rows_provided: true } }));
+    expect(result.meta).toBe(toolActivityEnUS[key]);
+  });
 });
