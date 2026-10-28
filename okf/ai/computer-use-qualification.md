@@ -5,7 +5,7 @@ description: Establish scope-specific evidence for decoded frames, real target i
 tags: [ai, computer-use, desktop, testing]
 timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -33,7 +33,7 @@ Foreground macOS and credentialed model qualification remain explicit runs; the 
 ## Real DeepSeek reliability acceptance
 `TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.
 
-Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1). Native entry also requires REDEVEN_COMPUTER_NATIVE_E2E=1 and the release Swift helper; serialize native cases on the shared desktop. Browser-only cases may use -parallel 3. Scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks failure namespace reset, multi-page script batches, browser-to-task-file processing and installed native application entry. Reset diagnostics and completed waits are checked against canonical tool results. observation_capture verifies four PageDown inputs followed by one fresh screenshot; frame_refs verifies a retained parent ref after child navigation; option_field verifies exact unsupported-option diagnostics. strict_wait also checks the failed wait index and sanitized condition facts.
+Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1). Native scenarios run serially in the harness and also require REDEVEN_COMPUTER_NATIVE_E2E=1 and the release Swift helper; serialize native cases on the shared desktop. Browser-only cases may use -parallel 3. Scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks failure namespace reset, multi-page script batches, browser-to-task-file processing and installed native application entry. Reset diagnostics and completed waits are checked against canonical tool results. observation_capture verifies four PageDown inputs followed by one fresh screenshot; frame_refs verifies a retained parent ref after child navigation; option_field verifies exact unsupported-option diagnostics. strict_wait also checks the failed wait index and sanitized condition facts.
 
 Natural tasks use the production default tool surface. Only the legacy default-wait
 case explicitly retains its primitive. Read canonical tool results through
@@ -64,6 +64,15 @@ help and batch example through production QuickJS, Runtime and installed Chromiu
 checking byte equality for a multi-chunk file and the actual page values.
 TestComputerNativeApplicationEntryQualification separately exercises single, no,
 multiple and minimized windows with the real native helper.
+
+TestComputerNativeDragQualification drives the published Swift helper against a
+disposable AppKit app, checking 0/1/500/5000 ms and cancellation during a 5000 ms
+drag. Each case requires exactly one press/release pair; cancellation must release
+before the endpoint. AppKit receive times and system event timestamps are retained.
+The native_drag, native_drag_validation and native_drag_zero model scenarios
+exercise discovery, screenshot-based inspection, one timed drag, invalid-duration
+rejection and zero-delay input through the production Service/tool registry.
+Configuration and credentials stay unchanged; model mistakes remain in evidence.
 
 The timed_drag and drag_validation scenarios verify fixture-generated mouse
 events independently of model text: one press/release, endpoints, intermediate

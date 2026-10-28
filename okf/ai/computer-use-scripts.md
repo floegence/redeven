@@ -52,8 +52,13 @@ path over the requested duration; zero adds no delay. A monotonic schedule avoid
 accumulating one extra delay per transport call. Dispatch overhead can extend the
 duration. Cancellation, takeover and document invalidation stop remaining moves;
 cleanup releases at the last confirmed pointer position. A lost input reply keeps
-its unknown-effect classification and is never replayed. Native delivery timing
-is a separate adapter contract and is not certified by browser tests.
+its unknown-effect classification and is never replayed. Native delivery uses the published FloeNativeDesktop NativeInputSequence, with
+one monotonic schedule after acknowledged mouse-down. It accepts the same
+integer 0..5000 ms contract. The host checks authorization/target/cancellation,
+retains exact per-event receipts, and releases only its outstanding input on
+interruption. No application-specific timing heuristic or automatic retry is
+added. Native qualification measures separate-process AppKit events; browser
+tests do not certify native timing.
 Browser locator.text() reads rendered innerText from one unique observed element
 through a fixed isolated-world function, bounded to 12,000 Unicode characters
 with explicit truncation and rendered_element scope. Hidden and unloaded content

@@ -45,8 +45,8 @@ final class NativeForegroundInput {
     func resetProgress() { inputProgress = [:] }
     func markActionStarted() { inputProgress["stage"] = "action" }
 
-    func post(_ events: [CGEvent], window: NativeWindow, allowed: Bool, privateInput: Bool, activate: Bool = true, started: () -> Void, prepare: () throws -> Void, didPost: () -> Void) throws {
-        inputProgress = ["posted": 0, "observed": 0, "expected": events.count, "stage": "preparation"]
+    func post(_ sequence: NativeInputSequence, window: NativeWindow, allowed: Bool, privateInput: Bool, activate: Bool = true, started: () -> Void, prepare: () throws -> Void, didPost: () -> Void) throws {
+        inputProgress = ["posted": 0, "observed": 0, "expected": sequence.events.count, "stage": "preparation"]
         let initialProgress = delivery.progress
         defer {
             let progress = delivery.progress
@@ -102,7 +102,10 @@ final class NativeForegroundInput {
         guard (!window.userInControl || privateInput) else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
         try execution.check()
         try prepare()
-        for event in events {
+        try sequence.deliver(check: {
+            try execution.check()
+            guard !window.userInControl || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "The user took control.") }
+        }, post: { event in
             // Drain queued input notifications before every injection.
             CFRunLoopRunInMode(.defaultMode, 0, true)
             try execution.check()
@@ -124,7 +127,7 @@ final class NativeForegroundInput {
                 self.pending.posted(event)
                 didPost()
             })
-        }
+        })
         inputProgress["stage"] = "input_observed"
         CFRunLoopRunInMode(.defaultMode, 0, true)
     }

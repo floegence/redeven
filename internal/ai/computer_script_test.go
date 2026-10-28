@@ -657,3 +657,17 @@ func TestComputerScriptUnknownEffectWithTakeoverDiscardsContent(t *testing.T) {
 		t.Fatalf("takeover leaked output: %#v %v", result, err)
 	}
 }
+
+func TestComputerNativeDragHelpDescribesTimingContract(t *testing.T) {
+	for _, topic := range []string{"core", "visual"} {
+		help, ok := computerScriptHelp(topic, false)
+		if !ok {
+			t.Fatalf("missing native %s help", topic)
+		}
+		for _, contract := range []string{"duration_ms", "integer 0..5000", "0 adds no delay", "overhead may extend", "window-local"} {
+			if !strings.Contains(help, contract) {
+				t.Errorf("native %s help omits %q", topic, contract)
+			}
+		}
+	}
+}

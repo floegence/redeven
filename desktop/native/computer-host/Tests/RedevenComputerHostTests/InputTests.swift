@@ -121,8 +121,16 @@ final class InputTests: XCTestCase {
         XCTAssertThrowsError(try NativeInput.scroll(at: point, x: 0, y: 1e20, naturalScrolling: true))
     }
 
+    func testDragDurationRejectsInvalidValuesBeforeIntegerConversion() throws {
+        for value in [Double.nan, .infinity, -.infinity, -1, 0.5, 5000.1, 5001, Double.greatestFiniteMagnitude] {
+            XCTAssertThrowsError(try nativeDragDuration(value))
+        }
+        for value in [0.0, 1, 500, 5000] { XCTAssertEqual(try nativeDragDuration(value), Int(value)) }
+    }
+
     func testDragProducesBalancedPath() throws {
-        let events = try NativeInput.drag(from: CGPoint(x: 10, y: 20), to: CGPoint(x: 110, y: 120), durationMilliseconds: 64)
+        let sequence = try NativeInput.dragSequence(from: CGPoint(x: 10, y: 20), to: CGPoint(x: 110, y: 120), durationMilliseconds: 64)
+        let events = sequence.events
         XCTAssertEqual(events.first?.type, .mouseMoved)
         XCTAssertEqual(events.dropFirst().first?.type, .leftMouseDown)
         XCTAssertEqual(events.last?.type, .leftMouseUp)

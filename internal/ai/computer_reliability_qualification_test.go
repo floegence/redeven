@@ -177,10 +177,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
-				t.Parallel()
+				if !strings.HasPrefix(scenario, "native_") {
+					t.Parallel()
+				}
 				output := filepath.Join(output, fmt.Sprintf("%02d", repeat))
 				if err := os.MkdirAll(output, 0700); err != nil {
 					t.Fatal(err)
@@ -322,8 +324,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				var injected, blockedInputs atomic.Int32
 				var nativeName string
 				var nativeFacts func() map[string]any
-				if scenario == "native_entry" || scenario == "native_tree" {
-					nativeName, nativeFacts = prepareComputerEntryFixture(t)
+				if scenario == "native_entry" || scenario == "native_tree" || strings.HasPrefix(scenario, "native_drag") {
+					if strings.HasPrefix(scenario, "native_drag") {
+						nativeName, nativeFacts = prepareComputerEntryFixture(t, "drag")
+					} else {
+						nativeName, nativeFacts = prepareComputerEntryFixture(t)
+					}
 					root, _ := filepath.Abs("../..")
 					native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
 					runtime.executors["desktop-main"] = native
@@ -440,6 +446,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Run this intentional diagnostic exactly once as one computer.exec: await ui.getByRole('button',{name:'Save once',exact:true}).snapshot({full:true}); . Do not remove the unsupported option. Report the returned method, field and expected form, then use a separate ui.snapshot() call. Do not click or save."
 				case "script_batch":
 					prompt = "Open " + site.URL + "/batch?page=1 in this task's page, read all three scores and calculate their total. Once the page structure is known, process the remaining pages in one computer script using a loop and return a screenshot of the last page. Keep the original browser page available; do not use network scraping."
+				case "native_drag", "native_drag_validation", "native_drag_zero":
+					prompt = "Open the installed native application named " + nativeName + " using Computer Use discovery and selection. Observe its instructions and screenshot, then perform its requested drag exactly once. Read Pointer telemetry and capture a screenshot afterwards. This is a disposable acceptance app; do not touch other applications or use terminal/network tools."
+					if scenario == "native_drag_zero" {
+						prompt += " Override only the duration: use 0 milliseconds instead of 1000. Keep the same endpoints and perform one drag."
+					}
+					if scenario == "native_drag_validation" {
+						prompt += " Before the requested valid drag, run this intentional diagnostic once unchanged: await ui.drag(50,100,300,150,5001); . Report the rejection, then use a separate computer.exec for the requested valid drag. Never retry the invalid duration."
+					}
 				case "native_entry", "native_tree":
 					prompt = "Open the installed native application named " + nativeName + " using Computer Use discovery and selection. Enter exactly Flash 1017 in Acceptance code, click Confirm exactly once, read the resulting confirmation and capture a screenshot. This is a disposable acceptance app; do not touch any other application."
 					if scenario == "native_tree" {
@@ -580,7 +594,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
 							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
 							fact["logs"], fact["budget"] = data["logs"], data["budget"]
-							if scenario == "field_integrity" || scenario == "native_entry" || scenario == "native_tree" {
+							if scenario == "field_integrity" || scenario == "native_entry" || scenario == "native_tree" || strings.HasPrefix(scenario, "native_drag") {
 								fact["observation"] = data["observation"]
 							}
 							fact["failed_action"] = data["failed_action"]
@@ -639,6 +653,9 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				report["pointer_clicks"] = pointerClicks.Load()
 				report["typed_value"] = typedValue.Load()
 				report["surface"] = "production_default"
+				if strings.HasPrefix(scenario, "native_") {
+					report["scope"] = "production-service-real-deepseek-disposable-appkit"
+				}
 				report["injected_read_failures"] = injected.Load()
 				report["inputs_after_failed_read"] = blockedInputs.Load()
 				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" {
@@ -1020,6 +1037,49 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if !saved || exports.Load() != 1 || readErr != nil || !strings.Contains(string(file), "20.5") || !strings.Contains(text, "terminal.exec") {
 						t.Errorf("mixed tool handoff failed: exports=%d file=%v", exports.Load(), readErr)
 					}
+				case "native_drag", "native_drag_validation", "native_drag_zero":
+					facts := nativeFacts()
+					report["native_facts"] = facts
+					events, _ := facts["drag_events"].([]any)
+					var down, up []map[string]any
+					intermediate := false
+					for _, value := range events {
+						event := value.(map[string]any)
+						if event["type"] == "down" {
+							down = append(down, event)
+						}
+						if event["type"] == "up" {
+							up = append(up, event)
+						}
+						if event["type"] == "drag" && event["x"].(float64) > 50 && event["x"].(float64) < 300 {
+							intermediate = true
+						}
+					}
+					valid := len(down) == 1 && len(up) == 1
+					if valid {
+						held := up[0]["time_ms"].(float64) - down[0]["time_ms"].(float64)
+						eventHeld := up[0]["event_time_ms"].(float64) - down[0]["event_time_ms"].(float64)
+						report["event_held_ms"] = eventHeld
+						report["held_ms"] = held
+						valid = down[0]["x"] == float64(50) && down[0]["y"] == float64(100) && up[0]["x"] == float64(300) && up[0]["y"] == float64(150)
+						if scenario == "native_drag_zero" {
+							valid = valid && held >= 0 && held < 1000
+						} else {
+							valid = valid && intermediate && eventHeld >= 1000 && held >= 975 && held < 3000
+						}
+					}
+					captured, rejected := false, false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							captured = captured || action == "screenshot"
+						}
+						rejected = rejected || fact["script_error"] == "INVALID_COMPUTER_ARGUMENTS" && fact["action_executed"] == false && fact["failed_action"] == "drag" && len(toAnySlice(fact["completed_actions"])) == 0
+					}
+					report["drag_contract_passed"] = valid
+					report["invalid_duration_rejected"] = rejected
+					if !valid || !captured || scenario == "native_drag_validation" && !rejected {
+						t.Errorf("native drag contract not confirmed: down=%d up=%d captured=%v rejected=%v", len(down), len(up), captured, rejected)
+					}
 				case "native_entry", "native_tree":
 					if scenario == "native_tree" {
 						single, limited, leaf, _ := qualificationTreeReadFacts(confirmedToolFacts)
@@ -1259,13 +1319,22 @@ func qualificationTreeReadFacts(facts []map[string]any) (single, limited, leaf, 
 			// Accept a complete JSON object/array, optionally preceded by a
 			// label from log(label + JSON.stringify(value)). Do not infer
 			// fields from prose or accept partial JSON/trailing commentary.
-			start := strings.IndexAny(v, "{[")
-			var decoded any
-			if start >= 0 && json.Unmarshal([]byte(v[start:]), &decoded) == nil {
-				switch decoded.(type) {
-				case map[string]any, []any:
+			for start, char := range v {
+				if char != '{' && char != '[' {
+					continue
+				}
+				var decoded any
+				decoder := json.NewDecoder(strings.NewReader(v[start:]))
+				if decoder.Decode(&decoded) != nil {
+					continue
+				}
+				// Labels may themselves contain non-JSON braces. The first
+				// complete JSON value must consume the remainder of the log;
+				// never skip a complete value to accept trailing fragments.
+				if strings.TrimSpace(v[start+int(decoder.InputOffset()):]) == "" {
 					inspect(decoded)
 				}
+				break
 			}
 		}
 	}
@@ -1280,7 +1349,7 @@ func TestQualificationTreeReadFactsAcceptStructuredAndJSONLogs(t *testing.T) {
 	subtree := map[string]any{"nodes": []any{node}, "truncated": true}
 	leaf := map[string]any{"ref": "leaf", "child_refs": []any{}}
 	rows := map[string]any{"rows": []any{map[string]any{"text": "Name"}, map[string]any{"text": "Alpha"}, map[string]any{"text": "Beta"}}, "truncated": false}
-	for _, format := range []string{"structured", "json", "labelled_json"} {
+	for _, format := range []string{"structured", "json", "labelled_json", "structured_label_json"} {
 		logs := []any{}
 		for _, v := range []any{node, subtree, leaf, rows} {
 			if format != "structured" {
@@ -1288,6 +1357,9 @@ func TestQualificationTreeReadFactsAcceptStructuredAndJSONLogs(t *testing.T) {
 				label := ""
 				if format == "labelled_json" {
 					label = "Returned object: \n"
+				}
+				if format == "structured_label_json" {
+					label = "WINDOW snapshot({limit:1}) [result] = "
 				}
 				logs = append(logs, label+string(b))
 			} else {

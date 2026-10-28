@@ -275,3 +275,123 @@ func TestComputerNativeScriptQualification(t *testing.T) {
 	}
 	t.Logf("facade-to-native scroll verified; wheel events=%v offset=%v", final["wheelEvents"], final["scrollOffset"])
 }
+
+func TestComputerNativeDragQualification(t *testing.T) {
+	if runtime.GOOS != "darwin" || os.Getenv("REDEVEN_COMPUTER_NATIVE_E2E") != "1" {
+		t.Skip("explicit native fixture required")
+	}
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct {
+		name     string
+		duration int
+		cancel   bool
+	}{
+		{"zero", 0, false}, {"short", 1, false}, {"timed", 500, false}, {"maximum", 5000, false}, {"cancel", 5000, true},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			name, read := prepareComputerEntryFixture(t, "drag")
+			host, _, _, _ := computerBindingFixture(t)
+			native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
+			host.executors["desktop-main"] = native
+			t.Cleanup(func() { _ = native.Close() })
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.targets"}
+			call.Arguments, _ = json.Marshal(map[string]any{"application": name})
+			ctx := computerPermissionContext(t, "full_access")
+			inventory, err := host.ComputerTargets(ctx, call, ToolTargetPolicy{})
+			if err != nil || len(inventory.Candidates) != 1 {
+				t.Fatalf("discovery: %+v %v", inventory, err)
+			}
+			call.ToolName = "computer.select_target"
+			target, err := host.SelectComputerCandidate(ctx, call, inventory.Candidates[0].CandidateRef, ToolTargetPolicy{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			call.TargetID, call.ToolName, call.fullAccess, call.allowForeground, call.scriptOperation = target.ID, "computer.drag", true, true, true
+			call.Arguments, _ = json.Marshal(map[string]any{"from_x": 50, "from_y": 100, "to_x": 300, "to_y": 150, "duration_ms": item.duration})
+			actionCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			stopped := make(chan struct{})
+			if item.cancel {
+				go func() {
+					defer close(stopped)
+					timeout := time.NewTimer(10 * time.Second)
+					defer timeout.Stop()
+					ticker := time.NewTicker(5 * time.Millisecond)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-actionCtx.Done():
+							return
+						case <-timeout.C:
+							cancel()
+							return
+						case <-ticker.C:
+							events, _ := read()["drag_events"].([]any)
+							if len(events) > 0 {
+								time.Sleep(100 * time.Millisecond)
+								cancel()
+								return
+							}
+						}
+					}
+				}()
+			} else {
+				close(stopped)
+			}
+			result, actionErr := native.ExecuteTargetTool(actionCtx, call)
+			<-stopped
+			if item.cancel && actionErr == nil {
+				t.Error("cancelled drag reported success")
+			}
+			if !item.cancel && actionErr != nil {
+				t.Fatalf("drag: %v %+v", actionErr, result.Result)
+			}
+			var facts map[string]any
+			var events []any
+			deadline := time.Now().Add(2 * time.Second)
+			for time.Now().Before(deadline) {
+				facts = read()
+				events, _ = facts["drag_events"].([]any)
+				if len(events) > 0 && events[len(events)-1].(map[string]any)["type"] == "up" {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if evidence := os.Getenv("REDEVEN_COMPUTER_EVIDENCE_DIR"); filepath.IsAbs(evidence) {
+				if err := os.MkdirAll(evidence, 0700); err != nil {
+					t.Fatal(err)
+				}
+				body, _ := json.MarshalIndent(map[string]any{"case": item.name, "duration_ms": item.duration, "facts": facts, "error": fmt.Sprint(actionErr)}, "", "  ")
+				if err := os.WriteFile(filepath.Join(evidence, "native-direct-"+item.name+".json"), body, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var down, up []map[string]any
+			for _, value := range events {
+				event := value.(map[string]any)
+				if event["type"] == "down" {
+					down = append(down, event)
+				}
+				if event["type"] == "up" {
+					up = append(up, event)
+				}
+			}
+			if len(down) != 1 || len(up) != 1 {
+				t.Fatalf("unbalanced input: %+v", events)
+			}
+			held := up[0]["time_ms"].(float64) - down[0]["time_ms"].(float64)
+			eventHeld := up[0]["event_time_ms"].(float64) - down[0]["event_time_ms"].(float64)
+			if item.cancel {
+				if held < 75 || held > 1500 || up[0]["x"].(float64) >= 300 {
+					t.Fatalf("cancelled path completed or release late: %.2f ms %+v", held, up[0])
+				}
+			} else if eventHeld < float64(item.duration) || held < float64(item.duration)-20 || held > float64(item.duration)+1500 || up[0]["x"] != float64(300) || up[0]["y"] != float64(150) {
+				t.Fatalf("duration/endpoint mismatch: %.2f ms %+v", held, up[0])
+			}
+			t.Logf("actual AppKit hold %.2f ms; system event hold %.2f ms; events %d", held, eventHeld, len(events))
+		})
+	}
+}

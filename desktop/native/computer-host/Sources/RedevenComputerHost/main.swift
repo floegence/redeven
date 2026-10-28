@@ -131,7 +131,7 @@ func handle(_ line: String) {
             return CGPoint(x: bounds.minX + local.x, y: bounds.minY + local.y)
         }
         var payload: [String: Any] = [:]
-        var events: [CGEvent] = []
+        var input = NativeInputSequence(events: [])
         var focusElement: AXUIElement?
         var mode = "background"
         let beforeInput = foreground.inputCount
@@ -154,42 +154,42 @@ func handle(_ line: String) {
                 // AX permission does not promise that an application will stay
                 // in the background. Announce and authorize that possibility
                 // before dispatch; do not activate the app merely to use AX.
-                try foreground.post([], window: selected, allowed: allowForeground, privateInput: privateInput, activate: false, started: {
+                try foreground.post(NativeInputSequence(events: []), window: selected, allowed: allowForeground, privateInput: privateInput, activate: false, started: {
                     emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground", "reason": "application_may_activate"])
                 }, prepare: {
                     payload = try selected.action(args, willMutate: { effectStarted = true; foreground.markActionStarted() })
                     if beforeApplication != NSWorkspace.shared.frontmostApplication?.processIdentifier || beforePointer != CGEvent(source: nil)?.location { mode = "foreground" }
                 }, didPost: {})
             }
-            else if action == "pointer_click" { events = try NativeInput.click(at: point("x", "y"), count: 1) }
-            else if action == "drag" { events = try NativeInput.drag(from: point("from_x", "from_y"), to: point("to_x", "to_y"), durationMilliseconds: Int(number("duration_ms", default: 0))) }
+            else if action == "pointer_click" { input = NativeInputSequence(events: try NativeInput.click(at: point("x", "y"), count: 1)) }
+            else if action == "drag" { input = try NativeInput.dragSequence(from: point("from_x", "from_y"), to: point("to_x", "to_y"), durationMilliseconds: nativeDragDuration(number("duration_ms", default: 0))) }
             else if action == "key" {
                 if let selector = args["selector"] as? [String: Any] {
                     focusElement = try selected.resolve(selector)
                 }
-                events = try NativeInput.key(text("key"))
+                input = NativeInputSequence(events: try NativeInput.key(text("key")))
             } else if action == "scroll" {
                 guard let selector = args["selector"] as? [String: Any], let rect = axRect(try selected.resolve(selector)) else { throw NativeInput.invalid("A scroll control is required.") }
-                events = try NativeInput.scroll(at: CGPoint(x: rect.midX, y: rect.midY), x: number("delta_x", default: 0), y: number("delta_y"), naturalScrolling: UserDefaults.standard.bool(forKey: "com.apple.swipescrolldirection"))
+                input = NativeInputSequence(events: try NativeInput.scroll(at: CGPoint(x: rect.midX, y: rect.midY), x: number("delta_x", default: 0), y: number("delta_y"), naturalScrolling: UserDefaults.standard.bool(forKey: "com.apple.swipescrolldirection")))
             } else { throw NativeInput.invalid("Unsupported semantic action.") }
         case "computer.wait":
             let milliseconds = try number("milliseconds", default: 0)
             guard (0...30000).contains(milliseconds) else { throw NativeInput.invalid("Wait exceeds its limit.") }
             let until = Date().addingTimeInterval(milliseconds / 1000)
             while Date() < until && !selected.userInControl { try execution.check(); CFRunLoopRunInMode(.defaultMode, until.timeIntervalSinceNow, true) }
-        case "computer.click", "computer.double_click": events = try NativeInput.click(at: point("x", "y"), count: tool == "computer.double_click" ? 2 : 1)
-        case "computer.drag": events = try NativeInput.drag(from: point("from_x", "from_y"), to: point("to_x", "to_y"), durationMilliseconds: Int(number("duration_ms", default: 0)))
-        case "computer.type": events = try NativeInput.text(text("text"))
-        case "computer.key": events = try NativeInput.key(text("key"))
+        case "computer.click", "computer.double_click": input = NativeInputSequence(events: try NativeInput.click(at: point("x", "y"), count: tool == "computer.double_click" ? 2 : 1))
+        case "computer.drag": input = try NativeInput.dragSequence(from: point("from_x", "from_y"), to: point("to_x", "to_y"), durationMilliseconds: nativeDragDuration(number("duration_ms", default: 0)))
+        case "computer.type": input = NativeInputSequence(events: try NativeInput.text(text("text")))
+        case "computer.key": input = NativeInputSequence(events: try NativeInput.key(text("key")))
         case "computer.scroll":
             guard let bounds = axRect(selected.element) else { throw NativeInput.unavailable() }
             let scrollPoint = args["x"] != nil || args["y"] != nil ? try point("x", "y") : CGPoint(x: bounds.midX, y: bounds.midY)
-            events = try NativeInput.scroll(at: scrollPoint, x: number("delta_x", default: 0), y: number("delta_y"), naturalScrolling: UserDefaults.standard.bool(forKey: "com.apple.swipescrolldirection"))
+            input = NativeInputSequence(events: try NativeInput.scroll(at: scrollPoint, x: number("delta_x", default: 0), y: number("delta_y"), naturalScrolling: UserDefaults.standard.bool(forKey: "com.apple.swipescrolldirection")))
         default: throw HostFailure(code: "TARGET_CAPABILITY_UNAVAILABLE", message: "The application target does not support this tool.")
         }
-        if !events.isEmpty {
+        if !input.events.isEmpty {
             mode = "foreground"
-            try foreground.post(events, window: selected, allowed: allowForeground, privateInput: privateInput, started: {
+            try foreground.post(input, window: selected, allowed: allowForeground, privateInput: privateInput, started: {
                 emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground", "reason": "native_input_required"])
             }, prepare: {
                 if let node = focusElement {

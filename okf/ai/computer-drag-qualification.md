@@ -1,7 +1,7 @@
 ---
 type: Verification Evidence
-title: Browser drag timing qualification
-description: Retain deterministic timing evidence and separate model deviations from browser contract failures.
+title: Browser and native drag timing qualification
+description: Retain browser and macOS timing evidence and separate model deviations from tool contract failures.
 tags: [ai, computer-use, testing, evidence]
 lifecycle: active_evidence
 reviewed_at: "2026-10-28"
@@ -44,6 +44,49 @@ claim zero model errors or a general success probability.
 # Boundaries
 
 Native macOS event construction/delivery was reviewed but not changed or timed
-in this browser qualification. Its duration currently affects path sampling
-without an explicit elapsed-time schedule. A native repair needs upstream-owned
-scheduling and native delivery evidence; browser success must not certify it.
+in that browser qualification. The subsequent native qualification below owns
+evidence for the separate native repair.
+
+
+## Native drag contract qualification — 2026-10-28
+
+The Floegence-owned floe-native-apps implementation now schedules native
+input against one monotonic origin after acknowledged mouse-down. Redeven uses
+that public sequence through its existing authorization, event-receipt and held
+input cleanup path. No application-specific detection or recovery was added.
+
+A separate AppKit receiver reproduced the old implementation releasing a 500 ms
+drag in about 17 ms. The repaired upstream receiver measured system event spans
+of 1.11/2.76/501.79/5001.71 ms for requests of 0/1/500/5000 ms. Cancellation of a
+5000 ms drag released after 113.91 ms without reaching the endpoint. The
+production Redeven helper passed all five corresponding direct scenarios;
+500/5000 ms requests measured 503.42/5005.30 ms. These are local event-delivery
+measurements, not a guarantee that every application accepts a business action.
+
+The configured real DeepSeek V4.1 Flash (1017) provider ran five native scenarios
+three times: timed drag, invalid-duration rejection followed by a timed drag,
+zero-duration drag, accessibility tree inspection and exact text entry. Eleven
+original assertions passed. Three failures expected a browser-only diagnostic
+field on a valid native rejection; one log parser stopped at a brace in a text
+label before the complete JSON evidence. These are test defects, retained in
+separate raw reports. One tree task also contained four model JavaScript field
+errors before successful observation and a single confirmed input; those errors
+remain model failures, not tool defects. Corrected validation/tree assertions
+passed six additional real-model tasks. Intentional invalid durations were
+rejected before input in every corresponding task.
+
+Upstream Swift scheduling tests cover boundaries, slow receipts, cancellation,
+unknown-effect failure and ordinary input. Downstream native protocol tests
+reject fractional, non-finite and out-of-range durations before integer
+conversion. The default three-tool surface and system prompt remain unchanged;
+native help states the duration range, straight-path meaning and timing limits.
+
+
+Nine additional real-model browser tasks (three repetitions of timed drag,
+invalid-duration rejection and multi-page script batching) passed. An initial
+command used an unanchored scenario selector, unintentionally admitted three
+native cases without their required opt-in, and failed before those model runs;
+its nine browser reports are retained separately. The precisely selected rerun
+passed all nine assertions. Some successful tasks still contained model syntax,
+argument or non-actionable-target errors before recovery; passing the final
+fixture contract does not mean every model call was valid.
