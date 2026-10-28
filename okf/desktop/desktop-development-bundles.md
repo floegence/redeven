@@ -5,7 +5,7 @@ description: Own development services, credentials and bundle retention.
 tags: [desktop, development, storage, retention]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -21,6 +21,8 @@ reviewed_at: "2026-10-26"
 scripts/dev_desktop.sh captures HEAD/current tracked and non-ignored source; concurrent edits fail. Generated OKF/ignored assets are outputs; protect authored OKF/builders/Go embeds. A profile-local receipt reuses output only when HEAD, dirty source, dependency bytes, toolchains, target/settings and verified Desktop/immutable Runtime bytes match. Missing/changed/incomplete output rebuilds; failed preparation never launches old bundles. Only installing pinned Rust admits preparation-time toolchain drift.
 
 --rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests choose pnpm/npm; receipts bind selected locks/toolchain, not a second installer from compatibility locks. First launch establishes receipts.
+
+On macOS, preparation reads enabled static HTTP/HTTPS system proxies once and exports them to dependency and bundle build tools. Any explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY variable (including lowercase or empty values) owns network policy and disables discovery; REDEVEN_DEV_SYSTEM_PROXY=0 also opts out. Preserve explicit NO_PROXY; otherwise include loopback and compatible system exclusions. PAC/SOCKS-only settings require explicit environment policy. Diagnostics never expose credentials; TLS and official artifact verification remain mandatory. Remove only inferred variables before launching Desktop, Runtime or Gateways.
 
 Development may cache Cargo registry/targets while staging exact locked published crates freshly. Verify digest/execution/consumption and regenerate evidence. Complete caches resolve/install offline; incomplete caches follow acquisition policy with diagnostics. Corrupt crates or compiler failure cannot retry via another path. Release Cargo dirs stay isolated. Source changes rebuild whole product, not component/watch mode.
 
@@ -49,6 +51,7 @@ in-progress directories.
 
 - `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Input drift, corruption and toolchain admission.
+- `redeven:scripts/dev_desktop_build_proxy.test.mjs` and `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Proxy precedence, preparation inheritance and launch isolation.
 - `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.
 - `redeven:scripts/build_assets.test.mjs` - Cold-install ordering and asset/notice failure propagation.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.

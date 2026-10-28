@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 if [ "${FAKE_SESSION_CASE:-}" = "" ]; then
-  for session_case in interrupt terminate normal electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure build-interrupt; do
+  for session_case in interrupt terminate normal system-proxy electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure build-interrupt; do
     FAKE_SESSION_CASE="$session_case" "$0"
   done
   exit 0
@@ -41,6 +41,14 @@ cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "
 cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$ROOT_DIR/scripts/run_parallel_builds.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
+cat > "$FAKE_SCRIPTS/dev_desktop_build_proxy.mjs" <<'JS'
+if (process.env.FAKE_SESSION_CASE === 'system-proxy') {
+  console.log('https_proxy=http://127.0.0.1:1082');
+  console.log('HTTPS_PROXY=http://127.0.0.1:1082');
+  console.log('no_proxy=localhost,127.0.0.1,::1');
+  console.log('NO_PROXY=localhost,127.0.0.1,::1');
+}
+JS
 cat > "$FAKE_SCRIPTS/dev_desktop_build_cache.mjs" <<'JS'
 if (process.argv[2] === 'capture') console.log('{}');
 if (process.argv[2] === 'key') console.log('a'.repeat(64));
@@ -57,6 +65,10 @@ JS
 
 printf '%s\n' '{"name":"@floegence/redeven-desktop"}' > "$FAKE_DESKTOP/package.json"
 cat > "$FAKE_DESKTOP/node_modules/electron/index.js" <<'JS'
+if (process.env.FAKE_SESSION_CASE === 'system-proxy' && !require('node:fs').existsSync(process.env.FAKE_ELECTRON_PATH + '.proxy-prepared')) {
+  if (process.env.https_proxy !== 'http://127.0.0.1:1082') throw new Error('missing macOS build proxy during dependency preparation');
+  require('node:fs').writeFileSync(process.env.FAKE_ELECTRON_PATH + '.proxy-prepared', 'verified');
+}
 if (process.env.FAKE_SESSION_CASE === 'electron-download') {
   console.log('Downloading Electron binary...');
   require('node:child_process').spawnSync(process.execPath, ['-e', 'console.log("Electron installer output")'], { stdio: 'inherit' });
@@ -67,6 +79,7 @@ JS
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
+  'if [ "$FAKE_SESSION_CASE" = system-proxy ]; then [ -z "${https_proxy+x}${HTTPS_PROXY+x}${no_proxy+x}${NO_PROXY+x}" ] || exit 91; fi' \
   'rm -f "$FAKE_RUNTIME_STOPPED"' \
   'printf "%s\\n" "$$" > "$FAKE_ELECTRON_STARTED"' \
   'on_signal() {' \
@@ -74,7 +87,7 @@ printf '%s\n' \
   '  exit 0' \
   '}' \
   'trap on_signal INT TERM' \
-  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = electron-download ] || [ "$FAKE_SESSION_CASE" = electron-reinstall ] || [ "$FAKE_SESSION_CASE" = gateway-failure ] || [ "$FAKE_SESSION_CASE" = cache-hit ]; then sleep 0.2; exit 0; fi' \
+  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = system-proxy ] || [ "$FAKE_SESSION_CASE" = electron-download ] || [ "$FAKE_SESSION_CASE" = electron-reinstall ] || [ "$FAKE_SESSION_CASE" = gateway-failure ] || [ "$FAKE_SESSION_CASE" = cache-hit ]; then sleep 0.2; exit 0; fi' \
   'while :; do sleep 0.05; done' > "$FAKE_ELECTRON_PATH"
 chmod 700 "$FAKE_ELECTRON_PATH"
 
@@ -83,12 +96,14 @@ printf '%s\n' \
   'set -euo pipefail' \
   'case "${1:-}:${2:-}" in' \
   '  run:build)' \
+  '    if [ "$FAKE_SESSION_CASE" = system-proxy ]; then [ "${https_proxy:-}" = http://127.0.0.1:1082 ] && [ "${NO_PROXY:-}" = localhost,127.0.0.1,::1 ] || exit 92; fi' \
   '    if [ "$FAKE_SESSION_CASE" = build-interrupt ]; then echo "$$" > "$FAKE_BUILD_PID"; while :; do sleep 0.05; done; fi' \
   '    if [ "$FAKE_SESSION_CASE" = cache-hit ] || [ "$FAKE_SESSION_CASE" = build-failure ]; then echo "unexpected or failed build" >&2; exit 23; fi' \
   '    if [ "$FAKE_SESSION_CASE" = source-drift ]; then printf "changed during Desktop build\n" >> "$PWD/package.json"; fi' \
   '    exit 0' \
   '    ;;' \
   '  run:prepare:bundled-runtime)' \
+  '    if [ "$FAKE_SESSION_CASE" = system-proxy ]; then [ "${HTTPS_PROXY:-}" = http://127.0.0.1:1082 ] && [ -f "$FAKE_ELECTRON_PATH.proxy-prepared" ] || exit 93; fi' \
   '    if [ "$FAKE_SESSION_CASE" = electron-reinstall ]; then' \
   '      mv "$FAKE_ELECTRON_PATH" "$FAKE_ELECTRON_PATH.rebuilt"' \
   '      printf "module.exports = process.env.FAKE_ELECTRON_PATH + \".rebuilt\";\n" > node_modules/electron/index.js' \
@@ -107,6 +122,7 @@ cat > "$FAKE_DESKTOP/dist/main/gatewayServiceHost.js" <<'JS'
 const fs = require('node:fs/promises');
 const path = require('node:path');
 exports.ensureManagedGatewayServiceReady = async options => {
+  if (process.env.FAKE_SESSION_CASE === 'system-proxy' && ['https_proxy', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY'].some(name => Object.hasOwn(process.env, name))) throw new Error('Build proxy leaked into Gateway preparation');
   if (options.forceUpdate === true) throw new Error('Development startup must reuse compatible Gateway installations');
   if (options.targetCommit !== process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) throw new Error('Gateway installation target does not match the current Desktop build');
   const binary = path.join(options.stateRoot, 'managed/bin/redeven-gateway');
@@ -152,6 +168,9 @@ export REDEVEN_DESKTOP_BUNDLE_COMMIT="$(git -C "$FAKE_CHECKOUT" rev-parse --shor
 export REDEVEN_DESKTOP_LOCAL_UI_BIND="localhost:32140"
 export REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=0
 export REDEVEN_DESKTOP_INSPECT_PORT=0
+if [ "$FAKE_SESSION_CASE" = system-proxy ]; then
+  unset http_proxy HTTP_PROXY https_proxy HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+fi
 
 mkdir -p "$STATE_ROOT/local-environment"
 printf '%s\n' 'legacy-runtime-lock' > "$STATE_ROOT/local-environment/agent.lock"

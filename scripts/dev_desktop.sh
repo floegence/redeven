@@ -38,6 +38,7 @@ BUILD_HELPER_PID=""
 SHUTDOWN_REQUESTED=0
 SHUTDOWN_EXIT_STATUS=0
 CLEANUP_RUNNING=0
+BUILD_PROXY_VARIABLES=()
 
 if [ -n "$REMOTE_DEBUGGING_PORT" ] || [ -n "$INSPECT_PORT" ] || [ -n "$LOCAL_UI_BIND" ]; then
 	PORTS_EXPLICIT=1
@@ -61,6 +62,9 @@ recovery screen; only its explicit migration action requests authorization.
 Keep the encryption key with this profile.
 Unchanged source, dependencies and toolchains reuse a verified build.
 Changed or damaged inputs rebuild automatically; --rebuild forces preparation.
+On macOS, dependency and bundle preparation inherit static system proxies when
+no proxy environment variable is set. Explicit environment settings take priority.
+The inferred proxies apply only to preparation, not the launched services.
 After building, keep the three newest development bundles plus the selected
 bundle and any older bundles still referenced by running processes.
 
@@ -92,6 +96,8 @@ Environment:
   REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG=<vX.Y.Z|v0.0.0-dev>
   REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT=<redeven-checkout>
   REDEVEN_AGENT_FORCE_INSTALL=1
+  REDEVEN_DEV_SYSTEM_PROXY=0 (disable macOS build proxy discovery)
+  HTTPS_PROXY, HTTP_PROXY, ALL_PROXY, NO_PROXY (explicit build network policy)
 USAGE
 }
 
@@ -721,6 +727,27 @@ ensure_desktop_workspace() {
   fi
 }
 
+prepare_build_proxy() {
+  [ "$DRY_RUN" -eq 0 ] || return 0
+  local settings entry name
+  settings=$(node "$SCRIPT_DIR/dev_desktop_build_proxy.mjs") || return $?
+  [ -n "$settings" ] || return 0
+  while IFS= read -r entry; do
+    name=${entry%%=*}
+    export "$entry"
+    BUILD_PROXY_VARIABLES+=("$name")
+  done <<< "$settings"
+  ui_pkg_log "Build downloads: using macOS system proxy settings (preparation only)."
+}
+
+restore_build_proxy() {
+  local name
+  if [ "${#BUILD_PROXY_VARIABLES[@]}" -gt 0 ]; then
+    for name in "${BUILD_PROXY_VARIABLES[@]}"; do unset "$name"; done
+    BUILD_PROXY_VARIABLES=()
+  fi
+}
+
 ensure_desktop_dependencies() {
   if [ "$DRY_RUN" -eq 1 ]; then
     return 0
@@ -889,6 +916,7 @@ start_desktop() {
   # Asset builds may reinstall Desktop dependencies; resolve the final package.
   electron_binary="$(ui_pkg_electron_binary "$DESKTOP_DIR")"
   [ -x "$electron_binary" ] || ui_pkg_die "Electron executable is unavailable: $electron_binary"
+  restore_build_proxy
   cmd=("$electron_binary")
   if [ "${#ELECTRON_DEBUG_ARGS[@]}" -gt 0 ]; then
     cmd+=("${ELECTRON_DEBUG_ARGS[@]}")
@@ -1023,6 +1051,7 @@ main() {
   fi
   verify_development_ports
   ensure_desktop_workspace
+  prepare_build_proxy
   local dependency_start=$SECONDS
   ensure_desktop_dependencies
   ui_pkg_log "Dependency preparation: $((SECONDS - dependency_start))s"
