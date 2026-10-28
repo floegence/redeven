@@ -26,7 +26,8 @@ The existing field reader remains the sole read owner. Header rendering adds no 
 Flower must not recover a missing child identity from activity sidecars, a title, a delegated approval alias, a fallback thread id, or local state.
 
 The dropdown lists tasks only. The empty trigger uses Floe's outline Workflow
-icon; canonical portrait stacks remain for existing agents. The published
+icon; canonical portrait stacks remain for existing agents. Empty dropdowns use
+a compact text row without an oversized illustration or placeholder card. The published
 SurfaceAnchoredLayer owns measured placement, local surface boundaries and
 viewport updates, with a six-pixel gap. Never position from an estimated menu
 width. Shared floating presence retains entry/exit motion and disables exiting

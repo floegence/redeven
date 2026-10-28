@@ -30,6 +30,9 @@ it('anchors the empty subagent panel to its control and retains shared exit moti
   expect(bounds.right).toBeGreaterThanOrEqual(anchor.left + anchor.width / 2);
   expect(bounds.top - anchor.bottom).toBeGreaterThanOrEqual(0);
   expect(bounds.top - anchor.bottom).toBeLessThanOrEqual(12);
+  expect(panel.querySelector('.flower-subagents-dropdown-count')).toBeNull();
+  expect(panel.querySelector('.flower-subagents-dropdown-empty svg')).toBeNull();
+  expect(bounds.height).toBeLessThan(100);
   await page.screenshot({ element: runtime, path: '__screenshots__/subagent-header/empty-anchored.png' });
   await userEvent.keyboard('{Escape}');
   expect(panel.isConnected).toBe(true);

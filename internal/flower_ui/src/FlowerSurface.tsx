@@ -12842,7 +12842,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-subagents-dropdown-header">
             <div class="flower-subagents-dropdown-title">
               <span>{subagentsCopy().title}</span>
-              <span class="flower-subagents-dropdown-count">{selectedSubagentItems().length}</span>
+              <Show when={selectedSubagentItems().length > 0}><span class="flower-subagents-dropdown-count">{selectedSubagentItems().length}</span></Show>
             </div>
             <Show when={selectedActiveSubagentCount() > 0}>
               <span class="flower-subagents-dropdown-active-count">
@@ -12856,7 +12856,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedSubagentItems().length > 0}
               fallback={(
                 <div class="flower-subagents-dropdown-empty">
-                  <Workflow class="h-5 w-5" aria-hidden="true" />
                   <span>{subagentsCopy().emptyTitle}</span>
                 </div>
               )}

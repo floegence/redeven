@@ -48,12 +48,16 @@ Desktop/mobile dialog shows final results, original inputs, collapsed conversati
 
 Use the published Dialog, file-type icon catalog and Button loading affordances.
 Deliverables and materials have counted section headings; conversation images
-and working files use keyboard-operable, initially collapsed disclosures. Cards
-prioritize title, compact file type, size and semantic availability; raw MIME
+and working files use keyboard-operable, initially collapsed disclosures. Flat
+rows prioritize clickable file titles, compact type/size and exceptional
+availability states; successful availability does not add a badge. Raw MIME
 parameters and internal endpoint IDs do not occupy primary reading space. Paths
 remain in the DOM with full-path tooltips and click/tap expansion; long titles wrap and whole actions
-reflow at phone widths. Preview leads, download/directory navigation are quiet
-secondary actions. Cleanup remains a separate confirmed destructive action.
+reflow at phone widths. The filename is the preview action; always-visible,
+accessibly named icon controls provide downloads, folder navigation and source
+messages. Counts are plain text and file icons have no backing tile. A single
+header close control replaces a redundant footer; refresh sits beside the first
+section heading. Cleanup remains a separate confirmed destructive action.
 Only the dialog body scrolls; the header and close action remain reachable.
 
 Browser evidence: internal/envapp/ui_src/src/ui/FlowerTaskFiles.browser.test.tsx

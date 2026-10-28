@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { ChevronRight, Download, Eye, Image, MessageSquare } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Download, MessageSquare } from '@floegence/floe-webapp-core/icons';
 import { FlowerTaskFileIdentity } from './FlowerTaskFileIdentity';
 import type { FlowerSurfaceAdapter, FlowerTaskMaterial } from './contracts/flowerSurfaceContracts';
 import type { TaskFilesCopy } from './taskFilesCopy';
@@ -55,15 +55,15 @@ export function FlowerTaskMaterials(props: {
     finally { if (url) URL.revokeObjectURL(url); if (downloadController === controller) setDownloading(false); }
   };
   const rows = (kind: 'input' | 'media') => <For each={items().filter(item => item.kind === kind)}>{item => (
-    <article class="flower-task-file-card flower-task-material-card">
+    <article class="flower-task-file-row flower-task-material-row">
       <FlowerTaskFileIdentity name={item.name} mime={item.mime} size={item.size}
+        onPreview={props.adapter.loadMessageAttachment && item.url ? () => open(item) : undefined} previewLabel={props.copy.preview}
         detail={<time class="flower-task-file-date" dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time>} />
       <div class="flower-task-file-actions">
         <Show when={props.adapter.loadMessageAttachment && item.url}>
-          <Button size="sm" variant="secondary" icon={Eye} onClick={() => open(item)}>{props.copy.preview}</Button>
-          <Button size="sm" variant="ghost" icon={Download} disabled={downloading()} onClick={() => void download(item)}>{props.copy.download}</Button>
+          <Button size="icon" variant="ghost" icon={Download} aria-label={props.copy.download} title={props.copy.download} disabled={downloading()} onClick={() => void download(item)} />
         </Show>
-        <Show when={props.onSource}><Button size="sm" variant="ghost" icon={MessageSquare} onClick={() => props.onSource?.(item.item_id)}>{props.copy.source}</Button></Show>
+        <Show when={props.onSource}><Button size="icon" variant="ghost" icon={MessageSquare} aria-label={props.copy.source} title={props.copy.source} onClick={() => props.onSource?.(item.item_id)} /></Show>
       </div>
     </article>
   )}</For>;
@@ -73,7 +73,7 @@ export function FlowerTaskMaterials(props: {
     <Show when={error()}><p role="alert" class="text-destructive">{error()}</p><Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
     <Show when={!loading() && !error() && items().length === 0}><p class="flower-task-files-empty">{cursor() ? props.copy.materialsEarlier : props.copy.materialsEmpty}</p></Show>
     <Show when={items().some(item => item.kind === 'input')}><div class="flower-task-files-list">{rows('input')}</div></Show>
-    <Show when={items().some(item => item.kind === 'media')}><details class="flower-task-media"><summary><span class="flower-task-disclosure-icon"><Image class="size-4" aria-hidden="true" /></span><span class="flower-task-disclosure-title">{props.copy.media}</span><span class="flower-task-count">{items().filter(item => item.kind === 'media').length}</span><ChevronRight class="flower-task-disclosure-chevron size-4" aria-hidden="true" /></summary><div class="flower-task-files-list">{rows('media')}</div></details></Show>
+    <Show when={items().some(item => item.kind === 'media')}><details class="flower-task-media"><summary><span class="flower-task-disclosure-title">{props.copy.media}</span><span class="flower-task-count">{items().filter(item => item.kind === 'media').length}</span><ChevronRight class="flower-task-disclosure-chevron size-4" aria-hidden="true" /></summary><div class="flower-task-files-list">{rows('media')}</div></details></Show>
     <Show when={cursor()}><Button size="sm" variant="ghost" class="flower-task-load-more" loading={loading()} onClick={() => void load(true)}>{props.copy.more}</Button></Show>
     <FlowerAttachmentPreviewWindow source={preview()} loadingLabel={props.copy.loading} unavailableLabel={props.copy.unavailable} onClose={() => setPreview(null)} zIndex={100} />
   </section>;

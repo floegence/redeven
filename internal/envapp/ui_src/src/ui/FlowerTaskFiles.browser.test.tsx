@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { it, expect, vi, onTestFinished } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { FlowerTaskMaterials } from '../../../../flower_ui/src/FlowerTaskMaterials';
 import { messageAttachmentPath } from '../../../../flower_ui/host/messageAttachmentPath';
 import { FlowerTaskFiles } from '../../../../flower_ui/src/FlowerTaskFiles';
@@ -51,8 +51,8 @@ it('opens delivered files with the shared desktop preview capability', async () 
   [...surface.querySelectorAll('button')].find(button => button.textContent?.includes('Deploy plan'))!.click();
   await waitFor(() => Boolean(surface.querySelector('button[aria-label="Files"]:not(:disabled)')));
   surface.querySelector<HTMLButtonElement>('button[aria-label="Files"]')!.click();
-  await waitFor(() => Boolean(document.querySelector('.flower-task-file-card')));
-  const preview = [...document.querySelectorAll<HTMLButtonElement>('.flower-task-file-actions button')].find(button => button.textContent?.trim() === 'Preview');
+  await waitFor(() => Boolean(document.querySelector('.flower-task-file-row')));
+  const preview = document.querySelector<HTMLButtonElement>('.flower-task-file-preview');
   expect(preview).toBeTruthy();
   preview!.click();
   await waitFor(() => document.querySelector('.flower-attachment-preview-text')?.textContent === 'Delivered report');
@@ -82,11 +82,12 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
   );
   const button = (text: string) =>
     [...document.querySelectorAll<HTMLButtonElement>('.flower-task-files-dialog button')].find(
-      (b) => b.textContent?.trim() === text,
+      (b) => b.getAttribute('aria-label') === text || b.getAttribute('aria-label')?.startsWith(text + ': ') || b.textContent?.trim() === text,
     )!;
   try {
-    await waitFor(() => Boolean(document.querySelector('.flower-task-file-card')));
-    button('Preview').click();
+    await waitFor(() => Boolean(document.querySelector('.flower-task-file-row')));
+    button('Preview').focus();
+    await userEvent.keyboard('{Enter}');
     expect(preview).toHaveBeenCalledWith(expect.objectContaining({ path: '/project/report.html', thread_id: 'one' }));
     button('Open folder').click();
     expect(folder).toHaveBeenCalledWith(expect.objectContaining({ path: '/project' }));
@@ -149,10 +150,10 @@ it('ignores stale thread responses and disables missing files and active cleanup
     await waitFor(() => document.body.textContent?.includes('New result') === true);
     resolveOld(fixture());
     await Promise.resolve();
-    expect(document.querySelector('.flower-task-file-card')?.textContent).toContain('New result');
+    expect(document.querySelector('.flower-task-file-row')?.textContent).toContain('New result');
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('.flower-task-files-dialog button')];
     for (const text of ['Preview', 'Download', 'Clean working files'])
-      expect(buttons.find((b) => b.textContent?.trim() === text)?.disabled).toBe(true);
+      expect(buttons.find((b) => b.getAttribute('aria-label') === text || b.getAttribute('aria-label')?.startsWith(text + ': ') || b.textContent?.trim() === text)?.disabled).toBe(true);
   } finally {
     dispose();
     host.remove();
@@ -180,22 +181,22 @@ it('pages materials, folds images, previews originals and opens their source', a
   try {
     await waitFor(() => host.textContent?.includes(taskFilesEnUS.materialsEarlier) === true);
     [...host.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === taskFilesEnUS.more)!.click();
-    await waitFor(() => host.querySelectorAll('.flower-task-material-card').length === 2);
+    await waitFor(() => host.querySelectorAll('.flower-task-material-row').length === 2);
     expect(load).toHaveBeenLastCalledWith('one', 'older');
     expect(host.querySelector<HTMLDetailsElement>('details')!.open).toBe(false);
-    const first = host.querySelector('.flower-task-material-card')!;
-    [...first.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === taskFilesEnUS.preview)!.click();
+    const first = host.querySelector('.flower-task-material-row')!;
+    [...first.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label')?.startsWith(taskFilesEnUS.preview + ': '))!.click();
     await waitFor(() => document.querySelector('.flower-attachment-preview-text')?.textContent === 'amount\n4\n8\n15');
     expect(bytes).toHaveBeenCalledWith(expect.objectContaining({ url: item.url }));
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     try {
-      [...first.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === taskFilesEnUS.download)!.click();
+      [...first.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === taskFilesEnUS.download)!.click();
       await waitFor(() => click.mock.calls.length === 1);
       const downloaded = click.mock.instances[0] as HTMLAnchorElement;
       expect(downloaded.download).toBe('source.csv');
       expect(downloaded.href).toMatch(/^blob:/u);
     } finally { click.mockRestore(); }
-    [...first.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === taskFilesEnUS.source)!.click();
+    [...first.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === taskFilesEnUS.source)!.click();
     expect(source).toHaveBeenCalledWith('user:one');
   } finally { dispose(); host.remove(); }
 });
@@ -237,7 +238,7 @@ it('opens an image source in its historical turn even when tool steps were folde
   surface.querySelector<HTMLButtonElement>('button[aria-label="Files"]')!.click();
   await waitFor(()=>Boolean(document.querySelector('.flower-task-media')));
   document.querySelector<HTMLDetailsElement>('.flower-task-media')!.open=true;
-  [...document.querySelectorAll<HTMLButtonElement>('.flower-task-material-card button')].find(b=>b.textContent===taskFilesEnUS.source)!.click();
+  [...document.querySelectorAll<HTMLButtonElement>('.flower-task-material-row button')].find(b=>b.getAttribute('aria-label')===taskFilesEnUS.source)!.click();
   await waitFor(()=>Boolean(surface.querySelector('[data-flower-message-id="source-image"]')));
   expect(history).toHaveBeenCalledWith('source-thread',expect.objectContaining({anchor_id:'source-image',direction:'around',limit:50}),expect.any(AbortSignal));
   const target=surface.querySelector<HTMLElement>('[data-flower-message-id="source-image"]')!;
@@ -270,13 +271,24 @@ for (const theme of ['light', 'dark'] as const) {
       await new Promise(resolve => setTimeout(resolve, 300));
       const body = dialog.querySelector<HTMLElement>('.flower-task-files-content')!;
       expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
-      const cards = [...dialog.querySelectorAll<HTMLElement>('.flower-task-file-card')];
+      const cards = [...dialog.querySelectorAll<HTMLElement>('.flower-task-file-row')];
       const title = cards[0].querySelector<HTMLElement>('.flower-task-file-name')!;
       expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
       expect(dialog.textContent).not.toContain('runtime-one');
       expect(cards[0].querySelector('.flower-task-file-path')?.getAttribute('title')).toBe(path);
       expect(cards[0].querySelector('.flower-task-file-meta')?.textContent).not.toContain('charset');
       expect(cards[0].querySelector('.flower-task-file-icon svg')).not.toBeNull();
+      expect(cards[0].querySelector('[data-status="available"]')).toBeNull();
+      expect(dialog.querySelector('.flower-task-files-toolbar')).toBeNull();
+      expect(dialog.querySelectorAll('button[aria-label="关闭"]').length).toBe(1);
+      expect(getComputedStyle(cards[0]).borderTopWidth).toBe('0px');
+      expect(getComputedStyle(cards[0]).borderRadius).toBe('0px');
+      const preview = cards[0].querySelector<HTMLButtonElement>('.flower-task-file-preview')!;
+      expect(preview.getAttribute('aria-label')).toBe('预览: Cloudflare 账号安全洞察汇总（可视化报告）');
+      preview.focus();
+      expect(document.activeElement).toBe(preview);
+      expect(getComputedStyle(preview).outlineStyle).not.toBe('none');
+      preview.blur();
       for (const button of cards.flatMap(card => [...card.querySelectorAll('button')])) {
         expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
         const bounds = button.getBoundingClientRect(), card = button.closest('article')!.getBoundingClientRect();
@@ -290,7 +302,8 @@ for (const theme of ['light', 'dark'] as const) {
       const disclosure = dialog.querySelector<HTMLDetailsElement>('.flower-task-media')!;
       expect(disclosure.open).toBe(false);
       expect(getComputedStyle(disclosure.querySelector('summary')!).listStyleType).toBe('none');
-      await page.screenshot({ element: dialog, path: '__screenshots__/files-polish-' + theme + '-' + width + '.png' });
+      location.blur();
+      await page.screenshot({ element: dialog, path: '__screenshots__/files-minimal-' + theme + '-' + width + '.png' });
     }
   });
 }
