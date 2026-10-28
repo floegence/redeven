@@ -26490,7 +26490,7 @@
       "frontmatter": {
         "description": "Select authorized directories through one navigation core in Flower, Spaces, and other filesystem pickers.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-28",
         "tags": [
           "filesystem",
           "flower",
@@ -26502,15 +26502,15 @@
         "title": "Absolute filesystem directory selection",
         "type": "UI Contract"
       },
-      "body_length": 2163,
+      "body_length": 3366,
       "summary": "Published Floe owns picker navigation, validity and request lifetime; Redeven supplies connection, authoritative path context, localization and form state. Paths are absolute and / means the target filesystem root. Home/Root shortcuts grant no access. Failed navigation preserves intent/form, disables confirmation and offers Retry; execution revalidates current policy.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Absolute paths and runtime authority\nDirectoryPicker, DirectoryInput and file pickers share the released core. Invalid context cannot synthesize Home/Root permissions. [Filesystem policy](../security/permission-policy-and-filesystem-scope.md) owns session, filesystem, OS and process access.\n\n## Navigation state and failures\nEach picker owns directory, entries, path input, hidden switch and validity. Stale successes/failures cannot replace newer intent. Validation is not authorization; changed policy/files/OS permissions may reject later operations.\n\n## Live language changes\nHome/Root resolve from active locale without replacing inputs/drafts/selection or reloading authorization. Desktop and Env App share the adapter.\n\n## Product presentations\nFiles uses released `parsePickerPath`/`formatPickerPath`; absolute input never gets a Home prefix. Actual viewports carry Workbench local-scroll markers; host/published components retain modal, keyboard and focus ownership.\n\n## Shared directory favorites\nAll pickers use controlled [favorites](directory-favorites.md), which own scoped persistence, refresh and failures. Shortcut views cannot confirm an earlier directory selection.",
-          "char_count": 1188
+          "body": "## Absolute paths and runtime authority\nDirectoryPicker, DirectoryInput and file pickers share the released core. Invalid context cannot synthesize Home/Root permissions. [Filesystem policy](../security/permission-policy-and-filesystem-scope.md) owns session, filesystem, OS and process access.\n\n## Navigation state and failures\nEach picker owns directory, entries, path input, hidden switch and validity. Stale successes/failures cannot replace newer intent. Validation is not authorization; changed policy/files/OS permissions may reject later operations.\n\n## Live language changes\nHome/Root resolve from active locale without replacing inputs/drafts/selection or reloading authorization. Desktop and Env App share the adapter.\n\n## Product presentations\nFiles uses released `parsePickerPath`/`formatPickerPath`; absolute input never gets a Home prefix. Actual viewports carry Workbench local-scroll markers; host/published components retain modal, keyboard and focus ownership.\n\nFiles owns its runtime recovery presentation over published Floe controls, icons and semantic colors. A failed navigation retains the last readable directory and shows one compact, dismissible notice with a selectable full path, adjacent copy action and grouped recovery actions. If no readable directory remains, a bounded recovery card replaces the listing. Long paths wrap and whole controls reflow inside Activity and scaled Workbench viewports.\n\nRuntime failures link the path input to the visible recovery description by ID instead of repeating its message under the toolbar. Syntax validation and canceled requests keep their own inline explanation. Editing clears the input's stale invalid state; it does not clear the unresolved navigation notice. Retry retains the same controls, focus and geometry through pending and repeated failure. Navigation, authorization, snapshots and persistence remain owned by the existing runtime controller.\n\n## Shared directory favorites\nAll pickers use controlled [favorites](directory-favorites.md), which own scoped persistence, refresh and failures. Shortcut views cannot confirm an earlier directory selection.",
+          "char_count": 2138
         },
         {
           "id": "boundaries",
@@ -26530,6 +26530,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx:0:published path parsing and formatting, absolute identity, and localized input recovery.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx",
           "description": "Published path parsing and formatting, absolute identity, and localized input recovery."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx:0:single error description, retained directory, localized light/dark and narrow recovery, selectable paths, retry continuity and explicit recovery destinations.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx",
+          "description": "Single error description, retained directory, localized light/dark and narrow recovery, selectable paths, retry continuity and explicit recovery destinations."
         }
       ],
       "snippet": "Published Floe owns picker navigation, validity and request lifetime; Redeven supplies connection, authoritative path context, localization and form state. Paths are absolute and / means the target filesystem root. Home/Root shortcuts grant",
@@ -32429,5 +32434,5 @@
       ]
     }
   ],
-  "source_sha256": "d91ba03cb0a201494bb70bc54ced773926c4d12e0f3f4fbb56c8487930f944d7"
+  "source_sha256": "a865abee28e42abf3cade91b74e43df972cbff9c5d9100ee062b83bc2853814b"
 }

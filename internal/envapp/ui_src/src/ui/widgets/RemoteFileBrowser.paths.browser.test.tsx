@@ -13,7 +13,8 @@ import { createDownloadManager } from '../downloads/createDownloadManager';
 import { FilePreviewContext } from './FilePreviewContext';
 import { createFilePreviewController } from './createFilePreviewController';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
-import { I18nProvider, type RedevenLocale } from '../i18n';
+import { createI18nHelpers, I18nProvider, type RedevenLocale } from '../i18n';
+import { loadEnvAppDictionary } from '../i18n/locales';
 import { writeStoredLanguagePreference } from '../i18n/storage';
 
 const home = '/Users/tangjianyin';
@@ -58,10 +59,11 @@ beforeEach(() => {
   transport.repo.mockReset().mockResolvedValue({ available: false, gitAvailable: false });
   transport.capabilities.mockReset().mockResolvedValue({});
 });
-afterEach(() => { releaseFavorites?.(); releaseFavorites = undefined; dispose?.(); document.body.replaceChildren(); vi.restoreAllMocks(); writeStoredLanguagePreference('en-US'); });
+afterEach(() => { releaseFavorites?.(); releaseFavorites = undefined; dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark'); vi.restoreAllMocks(); writeStoredLanguagePreference('en-US'); });
 
 async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean; picker?: boolean; locale?: RedevenLocale } = {}) {
   writeStoredLanguagePreference(options.locale ?? 'en-US');
+  const copy = createI18nHelpers(options.locale ?? 'en-US', await loadEnvAppDictionary(options.locale ?? 'en-US'));
   await page.viewport(1440, 900);
   const storage = options.storage ?? new Map<string, string>();
   const host = document.createElement('div');
@@ -104,11 +106,11 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
   const committedPath = () => host.querySelector('[data-testid="committed-path"]')?.textContent;
   const savedPaths = () => [...storage.entries()].filter(([key]) => key.includes('files:lastPath:')).map(([, value]) => JSON.parse(value));
   const enter = async (value: string) => {
-    const breadcrumb = host.querySelector<HTMLElement>('nav[aria-label="Breadcrumb"]')!;
-    const current = breadcrumb.querySelector<HTMLElement>('button[title="Go to path"]')!;
+    const breadcrumb = page.getByRole('navigation', { name: copy.t('files.breadcrumbLabel'), exact: true }).element();
+    const current = [...breadcrumb.querySelectorAll<HTMLButtonElement>('button')].find(button => button.title === copy.t('files.goToPath'))!;
     expect(current).toBeTruthy();
     await userEvent.click(current);
-    const input = page.getByRole('textbox', { name: 'Go to path', exact: true });
+    const input = page.getByRole('textbox', { name: copy.t('files.goToPath'), exact: true });
     await input.fill(value);
     await userEvent.keyboard('{Enter}');
   };
@@ -241,6 +243,68 @@ describe('Files directory favorites across published pickers', () => {
 });
 
 describe('Files path entry through the published components and runtime navigation', () => {
+  it.each([
+    ['light', 1200, 'en-US', 'activity'],
+    ['dark', 1200, 'zh-CN', 'activity'],
+    ['light', 640, 'de-DE', 'workbench'],
+    ['dark', 360, 'zh-TW', 'activity'],
+  ] as const)('keeps recovery compact and actionable in %s at %ipx in %s %s', async (theme, width, locale, placement) => {
+    const f = await mountFiles(target, placement, { locale });
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const surface = f.host.querySelector<HTMLElement>('[data-testid="files-surface"]')!;
+    surface.style.width = width + 'px';
+    surface.style.height = '640px';
+    const requested = width === 1200 ? '/123123' : '/Volumes/' + 'long-folder-name/'.repeat(8) + 'project';
+    transport.list.mockRejectedValue({ code: 404, message: 'not found' });
+    await f.enter(requested);
+    const copy = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
+    const panel = () => f.host.querySelector<HTMLElement>('[data-testid="file-browser-navigation-failure"]');
+    await expect.poll(() => panel()?.textContent).toContain(copy.t('files.navigationFailure.notFound'));
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-header-status"]')).toBeNull();
+    const viewport = f.host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+    await expect.poll(() => viewport.scrollWidth).toBe(viewport.clientWidth);
+    expect(panel()!.querySelector('dd')?.textContent).toBe(requested);
+    expect(f.host.querySelector('[data-file-browser-item-path="' + target + '/child"]')).not.toBeNull();
+    expect(f.committedPath()).toBe(target);
+    const bounds = panel()!.getBoundingClientRect();
+    for (const button of panel()!.querySelectorAll('button')) {
+      const rect = button.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+      expect(rect.right).toBeLessThanOrEqual(bounds.right);
+      expect(getComputedStyle(button).whiteSpace).toBe('nowrap');
+      expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+    }
+    if (width === 1200) expect(bounds.height).toBeLessThan(190);
+    await page.screenshot({ element: surface, path: '../../../node_modules/.cache/files-recovery/' + theme + '-' + width + '-' + locale + '.png' });
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    await page.getByRole('button', { name: copy.t('files.navigationFailure.copyPath'), exact: true }).click();
+    expect(write).toHaveBeenCalledWith(requested);
+    await page.getByRole('button', { name: copy.t('files.navigationFailure.dismiss'), exact: true }).click();
+    expect(panel()).toBeNull();
+    expect(f.committedPath()).toBe(target);
+  });
+
+  it('clears stale input validation when editing and keeps syntax feedback visible beside a recovery notice', async () => {
+    const f = await mountFiles(target);
+    const listExisting = transport.list.getMockImplementation()!;
+    transport.list.mockRejectedValue({ code: 404, message: 'not found' });
+    await f.enter('/123123');
+    const input = page.getByRole('textbox', { name: 'Go to path', exact: true });
+    await expect.poll(() => input.element().getAttribute('aria-invalid')).toBe('true');
+    await input.fill('relative');
+    expect(input.element().getAttribute('aria-invalid')).toBe('false');
+    expect(input.element().hasAttribute('aria-describedby')).toBe(false);
+    await userEvent.keyboard('{Enter}');
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-header-status"]')?.textContent).toContain('Enter an absolute path');
+    expect(document.getElementById(input.element().getAttribute('aria-describedby')!)?.textContent).toContain('Enter an absolute path');
+    transport.list.mockImplementation(listExisting);
+    await input.fill(home);
+    await userEvent.keyboard('{Enter}');
+    await expect.poll(f.committedPath).toBe(home);
+    expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+    expect(f.host.querySelector('[data-testid="file-browser-header-status"]')).toBeNull();
+  });
+
   it.each(['activity', 'workbench'] as const)('keeps long recovery paths and actions reachable in a narrow %s surface', async (placement) => {
     const longPath = `/Volumes/External drive/${'long-folder-'.repeat(16)}/project`;
     transport.list.mockRejectedValue({ code: 404, message: 'not found' });
@@ -282,17 +346,24 @@ describe('Files path entry through the published components and runtime navigati
     expect(viewport.contains(panel)).toBe(true);
     const retry = page.getByRole('button', { name: 'Retry', exact: true });
     const retryElement = retry.element();
+    const geometry = () => [...panel.querySelectorAll('button')].map(button => {
+      const rect = button.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
+    const beforeRetry = geometry();
     let reject!: (error: unknown) => void;
     transport.list.mockImplementation(() => new Promise((_, fail) => { reject = fail; }));
     await retry.click();
     await expect.poll(() => panel.getAttribute('aria-busy')).toBe('true');
     expect(document.activeElement).toBe(retryElement);
+    expect(geometry()).toEqual(beforeRetry);
     expect(f.host.querySelector('.redeven-loading-curtain')).toBeNull();
     await userEvent.keyboard('{Enter}');
     expect(transport.list).toHaveBeenCalledTimes(1);
     reject({ code: 404, message: 'not found' });
     await expect.poll(() => panel.getAttribute('aria-busy')).toBe('false');
     expect(retry.element()).toBe(retryElement);
+    expect(geometry()).toEqual(beforeRetry);
     expect(document.activeElement).toBe(retryElement);
     expect(f.committedPath()).toBe('');
     expect(f.savedPaths()).toEqual([]);
@@ -400,7 +471,15 @@ describe('Files path entry through the published components and runtime navigati
     await expect.poll(f.savedPaths).toContain(home);
     transport.list.mockRejectedValue({ code, message });
     await f.enter(target);
-    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-header-status"]')?.textContent).toBe(copy);
+    const notice = () => f.host.querySelector<HTMLElement>('[data-testid="file-browser-navigation-failure"]');
+    await expect.poll(() => notice()?.textContent).toContain(copy);
+    const input = f.host.querySelector<HTMLInputElement>('input[aria-label="Go to path"]')!;
+    await expect.poll(() => input.getAttribute('aria-invalid')).toBe('true');
+    expect(f.host.querySelector('[data-testid="file-browser-header-status"]')).toBeNull();
+    const description = document.getElementById(input.getAttribute('aria-describedby')!);
+    expect(description?.textContent).toBe(copy);
+    expect(notice()?.contains(description)).toBe(true);
+    expect(notice()!.getBoundingClientRect().height).toBeLessThan(code === 403 ? 230 : 190);
     expect(f.committedPath()).toBe(home);
     expect(f.host.querySelector<HTMLInputElement>('input[aria-label="Go to path"]')?.value).toBe(target);
     expect(f.savedPaths()).toEqual([home]);

@@ -3,7 +3,7 @@ import { Star } from '@floegence/floe-webapp-core/icons';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { classifyFilesystemPathError } from '../../../../../flower_ui/src/filePicker/filesystemPicker';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
-import { Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
+import { Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
@@ -4022,10 +4022,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
+  const navigationFailureDescriptionId = createUniqueId();
   const directoryNavigationFailurePanel = () => (
     <Show when={directoryNavigationFailure()}>
       {(failure) => (
         <FileBrowserRecoveryView
+          descriptionId={navigationFailureDescriptionId}
           requestedPath={failure().requestedPath}
           currentPath={activeDirectorySnapshotReady() ? activeDirectoryPath() : undefined}
           message={pathLoadFailureMessage(failure().result)}
@@ -5520,6 +5522,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       captureTypingFromPage={!hasEmbeddedWidget()}
                       files={displayFiles.items}
                       contentNotice={directoryNavigationFailurePanel()}
+                      navigationFailureDescriptionId={directoryNavigationFailure() ? navigationFailureDescriptionId : undefined}
                       contentUnavailable={directoryContentUnavailable()}
                       initializing={directoryInitializing()}
                       currentPath={activeDirectoryPath()}
@@ -5575,6 +5578,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                             return {
                               status: 'error',
                               message: result.message,
+                              descriptionId: directoryNavigationFailure()?.requestedPath === path ? navigationFailureDescriptionId : undefined,
                             };
                         }
                       }}

@@ -42,7 +42,7 @@ const FILE_WORKSPACE_TOOLBAR_FILTER_CLASS =
 
 export type FileBrowserPathSubmitResult =
   | { status: 'ready' | 'refreshed'; committedPath: string }
-  | { status: 'error'; message: string };
+  | { status: 'error'; message: string; descriptionId?: string };
 
 export interface FileBrowserWorkspaceProps {
   registerPageStateReader?: (read: () => Readonly<Record<string, unknown>>) => () => void;
@@ -79,6 +79,8 @@ export interface FileBrowserWorkspaceProps {
   pathEditRequestKey?: number;
   toolbarEndActions?: JSX.Element;
   contentNotice?: JSX.Element;
+  /** ID of the currently visible recovery description, if any. */
+  navigationFailureDescriptionId?: string;
   contentUnavailable?: boolean;
   /** No directory response exists yet; an empty array is not an empty result. */
   initializing?: boolean;
@@ -102,6 +104,7 @@ interface FileWorkspaceHeaderProps {
   pathControlMode: FileBrowserPathControlMode;
   pathDraft: string;
   pathError?: string;
+  pathErrorDescribedBy?: string;
   pathSubmitting?: boolean;
   pathStatusTone?: 'muted' | 'error';
   pathStatusText?: string;
@@ -166,7 +169,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               draft={props.pathDraft}
               error={props.pathError}
               submitting={props.pathSubmitting}
-              describedBy={props.pathStatusText?.trim() ? pathStatusId : undefined}
+              describedBy={props.pathErrorDescribedBy ?? (props.pathStatusText?.trim() ? pathStatusId : undefined)}
               inputRef={props.pathInputRef}
               onDraftChange={props.onPathDraftChange}
               onActivateEdit={props.onActivatePathEdit}
@@ -312,12 +315,16 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const [pathControlMode, setPathControlMode] = createSignal<FileBrowserPathControlMode>('read');
   const [pathDraft, setPathDraft] = createSignal('');
   const [pathError, setPathError] = createSignal('');
+  const [pathErrorDescriptionId, setPathErrorDescriptionId] = createSignal<string>();
   const [pathSubmitting, setPathSubmitting] = createSignal(false);
   const formattedCurrentPath = createMemo(() => formatPickerPath(props.currentPath, props.homePath));
   const currentRoot = createMemo(() => matchFilesystemRoot(props.currentPath, props.roots ?? []));
+  const pathErrorDescribedBy = createMemo(() => pathError().trim() && pathErrorDescriptionId() === props.navigationFailureDescriptionId
+    ? pathErrorDescriptionId() : undefined);
   const pathStatus = createMemo(() => {
     if (pathControlMode() !== 'edit') return null;
     if (pathError().trim()) {
+      if (pathErrorDescribedBy()) return null;
       return { tone: 'error' as const, text: pathError().trim() };
     }
     if (pathSubmitting()) {
@@ -354,6 +361,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
     const rawPath = pathDraft().trim();
     const absolutePath = parsePickerPath(rawPath, props.homePath);
     if (!absolutePath) {
+      setPathErrorDescriptionId(undefined);
       const homeUnavailable = (rawPath === '~' || rawPath.startsWith('~/')) && !parsePickerPath(props.homePath ?? '');
       setPathError(i18n.t(homeUnavailable ? 'files.pathHomeUnavailable' : 'files.pathInputInvalid'));
       focusPathInput();
@@ -369,9 +377,11 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 
     setPathSubmitting(true);
     setPathError('');
+    setPathErrorDescriptionId(undefined);
     try {
       const result = await props.onPathSubmit(absolutePath);
       if (result.status === 'error') {
+        setPathErrorDescriptionId(result.descriptionId);
         setPathError(result.message);
         focusPathInput();
         return;
@@ -530,13 +540,14 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             pathControlMode={pathControlMode()}
             pathDraft={pathDraft()}
             pathError={pathError()}
+            pathErrorDescribedBy={pathErrorDescribedBy()}
             pathSubmitting={pathSubmitting()}
             pathStatusTone={pathStatus()?.tone}
             pathStatusText={pathStatus()?.text}
             pathInputRef={(el) => {
               pathInputEl = el;
             }}
-            onPathDraftChange={setPathDraft}
+            onPathDraftChange={(value) => { setPathDraft(value); setPathError(''); }}
             onActivatePathEdit={openPathEditor}
             onSubmitPath={() => { void submitPathEditor(); }}
             onCancelPathEdit={closePathEditor}
@@ -627,6 +638,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           onDragMove={props.onDragMove}
           toolbarEndActions={props.toolbarEndActions}
           contentNotice={props.contentNotice}
+          navigationFailureDescriptionId={props.navigationFailureDescriptionId}
           contentUnavailable={props.contentUnavailable}
           initializing={props.initializing}
           contextMenuBottomLimit={props.contextMenuBottomLimit}
