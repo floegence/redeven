@@ -93,7 +93,7 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { await media.emulateTouchInput(false); document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
-  it.each([{ width: 1280, touch: false }, { width: 360, touch: false }, { width: 360, touch: true }])('reserves the sequence header without shifting the first tool at $width pixels, touch=$touch', async ({ width, touch }) => {
+  it.each([{ width: 1280, touch: false }, { width: 360, touch: false }, { width: 360, touch: true }])('shares the first activity row without blank space or movement at $width pixels, touch=$touch', async ({ width, touch }) => {
     await media.emulateTouchInput(touch);
     const { root, push } = await mount([tool('reserve-first', 'running')]);
     await page.viewport(width, 900);
@@ -101,6 +101,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(matchMedia('(pointer: coarse)').matches).toBe(touch);
     const first = row(root, 'reserve-first').querySelector<HTMLElement>('.flower-activity-inline-button')!;
     const top = first.getBoundingClientRect().top;
+    const left = first.getBoundingClientRect().left;
+    expect(Math.abs(top - group(root, 'reserve-first').getBoundingClientRect().top)).toBeLessThanOrEqual(1);
     const height = first.getBoundingClientRect().height;
     const widthBefore = first.getBoundingClientRect().width;
     expect(height).toBe(touch ? 44 : 32);
@@ -109,11 +111,19 @@ describe('consecutive tools in the shared Flower surface', () => {
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(Math.abs(first.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(first.getBoundingClientRect().height).toBe(height);
+    expect(first.getBoundingClientRect().left).toBe(left);
     expect(first.getBoundingClientRect().width).toBe(widthBefore);
     expect(toggle(root, 'reserve-first').getBoundingClientRect().height).toBe(height);
+    const control = toggle(root, 'reserve-first');
+    const bounds = control.getBoundingClientRect();
+    expect(Math.abs(bounds.top - top)).toBeLessThanOrEqual(1);
+    expect(bounds.right).toBeLessThanOrEqual(first.getBoundingClientRect().left);
+    expect(bounds.width).toBe(touch ? 44 : 24);
+    expect(control.getAttribute('aria-label')).toContain('2 tool calls');
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: `__screenshots__/flower-sequence-first-row-${width}-${touch}.png` });
   });
 
-  it('reserves the same header for leading thinking before the first tool arrives', async () => {
+  it('shares the leading thinking row before and after the first tool arrives', async () => {
     const thought = { ...item('reserved-thinking', 'thinking', 'Reviewing the evidence.'), live: true };
     const { root, push } = await mount([thought]);
     const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
@@ -121,11 +131,49 @@ describe('consecutive tools in the shared Flower surface', () => {
     const header = thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header');
     expect(header).not.toBeNull();
     const top = title.getBoundingClientRect().top;
+    const left = title.getBoundingClientRect().left;
+    expect(Math.abs(top - thinking.closest('.flower-tool-sequence-node')!.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
     push([thought, tool('thinking-first', 'running')]);
     await waitFor(() => Boolean(root.querySelector('.flower-tool-sequence-toggle')));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header')).toBe(header);
     expect(Math.abs(title.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+    expect(title.getBoundingClientRect().left).toBe(left);
+  });
+
+  it.each(['reduce', 'no-preference'] as const)('keeps the first-row group and detail controls independent with %s motion', async reducedMotion => {
+    await media.emulateMediaPreferences({ reducedMotion });
+    const { root, push } = await mount([tool('shared-first'), tool('shared-second')]);
+    const node = group(root, 'shared-first');
+    const first = row(root, 'shared-first');
+    const control = toggle(root, 'shared-first');
+    const details = first.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
+    const label = control.querySelector<HTMLElement>('.flower-tool-sequence-label')!;
+    const top = control.getBoundingClientRect().top;
+    expect(getComputedStyle(label).clipPath).toBe('inset(50%)');
+    await userEvent.click(details);
+    await waitFor(() => details.getAttribute('aria-expanded') === 'true');
+    expect(control.getAttribute('aria-expanded')).toBe('true');
+    await userEvent.click(control);
+    if (node.dataset.state === 'closing') {
+      expect(control.getBoundingClientRect().width).toBe(24);
+      expect(getComputedStyle(label).clipPath).toBe('inset(50%)');
+    }
+    await waitFor(() => node.dataset.state === 'closed');
+    expect(Math.abs(control.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+    expect(node.getBoundingClientRect().height).toBe(32);
+    expect(control.getBoundingClientRect().width).toBe(node.getBoundingClientRect().width);
+    expect(getComputedStyle(label).clipPath).toBe('none');
+    expect(document.activeElement).toBe(control);
+    push([tool('shared-first'), tool('shared-second'), tool('shared-third', 'running')]);
+    await waitFor(() => control.textContent?.includes('3 tool calls') === true);
+    expect(node.dataset.state).toBe('closed');
+    await userEvent.click(control);
+    await waitFor(() => node.dataset.state === 'open');
+    expect(row(root, 'shared-first')).toBe(first);
+    expect(details.getAttribute('aria-expanded')).toBe('true');
+    expect(control.getBoundingClientRect().width).toBe(24);
+    expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(details.getBoundingClientRect().left);
   });
 
   it.each(['reduce', 'no-preference'] as const)('keeps earlier content stationary during automatic folding with %s motion', async reducedMotion => {

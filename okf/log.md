@@ -4,6 +4,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-27
 
+- Share the [tool-sequence control](ui/flower-tool-sequences.md) with the first activity line. Remove blank title rows while retaining candidate width, accessible summaries, manual choices and reading anchors across desktop and touch layouts.
 - Add bounded multi-page [scripts](ai/computer-use-scripts.md), exact-ID [download handoff](ai/computer-use-browser.md), and installed-app [selection](ai/computer-use-target-selection.md). Selection observes through the runtime gate and preserves completed launch/binding facts on failure. Runtime owns cancellation, validation and partial-file cleanup. Default discovery retains three tools.
 - Record actual Flash results and retained failures in [qualification evidence](ai/computer-use-qualification-evidence.md); clarify snapshots, document-bound references and automatic screenshots in [prompt ownership](ai/flower-prompt-and-rule-sources.md).
 - Remove whole-turn/dense-receipt backfill for [tool statistics](ui/flower-tool-sequences.md). Unknown coverage shows a generic label; complete running or settled groups retain exact counts. [History](ui/flower-live-timeline.md) begins with 50 previews within existing byte budgets and preserves disclosure, focus and selection.
