@@ -206,12 +206,6 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 	if req.ToolName == "apply_patch" && !r.shouldRouteTargetTool(req.ToolName) {
 		executionContext = context.WithValue(executionContext, authorizedPatchResourcesKey{}, append([]fltools.ResourceRef(nil), req.Resources...))
 	}
-	// Batch metadata belongs to Floret's authorization request, not Invocation.
-	// Carry it to the handler so an invalid computer batch settles as ordinary
-	// paired feedback without executing a target action or failing the turn.
-	if req.BatchSize > 1 && isComputerUseTool(req.ToolName) && req.ToolName != "computer.targets" {
-		executionContext = context.WithValue(executionContext, computerConcurrentBatchKey{}, true)
-	}
 	dispatchErr := dispatch(executionContext, proof)
 	releaseAuthorization()
 	return dispatchErr

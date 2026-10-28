@@ -5,7 +5,7 @@ description: Fence secret-surface observation, private frames, ordered input and
 tags: [ai, computer-use, browser, privacy]
 timestamp: 2026-09-24T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -14,7 +14,17 @@ Runtime owns observer-bound private input/pixels; Floret owns takeover/continuat
 # Contract
 
 ## Browser observation and private input
-The shared browser controller examines visible password fields, `one-time-code` input semantics, CAPTCHA text and explicit instruction-override signals in each frame. An unreadable frame is a technical observation failure, not a human requirement.
+The shared browser controller enforces visible password fields, structured
+one-time-code input semantics, secret-change latches and explicit permissions in
+each frame, including shadow roots. Native adapters enforce platform secure-field
+roles. They do not classify ordinary labels or page prose as CAPTCHA, OTP or
+instruction attacks. Observed content is untrusted data, never authorization.
+The model decides task meaning and whether human help is needed; it never receives
+confirmed protected values or pixels for classification. Unmarked secrets are not
+guaranteed detectable by accessibility; native apps must expose secure fields and
+users retain explicit takeover control. An unreadable frame stops the observation
+without inventing a human requirement. Unknown read failures are not retried;
+only measured viewport instability has a bounded same-target resampling window.
 
 See [guided connection](computer-use-browser-connection.md).
 

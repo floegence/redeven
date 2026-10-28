@@ -191,23 +191,6 @@ func (c *atspiClient) safety(ctx context.Context) (*InteractionSafetyDecision, e
 		if role == "password text" {
 			reasons = append(reasons, "secret_input")
 		}
-		name, err := c.name(ctx, node)
-		if err != nil {
-			return nil, err
-		}
-		label := strings.ToLower(name)
-		for _, signal := range []string{"one-time", "verification code", "security code", "authenticator"} {
-			if strings.Contains(label, signal) {
-				reasons = append(reasons, "otp", "secret_input")
-				break
-			}
-		}
-		for _, signal := range []string{"captcha", "verify you are human", "not a robot"} {
-			if strings.Contains(label, signal) {
-				reasons = append(reasons, "captcha")
-				break
-			}
-		}
 		children, err := c.children(ctx, node)
 		if err != nil {
 			return nil, err

@@ -16,7 +16,6 @@ import (
 type computerAuthorizedTargetKey struct{}
 type computerAuthorizedCandidateKey struct{}
 type computerAuthorizedNavigationKey struct{}
-type computerConcurrentBatchKey struct{}
 
 func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) (resources []fltools.ResourceRef, resourceErr error) {
 	// Floret renders resource extraction failures as text, before dispatch. Keep

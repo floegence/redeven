@@ -20,6 +20,16 @@ interaction boundary.
 
 # Contract
 
+Rendered text reads require an explicitly selected HTML element. Document, text
+and SVG nodes return TARGET_CAPABILITY_UNAVAILABLE before reading; no parent/body
+substitution or scope expansion occurs. Unknown observation failures stop the
+operation; explicit fresh reads remain possible without input replay.
+
+Floret owns batch exclusion through tools.Definition.BatchExclusiveGroup. Redeven
+declares one computer-control group for selected-target calls. Conflicting
+prepared calls are rejected before authorization; independent tools and inventory
+can run alongside one computer call. Target gates still protect cross-batch use.
+
 ## Guest API and limits
 `computer.exec` requires a target, code and a user-readable description.
 

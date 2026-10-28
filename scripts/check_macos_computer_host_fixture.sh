@@ -56,7 +56,7 @@ try:
     helper = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     sequence = 0
     target_id = "desktop-main"
-    def action(tool, args):
+    def action(tool, args, require_routine=True):
         global sequence
         sequence += 1
         request = {'protocol_version':4,'request_id':str(sequence),'target_id':target_id,'tool_name':tool,'args':args, 'full_access':True, 'script_operation':True}
@@ -71,6 +71,7 @@ try:
             assert response['request_id'] == str(sequence), 'native helper response identity mismatch'
             if response['type'] == 'error': raise AssertionError(response.get('error_code', 'native helper error'))
             if response['type'] == 'result':
+                if not require_routine: return response
                 assert response.get('safety',{}).get('level') != 'takeover', 'native helper paused: '+json.dumps(response.get('safety'))
                 verify_restored()
                 return response['payload']
@@ -114,6 +115,14 @@ try:
     assert result['scrolled'] and result['scrollOffset'] > 0 and result['wheelEvents'] > 0, 'scroll did not move native content: '+json.dumps(result)
     assert result['scrollOffset'] > semantic_offset, 'coordinate scroll did not move the requested region'
     assert result['complete'], 'native fixture did not reach its final state'
+    fixture.stdin.write(b'protect\n'); fixture.stdin.flush()
+    assert select.select([fixture.stdout], [], [], 5)[0], 'secure fixture update timeout'
+    json.loads(fixture.stdout.readline())
+    blocked = action('computer.observe', {}, require_routine=False)
+    assert blocked.get('safety', {}).get('level') == 'takeover', 'secure role did not pause observation'
+    assert 'secret_input' in blocked['safety']['reason_codes']
+    assert 'fixture-private-value' not in json.dumps(blocked), 'secure value leaked'
+    assert 'screenshot_base64' not in json.dumps(blocked), 'secure pixels leaked'
     print(json.dumps({'native_fixture':'passed', 'clicks':result['clicks'], 'double':result['doubleClicked'], 'entered':result['entered'], 'scroll_offset':result['scrollOffset'], 'original_application_restored':True, 'original_window_restored':True, 'pointer_restored':True}))
 finally:
     stop(helper)

@@ -118,9 +118,6 @@ final class NativeWindow {
                 let node = queue.removeLast()
                 visited += 1
                 if axString(node, kAXSubroleAttribute) == kAXSecureTextFieldSubrole { reasons.insert("secret_input") }
-                let label = name(node).lowercased()
-                if ["one-time", "verification code", "security code", "authenticator"].contains(where: label.contains) { reasons.insert("otp"); reasons.insert("secret_input") }
-                if ["captcha", "verify you are human", "not a robot"].contains(where: label.contains) { reasons.insert("captcha") }
                 if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(5001)) }
                 if queue.count > 10000 { break }
             }

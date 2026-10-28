@@ -37,9 +37,9 @@ export class BrowserComputerController {
   async readObservation(read, stage = 'semantic_read') {
     const revision = this.page.revision;
     const deadline = Date.now() + 1000;
-    // Generic transient reads retry once. Same-document viewport movement has
-    // a bounded settling window. Neither path replays input or resets privacy.
-    for (let attempt = 0;; attempt++) {
+    // Only a measured viewport mismatch has a bounded settling window.
+    // Unknown failures stop this read; no input or privacy state is replayed.
+    for (;;) {
       try {
         const result = await read();
         // Confirmed privacy evidence wins over a concurrent frame change.
@@ -58,7 +58,7 @@ export class BrowserComputerController {
           if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
           continue;
         }
-        if (attempt >= 1) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage });
+        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage });
       }
     }
   }

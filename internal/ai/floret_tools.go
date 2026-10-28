@@ -59,6 +59,9 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 			return nil, err
 		}
 		toolDef.NewArgumentPreview = flowerArgumentPreviewFactory(name)
+		if isComputerUseTool(name) && name != "computer.targets" {
+			toolDef.BatchExclusiveGroup = "computer_control"
+		}
 		tool := fltools.Define[map[string]any](
 			toolDef,
 			nil,
@@ -86,11 +89,6 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 				authorizedSnapshot, effectAttemptID, err := r.effectAuthorizations.snapshotForInvocation(inv)
 				if err != nil {
 					return fltools.Result{}, err
-				}
-				if ctx.Value(computerConcurrentBatchKey{}) == true {
-					return floretToolResultFromFlower(r, ToolResult{ToolID: inv.CallID, ToolName: inv.Name, Status: toolResultStatusError,
-						Error: &aitools.ToolError{Code: aitools.ErrorCode("INVALID_REQUEST"), Message: "Use one computer call per batch; combine sequential actions inside computer.exec. Tool execution has not started; no action was executed."},
-						Data:  map[string]any{"action_executed": false}})
 				}
 				execRun, err := floretInvocationRunContext(ctx, r, inv, authorizedSnapshot)
 				if err != nil {

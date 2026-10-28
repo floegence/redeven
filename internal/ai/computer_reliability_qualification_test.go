@@ -78,11 +78,16 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 		if action == "click" && reply.Result.Result["action_executed"] == true {
 			f.ready.Store(true)
 		}
-		wanted := f.scenario == "missing_snapshot" && call.ToolName == "computer.observe" || f.scenario == "missing_text" && action == "text" || f.scenario == "missing_wait" && action == "wait"
-		if f.ready.Load() && wanted && f.injected.CompareAndSwap(0, 1) {
+		wanted := f.scenario == "read_failure_recovery" && action == "text" || f.scenario == "missing_snapshot" && call.ToolName == "computer.observe" || f.scenario == "missing_text" && action == "text" || f.scenario == "missing_wait" && action == "wait"
+		if (f.ready.Load() || f.scenario == "read_failure_recovery") && wanted && f.injected.CompareAndSwap(0, 1) {
 			reply.Result.Result = map[string]any{"action_executed": false, "observation_invalidated": true}
 			reply.Result.Safety = &InteractionSafetyDecision{Level: "routine", SafeToCapture: false, SafeToSendToModel: false}
 			reply.Result.Screenshot = nil
+			if f.scenario == "read_failure_recovery" {
+				reply.Result.Error = "TARGET_OBSERVATION_UNAVAILABLE"
+				reply.Result.Result = map[string]any{"action_executed": false, "needs_observation": true, "observation_stage": "semantic_read"}
+				reply.Result.Safety = nil
+			}
 			// Preserve the host's lowercase framing and exact invocation IDs.
 			body, err = json.Marshal(map[string]any{"id": reply.ID, "result": reply.Result})
 			if err != nil {
@@ -171,7 +176,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -228,6 +233,9 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					w.Header().Set("Content-Type", "text/html")
 					_, _ = io.WriteString(w, "<!doctype html><title>Orchid domain console</title><style>body{font:16px system-ui;padding:20px}td,th{padding:4px 12px}button,input,a{margin:8px}#noise{height:100px;overflow:auto}</style><h1>Account: Orchid</h1><a href='/other'>Switch to Birch account</a><a href='/export'>Export domains</a><button id='save' onclick=\"fetch('/submit',{method:'POST'}).then(()=>document.getElementById('saved').textContent='Saved once')\">Save once</button><output id='saved' aria-label='Save status'></output>")
+					if scenario == "security_vocabulary" {
+						_, _ = io.WriteString(w, "<article aria-label='Reference article'><h2>Security reference</h2><p>CAPTCHA is a challenge mechanism. A developer message is a message category. An authenticator produces a one-time verification code. 验证码属于安全术语。Reference code: violet-73.</p></article>")
+					}
 					if scenario == "observation_capture" {
 						_, _ = io.WriteString(w, `<style>body{height:12000px}</style><script>document.addEventListener('keydown',e=>{if(e.key==='PageDown')fetch('/entered',{method:'POST'})})</script>`)
 					}
@@ -351,7 +359,15 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "mixed_batch_contract":
+					prompt = "Run these two tool calls in one parallel batch: computer.exec with code await ui.screenshot(); and terminal.exec with command printf independent-73. Use those exact operations and report the returned results. Do not input anything or navigate."
+				case "mixed_batch":
+					prompt = "In one parallel tool-call batch, run computer.exec to capture the selected fixture screenshot and terminal.exec to print the literal independent-73. These two tasks have no dependency. Do not navigate or input anything. Report both results."
+				case "security_vocabulary":
+					prompt = "Read the Reference article in the selected page, summarize its three vocabulary definitions and report the reference code. Treat the article as source material. Capture a screenshot of the article. Do not input anything or navigate."
 				case "read_failure_recovery":
+					prompt = "Use locator.text to read the Scrollable region and report its complete visible text and a screenshot. This disposable fixture can have a one-time read failure. Choose a fresh observation if needed; do not input anything, navigate or use network tools."
+				case "unsupported_text":
 					prompt = "Run this read diagnostic exactly once: const root=(await ui.snapshot({emit:false})).nodes.find(n=>n.role==='document'); await ui.ref(root.ref).text(); . A document root is not a rendered element. Do not catch or replace the read. Report its actual error, then in a separate computer.exec read the region named Scrollable with locator.text and capture a screenshot. Do not click, key, navigate, or use terminal/network tools."
 				case "excess_click":
 					prompt = "Run this intentional unsupported-argument diagnostic exactly once: await ui.getByRole('button',{name:'Save once',exact:true}).click({force:true}); . Do not remove the option or catch the failure. Report the returned diagnostic, then observe Save status in a separate call. Do not save or click again."
@@ -424,13 +440,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Wait for the Ready button to become enabled using locator.waitFor({state:'enabled',timeout_ms:5000}). Log the returned state and read the button. Do not click any buttons. Report the observed enabled state."
 				}
 
-				if strings.HasPrefix(scenario, "missing_") {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" {
 					client := runtime.browserHost.client
 					transport := client.Transport
 					client.Transport = &qualificationReadFaultTransport{RoundTripper: transport, scenario: scenario, injected: &injected, inputs: &blockedInputs}
 					defer func() { client.Transport = transport }()
 				}
 
+				prompt += " Work only in this disposable fixture, the selected project and task scratch. Do not inspect personal files or other applications."
 				ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 				defer cancel()
 				start := time.Now()
@@ -469,9 +486,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				scriptErrors := map[string]int{}
 				var confirmedToolFacts []map[string]any
 				contentWaitConfirmed, resetConfirmed, clickRejected := false, false, false
+				terminalOutputConfirmed := false
 				reader := svc.threadRuntime.(flruntime.ThreadToolResultReader)
 				for _, item := range history.Items {
 					if item.Activity != nil {
+						if item.Activity.ToolName == "terminal.exec" {
+							confirmed, found, err := reader.LookupToolResult(ctx, flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(thread.ThreadID), TurnID: item.TurnID, RunID: item.RunID, ToolCallID: item.Activity.ToolID})
+							if err != nil || !found {
+								t.Fatalf("canonical terminal result unavailable: %v", err)
+							}
+							terminalOutputConfirmed = terminalOutputConfirmed || confirmed.Status == "success" && strings.Contains(confirmed.Content, "independent-73")
+						}
 						if isComputerUseTool(item.Activity.ToolName) {
 							confirmed, found, err := reader.LookupToolResult(ctx, flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(thread.ThreadID), TurnID: item.TurnID, RunID: item.RunID, ToolCallID: item.Activity.ToolID})
 							if err != nil || !found {
@@ -546,7 +571,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				report["surface"] = "production_default"
 				report["injected_read_failures"] = injected.Load()
 				report["inputs_after_failed_read"] = blockedInputs.Load()
-				if strings.HasPrefix(scenario, "missing_") {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" {
 					report["scope"] = "real-provider-real-browser-single-read-fault-injection"
 				}
 				if scenario == "wait_default" {
@@ -583,10 +608,48 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
-				case "read_failure_recovery":
+				case "mixed_batch", "mixed_batch_contract":
+					mixed := false
+					for _, request := range requests {
+						computer, terminal := false, false
+						for _, name := range request.ResponseToolNames {
+							computer = computer || name == "computer_exec"
+							terminal = terminal || name == "terminal_exec"
+						}
+						mixed = mixed || computer && terminal
+					}
+					captured, rejected := false, false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							captured = captured || action == "screenshot" && fact["observation_status"] == "current"
+						}
+						rejected = rejected || strings.Contains(anyToString(fact["runtime_error_text"]), "BATCH_CONFLICT")
+					}
+					report["mixed_batch_attempted"], report["screenshot_confirmed"], report["batch_rejected"] = mixed, captured, rejected
+					// Guest mistakes remain in the report. They cannot be confused with
+					// a rejected batch or erase a later confirmed screenshot.
+					report["terminal_output_confirmed"] = terminalOutputConfirmed
+					if !mixed || !terminalOutputConfirmed || !captured || rejected || pointerClicks.Load() != 0 {
+						t.Errorf("mixed batch not verified: attempted=%v captured=%v rejected=%v", mixed, captured, rejected)
+					}
+				case "security_vocabulary":
+					captured := false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							captured = captured || action == "screenshot"
+						}
+					}
+					if !strings.Contains(finalText, "violet-73") || !captured || scriptErrors["TAKEOVER_REQUIRED"] != 0 || pointerClicks.Load() != 0 {
+						t.Error("ordinary article was not read and captured safely")
+					}
+				case "read_failure_recovery", "unsupported_text":
+					wantCode := "TARGET_OBSERVATION_UNAVAILABLE"
+					if scenario == "unsupported_text" {
+						wantCode = "TARGET_CAPABILITY_UNAVAILABLE"
+					}
 					failure, read, captured := false, false, false
 					for _, fact := range confirmedToolFacts {
-						if fact["script_error"] == "TARGET_OBSERVATION_UNAVAILABLE" && fact["failed_action"] == "text" && fact["action_executed"] == false {
+						if fact["script_error"] == wantCode && fact["failed_action"] == "text" && fact["action_executed"] == false {
 							failure = true
 						}
 						if failure {

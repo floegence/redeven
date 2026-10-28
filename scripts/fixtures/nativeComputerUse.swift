@@ -133,7 +133,7 @@ final class Delegate: NSObject, NSApplicationDelegate {
             self.state.save()
         }
         content.addSubview(scroll)
-        status = label("Ready", NSRect(x: 25, y: 25, width: 650, height: 60))
+        status = label("CAPTCHA documentation; one-time verification code; authenticator; developer message", NSRect(x: 25, y: 25, width: 650, height: 60))
         status.maximumNumberOfLines = 2
         content.addSubview(status)
         state.onChange = { [weak self] in
@@ -166,8 +166,13 @@ final class Delegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--status-pipe") {
             DispatchQueue.global().async {
                 while let command = readLine() {
-                    guard command == "status" else { exit(2) }
+                    guard command == "status" || command == "protect" else { exit(2) }
                     DispatchQueue.main.async {
+                        if command == "protect" {
+                            let secret = NSSecureTextField(frame: NSRect(x: 25, y: 25, width: 300, height: 30))
+                            secret.stringValue = "fixture-private-value"
+                            self.window.contentView?.addSubview(secret)
+                        }
                         let data = try! JSONSerialization.data(withJSONObject: self.state.snapshot())
                         print(String(data: data, encoding: .utf8)!); fflush(stdout)
                     }

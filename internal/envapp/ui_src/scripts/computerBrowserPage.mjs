@@ -331,7 +331,6 @@ export class BrowserComputerPage {
           }
         }
         const found = await this.inFrame(frame, `(() => {
-          const text = (document.body?.innerText || '').slice(0, 200000).toLowerCase();
           const roots = [document];
           for (let i = 0; i < roots.length; i++) for (const element of roots[i].querySelectorAll('*')) if (element.shadowRoot) roots.push(element.shadowRoot);
           const inputs = roots.flatMap(root => [...root.querySelectorAll('input')]).filter(x => x.getClientRects().length);
@@ -339,8 +338,6 @@ export class BrowserComputerPage {
           if (globalThis.__flowerPrivacyObserver.secretChanged()) reasons.push('secret_input');
           if (inputs.some(x => x.type === 'password')) reasons.push('login', 'secret_input');
           if (inputs.some(x => (x.autocomplete || '').split(/\\s+/u).includes('one-time-code'))) reasons.push('otp', 'secret_input');
-          if (/captcha|i am not a robot|verify you are human/u.test(text)) reasons.push('captcha');
-          if (/ignore (all )?(previous|prior) instructions|system message|developer message/u.test(text)) reasons.push('prompt_injection');
           return reasons;
         })()`);
         for (const reason of found) reasons.add(reason);
@@ -609,8 +606,11 @@ export class BrowserComputerPage {
     const {object} = await session.send('DOM.resolveNode', {backendNodeId:element.backendNodeId, executionContextId});
     try {
       const result = await session.send('Runtime.callFunctionOn', {objectId:object.objectId, returnByValue:true,
-        functionDeclaration:'function(){const source=this.getClientRects().length&&getComputedStyle(this).visibility!=="hidden"?this.innerText||"":"";let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"rendered_element"};text+=character;}return {text,truncated:false,scope:"rendered_element"};}'});
+        functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.getClientRects().length&&getComputedStyle(this).visibility!=="hidden"?this.innerText||"":"";let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"rendered_element"};text+=character;}return {text,truncated:false,scope:"rendered_element"};}'});
       if (result.exceptionDetails || !result.result?.value) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+      if (result.result.value.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
+        diagnostic: { method: 'locator.text', expected: 'html_element', recovery: 'Choose an observed HTML element; document and text nodes do not support rendered_element reads.' },
+      });
       return result.result.value;
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }
   }

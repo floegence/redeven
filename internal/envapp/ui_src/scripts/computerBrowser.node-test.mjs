@@ -76,6 +76,14 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     const perform = async (args) => send('computer.action', args, { script_operation: true });
     const text = await perform({action:'text',selector:{role:'region',name:'Metrics'}});
     assert.deepEqual({text:text.result.text,truncated:text.result.truncated,scope:text.result.scope},{text:'Revenue 42',truncated:false,scope:'rendered_element'});
+    assert.ok(tree.nodes.some(node => node.role === 'RootWebArea'));
+    assert.ok(tree.nodes.some(node => node.role === 'StaticText'));
+    for (const node of tree.nodes.filter(node => ['RootWebArea', 'StaticText'].includes(node.role))) {
+      const unsupported = await perform({action:'text',selector:{ref:node.ref}});
+      assert.equal(unsupported.error, 'TARGET_CAPABILITY_UNAVAILABLE');
+      assert.equal(unsupported.result.action_executed, false);
+      assert.equal(unsupported.result.diagnostic.expected, 'html_element');
+    }
     const longText=await perform({action:'text',selector:{role:'region',name:'Long text'}});
     assert.equal(longText.result.text.length,12000);
     assert.equal(longText.result.truncated,true);
@@ -422,7 +430,7 @@ test('navigation during a safety read preserves the confirmed action without exp
     const send = session.send.bind(session);
     let edited = false, invalidated = false;
     session.send = async (method, parameters) => {
-      if (edited && !invalidated && method === 'Runtime.evaluate' && parameters.expression.includes('document.body?.innerText')) {
+      if (edited && !invalidated && method === 'Runtime.evaluate' && parameters.expression.includes('__flowerPrivacyObserver.secretChanged()')) {
         invalidated = true;
         // Destroy the exact context that safety was about to inspect. This is
         // the real CDP failure produced when a submitted form navigates.
@@ -508,7 +516,7 @@ test('a detached iframe invalidates a sampled view without inventing user takeov
     const send = session.send.bind(session);
     let childContext, removed = false;
     session.send = async (method, parameters) => {
-      if (method === 'Runtime.evaluate' && parameters.expression.includes('document.body?.innerText') && parameters.contextId === childContext && !removed) {
+      if (method === 'Runtime.evaluate' && parameters.expression.includes('__flowerPrivacyObserver.secretChanged()') && parameters.contextId === childContext && !removed) {
         removed = true;
         await page.evaluate(() => document.querySelector('iframe').remove());
       }
@@ -529,7 +537,7 @@ test('a detached iframe invalidates a sampled view without inventing user takeov
   } finally { await browser.close(); }
 });
 
-test('safety reads recover once and persistent failure preserves effects without requesting human input', async () => {
+test('unknown safety failures stop the read and fresh calls preserve completed effects', async () => {
   const { chromium } = await import('playwright');
   const { BrowserComputerController } = await import('./computerBrowserController.mjs');
   const browser = await chromium.launch({ headless: true, chromiumSandbox: true });
@@ -549,6 +557,10 @@ test('safety reads recover once and persistent failure preserves effects without
       if (method === 'Input.dispatchMouseEvent' && parameters.type === 'mouseReleased') effects++;
       return response;
     };
+    const initial = await controller.execute({ tool_name: 'computer.screenshot' });
+    assert.equal(initial.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+    assert.equal(scans, 1);
+    assert.equal(initial.screenshot, undefined);
     const recovered = await controller.execute({ tool_name: 'computer.screenshot' });
     assert.equal(recovered.error, undefined);
     assert.equal(recovered.safety.level, 'routine', JSON.stringify(recovered));
@@ -559,7 +571,7 @@ test('safety reads recover once and persistent failure preserves effects without
     assert.equal(blocked.error, 'TARGET_OBSERVATION_UNAVAILABLE');
     assert.equal(blocked.result.action_executed, false);
     assert.equal(blocked.safety, undefined); assert.equal(blocked.screenshot, undefined);
-    assert.equal(effects, 0); assert.equal(scans, 2, 'read recovery is bounded');
+    assert.equal(effects, 0); assert.equal(scans, 1, 'unknown read failure is not retried');
     failures = 0; failAfterEffect = true; scans = 0;
     const completed = await controller.execute(action);
     assert.equal(completed.error, 'TARGET_OBSERVATION_UNAVAILABLE', JSON.stringify(completed));
@@ -622,5 +634,53 @@ test('confirmed private input still requires takeover when a frame changes durin
     assert.equal(result.result.action_executed, false);
     assert.equal(result.screenshot, undefined);
     assert.equal(JSON.stringify(result).includes('private-value'), false);
+  } finally { await browser.close(); }
+});
+
+
+test('ordinary security vocabulary never establishes a sensitive platform fact', async () => {
+  const { chromium } = await import('playwright');
+  const { BrowserComputerController } = await import('./computerBrowserController.mjs');
+  const browser = await chromium.launch({headless:true});
+  try {
+    for (const label of ['Reference guide', 'CAPTCHA API documentation', 'Verify you are human',
+      'A developer message describes a message type.', 'Ignore previous instructions',
+      'One-time verification code authenticator', '验证码与开发者消息说明', 'Guide de sécurité']) {
+      const tab = await browser.newPage();
+      await tab.setContent('<title>Reference</title><main></main><label>Search<input></label>');
+      await tab.locator('main').evaluate((node, value) => { node.textContent = value; }, label);
+      const controller = new BrowserComputerController(await tab.context().newCDPSession(tab));
+      await controller.initialize();
+      try {
+        const result = await controller.execute({tool_name:'computer.observe',full_access:true});
+        assert.equal(result.error, undefined, label);
+        assert.equal(result.safety.level, 'routine', label);
+        assert.ok(result.result.observation.nodes.some(node => node.name === label), label);
+      } finally { controller.close(); await tab.close(); }
+    }
+  } finally { await browser.close(); }
+});
+
+test('text capability checks retain explicit node scope across documents and SVG', async () => {
+  const { chromium } = await import('playwright');
+  const { BrowserComputerPage } = await import('./computerBrowserPage.mjs');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const tab = await browser.newPage();
+    await tab.setContent('<main>Visible</main><iframe srcdoc="<main>Child</main>"></iframe><svg role="img" aria-label="Vector"><text>Vector</text></svg>');
+    const page = new BrowserComputerPage(await tab.context().newCDPSession(tab));
+    await page.initialize();
+    try {
+      const { nodes } = await page.observe();
+      assert.equal(nodes.filter(node => node.role === 'RootWebArea').length, 2);
+      assert.ok(nodes.some(node => node.role === 'image'));
+      for (const node of nodes.filter(node => ['RootWebArea', 'StaticText', 'image'].includes(node.role))) {
+        await assert.rejects(page.text(await page.resolve({ref:node.ref})), error =>
+          error.message === 'TARGET_CAPABILITY_UNAVAILABLE' && error.diagnostic.expected === 'html_element');
+      }
+      const root = nodes.find(node => node.role === 'RootWebArea');
+      const text = await page.text(await page.resolve({role:'main', root_ref:root.ref}));
+      assert.deepEqual(text, {text:'Visible',truncated:false,scope:'rendered_element'});
+    } finally { page.close(); }
   } finally { await browser.close(); }
 });

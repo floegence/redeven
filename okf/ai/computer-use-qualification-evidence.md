@@ -16,6 +16,31 @@ include September and October 2026 runs. A passing worktree run does not replace
 pre-push gate, certify arbitrary applications, or turn earlier failed runs into
 successes. Private text and pixels are excluded from retained diagnostics.
 
+## Generic contract qualification — 2026-10-27
+
+Published Floret v7.88.0 owns batch exclusion; Redeven only declares its shared
+computer-control group. Browser/native adapters no longer classify safety from
+ordinary vocabulary. Unknown reads stop once; rendered text requires an HTML
+element without fallback scope. Secure platform facts and permissions still pause.
+
+Local DeepSeek V4.1 Flash (1017), wire deepseek-flash: the first 40 scenarios
+passed. Eleven key scenarios repeated three times yielded 32/33 original assertion
+passes; the remaining task recovered from an invented visual.screenshot call and
+completed, but the first assertion incorrectly required zero guest errors. Nine
+supplemental runs retain three Activity-vs-canonical assertion failures, one model
+snapshot-vs-screenshot omission, and five passes. The final explicit mixed-batch
+contract passed 3/3. Raw failures remain external; successful reruns do not erase
+them. No production aliases or task-specific recovery were added for model errors.
+Configuration and secret-file hashes remain unchanged. Tests use isolated browser
+profiles, native fixture apps, project directories and task state; no real user
+thread was continued. Provider responses prove the configured alias, not remote
+weights. Deterministic contracts and model task completion are reported separately.
+Browser/read contracts passed 223/224 with one existing opt-in extension-install
+skip; the ten browser qualification suites passed. Go package, focused race,
+macOS native and Linux private-display checks passed. One combined safety run
+timed out waiting for a helper; the independent rerun and three consecutive
+four-fixture runs passed. The original timeout remains in external evidence.
+
 # Contract
 
 Keep measurements bound to their declared platform, provider and source build. Never infer cross-platform success from one adapter or from a model request returning HTTP 200.

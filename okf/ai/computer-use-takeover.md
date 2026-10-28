@@ -20,7 +20,7 @@ journal or second conversation lifecycle exists.
 # Contract
 
 ## Operation facts and independent questions
-Confirmed login, CAPTCHA, one-time codes, private fields, missing permissions and explicit user control return structured assistance facts. Flower can make another read within its execution budget; persistent failure requires an accurate explanation, never invented instructions to inspect.
+Structurally confirmed password/one-time-code controls, secure native fields, missing permissions and explicit user control return structured assistance facts. Flower can make another read within its execution budget; persistent failure requires an accurate explanation, never invented instructions to inspect.
 
 Tool rows retain their execution outcome; only the separate question displays waiting.
 

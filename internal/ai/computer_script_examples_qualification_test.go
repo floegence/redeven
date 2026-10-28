@@ -75,11 +75,11 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 	quoted, _ := json.Marshal(site.URL)
 	execute("await browser.navigate(" + string(quoted) + " + '/');")
 	// A document root is not a rendered element. Rejecting its text read
-	// must produce a valid observation failure and leave the page usable.
+	// must produce an accurate capability rejection and leave the page usable.
 	for i := 0; i < 3; i++ {
 		result, failure := executeTestScript(t.Context(), host, call, "const root=(await ui.snapshot({emit:false})).nodes.find(n=>n.role==='document'); await ui.ref(root.ref).text();")
 		payload, _ := result.Result.(map[string]any)
-		if failure == nil || payload["script_error"] != "TARGET_OBSERVATION_UNAVAILABLE" || payload["observation_stage"] != "semantic_read" {
+		if failure == nil || payload["script_error"] != "TARGET_CAPABILITY_UNAVAILABLE" {
 			t.Fatalf("read failure lost contract or target: error=%v payload=%+v", failure, payload)
 		}
 		execute("await ui.snapshot({emit:false});")

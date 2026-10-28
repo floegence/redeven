@@ -26,7 +26,7 @@ for (const operation of reads) {
     assert.deepEqual(await f.run(operation), { error: 'TARGET_OBSERVATION_UNAVAILABLE', result: {
       action_executed: false, needs_observation: true, observation_stage: 'semantic_read',
     } });
-    assert.deepEqual(f.facts(), { calls: 2, closes: 0, releases: 1 });
+    assert.deepEqual(f.facts(), { calls: 1, closes: 0, releases: 1 });
     failing = false;
     const recovered = await f.run(operation);
     assert.equal(recovered.error, undefined);
@@ -40,6 +40,7 @@ for (const operation of reads) {
     assert.equal(result.result.observation_stage, 'semantic_read');
     assert.equal(JSON.stringify(result).includes('private debugger content'), false);
     assert.equal(f.facts().closes, 0);
+    assert.equal(f.facts().calls, 1);
   });
   test(operation + ' rejects stale input without retry and stops an invalidated observation', async () => {
     const rejected = fixture(() => { throw new Error('STALE_REFERENCE'); });
