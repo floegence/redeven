@@ -44,6 +44,8 @@ final class EntryDelegate: NSObject, NSApplicationDelegate {
                 let point = self.window.convertPoint(toScreen: event.locationInWindow)
                 self.dragEvents.append(["type": event.type == .leftMouseDown ? "down" : event.type == .leftMouseUp ? "up" : "drag",
                     "time_ms": ProcessInfo.processInfo.systemUptime * 1000, "event_time_ms": event.timestamp * 1000,
+                    "source_pid": event.cgEvent.map { $0.getIntegerValueField(.eventSourceUnixProcessID) } as Any? ?? NSNull(),
+                    "source_marker": event.cgEvent.map { $0.getIntegerValueField(.eventSourceUserData) } as Any? ?? NSNull(),
                     "x": point.x - self.window.frame.minX, "y": self.window.frame.maxY - point.y])
                 let down = self.dragEvents.first { $0["type"] as? String == "down" }
                 if event.type == .leftMouseUp, let down {

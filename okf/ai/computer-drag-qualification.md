@@ -90,3 +90,16 @@ its nine browser reports are retained separately. The precisely selected rerun
 passed all nine assertions. Some successful tasks still contained model syntax,
 argument or non-actionable-target errors before recovery; passing the final
 fixture contract does not mean every model call was valid.
+
+The final published v0.25.1 dependency passed all five direct native scenarios
+and the affected Go consumers, vet, 38 Swift tests and the normal commit gate.
+Its macOS implementation is byte-identical to the earlier qualified candidate.
+Five final model tasks passed four assertions: one valid drag was refused with
+TAKEOVER_REQUIRED before input. Three validation repeats passed two assertions;
+the other receiver recorded an extra intermediate release from an unidentified
+source. Neither failure is reclassified as a model mistake or silently passed.
+The disposable receiver now records event source PID and marker without filtering
+events or weakening assertions. Three subsequent validation tasks all passed,
+with one marked source per run and 1002.99–1003.62 ms system-event durations.
+That new evidence cannot retrospectively identify the earlier event source;
+the original failed reports remain retained. No production takeover rule changed.
