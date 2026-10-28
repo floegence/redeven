@@ -342,7 +342,7 @@ func TestPlaywrightObservationFailurePreservesOnlyConfirmedProgress(t *testing.T
 				t.Fatalf("read failure misclassified: %v", err)
 			}
 			progress := result.Result.(map[string]any)
-			if len(progress) != 2 || progress["action_executed"] != executed || len(result.Attachments) != 0 || len(result.frameBytes) != 0 || len(executor.media) != 0 {
+			if len(progress) != 3 || progress["needs_observation"] != true || progress["action_executed"] != executed || len(result.Attachments) != 0 || len(result.frameBytes) != 0 || len(executor.media) != 0 {
 				t.Fatalf("unsafe failure payload: %+v", result)
 			}
 			if len(executor.clients) != 1 {

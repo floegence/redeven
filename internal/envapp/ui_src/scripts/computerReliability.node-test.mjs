@@ -18,7 +18,9 @@ function fixture() {
     return { documents: [], strings: [] };
   } };
   const page = new BrowserComputerPage(transport);
-  page.frames = async () => [{ session: transport, frame: { id: 'fixture' } }];
+  const frame = { session: transport, frame: { id: 'fixture' }, revision: page.revision };
+  page.observedFrames.set('fixture', frame);
+  page.frames = async () => [frame];
   return { page, add };
 }
 

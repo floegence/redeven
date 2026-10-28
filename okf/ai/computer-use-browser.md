@@ -28,6 +28,18 @@ The default profile creates its first page lazily; later loss of a selected page
 
 Semantic clicks check visible/enabled state, stable bounds and the actual input-session hit target before input, including parent-frame overlays. Preparatory scrolling is not a completed click; a blocked click reports `action_executed:false` and requires fresh observation when preparation changed the viewport. Condition waits inspect rendered state and use bounded sampling for CSS changes. Browser result labels use the current safe observation title when available; they do not treat a discovery label as current account identity.
 
+Screenshot geometry changes within the same document receive up to one second
+of read-only settling inside the invocation budget. Each attempt checks geometry
+before and after capture; persistent movement returns capture/viewport_unstable
+without pixels. Cancellation, document changes and the latched privacy guard
+remain authoritative. Input is never repeated to repair an observation.
+
+The existing frame observation inventory owns reference document identity. Child
+navigation or removal revokes that frame and its descendants; unchanged parent
+refs remain valid. Root replacement, cancellation and handback still invalidate
+all refs. Snapshot/image revisions remain page-wide, and ref resolution verifies
+the owning document again after its DOM/AX read.
+
 Locator key presses require a focusable DOM element. AX document roots are not elements; use `ui.key('PageDown')` for page-level keys. Document validation and exact confirmed DOM.focus rejections return ELEMENT_NOT_ACTIONABLE with focus/not_focusable diagnostics, without dispatching a key or retiring the connection. Generic command failures, lost focus/input acknowledgements and failed key release remain uncertain; no action is replayed. Returned uncertainty retains a safe stage/reason, requests fresh observation, and keeps both the warning and completed-prefix facts in model-visible output.
 
 Download association uses `browser.downloadCursor()` before the triggering input, followed sequentially by `browser.waitForDownload({after:cursor})`; an exact known `id` is also accepted. A cursor is bounded in-memory state owned by the page. Old files never satisfy it and multiple new files fail as ambiguous. No automatic input replay, latest-file inference or durable download ledger exists.

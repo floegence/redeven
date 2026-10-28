@@ -3112,17 +3112,18 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string, 
 				if strings.HasPrefix(target[0].Kind, "browser.") && (result.Safety == nil || result.Safety.SafeToSendToModel) {
 					payload["discovery_name"] = target[0].DisplayName
 					payload["target_name"] = firstNonEmptyString(target[0].ID, requestedTargetID)
+					current := payload["observation_status"] == "current" || len(result.Attachments) > 0
 					payload["observation_status"] = "not_observed"
 					identity := payload
 					if observation, ok := payload["observation"].(map[string]any); ok {
 						identity = observation
+						current = current || anyToString(observation["document_id"]) != ""
 					}
-					if _, hasTitle := identity["title"]; hasTitle {
+					if current && payload["needs_observation"] != true && payload["observation_invalidated"] != true && payload["effect_outcome_unknown"] != true {
 						payload["observation_status"] = "current"
 					}
 					if title := strings.TrimSpace(anyToString(identity["title"])); title != "" {
 						payload["target_name"] = title
-						payload["observation_status"] = "current"
 					}
 				}
 			}
