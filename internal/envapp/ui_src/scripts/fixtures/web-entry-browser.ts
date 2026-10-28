@@ -338,6 +338,53 @@ export async function createManualInputProbe() {
   };
 }
 
+type TerminalRecoveryProbe = { path: string; startsPath: string; marker: string; priorSessions: string[]; sessionID?: string };
+
+export async function createTerminalRecoveryProbe(): Promise<TerminalRecoveryProbe> {
+  const { current } = await openRuntimeSession();
+  try {
+    const owner = await current.rpc.call(1010, {}, value => value);
+    const inventory = await current.rpc.call(2002, {}, value => value);
+    if (!owner.ok || !inventory.ok) throw new Error('Terminal recovery setup rejected');
+    const home = (owner.payload as Record<string, JsonValue>).agent_home_path_abs;
+    if (typeof home !== 'string' || !home) throw new Error('Recovery fixture home missing');
+    const path = home + '/center-recovery-' + crypto.randomUUID();
+    for (const file of [path, path + '-starts']) {
+      const created = await current.rpc.call(1003, { path: file, content: '', encoding: 'utf8' }, value => value);
+      if (!created.ok) throw new Error('Recovery fixture file initialization rejected');
+    }
+    return { path, startsPath: path + '-starts', marker: crypto.randomUUID(), priorSessions: ((inventory.payload as Record<string, JsonValue>).sessions as { id: string }[]).map(item => item.id) };
+  } finally { await current.close(); }
+}
+
+export async function inspectTerminalRecoveryProbe(probe: TerminalRecoveryProbe, cleanup = false) {
+  const { current } = await openRuntimeSession();
+  const rpc = async (type: number, payload: JsonValue) => {
+    const result = await current.rpc.call(type, payload, value => value, { signal: AbortSignal.timeout(10000) });
+    if (!result.ok) throw new Error('Terminal recovery RPC rejected: ' + type + ' ' + result.error.code);
+    return result.payload as Record<string, JsonValue>;
+  };
+  try {
+    if (!probe.sessionID || probe.priorSessions.includes(probe.sessionID)) throw new Error('Terminal recovery must own its session');
+    if (cleanup) {
+      await rpc(2009, { session_id: probe.sessionID });
+      await rpc(1006, { path: probe.path });
+      await rpc(1006, { path: probe.startsPath });
+      return { cleaned: true };
+    }
+    const inventory = await rpc(2002, {});
+    const sessions = inventory.sessions as { id: string }[];
+    if (sessions.filter(item => item.id === probe.sessionID).length !== 1 || sessions.length !== probe.priorSessions.length + 1) throw new Error('Recovery duplicated or lost its terminal');
+    const counter = String((await rpc(1002, { path: probe.path, encoding: 'utf8' })).content);
+    const starts = String((await rpc(1002, { path: probe.startsPath, encoding: 'utf8' })).content);
+    if (!starts || !counter) return { iteration: 0, terminalCount: sessions.length, startedOnce: false };
+    if (starts !== probe.marker || !counter.startsWith(probe.marker + ':')) throw new Error('Recovery replayed a command or changed its output');
+    const iteration = Number(counter.slice(probe.marker.length + 1));
+    if (!Number.isSafeInteger(iteration) || iteration < 1) throw new Error('Recovery counter invalid');
+    return { iteration, terminalCount: sessions.length, startedOnce: true };
+  } finally { await current.close(); }
+}
+
 export async function startControlledWorkload() {
   const { current, acquisition } = await openRuntimeSession();
   const rpc = async (type:number,payload:JsonValue) => {

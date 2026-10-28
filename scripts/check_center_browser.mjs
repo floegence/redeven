@@ -325,6 +325,72 @@ async function verifyNativeDownloadPicker(page, bundle) {
     }
   }
 }
+async function verifyTerminalRecovery(page, context, portal, other, bundle) {
+  if (engine !== 'chromium') throw new Error('Terminal recovery qualification requires Chrome CDP');
+  await page.addScriptTag({ path: bundle });
+  const probe = await page.evaluate(() => GatewayAcceptance.createTerminalRecoveryProbe());
+  const cdp = await context.newCDPSession(page);
+  let observer;
+  let reopened;
+  let offline = false;
+  try {
+    await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+    await page.locator('nav[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'Terminal', exact: true }).click();
+    const panel = page.locator('[data-terminal-panel-variant="panel"]:visible').last();
+    await panel.getByRole('button', { name: 'Create session', exact: true }).click();
+    const terminal = panel.locator('[data-terminal-semantic-canvas="true"]:visible').last().locator('xpath=ancestor::*[@data-terminal-runtime-session][1]');
+    await until(async () => await terminal.getAttribute('aria-busy') === 'false' && Number(await terminal.getAttribute('data-terminal-presentation-sequence')) > 0, 'Recovery terminal not ready');
+    probe.sessionID = await terminal.getAttribute('data-terminal-runtime-session');
+    const quote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+    await terminal.locator('textarea[data-terminal-input-bridge="semantic"]').focus();
+    await page.keyboard.type('printf %s ' + quote(probe.marker) + ' >> ' + quote(probe.startsPath) + '; i=0; while [ "$i" -lt 90 ]; do i=$((i+1)); printf "%s:%s" ' + quote(probe.marker) + ' "$i" > ' + quote(probe.path) + '; sleep 1; done');
+    await page.keyboard.press('Enter');
+    let first;
+    await until(async () => { first = await page.evaluate(probe => GatewayAcceptance.inspectTerminalRecoveryProbe(probe), probe); return first.iteration > 0; }, 'Typed remote command did not start');
+    await cdp.send('Network.enable');
+    await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+    offline = true;
+    const rejected = await page.evaluate(async () => { try { await fetch('/api/local/runtime', { signal: AbortSignal.timeout(3000) }); return false; } catch { return true; } });
+    if (!rejected) throw new Error('Target tab network was not actually offline');
+    if (await runtimeStatus(other) !== 200 || (await centerCall(portal, 'directory')).status !== 200) throw new Error('One offline tab affected other authority');
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    offline = false;
+    await cdp.detach();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await until(async () => await runtimeStatus(page) === 200, 'Reload after offline lost authorization');
+    await page.addScriptTag({ path: bundle });
+    const online = await page.evaluate(probe => GatewayAcceptance.inspectTerminalRecoveryProbe(probe), probe);
+    if (online.iteration <= first.iteration) throw new Error('Remote command stopped while browser was offline');
+    observer = await openEnvironment(portal, context, 0);
+    await until(async () => await runtimeStatus(observer) === 200, 'Observer could not reuse valid authority');
+    await observer.addScriptTag({ path: bundle });
+    await page.close();
+    const closed = await observer.evaluate(probe => GatewayAcceptance.inspectTerminalRecoveryProbe(probe), probe);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const progressed = await observer.evaluate(probe => GatewayAcceptance.inspectTerminalRecoveryProbe(probe), probe);
+    if (progressed.iteration <= closed.iteration) throw new Error('Closing the original page stopped the remote terminal');
+    reopened = await openEnvironment(portal, context, 0);
+    await until(async () => await runtimeStatus(reopened) === 200, 'Reopened page lost authority');
+    await reopened.addScriptTag({ path: bundle });
+    const recovered = await reopened.evaluate(probe => GatewayAcceptance.inspectTerminalRecoveryProbe(probe), probe);
+    await reopened.getByRole('tab', { name: 'Activity', exact: true }).click();
+    await reopened.locator('nav[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'Terminal', exact: true }).click();
+    await reopened.locator('[data-terminal-runtime-session="' + probe.sessionID + '"]:visible').waitFor({ timeout: 30000 });
+    report.cases.push({ scope: 'Actual Chrome offline/reload and page close/reopen while one bounded remote terminal command continues; fresh Runtime catalog/file reads, same session rendered, no duplicated submission', first, online, closed, progressed, recovered, otherRuntimeUnaffected: true });
+    await reopened.getByRole('tab', { name: 'Workbench', exact: true }).click();
+    await verifyRuntimeWorkspace(reopened, false);
+    return reopened;
+  } finally {
+    if (offline) {
+      await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+      await cdp.detach();
+    }
+    const cleanup = observer ?? reopened ?? page;
+    if (probe.sessionID) await cleanup.evaluate(probe => GatewayAcceptance.inspectTerminalRecoveryProbe(probe, true), probe);
+    if (observer) await observer.close();
+  }
+}
 async function checkAccessibility(page) {
   await page.evaluate(await readFile(path.join(root, 'internal/envapp/ui_src/node_modules/axe-core/axe.min.js'), 'utf8'));
   const violations = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(item => ({ id: item.id, impact: item.impact, nodes: item.nodes.map(node => node.target) })));
@@ -602,6 +668,11 @@ try {
     await candidate.addScriptTag({ path: bundled });
     await candidate.evaluate(() => GatewayAcceptance.verifyWebEntryServices());
     report.cases.push('Chrome page freeze/resume preserves server authorization and other tabs; resumed terminal/file/Git/Flower RPC use authoritative state');
+  }
+  if (process.env.REDEVEN_CENTER_TERMINAL_RECOVERY === '1') {
+    const previous = environments[0];
+    environments[0] = await verifyTerminalRecovery(previous, context, portal, environments[1], bundled);
+    if (applicationEnv === previous) applicationEnv = environments[0];
   }
   if (process.env.REDEVEN_CENTER_PERFORMANCE === '1') {
     const directory = [], opened = [];
