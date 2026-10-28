@@ -18,38 +18,37 @@
  * runtime section. Floe owns the primitives and focus treatment; Redeven only
  * supplies product spacing, palette roles, and responsive limits. */
 .redeven-settings-shell .redeven-settings-page {
-  max-width: 860px;
+  max-width: 980px;
   margin-inline: auto;
-  padding: 44px 40px 64px;
+  padding: 24px 24px 48px;
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-settings-section__body {
-  gap: 1.75rem;
+  gap: 1rem;
 }
 
 .redeven-settings-section + .redeven-settings-section {
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-settings-list {
   border: 1px solid var(--redeven-settings-inset-border);
-  border-radius: 14px;
+  border-radius: var(--floe-radius-lg, 10px);
   background: var(--redeven-settings-inset-bg);
   box-shadow: none;
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-setting-row {
-  min-height: 65px;
-  padding: 14px 17px;
+  padding: 12px;
   background: transparent;
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-setting-row__main {
-  gap: 1.75rem;
+  gap: 1rem;
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-setting-row__control {
-  max-width: 56%;
+  max-width: 50%;
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-setting-row__title {
@@ -58,8 +57,9 @@
 
 .redeven-settings-shell .redeven-settings-page .floe-setting-row__label p,
 .redeven-settings-shell .redeven-settings-page .floe-settings-section__heading > p {
-  max-width: 38rem;
-  line-height: 1.6;
+  max-width: 40rem;
+  font-size: var(--floe-type-supporting);
+  line-height: 18px;
 }
 
 .redeven-settings-shell .redeven-settings-page .redeven-settings-inset {
@@ -101,19 +101,19 @@
 }
 
 /* Product page scale follows the approved reference. Floe owns interaction. */
-.redeven-settings-shell .floe-settings-layout__sidebar { width: 228px; border-inline-end: 0; }
-.redeven-settings-shell .floe-settings-navigation__search { padding: 20px 14px 8px; }
+.redeven-settings-shell .floe-settings-layout__sidebar { width: 220px; border-inline-end: 0; }
+.redeven-settings-shell .floe-settings-navigation__search { padding: 12px 12px 8px; }
 .redeven-settings-shell input.redeven-settings-search { padding-inline: 32px 28px; }
-.redeven-settings-shell .floe-settings-navigation__groups { padding: 0 14px 20px; }
-.redeven-settings-shell .floe-settings-navigation__label { padding: 19px 9px 6px; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
-.redeven-settings-shell .floe-settings-navigation__group + .floe-settings-navigation__group { margin-top: 0; }
-.redeven-settings-shell .floe-settings-navigation__item { min-height: 35px; margin-block: 2px; padding: 8px 10px; gap: 10px; font-size: 13px; font-weight: 400; }
+.redeven-settings-shell .floe-settings-navigation__groups { padding: 0 10px 20px; }
+.redeven-settings-shell .floe-settings-navigation__label { padding: 12px 10px 4px; font-size: var(--floe-type-caption); font-weight: 500; letter-spacing: .025em; text-transform: uppercase; }
+.redeven-settings-shell .floe-settings-navigation__group + .floe-settings-navigation__group { margin-top: 7px; }
+.redeven-settings-shell .floe-settings-navigation__item { min-height: var(--floe-row-height); margin-block: 0; padding: 4px 10px; gap: 8px; font-size: var(--floe-type-control); }
 :root:not([data-floe-shell-theme^='hc-']) .redeven-settings-shell .floe-settings-navigation__item[aria-current='page']::before { display: none; }
-.redeven-settings-shell .redeven-settings-page h1 { font-size: 25px; line-height: 1.4; letter-spacing: -.6px; font-weight: 600; }
-.redeven-settings-shell .floe-settings-section[data-settings-variant='page'] > .floe-settings-section__header { margin-bottom: 33px; }
-.redeven-settings-shell .floe-settings-section[data-settings-variant='page'] > .floe-settings-section__header .floe-settings-section__heading > p { margin-top: 8px; font-size: 13px; line-height: 1.7; }
-.redeven-settings-shell .floe-setting-row__title { font-size: 13px; line-height: 1.6; }
-.redeven-settings-shell .floe-setting-row__label p { font-size: 12px; line-height: 1.65; margin-top: 3px; }
+.redeven-settings-shell .redeven-settings-page h1 { font-size: var(--floe-type-heading); line-height: 1.375rem; letter-spacing: 0; font-weight: 500; }
+.redeven-settings-shell .floe-settings-section[data-settings-variant='page'] > .floe-settings-section__header { margin-bottom: 16px; }
+.redeven-settings-shell .floe-settings-section[data-settings-variant='page'] > .floe-settings-section__header .floe-settings-section__heading > p { margin-top: 4px; font-size: var(--floe-type-supporting); line-height: 18px; }
+.redeven-settings-shell .floe-setting-row__title { font-size: var(--floe-type-control); line-height: var(--floe-line-control); }
+.redeven-settings-shell .floe-setting-row__label p { font-size: var(--floe-type-supporting); line-height: 18px; margin-top: 2px; }
 .redeven-settings-shell .floe-setting-row__icon {
   display: flex; align-items: center; justify-content: center; flex: none;
   width: var(--floe-control-height-md); height: var(--floe-control-height-md); padding: 7px;
@@ -162,20 +162,20 @@
 @media (pointer: coarse) { .settings-technical-details > summary { min-height: 44px; } }
 .settings-technical-details > .floe-settings-list { margin-top: 12px; }
 .settings-provider-row + .settings-provider-row { border-top: 1px solid var(--redeven-settings-divider); }
-.settings-provider-details { padding: 0 17px 12px; }
+.settings-provider-details { padding: 0 12px 12px; }
 .settings-skill-details { margin-top: 10px; }
 .settings-permission-ceiling { display: flex; flex-wrap: wrap; gap: 16px; }
 .settings-permission-ceiling label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; }
-.settings-permission-table { border: 1px solid var(--redeven-settings-inset-border); border-radius: 14px; background: var(--redeven-settings-inset-bg); overflow: hidden; }
-.settings-permission-table table { table-layout: fixed; width: 100%; font-size: 12px; }
+.settings-permission-table { border: 1px solid var(--redeven-settings-inset-border); border-radius: var(--floe-radius-group); background: var(--redeven-settings-inset-bg); overflow: hidden; }
+.settings-permission-table table { table-layout: fixed; width: 100%; font-size: var(--floe-type-supporting); }
 .settings-permission-table th { color: var(--redeven-settings-note-fg); font-weight: 400; }
-.settings-permission-table th, .settings-permission-table td { padding: 12px 8px; text-align: center; overflow-wrap: anywhere; }
-.settings-permission-table th:first-child, .settings-permission-table td:first-child { width: 42%; text-align: left; padding-inline-start: 17px; }
+.settings-permission-table th, .settings-permission-table td { padding: 10px 8px; text-align: center; overflow-wrap: anywhere; }
+.settings-permission-table th:first-child, .settings-permission-table td:first-child { width: 42%; text-align: left; padding-inline-start: 12px; }
 .settings-permission-table th:last-child { width: 44px; }
 .settings-permission-table tr + tr, .settings-permission-table tbody { border-top: 1px solid var(--redeven-settings-divider); }
-.settings-permission-table .settings-permission-empty { color: var(--redeven-settings-note-fg); padding: 22px 17px; }
-.settings-permission-options { border: 1px solid var(--redeven-settings-inset-border); border-radius: 14px; background: var(--redeven-settings-inset-bg); overflow: hidden; }
-.settings-permission-option { display: flex; align-items: center; justify-content: space-between; gap: 28px; width: 100%; min-height: 65px; padding: 14px 17px; text-align: left; cursor: pointer; }
+.settings-permission-table .settings-permission-empty { color: var(--redeven-settings-note-fg); padding: 20px 12px; }
+.settings-permission-options { border: 1px solid var(--redeven-settings-inset-border); border-radius: var(--floe-radius-group); background: var(--redeven-settings-inset-bg); overflow: hidden; }
+.settings-permission-option { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; min-height: var(--floe-control-height-lg); padding: 12px; text-align: left; cursor: pointer; }
 .settings-permission-option + .settings-permission-option { border-top: 1px solid var(--redeven-settings-divider); }
 .settings-permission-option:hover { background: var(--redeven-settings-row-hover-bg); }
 .settings-permission-option:disabled { cursor: not-allowed; opacity: .6; }
@@ -183,7 +183,7 @@
 .settings-permission-option-mark { flex-shrink: 0; width: 16px; height: 16px; border: 1px solid var(--muted-foreground); border-radius: 50%; }
 .settings-permission-option[aria-checked='true'] .settings-permission-option-mark { border: 5px solid var(--primary); }
 .redeven-settings-shell .floe-settings-list > .floe-setting-row + .floe-setting-row { border-top: 0; position: relative; }
-.redeven-settings-shell .floe-settings-list > .floe-setting-row + .floe-setting-row::before { content: ''; position: absolute; top: 0; left: 17px; right: 17px; border-top: 1px solid var(--redeven-settings-divider); }
+.redeven-settings-shell .floe-settings-list > .floe-setting-row + .floe-setting-row::before { content: ''; position: absolute; top: 0; left: 12px; right: 12px; border-top: 1px solid var(--redeven-settings-divider); }
 @container redeven-settings (max-width: 600px) {
   .settings-row-actions { flex-wrap: wrap; justify-content: flex-start; }
   .settings-port-controls { align-items: flex-start; }

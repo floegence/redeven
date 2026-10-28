@@ -1,6 +1,6 @@
 import type { JSX } from 'solid-js';
 import { createEffect, onCleanup } from 'solid-js';
-import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { createFloatingPresence, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 /** Flower menus share projected placement and keyboard/focus ownership. */
 export function FlowerContextMenu(props: Readonly<{
@@ -14,6 +14,10 @@ export function FlowerContextMenu(props: Readonly<{
 }>): JSX.Element {
   let menuRef: HTMLDivElement | undefined;
   let disposed = false;
+  // Flower mounts this menu only while it is open, so presence supplies the
+  // floe menu entrance (240ms, -0.375rem rise, 0.97 scale). Dismissal still
+  // unmounts through the caller, keeping focus restoration unchanged.
+  const menuPresence = createFloatingPresence({ open: () => true, element: () => menuRef });
   const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled):not([aria-disabled="true"])') ?? []);
   const focusItem = (delta: number) => {
     const items = focusableItems();
@@ -97,7 +101,8 @@ export function FlowerContextMenu(props: Readonly<{
         ref={menuRef}
         role="menu"
         tabIndex={-1}
-        class="flower-thread-context-menu"
+        class="flower-thread-context-menu floe-floating-presence floe-floating-menu"
+        data-floating-presence={menuPresence.state()}
         aria-label={props.label}
         onFocusOut={(event) => {
           const next = event.relatedTarget;

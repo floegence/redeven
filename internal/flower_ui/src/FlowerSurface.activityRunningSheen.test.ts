@@ -202,12 +202,15 @@ describe('Flower activity status presentation', () => {
     expect(mainRule).toContain('z-index: var(--flower-layer-chat-main)');
     expect(headerRule).toContain('z-index: var(--flower-layer-chat-header)');
     expect(dropdownLayerRule).toContain('z-index: var(--flower-layer-subagent-dropdown)');
-    expect(dropdownRule).toContain('background: var(--card)');
-    expect(dropdownRule).not.toContain('box-shadow:');
+    // The dropdown follows the shared floe menu recipe: popover surface, line
+    // border, panel radius, float elevation and the presence transition.
+    expect(dropdownRule).toContain('background: var(--popover, var(--card))');
+    expect(dropdownRule).toContain('border-radius: var(--floe-radius-panel)');
+    expect(dropdownRule).toContain('box-shadow: var(--floe-elevation-float)');
     expect(dropdownRule).not.toContain('backdrop-filter:');
-    expect(dropdownRule).toContain('border-radius: 0.875rem');
-    expect(dropdownRule).toContain('animation: flower-subagents-dropdown-enter 220ms');
-    expect(dropdownRowRule).toContain('min-height: 4rem');
+    expect(dropdownRule).not.toContain('animation:');
+    expect(dropdownRowRule).toContain('min-height: 2.5rem');
+    expect(dropdownRowRule).toContain('border-radius: var(--floe-radius-sm)');
     expect(dropdownRowHoverRule).not.toContain('transform:');
     expect(dropdownRunningStatusRule).toContain('color: var(--primary)');
     expect(css).not.toContain('flower-running-text-shimmer');

@@ -35,6 +35,7 @@ import {
   DialogPlacementProvider,
   SurfaceFloatingLayer,
   Dropdown,
+  createFloatingPresence,
 } from '@floegence/floe-webapp-core/ui';
 import { ActivityFieldRows } from './ActivityFieldRows';
 import { ActivityFieldText } from './ActivityFieldText';
@@ -1216,6 +1217,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let composerMorePanelRef: HTMLDivElement | undefined;
   let subagentTriggerRef: HTMLElement | undefined;
   let subagentDropdownRef: HTMLDivElement | undefined;
+  // Floe owns the menu entrance. The panel mounts only while open, so presence
+  // supplies the same 240ms rise/scale every other Flower menu uses.
+  const subagentDropdownPresence = createFloatingPresence({ open: () => true, element: () => subagentDropdownRef });
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
@@ -12774,7 +12778,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ref={subagentDropdownRef}
           id="flower-subagents-dropdown"
           data-floe-surface="floating"
-          class="flower-subagents-dropdown"
+          class="flower-subagents-dropdown floe-floating-presence floe-floating-menu"
+          data-floating-presence={subagentDropdownPresence.state()}
           role="dialog"
           aria-label={subagentsCopy().title}
           aria-modal="false"

@@ -8,10 +8,12 @@
 .managed-settings-content > section > header h3 { font-size: 25px; line-height: 1.4; font-weight: 600; letter-spacing: -.6px; }
 .managed-settings-content > section > header p { font-size: 13px; line-height: 1.7; margin-top: 8px; }
 .managed-settings-fields { display: flex; flex-direction: column; padding: 0 17px; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: var(--card); }
-.managed-settings-field, .managed-settings-fields > label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 4px 28px; min-width: 0; padding: 14px 0; min-height: 65px; }
+/* Label and control share the first row; supporting copy stays in column one
+ * beneath its label so the control never centers against text it does not own. */
+.managed-settings-field, .managed-settings-fields > label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 4px 28px; min-width: 0; padding-block: 12px; }
 .managed-settings-fields > label + label { border-top: 1px solid var(--border); }
-.managed-settings-field > span:first-child, .managed-settings-fields > label > span:first-child { grid-column: 1; grid-row: 1; font-size: 13px; font-weight: 400; color: var(--foreground); }
-.managed-settings-field > input, .managed-settings-field > textarea, .managed-settings-fields > label > input, .managed-settings-fields > label > select { grid-column: 2; grid-row: 1 / span 2; font-size: 12px; width: 100%; min-width: 0; }
+.managed-settings-field > span:first-child, .managed-settings-fields > label > span:first-child { grid-column: 1; grid-row: 1; align-self: center; font-size: 13px; font-weight: 400; line-height: var(--floe-line-control); color: var(--foreground); }
+.managed-settings-field > input, .managed-settings-field > textarea, .managed-settings-fields > label > input, .managed-settings-fields > label > select { grid-column: 2; grid-row: 1; align-self: center; font-size: var(--floe-type-control); width: 100%; min-width: 0; }
 .managed-settings-field > input[type=number] { width: 88px; justify-self: end; }
 .managed-settings-fields > label > span:last-child:not(:first-child) { grid-column: 1; grid-row: 2; font-size: 12px; line-height: 1.65; }
 @container managed-settings (max-width: 600px) {

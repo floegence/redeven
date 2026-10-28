@@ -233,10 +233,15 @@
 .ssh-settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ssh-settings-section h3 { font-size: var(--floe-type-control); font-weight: 500; color: var(--foreground); }
 .ssh-settings-fields.floe-settings-list { padding: 0 var(--environment-settings-inset); border: 1px solid var(--environment-settings-border); border-radius: var(--environment-settings-radius); background: var(--environment-settings-surface); }
-.ssh-settings-field, .ssh-settings-probe { display: flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 65px; padding: 14px 0; min-width: 0; }
+/* The label is top-aligned with the control row and centers itself inside one
+ * control height, so its help text and a validation line under the control
+ * never pull the pair apart. */
+.ssh-settings-field { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding-block: 12px; min-width: 0; }
+.ssh-settings-probe { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding-block: 12px; min-width: 0; }
 .ssh-settings-field + .ssh-settings-field { border-top: 1px solid var(--environment-settings-border); }
 .ssh-settings-field-label, .ssh-settings-probe > div { flex: 1; min-width: 0; }
-.ssh-settings-field-label label, .ssh-settings-field-label > span, .ssh-settings-probe label { font-size: var(--floe-type-control); font-weight: 400; line-height: 1.6; }
+.ssh-settings-field-label label, .ssh-settings-field-label > span { display: inline-flex; align-items: center; min-height: var(--environment-settings-control-height); font-size: var(--floe-type-control); font-weight: 400; line-height: var(--floe-line-control); }
+.ssh-settings-probe label { font-size: var(--floe-type-control); font-weight: 400; line-height: 1.6; }
 .ssh-settings-field-control { width: 258px; max-width: 56%; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
 .ssh-settings-field:has(#ssh-settings-ssh_port) .ssh-settings-field-control { width: 88px; }
 /* Text-entry geometry only. A radio is a choice dot that keeps its intrinsic
@@ -300,17 +305,21 @@
 .environment-connection-form { display: flex; flex-direction: column; gap: 24px; }
 .environment-connection-section-title { font-size: var(--floe-type-control); font-weight: 500; color: var(--foreground); }
 .environment-connection-group { margin-top: 10px; padding: 0 var(--environment-settings-inset); border: 1px solid var(--environment-settings-border); border-radius: var(--environment-settings-radius); background: var(--environment-settings-surface); }
-.environment-connection-field { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,258px); align-items: center; column-gap: 28px; row-gap: 4px; min-width: 0; min-height: 65px; padding-block: 14px; }
+/* One label/control row per field. The label, the control and any help or
+ * validation line share the first row's center, so a field with supporting
+ * copy never shifts its control relative to the text it belongs to. */
+.environment-connection-field { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,258px); align-items: center; column-gap: 28px; row-gap: 4px; min-width: 0; padding-block: 12px; }
 .environment-connection-field + .environment-connection-field { border-top: 1px solid var(--environment-settings-border); }
-.environment-connection-field > label { grid-column: 1; grid-row: 1; font-size: var(--floe-type-control); font-weight: 400; }
-.environment-connection-field > :not(label) { grid-column: 2; min-width: 0; }
-.environment-connection-field > input, .environment-connection-field > select, .environment-connection-field > div:has(input) { grid-row: 1 / span 2; width: 100%; height: var(--environment-settings-control-height); font-size: var(--floe-type-supporting); }
-.environment-connection-field > .text-muted-foreground { grid-column: 1; grid-row: 2; font-size: var(--floe-type-supporting); line-height: 1.65; }
+.environment-connection-field > label { grid-column: 1; grid-row: 1; align-self: center; font-size: var(--floe-type-control); font-weight: 400; line-height: var(--floe-line-control); }
+.environment-connection-field > :not(label):not(.environment-connection-help):not(.environment-connection-error):not(.text-muted-foreground) { grid-column: 2; grid-row: 1; min-width: 0; }
+.environment-connection-field > input, .environment-connection-field > select, .environment-connection-field > div:has(input) { grid-row: 1; width: 100%; height: var(--environment-settings-control-height); font-size: var(--floe-type-control); }
+.environment-connection-field > .text-muted-foreground { grid-column: 1; grid-row: 2; font-size: var(--floe-type-supporting); line-height: 1.5; }
 .environment-connection-field > .environment-connection-help { grid-column: 1; grid-row: 2; }
-.environment-connection-help, .environment-connection-guidance { font-size: var(--floe-type-supporting); line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.environment-connection-field > .environment-connection-error { grid-column: 2; grid-row: 2; }
+.environment-connection-help, .environment-connection-guidance { font-size: var(--floe-type-supporting); line-height: 1.5; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .environment-connection-help { margin-top: 3px; }
 .environment-connection-error { font-size: var(--floe-type-supporting); line-height: 1.6; color: var(--error); overflow-wrap: anywhere; }
-.environment-connection-guidance { padding-block: 14px; border-bottom: 1px solid var(--environment-settings-border); }
+.environment-connection-guidance { padding-block: 12px; border-bottom: 1px solid var(--environment-settings-border); }
 .environment-connection-fields > .environment-connection-fields { border-bottom: 1px solid var(--environment-settings-border); }
 .environment-connection-fields > .environment-connection-fields:last-child { border-bottom: 0; }
 .environment-connection-field > .environment-connection-help + button { justify-self: end; max-width: 100%; white-space: nowrap; }
@@ -319,25 +328,30 @@
  * reads as an empty control. */
 .environment-connection-field > .floe-segmented-control,
 .environment-connection-field > [role='radiogroup'] { justify-self: start; width: fit-content; max-width: 100%; }
-.environment-connection-probe { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
+.environment-connection-probe { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 12px; }
 .environment-connection-group .environment-connection-field { margin-block: 0; }
 .environment-connection-facts { margin: 0; }
-.environment-connection-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 28px; min-height: 65px; padding-block: 14px; }
+.environment-connection-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 28px; padding-block: 12px; }
 .environment-connection-facts > div + div { border-top: 1px solid var(--environment-settings-border); }
-.environment-connection-facts dt { font-size: var(--floe-type-control); }
+.environment-connection-facts dt { font-size: var(--floe-type-control); line-height: var(--floe-line-control); }
 .environment-connection-facts dd { margin: 0; font-size: var(--floe-type-supporting); text-align: right; overflow-wrap: anywhere; }
-.environment-connection-form .environment-container-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); column-gap: 28px; row-gap: 8px; padding-block: 14px; border-top: 1px solid var(--environment-settings-border); }
+.environment-connection-form .environment-container-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; column-gap: 28px; row-gap: 6px; padding-block: 12px; border-top: 1px solid var(--environment-settings-border); }
 .environment-connection-form .environment-container-picker-heading { display: contents; }
-.environment-connection-form .environment-container-picker-heading label { grid-column: 1; grid-row: 1; align-self: center; font-size: var(--floe-type-control); font-weight: 400; }
+.environment-connection-form .environment-container-picker-heading label { grid-column: 1; grid-row: 1; align-self: center; font-size: var(--floe-type-control); font-weight: 400; line-height: var(--floe-line-control); }
 .environment-connection-form .environment-container-picker-heading button { grid-column: 2; grid-row: 2; justify-self: end; }
-.environment-connection-form .environment-container-picker-control { grid-column: 2; grid-row: 1; margin: 0; }
+.environment-connection-form .environment-container-picker-control { grid-column: 2; grid-row: 1; align-self: center; margin: 0; }
 .environment-connection-form .environment-container-picker > :not(.environment-container-picker-heading):not(.environment-container-picker-control) { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 600px) {
+  /* Stacked rows keep every child at the row's own leading edge; the grid's
+   * center alignment would otherwise size the label to its text and center it. */
   .environment-connection-field { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .environment-connection-field > label,
+  .environment-connection-form .environment-container-picker-heading label { align-self: stretch; text-align: start; }
   .environment-connection-facts > div { grid-template-columns: 1fr; gap: 8px; }
   .environment-connection-facts dd { text-align: left; }
-  .environment-connection-form .environment-container-picker { display: flex; flex-direction: column; }
+  .environment-connection-form .environment-container-picker { display: flex; flex-direction: column; align-items: stretch; }
   .environment-connection-form .environment-container-picker-heading { display: flex; }
+  .environment-connection-form .environment-container-picker-control { align-self: stretch; }
 }
 @media (pointer: coarse) {
   .environment-connection-field input, .environment-connection-field select { font-size: 16px; min-height: 44px; }

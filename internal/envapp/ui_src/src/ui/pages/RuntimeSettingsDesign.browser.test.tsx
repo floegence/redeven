@@ -238,21 +238,22 @@ it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overf
   for (const item of SETTINGS_NAV_ITEMS) {
     const panel = await openSection(item.id); expectNoOverflow(panel);
     expect(panel.querySelectorAll('h1')).toHaveLength(1);
-    expect(getComputedStyle(panel.querySelector('h1')!).fontSize).toBe('25px');
-    expect(getComputedStyle(panel.querySelector('h1')!).fontWeight).toBe('600');
+    // Page identity takes the floe heading step, not a product-local display size.
+    expect(getComputedStyle(panel.querySelector('h1')!).fontSize).toBe('16px');
+    expect(getComputedStyle(panel.querySelector('h1')!).fontWeight).toBe('500');
     for (const description of panel.querySelectorAll('.floe-setting-row__label p')) {
       expect(getComputedStyle(description).fontSize).toBe('12px');
     }
-    expect(getComputedStyle(panel.querySelector('.floe-settings-section__heading > p')!).fontSize).toBe('13px');
+    expect(getComputedStyle(panel.querySelector('.floe-settings-section__heading > p')!).fontSize).toBe('12px');
     if (item.id === 'config') {
       expect(getComputedStyle(panel.querySelector('code')!).fontSize).toBe('12px');
     }
     if (width === 1280) {
       const content = panel.querySelector<HTMLElement>('.redeven-settings-page')!;
-      expect(content.getBoundingClientRect().width).toBe(860);
-      expect(getComputedStyle(content).padding).toBe('44px 40px 64px');
+      expect(getComputedStyle(content).maxWidth).toBe('980px');
+      expect(getComputedStyle(content).padding).toBe('24px 24px 48px');
       for (const list of content.querySelectorAll<HTMLElement>('.floe-settings-list')) {
-        expect(getComputedStyle(list).borderRadius).toBe('14px');
+        expect(getComputedStyle(list).borderRadius).toBe('10px');
       }
       await page.screenshot({ path: `../../../dist/settings-design/runtime-settings-${item.id}.png` });
     }
