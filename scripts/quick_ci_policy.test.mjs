@@ -85,6 +85,7 @@ const allowedQuickGateCommands = new Set([
   "node --test scripts/interaction_continuity_policy.test.mjs",
   "node --test scripts/install_bootstrap_contract.test.mjs scripts/security_scan_boundaries.test.mjs",
   "node --test scripts/desktop_test_session_policy.test.mjs scripts/desktop_test_session.test.mjs",
+  "node --test scripts/dev_desktop_build_proxy.test.mjs",
   "node --test scripts/check_staged_viewer_assets.test.mjs",
   "node --test scripts/check_floeterm_dependency_consistency.test.mjs",
   "node --test scripts/computer_webtop_cleanup.test.mjs scripts/computer_webtop_acceptance.test.mjs scripts/qualification_response_stream.test.mjs",
