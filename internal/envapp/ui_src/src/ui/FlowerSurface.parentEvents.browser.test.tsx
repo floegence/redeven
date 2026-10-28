@@ -9,7 +9,6 @@ import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtime
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerParentEventPage, FlowerRuntimeCurrentItem } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
-import { loadEnvAppDictionary } from './i18n/locales';
 import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import type { EnvAppTranslationKey } from './i18n';
@@ -250,6 +249,45 @@ it('does not retry a denied report or a collapsed transient request', async () =
   expect(read).toHaveBeenCalledTimes(2);
 });
 
+it.each([292, 420, 960])('keeps event timestamps next to their content with one source action at %s px', async width => {
+  // A narrow companion can also sit inside a wide desktop viewport.
+  await page.viewport(width === 292 ? 320 : 1100, 850);
+  const host = document.createElement('div'); host.style.width = width + 'px'; document.body.append(host);
+  const onOpenSource = vi.fn();
+  const [name, setName] = createSignal('US Culture Sports');
+  const dispose = render(() => <>
+    <ParentEventRow event={event('inline-completed', 'completed')} copy={copy} sourceName={name()} canOpenSource onOpenSource={onOpenSource} onDisclosureClick={() => {}} />
+    <ParentEventRow event={event('inline-report')} copy={copy} sourceName={name()} canOpenSource onOpenSource={onOpenSource} onDisclosureClick={() => {}} />
+    <ParentEventRow event={event('inline-unavailable', 'failed')} copy={copy} sourceName={name()} canOpenSource={false} onOpenSource={onOpenSource} onDisclosureClick={() => {}} />
+  </>, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  const checkGeometry = () => {
+    for (const row of host.querySelectorAll<HTMLElement>('.flower-parent-event')) {
+      const time = row.querySelector('time')!;
+      const previous = time.previousElementSibling!.getBoundingClientRect();
+      const box = time.getBoundingClientRect();
+      expect(Math.abs(box.top + box.height / 2 - previous.top - previous.height / 2)).toBeLessThan(1);
+      expect(box.left - previous.right).toBeGreaterThanOrEqual(0);
+      expect(box.left - previous.right).toBeLessThanOrEqual(8);
+      expect(time.getAttribute('datetime')).toBe(event('inline').received_at);
+      expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+    }
+  };
+  checkGeometry();
+  expect(host.querySelector('.flower-parent-event-open')).toBeNull();
+  expect(host.textContent).not.toContain(copy.events.open);
+  const source = host.querySelector<HTMLButtonElement>('[data-parent-event="inline-completed"] button.flower-parent-event-source')!;
+  await userEvent.click(source);
+  source.focus(); await userEvent.keyboard('{Enter}');
+  expect(onOpenSource).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('[data-parent-event="inline-unavailable"] button')).toBeNull();
+  setName('Long research task — ' + 'Complete source verification '.repeat(6));
+  checkGeometry();
+  expect(host.querySelector('button.flower-parent-event-source')).toBe(source);
+  expect(document.activeElement).toBe(source);
+  await page.screenshot({ element: host, path: '__screenshots__/parent-events/inline-time-' + width + '.png' });
+});
+
 it('expands the original report in place without repeating its preview', async () => {
   await page.viewport(700, 850);
   const host = document.createElement('div'); host.style.width = '620px'; document.body.append(host);
@@ -355,7 +393,7 @@ it('shows reports and terminal events with child avatars in the parent transcrip
   await waitFor(() => Boolean(document.querySelector('.flower-subagents-dropdown')));
   expect(document.querySelector('.flower-subagents-dropdown [data-parent-event]')).toBeNull();
   expect(document.querySelector('.flower-subagents-dropdown [data-flower-subagent-avatar]')?.getAttribute('data-flower-subagent-avatar')).toBe(avatars[0].getAttribute('data-flower-subagent-avatar'));
-  runtime.querySelector<HTMLButtonElement>('[data-parent-event="failed"] .flower-parent-event-open')!.click();
+  runtime.querySelector<HTMLButtonElement>('[data-parent-event="failed"] button.flower-parent-event-source')!.click();
   await waitFor(() => loadChild.mock.calls.length > 0);
 });
 
@@ -469,17 +507,31 @@ it('ignores a late body after changing the parent and retries demanded details o
 it('keeps report actions readable and non-overlapping in every shipped locale', async () => {
   await page.viewport(320, 780);
   for (const locale of SUPPORTED_LOCALES) {
-    const localized = { ...copy, events: (await loadEnvAppDictionary(locale)).flowerSurface.subagents.events };
+    const i18n = createTestI18nHelpers(locale);
+    const localized = createLocalizedFlowerSurfaceCopy({ locale,
+      t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+      tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) }).subagents!;
     const host = document.createElement('div'); host.style.width = '292px'; document.body.append(host);
-    const dispose = render(() => <ParentEventRow event={{ ...event('localized'), message: 'Finding\nComplete report' }}
-      copy={localized} sourceName="Research" canOpenSource onOpenSource={() => {}} onDisclosureClick={() => {}} />, host);
+    const dispose = render(() => <>
+      <ParentEventRow event={{ ...event('localized'), message: 'Finding\nComplete report' }}
+        copy={localized} sourceName="Research" canOpenSource onOpenSource={() => {}} onDisclosureClick={() => {}} />
+      {(['completed', 'failed', 'timed_out', 'input_required', 'approval_required', 'interrupted', 'cancelled'] as const).map(kind =>
+        <ParentEventRow event={event('localized-' + kind, kind)} copy={localized} sourceName="Research" canOpenSource onOpenSource={() => {}} onDisclosureClick={() => {}} />)}
+    </>, host);
     try {
       const disclosure = host.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
-      const action = host.querySelector<HTMLElement>('.flower-parent-event-report .flower-parent-event-open')!;
+      expect(host.querySelector('.flower-parent-event-open')).toBeNull();
+      for (const heading of host.querySelectorAll<HTMLElement>('.flower-parent-event-heading')) {
+        expect(heading.scrollWidth, locale).toBeLessThanOrEqual(heading.clientWidth + 1);
+        const time = heading.querySelector('time')!.getBoundingClientRect();
+        const previous = heading.querySelector('time')!.previousElementSibling!.getBoundingClientRect();
+        expect(time.left - previous.right, locale).toBeLessThanOrEqual(8);
+        expect(heading.querySelector('.flower-parent-event-source')!.getBoundingClientRect().width, locale).toBeGreaterThan(12);
+      }
       for (const expanded of [false, true]) {
         if (expanded) disclosure.click();
-        const a = disclosure.getBoundingClientRect(), b = action.getBoundingClientRect();
-        expect(a.right <= b.left || a.bottom <= b.top, locale).toBe(true);
+        expect(disclosure.scrollWidth, locale).toBeLessThanOrEqual(disclosure.clientWidth + 1);
+        expect(disclosure.getBoundingClientRect().height, locale).toBeGreaterThanOrEqual(32);
         expect(host.scrollWidth, locale).toBeLessThanOrEqual(host.clientWidth + 1);
       }
     } finally { dispose(); host.remove(); }
@@ -497,14 +549,13 @@ for (const theme of ['light', 'dark']) it('keeps report actions inline and event
   </>, host);
   onTestFinished(() => { dispose(); host.remove(); });
   const disclosure = host.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
-  const action = host.querySelector<HTMLElement>('.flower-parent-event-report .flower-parent-event-open')!;
-  const a = disclosure.getBoundingClientRect(), b = action.getBoundingClientRect();
-  expect(Math.abs((a.top + a.height / 2) - (b.top + b.height / 2))).toBeLessThan(2);
-  expect(a.right).toBeLessThan(b.left);
-  expect(getComputedStyle(action).cursor).toBe('pointer');
+  expect(host.querySelector('.flower-parent-event-open')).toBeNull();
+  const source = host.querySelector<HTMLElement>('button.flower-parent-event-source')!;
+  expect(getComputedStyle(source).cursor).toBe('pointer');
   const status = host.querySelector<HTMLElement>('.flower-parent-event-status')!.getBoundingClientRect();
-  const eventAction = host.querySelector<HTMLElement>('[data-parent-event="failed"] .flower-parent-event-open')!.getBoundingClientRect();
-  expect(Math.abs((status.top + status.height / 2) - (eventAction.top + eventAction.height / 2))).toBeLessThan(2);
+  const time = host.querySelector<HTMLElement>('[data-parent-event="failed"] time')!.getBoundingClientRect();
+  expect(Math.abs((status.top + status.height / 2) - (time.top + time.height / 2))).toBeLessThan(1);
+  expect(time.left - status.right).toBeLessThanOrEqual(8);
   disclosure.click();
   expect(host.querySelector('[data-parent-event-body]')?.textContent?.length).toBeGreaterThan(7000);
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
@@ -755,8 +806,8 @@ it('keeps the child destination hidden until receipt alignment finishes', async 
       await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
     },
   }, { focusThreadRequest: { request_id: 'child-receipt-readiness', thread_id: 'parent' } });
-  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] .flower-parent-event-open')));
-  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] .flower-parent-event-open')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] button.flower-parent-event-source')));
+  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] button.flower-parent-event-source')!.click();
   await waitFor(() => read.mock.calls.length === 1 && Boolean(document.querySelector('[data-flower-message-id="child-text"]')));
   const message = document.querySelector<HTMLElement>('[data-flower-message-id="child-text"]')!;
   const viewport = document.querySelector<HTMLElement>('.flower-subagent-detail-transcript')!;
@@ -792,8 +843,8 @@ it.each(['complete', 'close'] as const)('owns child destination body reads throu
       activity: 'idle', last_outcome: 'completed', items: [item] },
       window: { first_item_id: item.id, last_item_id: item.id, has_before: false, has_after: false } }),
   }, { focusThreadRequest: { request_id: 'child-body-readiness-' + outcome, thread_id: 'parent' } });
-  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] .flower-parent-event-open')));
-  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] .flower-parent-event-open')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] button.flower-parent-event-source')));
+  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] button.flower-parent-event-source')!.click();
   await waitFor(() => read.mock.calls.length === 1);
   expect(read.mock.calls[0].slice(0, 2)).toEqual(['child', item.id]);
   const panel = document.querySelector<HTMLElement>('[data-flower-subagent-detail="open"]')!;
@@ -831,8 +882,8 @@ it('shows child receipt failure outside the hidden preparing transcript', async 
       parent_events: { thread_id: 'child', leaf_id: 'leaf', events: [first], first_event_id: first.id, last_event_id: 'last', next_after_event_id: first.id } },
       window: { first_item_id: 'child-text', last_item_id: 'child-text', has_before: true, has_after: false } }),
   }, { focusThreadRequest: { request_id: 'child-receipt-failure', thread_id: 'parent' } });
-  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] .flower-parent-event-open')));
-  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] .flower-parent-event-open')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] button.flower-parent-event-source')));
+  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] button.flower-parent-event-source')!.click();
   await waitFor(() => read.mock.calls.length === 1 && Boolean(document.querySelector('[data-flower-subagent-detail="open"] .flower-parent-event-reading')));
   const notice = document.querySelector<HTMLElement>('[data-flower-subagent-detail="open"] .flower-parent-event-reading')!;
   expect(notice.checkVisibility({ visibilityProperty: true })).toBe(true);
@@ -860,8 +911,8 @@ it('reads nested child reports with the child owner and cancels them when its pa
     loadSubagentDetail: async () => ({ summary: child, current: { thread_id: 'child', view_version: 1,
       activity: 'idle', last_outcome: 'completed', items: [], parent_events: childEvents } }),
   }, { focusThreadRequest: { request_id: 'nested-receipt', thread_id: 'parent' } });
-  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] .flower-parent-event-open')));
-  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] .flower-parent-event-open')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="open-child"] button.flower-parent-event-source')));
+  surface.querySelector<HTMLButtonElement>('[data-parent-event="open-child"] button.flower-parent-event-source')!.click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"] [data-parent-event="nested-report"]')));
   const panel = document.querySelector<HTMLElement>('[data-flower-subagent-detail="open"]')!;
   expect(read).not.toHaveBeenCalled();

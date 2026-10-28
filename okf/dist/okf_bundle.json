@@ -28696,7 +28696,7 @@
       "frontmatter": {
         "description": "Important child reports and automatic events in the parent conversation with canonical avatars and compact source navigation.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-28",
         "tags": [
           "ai",
           "flower",
@@ -28707,15 +28707,15 @@
         "title": "Flower parent event timeline",
         "type": "UI Contract"
       },
-      "body_length": 1384,
+      "body_length": 2211,
       "summary": "Floret owns canonical child reports/events and admission; UI owns pages/bodies/disclosure only. Reports appear in the selected parent with canonical child avatars, without receipt/admission/preservation notices. Reading wakes neither task. Every full read rechecks recipient authority and canonical fixed-range paging.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The parent transcript merges messages, anchored decorations and events by published canonical_ordinal on the queried Path; received time is display-only. Published Floret v7.61.0 supplies optional parent_turn_id from canonical receipt order.\n\nAn isolated Service/SQLite/scripted-provider browser qualification exercises actual fork, detail and report JSON through the production adapter and FlowerSurface, including read failures and restart.",
-          "char_count": 442
+          "body": "The parent transcript merges messages, anchored decorations and events by published canonical_ordinal on the queried Path; received time is display-only. Published Floret v7.61.0 supplies optional parent_turn_id from canonical receipt order.\n\nEvent headers keep the received time directly after the source/status in one compact row. Long source names truncate within the available width, including narrow companion surfaces. The source-name button is the only child-navigation action; report expansion stays independent. Preserve the event header row height so removing the duplicate action does not change disclosure anchoring. Layout uses CSS without measurement listeners, polling or extra reads.\n\nAn isolated Service/SQLite/scripted-provider browser qualification exercises actual fork, detail and report JSON through the production adapter and FlowerSurface, including read failures and restart.",
+          "char_count": 900
         },
         {
           "id": "boundaries",
@@ -32415,5 +32415,5 @@
       ]
     }
   ],
-  "source_sha256": "a76386d8372d92a0b2f55fb6fa3b5172589f5da8e91d375056802301e342dea4"
+  "source_sha256": "7f923fcb1c127af8d8cf210efcbc4656c786e2c79df6b54b71eb039dfcb63cbf"
 }

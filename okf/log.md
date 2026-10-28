@@ -6,6 +6,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 - Render name-only [SubAgent targets](ui/flower-subagent-detail.md) in compact informational capsules, keeping names out of action titles and preserving existing reads and identity-based navigation.
 
+- Keep [parent event](ui/flower-parent-events.md) timestamps next to their source/status and remove duplicate child-navigation actions. Retain name-button navigation, report disclosure and compact responsive headers.
+
 - Gate [thread entry](ui/flower-thread-selection.md) on the current bounded baseline and prepared destination. Settle restored [tool titles and folds](ui/flower-activity-interaction.md) statically, preserve manual choices and reading input, and retain genuine post-ready motion across root/child views and reconnect. Record focused regression and paired rendering [qualification](operations/flower-thread-switch-qualification.md), including retained baseline failures.
 
 - Keep single-target [SubAgent operation capsules](ui/flower-subagent-detail.md) on the title line through deferred identity reads, with stable narrow/touch geometry and unchanged read ownership. Retain informational portraits without granting child navigation.

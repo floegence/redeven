@@ -1,5 +1,5 @@
 import { batch, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from 'solid-js';
-import { AlertCircle, Check, ChevronDown, Clock, ExternalLink, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, Check, ChevronDown, Clock, XCircle } from '@floegence/floe-webapp-core/icons';
 import type { FlowerParentEvent, FlowerParentEventPage, FlowerParentEventQuery } from './contracts/flowerSurfaceContracts';
 import type { FlowerSubagentsCopy } from './copy';
 import { SubagentAvatar } from './SubagentAvatar';
@@ -561,11 +561,6 @@ export function ParentEventRow(props: Readonly<{
         </span>
       </Show>
       <time dateTime={props.event.received_at}>{time()}</time>
-      <Show when={!report() && props.canOpenSource}>
-        <button type="button" class="flower-parent-event-action flower-parent-event-open" onClick={props.onOpenSource}>
-          {props.copy.events.open}<ExternalLink aria-hidden="true" />
-        </button>
-      </Show>
     </div>
     <Show when={report()}>
       <div class="flower-parent-event-report">
@@ -582,11 +577,6 @@ export function ParentEventRow(props: Readonly<{
                 props.onExpandedChange(!open());
               }}>
               {open() ? props.copy.events.collapse : props.copy.events.read}<ChevronDown aria-hidden="true" />
-            </button>
-          </Show>
-          <Show when={props.canOpenSource}>
-            <button type="button" class="flower-parent-event-action flower-parent-event-open" onClick={props.onOpenSource}>
-              {props.copy.events.open}<ExternalLink aria-hidden="true" />
             </button>
           </Show>
         </div>
