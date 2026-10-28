@@ -1,7 +1,7 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import type { FlowerAttachmentUploadInput, FlowerReasoningCapability, FlowerThreadView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -40,6 +40,17 @@ function fixture() {
   return { drafts, base };
 }
 const control = (surface: HTMLElement) => surface.querySelector<HTMLElement>('[data-flower-composer-control="model_reasoning"] .flower-reasoning-control-segment');
+async function revealModelControls(surface: HTMLElement) {
+  const selector = '[data-flower-composer-control="model_reasoning"]';
+  await waitFor(() => Boolean(surface.querySelector(selector) || surface.querySelector('.flower-composer-more-button')));
+  // Width measurement can move the loaded control into More, including after
+  // a draft remount. Exercise that public path before inspecting its choices.
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  if (!surface.querySelector(selector)) {
+    await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-composer-more-button')!);
+    await waitFor(() => Boolean(surface.querySelector(selector)));
+  }
+}
 async function select(surface: HTMLElement, id = 'thread-1', waitForDetail = true) {
   await waitFor(() => Boolean(surface.querySelector(`[data-thread-id="${id}"] button`)));
   surface.querySelector<HTMLButtonElement>(`[data-thread-id="${id}"] button`)!.click();
@@ -59,6 +70,7 @@ describe('Flower reasoning settings authority', () => {
     const { drafts, base } = fixture();
     base.loadSettings = vi.fn(async () => settings(cap));
     let surface = renderSurfaceWithDraftCoordinator(base, drafts);
+    await revealModelControls(surface);
     await waitFor(() => control(surface)?.textContent?.includes('Default') === true);
     control(surface)!.querySelector('button')!.click();
     const items = Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
@@ -72,6 +84,7 @@ describe('Flower reasoning settings authority', () => {
     surface = renderSurfaceWithDraftCoordinator(base, drafts);
     expect(drafts.read('__new_thread__').value.reasoning_selection).toEqual({ level });
     reloadedSettings.resolve(settings(cap));
+    await revealModelControls(surface);
     await waitFor(() => control(surface)?.textContent?.includes(choice) === true);
     const textarea = surface.querySelector<HTMLTextAreaElement>('textarea')!;
     textarea.value = 'Use the selected reasoning mode';
@@ -92,7 +105,7 @@ describe('Flower reasoning settings authority', () => {
     const { drafts, base } = fixture();
     base.loadSettings = vi.fn(async () => settings({ kind }));
     const surface = renderSurfaceWithDraftCoordinator(base, drafts);
-    await waitFor(() => Boolean(surface.querySelector('[data-flower-composer-control="model_reasoning"]')));
+    await revealModelControls(surface);
     if (label) {
       await waitFor(() => control(surface)?.textContent?.includes(label) === true);
       expect(control(surface)?.querySelector('button')).toBeNull();
