@@ -4225,7 +4225,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       const hydrated = batch(() => {
         const accepted = chunk ? threadCache().appendBody(threadID, chunk) : threadCache().hydrateItem(threadID, expected, item!) ? 'applied' : 'rejected';
-        if (accepted === 'applied') recordTimelineReceipt(threadID, false);
+        // Byte chunks extend an already admitted body; they do not restore
+        // timeline membership or introduce historical title identities. Keep
+        // current arrival/fold owners intact while the body catches up.
+        if (accepted === 'applied' && !chunk) recordTimelineReceipt(threadID, false);
         return accepted;
       });
       if (hydrated === 'superseded') return;

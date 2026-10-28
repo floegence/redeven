@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page } from 'vitest/browser';
-import type { FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerToolCallPreview } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerToolCallPreview, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { adapter, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -25,7 +25,7 @@ function current(items: FlowerRuntimeCurrentItem[], version = 1): FlowerRuntimeC
     items: items.map((item, ordinal) => ({ ...item, ordinal: ordinal + 1 })),
   };
 }
-async function mount(initial = [tool('history', 'success')], child = false) {
+async function mount(initial = [tool('history', 'success')], child = false, bodyReads: Pick<FlowerSurfaceAdapter, 'loadHistoryItem' | 'loadHistoryBody'> = {}) {
   await page.viewport(1280, 900);
   let latest = current(initial);
   const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'typing', title: 'Activity typing', messages: [] }), latest);
@@ -44,7 +44,7 @@ async function mount(initial = [tool('history', 'success')], child = false) {
   });
   const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [child ? parent : applyFlowerRuntimeCurrentView(seed, latest), peer]),
     loadThread: vi.fn(async id => id === peer.thread_id ? liveBootstrap(peer) : child ? liveBootstrap(parent) : { thread: applyFlowerRuntimeCurrentView(seed, latest), current: latest }),
-    loadSubagentDetail: loadChild,
+    loadSubagentDetail: loadChild, ...bodyReads,
     async *connectLiveStream({ signal }) {
       connections++;
       yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [selected, peer] };
@@ -97,6 +97,31 @@ const title = (root: HTMLElement, id: string) => row(root, id)?.querySelector<HT
 const reveals = (node: HTMLElement) => node.getAnimations().filter(animation =>
   (animation.effect as KeyframeEffect).getKeyframes().some(frame => 'clipPath' in frame));
 afterEach(async () => { await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); });
+
+it.each([false, true])('keeps fresh title motion through admitted live-body chunks (child=%s)', async child => {
+  let release!: () => void;
+  const text = 'Preview prose with its complete admitted content.';
+  const partial: FlowerRuntimeCurrentItem = { id: 'live-prose', kind: 'assistant', turn_id: 'turn', run_id: 'run', ordinal: 0, live: true,
+    text: text.slice(0, 7), body: { run_id: 'run', source_id: 'live-prose', field: 'content', bytes: text.length, preview_bytes: 7 } };
+  const read = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (thread_id, input) => {
+    await new Promise<void>(resolve => { release = resolve; });
+    return { ...input, thread_id, bytes: text.length, text: text.slice(input.offset_bytes) };
+  });
+  const items = [partial, tool('previous')];
+  const { root, push } = await mount(items, child, { loadHistoryBody: read, loadHistoryItem: vi.fn(async () => { throw new Error('Expected incremental body read'); }) });
+  await waitFor(() => read.mock.calls.length === 1);
+  push([...items, tool('arrival')]);
+  await waitFor(() => Boolean(title(root, 'arrival')));
+  const animation = reveals(title(root, 'arrival')!)[0];
+  expect(animation).toBeDefined();
+  animation.pause();
+  release();
+  await waitFor(() => root.querySelector('[data-flower-message-id="live-prose"]')?.textContent?.includes(text) === true);
+  expect(animation.playState).toBe('paused');
+  expect(reveals(title(root, 'arrival')!)).toContain(animation);
+  expect(reveals(title(root, 'previous')!)).toHaveLength(0);
+  animation.finish();
+});
 
 it.each([[2, false], [24, false], [2, true], [24, true]] as const)('positions consecutive tool arrivals before revealing their titles (%i initial tools, child=%s)', async (count, child) => {
   const items = [
