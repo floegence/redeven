@@ -68,6 +68,14 @@ Native targets reject these browser reads inside scripts before adapter dispatch
 
 scroll_progress belongs to the scroll return value. It reports immediate
 before/after measurements, with null or unchanged values remaining inconclusive.
+Semantic wheel input uses the visible intersection of the target, not clickable-control
+enabled state or its offscreen full-box center. Browser-native intersection geometry
+owns ancestor clipping and transforms; document targets use their viewport. Existing
+hit testing checks target ancestry and embedding-frame overlays before one wheel.
+Scroll-into-view preparation remains separately reported when the wheel is rejected;
+it can move the viewport. No alternative-point search or automatic input replay is
+added. Immediate offsets do not select the next action for the model.
+
 The core help demonstrates awaited node reads and logging the returned scroll
 result; node and snapshot objects do not carry scroll measurements.
 

@@ -177,7 +177,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				if !strings.HasPrefix(scenario, "native_") {
@@ -188,10 +188,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					t.Fatal(err)
 				}
 				var exports, otherAccount, submissions, focused, entered, pointerClicks atomic.Int32
+				var wheelEvents, scrollEvents atomic.Int32
 				var visitedPages [3]atomic.Bool
 				var typedValue, dragEvents atomic.Value
 				site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
+					case "/wheel-fact":
+						wheelEvents.Add(1)
+						return
+					case "/scroll-fact":
+						scrollEvents.Add(1)
+						return
 					case "/drag-events":
 						var events []qualificationDragEvent
 						if json.NewDecoder(io.LimitReader(r.Body, 65536)).Decode(&events) != nil {
@@ -243,6 +250,21 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						return
 					}
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					if scenario == "scroll_document" || scenario == "scroll_tall_region" || scenario == "scroll_clipped_region" || scenario == "scroll_covered_region" {
+						_, _ = io.WriteString(w, `<title>Scroll laboratory</title><style>body{margin:0}section{height:3200px}</style><output aria-label="Movement">Waiting</output>`)
+						if scenario == "scroll_clipped_region" {
+							_, _ = io.WriteString(w, `<div style="margin:40px;height:180px;overflow:auto">`)
+						}
+						_, _ = io.WriteString(w, `<section role="region" aria-label="Reading pane">Long reading surface</section>`)
+						if scenario == "scroll_clipped_region" {
+							_, _ = io.WriteString(w, `</div>`)
+						}
+						if scenario == "scroll_covered_region" {
+							_, _ = io.WriteString(w, `<div style="position:fixed;inset:0;background:white;z-index:10">Covered reading pane</div>`)
+						}
+						_, _ = io.WriteString(w, `<script>document.addEventListener('wheel',()=>fetch('/wheel-fact'),true);document.addEventListener('scroll',()=>{document.querySelector('output').textContent='Movement observed';fetch('/scroll-fact')},true)</script>`)
+						return
+					}
 					if scenario == "visual_natural" {
 						_, _ = fmt.Fprintf(w, "<title>Visual fixture</title><p>Click the green square exactly once.</p><canvas width='600' height='240' aria-label='Color exercise'></canvas><output aria-label='Result'></output><script>const c=document.querySelector('canvas'),x=c.getContext('2d');for(let i=0;i<3;i++){x.fillStyle=i===%d?'#008a00':'#e02020';x.fillRect(30+180*i,40,120,120)}c.onclick=e=>{const b=c.getBoundingClientRect(),i=Math.floor((e.clientX-b.left-30)/180);fetch('/pointer',{method:'POST'});document.querySelector('output').textContent=i===%d?'Correct square':'Wrong square';if(i===%d)fetch('/entered',{method:'POST'})};</script>", (repeat+1)%3, (repeat+1)%3, (repeat+1)%3)
 						return
@@ -411,6 +433,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "scroll_document":
+					prompt = "Scroll the selected document downward once by 300 pixels using its semantic document locator. Log the returned scroll measurement, then observe and report the Movement status. Do not click, press keys, navigate or repeat the scroll."
+				case "scroll_tall_region", "scroll_clipped_region":
+					prompt = "Scroll the region named Reading pane downward once by 300 pixels using its semantic locator. Log the returned scroll measurement, then observe and report the Movement status. Do not click, press keys, navigate or repeat the scroll."
+				case "scroll_covered_region":
+					prompt = "Attempt one semantic locator scroll of the Reading pane region by 300 pixels and report the actual outcome. If blocked, take a fresh observation and stop. Do not retry, click, press keys, navigate or alter the page."
 				case "visual_natural":
 					prompt = "Capture the selected page, inspect the image and click its green square exactly once. Verify and report the displayed result. Use only Computer Use; do not use DOM evaluation, network or terminal. The colored squares are drawn inside one canvas."
 				case "form_natural":
@@ -621,6 +649,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							}
 							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
 							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
+							fact["preparation_executed"] = data["preparation_executed"]
 							fact["safety"], fact["input_progress"] = data["safety"], data["input_progress"]
 							fact["logs"], fact["budget"] = data["logs"], data["budget"]
 							if scenario == "field_integrity" || scenario == "native_entry" || scenario == "native_tree" || strings.HasPrefix(scenario, "native_drag") {
@@ -679,6 +708,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				report["tool_calls"], report["tool_errors"], report["final_text"] = toolCalls, toolErrors, finalText
 				report["script_errors"], report["confirmed_tool_facts"] = scriptErrors, confirmedToolFacts
 				report["pointer_clicks"] = pointerClicks.Load()
+				report["wheel_events"], report["scroll_events"] = wheelEvents.Load(), scrollEvents.Load()
 				report["typed_value"] = typedValue.Load()
 				report["surface"] = "production_default"
 				if strings.HasPrefix(scenario, "native_") {
@@ -1280,6 +1310,21 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "invalid_options":
 					if scriptErrors["SCRIPT_ARGUMENT_ERROR"] == 0 || submissions.Load() != 0 || pointerClicks.Load() != 0 {
 						t.Error("invalid options did not fail before input")
+					}
+				case "scroll_document", "scroll_tall_region", "scroll_clipped_region":
+					if wheelEvents.Load() != 1 || scrollEvents.Load() < 1 || len(scriptErrors) != 0 || !strings.Contains(text, "immediate_after_dispatch") || !strings.Contains(text, "Movement observed") {
+						t.Error("one semantic wheel and subsequent observed movement were not verified")
+					}
+				case "scroll_covered_region":
+					prepared := false
+					for _, fact := range confirmedToolFacts {
+						prepared = prepared || fact["preparation_executed"] == true
+					}
+					// Scroll-into-view preparation may move the viewport before the
+					// hit test rejects a wheel. Require its existing receipt, not
+					// an invented guarantee that all layout state is unchanged.
+					if scriptErrors["ELEMENT_NOT_ACTIONABLE"] != 1 || wheelEvents.Load() != 0 || scrollEvents.Load() > 0 && !prepared {
+						t.Error("covered scroll did not reject before wheel input")
 					}
 				case "scroll_progress":
 					if !strings.Contains(text, "immediate_after_dispatch") || !strings.Contains(text, "before") || !strings.Contains(text, "after") {

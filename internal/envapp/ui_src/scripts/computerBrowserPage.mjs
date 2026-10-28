@@ -519,14 +519,26 @@ export class BrowserComputerPage {
       if (collect) return matches;
       if (!entry) throw new Error('ELEMENT_NOT_FOUND');
     }
+    let node, nodes, current;
     try {
-      const { node } = await entry.frame.session.send('DOM.describeNode', { backendNodeId: entry.backendNodeId });
-      if (!node || !node.nodeName) throw new Error('missing');
-      const { nodes } = await entry.frame.session.send('Accessibility.getPartialAXTree', { backendNodeId: entry.backendNodeId, fetchRelatives: false });
-      const current = nodes.find(node => node.backendDOMNodeId === entry.backendNodeId);
-      if (!current || current.ignored || current.role?.value !== entry.role || nameIdentity(current.name?.value || '') !== entry.nameIdentity) throw new Error('changed');
-    } catch { this.references.delete(entry.ref); throw new Error('STALE_REFERENCE'); }
+      ({ node } = await entry.frame.session.send('DOM.describeNode', { backendNodeId: entry.backendNodeId }));
+      ({ nodes } = await entry.frame.session.send('Accessibility.getPartialAXTree', { backendNodeId: entry.backendNodeId, fetchRelatives: false }));
+      if (!node || !Number.isInteger(node.nodeType) || !node.nodeName || node.backendNodeId !== entry.backendNodeId
+        || !Array.isArray(nodes) || nodes.some(value => !value || typeof value.nodeId !== 'string' || typeof value.ignored !== 'boolean')) throw new Error('INVALID_OBSERVATION');
+      current = nodes.find(value => value.backendDOMNodeId === entry.backendNodeId);
+      if (current && !current.ignored && (typeof current.role?.value !== 'string'
+        || (current.name !== undefined && typeof current.name.value !== 'string'))) throw new Error('INVALID_OBSERVATION');
+    } catch (error) {
+      // Failure to read identity is not evidence that identity changed. Keep
+      // the observed reference, but never authorize input without revalidation.
+      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'semantic_read', protocolDiagnostic: error?.protocolDiagnostic });
+    }
+    if (!current || current.ignored || current.role?.value !== entry.role || nameIdentity(current.name?.value || '') !== entry.nameIdentity) {
+      this.references.delete(entry.ref);
+      throw new Error('STALE_REFERENCE');
+    }
     if (entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
+    entry.nodeType = node.nodeType;
     return collect ? [entry] : entry;
   }
 
@@ -709,6 +721,53 @@ export class BrowserComputerPage {
     throw new Error('ELEMENT_NOT_ACTIONABLE');
   }
 
+  async scrollPoint(element) {
+    const session = element.frame.session;
+    let object;
+    try {
+      const { executionContextId } = await session.send('Page.createIsolatedWorld', { frameId: element.frame.frame.id, worldName: 'flower-observation' });
+      ({ object } = await session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId }));
+      // Let the browser own ancestor/frame clipping and transforms. The one-shot
+      // observation does not search alternative points or repeat wheel input.
+      const result = await session.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, awaitPromise: true,
+        functionDeclaration: `async function(){
+          const root=this.nodeType===9, element=root?this.documentElement:this;
+          if(!element?.isConnected||!element.getBoundingClientRect)return null;
+          for(let p=element;p;p=p.parentElement||p.getRootNode()?.host){
+            const style=getComputedStyle(p);
+            if(style.visibility==='hidden'||style.display==='none'||Number(style.opacity)===0)return null;
+          }
+          const v=visualViewport, width=innerWidth, height=innerHeight;
+          let left=v?.offsetLeft||0,top=v?.offsetTop||0,right=left+(v?.width||width),bottom=top+(v?.height||height);
+          if(!root){
+            const r=await new Promise((resolve,reject)=>{
+              const observer=new IntersectionObserver(entries=>{clearTimeout(timer);observer.disconnect();resolve(entries[0].intersectionRect);});
+              const timer=setTimeout(()=>{observer.disconnect();reject(new Error('intersection observation unavailable'));},1000);
+              observer.observe(element);
+            });
+            left=Math.max(left,r.left);top=Math.max(top,r.top);right=Math.min(right,r.right);bottom=Math.min(bottom,r.bottom);
+          }
+          return right>left&&bottom>top?{x:(left+right)/2,y:(top+bottom)/2,width,height}:null;
+        }` });
+      if (result.exceptionDetails || !result.result || !Object.hasOwn(result.result,'value')) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+      const point=result.result.value;
+      if (!point) throw new Error('ELEMENT_NOT_ACTIONABLE');
+      if (![point.x,point.y,point.width,point.height].every(Number.isFinite) || point.width<=0 || point.height<=0) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+      const {frameTree}=await session.send('Page.getFrameTree');
+      if(frameTree.frame.id===element.frame.frame.id)return {x:point.x,y:point.y};
+      // Same-process child frames use their session root's input coordinates.
+      const {backendNodeId}=await session.send('DOM.getFrameOwner',{frameId:element.frame.frame.id});
+      const {quads}=await session.send('DOM.getContentQuads',{backendNodeId});
+      const q=quads?.[0];
+      if(!q||q.length!==8||!q.every(Number.isFinite))throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+      const u=point.x/point.width,v=point.y/point.height;
+      return {x:(1-u)*(1-v)*q[0]+u*(1-v)*q[2]+u*v*q[4]+(1-u)*v*q[6],y:(1-u)*(1-v)*q[1]+u*(1-v)*q[3]+u*v*q[5]+(1-u)*v*q[7]};
+    } catch (error) {
+      if (error.message === 'ELEMENT_NOT_ACTIONABLE') throw error;
+      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test', protocolDiagnostic: error.protocolDiagnostic });
+    } finally { if(object?.objectId)await session.send('Runtime.releaseObject',{objectId:object.objectId}); }
+  }
+
   async receivesPoint(element, x, y) {
     const session = element.frame.session;
     const objects = [];
@@ -721,7 +780,7 @@ export class BrowserComputerPage {
         objects.push(object.objectId);
       }
       const result = await session.send('Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
-        functionDeclaration: 'function(hit){for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===this)return true;return false;}' });
+        functionDeclaration: 'function(hit){const target=this.nodeType===9?this.documentElement:this;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===target)return true;return false;}' });
       if (result.exceptionDetails) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
       if (result.result?.value !== true) return false;
       // An OOPIF session cannot see an overlay in its embedding document.
@@ -985,12 +1044,12 @@ export class BrowserComputerPage {
     } else if (args.action === 'scroll') {
       if (!Number.isFinite(args.delta_y) || !Number.isFinite(args.delta_x ?? 0)) throw new Error('INVALID_REQUEST');
       const target = element?.frame.session || this.transport;
-      if (element) await this.actionable(element,true);
-      const model = element ? (await target.send('DOM.getBoxModel', { backendNodeId: element.backendNodeId })).model : undefined;
-      const explicitPoint = args.x !== undefined || args.y !== undefined;
-      if (explicitPoint && (!Number.isFinite(args.x) || !Number.isFinite(args.y) || args.x < 0 || args.y < 0)) throw new Error('INVALID_REQUEST');
-      const x = model ? (model.content[0]+model.content[2]+model.content[4]+model.content[6])/4 : explicitPoint ? args.x : 1;
-      const y = model ? (model.content[1]+model.content[3]+model.content[5]+model.content[7])/4 : explicitPoint ? args.y : 1;
+      if (element && element.nodeType !== 9) {
+        await this.effect(() => target.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }));
+      }
+      if ((args.x !== undefined || args.y !== undefined) && (!Number.isFinite(args.x) || !Number.isFinite(args.y) || args.x < 0 || args.y < 0)) throw new Error('INVALID_REQUEST');
+      const point = element ? await this.scrollPoint(element) : {x:args.x ?? 1,y:args.y ?? 1};
+      const {x,y}=point;
       if(element && !await this.receivesPoint(element,x,y)) throw new Error('ELEMENT_NOT_ACTIONABLE');
       const before=await this.scrollPosition(element);
       await this.input(target, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaY: args.delta_y, deltaX: args.delta_x || 0 });

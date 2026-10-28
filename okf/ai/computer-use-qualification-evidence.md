@@ -28,6 +28,28 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 
 # Evidence
 
+## Semantic scroll and reference validation (2026-10-28)
+
+The initial 36 real DeepSeek Flash tasks produced 29 strict assertion passes.
+Three covered-scroll assertions incorrectly required zero viewport movement even
+though scroll-into-view preparation was already reported; four other failures
+were model argument mistakes. Preserve that batch unchanged. After correcting
+only the assertion/evidence capture, the final implementation produced 20/24
+passes across 12 tasks repeated twice. Four retained failures were an object
+argument to positional scroll, a bare undefined variable, and two multi-page
+script mistakes (old refs/unsupported screenshot options or undefined refs).
+No production input replay or API alias was added to make those tasks pass.
+All six valid final document/tall/clipped scroll tasks dispatched exactly one
+wheel and moved; the valid covered attempt dispatched zero wheels and retained
+preparation_executed. The second covered task never reached the adapter because
+its model arguments were invalid. Read-failure recovery, complete-name staleness,
+visual input, forms, tables and download processing passed both final repetitions.
+The configured provider used deepseek-flash on the wire (local catalog: V4.1 Flash
+1017); the alias does not independently certify the remote deployment snapshot.
+Detailed private histories remain outside the repository.
+
+
+
 See [media contention and native read qualification](computer-media-read-qualification.md)
 for the October 28 deterministic checks, 36 original and six supplemental real
 DeepSeek tasks, including retained model and evidence-parser failures.

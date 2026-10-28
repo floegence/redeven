@@ -43,7 +43,10 @@ the displayed prefix. Changed names receive different tokens so a fresh observat
 cannot rebind an old reference. Browser collection cursors include complete-name digests
 for every match, including items outside the current page. The existing reference
 table and cursor owner remain authoritative; no additional lifecycle or replay
-state exists. Semantic selectors match full names, including on native adapters.
+state exists. A failed or malformed DOM/AX identity read is observation-unavailable,
+not proof of a stale reference. Preserve the observed token and sanitized protocol
+method/code, reject input before dispatch, and require successful validation on a
+later explicit call. Only confirmed identity changes invalidate the token. Semantic selectors match full names, including on native adapters.
 
 Both directions of every parent/child edge must agree. An observation describes the bounded returned tree, not an exhaustive view of every application node.
 
@@ -73,3 +76,7 @@ Confirmed actions survive an observation failure; failed content never enters mo
 - `redeven:internal/ai/computer_semantic_test.go` - graph, relationship, state, diff, selector and privacy assertions.
 - `redeven:internal/ai/computer_field_integrity_test.go` - normalization, compact/detailed/diff/guest preservation, scalar bounds and diagnostics.
 - `redeven:internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs` - real Chromium Unicode boundaries and full-name reference/cursor checks.
+
+Browser identity-read failures and explicit recovery also have real Chromium and
+connected-extension regressions in computerScrollReference.node-test.mjs and
+computerExtension.node-test.mjs.

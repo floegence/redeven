@@ -11,7 +11,7 @@ type selectionObservationExecutor struct{ scriptTestExecutor }
 func TestComputerCoreHelpExplainsAutomaticScreenshotsAndDocumentRefs(t *testing.T) {
 	for _, browser := range []bool{false, true} {
 		help, ok := computerScriptHelp("core", browser)
-		for _, text := range []string{"automatically returns the image", "not PNG bytes or a filesystem path", "Refs belong to the observed document"} {
+		for _, text := range []string{"automatically returns the image", "not PNG bytes or a filesystem path", "Refs identify the observed node, role and complete name within a document"} {
 			if !ok || !strings.Contains(help, text) {
 				t.Fatalf("missing lifecycle contract %q", text)
 			}

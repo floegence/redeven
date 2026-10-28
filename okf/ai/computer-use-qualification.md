@@ -46,6 +46,14 @@ The native_drag_focus_change model scenario exercises the same interruption
 through the production Service and requires a retained partial input receipt,
 one balanced press/release and no completed drag or automatic replay.
 
+Semantic scroll qualification covers documents, oversized regions, clipped containers
+and covered targets. Independent wheel events require one dispatched wheel or zero
+when rejected; scroll events can also come from reported scroll-into-view preparation.
+Real extension tests inject DOM/AX protocol failures before reads and clicks, retain
+method/code, verify zero input and recover the same reference on an explicit read.
+Managed tests cover malformed responses, transformed clipping, shadow DOM, same-process
+and cross-process frames; geometry tests repeat document scroll under real zoom/DPR.
+
 Natural tasks use the production default tool surface. Only the legacy default-wait
 case explicitly retains its primitive. Read canonical tool results through
 ThreadToolResultReader, decoding Floret's error-status ERROR prefix before the

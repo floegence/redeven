@@ -46,6 +46,10 @@ for (const deviceScaleFactor of [1, 2]) test('real browser zoom preserves semant
         assert.equal(clicked.error,undefined,JSON.stringify(clicked)); assert.equal(await tab.evaluate(()=>window.hits),1,'pixel input must hit the rendered button');
         const semantic=await call('computer.action',{action:'click',selector:{role:'button',name:'Probe',exact:true}});
         assert.equal(semantic.error,undefined,JSON.stringify(semantic)); assert.equal(await tab.evaluate(()=>window.hits),2,'semantic input must hit after scrolling');
+        const beforeWheel=await tab.evaluate(()=>window.scrollY);
+        const wheel=await call('computer.action',{action:'scroll',selector:{role:'RootWebArea'},delta_y:100});
+        assert.equal(wheel.error,undefined,JSON.stringify(wheel));
+        await tab.waitForFunction(before=>window.scrollY>before,beforeWheel);
         await tab.evaluate(()=>{const cover=document.createElement('div');cover.style='position:fixed;inset:0;z-index:100;background:#eee';document.body.append(cover);});
         const covered=await call('computer.action',{action:'click',selector:{role:'button',name:'Probe',exact:true}});
         assert.equal(covered.error,'ELEMENT_NOT_ACTIONABLE'); assert.equal(await tab.evaluate(()=>window.hits),2);

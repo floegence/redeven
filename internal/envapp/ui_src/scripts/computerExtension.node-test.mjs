@@ -275,6 +275,32 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       assert.equal(fresh.safety.level, 'routine', JSON.stringify(fresh));
       assert.ok(fresh.result.observation);
     });
+    await t.test('reference preflight preserves actual debugger rejection facts', async () => {
+      const tree=(await execute('computer.observe')).result.observation;
+      const ref=tree.nodes.find(node=>node.role==='button'&&node.name==='Apply').ref;
+      await task.evaluate(()=>{window.probeInputs=0;document.addEventListener('pointerdown',()=>window.probeInputs++);});
+      for(const action of ['read','click'])for(const method of ['DOM.describeNode','Accessibility.getPartialAXTree']){
+        await worker.evaluate(method=>{
+          globalThis.fixtureSendCommand=chrome.debugger.sendCommand.bind(chrome.debugger);
+          chrome.debugger.sendCommand=async(target,m,args)=>{
+            if(m===method)throw new Error(JSON.stringify({code:-32603,message:'private preflight diagnostic'}));
+            return globalThis.fixtureSendCommand(target,m,args);
+          };
+        },method);
+        try {
+          const failed=await execute('computer.action',{action,selector:{ref}});
+          assert.equal(failed.error,'TARGET_OBSERVATION_UNAVAILABLE',JSON.stringify(failed));
+          assert.equal(failed.result.action_executed,false);
+          assert.equal(failed.result.observation_stage,'semantic_read');
+          assert.deepEqual(failed.result.diagnostic,{phase:'protocol',method,code:-32603});
+          assert.equal(JSON.stringify(failed).includes('private preflight'),false);
+        }finally{
+          await worker.evaluate(()=>{chrome.debugger.sendCommand=globalThis.fixtureSendCommand;delete globalThis.fixtureSendCommand;});
+        }
+        assert.equal((await execute('computer.action',{action:'read',selector:{ref}})).error,undefined);
+      }
+      assert.equal(await task.evaluate(()=>window.probeInputs),0);
+    });
     await user.bringToFront();
     const activeBeforeInput = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
     assert.equal(await task.evaluate(() => document.hasFocus()), false, 'observation must not acquire virtual focus');
@@ -321,6 +347,26 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal(await task.locator('input').inputValue(), 'Completed');
     assert.equal(await user.locator('input').inputValue(), '');
     assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeBeforeInput);
+    await t.test('extension semantic document scroll uses the viewport',async()=>{
+      const frames=task.frames();
+      for(const frame of frames)await frame.evaluate(()=>{document.body.style.minHeight='3000px';window.probeWheels=0;document.addEventListener('wheel',()=>window.probeWheels++);});
+      try {
+        const observed=await execute('computer.observe');
+        assert.ok(observed.result.observation,JSON.stringify(observed));
+        const tree=await owners.get(selected.id).controller.transport.send('Page.getFrameTree');
+        const root=observed.result.observation.nodes.find(node=>node.role==='RootWebArea'&&node.frame_id===tree.frameTree.frame.id);
+        const result=await execute('computer.action',{action:'scroll',selector:{ref:root.ref},delta_y:160});
+        assert.equal(result.error,undefined,JSON.stringify(result));
+        let facts=[];
+        for(let i=0;i<50;i++){
+          facts=await Promise.all(frames.map(frame=>frame.evaluate(()=>({wheels:window.probeWheels,scroll:window.scrollY}))));
+          if(facts.some(f=>f.scroll>0))break;
+          await new Promise(resolve=>setTimeout(resolve,20));
+        }
+        assert.equal(facts.reduce((n,f)=>n+f.wheels,0),1,JSON.stringify(facts));
+        assert.ok(facts.some(f=>f.scroll>0),JSON.stringify(facts));
+      }finally{for(const frame of frames)await frame.evaluate(()=>{document.body.style.minHeight='';window.scrollTo(0,0);});}
+    });
     assert.equal((await context.cookies(origin))[0].value, 'present');
     await user.bringToFront();
     const activeBefore = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
