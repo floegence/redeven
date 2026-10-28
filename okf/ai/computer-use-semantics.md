@@ -5,7 +5,7 @@ description: Normalize browser, AX and AT-SPI facts into bounded, revision-scope
 tags: [ai, computer-use, accessibility, protocol]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -25,6 +25,11 @@ Observations include `semantic_schema_version: 2`, `document_id`, `roots`, `node
 Browser role resolution scans the complete authorized AX scope independently of the bounded model observation. A unique control after node 1000 remains resolvable; a duplicate beyond the presentation boundary remains ambiguous. References still require document revision and fresh DOM/AX identity validation.
 
 `children_truncated` marks exported nodes with omitted descendants, including Runtime byte pruning. It is not evidence of empty rows or virtualization. Agents can read a row or table subtree through `root_ref`; completeness claims require checking the returned truncation facts.
+
+Single-node reads use the same bounded observation path on browser, macOS and
+Linux. child_refs only links returned nodes; an omitted child is not an empty
+subtree. Native child-list read failures stop observation rather than becoming
+empty arrays.
 
 Name, description and string value have a 2,000 Unicode code-point budget.
 name_truncated, description_truncated and value_truncated are true only when

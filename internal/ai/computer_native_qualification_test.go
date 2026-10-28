@@ -233,6 +233,10 @@ func TestComputerNativeScriptQualification(t *testing.T) {
 	x := geometry["scrollX"].(float64) - geometry["x"].(float64)
 	y := geometry["scrollY"].(float64) - geometry["y"].(float64)
 	call := TargetToolCall{ThreadID: "native-fixture", TurnID: "turn", RunID: "run", TargetID: target.ID, ToolCallID: "script", ToolName: "computer.exec", fullAccess: true, revalidate: func(ctx context.Context) error { return ctx.Err() }}
+	contract := "const tree=await ui.snapshot({emit:false}); const parent=tree.nodes.find(n=>n.child_refs.length>0); if(!parent) throw new Error('missing fixture container'); const limited=await ui.ref(parent.ref).snapshot({limit:1,emit:false}); if(!limited.truncated || !limited.nodes[0].children_truncated) throw new Error('missing subtree truncation'); const single=await ui.ref(parent.ref).node(); if(single.child_refs.length!==0 || !single.children_truncated) throw new Error('missing single-node truncation'); const leaf=tree.nodes.find(n=>n.child_refs.length===0 && !n.children_truncated); if(!leaf) throw new Error('missing fixture leaf'); if((await ui.ref(leaf.ref).node()).children_truncated) throw new Error('leaf misreported as truncated');"
+	if result, err := executeTestScript(t.Context(), host, call, contract); err != nil {
+		t.Fatalf("native tree completeness: %v %#v", err, result.Result)
+	}
 	code := fmt.Sprintf("await ui.snapshot(); await ui.scroll(0); await ui.scrollAt(%f,%f,200); await ui.screenshot();", x, y)
 	result, err := executeTestScript(t.Context(), host, call, code)
 	if err != nil {

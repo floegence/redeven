@@ -80,8 +80,8 @@ func TestToolMediaCleanupChecksExecutionWhileHoldingWriteGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := &Service{toolMedia: store, floretMediaInventory: func(context.Context) (flruntime.MediaInventory, error) {
-		if store.writes.TryLock() {
-			store.writes.Unlock()
+		if _, release, acquired := store.writes.collect(t.Context()); acquired {
+			release()
 			t.Fatal("canonical retention was read outside the media write gate")
 		}
 		return flruntime.MediaInventory{Idle: false}, nil
@@ -130,5 +130,124 @@ func waitForToolMediaRemoval(t *testing.T, store toolMediaStore, ref string) {
 			t.Fatalf("background cleanup did not collect the unadmitted snapshot: %v", err)
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestToolMediaWriterPreemptsMaintenance(t *testing.T) {
+	store := newToolMediaStore(t.TempDir())
+	body, attachment := computerFrameFixture(t)
+	if err := store.put(t.Context(), attachment, body); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	done := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	go func() {
+		removed, err := store.sweepUnreferenced(ctx, func(ctx context.Context) ([]string, error) {
+			close(entered)
+			<-ctx.Done()
+			// Cancellation must be checked even if a collector returns a partial result.
+			return nil, nil
+		})
+		if removed != 0 {
+			done <- errors.New("cancelled scan deleted media")
+			return
+		}
+		done <- err
+	}()
+	<-entered
+	writeCtx, stop := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer stop()
+	if err := store.put(writeCtx, attachment, body); err != nil {
+		t.Fatalf("interactive write did not preempt maintenance: %v", err)
+	}
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("maintenance should yield: %v", err)
+	}
+	if _, err := store.read(t.Context(), attachment.ResourceRef); err != nil {
+		t.Fatalf("retained media lost: %v", err)
+	}
+}
+
+func TestToolMediaWriterCancellationWhileInventoryIsBlocked(t *testing.T) {
+	store := newToolMediaStore(t.TempDir())
+	body, attachment := computerFrameFixture(t)
+	entered, release, swept := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	defer func() { close(release); <-swept }()
+	go func() {
+		defer close(swept)
+		_, _ = store.sweepUnreferenced(t.Context(), func(context.Context) ([]string, error) {
+			close(entered)
+			<-release
+			return nil, errors.New("inventory unavailable")
+		})
+	}()
+	<-entered
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- store.put(ctx, attachment, body) }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		store.writes.mu.Lock()
+		queued := store.writes.writers > 0
+		store.writes.mu.Unlock()
+		if queued {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("writer did not queue")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancel: %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("cancelled writer waited for inventory release")
+	}
+}
+
+func TestToolMediaMaintenanceSkipsBusyWriter(t *testing.T) {
+	store := newToolMediaStore(t.TempDir())
+	release, err := store.writes.write(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	called := false
+	removed, err := store.sweepUnreferenced(t.Context(), func(context.Context) ([]string, error) { called = true; return nil, nil })
+	if removed != 0 || called || !errors.Is(err, errToolMediaMaintenanceBusy) {
+		t.Fatalf("maintenance waited or scanned: %d %v %v", removed, called, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := store.writes.write(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled writer: %v", err)
+	}
+}
+
+func TestToolMediaConcurrentWritersPreserveBytes(t *testing.T) {
+	store := newToolMediaStore(t.TempDir())
+	body, attachment := computerFrameFixture(t)
+	done := make(chan error, 24)
+	for i := 0; i < 24; i++ {
+		go func() { done <- store.put(t.Context(), attachment, body) }()
+	}
+	for i := 0; i < 24; i++ {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.read(t.Context(), attachment.ResourceRef)
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("concurrent persistence: %v", err)
+	}
+	if removed, err := store.sweepUnreferenced(t.Context(), func(context.Context) ([]string, error) { return []string{attachment.ResourceRef}, nil }); err != nil || removed != 0 {
+		t.Fatalf("retention after writes: %d %v", removed, err)
 	}
 }

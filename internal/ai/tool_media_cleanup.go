@@ -11,6 +11,7 @@ import (
 )
 
 var errToolMediaExecutionActive = errors.New("tool media execution is active")
+var errToolMediaMaintenanceBusy = errors.New("tool media maintenance yielded to a writer")
 
 func (s *Service) sweepToolMedia(ctx context.Context, executionDeferred bool) (int, error) {
 	if s == nil || s.floretMediaInventory == nil {
@@ -41,7 +42,7 @@ func (s *Service) maintainToolMedia(ctx context.Context, reason string, executio
 	ctx, cancel := context.WithTimeout(ctxOrBackground(ctx), 30*time.Second)
 	defer cancel()
 	removed, err := s.sweepToolMedia(ctx, executionDeferred)
-	if err != nil && !errors.Is(err, errToolMediaExecutionActive) && !errors.Is(err, context.Canceled) && s.log != nil {
+	if err != nil && !errors.Is(err, errToolMediaExecutionActive) && !errors.Is(err, errToolMediaMaintenanceBusy) && !errors.Is(err, context.Canceled) && s.log != nil {
 		s.log.Warn("ai: tool media retention failed", "reason", reason, "error", err)
 	} else if removed > 0 && s.log != nil {
 		s.log.Info("ai: tool media retention reclaimed snapshots", "reason", reason, "count", removed)
@@ -55,14 +56,27 @@ func (store toolMediaStore) sweepUnreferenced(ctx context.Context, retained func
 	if store.writes == nil || retained == nil {
 		return 0, errors.New("tool media retention authority is unavailable")
 	}
-	store.writes.Lock()
-	defer store.writes.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	scan, release, acquired := store.writes.collect(ctx)
+	if !acquired {
+		return 0, errToolMediaMaintenanceBusy
+	}
+	defer release()
+	ctx = scan
 	references, err := retained(ctx)
 	if err != nil {
 		return 0, err
 	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	keep := make(map[string]struct{}, len(references))
 	for _, ref := range references {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
 		if !isToolMediaRef(ref) {
 			continue
 		}

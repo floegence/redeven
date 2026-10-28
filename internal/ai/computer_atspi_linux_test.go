@@ -226,6 +226,35 @@ Gtk.main()
 		t.Fatal("native mixed state or description missing")
 	}
 
+	var container, leaf map[string]any
+	for _, node := range payload["nodes"].([]map[string]any) {
+		if len(node["child_refs"].([]string)) > 0 {
+			container = node
+		} else {
+			leaf = node
+		}
+	}
+	if container == nil || leaf == nil {
+		t.Fatal("fixture must have containers and leaves")
+	}
+	limited, err := e.atspi.observe(ctx, map[string]any{"root_ref": container["ref"], "limit": float64(1)})
+	if err != nil || limited["truncated"] != true || limited["nodes"].([]map[string]any)[0]["children_truncated"] != true {
+		t.Fatalf("bounded tree completeness: %+v %v", limited, err)
+	}
+	for _, item := range []struct {
+		node      map[string]any
+		truncated bool
+	}{{container, true}, {leaf, false}} {
+		result, err := call("computer.action", map[string]any{"action": "read", "selector": map[string]any{"ref": item.node["ref"]}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		node := result.Result.(map[string]any)["node"].(map[string]any)
+		if (node["children_truncated"] == true) != item.truncated || len(node["child_refs"].([]string)) != 0 {
+			t.Fatalf("single node completeness: %+v", node)
+		}
+	}
+
 	var inputRef string
 	for _, node := range payload["nodes"].([]map[string]any) {
 		if node["name"] == "Query" {

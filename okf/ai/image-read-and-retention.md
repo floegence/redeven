@@ -5,7 +5,7 @@ description: Authorized image reads produce immutable native model attachments w
 tags: [ai, tools, images, media, security]
 timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -33,6 +33,15 @@ remain available after model preparation.
 - toolMediaStore retains immutable images in computer/keyframes across source
   changes, Retry, restart, Fork and compaction.
 - Previews check ownership/canonical membership directly. Markdown images stay unchanged.
+
+## Maintenance and interactive writes
+
+One in-process media gate protects writes and the complete canonical inventory
+through deletion, following Floret's published retention contract. Maintenance
+skips a held gate or queued writers. An interactive write cancels a running
+maintenance scan and waits for that scan to settle; its own wait honors caller
+cancellation. Partial or failed inventory never authorizes deletion. No second
+membership ledger, detached scan, speculative unlock or input replay is used.
 
 # Boundaries
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -176,7 +177,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -233,6 +234,9 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
 					_, _ = io.WriteString(w, "<!doctype html><title>Orchid domain console</title><style>body{font:16px system-ui;padding:20px}td,th{padding:4px 12px}button,input,a{margin:8px}#noise{height:100px;overflow:auto}</style><h1>Account: Orchid</h1><a href='/other'>Switch to Birch account</a><a href='/export'>Export domains</a><button id='save' onclick=\"fetch('/submit',{method:'POST'}).then(()=>document.getElementById('saved').textContent='Saved once')\">Save once</button><output id='saved' aria-label='Save status'></output>")
+					if scenario == "node_scope" {
+						_, _ = io.WriteString(w, "<table aria-label='Inventory'><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Alpha</td></tr><tr><td>Beta</td></tr></tbody></table>")
+					}
 					if scenario == "field_integrity" || scenario == "attribute_overflow" {
 						full := strings.Repeat("中🙂", 1050)
 						_, _ = fmt.Fprintf(w, "<section aria-label='Bounded fields'><input aria-label='%s' aria-description='%s' title='%s' value='%s'></section>", full, full, full, full)
@@ -306,7 +310,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				var injected, blockedInputs atomic.Int32
 				var nativeName string
 				var nativeFacts func() map[string]any
-				if scenario == "native_entry" {
+				if scenario == "native_entry" || scenario == "native_tree" {
 					nativeName, nativeFacts = prepareComputerEntryFixture(t)
 					root, _ := filepath.Abs("../..")
 					native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
@@ -416,10 +420,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Run this intentional diagnostic exactly once as one computer.exec: await ui.getByRole('button',{name:'Save once',exact:true}).snapshot({full:true}); . Do not remove the unsupported option. Report the returned method, field and expected form, then use a separate ui.snapshot() call. Do not click or save."
 				case "script_batch":
 					prompt = "Open " + site.URL + "/batch?page=1 in this task's page, read all three scores and calculate their total. Once the page structure is known, process the remaining pages in one computer script using a loop and return a screenshot of the last page. Keep the original browser page available; do not use network scraping."
-				case "native_entry":
+				case "native_entry", "native_tree":
 					prompt = "Open the installed native application named " + nativeName + " using Computer Use discovery and selection. Enter exactly Flash 1017 in Acceptance code, click Confirm exactly once, read the resulting confirmation and capture a screenshot. This is a disposable acceptance app; do not touch any other application."
+					if scenario == "native_tree" {
+						prompt += " Also inspect an observed container using node() and snapshot({limit:1}), log each complete returned object, then inspect a leaf node and log its complete returned object. Use only observed refs and the documented API."
+					}
 				case "mixed_download":
 					prompt = "Export Orchid domains exactly once from the selected page. Save the exact completed download through browser.saveDownload, then use a terminal script to calculate total divided by count and save that result as acceptance-ratio.txt in the selected project directory. Inspect the file and report its absolute path. Use the normal tools available, restricted to this fixture, the selected project and task scratch directory. Do not inspect personal directories, fetch the export URL outside the browser or switch accounts."
+				case "media_contention":
+					prompt = "Click Save once exactly once, inspect Save status and capture a screenshot. Report the confirmed saved state. Work only in this fixture."
+				case "node_scope":
+					prompt = "Inspect the Inventory table. Use a single-node read and a subtree limited to one node, log each complete returned object. Then read its rows, log the complete rows result and report the row count including the header. Capture a screenshot. Do not treat omitted children as an empty table. Do not input anything."
 				case "bounded_read":
 					prompt = "Use ui.help('read') and locator.text() to read visible text of the region named Scrollable, then log its text, truncated and scope. Do not click, scroll, navigate or use shell/network tools."
 				case "repair_limit":
@@ -467,6 +478,22 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					defer func() { client.Transport = transport }()
 				}
 
+				var maintenanceDone chan error
+				if scenario == "media_contention" {
+					entered := make(chan struct{})
+					maintenanceDone = make(chan error, 1)
+					scan, stopScan := context.WithCancel(t.Context())
+					defer stopScan()
+					go func() {
+						_, err := runtime.media.sweepUnreferenced(scan, func(ctx context.Context) ([]string, error) {
+							close(entered)
+							<-ctx.Done()
+							return nil, ctx.Err()
+						})
+						maintenanceDone <- err
+					}()
+					<-entered
+				}
 				prompt += " Work only in this disposable fixture, the selected project and task scratch. Do not inspect personal files or other applications."
 				ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 				defer cancel()
@@ -533,7 +560,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
 							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
 							fact["logs"], fact["budget"] = data["logs"], data["budget"]
-							if scenario == "field_integrity" || scenario == "native_entry" {
+							if scenario == "field_integrity" || scenario == "native_entry" || scenario == "native_tree" {
 								fact["observation"] = data["observation"]
 							}
 							fact["failed_action"] = data["failed_action"]
@@ -631,6 +658,29 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "media_contention":
+					select {
+					case err := <-maintenanceDone:
+						report["maintenance_cancelled"] = errors.Is(err, context.Canceled)
+					default:
+						report["maintenance_cancelled"] = false
+					}
+					captured := false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							captured = captured || action == "screenshot"
+						}
+					}
+					report["clean_scripts"] = len(scriptErrors) == 0
+					if !captured || submissions.Load() != 1 || report["maintenance_cancelled"] != true {
+						t.Errorf("media contention contract failed: captured=%v submissions=%d yielded=%v errors=%v", captured, submissions.Load(), report["maintenance_cancelled"], scriptErrors)
+					}
+				case "node_scope":
+					single, limited, _, rows := qualificationTreeReadFacts(confirmedToolFacts)
+					report["single_truncated"], report["limited_truncated"], report["complete_rows"] = single, limited, rows
+					if !single || !limited || !rows || pointerClicks.Load() != 0 || len(scriptErrors) != 0 {
+						t.Error("node/subtree/row scope facts not confirmed")
+					}
 				case "field_integrity":
 					verified := false
 					var inspect func(any)
@@ -885,7 +935,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if !saved || exports.Load() != 1 || readErr != nil || !strings.Contains(string(file), "20.5") || !strings.Contains(text, "terminal.exec") {
 						t.Errorf("mixed tool handoff failed: exports=%d file=%v", exports.Load(), readErr)
 					}
-				case "native_entry":
+				case "native_entry", "native_tree":
+					if scenario == "native_tree" {
+						single, limited, leaf, _ := qualificationTreeReadFacts(confirmedToolFacts)
+						report["single_truncated"], report["limited_truncated"], report["leaf_complete"] = single, limited, leaf
+						if !single || !limited || !leaf {
+							t.Error("native node/subtree/leaf facts not confirmed")
+						}
+					}
 					facts := nativeFacts()
 					report["native_facts"] = facts
 					discovered, selected, captured := false, false, false
@@ -1082,5 +1139,90 @@ func TestComputerQualificationCanonicalResultFraming(t *testing.T) {
 				t.Fatalf("data=%v error=%v", data, err)
 			}
 		})
+	}
+}
+
+// Inspect actual structured logs; neither the user prompt nor final prose is
+// evidence that a bounded node, subtree or collection was read correctly.
+func qualificationTreeReadFacts(facts []map[string]any) (single, limited, leaf, rows bool) {
+	var inspect func(any)
+	inspect = func(value any) {
+		switch v := value.(type) {
+		case map[string]any:
+			if _, ok := v["ref"].(string); ok {
+				if children, ok := v["child_refs"].([]any); ok && len(children) == 0 {
+					single = single || v["children_truncated"] == true
+					leaf = leaf || v["children_truncated"] != true
+				}
+			}
+			if nodes, ok := v["nodes"].([]any); ok && len(nodes) == 1 && v["truncated"] == true {
+				node, _ := nodes[0].(map[string]any)
+				limited = limited || node["children_truncated"] == true
+			}
+			if values, ok := v["rows"].([]any); ok && len(values) == 3 && v["truncated"] == false {
+				body, _ := json.Marshal(values)
+				rows = rows || strings.Contains(string(body), "Alpha") && strings.Contains(string(body), "Beta")
+			}
+			for _, child := range v {
+				inspect(child)
+			}
+		case []any:
+			for _, child := range v {
+				inspect(child)
+			}
+		case string:
+			// Accept a complete JSON object/array, optionally preceded by a
+			// label from log(label + JSON.stringify(value)). Do not infer
+			// fields from prose or accept partial JSON/trailing commentary.
+			start := strings.IndexAny(v, "{[")
+			var decoded any
+			if start >= 0 && json.Unmarshal([]byte(v[start:]), &decoded) == nil {
+				switch decoded.(type) {
+				case map[string]any, []any:
+					inspect(decoded)
+				}
+			}
+		}
+	}
+	for _, fact := range facts {
+		inspect(fact["logs"])
+	}
+	return
+}
+
+func TestQualificationTreeReadFactsAcceptStructuredAndJSONLogs(t *testing.T) {
+	node := map[string]any{"ref": "root", "child_refs": []any{}, "children_truncated": true}
+	subtree := map[string]any{"nodes": []any{node}, "truncated": true}
+	leaf := map[string]any{"ref": "leaf", "child_refs": []any{}}
+	rows := map[string]any{"rows": []any{map[string]any{"text": "Name"}, map[string]any{"text": "Alpha"}, map[string]any{"text": "Beta"}}, "truncated": false}
+	for _, format := range []string{"structured", "json", "labelled_json"} {
+		logs := []any{}
+		for _, v := range []any{node, subtree, leaf, rows} {
+			if format != "structured" {
+				b, _ := json.Marshal(v)
+				label := ""
+				if format == "labelled_json" {
+					label = "Returned object: \n"
+				}
+				logs = append(logs, label+string(b))
+			} else {
+				logs = append(logs, v)
+			}
+		}
+		a, b, c, d := qualificationTreeReadFacts([]map[string]any{{"logs": logs}})
+		if !a || !b || !c || !d {
+			t.Fatalf("format=%s: %v %v %v %v", format, a, b, c, d)
+		}
+	}
+	for _, invalid := range []string{
+		"children_truncated true and three rows",
+		`node: {"ref":"root","child_refs":[],"children_truncated":true`,
+		`node: {"ref":"root","child_refs":[],"children_truncated":true} then completed`,
+		`node: {"ref":"root","child_refs":[],"children_truncated":true} {}`,
+	} {
+		a, b, c, d := qualificationTreeReadFacts([]map[string]any{{"logs": []any{invalid}}})
+		if a || b || c || d {
+			t.Fatalf("invalid log counted as structured read evidence: %q", invalid)
+		}
 	}
 }

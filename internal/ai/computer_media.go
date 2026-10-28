@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 const maxComputerFrameBytes = 16 << 20
@@ -20,11 +19,11 @@ const maxComputerFrameBytes = 16 << 20
 // canonical descriptor and membership; this store never reconstructs history.
 type toolMediaStore struct {
 	directory string
-	writes    *sync.Mutex
+	writes    *toolMediaGate
 }
 
 func newToolMediaStore(directory string) toolMediaStore {
-	return toolMediaStore{directory: directory, writes: &sync.Mutex{}}
+	return toolMediaStore{directory: directory, writes: newToolMediaGate()}
 }
 
 func (s toolMediaStore) path(ref string) (string, error) {
@@ -73,8 +72,11 @@ func (s toolMediaStore) put(ctx context.Context, attachment TargetToolAttachment
 	if s.writes == nil {
 		return errors.New("tool media store is unavailable")
 	}
-	s.writes.Lock()
-	defer s.writes.Unlock()
+	release, err := s.writes.write(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
 	if err := ctx.Err(); err != nil {
 		return err
 	}

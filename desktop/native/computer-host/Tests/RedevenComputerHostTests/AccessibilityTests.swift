@@ -1,7 +1,14 @@
 import XCTest
+import ApplicationServices
 @testable import RedevenComputerHost
 
 final class AccessibilityTests: XCTestCase {
+    func testUnavailableChildReadDoesNotBecomeAnEmptyLeaf() {
+        XCTAssertThrowsError(try axChildren(AXUIElementCreateApplication(-1))) { error in
+            XCTAssertEqual((error as? HostFailure)?.code, "TARGET_OBSERVATION_UNAVAILABLE")
+        }
+    }
+
     func testIncompleteSafetyScanReportsTechnicalFailureWithoutInventingTakeover() throws {
         XCTAssertNoThrow(try validateNativeSafetyScan(remainingNodes: 0, confirmedReasons: []))
         XCTAssertThrowsError(try validateNativeSafetyScan(remainingNodes: 1, confirmedReasons: [])) { error in

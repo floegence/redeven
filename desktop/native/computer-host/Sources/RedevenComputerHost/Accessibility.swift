@@ -8,6 +8,17 @@ func axValue(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+// Unsupported child attributes denote leaves; transport/read failures do not.
+func axChildren(_ element: AXUIElement) throws -> [AXUIElement] {
+    var value: CFTypeRef?
+    let status = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &value)
+    if status == .attributeUnsupported || status == .noValue { return [] }
+    guard status == .success, let children = value as? [AXUIElement] else {
+        throw HostFailure(code: "TARGET_OBSERVATION_UNAVAILABLE", message: "The accessibility child list could not be read.")
+    }
+    return children
+}
+
 func axString(_ element: AXUIElement, _ attribute: String) -> String {
     (axValue(element, attribute) as? String) ?? ""
 }
@@ -207,6 +218,7 @@ final class NativeWindow {
         let root = try (args["root_ref"] as? String).map { try resolve(["ref": $0]) } ?? element
         var queue: [(AXUIElement, String?)] = [(root, nil)], nodes: [[String: Any]] = [], elements: [AXUIElement] = [], visited: [AXUIElement] = []
         var indices: [String: Int] = [:]
+        var childrenOmitted = false
         while !queue.isEmpty && nodes.count < limit && visited.count < 5000 {
             try check()
             let (node, parentRef) = queue.removeFirst()
@@ -224,7 +236,15 @@ final class NativeWindow {
                 indices[ref] = nodes.count
                 nodes.append(output); elements.append(node); childParent = ref
             }
-            if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(1001).map { ($0, childParent) }) }
+            let children = try axChildren(node)
+            if children.count > 1001 {
+                childrenOmitted = true
+                if let childParent, let index = indices[childParent] { nodes[index]["children_truncated"] = true }
+            }
+            queue.append(contentsOf: children.prefix(1001).map { ($0, childParent) })
+        }
+        for (node, parentRef) in queue where !visited.contains(where: { CFEqual($0, node) }) {
+            if let parentRef, let index = indices[parentRef] { nodes[index]["children_truncated"] = true }
         }
         for (index, node) in elements.enumerated() {
             try check()
@@ -233,7 +253,7 @@ final class NativeWindow {
                 nodes[index]["relations"] = ["labelled_by": [nodes[related]["ref"] as! String]]
             }
         }
-        return ["source": "macos_accessibility", "coverage": "application_provided", "semantic_schema_version": 2, "document_id": "\(id):\(revision)", "nodes": nodes, "truncated": !queue.isEmpty, "execution_mode": "background"]
+        return ["source": "macos_accessibility", "coverage": "application_provided", "semantic_schema_version": 2, "document_id": "\(id):\(revision)", "nodes": nodes, "truncated": childrenOmitted || !queue.isEmpty, "execution_mode": "background"]
     }
 
     func resolve(_ selector: [String: Any]) throws -> AXUIElement {
@@ -271,7 +291,12 @@ final class NativeWindow {
         if action == "wait" { return try wait(selector, args) }
         let node = try resolve(selector)
         switch action {
-        case "read": return ["semantic_schema_version": 2, "node": describe(node)]
+        case "read":
+            let snapshot = try observe(["root_ref": describe(node)["ref"]!, "limit": 1])
+            guard let nodes = snapshot["nodes"] as? [[String: Any]], let first = nodes.first else {
+                throw HostFailure(code: "TARGET_OBSERVATION_UNAVAILABLE", message: "The selected node could not be read.")
+            }
+            return ["semantic_schema_version": 2, "node": first]
         case "click":
             var actions: CFArray?
             AXUIElementCopyActionNames(node, &actions)

@@ -5,7 +5,7 @@ description: Execute bounded JavaScript against one authorized target without ex
 tags: [ai, computer-use, scripts, accessibility]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -163,6 +163,10 @@ result; node and snapshot objects do not carry scroll measurements.
 Repeated identical observations in the same script namespace/document/scope
 receive a bounded advisory after two repeats. This never replays input, changes
 target, adds a planner, or persists a second lifecycle.
+
+Single-node detail does not enumerate a subtree. child_refs describes only
+returned relationships; check children_truncated, use snapshot for a subtree
+and browser rows/query/count for loaded collections.
 
 # Boundaries
 

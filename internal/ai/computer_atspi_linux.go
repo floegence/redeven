@@ -354,6 +354,11 @@ func (c *atspiClient) observe(ctx context.Context, args map[string]any) (map[str
 			break
 		}
 	}
+	for _, pending := range queue {
+		if !seen[pending.object] && pending.parent != "" {
+			nodes[indices[pending.parent]]["children_truncated"] = true
+		}
+	}
 	for index, object := range ordered {
 		var relations []struct {
 			Kind    uint32
@@ -477,7 +482,18 @@ func (c *atspiClient) action(ctx context.Context, args map[string]any) (map[stri
 	switch args["action"] {
 	case "read":
 		node, err := c.describe(ctx, entry.object)
-		return map[string]any{"semantic_schema_version": computerSemanticSchemaVersion, "node": node}, err
+		if err != nil {
+			return nil, err
+		}
+		snapshot, err := c.observe(ctx, map[string]any{"root_ref": node["ref"], "limit": float64(1)})
+		if err != nil {
+			return nil, err
+		}
+		nodes := snapshot["nodes"].([]map[string]any)
+		if len(nodes) != 1 {
+			return nil, errors.New("TARGET_OBSERVATION_UNAVAILABLE")
+		}
+		return map[string]any{"semantic_schema_version": computerSemanticSchemaVersion, "node": nodes[0]}, nil
 	case "click":
 		var countValue dbus.Variant
 		if err := c.call(ctx, entry.object, "org.freedesktop.DBus.Properties.Get", "org.a11y.atspi.Action", "NActions").Store(&countValue); err != nil {

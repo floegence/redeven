@@ -65,3 +65,22 @@ test('collection cursor validates full names including an unreturned tail', () =
   await tab.locator('#tail').evaluate((node, value) => {node.textContent=value;}, prefix+'B');
   await assert.rejects(page.query({role:'button'}, {limit:1,cursor:first.next_cursor}), /STALE_REFERENCE/);
 }));
+
+test('single-node reads disclose omitted children while scoped rows remain complete', () => fixture(async (tab, page) => {
+  await tab.setContent('<table aria-label="Inventory"><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Alpha</td></tr><tr><td>Beta</td></tr></tbody></table>');
+  const selector = {role:'table',name:'Inventory',exact:true};
+  const single = (await page.action({action:'read',selector})).node;
+  assert.deepEqual(single.child_refs, []);
+  assert.equal(single.children_truncated, true);
+  const limited = await page.observe({root_ref:single.ref,limit:1});
+  assert.equal(limited.truncated, true);
+  assert.equal(limited.nodes[0].children_truncated, true);
+  const complete = await page.observe({root_ref:single.ref,limit:100});
+  assert.equal(complete.truncated, false);
+  const leaf = complete.nodes.find(node => node.child_refs.length === 0 && !node.children_truncated);
+  assert.ok(leaf);
+  assert.notEqual((await page.action({action:'read',selector:{ref:leaf.ref}})).node.children_truncated, true);
+  const rows = await page.action({action:'table',selector,limit:100});
+  assert.equal(rows.rows.length, 3);
+  assert.equal(rows.truncated, false);
+}));

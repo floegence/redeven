@@ -2,6 +2,10 @@
 
 Recent changes only. Concepts own current contracts and evidence; Git retains older log entries.
 
+## 2026-10-28
+
+- Let interactive [media writes](ai/image-read-and-retention.md) cancel maintenance scans while preserving canonical retention and cancellable gate waits. Unify native [single-node and subtree completeness](ai/computer-use-semantics.md) with browser facts; clarify [script read scope](ai/computer-use-scripts.md) without application-specific rules.
+
 ## 2026-10-27
 
 - Follow [streamed prose](ui/flower-activity-interaction.md) continuously using one viewport scheduler and cached animation geometry. Preserve reading/selection ownership, explicit return and tool-fold priority; verify frame displacement and bounded layout work.
