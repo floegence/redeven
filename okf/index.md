@@ -313,6 +313,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower computer viewer presentation](ui/flower-computer-viewer.md)
 - [Computer use qualification](ai/computer-use-qualification.md)
 - [Computer use qualification evidence](ai/computer-use-qualification-evidence.md)
+- [Media contention and native read qualification](ai/computer-media-read-qualification.md)
 - [Computer use paired model measurements](ai/computer-use-performance.md)
 - [Codex design evidence](ai/computer-use-design-evidence.md)
 - [AI tool approval runtime](ai/tool-approval-runtime.md)

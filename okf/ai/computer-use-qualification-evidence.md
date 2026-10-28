@@ -28,6 +28,10 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 
 # Evidence
 
+See [media contention and native read qualification](computer-media-read-qualification.md)
+for the October 28 deterministic checks, 36 original and six supplemental real
+DeepSeek tasks, including retained model and evidence-parser failures.
+
 ## Field integrity qualification — 2026-10-27
 
 Browser, AX and AT-SPI report per-field truncation within the existing 2,000-code-
