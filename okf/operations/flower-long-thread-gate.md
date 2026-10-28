@@ -54,12 +54,17 @@ and reasoning item through real history/disclosure controls with canonical conte
 and full Markdown parsing, including exact code blocks. Draft, focus and selection
 must survive drag. Browser regression suites retain the remaining interaction
 contracts; the synthetic floating output is not a terminal emulator qualification.
+Content inspection waits for the observed terminal state, enters reading mode,
+and reveals measured history sections before operating their descendants. It
+must not force clicks through hidden content or mutate product disclosure state.
 
 ## Responsiveness
 
 Sample idle, early work, late work and a repeat on the same visible production UI
 with two production PersistentFloatingWindows. Each sample lasts at least twelve
-seconds. Independent 60 Hz CDP input scheduling must offer at least 55 events/second;
+seconds measured with a monotonic clock. Pointer cancellation, released buttons,
+window blur or a hidden document invalidates the sample. Independent 60 Hz CDP
+input scheduling must offer at least 55 events/second;
 awaiting every dispatch in the producer is prohibited. Require at least 45 actual
 position commits/second and 80% of idle cadence, not merely low latency among the
 few events the renderer happens to deliver.

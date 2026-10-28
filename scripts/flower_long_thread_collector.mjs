@@ -1,7 +1,7 @@
 // Injected into the measured page; no product state is changed by collection.
 export function collectDrag() {
   window.__flowerLongThreadDrag?.stop?.();
-  const state = { started: performance.now(), events: [], commits: [], frames: [], queues: [], tasks: [], outputs: [], active: true };
+  const state = { started: performance.now(), events: [], commits: [], frames: [], queues: [], tasks: [], outputs: [], interruptions: [], active: true };
   let latest, dragRoot, lastFrame, raf;
   const focus = document.activeElement;
   // A titlebar drag intentionally focuses its own window; later streaming
@@ -11,7 +11,10 @@ export function collectDrag() {
   const selection = [draft.selectionStart, draft.selectionEnd];
   const handler = event => {
     if (event.type === 'pointerdown') dragRoot = event.target instanceof Element ? event.target.closest('[data-floe-geometry-surface="floating-window"]') : undefined;
-    if (event.type === 'pointermove' && !(event.buttons & 1)) return;
+    if (event.type === 'pointermove' && !(event.buttons & 1)) {
+      state.interruptions.push({ type: 'buttons_released', at: performance.now() });
+      return;
+    }
     if (!dragRoot) return;
     latest = { id: state.events.length, type: event.type, at: performance.now(), source: event.timeStamp, x: event.clientX, y: event.clientY, trusted: event.isTrusted };
     state.events.push(latest);
@@ -19,6 +22,11 @@ export function collectDrag() {
   };
   const eventTypes = ['pointerdown', 'pointermove', 'pointerup'];
   for (const type of eventTypes) document.addEventListener(type, handler, true);
+  const interrupted = event => state.interruptions.push({ type: event.type, at: performance.now() });
+  const hidden = () => { if (document.hidden) interrupted({ type: 'document_hidden' }); };
+  window.addEventListener('blur', interrupted);
+  document.addEventListener('pointercancel', interrupted, true);
+  document.addEventListener('visibilitychange', hidden);
   const observed = new Set(), lengths = new WeakMap();
   const outputs = new MutationObserver(records => {
     for (const record of records) {
@@ -69,6 +77,9 @@ export function collectDrag() {
     cancelAnimationFrame(raf);
     mutations.disconnect(); outputs.disconnect(); marks.disconnect(); tasks.disconnect();
     for (const type of eventTypes) document.removeEventListener(type, handler, true);
+    window.removeEventListener('blur', interrupted);
+    document.removeEventListener('pointercancel', interrupted, true);
+    document.removeEventListener('visibilitychange', hidden);
     return { ...state, focusPreserved: focus === document.activeElement, selectionPreserved: selection[0] === draft.selectionStart && selection[1] === draft.selectionEnd };
   };
   window.__flowerLongThreadDrag = { state, stop };

@@ -362,6 +362,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 				}
 			}
 			if err != nil {
+				t.Logf("qualification %s failed: %v", r.URL.Query().Get("op"), err)
 				http.Error(w, err.Error(), 500)
 				return
 			}

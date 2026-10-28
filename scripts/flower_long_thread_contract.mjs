@@ -67,6 +67,7 @@ export function evaluateLongThread(report) {
     check(finite(sample.frames?.p95, value => value <= 25) && sample.frames?.count >= sample.seconds * 30, label + 'frame interval P95 <=25ms');
     check(sample.longTasks?.count === 0 || finite(sample.longTasks?.max, value => value < 100), label + 'no main-thread task >=100ms');
     check(Array.isArray(sample.inputErrors) && sample.inputErrors.length === 0, label + 'no input dispatch failures');
+    check(Array.isArray(sample.interruptions) && sample.interruptions.length === 0, label + 'uninterrupted pointer and window ownership');
     if (sample.name === 'idle') continue;
     check(finite(sample.updates, value => value / sample.seconds >= workload.hz * .95), label + 'provider maintains >=95% of 80Hz');
     check(sample.output?.count > 0 && sample.output.coverage >= .95 && finite(sample.output.p95, value => value <= 250), label + '>=95% live prose markers visible within P95 250ms');

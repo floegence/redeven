@@ -86,6 +86,7 @@ await session.run(async () => {
   let generationStarted = 0;
   let fixtureClosed = false;
   const sample = async name => {
+    await page.bringToFront();
     const titlebar = page.locator('[data-floe-floating-window-titlebar]').filter({ hasText: 'Long-thread preview' });
     await page.locator('[aria-label="Preview draft"]').evaluate(node => { node.focus({ preventScroll: true }); node.setSelectionRange(5, 12); });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -98,16 +99,20 @@ await session.run(async () => {
     const before = await api('stats');
     const inputErrors = [], pending = new Set();
     let sent = 0;
-    const start = Date.now();
+    const start = Date.now(), monotonicStart = performance.now();
     const interval = setInterval(() => {
-      const now = Date.now(), phase = (now - start) / 1000;
+      const now = Date.now(), phase = (performance.now() - monotonicStart) / 1000;
       sent++;
       const request = cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x + Math.sin(phase * 2) * 110, y: y + Math.sin(phase * 1.3) * 70, button: 'left', buttons: 1, pointerType: 'mouse', timestamp: now / 1000 })
         .catch(error => inputErrors.push(String(error))).finally(() => pending.delete(request));
       pending.add(request);
     }, 1000 / 60);
     let seconds;
-    try { await sleep(workload.sampleSeconds * 1000); seconds = (Date.now() - start) / 1000; }
+    try {
+      const deadline = monotonicStart + workload.sampleSeconds * 1000;
+      while (performance.now() < deadline) await sleep(deadline - performance.now());
+      seconds = (performance.now() - monotonicStart) / 1000;
+    }
     finally { clearInterval(interval); await Promise.all(pending); }
     const state = await page.evaluate(() => ({ hot: document.documentElement.getAttribute('data-floe-hot-interaction'), visible: document.visibilityState === 'visible',
       draftPreserved: document.querySelector('[aria-label="Preview draft"]')?.value === 'Keep the preview draft' && document.querySelector('.flower-composer textarea')?.value === 'Keep the Flower draft',
@@ -121,10 +126,10 @@ await session.run(async () => {
     try { for (;;) { const part = await cdp.send('IO.read', { handle: stream }); raw += part.data; if (part.eof) break; } }
     finally { await cdp.send('IO.close', { handle: stream }); }
     await writeFile(path.join(output, name + '-trace.json'), raw);
-    const result = { name, seconds, sent, inputErrors, active: state.hot, visible: state.visible, draftPreserved: state.draftPreserved, focusPreserved: state.focusPreserved, selectionPreserved: state.selectionPreserved,
+    const result = { name, seconds, sent, inputErrors, interruptions: state.interruptions, active: state.hot, visible: state.visible, draftPreserved: state.draftPreserved, focusPreserved: state.focusPreserved, selectionPreserved: state.selectionPreserved,
       startedAt: start, outputs: state.outputs, commits: state.commits.length, nodes: state.nodes, presented: presentedMouseLatency(JSON.parse(raw).traceEvents), frames: distribution(state.frames.map(item => item.delta).filter(value => value > 0)),
       longTasks: distribution(state.tasks.map(item => item.duration)), queue: distribution(state.queues.map(item => item.durationMs)), updates: after.produced - before.produced,
-      producedBefore: before.produced, generationSeconds: generationStarted ? (start - generationStarted) / 1000 : 0 };
+      producedBefore: before.produced, generationSeconds: generationStarted ? (monotonicStart - generationStarted) / 1000 : 0 };
     samples.push(result);
     await writeFile(path.join(output, name + '-measurements.json'), JSON.stringify(state));
     await writeFile(path.join(output, 'metrics.json'), JSON.stringify(report, null, 2));
@@ -132,14 +137,17 @@ await session.run(async () => {
   };
   try {
     await sleep(1000); await sample('idle');
-    await api('start', '&threads=1'); generationStarted = Date.now();
+    await api('start', '&threads=1'); generationStarted = performance.now();
     await sleep(5000); await sample('early');
-    while (Date.now() - generationStarted < workload.warmupSeconds * 1000) {
-      await sleep(Math.min(15000, workload.warmupSeconds * 1000 - (Date.now() - generationStarted)));
+    while (performance.now() - generationStarted < workload.warmupSeconds * 1000) {
+      await sleep(Math.min(15000, workload.warmupSeconds * 1000 - (performance.now() - generationStarted)));
       console.log('Active-turn accumulation: ' + JSON.stringify(await api('stats')));
     }
     await sample('long'); await sample('repeat');
     await api('stop');
+    // Backend completion can precede consumption of the queued final snapshot.
+    // Wait for the observed terminal state before navigating folded content.
+    await page.locator('main[data-flower-selected-thread-status="success"]').waitFor({ timeout: 60000 });
     const canonical = await api('evidence', '&id=' + configured.threads[0]);
     for (const measured of samples.filter(item => item.name !== 'idle')) {
       const expected = [...canonical.text.matchAll(/word(\d{6})/g)].map(match => Number(match[1])).filter(index => canonical.timings[index] >= measured.startedAt && canonical.timings[index] <= measured.startedAt + measured.seconds * 1000 - 250);
@@ -165,6 +173,8 @@ await session.run(async () => {
   } catch (error) {
     report.failure = String(error);
     report.acceptance = evaluateLongThread(report);
+    await page.screenshot({ path: path.join(output, 'failed.png') }).catch(() => {});
+    await page.content().then(html => writeFile(path.join(output, 'failed.dom.html'), html)).catch(() => {});
     await session.writeEvidence(path.join(output, 'metrics.json'), report);
     throw error;
   } finally { if (!fixtureClosed) await api('stop'); }

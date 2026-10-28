@@ -9,7 +9,7 @@ function valid() {
     canonical: { exact_text: true, exact_reasoning: true, tools: 190, exact_tools: true, renderedIDs: Array.from({ length: 380 }, (_, i) => String(i)) }, rendered: Array.from({ length: 380 }, (_, i) => ({ id: String(i), exact: true })), errors: [],
     samples: ['idle', 'early', 'long', 'repeat'].map(name => ({ name, seconds: 12, visible: true, active: 'drag', draftPreserved: true, focusPreserved: true, selectionPreserved: true,
       sent: 720, commits: 680, presented: { count: 650, p95: name === 'idle' ? 40 : 55 }, frames: { count: 700, p95: 18 }, longTasks: { count: 0, max: null },
-      output: { count: 650, coverage: .99, p95: 100 }, queue: { count: 150, p95: 8, max: 20 }, updates: 960, inputErrors: [], generationSeconds: 125, producedBefore: 10000 })) };
+      output: { count: 650, coverage: .99, p95: 100 }, queue: { count: 150, p95: 8, max: 20 }, updates: 960, inputErrors: [], interruptions: [], generationSeconds: 125, producedBefore: 10000 })) };
 }
 test('acceptance rejects missing evidence, short workloads and every correctness/performance regression', () => {
   assert.equal(evaluateLongThread(valid()).passed, true);
@@ -23,6 +23,7 @@ test('acceptance rejects missing evidence, short workloads and every correctness
     r => r.samples[2].queue.p95 = 70, r => r.samples[2].queue.max = 51, r => r.samples[2].presented.p95 = 110,
     r => r.samples[2].presented.count = 0, r => r.samples[2].presented.p95 = null, r => r.samples[2].frames.p95 = 66,
     r => r.samples[2].longTasks = { count: 1, max: 100 }, r => r.samples[2].inputErrors.push('CDP failed'),
+    r => r.samples[0].interruptions.push({ type: 'blur' }), r => delete r.samples[2].interruptions,
     r => r.samples[2].seconds = 1, r => r.samples[2].output.coverage = .5, r => r.samples[2].output.p95 = 900,
   ]) { const report = valid(); mutate(report); assert.equal(evaluateLongThread(report).passed, false, mutate.toString()); }
   assert.equal(evaluateLongThread({}).passed, false);
