@@ -5,7 +5,8 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { testDesktopPreferences } from '../testSupport/desktopTestHelpers';
 import type { DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
 import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH, RUNTIME_SERVICE_PROTOCOL_VERSION, type RuntimeServiceAIReadinessState } from '../shared/runtimeService';
-import type { RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
+import type { RuntimeFlowerRequest, RuntimeFlowerStreamEvent, RuntimeFlowerStreamRequest } from '../shared/runtimeFlowerIPC';
+import { flowerLiveWireFixture } from '../../../internal/flower_ui/src/test/flowerLiveWireFixture';
 import { modelDirectoryWireFixture } from '../../../internal/envapp/ui_src/src/test/modelDirectoryWireFixture';
 import type { AgentSettingsResponse } from '../../../internal/envapp/ui_src/src/ui/pages/settings/types';
 
@@ -18,7 +19,7 @@ const click = (selector: string) => {
   button!.click();
 };
 
-async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_environment', aiState: RuntimeServiceAIReadinessState = 'ready', respond?: (request: RuntimeFlowerRequest) => unknown) {
+async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_environment', aiState: RuntimeServiceAIReadinessState = 'ready', respond?: (request: RuntimeFlowerRequest) => unknown, liveReady = false) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -32,7 +33,7 @@ async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_envir
     compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: aiState } });
   snapshot = { ...snapshot, environments: snapshot.environments.map(entry => ({ ...entry, runtime_service: runtimeService })) };
   let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
-  // Both IPC and runtime preparation stay pending throughout navigation.
+  // Host IPC stays pending; individual cases may publish runtime baseline reads.
   const performAction = vi.fn(() => new Promise<never>(() => {}));
   const getSnapshot = vi.fn(() => new Promise<never>(() => {}));
   let fixtureSettings = {} as AgentSettingsResponse;
@@ -42,10 +43,21 @@ async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_envir
     if (request.path === '/_redeven_proxy/api/settings') fixtureSettings = data as AgentSettingsResponse;
     return Promise.resolve({ ok: true as const, data: request.path.startsWith('/_redeven_proxy/api/ai/models') ? modelDirectoryWireFixture(fixtureSettings, data as Record<string, unknown>) : data });
   });
-  const startRuntimeFlowerStream = vi.fn(() => new Promise<never>(() => {}));
+  let streamListener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
+  const startRuntimeFlowerStream = vi.fn((request: RuntimeFlowerStreamRequest) => {
+    if (!liveReady) return new Promise<never>(() => {});
+    queueMicrotask(() => {
+      const data = flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] })[0]!.data;
+      streamListener?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${data}\n\n`) });
+    });
+    return Promise.resolve({ ok: true as const, status: 200, content_type: 'text/event-stream' });
+  });
   const cancelRuntimeFlowerStream = vi.fn();
   const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower, cancelRuntimeFlowerRead: vi.fn(),
-    startRuntimeFlowerStream, cancelRuntimeFlowerStream, subscribeRuntimeFlowerStream: () => () => {},
+    startRuntimeFlowerStream, cancelRuntimeFlowerStream, subscribeRuntimeFlowerStream: (listener: (event: RuntimeFlowerStreamEvent) => void) => {
+      streamListener = listener;
+      return () => { streamListener = undefined; };
+    },
   } as unknown as DesktopWelcomeRuntime['settings'];
   const host = document.createElement('div');
   document.body.append(host);
@@ -128,8 +140,19 @@ it('returns during AI startup and initializes the retained page only when the ru
   expect(h.performAction).not.toHaveBeenCalled();
 });
 
-it.each(['.redeven-flower-back-button', '.flower-sidebar-leading-action'])('returns immediately through %s and retains the pending Flower instance', async selector => {
-  const h = await mount('flower');
+it.each(['.redeven-flower-back-button', '.flower-sidebar-leading-action'])('returns immediately through %s and retains Flower while host IPC is pending', async selector => {
+  const sidebar = selector === '.flower-sidebar-leading-action';
+  const h = await mount('flower', 'ready', sidebar ? request => {
+    if (request.path === '/_redeven_proxy/api/settings') return { ai: { current_model_id: 'deepseek/deepseek-flash', permission_type: 'full_access', providers: [{ id: 'deepseek', name: 'DeepSeek', type: 'deepseek', model_selection: { selected_models: ['deepseek-flash'] } }] }, ai_secrets: { provider_api_key_set: { deepseek: true } } };
+    if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'deepseek/deepseek-flash', models: [] };
+    if (request.path.startsWith('/_redeven_proxy/api/ai/threads?')) return { threads: [] };
+    return {};
+  } : undefined, sidebar);
+  if (sidebar) await vi.waitFor(() => expect(document.querySelector(selector)).not.toBeNull());
+  else {
+    expect(document.querySelector('.flower-warmup')).not.toBeNull();
+    expect(document.querySelector('.flower-sidebar-leading-action')).toBeNull();
+  }
   const mounted = flower();
   expect(mounted).not.toBeNull();
   const calls = h.requestRuntimeFlower.mock.calls.length;
