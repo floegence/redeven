@@ -795,6 +795,11 @@ export class BrowserComputerPage {
     if (down) this.heldInput.set(heldKey, { session, method, parameters });
     if (releasing) await session.send(method, parameters);
     else await this.effect(() => session.send(method, parameters), 'input_delivery');
+    if (method === 'Input.dispatchMouseEvent' && parameters.type === 'mouseMoved') {
+      for (const held of this.heldInput.values()) if (held.session === session && held.method === method) {
+        held.parameters = { ...held.parameters, x: parameters.x, y: parameters.y };
+      }
+    }
     if (up) this.heldInput.delete(heldKey);
   }
 
@@ -918,14 +923,15 @@ export class BrowserComputerPage {
     }
   }
 
-  async delay(milliseconds) {
+  async delay(milliseconds, revision) {
     let changed, timer;
     try {
       await Promise.race([
         new Promise(resolve => { timer = setTimeout(resolve, milliseconds); }),
-        new Promise(resolve => { changed = () => { if (this.stopped || this.operationCancelled || this.invalid) resolve(); }; this.listeners.add(changed); changed(); }),
+        new Promise(resolve => { changed = () => { if (this.stopped || this.operationCancelled || this.invalid || (revision !== undefined && revision !== this.revision)) resolve(); }; this.listeners.add(changed); changed(); }),
       ]);
       if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
+      if (revision !== undefined && revision !== this.revision) throw new Error('STALE_REFERENCE');
     } finally { clearTimeout(timer); this.listeners.delete(changed); }
   }
 
@@ -992,8 +998,18 @@ export class BrowserComputerPage {
       return {action_executed:true,execution_mode:'background',scroll_progress:{before,after,changed:before&&after ? before.x!==after.x||before.y!==after.y : null,measurement:'immediate_after_dispatch'}};
     } else if (args.action === 'drag') {
       for (const key of ['from_x', 'from_y', 'to_x', 'to_y']) if (!Number.isFinite(args[key]) || args[key] < 0) throw new Error('INVALID_REQUEST');
+      const revision = this.revision, duration = args.duration_ms ?? 0;
       await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, x: args.from_x, y: args.from_y });
-      await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mouseMoved', button: 'left', buttons: 1, x: args.to_x, y: args.to_y });
+      // Schedule against one monotonic start; transport latency must not add
+      // another full delay to every step. Cancellation wakes the same wait.
+      const started = performance.now(), steps = Math.max(1, Math.min(120, Math.ceil(duration / 16)));
+      for (let step = 1; step <= steps; step++) {
+        if (duration > 0) await this.delay(Math.max(0, started + duration * step / steps - performance.now()), revision);
+        if (revision !== this.revision) throw new Error('STALE_REFERENCE');
+        await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mouseMoved', button: 'left', buttons: 1,
+          x: args.from_x + (args.to_x - args.from_x) * step / steps, y: args.from_y + (args.to_y - args.from_y) * step / steps });
+      }
+      if (revision !== this.revision) throw new Error('STALE_REFERENCE');
       await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, x: args.to_x, y: args.to_y });
     } else throw new Error('INVALID_REQUEST');
     return { action_executed: true, execution_mode: 'background' };

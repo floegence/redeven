@@ -177,7 +177,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -187,9 +187,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				var exports, otherAccount, submissions, focused, entered, pointerClicks atomic.Int32
 				var visitedPages [3]atomic.Bool
-				var typedValue atomic.Value
+				var typedValue, dragEvents atomic.Value
 				site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
+					case "/drag-events":
+						var events []qualificationDragEvent
+						if json.NewDecoder(io.LimitReader(r.Body, 65536)).Decode(&events) != nil {
+							http.Error(w, "invalid telemetry", http.StatusBadRequest)
+							return
+						}
+						dragEvents.Store(events)
+						return
 					case "/child", "/child2":
 						w.Header().Set("Content-Type", "text/html; charset=utf-8")
 						_, _ = fmt.Fprintf(w, `<button>%s</button>`, r.URL.Path)
@@ -233,6 +241,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						return
 					}
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					if scenario == "timed_drag" || scenario == "drag_validation" {
+						_, _ = io.WriteString(w, `<title>Pointer exercise</title><style>body{margin:0;user-select:none}#pad{position:absolute;left:0;top:0;width:300px;height:160px;background:#ddd}p{margin-top:180px}</style><div id="pad"></div><p>Drag once from CSS coordinates (20,30) to (180,100), holding for 1000 milliseconds. Coordinates are in this document's viewport. The pad is deliberately unconstrained.</p><section aria-label="Pointer telemetry">[]</section><script>let events=[];for(const type of ['mousedown','mousemove','mouseup'])document.addEventListener(type,e=>{events.push({type:e.type,time:performance.now(),x:e.clientX,y:e.clientY,buttons:e.buttons});document.querySelector('section').textContent=JSON.stringify(events);if(type==='mouseup')fetch('/drag-events',{method:'POST',body:JSON.stringify(events)})});</script>`)
+						return
+					}
 					_, _ = io.WriteString(w, "<!doctype html><title>Orchid domain console</title><style>body{font:16px system-ui;padding:20px}td,th{padding:4px 12px}button,input,a{margin:8px}#noise{height:100px;overflow:auto}</style><h1>Account: Orchid</h1><a href='/other'>Switch to Birch account</a><a href='/export'>Export domains</a><button id='save' onclick=\"fetch('/submit',{method:'POST'}).then(()=>document.getElementById('saved').textContent='Saved once')\">Save once</button><output id='saved' aria-label='Save status'></output>")
 					if scenario == "node_scope" {
 						_, _ = io.WriteString(w, "<table aria-label='Inventory'><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Alpha</td></tr><tr><td>Beta</td></tr></tbody></table>")
@@ -373,6 +385,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "timed_drag":
+					prompt = "Read the selected Pointer exercise page and complete its drag exactly once using Computer Use. Inspect and report the actual Pointer telemetry afterwards. Do not use terminal/network tools or navigate."
+				case "drag_validation":
+					prompt = "Run this intentional diagnostic once, unchanged: await ui.drag(20,30,180,100,5001); . Report its diagnostic. Then in a separate computer.exec follow the selected page's drag instructions exactly once and inspect Pointer telemetry. Do not retry the invalid duration or use terminal/network tools."
+				case "optional_probe":
+					prompt = "On this disposable page, determine whether a button named Optional banner exists. If present, dismiss it. If absent, continue without clicking it. Wait at most 100ms for a button named Optional offer to become visible; if that wait times out, continue. Then click Save once exactly once and verify Save status. Use the documented browser API and conditional script logic, without exceptions as optional-element probing. Do not navigate or use terminal/network tools."
+				case "caught_lookup":
+					prompt = "Execute this intentional boundary diagnostic exactly once in one computer.exec: try { await ui.getByRole('button',{name:'Missing probe',exact:true}).node(); } catch {} await ui.getByRole('button',{name:'Save once',exact:true}).click(); . Report the actual tool outcome. Then inspect Save status in a separate call. Never save again or use terminal/network tools."
 				case "field_integrity":
 					prompt = "Inspect the Bounded fields region. Read its textbox through node() and query(), log the returned field completeness flags and lengths, then capture a detailed subtree with ui.snapshot({root_ref,full:true}). Report whether name, description and value are complete. Do not modify any field or click."
 				case "long_text_natural":
@@ -658,6 +678,71 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "timed_drag", "drag_validation":
+					events, _ := dragEvents.Load().([]qualificationDragEvent)
+					report["pointer_events"] = events
+					var down, up []qualificationDragEvent
+					intermediate := false
+					for _, event := range events {
+						if event.Type == "mousedown" {
+							down = append(down, event)
+						}
+						if event.Type == "mouseup" {
+							up = append(up, event)
+						}
+						if event.Type == "mousemove" && event.Buttons == 1 && event.X > 20 && event.X < 180 {
+							intermediate = true
+						}
+					}
+					valid := len(down) == 1 && len(up) == 1 && intermediate
+					if valid {
+						held := up[0].Time - down[0].Time
+						report["held_ms"] = held
+						valid = held >= 975 && held < 3000 && down[0].X == 20 && down[0].Y == 30 && up[0].X == 180 && up[0].Y == 100
+					}
+					report["drag_contract_passed"] = valid
+					if !valid {
+						t.Errorf("drag telemetry contract failed: down=%d up=%d intermediate=%v", len(down), len(up), intermediate)
+					}
+					if scenario == "drag_validation" {
+						rejected := false
+						for _, fact := range confirmedToolFacts {
+							diagnostic, _ := fact["diagnostic"].(map[string]any)
+							rejected = rejected || fact["script_error"] == "INVALID_COMPUTER_ARGUMENTS" && fact["action_executed"] == false && fact["failed_action"] == "drag" && diagnostic["field"] == "duration_ms" && diagnostic["expected"] == "integer_0_5000"
+						}
+						report["invalid_duration_rejected"] = rejected
+						if !rejected {
+							t.Error("invalid duration rejection was not confirmed")
+						}
+					}
+				case "optional_probe":
+					continued := false
+					var query, wait bool
+					for _, fact := range confirmedToolFacts {
+						actions := toAnySlice(fact["completed_actions"])
+						for _, action := range actions {
+							query = query || action == "query"
+							wait = wait || action == "wait"
+							if action == "click" && query && wait {
+								continued = true
+							}
+						}
+					}
+					report["conditional_continuation_confirmed"] = continued
+					if !continued || submissions.Load() != 1 || len(scriptErrors) != 0 {
+						t.Errorf("optional conditions failed: continued=%v saves=%d errors=%v", continued, submissions.Load(), scriptErrors)
+					}
+				case "caught_lookup":
+					sealed := false
+					for _, fact := range confirmedToolFacts {
+						if fact["script_error"] == "ELEMENT_NOT_FOUND" && fact["failed_operation_index"] == float64(0) && len(toAnySlice(fact["completed_actions"])) == 0 && fact["context_reset"] == true {
+							sealed = true
+						}
+					}
+					report["caught_failure_sealed"] = sealed
+					if !sealed || submissions.Load() != 0 {
+						t.Errorf("caught lookup failure did not seal input: sealed=%v saves=%d", sealed, submissions.Load())
+					}
 				case "media_contention":
 					select {
 					case err := <-maintenanceDone:
@@ -1225,4 +1310,13 @@ func TestQualificationTreeReadFactsAcceptStructuredAndJSONLogs(t *testing.T) {
 			t.Fatalf("invalid log counted as structured read evidence: %q", invalid)
 		}
 	}
+}
+
+// Fixture telemetry is produced by browser events, independently of model text.
+type qualificationDragEvent struct {
+	Type    string  `json:"type"`
+	Time    float64 `json:"time"`
+	X       float64 `json:"x"`
+	Y       float64 `json:"y"`
+	Buttons int     `json:"buttons"`
 }

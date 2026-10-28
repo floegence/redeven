@@ -46,6 +46,14 @@ are never echoed. locator.snapshot still accepts only limit and emit.
 
 Native ui.scroll uses the window center; ui.scrollAt(x,y,delta_y,delta_x=0)
 targets a region without clicking first. Selector scroll remains semantic.
+Browser drag accepts integer duration_ms from 0 through 5000. The shared managed
+and connected-browser implementation holds the button while following a straight
+path over the requested duration; zero adds no delay. A monotonic schedule avoids
+accumulating one extra delay per transport call. Dispatch overhead can extend the
+duration. Cancellation, takeover and document invalidation stop remaining moves;
+cleanup releases at the last confirmed pointer position. A lost input reply keeps
+its unknown-effect classification and is never replayed. Native delivery timing
+is a separate adapter contract and is not certified by browser tests.
 Browser locator.text() reads rendered innerText from one unique observed element
 through a fixed isolated-world function, bounded to 12,000 Unicode characters
 with explicit truncation and rendered_element scope. Hidden and unloaded content
@@ -57,7 +65,7 @@ The Runtime admits at most eight active script namespaces. The short tool defini
 
 Semantic snapshots retain their 256 KiB output budget. The script response allows a bounded 512 KiB envelope so metadata cannot make a valid snapshot fail at the transport boundary. Logs have a separate 64 KiB total budget. Local `emit:false` reads receive the same URL/title identity as emitted observations.
 
-`context_reset` explicitly reports namespace retirement after failure. Safe diagnostics include phase and submitted-source line/column/symbol when available; raw exception text and stacks stay private. Failed namespaces cannot retain dormant Promise callbacks. A caught argument error seals further operations. `const`/`let` are invocation-local; explicit `globalThis` values last only within a healthy turn/target namespace. Timers are unavailable.
+`context_reset` explicitly reports namespace retirement after failure. Safe diagnostics include phase and submitted-source line/column/symbol when available; raw exception text and stacks stay private. Failed namespaces cannot retain dormant Promise callbacks. Any failed host operation seals further operations, even when caught by guest JavaScript. Unique node/action lookups fail on missing or ambiguous matches; optional browser checks use count/query (zero is data) or waitFor (timeout is data). `const`/`let` are invocation-local; explicit `globalThis` values last only within a healthy turn/target namespace. Timers are unavailable.
 
 Default `ui.snapshot` automatic output uses a compact 32 KiB presentation budget, short opaque browser references and parent links. Truncation marks omitted nodes and children; omitted content is unknown. Guest reads retain the canonical 256 KiB budget. `full:true` and `locator.node()` provide details with the same 2,000-code-point field budgets and explicit name/description/value truncation flags. Changing detail mode resets the diff baseline; failures use the same bounded output projection.
 
@@ -84,28 +92,11 @@ read diagnostics retain method, expected capability and choose_supported_read
 through the browser, Runtime and script result. They do not infer a replacement
 element, widen scope or repeat input. The model chooses another explicit read.
 
-## Successful reads and argument counts
-All guest methods, including image and download-cursor methods, validate explicit
-minimum/maximum argument counts before dispatch. Existing type and option
-validation remains authoritative; extra arguments return SCRIPT_ARGUMENT_ERROR
-with a closed method and documented_arity diagnostic. Valid signatures do not change.
+## Read and validation contracts
 
-Runtime requires the promised result for semantic observations, node/text/collection/
-attribute reads and condition waits. Missing or invalidated reads fail through the
-existing observation-error boundary, seal the invocation and retain completed
-input without replay. Empty arrays, empty text, zero counts and null attributes
-remain valid data. Snapshot projection never fills absent observations with an
-empty tree. A confirmed action may invalidate an old observation and still be
-followed by an explicit fresh read. A documented wait timeout remains a result;
-requireState turns it into CONDITION_TIMEOUT. Takeovers and target changes keep
-their existing control boundaries.
-
-The browser controller routes node/text/query/table/attribute/condition reads
-through one observation boundary, including direct lower-level read exceptions.
-It supplies the required semantic_read failure stage, retains the live source,
-and uses the existing bounded read retry only; inputs never enter that retry.
-A rejected read cannot become a malformed transport response that disconnects
-the target. A later explicitly requested read can recover on the same page.
+See [script reads and validation](computer-script-read-contract.md) for success
+shapes, strict argument boundaries, branchable absence/timeout and bounded
+collections. Failed operations seal the invocation; they never replay input.
 
 ## Observation and references
 The [semantic snapshot contract](computer-use-semantics.md) owns schema v2, role normalization, tree validation, states, relationships and privacy projection. `ui.getByRole(role, {name?, exact?, root_ref?})` uses a canonical role.
@@ -126,47 +117,6 @@ model result. A safe snapshot (including emit:false) or screenshot clears it;
 later input, stale refs, observation failure or unknown effects require a fresh
 read. observation_status describes a safe current observation in this call,
 not the presence of a title. A title alone never establishes freshness.
-
-## Validated inputs and bounded browser reads
-The browser adapter validates the complete operation before virtual focus,
-scroll preparation or input. Invalid arguments retain a closed diagnostic with
-phase, field, expected form and recovery; page errors and supplied secrets are
-never copied into it. Keys use characters or documented names with
-Alt/Control/Meta/Shift modifiers; physical codes such as Equal are not names.
-Primitive computer.wait defaults to zero milliseconds and adds no settling
-promise. Legacy waitFor retains its returned state. requireState throws CONDITION_TIMEOUT and seals later host operations, even if guest code catches the error. Earlier completed input remains recorded.
-Its closed diagnostic retains method, requested state, timeout_ms and zero-based
-operation_index, mirrored in failed_action/failed_operation_index. Matching text
-and raw exceptions stay private. completed_actions records completed operations;
-a completed wait operation does not imply its requested condition was met.
-
-Browser locators expose query({limit,cursor}) over the authorized loaded AX
-scope and an attribute allowlist. Results carry total, truncation, document and
-cursor; changed contents invalidate pagination. Only returned page references
-enter the bounded reference table. Each page is at most 200 items and 48 KiB of
-items. Virtualized, unloaded rows are never counted as visited. href removes
-credentials, query and fragment and must not be reconstructed as an action URL.
-Browser rows reads a unique table/grid and returns header/data rows and cell roles,
-with explicit loaded-tree scope. Pages contain at most 200 rows/48 KiB of item
-content; each row is limited to 200 cells/44 KiB, each cell to 2,000 Unicode
-characters. cells_truncated/text_truncated mark loss; exact totals cannot be
-inferred from incomplete rows. Cursor identity includes full cell contents.
-Nested tables are excluded. count reports loaded matches. attribute returns a
-scalar safe attribute; linkSummary labels its redacted URL as non-actionable.
-Native targets reject these browser reads inside scripts before adapter dispatch.
-
-scroll_progress belongs to the scroll return value. It reports immediate
-before/after measurements, with null or unchanged values remaining inconclusive.
-The core help demonstrates awaited node reads and logging the returned scroll
-result; node and snapshot objects do not carry scroll measurements.
-
-Repeated identical observations in the same script namespace/document/scope
-receive a bounded advisory after two repeats. This never replays input, changes
-target, adds a planner, or persists a second lifecycle.
-
-Single-node detail does not enumerate a subtree. child_refs describes only
-returned relationships; check children_truncated, use snapshot for a subtree
-and browser rows/query/count for loaded collections.
 
 # Boundaries
 

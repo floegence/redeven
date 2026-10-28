@@ -33,7 +33,7 @@ Foreground macOS and credentialed model qualification remain explicit runs; the 
 ## Real DeepSeek reliability acceptance
 `TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.
 
-Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1). Native entry also requires REDEVEN_COMPUTER_NATIVE_E2E=1 and the release Swift helper; serialize native cases on the shared desktop. Browser-only cases may use -parallel 3. Twenty-eight scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks failure namespace reset, multi-page script batches, browser-to-task-file processing and installed native application entry. Reset diagnostics and completed waits are checked against canonical tool results. observation_capture verifies four PageDown inputs followed by one fresh screenshot; frame_refs verifies a retained parent ref after child navigation; option_field verifies exact unsupported-option diagnostics. strict_wait also checks the failed wait index and sanitized condition facts.
+Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1). Native entry also requires REDEVEN_COMPUTER_NATIVE_E2E=1 and the release Swift helper; serialize native cases on the shared desktop. Browser-only cases may use -parallel 3. Scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks failure namespace reset, multi-page script batches, browser-to-task-file processing and installed native application entry. Reset diagnostics and completed waits are checked against canonical tool results. observation_capture verifies four PageDown inputs followed by one fresh screenshot; frame_refs verifies a retained parent ref after child navigation; option_field verifies exact unsupported-option diagnostics. strict_wait also checks the failed wait index and sanitized condition facts.
 
 Natural tasks use the production default tool surface. Only the legacy default-wait
 case explicitly retains its primitive. Read canonical tool results through
@@ -64,6 +64,16 @@ help and batch example through production QuickJS, Runtime and installed Chromiu
 checking byte equality for a multi-chunk file and the actual page values.
 TestComputerNativeApplicationEntryQualification separately exercises single, no,
 multiple and minimized windows with the real native helper.
+
+The timed_drag and drag_validation scenarios verify fixture-generated mouse
+events independently of model text: one press/release, endpoints, intermediate
+movement and actual held duration. The invalid request must retain the Runtime's
+INVALID_COMPUTER_ARGUMENTS duration_ms/integer_0_5000 diagnostic without input.
+optional_probe verifies conditional continuation after zero matches and a normal
+wait timeout; caught_lookup verifies that catching a failed unique lookup cannot
+resume input within that invocation. computerDrag.node-test.mjs qualifies the
+shared browser implementation through managed and connected hosts, image-bound
+input, duration endpoints and interruption/unknown-effect cleanup.
 
 Retain failed batches and classify model instruction failures, test defects and
 product defects separately. Scenario completion is not a zero-tool-error claim,
@@ -138,3 +148,5 @@ claimed.
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` - Deterministic provider with real Desktop takeover, frames and handback.
 
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs` - Real Desktop/Env App connection guide, extension, task tab and Stage with a deterministic provider.
+
+See [browser drag qualification](computer-drag-qualification.md) for the October 28 timing repair, real-model failures and native boundary.

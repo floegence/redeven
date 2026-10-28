@@ -28,6 +28,38 @@ test('one invocation combines page navigation, loops, conditional reads and a fi
   } finally { script.dispose(); }
 });
 
+test('drag forwards exact timing through CSS and image-bound calls', async () => {
+  const script = await createComputerScript(); const operations = [];
+  try {
+    await script.execute('await ui.drag(1,2,30,40,500); const image=await ui.screenshot(); await image.drag(2,3,40,50,5000);', async operation => {
+      operations.push(operation); return operation.action === 'screenshot' ? {frame_geometry:{frame:'f',document_id:'d'}} : {};
+    });
+    assert.deepEqual(operations.filter(o => o.action === 'drag').map(o => o.duration_ms), [500,5000]);
+    assert.equal(operations[2].frame, 'f');
+    assert.equal(operations[2].document_id, 'd');
+  } finally { script.dispose(); }
+});
+
+test('optional zero matches and timeout remain branchable data', async () => {
+  const script = await createComputerScript(); const operations = [];
+  try {
+    const result = await script.execute("const optional=ui.getByRole('button',{name:'Optional',exact:true}); if(await optional.count()) await optional.click(); const state=await optional.waitFor({state:'visible',timeout_ms:0}); if(state.state==='timeout') await ui.type('continued');", async operation => {
+      operations.push(operation.action); return operation.action === 'query' ? {items:[],total:0} : operation.action === 'wait' ? {state:'timeout'} : {};
+    });
+    assert.deepEqual(operations, ['query','wait','type']); assert.equal(result.operations, 3);
+  } finally { script.dispose(); }
+});
+
+test('catching a failed single-node read cannot resume host input', async () => {
+  const script = await createComputerScript(); const operations = [];
+  try {
+    await assert.rejects(script.execute("try { await ui.getByRole('button',{name:'Missing',exact:true}).node(); } catch {} await ui.type('must not run');", async operation => {
+      operations.push(operation.action); throw new Error('ELEMENT_NOT_FOUND');
+    }));
+    assert.deepEqual(operations, ['read']);
+  } finally { script.dispose(); }
+});
+
 test('download byte reads validate ranges before dispatch', async () => {
   const script=await createComputerScript();
   try {
