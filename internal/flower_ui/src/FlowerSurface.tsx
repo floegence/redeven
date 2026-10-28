@@ -11352,19 +11352,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             const status = () => normalizeSubagentPanelStatus(agent().raw_status);
             const title = () => [agent().name, subagentStatusLabel(status()), subagentsCopy().openThread].join('. ');
             const identity = <>
-              <SubagentAvatar threadID={agent().thread_id} class="flower-subagent-capsule-avatar" />
+              <Show when={agent().thread_id}><SubagentAvatar threadID={agent().thread_id} class="flower-subagent-capsule-avatar" /></Show>
               <span class="flower-subagent-capsule-name">{presentSubagentTaskName(agent().name)}</span>
-              <span class="flower-subagent-capsule-status" aria-hidden="true">{subagentStatusIndicator(status())}</span>
+              <Show when={agent().thread_id}><span class="flower-subagent-capsule-status" aria-hidden="true">{subagentStatusIndicator(status())}</span></Show>
             </>;
             return <div class="flower-activity-subagents-item" role="listitem">
               <Show when={agent().open_messages && current()} fallback={
-                <Show when={agent().thread_id} fallback={<span class="flower-activity-subagent-unavailable">{agent().name}</span>}>
-                  <span class="flower-subagent-capsule flower-subagent-capsule-static"
-                    data-flower-subagent-identity={agent().thread_id}
-                    title={[agent().name, subagentStatusLabel(status()), agent().description].filter(Boolean).join('\n')}>
-                    {identity}
-                  </span>
-                </Show>
+                <span class={cn('flower-subagent-capsule flower-subagent-capsule-static', !agent().thread_id && 'flower-subagent-capsule-name-only')}
+                  data-flower-subagent-identity={agent().thread_id || undefined}
+                  title={[agent().name, subagentStatusLabel(status()), agent().description].filter(Boolean).join('\n')}>
+                  {identity}
+                </span>
               }>
                 <button type="button" class="flower-subagent-capsule"
                   data-flower-subagent-identity={agent().thread_id}
@@ -11610,7 +11608,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }}</For>;
 
     const inlineSubagent = createMemo(() => presentation().detailBlocks.find((block) => (
-      block.kind === 'subagents' && block.subagents.items.length === 1 && Boolean(block.subagents.items[0]?.thread_id)
+      block.kind === 'subagents' && block.subagents.items.length === 1
     )));
     const compactReports = () => item().tool_name === 'subagent_events';
     const subagentReadHint = () => {

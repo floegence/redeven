@@ -858,12 +858,10 @@ function subagentActionTitle(
   const statusTitle = (status: string, fallback: string): string => (
     actionTitle && normalizedAction !== 'unknown' ? `${actionTitle} · ${status}` : fallback
   );
-  const singleName = items.length === 1 && !items[0]?.thread_id ? trimString(items[0]?.name) : '';
-  const withSingleName = (title: string): string => singleName ? `${title} · ${singleName}` : title;
   if (item.status === 'canceled') return statusTitle(subagentsCopy(copy).statusLabels.canceled, activityCopy.titles.operation);
   if (normalizedAction === 'spawn') {
-    if (item.status === 'error') return withSingleName(activityCopy.titles.createFailed);
-    return withSingleName(item.status === 'success' ? activityCopy.titles.started : activityCopy.titles.starting);
+    if (item.status === 'error') return activityCopy.titles.createFailed;
+    return item.status === 'success' ? activityCopy.titles.started : activityCopy.titles.starting;
   }
   if (item.status === 'error') return statusTitle(subagentsCopy(copy).statusLabels.failed, activityCopy.titles.failed);
   if (items.some((entry) => entry.raw_status === 'waiting_input')) {

@@ -60,6 +60,56 @@ afterEach(async () => {
 });
 
 describe('Subagent inline capsules', () => {
+  it.each([1100, 320])('wraps name-only creation targets in a stable capsule without inferring identity (%s)', async width => {
+    await page.viewport(width, 900);
+    document.documentElement.classList.add('dark');
+    const pending = deferred<{ task_name: string; status: string }>();
+    const loadActivityValue = vi.fn(async (_thread: string, request: { item_id: string; path: string }) => ({
+      thread_id: parentID, item_id: request.item_id, turn_id: 'parent-turn', run_id: 'parent-run', path: request.path,
+      value: request.path === '/payload' ? { action: 'spawn', requested_count: 1 } : await pending.promise,
+    }));
+    const names = [targets[0]!.task_name, 'US Hard News', 'US Business Tech', 'US Online Discourse', targets[7]!.task_name];
+    const { runtime, loadDetail } = mount([operation('name-field', 'spawn', 1, { payload: undefined,
+      field_summary: { version: 'name-only-v1', renderer: 'subagent_operation', fields: [
+        { path: '/payload/action', kind: 'string', bytes: 5 },
+        { path: '/payload/requested_count', kind: 'scalar', value: 1 },
+        { path: '/payload/targets', kind: 'array', count: 1 },
+      ] },
+    }), ...names.map((name, index) => operation('name-' + index, 'spawn', 1, {
+      payload: { action: 'spawn', targets: [{ task_name: name, status: 'running' }], requested_count: 1 },
+      started_at_unix_ms: 100, ended_at_unix_ms: 323,
+    }))], 1, { loadActivityValue });
+    await waitFor(() => loadActivityValue.mock.calls.length === 2);
+    const activity = row(runtime, 'name-field');
+    const height = activity.getBoundingClientRect().height;
+    const followingTop = row(runtime, 'name-0').getBoundingClientRect().top;
+    pending.resolve({ task_name: targets[7]!.task_name, status: 'running' });
+    expect(row(runtime, 'name-0').querySelector('.flower-subagent-capsule')).not.toBeNull();
+    await expect.poll(() => activity.querySelector('.flower-subagent-capsule')?.textContent ?? activity.textContent).toContain('Review Deployment');
+    for (const id of ['name-field', ...names.map((_, index) => 'name-' + index)]) {
+      const current = row(runtime, id);
+      const capsule = current.querySelector<HTMLElement>('.flower-subagent-capsule');
+      expect(capsule).not.toBeNull();
+      expect(current.querySelectorAll('.flower-subagent-capsule')).toHaveLength(1);
+      expect(current.querySelector('.flower-activity-inline-line')!.contains(capsule)).toBe(true);
+      expect(current.querySelector('.flower-activity-inline-title')?.textContent).toBe('Created subagent');
+      expect(capsule!.tagName).toBe('SPAN');
+      expect(capsule!.hasAttribute('tabindex')).toBe(false);
+      expect(capsule!.querySelector('[data-flower-subagent-avatar]')).toBeNull();
+      expect(current.querySelector('[data-flower-subagent-capsule], [data-flower-subagent-identity]')).toBeNull();
+      expect(parseFloat(getComputedStyle(capsule!).borderTopWidth)).toBeGreaterThan(0);
+      expect(parseFloat(getComputedStyle(capsule!).borderRadius)).toBeGreaterThan(0);
+      expect(getComputedStyle(capsule!.querySelector('.flower-subagent-capsule-name')!).textOverflow).toBe('ellipsis');
+      expect(current.getBoundingClientRect().height).toBe(32);
+      expect(current.scrollWidth).toBeLessThanOrEqual(current.clientWidth + 1);
+    }
+    expect(activity.getBoundingClientRect().height).toBe(height);
+    expect(row(runtime, 'name-0').getBoundingClientRect().top).toBe(followingTop);
+    expect(loadActivityValue.mock.calls.map(call => call[1].path).sort()).toEqual(['/payload', '/payload/targets/0']);
+    expect(loadDetail).not.toHaveBeenCalled();
+    await page.screenshot({ path: '__screenshots__/subagent-capsules/name-only-' + width + '.png' });
+  });
+
   it.each([
     { width: 1100, coarse: false, fontSize: 16, theme: 'light' },
     { width: 320, coarse: false, fontSize: 16, theme: 'dark' },

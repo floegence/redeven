@@ -6855,10 +6855,12 @@ button.flower-composer-context-source:focus-visible,
   flex-basis: 1.125rem;
 }
 
-.flower-activity-subagent-unavailable {
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  overflow-wrap: anywhere;
+.flower-subagent-capsule-name-only {
+  padding-inline-start: 0.5625rem;
+}
+
+.flower-activity-inline-row-single-subagent .flower-subagent-capsule-name-only {
+  padding-inline-start: 0.375rem;
 }
 
 .flower-subagent-switcher {

@@ -850,7 +850,7 @@ describe('presentFlowerActivityItem', () => {
     expect(failed.label).toBe(failedTitle);
   });
 
-  it('retains the task in creation titles while no canonical capsule can open it', () => {
+  it('retains name-only targets for capsules without duplicating the name in creation titles', () => {
     const present = (status: 'running' | 'success' | 'error') => presentFlowerActivityItem(item({
       tool_name: 'subagents',
       renderer: 'subagent_operation',
@@ -860,11 +860,18 @@ describe('presentFlowerActivityItem', () => {
         targets: [{ task_name: 'Research model releases', status: status === 'error' ? 'failed' : 'running' }],
         ...(status === 'error' ? { error: { message: 'creation failed' } } : {}),
       },
-    })).label;
+    }));
 
-    expect(present('running')).toBe('Creating subagent · Research model releases');
-    expect(present('success')).toBe('Created subagent · Research model releases');
-    expect(present('error')).toBe('Failed to create subagent · Research model releases');
+    expect(present('running').label).toBe('Creating subagent');
+    expect(present('success').label).toBe('Created subagent');
+    expect(present('error').label).toBe('Failed to create subagent');
+    for (const status of ['running', 'success', 'error'] as const) {
+      expect(present(status).detailBlocks).toContainEqual(expect.objectContaining({
+        kind: 'subagents', subagents: expect.objectContaining({ items: [expect.objectContaining({
+          name: 'Research model releases', thread_id: '',
+        })] }),
+      }));
+    }
   });
 
   it('uses a neutral title for an unknown Subagent operation without guessing from its label', () => {
