@@ -1,3 +1,4 @@
+import { observeFlowerSequenceDisclosure } from './flowerSequenceDisclosure';
 import { createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerSequenceSubscriptions, createFlowerProcessSubscriptions } from './flowerPresentationSubscriptions';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
@@ -390,36 +391,6 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     }));
   });
 
-  createEffect(() => {
-    const projection = sequences();
-    const animate = liveArrival();
-    pendingSequenceContent();
-    titleReveal.revealingEntries();
-    let cancelled = false;
-    onCleanup(() => { cancelled = true; });
-    queueMicrotask(() => untrack(() => {
-      if (cancelled) return;
-      const revealing = titleReveal.revealingEntries();
-      for (const group of projection.groups.values()) {
-        if (group.followingContentKeys.some(key => {
-          const owner = pendingSequenceContent().get(key);
-          return owner && owner.motionKey !== 'tools:' + owner.nodeKey;
-        })) continue;
-        if (group.disclosure === 'automatic' && group.entryKeys.some(key => revealing.has(key))) continue;
-        props.choices.observe(sequenceIdentity(group.key), group.disclosure, () => {
-          const inspectedNodes = group.nodeKeys.flatMap(key => {
-            const element = sequenceLayout.element(key);
-            return element ? [element] : [];
-          });
-          const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
-          return inspectionProtected(turnID, group.entryKeys, true, inspectedNodes);
-        }, () => preserveReadingAnchor(group.entryKeys), animate);
-        if (props.choices.expanded(sequenceIdentity(group.key), group.disclosure) && !motions.has(`tools:${group.nodeKeys[0]}`)) {
-          releaseMotionContent('tools:' + group.nodeKeys[0]);
-        }
-      }
-    }));
-  });
   const finishMotion = (key: string) => {
     motions.delete(key);
     if (motions.size === 0 && layoutAnchor) {
@@ -472,6 +443,23 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     isVisible: key => {
       const group = sequences().members.get(key)?.group;
       return !group || sequenceContext.expanded(group);
+    },
+  });
+  observeFlowerSequenceDisclosure({
+    groups: () => sequences().groups, pending: pendingSequenceContent,
+    revealing: () => titleReveal.revealingEntries(), animate: liveArrival,
+    observe: (group, animate) => {
+      props.choices.observe(sequenceIdentity(group.key), group.disclosure, () => {
+        const inspectedNodes = group.nodeKeys.flatMap(key => {
+          const element = sequenceLayout.element(key);
+          return element ? [element] : [];
+        });
+        const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
+        return inspectionProtected(turnID, group.entryKeys, true, inspectedNodes);
+      }, () => preserveReadingAnchor(group.entryKeys), animate);
+      if (props.choices.expanded(sequenceIdentity(group.key), group.disclosure) && !motions.has('tools:' + group.nodeKeys[0])) {
+        releaseMotionContent('tools:' + group.nodeKeys[0]);
+      }
     },
   });
   const row = (key: string, entry: Accessor<FlowerTimelineEntry>) => {

@@ -47,6 +47,9 @@ Title arrivals classify identities once per mounted entry and inspect visibility
 only when admitted and claimed. Group/disclosure changes cannot rescan completed
 title bodies; restored and reconnected titles remain static. Fast regressions
 exercise 600 retained rows, and browser cases protect genuine arrival motion.
+Stable tool groups own their disclosure observer. Tail growth and title motion
+publish only changed group blockers; removed groups dispose their pending
+observations. A 600-group regression rejects repeated historical fold checks.
 Body receipts request synchronous anchor correction only when loading becomes
 complete; growing byte extents of already retained content do not force layout.
 Structural batches publish ordered membership once after every affected record is

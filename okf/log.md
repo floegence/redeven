@@ -13,6 +13,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 - Preserve structured protocol facts in [computer scripts](ai/computer-use-scripts.md), report objective [pause reasons](ai/computer-use-takeover.md) without inferring user intent, and extend isolated [qualification](ai/computer-use-qualification.md) with natural visual/form/table tasks and programmatic native focus changes.
 
 - Align [patch paths](ai/tool-permission-runtime.md) with filesystem registry policy, preserving logical bindings and ordered authorization. Support detached [task scratch](ai/flower-task-files.md), retain truthful partial Move diffs and [error presentation](ui/flower-edit-preparation.md), and qualify restart/Fork without replay.
+- Keep [tool-sequence disclosure observations](operations/flower-long-thread-gate.md) local to mounted stable groups. New titles and pending prose release only affected groups; the mandatory 600-group regression protects historical update cost and disposal.
+
 - Bound [long-thread title arrival work](operations/flower-long-thread-gate.md) to mounted identities and explicit admission/claim checks, preserving restored-title behavior while preventing sequence changes from rescanning completed activity bodies.
 
 - Render name-only [SubAgent targets](ui/flower-subagent-detail.md) in compact informational capsules, keeping names out of action titles and preserving existing reads and identity-based navigation.
