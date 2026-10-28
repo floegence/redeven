@@ -83,7 +83,11 @@ seconds measured with a monotonic clock. Pointer cancellation, released buttons,
 window blur or a hidden document invalidates the sample. The visible test-only
 Electron host ignores physical mouse events so normal desktop pointer motion
 cannot cancel the independently injected CDP drag. Input handlers, compositor
-presentation and every interruption check remain active. Independent 60 Hz CDP
+presentation and every interruption check remain active. Read the runtime counter
+before pressing, then use one CDP session for press, continuous movement and
+release so no backend request pauses input establishment. Chromium timestamps
+input on its own monotonic clock; injecting Node wall time can place the input
+after its renderer processing and corrupt presentation spans. Independent 60 Hz CDP
 input scheduling must offer at least 55 events/second;
 awaiting every dispatch in the producer is prohibited. Require at least 45 actual
 position commits/second and 80% of idle cadence, not merely low latency among the

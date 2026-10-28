@@ -98,17 +98,20 @@ await session.run(async () => {
     const box = await titlebar.boundingBox(); assert.ok(box);
     const x = box.x + Math.min(140, box.width / 2), y = box.y + 12;
     await cdp.send('Tracing.start', { categories: 'devtools.timeline,blink.user_timing,input,cc,benchmark', transferMode: 'ReturnAsStream' });
-    await page.mouse.move(x, y); await page.mouse.down();
+    const before = await api('stats');
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', buttons: 0, pointerType: 'mouse' });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1, pointerType: 'mouse' });
     await page.waitForFunction(() => document.documentElement.getAttribute('data-floe-hot-interaction') === 'drag', undefined, { timeout: 2000 });
     await page.evaluate(collectDrag);
-    const before = await api('stats');
     const inputErrors = [], pending = new Set();
     let sent = 0;
     const start = Date.now(), monotonicStart = performance.now();
     const interval = setInterval(() => {
-      const now = Date.now(), phase = (performance.now() - monotonicStart) / 1000;
+      const phase = (performance.now() - monotonicStart) / 1000;
       sent++;
-      const request = cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x + Math.sin(phase * 2) * 110, y: y + Math.sin(phase * 1.3) * 70, button: 'left', buttons: 1, pointerType: 'mouse', timestamp: now / 1000 })
+      // Let Chromium timestamp input on its own monotonic clock. A Node wall
+      // clock can drift past renderer processing and corrupt EventLatency spans.
+      const request = cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x + Math.sin(phase * 2) * 110, y: y + Math.sin(phase * 1.3) * 70, button: 'left', buttons: 1, pointerType: 'mouse' })
         .catch(error => inputErrors.push(String(error))).finally(() => pending.delete(request));
       pending.add(request);
     }, 1000 / 60);
@@ -122,7 +125,7 @@ await session.run(async () => {
     const state = await page.evaluate(() => ({ hot: document.documentElement.getAttribute('data-floe-hot-interaction'), visible: document.visibilityState === 'visible',
       draftPreserved: document.querySelector('[aria-label="Preview draft"]')?.value === 'Keep the preview draft' && document.querySelector('.flower-composer textarea')?.value === 'Keep the Flower draft',
       nodes: document.querySelectorAll('*').length, ...window.__flowerLongThreadDrag.stop() }));
-    await page.mouse.up();
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1, pointerType: 'mouse' });
     const after = await api('stats');
     const done = new Promise(resolve => cdp.once('Tracing.tracingComplete', resolve));
     await cdp.send('Tracing.end');
