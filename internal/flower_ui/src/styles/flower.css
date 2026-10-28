@@ -10818,7 +10818,9 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-provider-disclosure {
   display: flex;
   width: fit-content;
-  min-height: 1.5rem;
+  /* The shared row height is the touch target: 1.875rem on a pointer, 2.75rem
+   * on touch, so the disclosure never needs a separate coarse-pointer rule. */
+  min-height: var(--floe-row-height);
   align-items: center;
   gap: 0.375rem;
   cursor: pointer;

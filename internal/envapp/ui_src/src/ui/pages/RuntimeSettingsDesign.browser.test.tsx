@@ -61,19 +61,17 @@ it.each([false, true])('coordinates settings fields and selects with the surroun
     expect(getComputedStyle(input).fontSize).toBe('16px');
   } finally { await media.emulateTouchInput(false); }
   const models = await openSection('ai');
-  const select = models.querySelector<HTMLElement>('[data-floe-input-surface]')!;
-  expect(getComputedStyle(select).borderRadius).toBe('10px');
-  expect(select.getBoundingClientRect().height).toBe(32);
-  expect(['none', 'rgba(0, 0, 0, 0) 0px 0px 0px 0px']).toContain(getComputedStyle(select).boxShadow);
-  select.focus();
-  await userEvent.keyboard('{Enter}');
-  await expect.element(page.getByRole('menu')).toBeVisible();
-  await userEvent.keyboard('{Escape}');
+  // The Flower section owns its fields inside the model and provider dialogs;
+  // the page itself is a provider gallery, so the field contract is checked
+  // through the surface that actually renders an editor.
+  expect(models.querySelector('.flower-settings-provider-card')).not.toBeNull();
   await page.getByRole('button', { name: 'Edit provider', exact: true }).click();
-  await userEvent.click(document.querySelector('[data-provider-dialog-step="connection"]')!);
+  await expect.element(page.getByRole('dialog')).toBeVisible();
   const dialogInput = document.querySelector<HTMLInputElement>('[role="dialog"] input[data-floe-control="input"]')!;
+  expect(dialogInput, 'provider dialog renders a field').not.toBeNull();
   expect(getComputedStyle(dialogInput).borderRadius).toBe('10px');
-  expect(dialogInput.getBoundingClientRect().height).toBe(32);
+  const dialogField = getComputedStyle(dialogInput);
+  expect(['none', 'rgba(0, 0, 0, 0) 0px 0px 0px 0px']).toContain(dialogField.boxShadow);
   expectSingleInputFocus(dialogInput);
   await page.screenshot({ path: `../../../dist/control-harmony/provider-${dark ? 'dark' : 'light'}.png` });
 });
@@ -93,12 +91,15 @@ it.each([false, true])('identifies filesystem roots and every model provider wit
   fixture.context.mutateSettings({ ...settings, ai: { ...settings.ai!, providers: FLOWER_PROVIDER_TYPES.map(({ value }) => ({ ...settings.ai!.providers![0], id: value, type: value, name: value })) } });
   const models = await openSection('ai');
   for (const { value } of FLOWER_PROVIDER_TYPES) {
-    const icon = models.querySelector<HTMLElement>(`.settings-provider-row [data-provider-brand="${value}"]`)!;
-    expect(icon, `${value} uses its catalog brand`).not.toBeNull();
-    expect(icon.getBoundingClientRect().width).toBe(32);
-    expect(getComputedStyle(icon).padding).toBe('5px');
+    const brand = models.querySelector<HTMLElement>(`.flower-settings-provider-card [data-flower-provider-brand="${value}"]`)!;
+    expect(brand, `${value} uses its catalog brand`).not.toBeNull();
+    // The gallery reserves a 2rem column; the mark fills 1.5rem of it and takes
+    // no padding, so the glyph is the row's only vertical rhythm.
+    expect(brand.getBoundingClientRect().width).toBe(24);
+    expect(getComputedStyle(brand).padding).toBe('0px');
+    expect(brand.closest<HTMLElement>('.flower-settings-provider-brand')!.getBoundingClientRect().width).toBe(32);
     if (['openrouter', 'xai', 'ollama'].includes(value)) {
-      expect(getComputedStyle(icon).color).toBe(getComputedStyle(models.querySelector('.floe-setting-row__title')!).color);
+      expect(getComputedStyle(brand).color).toBe(getComputedStyle(models.querySelector('.flower-settings-provider-title > span')!).color);
     }
   }
   await page.screenshot({ path: `../../../dist/control-harmony/all-providers-${dark ? 'dark' : 'light'}.png` });
@@ -107,7 +108,7 @@ it.each([false, true])('identifies filesystem roots and every model provider wit
 it.each([1280, 390])('keeps settings disclosure targets padded and usable at %ipx', async width => {
   await mount(width);
   const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
-  for (const id of ['connection', 'agent', 'ai', 'codespaces'] as const) {
+  for (const id of ['connection', 'agent', 'codespaces'] as const) {
     const panel = await openSection(id);
     const summaries = [...panel.querySelectorAll<HTMLElement>('.settings-technical-details > summary')].filter(element => element.getClientRects().length);
     expect(summaries.length, `${id} has a visible disclosure`).toBeGreaterThan(0);
@@ -132,6 +133,27 @@ it.each([1280, 390])('keeps settings disclosure targets padded and usable at %ip
     } finally { await media.emulateTouchInput(false); }
     expectNoOverflow(panel);
   }
+  // The Flower section discloses per provider rather than through the technical
+  // details block, so its own control carries the same target contract.
+  const models = await openSection('ai');
+  const disclosures = [...models.querySelectorAll<HTMLButtonElement>('.flower-settings-provider-disclosure')];
+  expect(disclosures.length, 'ai has a visible disclosure').toBeGreaterThan(0);
+  for (const disclosure of disclosures) {
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    expect(getComputedStyle(disclosure).cursor).toBe('pointer');
+    expect(disclosure.getBoundingClientRect().height).toBeGreaterThanOrEqual(24);
+    disclosure.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    expect(getComputedStyle(disclosure).outlineStyle).toBe('solid');
+    await userEvent.keyboard('{Enter}');
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+  }
+  try {
+    await media.emulateTouchInput(true);
+    for (const disclosure of disclosures) expect(disclosure.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  } finally { await media.emulateTouchInput(false); }
+  expectNoOverflow(models);
 });
 
 it.each([false, true])('keeps value copying quiet, discoverable and stationary (dark=%s)', async dark => {
@@ -303,8 +325,13 @@ it('edits directory identity separately and confirms write permission before sav
 it('keeps provider diagnostics closed without hiding their actions', async () => {
   await mount();
   const models = await openSection('ai');
-  const provider = models.querySelector<HTMLDetailsElement>('.settings-provider-details')!;
-  expect(provider.open).toBe(false);
+  const provider = models.querySelector<HTMLElement>('.flower-settings-provider-details')!;
+  // The card keeps its model table mounted but inert until the reader opens it,
+  // so the actions beside it never move and the table stays out of the tab order.
+  expect(provider.getAttribute('data-state')).toBe('closed');
+  expect(provider.getAttribute('aria-hidden')).toBe('true');
+  expect(provider.hasAttribute('inert')).toBe(true);
+  expect(provider.getBoundingClientRect().height).toBeLessThanOrEqual(1);
   await expect.element(page.getByRole('button', { name: 'Edit provider', exact: true })).toBeVisible();
 
 });
@@ -369,20 +396,26 @@ it('retains drafts and scroll position when navigating, and saves real settings 
   await expect.poll(() => fixture.settings().runtime.agent_home_dir).toBe('/workspace/new-home');
 });
 
-it('opens every provider step at a mobile width with a reachable footer', async () => {
+it('opens every provider type at a mobile width with a reachable footer', async () => {
   await mount(390);
   await openSection('ai');
   await page.getByRole('button', { name: 'Edit provider', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect.element(dialog).toBeVisible();
-  for (const step of ['type', 'connection', 'models', 'advanced']) {
-    const button = document.querySelector(`[data-provider-dialog-step="${step}"]`)!;
-    await userEvent.click(button);
+  const choices = [...document.querySelectorAll<HTMLButtonElement>('.flower-provider-choice')];
+  expect(choices.length, 'every provider type is offered').toBeGreaterThan(1);
+  for (const choice of choices) {
+    await userEvent.click(choice);
+    expect(choice.getAttribute('aria-current'), `${choice.getAttribute('aria-label')} is the active type`).toBe('true');
     const element = document.querySelector('[role="dialog"]') as HTMLElement;
     expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
-    const save = [...element.querySelectorAll('button')].find((item) => item.textContent?.includes('Save Provider'))!;
-    const bounds = save.getBoundingClientRect();
-    expect(bounds.bottom).toBeLessThanOrEqual(800);
+    // Below the picker breakpoint the workspace stacks, so the type picker sits
+    // above the form instead of eating a fixed 12rem column out of a phone width.
+    const picker = element.querySelector<HTMLElement>('.flower-provider-picker')!;
+    const detail = element.querySelector<HTMLElement>('.flower-provider-detail')!;
+    expect(detail.getBoundingClientRect().top).toBeGreaterThanOrEqual(picker.getBoundingClientRect().bottom - 1);
+    const save = [...element.querySelectorAll('button')].find((item) => item.textContent?.includes('Save provider'))!;
+    expect(save.getBoundingClientRect().bottom).toBeLessThanOrEqual(800);
   }
   await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-provider-mobile.png' });
 });
