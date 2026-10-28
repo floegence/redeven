@@ -5,7 +5,7 @@ description: Compact tools and bounded thinking without hiding dialogue or takin
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -45,7 +45,7 @@ The upper clipping edge suppresses a connector only after its source icon leaves
 
 Inner content/transcript use the same input-aware controller; wheel/touch/keyboard/scrollbar reading pauses following, while programmatic events, geometry, images and row placement create no intent. Each open sequence observes mounted children through that owner, retaining nested input and anchors. Explicit opening positions latest tool before paint, including calls received while folded. Navigation waits for row placement and both destinations. Restored details have no preparation-time opening motion. Manual folds stay closed; complete counts may include the canonical latest-tool label without body reads. Collapse focuses its button. Thinking retains completion state and saved offset. [Activity motion](flower-activity-interaction.md#visual-motion) coordinates placement/arrival scrolling.
 
-Controls expose viewport IDs/localized counts; closed members leave no gaps and candidate control slots remain inaccessible until eligible. Auto-fold uses [turn disclosure](flower-turn-process-disclosure.md) offset policy; manual toggles retain trigger anchors. Both catalogs share narrow/touch/focus/reduced-motion/forced-color behavior.
+Controls expose viewport IDs/localized counts; closed members leave no gaps and candidate control slots remain inaccessible until eligible. Auto-fold uses [turn disclosure](flower-turn-process-disclosure.md) real-content anchoring policy; manual toggles retain trigger anchors. Both catalogs share narrow/touch/focus/reduced-motion/forced-color behavior.
 
 # Boundaries
 

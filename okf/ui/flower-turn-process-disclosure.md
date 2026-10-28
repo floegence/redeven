@@ -5,7 +5,7 @@ description: Collapse terminal work while preserving valuable output, explicit c
 tags: [ui, flower, turns, disclosure, accessibility]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -24,7 +24,9 @@ Running/preparing/retrying/finalizing/waiting turns stay expanded with an inacce
 ## Layout and accessibility
 The turn header precedes its first loaded response after the original request, independently of which rows may fold. Canonical intermediate membership spans all executions of the same turn; source-run supersession remains engine-owned. In-turn Goal facts retain their turn ownership across continuation. Unknown prose and final output remain visible. A partial window uses its first loaded response without fetching earlier history for presentation. Retained canonical prefixes keep confirmed intermediate membership across a new run; incoming window facts replace overlapping classifications, and final boundaries remain run-scoped. Prepending the actual beginning moves the header while retaining its turn choice and keyboard focus; the button reads turn disclosure state independently of its anchor row visibility.
 
-The first loaded response reserves header geometry before eligibility; revealing the toggle never inserts space or narrows content. Automatic turn/sequence folding preserves the pre-fold scroll offset before paint, including temporary space from incoming prose while a sequence is still moving. The existing scroll owner retains only the trailing room required to prevent browser clamping, consumes it as new output grows, and releases it on explicit navigation. User scrolling updates the reading anchor even across empty reserved rows. When newly arriving prose is waiting for a sequence, terminal closure uses its existing outer row motion directly and releases prose only after that motion settles. Nested tools retain geometry during the outer fold; an interrupted inner fold transfers its painted opacity/transform. Other automatic turn settlement retains its immediate policy. Manual open/close remains reversible and respects reduced motion; the disclosure owner retains the interaction choice. Canonical Path order, never timestamps, positions messages/receipts. Dialogue, final segments and secret-answer redaction remain intact.
+The first loaded response reserves header geometry before eligibility; revealing the toggle never inserts space or narrows content. Automatic turn/sequence folding follows the real content bottom before paint while the user is following output. Fold geometry owns motion; the viewport must not lock an obsolete absolute offset, add synthetic trailing space or run a competing growth animation. Long content becoming shorter than the viewport settles at zero scroll offset, with final output visible. Existing final answers stay mounted while process rows close over the existing 260 ms motion; reduced motion settles immediately. Paused reading and manual disclosure retain visible content/trigger anchors, including required temporary room during history insertion. Distance to latest excludes that room, so an overscrolled reader retains the return action. User input cancels automatic following immediately; later motion settlement cannot reclaim it.
+
+When newly arriving prose waits for a sequence, terminal closure uses its existing outer row motion directly and releases prose only after that motion settles. Nested tools retain geometry during the outer fold; an interrupted inner fold transfers its painted opacity/transform. Manual open/close remains reversible and respects reduced motion; the disclosure owner retains the interaction choice. Canonical Path order, never timestamps, positions messages/receipts. Dialogue, final segments and secret-answer redaction remain intact.
 
 # Boundaries
 
@@ -32,7 +34,7 @@ Disclosure is ephemeral UI state. Final content and dialogue stay mounted and or
 
 # Evidence
 
-Browser regressions cover reserved running headers, frame-by-frame automatic fold offsets, repeated folds, subsequent growth, explicit navigation, short-history pagination, focus, selection and nested choices in main/child views. Continuation cases retain old-run prose and Goal; history prepends retain header focus and disclosure state. Existing isolated historical-copy qualification covers one opening read, no idle traversal, and complete statistics after explicit paging.
+Browser regressions cover reserved running headers, frame-by-frame real-tail alignment and answer visibility, large and repeated folds, narrow viewports, reduced motion, subsequent growth, explicit navigation, short-history pagination, focus, selection and nested choices in main/child views. Continuation cases retain old-run prose and Goal; history prepends retain header focus and disclosure state. Existing isolated historical-copy qualification covers one opening read, no idle traversal, and complete statistics after explicit paging.
 
 - `redeven:go.mod` - Published Floret dependency.
 
@@ -40,4 +42,4 @@ Browser regressions cover reserved running headers, frame-by-frame automatic fol
 
 - `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Validates and maps current turn facts.
 - `redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts` - Classifies interleaved answered inputs without changing ordinary turn disclosure.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Verifies ordered checkpoints, stationary thinking-only completion, one-step automatic folding and preserved manual animation.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Verifies ordered checkpoints, stationary thinking-only completion, continuous automatic folding and preserved manual animation.

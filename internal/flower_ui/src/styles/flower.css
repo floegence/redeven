@@ -3444,8 +3444,8 @@
   margin: 0 auto;
 }
 
-/* The scroll owner retains visible trailing room during history insertion and
-   automatic folding. Geometry stays outside message and disclosure identity. */
+/* Paused reading may retain trailing room during history insertion. Automatic
+   folding follows real content instead of extending the scrollable range. */
 .flower-chat-transcript::after,
 .flower-subagent-detail-transcript::after {
   content: '';

@@ -4,6 +4,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-28
 
+- Keep final answers visible through [automatic folding](ui/flower-turn-process-disclosure.md): follow the real content edge, remove obsolete offset retention, animate existing-answer settlement, and exclude temporary reading room from return-to-latest distance. Browser checks cover frame geometry, narrow layouts, reduced motion and reading ownership.
+
 - Retain [media/read qualification](ai/computer-media-read-qualification.md) with 31/36 original and 4/6 supplemental real DeepSeek assertion passes, separating contract correctness, model errors and test-parser defects.
 
 - Let interactive [media writes](ai/image-read-and-retention.md) cancel maintenance scans while preserving canonical retention and cancellable gate waits. Unify native [single-node and subtree completeness](ai/computer-use-semantics.md) with browser facts; clarify [script read scope](ai/computer-use-scripts.md) without application-specific rules.

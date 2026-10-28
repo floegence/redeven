@@ -193,7 +193,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     });
   };
   const preserveReadingAnchor = (processKeys: readonly string[]) => {
-    if (props.scroll.followingLatest()) { props.scroll.preserveCollapseOffset(() => motions.size > 0); return; }
+    if (props.scroll.followingLatest()) { props.scroll.beginAutomaticFold(() => motions.size > 0); return; }
     const bounds = props.scroll.viewport()?.getBoundingClientRect();
     if (!bounds) return;
     const hidden = new Set(processKeys);
@@ -304,9 +304,9 @@ export function FlowerTurnTimeline(props: TimelineProps) {
             && !props.choices.manuallyControlled(sequenceIdentity(group.key))) {
             const owner = { nodeKey: group.nodeKeys[0], motionKey: 'tools:' + group.nodeKeys[0] };
             for (const key of group.followingContentKeys) pending.set(key, owner);
-            // Capture before this snapshot mounts the following prose. Its
-            // measured height must not advance the transcript before folding.
-            props.scroll.preserveCollapseOffset(() => pendingSequenceContent().size > 0 || motions.size > 0);
+            // New prose and folding share one layout owner. Suppress the
+            // independent growth animation while fold geometry is moving.
+            props.scroll.beginAutomaticFold(() => pendingSequenceContent().size > 0 || motions.size > 0);
           }
         }
       }
@@ -480,8 +480,6 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const motion = createFlowerActivityDisclosureMotion(expanded, {
       initialOpen: untrack(expanded),
       reducedMotion: props.reducedMotion,
-      animateClose: () => !group() || props.choices.manuallyControlled(identity(group()!.turnID))
-        || [...pendingSequenceContent().values()].some(owner => owner.motionKey === key),
       closeDurationMs: 260,
       closeEasing: 'cubic-bezier(0.32, 0, 0.2, 1)',
       closePresentation: current => {

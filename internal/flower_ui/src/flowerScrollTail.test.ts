@@ -168,8 +168,8 @@ describe('Flower scroll tail controller', () => {
     metrics.setScrollHeight(575); controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame();
     reduced = true; raf.flushFrame(); expect(metrics.scrollTop()).toBe(475); expect(raf.pending()).toBe(0);
     reduced = false; metrics.setScrollHeight(600); controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame();
-    controller.preserveCollapseOffset(() => true); const held = metrics.scrollTop();
-    raf.flushAll(); expect(metrics.scrollTop()).toBe(held);
+    controller.beginAutomaticFold(() => true);
+    raf.flushAll(); expect(metrics.scrollTop()).toBe(500);
     controller.scrollToBottom(); expect(metrics.scrollTop()).toBe(500);
     metrics.setScrollHeight(650); controller.measureAfterLayout(); raf.flushFrame();
     const replacement = createViewport(900); replacement.setScrollTop(0); controller.bind(replacement.viewport);
@@ -177,20 +177,37 @@ describe('Flower scroll tail controller', () => {
     expect(raf.pending()).toBe(0); controller.dispose();
   });
 
-  it('retains the offset through incoming room while an automatic fold is moving', () => {
-    const { controller, raf } = createController();
+  it('follows fold geometry without lag and resumes bounded growth after settlement', () => {
+    const raf = createRafHarness();
+    const controller = createFlowerScrollTailController({ smoothContentGrowth: true, reducedMotionPreferred: () => false,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
     const metrics = createViewport();
     let moving = true;
-    controller.bind(metrics.viewport);
-    controller.preserveCollapseOffset(() => moving);
-    metrics.setScrollHeight(700);
-    raf.flushAll();
-    expect(metrics.scrollTop()).toBe(400);
-    controller.flushLayout(false);
-    expect(metrics.scrollTop()).toBe(400);
-    moving = false;
-    controller.flushLayout(false);
-    expect(metrics.scrollTop()).toBe(600);
+    controller.bind(metrics.viewport); controller.flushLayout();
+    controller.beginAutomaticFold(() => moving);
+    for (const height of [700, 600, 450, 300, 100]) {
+      metrics.setScrollHeight(height); controller.measureAfterLayout(); raf.flushAll();
+      expect(metrics.scrollTop()).toBe(height - 100);
+      expect(raf.pending()).toBe(0);
+    }
+    moving = false; controller.flushLayout(false);
+    metrics.setScrollHeight(125); controller.measureAfterLayout(); raf.flushFrame(); raf.flushFrame();
+    expect(metrics.scrollTop()).toBeGreaterThan(0);
+    expect(metrics.scrollTop()).toBeLessThan(25);
+    raf.flushAll(); expect(metrics.scrollTop()).toBe(25);
+    controller.dispose();
+  });
+
+  it('does not reclaim user reading when an automatic fold settles', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport(900);
+    let moving = true;
+    controller.bind(metrics.viewport); controller.beginAutomaticFold(() => moving);
+    controller.stopFollowing(); metrics.setScrollTop(300);
+    metrics.setScrollHeight(700); controller.measureAfterLayout(); raf.flushAll();
+    moving = false; controller.flushLayout(false);
+    expect(metrics.scrollTop()).toBe(300); expect(controller.followingLatest()).toBe(false);
+    expect(controller.showLatest()).toBe(true);
     controller.dispose();
   });
   it('suppresses late arrival animations until the destination is ready', () => {

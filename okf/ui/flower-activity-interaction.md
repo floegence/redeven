@@ -5,7 +5,7 @@ description: Keep native tool activation, disclosure state, viewport following, 
 tags: [ai, flower, activity, interaction, accessibility]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -44,7 +44,9 @@ skip history scans until the settled scroll event. No idle polling or delayed
 output delivery. Native scroll input and text selection immediately pause follow;
 clearing selection does not resume it. Initial positioning, navigation, viewport
 resize and shrinking ranges remain immediate. Explicit return keeps its 220 ms
-arrival motion; automatic folds retain offset ownership. Reduced motion bypasses
+arrival motion; automatic folds follow real content geometry without trailing
+space or a competing scroll animation. Paused-reading room is excluded from
+distance to latest, keeping explicit return reachable. Reduced motion bypasses
 animation, and hiding, rebinding or disposal cancels obsolete motion.
 
 ## Thinking duration

@@ -514,26 +514,58 @@ describe('completed turn process disclosure', () => {
     expect(Math.max(...samples.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(1);
   });
 
-  it('settles automatic completion in one layout update and still animates manual disclosure', async () => {
-    const { root, live } = await mount();
-    const samples: string[] = [];
-    let sampling = true;
-    const sample = () => {
-      if (summary(root)) samples.push(messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state')!);
-      if (sampling) requestAnimationFrame(sample);
-    };
-    requestAnimationFrame(sample);
-    live.push(current(true));
-    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
-    await new Promise(resolve => setTimeout(resolve, 200));
-    sampling = false;
-    expect(samples.length).toBeGreaterThan(0);
-    expect(samples.every(state => state === 'closed')).toBe(true);
+  it.each([
+    { reducedMotion: 'reduce', width: 1280, outcome: 'completed' },
+    { reducedMotion: 'no-preference', width: 1280, outcome: 'completed' },
+    { reducedMotion: 'reduce', width: 390, outcome: 'completed' },
+    { reducedMotion: 'no-preference', width: 390, outcome: 'completed' },
+    { reducedMotion: 'no-preference', width: 1280, outcome: 'failed' },
+    { reducedMotion: 'no-preference', width: 1280, outcome: 'cancelled' },
+    { reducedMotion: 'no-preference', width: 1280, outcome: 'interrupted' },
+  ] as const)('keeps an existing final answer visible as a long turn folds: %o', async ({ reducedMotion, width, outcome }) => {
+    await media.emulateMediaPreferences({ reducedMotion });
+    const base = current();
+    const initial = { ...base, items: base.items!.map(item => item.id === 'progress' ? { ...item, text: 'Substantial work already shown. '.repeat(250) } : item) };
+    const { root, live } = await mount(initial);
+    await page.viewport(width, 900);
+    const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const final = message(root, 'final-a');
+    await waitFor(() => Math.abs(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop) <= 1);
+    expect(viewport.scrollTop).toBeGreaterThan(viewport.clientHeight);
+    const done = current(true, { last_outcome: outcome, items: initial.items!.map(item => ({ ...item, live: false })),
+      turns: [turn({ outcome, final_item_ids: outcome === 'completed' ? ['final-a'] : [], final_boundary_complete: outcome === 'completed' })] });
+    const samples: { time: number; state: string | null; bottom: number; top: number; tail: number }[] = [];
+    live.push(done);
+    for (let i = 0; i < 30; i++) {
+      await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      const rect = final.getBoundingClientRect(); const bounds = viewport.getBoundingClientRect();
+      samples.push({ time: performance.now(), state: messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state'),
+        bottom: rect.bottom - bounds.top, top: rect.top - bounds.top, tail: parseFloat(viewport.style.getPropertyValue('--flower-reading-tail-space')) || 0 });
+    }
+    expect(message(root, 'final-a')).toBe(final);
+    expect(samples.every(sample => sample.top >= 0 && sample.bottom <= viewport.clientHeight + 1 && sample.tail === 0), JSON.stringify(samples)).toBe(true);
+    expect(samples.at(-1)!.state).toBe('closed');
+    if (reducedMotion === 'no-preference') {
+      expect(samples.some(sample => sample.state === 'closing')).toBe(true);
+      const steps = samples.slice(1).map((sample, i) => ({ dt: sample.time - samples[i].time, delta: sample.bottom - samples[i].bottom }));
+      expect(Math.max(...steps.filter(step => step.dt <= 25).map(step => Math.abs(step.delta))), JSON.stringify(samples)).toBeLessThan(viewport.clientHeight / 5);
+      expect(steps.every(step => step.delta <= 3), JSON.stringify(samples)).toBe(true);
+      const lastMoving = samples.map(sample => sample.state).lastIndexOf('closing');
+      // Bound the last normal frame independently of the preceding long fold.
+      // A dropped frame is covered by the visibility and monotonicity checks.
+      if (samples[lastMoving + 1].time - samples[lastMoving].time <= 25) {
+        expect(Math.abs(samples[lastMoving + 1].bottom - samples[lastMoving].bottom)).toBeLessThanOrEqual(4);
+      }
+      const settled = samples.slice(lastMoving + 1);
+      expect(Math.max(...settled.map(sample => Math.abs(sample.bottom - settled[0].bottom)))).toBeLessThanOrEqual(1);
+    } else expect(samples.every(sample => sample.state !== 'closing')).toBe(true);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-fold-answer-' + width + '-' + reducedMotion + '-' + outcome + '.png' });
     summary(root)!.click();
-    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state') === 'opening');
     await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state') === 'open');
+    const buttonTop = summary(root)!.getBoundingClientRect().top;
     summary(root)!.click();
-    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state') === 'closing');
+    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state') === 'closed');
+    expect(Math.abs(summary(root)!.getBoundingClientRect().top - buttonTop)).toBeLessThanOrEqual(1);
   });
 
   it('shows one failure explanation while preserving older failed-turn status', async () => {

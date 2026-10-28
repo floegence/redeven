@@ -459,30 +459,47 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(details.getBoundingClientRect().left);
   });
 
-  it.each(['reduce', 'no-preference'] as const)('keeps earlier content stationary during automatic folding with %s motion', async reducedMotion => {
+  it.each([
+    { reducedMotion: 'reduce', terminal: true, width: 1280 },
+    { reducedMotion: 'no-preference', terminal: true, width: 1280 },
+    { reducedMotion: 'no-preference', terminal: false, width: 1280 },
+    { reducedMotion: 'reduce', terminal: true, width: 390 },
+    { reducedMotion: 'no-preference', terminal: true, width: 390 },
+    { reducedMotion: 'no-preference', terminal: false, width: 390 },
+  ] as const)('keeps the answer at the real tail through folding: %o', async ({ reducedMotion, terminal, width }) => {
     await media.emulateMediaPreferences({ reducedMotion });
     const prefix = item('stationary-prefix', 'assistant', 'Earlier visible content. '.repeat(160));
-    const calls = Array.from({ length: 18 }, (_, i) => tool('stationary-' + i));
+    const calls = Array.from({ length: 24 }, (_, i) => tool('stationary-' + i));
     const output = item('stationary-output', 'assistant', 'Final result.');
     const { root, push } = await mount([prefix, ...calls]);
+    await page.viewport(width, 900);
     const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
-    const header = toggle(root, 'stationary-0');
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    const initialTop = header.getBoundingClientRect().top;
     const initialOffset = viewport.scrollTop;
     expect(initialOffset).toBeGreaterThan(100);
-    const samples: { top: number; offset: number }[] = [];
-    let sampling = true;
-    const sample = () => { samples.push({ top: header.getBoundingClientRect().top, offset: viewport.scrollTop }); if (sampling) requestAnimationFrame(() => setTimeout(sample, 0)); };
-    requestAnimationFrame(() => setTimeout(sample, 0));
-    push([prefix, ...calls, { ...output, live: true }]);
-    await waitFor(() => collapsed(root, 'stationary-0'));
-    await new Promise(resolve => setTimeout(resolve, 260));
-    sampling = false;
+    const samples: { gap: number; space: number; top: number; bottom: number; visible: boolean }[] = [];
+    push([prefix, ...calls, { ...output, live: !terminal }], [], terminal);
+    let answer: HTMLElement | undefined;
+    for (let frame = 0; frame < 36; frame++) {
+      await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      const text = root.querySelector<HTMLElement>('[data-flower-message-id="stationary-output"]');
+      if (!text) continue;
+      if (answer) expect(text).toBe(answer); else answer = text;
+      const bounds = viewport.getBoundingClientRect();
+      const rect = text.getBoundingClientRect();
+      samples.push({ gap: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop,
+        space: parseFloat(viewport.style.getPropertyValue('--flower-reading-tail-space')) || 0,
+        top: rect.top - bounds.top, bottom: rect.bottom - bounds.top,
+        visible: text.checkVisibility({ visibilityProperty: true }) });
+    }
     expect(samples.length).toBeGreaterThan(0);
-    expect(Math.max(...samples.map(value => Math.abs(value.top - initialTop))), JSON.stringify({ initialTop, initialOffset, samples })).toBeLessThanOrEqual(1);
-    expect(Math.max(...samples.map(value => Math.abs(value.offset - initialOffset)))).toBeLessThanOrEqual(1);
-    expect(Number.parseFloat(viewport.style.getPropertyValue('--flower-reading-tail-space'))).toBeGreaterThan(0);
+    expect(samples.every(sample => Math.abs(sample.gap) <= 1 && sample.space === 0), JSON.stringify(samples)).toBe(true);
+    const visible = samples.filter(sample => sample.visible);
+    expect(visible.length).toBeGreaterThan(0);
+    expect(visible.every(sample => sample.top >= 0 && sample.bottom <= viewport.clientHeight + 1), JSON.stringify(samples)).toBe(true);
+    expect(Math.max(...visible.map(sample => sample.top)) - Math.min(...visible.map(sample => sample.top)), JSON.stringify(samples)).toBeLessThanOrEqual(1);
+    expect(root.querySelector('[data-flower-scroll-to-latest]')).toBeNull();
+    expect(viewport.scrollTop).toBeLessThan(initialOffset);
   });
 
   it.each(['zh-CN', 'en-US', 'de-DE', 'ja-JP'] as const)('keeps the incomplete label concise and accessible at 320 pixels in %s', async locale => {
@@ -1357,7 +1374,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     const { root, push } = await mount(initial);
     const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
     thinking.querySelector<HTMLButtonElement>('button')!.click();
-    await waitFor(() => Boolean(thinking.querySelector('.flower-thinking-content')));
+    await waitFor(() => thinking.querySelector('.flower-thinking-viewport')?.getAttribute('data-state') === 'open'
+      && thinking.querySelector('.flower-thinking-content')?.textContent?.includes('Keep this selected thought.') === true);
     const content = thinking.querySelector('.flower-thinking-content')!;
     const range = document.createRange(); range.selectNodeContents(content);
     document.getSelection()!.removeAllRanges(); document.getSelection()!.addRange(range);
