@@ -15089,7 +15089,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           presentation="dialog"
           title={copy().settings.title}
           closeLabel={copy().computer.close}
-          bodyDescription={copy().settings.description}
           escapeKeyPhase="bubble"
           onKeyDown={event => {
             if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;

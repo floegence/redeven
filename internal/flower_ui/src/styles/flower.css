@@ -9725,16 +9725,47 @@ button.flower-attachment-preview-trigger:disabled {
   container-type: inline-size;
 }
 
+/* The settings dialog is a compact sheet, not a second application window: it
+ * sits in the same reading column as a chat thread instead of filling the
+ * viewport edge to edge. Height follows the content; the overlay's own padding
+ * keeps the panel off the viewport edges. */
 .flower-settings-dialog {
-  width: min(960px, 100%);
-  max-width: 960px;
-  height: min(820px, 100%);
+  width: min(720px, 100%);
+  max-width: 720px;
+  height: auto;
 }
 
 .flower-settings-dialog-content { padding: 0; }
-.flower-settings-dialog-content > p { padding: 0.75rem 1.25rem 0; }
-.flower-settings-dialog .flower-settings-frame { padding: 0.75rem 1rem 1.5rem; }
+.flower-settings-dialog .flower-settings-frame { position: relative; padding: 0.75rem 1rem 1rem; }
 .flower-settings-dialog .flower-settings-surface { height: auto; overflow: visible; }
+
+/* In dialog mode the title lives in the dialog header, so this row holds nothing
+ * but the auto-save pill, which stays hidden while idle. Lift it out of the flow
+ * so it costs no vertical space and appearing mid-save moves nothing. */
+.flower-settings-dialog .flower-settings-title-row {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  padding-bottom: 0;
+}
+
+/* Dialog density: one step down from the panel ladder, because the dialog is
+ * a transient overlay rather than the surface the user reads in. Every size
+ * below is a named token, so the dialog still moves with the shell theme. */
+.flower-settings-dialog {
+  --floe-type-heading: 0.9375rem;
+  --floe-type-heading-sm: 0.875rem;
+  --floe-type-body: 0.75rem;
+  --floe-type-control: 0.75rem;
+  --floe-type-supporting: 0.6875rem;
+  --floe-line-body: 1.125rem;
+  --floe-line-control: 1rem;
+  --floe-line-heading: 1.25rem;
+}
+
+.flower-settings-dialog .flower-settings-section { gap: 10px; padding: 12px 0; }
+.flower-settings-dialog .flower-settings-provider-card { padding-block: 12px; }
+.flower-settings-dialog .flower-settings-policy-option { padding-block: 8px 12px; }
 
 .flower-settings-surface { background: var(--flower-chat-surface, var(--redeven-surface-main, var(--background))); }
 .flower-settings-model-sections > .flower-settings-section:first-child { padding-top: 0; }
@@ -10778,7 +10809,7 @@ button.flower-attachment-preview-trigger:disabled {
   overflow-wrap: anywhere;
   min-width: 0;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.65;
 }
 
@@ -10786,7 +10817,7 @@ button.flower-attachment-preview-trigger:disabled {
   flex: 0 0 auto;
   border-radius: 9999px;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   font-weight: 500;
 }
 
@@ -10815,7 +10846,7 @@ button.flower-attachment-preview-trigger:disabled {
   align-items: center;
   gap: 0.375rem;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: var(--floe-type-supporting);
   font-weight: 400;
 }
 
@@ -10836,19 +10867,19 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-model-stat { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding-inline: 16px; border-left: 1px solid var(--flower-settings-divider); }
 .flower-settings-model-stat:first-child { padding-left: 0; border-left: 0; }
 .flower-settings-model-stat:last-child { padding-right: 0; }
-.flower-settings-model-stat dt { color: var(--muted-foreground); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.flower-settings-model-stat dd { display: flex; flex-wrap: wrap; min-height: 24px; align-items: center; margin: 0; color: var(--foreground); font-size: 13px; line-height: 1.5; font-variant-numeric: tabular-nums; }
-.flower-settings-model-notice { margin: 0; padding-block: 0 14px; font-size: 12px; line-height: 1.6; }
+.flower-settings-model-stat dt { color: var(--muted-foreground); font-size: var(--floe-type-caption); line-height: 1.5; overflow-wrap: anywhere; }
+.flower-settings-model-stat dd { display: flex; flex-wrap: wrap; min-height: 24px; align-items: center; margin: 0; color: var(--foreground); font-size: var(--floe-type-control); line-height: 1.5; font-variant-numeric: tabular-nums; }
+.flower-settings-model-notice { margin: 0; padding-block: 0 14px; font-size: var(--floe-type-supporting); line-height: 1.6; }
 .flower-settings-current-model .flower-reasoning-control { max-width: 100%; }
 .flower-settings-computer-group .flower-settings-toggle-card,
-.flower-settings-computer-action { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 17px 0; border: 0; border-radius: 0; background: transparent; font-size: 13px; }
+.flower-settings-computer-action { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 17px 0; border: 0; border-radius: 0; background: transparent; font-size: var(--floe-type-control); }
 .flower-settings-computer-action { cursor: pointer; text-align: left; }
 .flower-settings-computer-group .flower-settings-toggle-card + .flower-settings-computer-action { border-top: 1px solid var(--flower-settings-divider); }
 .flower-settings-computer-action:hover { color: var(--primary); }
 @media (pointer: coarse) { .flower-settings-policy-card { min-height: 44px; } }
 .flower-settings-provider-add { margin: 0; }
-.flower-settings-provider-default { border-radius: 4px; background: color-mix(in srgb, var(--primary) 8%, transparent); padding: 1px 5px; color: var(--muted-foreground); font-size: 0.6875rem; font-weight: 400; }
-.flower-settings-provider-status { display: flex; min-width: 0; align-items: center; justify-content: flex-end; color: var(--muted-foreground); font-size: 0.75rem; overflow-wrap: anywhere; }
+.flower-settings-provider-default { border-radius: 4px; background: color-mix(in srgb, var(--primary) 8%, transparent); padding: 1px 5px; color: var(--muted-foreground); font-size: var(--floe-type-caption); font-weight: 400; }
+.flower-settings-provider-status { display: flex; min-width: 0; align-items: center; justify-content: flex-end; color: var(--muted-foreground); font-size: var(--floe-type-supporting); overflow-wrap: anywhere; }
 .flower-settings-provider-details { grid-column: 1 / -1; grid-row: 2; min-width: 0; overflow: hidden; opacity: 0; transform: translateY(-2px); }
 .flower-settings-provider-details[data-state='opening'],
 .flower-settings-provider-details[data-state='open'] { opacity: 1; transform: translateY(0); }
@@ -10878,22 +10909,22 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-provider-detail-body { min-width: 0; padding: 12px 0 2px; }
 .flower-settings-provider-table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .flower-settings-provider-table-scroll:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
-.flower-settings-provider-model-table { width: 100%; min-width: 44rem; table-layout: fixed; border-collapse: collapse; color: var(--foreground); font-size: 12px; line-height: 1.5; }
+.flower-settings-provider-model-table { width: 100%; min-width: 44rem; table-layout: fixed; border-collapse: collapse; color: var(--foreground); font-size: var(--floe-type-supporting); line-height: 1.5; }
 .flower-settings-provider-model-table col:nth-child(1) { width: 41%; }
 .flower-settings-provider-model-table col:nth-child(2) { width: 15%; }
 .flower-settings-provider-model-table col:nth-child(3) { width: 14%; }
 .flower-settings-provider-model-table col:nth-child(4) { width: 13%; }
 .flower-settings-provider-model-table col:nth-child(5) { width: 17%; }
 .flower-settings-provider-model-table :is(th, td) { padding: 12px 10px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-.flower-settings-provider-model-table thead th { padding-block: 9px; color: var(--muted-foreground); font-size: 11px; font-weight: 500; }
+.flower-settings-provider-model-table thead th { padding-block: 9px; color: var(--muted-foreground); font-size: var(--floe-type-caption); font-weight: 500; }
 .flower-settings-provider-model-table thead { border-bottom: 1px solid var(--flower-settings-provider-divider); }
 .flower-settings-provider-model-table tbody th { font-weight: 400; }
 .flower-settings-provider-model-table tbody tr + tr { border-top: 1px solid var(--flower-settings-provider-divider); }
 .flower-settings-provider-model-table .flower-settings-provider-token-cell { text-align: right; font-variant-numeric: tabular-nums; }
 .flower-settings-provider-model-heading { display: flex; min-width: 0; align-items: center; gap: 6px; }
 .flower-settings-provider-model-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.flower-settings-provider-model-id { display: block; margin-top: 4px; color: var(--muted-foreground); font-size: 11px; }
-.flower-settings-provider-model-current, .flower-settings-provider-model-unavailable { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; min-height: 20px; padding: 2px 6px; border-radius: 4px; font-size: 10px; line-height: 1.4; font-weight: 500; white-space: nowrap; color: var(--muted-foreground); background: var(--muted); }
+.flower-settings-provider-model-id { display: block; margin-top: 4px; color: var(--muted-foreground); font-size: var(--floe-type-caption); }
+.flower-settings-provider-model-current, .flower-settings-provider-model-unavailable { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; min-height: 20px; padding: 2px 6px; border-radius: 4px; font-size: var(--floe-type-caption); line-height: 1.4; font-weight: 500; white-space: nowrap; color: var(--muted-foreground); background: var(--muted); }
 .flower-settings-provider-model-current { color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, transparent); }
 .flower-settings-provider-model-search { color: var(--muted-foreground); }
 .flower-settings-provider-model-search[data-web-search='available'] { color: var(--foreground); }
@@ -10929,9 +10960,9 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-subsection-title {
   margin: 0;
   color: var(--foreground);
-  font-size: 0.8125rem;
+  font-size: var(--floe-type-control);
   font-weight: 500;
-  line-height: 1.5;
+  line-height: var(--floe-line-control);
 }
 
 .flower-settings-subsection-rule {
@@ -10942,7 +10973,7 @@ button.flower-attachment-preview-trigger:disabled {
   margin: 0.375rem 0 0;
   max-width: 44rem;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.5;
 }
 

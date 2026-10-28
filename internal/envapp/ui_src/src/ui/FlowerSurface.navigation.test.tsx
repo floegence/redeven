@@ -573,7 +573,8 @@ describe('FlowerSurface navigation', () => {
 
     expect(document.querySelector<HTMLElement>('.flower-settings-title-feedback [role="status"]')?.style.visibility).toBe('hidden');
     expect(document.querySelector('.flower-settings-current-model')).toBeTruthy();
-    expect(document.querySelector('.flower-settings-dialog')?.textContent).toContain('Configure models and the default Flower permission for the Local AI Profile.');
+    // The header names the surface; the body carries settings only.
+    expect(document.querySelector('.flower-settings-dialog')?.textContent).toContain('Default permission');
 
     const fullAccessButton = Array.from(document.querySelectorAll('.flower-settings-policy-card'))
       .find((button) => button.textContent?.includes('Full access')) as HTMLButtonElement | undefined;
