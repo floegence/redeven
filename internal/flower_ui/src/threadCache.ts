@@ -201,7 +201,7 @@ export type ThreadCache = {
   runtimeItem(threadID: string, itemID: string): FlowerRuntimeCurrentItem | undefined;
   runtimePreviewItem(threadID: string, itemID: string): FlowerRuntimeCurrentItem | undefined;
   bodyOffset(threadID: string, itemID: string): number | undefined;
-  appendBody(threadID: string, chunk: import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyChunk): boolean;
+  appendBody(threadID: string, chunk: import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyChunk): import('./runtimeThreadRecord').HistoryBodyAppendResult;
   hydrateItem(threadID: string, expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem): boolean;
   receiveView(
     view: ThreadView,
@@ -414,7 +414,7 @@ function createCache(
     runtimeItem(threadID, itemID) { return views.get(threadID)?.runtime?.item(itemID); },
     runtimePreviewItem(threadID, itemID) { return views.get(threadID)?.runtime?.previewItem(itemID); },
     bodyOffset(threadID, itemID) { return views.get(threadID)?.runtime?.bodyOffset(itemID); },
-    appendBody(threadID, chunk) { return views.get(threadID)?.runtime?.appendBody(chunk) ?? false; },
+    appendBody(threadID, chunk) { return views.get(threadID)?.runtime?.appendBody(chunk) ?? 'superseded'; },
     hydrateItem(threadID, expected, loaded) { return views.get(threadID)?.runtime?.hydrate(expected, loaded) ?? false; },
     beginRuntimeRead(id) {
       const entry = reads.get(id);

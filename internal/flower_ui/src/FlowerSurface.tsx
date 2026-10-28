@@ -4218,6 +4218,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const item = chunk ? undefined : await props.adapter.loadHistoryItem!(threadID, itemID, readSignal);
       readSignal.throwIfAborted();
       if (epoch !== liveTransport.connectionEpoch()) throw new DOMException('Read was superseded.', 'AbortError');
+      // A stale read can be covered by newer cache progress, but a malformed
+      // response must never be mistaken for normal source supersession.
+      if (chunk && (chunk.thread_id !== threadID || chunk.item_id !== itemID || chunk.run_id !== body!.run_id
+        || chunk.source_id !== body!.source_id || chunk.entry_id !== body!.entry_id || chunk.field !== body!.field
+        || chunk.offset_bytes !== offset || chunk.through_bytes !== (body!.run_id ? body!.bytes : Math.min(body!.bytes, chunk.bytes)))) {
+        throw new Error('Body response differs from its request.');
+      }
       const viewport = viewportScope?.viewport();
       const bounds = viewport?.getBoundingClientRect();
       const anchor = viewport && bounds && !viewportScope!.followingLatest()
@@ -4230,15 +4237,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         requestTranscriptAnimationFrame(() => viewportScope!.finishDisclosure(anchor));
       }
       const hydrated = batch(() => {
-        const accepted = chunk ? threadCache().appendBody(threadID, chunk) : threadCache().hydrateItem(threadID, expected, item!);
-        if (accepted) recordTimelineReceipt(threadID, false);
+        const accepted = chunk ? threadCache().appendBody(threadID, chunk) : threadCache().hydrateItem(threadID, expected, item!) ? 'applied' : 'rejected';
+        if (accepted === 'applied') recordTimelineReceipt(threadID, false);
         return accepted;
       });
-      if (!hydrated) {
+      if (hydrated === 'superseded') return;
+      if (hydrated === 'rejected') {
         if (threadCache().runtimeItem(threadID, itemID)?.body || threadCache().runtimeItem(threadID, itemID)?.activity_bodies?.length) throw new Error('Body changed during read.');
         return;
       }
-      setTranscriptLayoutRevision(value => value + 1);
+      if (hydrated === 'applied') setTranscriptLayoutRevision(value => value + 1);
       const remaining = threadCache().runtimeItem(threadID, itemID);
       return Boolean(remaining?.body || remaining?.activity_bodies?.length);
     }, priority ?? (initial.live ? 'interactive' : 'visible'));

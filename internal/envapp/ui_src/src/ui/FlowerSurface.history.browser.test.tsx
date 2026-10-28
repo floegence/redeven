@@ -11,12 +11,13 @@ function fixture(id: string, partial = false): FlowerRuntimeCurrentItem {
   return { id, kind: 'assistant', text: partial ? 'Preview text' : 'Older conversation', ordinal: id === 'latest' ? 2 : 1,
     turn_id: 'turn', run_id: 'run', ...(partial ? { body: { field: 'content', source_id: id, bytes: 28, preview_bytes: 12 } } : {}) };
 }
-async function mount(tool = false, pending = false, options: { count?: number; text?: string; fail?: boolean; kind?: 'user' | 'assistant'; live?: boolean; loadHistoryItem?: FlowerSurfaceAdapter['loadHistoryItem']; loadHistoryBody?: FlowerSurfaceAdapter['loadHistoryBody'] } = {}) {
+async function mount(tool = false, pending = false, options: { count?: number; text?: string; preview?: string; fail?: boolean; kind?: 'user' | 'assistant'; live?: boolean; loadHistoryItem?: FlowerSurfaceAdapter['loadHistoryItem']; loadHistoryBody?: FlowerSurfaceAdapter['loadHistoryBody'] } = {}) {
   await page.viewport(1280, 900);
   const seed = thread({ thread_id: 'history', title: 'Bounded history', messages: [] });
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
   const message = (id: string, partial = false): FlowerRuntimeCurrentItem => {
     const item = { ...fixture(id, partial), kind: options.kind ?? 'assistant', ...(options.live ? { live: true } : {}) };
+    if (item.body && options.preview) { item.text = options.preview; item.body = { ...item.body, preview_bytes: new TextEncoder().encode(options.preview).length }; }
     if (item.body && options.text) item.body = { ...item.body, bytes: new TextEncoder().encode(options.text).length };
     return options.live && item.body ? { ...item, body: { ...item.body, run_id: 'run' } } : item;
   };
@@ -58,6 +59,91 @@ async function mount(tool = false, pending = false, options: { count?: number; t
 }
 
 describe('bounded Flower history', () => {
+  it.each(['identity', 'offset', 'extent', 'empty'] as const)('keeps malformed body responses actionable without retry loops (%s)', async fault => {
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({
+      ...input, thread_id: 'history', bytes: input.through_bytes, text: ' expanded body!!',
+      ...(fault === 'identity' ? { source_id: 'wrong' } : fault === 'offset' ? { offset_bytes: 0 }
+        : fault === 'extent' ? { through_bytes: input.through_bytes + 1 } : { text: '' }),
+    }));
+    const { root, body } = await mount(false, false, { loadHistoryBody: incremental });
+    await waitFor(() => Boolean(root.querySelector('.flower-history-body-control button')));
+    expect(incremental).toHaveBeenCalledOnce();
+    expect(body).not.toHaveBeenCalled();
+    incremental.mockImplementation(async (_tid, input) => ({ ...input, thread_id: 'history', bytes: input.through_bytes, text: ' expanded body!!' }));
+    root.querySelector<HTMLButtonElement>('.flower-history-body-control button')!.click();
+    await waitFor(() => root.textContent?.includes('Preview text expanded body!!') === true);
+    expect(incremental).toHaveBeenCalledTimes(2);
+    expect(root.querySelector('.flower-history-body-control')).toBeNull();
+  });
+
+  it.each(['replacement-first', 'response-first', 'overlap'] as const)('keeps same-source completion readable without retry (%s)', async order => {
+    const prefix = '测'.repeat(15);
+    const text = prefix + '。' + (order === 'overlap' ? '🌸done' : '');
+    const held = deferred<void>();
+    const last = deferred<void>();
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => {
+      const first = input.offset_bytes === 45;
+      await (first ? held.promise : last.promise);
+      return { ...input, thread_id: 'history', bytes: input.through_bytes, text: first ? '。' : '🌸done' };
+    });
+    const { root, history, push, body, full } = await mount(false, false, { live: true, preview: prefix, text, loadHistoryBody: incremental });
+    await waitFor(() => incremental.mock.calls.length === 1);
+    const row = root.querySelector<HTMLElement>('[data-flower-message-id="latest"]')!;
+    const bubble = row.querySelector('.flower-message-bubble')!;
+    const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
+    editor.focus(); editor.value = 'Keep my draft'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const before = row.getBoundingClientRect();
+    const samples: { skeleton: boolean; error: boolean; readable: boolean }[] = [];
+    const sample = () => samples.push({ skeleton: Boolean(row.querySelector('.flower-history-text-loading')),
+      error: Boolean(row.querySelector('.flower-history-body-control button')), readable: row.textContent?.includes(prefix) === true });
+    const observer = new MutationObserver(sample);
+    observer.observe(row, { childList: true, subtree: true, characterData: true });
+    const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => { sample(); resolve(); }));
+    try {
+      if (order === 'response-first') { held.resolve(); await waitFor(() => row.textContent?.includes('。') === true); }
+      const replacement = { ...fixture('latest', true), live: false, text: prefix + '。',
+        body: { field: 'content', source_id: 'latest', run_id: 'run', bytes: new TextEncoder().encode(text).length, preview_bytes: 48 } };
+      push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: history.mock.calls.at(-1)![1].reading_revision,
+        update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8,
+          facts: { activity: 'active', attention: {}, queue_count: 0, run_progress: { phase: 'streaming' } },
+          items: [{ kind: 'replace', item_id: 'latest', item: replacement }] } });
+      await frame(); await frame();
+      held.resolve();
+      if (order === 'overlap') {
+        await waitFor(() => incremental.mock.calls.length === 2 || Boolean(row.querySelector('.flower-history-body-control button')));
+        expect(row.querySelector('.flower-history-body-control button')).toBeNull();
+        expect(incremental.mock.calls[1][1]).toMatchObject({ offset_bytes: 48, through_bytes: 56 });
+        last.resolve();
+      }
+      await waitFor(() => row.textContent?.includes(text) === true && !row.querySelector('.flower-history-body-control'));
+      await frame();
+      expect(samples.length).toBeGreaterThan(0);
+      expect(samples.every(value => !value.skeleton && !value.error && value.readable)).toBe(true);
+      expect(row.querySelector('.flower-message-bubble')).toBe(bubble);
+      expect(row.getBoundingClientRect().top).toBeCloseTo(before.top, 0);
+      expect(row.getBoundingClientRect().height).toBeCloseTo(before.height, 0);
+      expect(root.querySelector('textarea')).toBe(editor);
+      expect(editor.value).toBe('Keep my draft');
+      expect(document.activeElement).toBe(editor);
+      expect(incremental).toHaveBeenCalledTimes(order === 'overlap' ? 2 : 1);
+      expect(history).toHaveBeenCalledOnce();
+      expect(body).not.toHaveBeenCalled(); expect(full).not.toHaveBeenCalled();
+      push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: history.mock.calls.at(-1)![1].reading_revision,
+        update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: 8, view_version: 9,
+          facts: { activity: 'active', attention: {}, queue_count: 0, run_progress: { phase: 'streaming' } }, items: [
+            { kind: 'add', item_id: 'next-tool', item: { id: 'next-tool', kind: 'tool', ordinal: 3, turn_id: 'turn', run_id: 'run',
+              activity: { item_id: 'next-tool', tool_id: 'next-tool', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet' } } },
+            { kind: 'add', item_id: 'next-text', item: { id: 'next-text', kind: 'assistant', ordinal: 4, turn_id: 'turn', run_id: 'run', text: 'Continued after the tool', live: true } },
+          ] } });
+      await waitFor(() => root.textContent?.includes('Continued after the tool') === true);
+      expect(root.querySelector('[data-flower-activity-item-id="next-tool"]')).not.toBeNull();
+      expect(row.querySelector('.flower-message-bubble')).toBe(bubble);
+      expect(root.querySelector('.flower-history-text-loading, .flower-history-body-control')).toBeNull();
+      expect(incremental).toHaveBeenCalledTimes(order === 'overlap' ? 2 : 1);
+      if (order === 'replacement-first') await page.screenshot({ element: root, path: '__screenshots__/flower-body-read-race-fixed.png' });
+    } finally { observer.disconnect(); held.resolve(); last.resolve(); }
+  });
+
   it('reveals newly visited historical Markdown once, fully formatted and without height motion', async () => {
     const prefix = 'Preview text';
     const middle = [' table follows.', '', '| Item | Value |', '| --- | --- |', '| A | 1 |', '', '```ts', 'const ready = true;', ''].join(String.fromCharCode(10));

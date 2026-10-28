@@ -5,7 +5,7 @@ description: One workspace facts stream, two bounded reading interests, and one 
 tags: [ui, flower, live, threads]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 quality_exception: Cross-boundary live-state contract spanning stream ownership, bounded reading interests, delivery and body caching, immediate send feedback, and recovery inside one timeline concept.
 ---
 # Summary
@@ -53,6 +53,8 @@ Collapsed patches use summary name/type for one mutation or localized multi-file
 Only unseen text shows skeletons. Accepted prose, attachments/references, anchors and follow choices survive refresh/completion. One visibility observer admits demand within 160 px; text/open tools share two slots and a 15-second deadline. Priority: visible live text/interactive disclosure, visible history, background; age every eight admissions. Offscreen/navigation cancels demand/read; failures expose local Retry.
 
 ThreadCache alone retains bodies by item/turn/run/source. Freshly authorized ThreadItemTextReader reads ≤16 KiB at accepted UTF-8 offsets. One source task coalesces extents, accepts earlier in-flight prefixes and yields between chunks. No polling, full-prefix/history downloads or duplicate store. Changed sources, including sealing, restart at canonical preview offset; live/sealed suffixes need not match. Keep readable prose until replacement chunks complete, then publish once. Same-source refresh retains progress; late old chunks cannot overwrite. Terminal/exhausted failures offer localized Retry, never execution replay.
+
+Ending a text segment (`live: false`) does not itself change its source. A longer validated same-source live preview advances cached text and pending state atomically, preserving the locator for later growth. Covered chunk responses validate their overlap and yield without layout invalidation; any missing suffix resumes at the current cache offset. Source changes discard obsolete responses. Response/request identity, range, conflicting prefixes and empty nonterminal chunks remain explicit failures. Regression tests control both completion orders and overlapping reads, retaining the bubble, draft, focus and geometry while the turn continues through tools.
 
 Schema v3 has one decoder. Base64 fragments include identity, zero-based index/count and total bytes. Merge ≤32 KiB fragments only with matching revision/thread/item/turn/run, contiguous version and UTF-8 offset. Growth sends locators. Same-source server/frame coalescing uses constant storage, original base version and intact semantic boundaries. Limits: sixteen pending batches, 32 MiB envelope/subscriber, 32 MiB global retained references. Started frames are immutable; byte-accounted covered versions suppress represented deltas. Summary/private-state/child inventories use separate mailboxes.
 

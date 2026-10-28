@@ -269,6 +269,83 @@ describe('history page anchors', () => {
 
 
 describe('continuous visible bodies', () => {
+  it('publishes a complete same-source preview after staging a sealed chunk', () => {
+    const { current, initial } = fixture();
+    const item = { ...current.items![0], text: '中文', body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 11, preview_bytes: 6 } };
+    const page = { ...current, items: [item] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const sealed = { ...item, live: false };
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: sealed }] });
+    expect(record.appendBody({ ...item.body, thread_id: 'thread', item_id: 'one', offset_bytes: 6, through_bytes: 11, text: '🌸' })).toBe('applied');
+    expect(record.initializeThread().messages[0].content).toBe('中文');
+    const complete = { ...sealed, text: '中文🌸!', body: { ...item.body, preview_bytes: 11 } };
+    record.apply(record.initializeThread(), { ...append(2), items: [{ kind: 'replace', item_id: 'one', item: complete }] });
+    expect(record.initializeThread().messages[0].content).toBe('中文🌸!');
+    expect(record.initializeThread().messages[0].body_pending).toBeUndefined();
+    const refreshed = createRuntimeThreadRecord({ ...page, view_version: 4, items: [complete] }, applyFlowerRuntimeCurrentView(initial, { ...page, items: [complete] }), record);
+    expect(refreshed.initializeThread().messages[0].content).toBe('中文🌸!');
+    expect(refreshed.initializeThread().messages[0].body_pending).toBeUndefined();
+  });
+
+  it('validates raced UTF-8 overlap and resumes only from the current prefix', () => {
+    const { current, initial } = fixture();
+    const item = { ...current.items![0], text: '中文',
+      body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 15, preview_bytes: 6 } };
+    const page = { ...current, items: [item] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const replacement = { ...item, live: false, text: '中文🌸', body: { ...item.body, preview_bytes: 10 } };
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: replacement }] });
+    const chunk = { thread_id: 'thread', item_id: 'one', ...item.body, offset_bytes: 6, through_bytes: 15, text: '🌸done' };
+    expect(record.appendBody(chunk)).toBe('covered');
+    expect(record.bodyOffset('one')).toBe(10);
+    expect(record.initializeThread().messages[0].body_pending?.retained).toBe(true);
+    expect(() => record.appendBody({ ...chunk, text: '🌻done' })).toThrow('conflicts with its cached prefix');
+    expect(() => record.appendBody({ ...chunk, offset_bytes: 7, text: '' })).toThrow('invalid body chunk extent');
+    expect(() => record.appendBody({ ...chunk, offset_bytes: 11, text: 'done' })).toThrow('invalid body chunk extent');
+    expect(() => record.appendBody({ ...chunk, text: '' })).toThrow('invalid body chunk extent');
+    expect(() => record.appendBody({ ...chunk, text: 'x'.repeat(16385), through_bytes: 20000, bytes: 20000 })).toThrow('invalid body chunk extent');
+    expect(record.item('one')?.text).toBe('中文🌸');
+    expect(record.appendBody({ ...chunk, offset_bytes: 10, text: 'done!' })).toBe('applied');
+    expect(record.item('one')?.text).toBe('中文🌸done!');
+    expect(record.initializeThread().messages[0].body_pending).toBeUndefined();
+  });
+
+  it('rejects inconsistent same-source previews without publishing a partial update', () => {
+    const { current, initial } = fixture();
+    const item = { ...current.items![0], text: '中文', body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };
+    const page = { ...current, items: [item] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    for (const replacement of [{ ...item, text: 'changed' }, { ...item, text: '中文🌸' },
+      { ...item, text: '中文🌸!', body: { ...item.body, preview_bytes: 11 } }]) {
+      expect(() => record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: replacement }] })).toThrow('Flower contract error');
+      expect(record.version).toBe(1);
+      expect(record.item('one')?.text).toBe('中文');
+    }
+  });
+
+  it.each(['assistant', 'thinking'] as const)('settles a longer same-source %s preview before its final chunk returns', kind => {
+    const { current, initial } = fixture();
+    const text = '测'.repeat(15) + '。';
+    const field = kind === 'thinking' ? 'reasoning' : 'content';
+    const item = { ...current.items![0], kind, text: text.slice(0, -1),
+      body: { field, source_id: 'one', run_id: 'run', bytes: 48, preview_bytes: 45 } };
+    const page = { ...current, items: [item] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const sealed = { ...item, live: false, text, body: { ...item.body, preview_bytes: 48 } };
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: sealed }] });
+    expect(record.bodyOffset('one')).toBe(48);
+    expect(record.initializeThread().messages[0].body_pending).toBeUndefined();
+    expect(record.item('one')?.body).toBeUndefined();
+    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', ...item.body, offset_bytes: 45, through_bytes: 48, text: '。' })).toBe('covered');
+    const message = record.initializeThread().messages[0];
+    expect(kind === 'thinking' ? message.blocks?.[0] : message.content).toEqual(kind === 'thinking' ? { type: 'thinking', content: text } : text);
+    expect(message.body_pending).toBeUndefined();
+    // The locator must survive completion so later growth keeps its source.
+    record.apply(record.initializeThread(), { ...append(2), items: [{ kind: 'body', item_id: 'one', body: { ...item.body, bytes: 52 } }] });
+    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', ...item.body, bytes: 52, offset_bytes: 48, through_bytes: 52, text: '🌸' })).toBe('applied');
+    expect(record.item('one')?.text).toBe(text + '🌸');
+  });
+
   it.each(['assistant', 'user', 'thinking'] as const)('publishes a cold sealed %s body only after all chunks arrive, including reconnect', kind => {
     const { current, initial } = fixture();
     const parts = [['# Stable', '', ''].join(String.fromCharCode(10)),
@@ -285,14 +362,14 @@ describe('continuous visible bodies', () => {
       ? (record.initializeThread().messages[0].blocks?.[0] as { content: string }).content
       : record.initializeThread().messages[0].content;
     const chunk = { thread_id: 'thread', item_id: 'one', field, source_id: 'sealed', bytes, through_bytes: bytes };
-    expect(record.appendBody({ ...chunk, offset_bytes: parts[0].length, text: parts[1] })).toBe(true);
+    expect(record.appendBody({ ...chunk, offset_bytes: parts[0].length, text: parts[1] })).toBe('applied');
     expect(visibleText()).toBe(parts[0]);
     expect(record.initializeThread().messages[0].body_pending?.retained).not.toBe(true);
     record = createRuntimeThreadRecord({ ...page, view_version: 2 }, applyFlowerRuntimeCurrentView(initial, page), record);
     expect(visibleText()).toBe(parts[0]);
     expect(record.initializeThread().messages[0].body_pending?.retained).not.toBe(true);
     expect(record.bodyOffset('one')).toBe(parts[0].length + parts[1].length);
-    expect(record.appendBody({ ...chunk, offset_bytes: record.bodyOffset('one')!, text: parts[2] })).toBe(true);
+    expect(record.appendBody({ ...chunk, offset_bytes: record.bodyOffset('one')!, text: parts[2] })).toBe('applied');
     expect(visibleText()).toBe(full);
     expect(record.initializeThread().messages[0].body_pending).toBeUndefined();
   });
@@ -308,13 +385,13 @@ describe('continuous visible bodies', () => {
     expect(record.bodyOffset('one')).toBe(6);
     expect(record.initializeThread().messages[0].content).toBe(liveText);
     const chunk = { thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 14, offset_bytes: 6, through_bytes: 14, text: '🌸' };
-    expect(record.appendBody(chunk)).toBe(true);
+    expect(record.appendBody(chunk)).toBe('applied');
     expect(record.bodyOffset('one')).toBe(10);
     expect(record.initializeThread().messages[0].content).toBe(liveText);
     // An unchanged canonical baseline must retain the in-flight read prefix.
     const refreshed = createRuntimeThreadRecord({ ...page, view_version: 3, items: [sealed] }, applyFlowerRuntimeCurrentView(initial, { ...page, items: [sealed] }), record);
     expect(refreshed.bodyOffset('one')).toBe(10);
-    expect(refreshed.appendBody({ ...chunk, offset_bytes: 10, text: 'done' })).toBe(true);
+    expect(refreshed.appendBody({ ...chunk, offset_bytes: 10, text: 'done' })).toBe('applied');
     expect(refreshed.initializeThread().messages[0].content).toBe('中文🌸done');
     expect(refreshed.initializeThread().messages[0].body_pending).toBeUndefined();
     expect(refreshed.retainedItem(sealed)?.bytes).toBe(14);
@@ -330,8 +407,8 @@ describe('continuous visible bodies', () => {
     record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: sealed }] });
     expect(record.bodyOffset('one')).toBe(6);
     const chunk = { thread_id: 'thread', item_id: 'one', field, source_id: 'sealed', bytes: 11, offset_bytes: 6, through_bytes: 11, text: 'final' };
-    expect(record.appendBody({ ...chunk, run_id: 'run' })).toBe(false);
-    expect(record.appendBody(chunk)).toBe(true);
+    expect(record.appendBody({ ...chunk, run_id: 'run' })).toBe('superseded');
+    expect(record.appendBody(chunk)).toBe('applied');
     const message = record.initializeThread().messages[0];
     expect(kind === 'thinking' ? message.blocks?.[0] : message.content).toEqual(kind === 'thinking' ? { type: 'thinking', content: '中文final' } : '中文final');
     expect(message.body_pending).toBeUndefined();
@@ -357,7 +434,7 @@ describe('continuous visible bodies', () => {
     const sealed = { ...live, live: false, text: '中文', body: { field: 'content', source_id: 'one', bytes: 16, preview_bytes: 6 } };
     record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: sealed }] });
     expect(record.bodyOffset('one')).toBe(6);
-    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 16, offset_bytes: 6, through_bytes: 16, text: 'final text' })).toBe(true);
+    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 16, offset_bytes: 6, through_bytes: 16, text: 'final text' })).toBe('applied');
     expect(record.initializeThread().messages[0].content).toBe('中文final text');
   });
 
@@ -385,13 +462,13 @@ describe('continuous visible bodies', () => {
     const messages = record.initializeThread().messages;
     record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 11 } }] });
     const chunk = { thread_id: 'thread', item_id: 'one', field: 'content', bytes: 11, run_id: 'run', source_id: 'one', offset_bytes: 6, through_bytes: 10, text: '🌸' };
-    expect(record.appendBody({ ...chunk, run_id: 'obsolete' })).toBe(false);
-    expect(record.appendBody(chunk)).toBe(true);
-    expect(record.appendBody(chunk)).toBe(false);
+    expect(record.appendBody({ ...chunk, run_id: 'obsolete' })).toBe('superseded');
+    expect(record.appendBody(chunk)).toBe('applied');
+    expect(record.appendBody(chunk)).toBe('covered');
     expect(record.bodyOffset('one')).toBe(10);
     expect(record.initializeThread().messages).toBe(messages);
     expect(messages[0].body_pending?.bytes).toBe(11);
-    expect(record.appendBody({ ...chunk, offset_bytes: 10, through_bytes: 11, text: '!' })).toBe(true);
+    expect(record.appendBody({ ...chunk, offset_bytes: 10, through_bytes: 11, text: '!' })).toBe('applied');
     expect(messages[0].content).toBe('中文🌸!');
     expect(messages[0].body_pending).toBeUndefined();
     expect(messages[0].text_source!.read(0)).toEqual(['🌸', '!']);
@@ -400,7 +477,7 @@ describe('continuous visible bodies', () => {
     expect(record.initializeThread().messages[0]).toBe(messages[0]);
     expect(messages[0].content).toBe('中文🌸!');
     expect(messages[0].body_pending?.retained).toBe(true);
-    expect(record.appendBody({ ...chunk, offset_bytes: 11, through_bytes: 12, text: '?' })).toBe(false);
+    expect(record.appendBody({ ...chunk, offset_bytes: 11, through_bytes: 12, text: '?' })).toBe('superseded');
     expect(record.hydrate(record.item('one')!, { ...canonical, body: undefined, text: '中文🌸!' })).toBe(true);
     expect(messages[0].body_pending).toBeUndefined();
   });
@@ -410,7 +487,7 @@ describe('continuous visible bodies', () => {
     const preview = { ...current.items![0], live: false, canonical_ordinal: 4, text: '中文', body: { field: 'content', source_id: 'one', bytes: 100, preview_bytes: 6 } };
     const page = { ...current, items: [preview] };
     const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
-    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 6, offset_bytes: 6, through_bytes: 6, text: '' })).toBe(true);
+    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 6, offset_bytes: 6, through_bytes: 6, text: '' })).toBe('applied');
     expect(record.item('one')?.body).toBeUndefined();
     expect(record.item('one')?.text).toBe('中文');
   });
@@ -422,8 +499,8 @@ describe('continuous visible bodies', () => {
       const page = { ...current, items: [preview] };
       const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
       const chunk = { thread_id: 'thread', item_id: 'one', ...body, bytes: 10, offset_bytes: 6, through_bytes: 10, text: '🌸' };
-      expect(record.appendBody({ ...chunk, entry_id: 'wrong' })).toBe(false);
-      expect(record.appendBody(chunk)).toBe(true);
+      expect(record.appendBody({ ...chunk, entry_id: 'wrong' })).toBe('superseded');
+      expect(record.appendBody(chunk)).toBe('applied');
       expect(record.item('one')?.text).toBe('中文🌸');
       expect(record.item('one')?.body).toBeUndefined();
     }

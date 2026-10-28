@@ -6,6 +6,35 @@ import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { createFlowerTimelineProjection } from './flowerTimelineProjection';
 import type { FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 
+it('keeps covered body responses inert for text, timeline and historical subscribers', () => createRoot(dispose => {
+  try {
+    const item = { id: 'one', kind: 'assistant' as const, ordinal: 2, turn_id: 'turn', run_id: 'run', text: '中文', live: true,
+      body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 11, preview_bytes: 6 } };
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' },
+      items: [{ id: 'old', kind: 'assistant', ordinal: 1, turn_id: 'oldturn', run_id: 'oldrun', text: 'History' }, item] };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    record.apply(record.initializeThread(), { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 1, view_version: 2,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'replace', item_id: 'one', item: { ...item, live: false, text: '中文🌸', body: { ...item.body, preview_bytes: 10 } } }] });
+    const thread = record.initializeThread();
+    const timeline = createFlowerTimelineProjection();
+    let text = 0, structure = 0, historical = 0;
+    createComputed(() => { void thread.messages[1].content; text++; });
+    createComputed(() => { timeline(thread); structure++; });
+    createComputed(() => { void thread.messages[0].content; historical++; });
+    for (let index = 0; index < 100; index++) {
+      expect(record.appendBody({ ...item.body, thread_id: 'thread', item_id: 'one', offset_bytes: 6, through_bytes: 11, text: '🌸' })).toBe('covered');
+    }
+    expect({ text, structure, historical }).toEqual({ text: 1, structure: 1, historical: 1 });
+    expect(record.bodyOffset('one')).toBe(10);
+    expect(record.appendBody({ ...item.body, thread_id: 'thread', item_id: 'one', offset_bytes: 10, through_bytes: 11, text: '!' })).toBe('applied');
+    expect({ text, structure, historical }).toEqual({ text: 2, structure: 1, historical: 1 });
+  } finally { dispose(); }
+}));
+
 it('notifies only affected text subscribers and preserves structural presentation identities', () => createRoot(dispose => {
   try {
     const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run', run_progress: { phase: 'streaming' }, interactions: [], queue: [], turns: [],

@@ -14,6 +14,7 @@ type MutableMessage = Omit<{ -readonly [K in keyof FlowerChatMessage]: FlowerCha
   & { blocks?: NonNullable<FlowerChatMessage['blocks']>[number][] };
 type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; appendText: (text: string) => void };
 const utf8 = new TextEncoder();
+export type HistoryBodyAppendResult = 'applied' | 'covered' | 'superseded';
 
 function advanceMessage(prior: MessageRecord, message: FlowerChatMessage): boolean {
   const before = prior.value;
@@ -55,9 +56,21 @@ function retainBody(before: ItemRecord | undefined, incoming: FlowerRuntimeCurre
     return { item: incoming, bytes: utf8.encode(incoming.text ?? '').length, preview: incoming, retained: before.retained || !before.item.body,
       displayText: before.displayText ?? before.item.text ?? '' };
   }
-  if (!(before.item.text ?? '').startsWith(incoming.text ?? '')) return;
   const sameLiveSource = Boolean(body.run_id) && body.run_id === (source?.run_id ?? before.item.run_id);
-  return { ...before, item: { ...incoming, text: before.item.text, body: sameLiveSource && before.bytes >= body.bytes ? undefined : body },
+  let text = before.item.text ?? '';
+  let bytes = before.bytes;
+  if (!text.startsWith(incoming.text ?? '')) {
+    if (!sameLiveSource) return;
+    if (!(incoming.text ?? '').startsWith(text)) invalid('live body preview changed its prefix');
+    text = incoming.text ?? '';
+    bytes = utf8.encode(text).length;
+    if (body.preview_bytes !== bytes || bytes > body.bytes) invalid('invalid live body preview extent');
+  }
+  // Ending a segment can publish a longer preview from the same live source.
+  // Accept that prefix atomically with its pending state, retaining the locator
+  // in preview for later growth even when this extent is already complete.
+  return { ...before, bytes, item: { ...incoming, text, body: sameLiveSource && bytes >= body.bytes ? undefined : body },
+    displayText: sameLiveSource && bytes >= body.bytes ? undefined : before.displayText,
     preview: incoming, retained: before.retained || !before.item.body || Boolean(incoming.live) };
 }
 
@@ -245,14 +258,31 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       return true;
     },
     bodyOffset(id: string) { return (items.get(id) ?? archive.get(id))?.bytes; },
-    appendBody(chunk: FlowerHistoryBodyChunk) {
+    appendBody(chunk: FlowerHistoryBodyChunk): HistoryBodyAppendResult {
       const before = items.get(chunk.item_id) ?? archive.get(chunk.item_id);
-      const body = before?.item.body;
+      const body = before?.item.body ?? before?.preview?.body;
       if (!before || !body || chunk.thread_id !== threadID || chunk.run_id !== body.run_id
-        || chunk.source_id !== body.source_id || chunk.entry_id !== body.entry_id || chunk.field !== body.field || chunk.offset_bytes !== before.bytes) return false;
+        || chunk.source_id !== body.source_id || chunk.entry_id !== body.entry_id || chunk.field !== body.field) return 'superseded';
       const size = utf8.encode(chunk.text).length;
       if ((!size && chunk.offset_bytes !== chunk.through_bytes) || size > 16 * 1024 || !version(chunk.bytes) || !version(chunk.through_bytes)
-        || before.bytes + size > chunk.through_bytes || chunk.through_bytes > body.bytes || chunk.through_bytes > chunk.bytes) invalid('invalid body chunk extent');
+        || !version(chunk.offset_bytes) || chunk.offset_bytes > before.bytes
+        || chunk.offset_bytes + size > chunk.through_bytes || chunk.through_bytes > body.bytes || chunk.through_bytes > chunk.bytes) invalid('invalid body chunk extent');
+      if (chunk.offset_bytes < before.bytes) {
+        // Only a raced response inspects the cached suffix. Ordinary chunks
+        // never encode the growing document again. Validate overlap before
+        // yielding; the next read starts at the cache's authoritative offset.
+        const distance = before.bytes - chunk.offset_bytes;
+        const tail = utf8.encode((before.item.text ?? '').slice(-distance));
+        const incoming = utf8.encode(chunk.text);
+        const start = tail.length - distance;
+        if ((tail[start] & 0xc0) === 0x80) invalid('body chunk starts inside a UTF-8 code point');
+        for (let index = 0; index < Math.min(size, distance); index++) {
+          if (tail[start + index] !== incoming[index]) invalid('body chunk conflicts with its cached prefix');
+        }
+        if (size < distance && (tail[start + size] & 0xc0) === 0x80) invalid('body chunk ends inside a UTF-8 code point');
+        return 'covered';
+      }
+      if (!before.item.body) return 'covered';
       const bytes = before.bytes + size;
       const item = { ...before.item, text: (before.item.text ?? '') + chunk.text, body: bytes < (body.run_id ? body.bytes : Math.min(body.bytes, chunk.bytes)) ? body : undefined };
       // A sealed historical body is one document, not a stream. Keep its
@@ -276,7 +306,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         else { message.set('content', item.text); message.appendText(chunk.text); }
         message.set('body_pending', item.body ? { kind: 'text', bytes: body.bytes, retained: true } : undefined);
       });
-      return true;
+      return 'applied';
     },
     findMessage(id: string) { return messages.get(id); },
     initializeThread(): FlowerThreadSnapshot { return thread; },

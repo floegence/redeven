@@ -4,6 +4,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-28
 
+- Reconcile [same-source body progress](ui/flower-live-timeline.md) atomically when live segments end. Validate covered reads without false Retry states, preserve readable text and source handoff, and qualify deterministic completion order, UTF-8 overlap and rendering continuity.
+
 - Align [patch paths](ai/tool-permission-runtime.md) with filesystem registry policy, preserving logical bindings and ordered authorization. Support detached [task scratch](ai/flower-task-files.md), retain truthful partial Move diffs and [error presentation](ui/flower-edit-preparation.md), and qualify restart/Fork without replay.
 
 - Render name-only [SubAgent targets](ui/flower-subagent-detail.md) in compact informational capsules, keeping names out of action titles and preserving existing reads and identity-based navigation.
