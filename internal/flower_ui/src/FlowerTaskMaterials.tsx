@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { FileText } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Download, Eye, Image, MessageSquare } from '@floegence/floe-webapp-core/icons';
+import { FlowerTaskFileIdentity } from './FlowerTaskFileIdentity';
 import type { FlowerSurfaceAdapter, FlowerTaskMaterial } from './contracts/flowerSurfaceContracts';
 import type { TaskFilesCopy } from './taskFilesCopy';
 import { FlowerAttachmentPreviewWindow, type FlowerAttachmentPreviewSource } from './attachments/FlowerAttachmentPreviewWindow';
@@ -55,28 +56,25 @@ export function FlowerTaskMaterials(props: {
   };
   const rows = (kind: 'input' | 'media') => <For each={items().filter(item => item.kind === kind)}>{item => (
     <article class="flower-task-file-card flower-task-material-card">
-      <FileText class="size-5 shrink-0 text-primary" aria-hidden="true" />
-      <div class="min-w-0 flex-1">
-        <div class="font-medium break-words">{item.name}</div>
-        <div class="text-xs text-muted-foreground">{item.mime} · {item.size.toLocaleString()} B · {new Date(item.created_at).toLocaleString()}</div>
-        <div class="flower-task-file-actions">
-          <Show when={props.adapter.loadMessageAttachment && item.url}>
-            <Button size="sm" variant="outline" onClick={() => open(item)}>{props.copy.preview}</Button>
-            <Button size="sm" variant="outline" disabled={downloading()} onClick={() => void download(item)}>{props.copy.download}</Button>
-          </Show>
-          <Show when={props.onSource}><Button size="sm" variant="ghost" onClick={() => props.onSource?.(item.item_id)}>{props.copy.source}</Button></Show>
-        </div>
+      <FlowerTaskFileIdentity name={item.name} mime={item.mime} size={item.size}
+        detail={<time class="flower-task-file-date" dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time>} />
+      <div class="flower-task-file-actions">
+        <Show when={props.adapter.loadMessageAttachment && item.url}>
+          <Button size="sm" variant="secondary" icon={Eye} onClick={() => open(item)}>{props.copy.preview}</Button>
+          <Button size="sm" variant="ghost" icon={Download} disabled={downloading()} onClick={() => void download(item)}>{props.copy.download}</Button>
+        </Show>
+        <Show when={props.onSource}><Button size="sm" variant="ghost" icon={MessageSquare} onClick={() => props.onSource?.(item.item_id)}>{props.copy.source}</Button></Show>
       </div>
     </article>
   )}</For>;
-  return <section class="flower-task-materials" aria-label={props.copy.materials}>
-    <h3 class="font-medium mt-4">{props.copy.materials}</h3>
-    <Show when={loading()}><p role="status">{props.copy.loading}</p></Show>
+  return <section class="flower-task-materials flower-task-files-section" aria-label={props.copy.materials}>
+    <div class="flower-task-section-heading"><h3>{props.copy.materials}</h3><span class="flower-task-count">{items().length}{cursor() ? '+' : ''}</span></div>
+    <Show when={loading()}><p class="flower-task-files-empty" role="status">{props.copy.loading}</p></Show>
     <Show when={error()}><p role="alert" class="text-destructive">{error()}</p><Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
-    <Show when={!loading() && !error() && items().length === 0}><p class="text-muted-foreground py-2">{cursor() ? props.copy.materialsEarlier : props.copy.materialsEmpty}</p></Show>
-    <div class="flower-task-files-list">{rows('input')}</div>
-    <Show when={items().some(item => item.kind === 'media')}><details class="flower-task-media"><summary>{props.copy.media}</summary><div class="flower-task-files-list">{rows('media')}</div></details></Show>
-    <Show when={cursor()}><Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load(true)}>{props.copy.more}</Button></Show>
+    <Show when={!loading() && !error() && items().length === 0}><p class="flower-task-files-empty">{cursor() ? props.copy.materialsEarlier : props.copy.materialsEmpty}</p></Show>
+    <Show when={items().some(item => item.kind === 'input')}><div class="flower-task-files-list">{rows('input')}</div></Show>
+    <Show when={items().some(item => item.kind === 'media')}><details class="flower-task-media"><summary><span class="flower-task-disclosure-icon"><Image class="size-4" aria-hidden="true" /></span><span class="flower-task-disclosure-title">{props.copy.media}</span><span class="flower-task-count">{items().filter(item => item.kind === 'media').length}</span><ChevronRight class="flower-task-disclosure-chevron size-4" aria-hidden="true" /></summary><div class="flower-task-files-list">{rows('media')}</div></details></Show>
+    <Show when={cursor()}><Button size="sm" variant="ghost" class="flower-task-load-more" loading={loading()} onClick={() => void load(true)}>{props.copy.more}</Button></Show>
     <FlowerAttachmentPreviewWindow source={preview()} loadingLabel={props.copy.loading} unavailableLabel={props.copy.unavailable} onClose={() => setPreview(null)} zIndex={100} />
   </section>;
 }

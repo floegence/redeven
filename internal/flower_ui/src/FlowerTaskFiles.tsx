@@ -1,7 +1,8 @@
+import { FlowerTaskFileIdentity, taskFileSize as size } from './FlowerTaskFileIdentity';
 import { FlowerTaskMaterials } from './FlowerTaskMaterials';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import { FileText, Folder, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
+import { Check, ChevronRight, Download, Eye, FileText, Folder, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
 import type { FlowerSurfaceAdapter, FlowerTaskFiles as TaskFiles } from './contracts/flowerSurfaceContracts';
 import type { TaskFilesCopy } from './taskFilesCopy';
 
@@ -20,7 +21,7 @@ export function FlowerTaskFiles(props: {
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
   const [confirm, setConfirm] = createSignal(false);
-  const [downloading, setDownloading] = createSignal(false);
+  const [downloading, setDownloading] = createSignal<string>();
   let downloadController: AbortController | undefined;
   let generation = 0;
   onCleanup(() => {
@@ -47,7 +48,7 @@ export function FlowerTaskFiles(props: {
     const open = props.open,
       id = props.threadID;
     downloadController?.abort();
-    setDownloading(false);
+    setDownloading(undefined);
     generation++;
     setData(undefined);
     setConfirm(false);
@@ -95,7 +96,7 @@ export function FlowerTaskFiles(props: {
   const download = async (path: string, working: boolean) => {
     const controller = new AbortController();
     downloadController = controller;
-    setDownloading(true);
+    setDownloading(path);
     setError('');
     try {
       await props.adapter.downloadTaskFile!(props.threadID, path, working, controller.signal);
@@ -104,24 +105,18 @@ export function FlowerTaskFiles(props: {
         setError(props.copy.unavailable);
     } finally {
       if (downloadController === controller) {
-        setDownloading(false);
+        setDownloading(undefined);
         downloadController = undefined;
       }
     }
   };
-  const size = (bytes: number) =>
-    bytes < 1024
-      ? bytes + ' B'
-      : bytes < 1048576
-        ? (bytes / 1024).toFixed(1) + ' KB'
-        : (bytes / 1048576).toFixed(1) + ' MB';
   return (
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={props.copy.title}
       closeLabel={props.copy.close}
-      class="flower-task-files-dialog w-[min(44rem,94vw)]"
+      class="flower-task-files-dialog w-[min(44rem,94vw)] max-w-3xl"
       contentClass="flower-task-files-content"
       footer={
         <Button variant="outline" onClick={() => props.onOpenChange(false)}>
@@ -130,9 +125,8 @@ export function FlowerTaskFiles(props: {
       }
     >
       <div class="flower-task-files-toolbar">
-        <span>{props.adapter.runtime?.display_name}</span>
-        <Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load()}>
-          <Refresh class="size-3.5" />
+        <span class="flower-task-files-context"><Folder class="size-4" aria-hidden="true" />{props.adapter.runtime?.display_name || props.copy.title}</span>
+        <Button size="sm" variant="ghost" icon={Refresh} loading={loading()} onClick={() => void load()}>
           {props.copy.refresh}
         </Button>
       </div>
@@ -142,7 +136,7 @@ export function FlowerTaskFiles(props: {
         </p>
       </Show>
       <Show when={loading() && !data()}>
-        <p role="status">{props.copy.loading}</p>
+        <p class="flower-task-files-empty" role="status">{props.copy.loading}</p>
       </Show>
       <Show when={data()}>
         {(value) => (
@@ -150,27 +144,22 @@ export function FlowerTaskFiles(props: {
             <Show when={value().state_in_workspace}>
               <p class="flower-task-files-notice">{props.copy.warning}</p>
             </Show>
-            <h3 class="font-medium">{props.copy.results}</h3>
-            <Show when={value().files.length} fallback={<p class="text-muted-foreground py-4">{props.copy.empty}</p>}>
-              <div class="flower-task-files-list">
-                <For each={value().files}>
-                  {(file) => (
-                    <article class="flower-task-file-card">
-                      <FileText class="size-5 shrink-0 text-primary" aria-hidden="true" />
-                      <div class="min-w-0 flex-1">
-                        <div class="font-medium break-words">{file.title || file.name}</div>
-                        <div class="text-xs text-muted-foreground">
-                          {size(file.size)} · {file.mime} · {props.copy[file.status]}
-                        </div>
-                        <div class="flower-task-file-path" title={file.file_path}>
-                          {file.file_path}
-                        </div>
-                        <div class="text-xs text-muted-foreground">{file.endpoint_id}</div>
+            <section class="flower-task-files-section" aria-label={props.copy.results}>
+              <div class="flower-task-section-heading"><h3>{props.copy.results}</h3><span class="flower-task-count">{value().files.length}{value().next_cursor ? '+' : ''}</span></div>
+              <Show when={value().files.length} fallback={<div class="flower-task-files-empty"><FileText class="size-6" aria-hidden="true" /><p>{props.copy.empty}</p></div>}>
+                <div class="flower-task-files-list">
+                  <For each={value().files}>
+                    {(file) => (
+                      <article class="flower-task-file-card">
+                        <FlowerTaskFileIdentity name={file.name} title={file.title} mime={file.mime} size={file.size}
+                          status={<span class="flower-task-file-status" data-status={file.status}><Show when={file.status === 'available'}><Check class="size-3" aria-hidden="true" /></Show>{props.copy[file.status]}</span>}
+                          path={file.file_path} />
                         <div class="flower-task-file-actions">
                           <Show when={props.onPreview || props.adapter.openLinkedFilePreview}>
                             <Button
                               size="sm"
-                              variant="outline"
+                              variant="secondary"
+                              icon={Eye}
                               disabled={file.status === 'missing' || file.status === 'unavailable'}
                               onClick={() => void openPath(file.file_path)}
                             >
@@ -180,8 +169,10 @@ export function FlowerTaskFiles(props: {
                           <Show when={props.adapter.downloadTaskFile}>
                             <Button
                               size="sm"
-                              variant="outline"
-                              disabled={downloading() || file.status === 'missing' || file.status === 'unavailable'}
+                              variant="ghost"
+                              icon={Download}
+                              loading={downloading() === file.file_path}
+                              disabled={Boolean(downloading()) || file.status === 'missing' || file.status === 'unavailable'}
                               onClick={() => void download(file.file_path, false)}
                             >
                               {props.copy.download}
@@ -191,86 +182,92 @@ export function FlowerTaskFiles(props: {
                             <Button
                               size="sm"
                               variant="ghost"
+                              icon={Folder}
                               onClick={() => void openPath(file.file_path.replace(/[/\\][^/\\]+$/, ''), true)}
                             >
-                              <Folder class="size-3.5" />
                               {props.copy.folder}
                             </Button>
                           </Show>
                         </div>
-                      </div>
-                    </article>
-                  )}
-                </For>
-              </div>
-            </Show>
-            <Show when={value().next_cursor}>
-              <Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load(true)}>
-                {props.copy.more}
-              </Button>
-            </Show>
+                      </article>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <Show when={value().next_cursor}>
+                <Button size="sm" variant="ghost" class="flower-task-load-more" loading={loading()} onClick={() => void load(true)}>
+                  {props.copy.more}
+                </Button>
+              </Show>
+            </section>
             <Show when={props.adapter.loadTaskMaterials}><FlowerTaskMaterials threadID={props.threadID} adapter={props.adapter} copy={props.copy} refresh={materialsRefresh()} onSource={props.onSource} /></Show>
             <details class="flower-task-working">
               <summary>
-                {props.copy.working} · {value().working_files}
-                {value().working_truncated ? '+' : ''} · {size(value().working_bytes)}
-                {value().working_truncated ? '+' : ''}
+                <span class="flower-task-disclosure-icon"><Folder class="size-4" aria-hidden="true" /></span>
+                <span class="flower-task-disclosure-title">{props.copy.working}</span>
+                <span class="flower-task-count">{value().working_files}{value().working_truncated ? '+' : ''}</span>
+                <span class="flower-task-disclosure-size">{size(value().working_bytes)}{value().working_truncated ? '+' : ''}</span>
+                <ChevronRight class="flower-task-disclosure-chevron size-4" aria-hidden="true" />
               </summary>
-              <p class="flower-task-file-path">{value().working_path}</p>
-              <div class="flower-task-working-list">
-                <For each={value().working ?? []}>
-                  {(file) => (
-                    <div>
-                      <span class="break-all">{file.name}</span>
-                      <span>{size(file.size)}</span>
-                      <Show when={props.adapter.downloadTaskFile}>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={downloading()}
-                          onClick={() => void download(file.path, true)}
-                        >
-                          {props.copy.download}
-                        </Button>
-                      </Show>
-                    </div>
-                  )}
-                </For>
-              </div>
-              <Show when={value().working_truncated}>
-                <p>{props.copy.truncated}</p>
-              </Show>
-              <Show when={!value().can_clean}>
-                <p class="text-xs text-muted-foreground">{props.copy.busy}</p>
-              </Show>
-              <Show when={props.adapter.cleanTaskFiles && props.adapter.canMutate !== false}>
-                <Show
-                  when={confirm()}
-                  fallback={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={loading() || downloading() || !value().can_clean || !value().working_files}
-                      onClick={() => setConfirm(true)}
-                    >
-                      <Trash class="size-3.5" />
-                      {props.copy.clean}
-                    </Button>
-                  }
-                >
-                  <div role="alert" class="flower-task-files-notice">
-                    <p>{props.copy.confirm}</p>
-                    <div class="flex gap-2 mt-2">
-                      <Button size="sm" disabled={loading()} onClick={() => void clean()}>
+              <div class="flower-task-disclosure-body">
+                <p class="flower-task-file-path" title={value().working_path}>{value().working_path}</p>
+                <div class="flower-task-working-list">
+                  <For each={value().working ?? []}>
+                    {(file) => (
+                      <div>
+                        <span class="break-all">{file.name}</span>
+                        <span>{size(file.size)}</span>
+                        <Show when={props.adapter.downloadTaskFile}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={Download}
+                            loading={downloading() === file.path}
+                            disabled={Boolean(downloading())}
+                            onClick={() => void download(file.path, true)}
+                          >
+                            {props.copy.download}
+                          </Button>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+                <Show when={value().working_truncated}>
+                  <p>{props.copy.truncated}</p>
+                </Show>
+                <Show when={!value().can_clean}>
+                  <p class="text-xs text-muted-foreground">{props.copy.busy}</p>
+                </Show>
+                <Show when={props.adapter.cleanTaskFiles && props.adapter.canMutate !== false}>
+                  <Show
+                    when={confirm()}
+                    fallback={
+                      <Button
+                        size="sm"
+                        variant="ghost-destructive"
+                        icon={Trash}
+                        disabled={loading() || Boolean(downloading()) || !value().can_clean || !value().working_files}
+                        onClick={() => setConfirm(true)}
+                      >
                         {props.copy.clean}
                       </Button>
-                      <Button size="sm" variant="ghost" disabled={loading()} onClick={() => setConfirm(false)}>
-                        {props.copy.cancel}
-                      </Button>
+                    }
+                  >
+                    <div role="alert" class="flower-task-files-notice">
+                      <p>{props.copy.confirm}</p>
+                      <div class="flower-task-file-actions">
+                        <Button size="sm" variant="destructive" icon={Trash} loading={loading()} onClick={() => void clean()}>
+                          {props.copy.clean}
+                        </Button>
+                        <Button size="sm" variant="ghost" disabled={loading()} onClick={() => setConfirm(false)}>
+                          {props.copy.cancel}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  </Show>
                 </Show>
-              </Show>
+              </div>
             </details>
           </>
         )}

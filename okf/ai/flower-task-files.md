@@ -44,6 +44,22 @@ Files panel queries successful canonical results through authorized public Flore
 
 Desktop/mobile dialog shows final results, original inputs, collapsed conversation images and expandable working files. Inputs and images reuse authorized attachment preview/download and can navigate to their source message. Material discovery reads exactly one 50-item canonical window per request, with 128-byte body previews and no full-history View or retention inventory scan. Empty intervals retain their next cursor; refresh resets a changed canonical leaf. Existing host preview/directory routing and HTML isolation remain; absent callbacks use shared image/PDF/text preview and read-only listing. Existing save destinations reauthorize each 256 KiB download chunk; version/offset drift aborts destination. Desktop allows exact thread endpoints/query keys only. Downloads neither publish nor relocate originals; browser Blob fallback retains its memory behavior.
 
+## File panel presentation
+
+Use the published Dialog, file-type icon catalog and Button loading affordances.
+Deliverables and materials have counted section headings; conversation images
+and working files use keyboard-operable, initially collapsed disclosures. Cards
+prioritize title, compact file type, size and semantic availability; raw MIME
+parameters and internal endpoint IDs do not occupy primary reading space. Paths
+remain in the DOM with full-path tooltips and click/tap expansion; long titles wrap and whole actions
+reflow at phone widths. Preview leads, download/directory navigation are quiet
+secondary actions. Cleanup remains a separate confirmed destructive action.
+Only the dialog body scrolls; the header and close action remain reachable.
+
+Browser evidence: internal/envapp/ui_src/src/ui/FlowerTaskFiles.browser.test.tsx
+covers long localized names, file icons, material disclosures, desktop/phone
+geometry, source routing, stale responses and protected cleanup.
+
 ## Cleanup
 
 List ≤200 files while inspecting ≤10,000 entries; show truncation/lower bounds. Explicit confirmed RWX cleanup uses rooted operations on owned scratch/staging only. Active/queued turns, interactions, admitted work and unreaped terminals block it. In-process admissions and canonical view suffice; no durable cleanup lease/ledger.

@@ -34,6 +34,7 @@ import {
   Dialog,
   DialogPlacementProvider,
   SurfaceFloatingLayer,
+  SurfaceAnchoredLayer,
   Dropdown,
   createFloatingPresence,
 } from '@floegence/floe-webapp-core/ui';
@@ -45,7 +46,7 @@ import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from '.
 import { computerAssistance } from './computerAssistance';
 import { computerFrameRate } from './computerViewer';
 import type { FlowerComputerFrameSource, FlowerComputerInputCommand, FlowerThreadPinMetadata, FlowerThreadPinPosition } from './contracts/flowerSurfaceContracts';
-import { FLOE_HOT_INTERACTION_ATTR, secureRandomUUID } from '@floegence/floe-webapp-core';
+import { FLOE_HOT_INTERACTION_ATTR, secureRandomUUID, useOverlayMask } from '@floegence/floe-webapp-core';
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { FlowerApprovalRow, FlowerApprovalDecisionActions } from './FlowerApprovalRow';
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
@@ -57,7 +58,7 @@ import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack, useContext } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, Workflow, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -455,7 +456,6 @@ const FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT = 44;
 const FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME = 12;
 const FLOWER_TERMINAL_THREAD_STATUSES = new Set<FlowerThreadStatus>(['idle', 'failed', 'success', 'canceled', 'read_only']);
 const FLOWER_ACTIVE_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
-const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 400, height: 480 } as const;
 const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
   contextPreview: 162,
@@ -1134,7 +1134,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
   const [subagentDropdownOpen, setSubagentDropdownOpen] = createSignal(false);
   const [settledSubagentsExpanded, setSettledSubagentsExpanded] = createSignal(false);
-  const [subagentDropdownPosition, setSubagentDropdownPosition] = createSignal<FlowerFloatingPoint>({ x: 0, y: 0 });
   const [permissionMenuOpen, setPermissionMenuOpen] = createSignal(false);
   const [permissionMenuActiveIndex, setPermissionMenuActiveIndex] = createSignal(0);
   const [pendingPermissionPatch, setPendingPermissionPatch] = createSignal<PendingPermissionPatch | null>(null);
@@ -1229,9 +1228,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let composerMorePanelRef: HTMLDivElement | undefined;
   let subagentTriggerRef: HTMLElement | undefined;
   let subagentDropdownRef: HTMLDivElement | undefined;
-  // Floe owns the menu entrance. The panel mounts only while open, so presence
-  // supplies the same 240ms rise/scale every other Flower menu uses.
-  const subagentDropdownPresence = createFloatingPresence({ open: () => true, element: () => subagentDropdownRef });
+  // Floe retains the anchored panel through both enter and exit transitions.
+  const subagentDropdownPresence = createFloatingPresence({ open: subagentDropdownOpen, element: () => subagentDropdownRef });
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
@@ -3057,39 +3055,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     onCleanup(() => window.removeEventListener('pointerdown', handlePointerDown, true));
   });
 
+  useOverlayMask({
+    open: subagentDropdownPresence.mounted,
+    root: () => subagentDropdownRef,
+    containsTarget: target => target instanceof Node && Boolean(subagentTriggerRef?.contains(target) || subagentDropdownRef?.contains(target)),
+    onClose: () => setSubagentDropdownOpen(false),
+    onInteractOutside: () => setSubagentDropdownOpen(false),
+    onEscapeOutside: () => closeSubagentDropdown(true),
+    lockBodyScroll: false, trapFocus: false, autoFocus: false, restoreFocus: false,
+    blockHotkeys: false, closeOnEscape: 'inside', escapeKeyPhase: 'bubble',
+  });
   createEffect(() => {
-    const dropdownOpen = subagentDropdownOpen();
-    if (!dropdownOpen) return;
-    updateSubagentDropdownPosition();
+    if (!subagentDropdownOpen()) return;
     const focusFrame = window.requestAnimationFrame(() => {
-      const firstRow = subagentDropdownRows()[0];
-      (firstRow ?? subagentDropdownRef)?.focus();
+      (subagentDropdownRows()[0] ?? subagentDropdownRef)?.focus({ preventScroll: true });
     });
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (subagentTriggerRef?.contains(target) || subagentDropdownRef?.contains(target)) {
-        return;
-      }
-      setSubagentDropdownOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setSubagentDropdownOpen(false);
-      subagentTriggerRef?.focus();
-    };
-    const onReposition = () => updateSubagentDropdownPosition();
-    window.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('resize', onReposition);
-    window.addEventListener('scroll', onReposition, true);
-    onCleanup(() => {
-      window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('resize', onReposition);
-      window.removeEventListener('scroll', onReposition, true);
-    });
+    onCleanup(() => window.cancelAnimationFrame(focusFrame));
   });
 
   createEffect(() => {
@@ -5928,15 +5909,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const updateSubagentDropdownPosition = () => {
-    const rect = subagentTriggerRef?.getBoundingClientRect();
-    if (!rect) return;
-    setSubagentDropdownPosition({
-      x: Math.max(8, rect.right - SUBAGENT_DROPDOWN_ESTIMATED_SIZE.width),
-      y: rect.bottom + 8,
-    });
-  };
-
   const subagentDropdownRows = (): HTMLButtonElement[] => (
     Array.from(subagentDropdownRef?.querySelectorAll<HTMLButtonElement>('button[data-flower-subagent-row], button[data-flower-subagent-disclosure]') ?? [])
   );
@@ -5978,7 +5950,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const openSubagents = () => {
     if (!subagentDropdownOpen()) setSettledSubagentsExpanded(false);
-    updateSubagentDropdownPosition();
     setSubagentDropdownOpen((open) => !open);
   };
 
@@ -12845,11 +12816,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </ul>
   );
   const subagentDropdown = () => (
-    <Show when={subagentDropdownOpen()}>
-      <SurfaceFloatingLayer
-        position={subagentDropdownPosition()}
-        owner={subagentTriggerRef}
-        estimatedSize={SUBAGENT_DROPDOWN_ESTIMATED_SIZE}
+    <Show when={subagentDropdownPresence.mounted()}>
+      <SurfaceAnchoredLayer
+        anchor={subagentTriggerRef}
+        gap={6}
+        onAnchorDisconnect={() => setSubagentDropdownOpen(false)}
+        style={{ 'z-index': 'var(--flower-layer-subagent-dropdown, 120)' }}
         class="flower-subagents-dropdown-layer"
         data-flower-floating-layer="true"
       >
@@ -12859,6 +12831,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           data-floe-surface="floating"
           class="flower-subagents-dropdown floe-floating-presence floe-floating-menu"
           data-floating-presence={subagentDropdownPresence.state()}
+          inert={subagentDropdownPresence.exiting()}
+          aria-hidden={subagentDropdownPresence.exiting() ? 'true' : undefined}
           role="dialog"
           aria-label={subagentsCopy().title}
           aria-modal="false"
@@ -12882,7 +12856,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedSubagentItems().length > 0}
               fallback={(
                 <div class="flower-subagents-dropdown-empty">
-                  <Bot class="h-4 w-4" />
+                  <Workflow class="h-5 w-5" aria-hidden="true" />
                   <span>{subagentsCopy().emptyTitle}</span>
                 </div>
               )}
@@ -12932,7 +12906,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
           </div>
         </div>
-      </SurfaceFloatingLayer>
+      </SurfaceAnchoredLayer>
     </Show>
   );
 
@@ -14612,7 +14586,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       label: () => copy().chat.newChat, icon: () => <Plus class="h-4 w-4" aria-hidden="true" />,
       disabled: surfaceWarmupActive, run: startCompose },
     { id: 'subagents', visible: () => true, label: subagentHeaderLabel,
-      icon: () => <Bot class="h-4 w-4" aria-hidden="true" />,
+      icon: () => <Workflow class="h-4 w-4" aria-hidden="true" />,
       run: source => { subagentTriggerRef = source; openSubagents(); } },
     { id: 'settings', visible: () => true, label: () => copy().chat.settingsLabel,
       icon: () => <Settings class="h-4 w-4" aria-hidden="true" />, run: openSettings },

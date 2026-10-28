@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { it, expect, vi } from 'vitest';
+import { it, expect, vi, onTestFinished } from 'vitest';
 import { page } from 'vitest/browser';
 import { FlowerTaskMaterials } from '../../../../flower_ui/src/FlowerTaskMaterials';
 import { messageAttachmentPath } from '../../../../flower_ui/host/messageAttachmentPath';
@@ -243,3 +243,54 @@ it('opens an image source in its historical turn even when tool steps were folde
   const target=surface.querySelector<HTMLElement>('[data-flower-message-id="source-image"]')!;
   expect(target.getBoundingClientRect().height).toBeGreaterThan(0);
 });
+
+
+for (const theme of ['light', 'dark'] as const) {
+  it('keeps long localized files and disclosure actions readable in ' + theme, async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    document.documentElement.classList.add(theme);
+    const copy = { ...taskFilesEnUS, title: '会话文件', results: '交付成果', materials: '资料', media: '会话图片',
+      working: '工作文件', preview: '预览', download: '下载', folder: '打开所在目录', available: '可用', refresh: '刷新', close: '关闭' };
+    const base = fixture();
+    const path = '/Volumes/JianDisk/code/floegence/cloudflare-security-insights-2026-10-28.html';
+    const dispose = render(() => <FlowerTaskFiles open threadID="one" onOpenChange={() => {}} copy={copy}
+      adapter={{ ...adapter(), loadTaskFiles: async () => ({ ...base, files: [
+        { ...base.files[0], title: 'Cloudflare 账号安全洞察汇总（可视化报告）', name: 'cloudflare-security-insights-2026-10-28.html', file_path: path, mime: 'text/html; charset=utf-8' },
+        { ...base.files[0], title: 'Cloudflare 安全洞察汇总（Markdown）', name: 'cloudflare-security-insights-2026-10-28.md', file_path: path.replace('.html', '.md') },
+      ] }), downloadTaskFile: async () => {}, openLinkedFilePreview: async () => {}, openLinkedDirectoryBrowser: async () => {},
+      loadTaskMaterials: async () => ({ items: [{ id: 'image', kind: 'media', name: 'Screenshot.png', mime: 'image/png', size: 5120,
+        locator: 'media:v1:' + 'a'.repeat(64), url: '', item_id: 'image', turn_id: 'turn', created_at: '2026-10-28T12:00:00Z' }] }),
+      }} />, host);
+    onTestFinished(() => { dispose(); host.remove(); document.documentElement.classList.remove(theme); });
+    await waitFor(() => Boolean(document.querySelector('.flower-task-media')));
+    const dialog = document.querySelector<HTMLElement>('.flower-task-files-dialog')!;
+    for (const width of [1280, 768, 430, 390, 320]) {
+      await page.viewport(width, 900);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const body = dialog.querySelector<HTMLElement>('.flower-task-files-content')!;
+      expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
+      const cards = [...dialog.querySelectorAll<HTMLElement>('.flower-task-file-card')];
+      const title = cards[0].querySelector<HTMLElement>('.flower-task-file-name')!;
+      expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
+      expect(dialog.textContent).not.toContain('runtime-one');
+      expect(cards[0].querySelector('.flower-task-file-path')?.getAttribute('title')).toBe(path);
+      expect(cards[0].querySelector('.flower-task-file-meta')?.textContent).not.toContain('charset');
+      expect(cards[0].querySelector('.flower-task-file-icon svg')).not.toBeNull();
+      for (const button of cards.flatMap(card => [...card.querySelectorAll('button')])) {
+        expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+        const bounds = button.getBoundingClientRect(), card = button.closest('article')!.getBoundingClientRect();
+        expect(bounds.right).toBeLessThanOrEqual(card.right);
+      }
+      const location = cards[0].querySelector<HTMLButtonElement>('button.flower-task-file-path')!;
+      location.click();
+      expect(location.getAttribute('aria-expanded')).toBe('true');
+      expect(location.querySelector('span')!.scrollWidth).toBeLessThanOrEqual(location.querySelector('span')!.clientWidth + 1);
+      location.click();
+      const disclosure = dialog.querySelector<HTMLDetailsElement>('.flower-task-media')!;
+      expect(disclosure.open).toBe(false);
+      expect(getComputedStyle(disclosure.querySelector('summary')!).listStyleType).toBe('none');
+      await page.screenshot({ element: dialog, path: '__screenshots__/files-polish-' + theme + '-' + width + '.png' });
+    }
+  });
+}

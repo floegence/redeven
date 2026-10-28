@@ -11,6 +11,55 @@ import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, subagentSummary,
 
 afterEach(() => document.documentElement.classList.remove('dark', 'light'));
 
+it('anchors the empty subagent panel to its control and retains shared exit motion', async () => {
+  await page.viewport(1280, 900);
+  const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'no-preference' }) => Promise<void> };
+  await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  const parent = thread({ thread_id: 'empty-header', subagents: [] });
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [parent],
+    loadThread: async () => liveBootstrap(parent),
+  }, { focusThreadRequest: { request_id: 'empty-header', thread_id: parent.thread_id } });
+  runtime.style.height = '800px';
+  await waitFor(() => Boolean(runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]')));
+  const trigger = runtime.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!;
+  trigger.click();
+  await waitFor(() => document.querySelector<HTMLElement>('.flower-subagents-dropdown')?.dataset.floatingPresence === 'open');
+  const panel = document.querySelector<HTMLElement>('.flower-subagents-dropdown')!;
+  await new Promise(resolve => setTimeout(resolve, 250));
+  const anchor = trigger.getBoundingClientRect(), bounds = panel.getBoundingClientRect();
+  expect(bounds.right).toBeGreaterThanOrEqual(anchor.left + anchor.width / 2);
+  expect(bounds.top - anchor.bottom).toBeGreaterThanOrEqual(0);
+  expect(bounds.top - anchor.bottom).toBeLessThanOrEqual(12);
+  await page.screenshot({ element: runtime, path: '__screenshots__/subagent-header/empty-anchored.png' });
+  await userEvent.keyboard('{Escape}');
+  expect(panel.isConnected).toBe(true);
+  expect(panel.dataset.floatingPresence).toBe('exiting');
+  expect(document.activeElement).toBe(trigger);
+  await waitFor(() => !panel.isConnected);
+  trigger.click();
+  await waitFor(() => document.querySelector<HTMLElement>('.flower-subagents-dropdown')?.dataset.floatingPresence === 'open');
+  const reopened = document.querySelector<HTMLElement>('.flower-subagents-dropdown')!;
+  document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  await waitFor(() => reopened.dataset.floatingPresence === 'exiting');
+  expect(reopened.inert).toBe(true);
+  await waitFor(() => !reopened.isConnected);
+  for (const width of [768, 390, 320]) {
+    await page.viewport(width, 900);
+    trigger.click();
+    await waitFor(() => document.querySelector<HTMLElement>('.flower-subagents-dropdown')?.dataset.floatingPresence === 'open');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const current = document.querySelector<HTMLElement>('.flower-subagents-dropdown')!;
+    const rect = current.getBoundingClientRect(), button = trigger.getBoundingClientRect();
+    expect(rect.left).toBeGreaterThanOrEqual(0);
+    expect(rect.right).toBeLessThanOrEqual(width);
+    expect(button.left + button.width / 2).toBeGreaterThanOrEqual(rect.left);
+    expect(button.left + button.width / 2).toBeLessThanOrEqual(rect.right);
+    expect(rect.top - button.bottom).toBeLessThanOrEqual(12);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => !current.isConnected);
+  }
+});
+
 for (const theme of ['light', 'dark'] as const) {
   it(`caps running portraits at three, updates overflow live and retains gray settled portraits in ${theme} mode`, async () => {
     await page.viewport(1100, 850);
