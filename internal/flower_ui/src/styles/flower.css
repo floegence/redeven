@@ -12609,9 +12609,9 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-task-count { color: var(--muted-foreground); font-size: .6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .flower-task-refresh { margin-left: auto; color: var(--muted-foreground); }
 .flower-task-files-list { display: flex; flex-direction: column; }
-.flower-task-file-row { display: flex; align-items: flex-start; gap: .75rem; min-width: 0; padding: .75rem 0; }
+.flower-task-file-row { display: flex; align-items: center; gap: .75rem; min-width: 0; padding: .625rem 0; }
 .flower-task-file-row + .flower-task-file-row { border-top: 1px solid var(--floe-line); }
-.flower-task-file-identity { display: grid; flex: 1; min-width: 0; grid-template-columns: 1.5rem minmax(0, 1fr); column-gap: .625rem; row-gap: .25rem; align-items: start; }
+.flower-task-file-identity { display: grid; flex: 1; min-width: 0; grid-template-columns: 1.5rem minmax(0, 1fr); column-gap: .625rem; align-items: center; }
 .flower-task-file-icon { display: flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; }
 .flower-task-file-heading { min-width: 0; }
 .flower-task-file-name { font-size: .8125rem; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; color: var(--foreground); }
@@ -12622,17 +12622,8 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-task-file-meta { display: flex; align-items: center; flex-wrap: wrap; column-gap: .625rem; row-gap: .125rem; padding-top: .125rem; font-size: .6875rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .flower-task-file-status[data-status='changed'] { color: var(--warning); }
 .flower-task-file-status[data-status='missing'], .flower-task-file-status[data-status='unavailable'] { color: var(--error); }
-.flower-task-file-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: .6875rem; color: var(--muted-foreground); line-height: 1.6; }
-.flower-task-file-identity > .flower-task-file-path { grid-column: 2; }
-button.flower-task-file-path { display: flex; align-items: flex-start; gap: .375rem; text-align: left; cursor: pointer; border-radius: .25rem; }
-button.flower-task-file-path > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-button.flower-task-file-path > svg { flex-shrink: 0; margin-top: .125rem; }
-button.flower-task-file-path:hover { color: var(--foreground); }
-button.flower-task-file-path:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-button.flower-task-file-path[aria-expanded='true'] > span { white-space: normal; overflow-wrap: anywhere; }
-button.flower-task-file-path[aria-expanded='true'] > svg { transform: rotate(180deg); }
 .flower-task-file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem; }
-.flower-task-file-row > .flower-task-file-actions { flex: 0 0 auto; flex-wrap: nowrap; margin-top: -.25rem; color: var(--muted-foreground); }
+.flower-task-file-row > .flower-task-file-actions { flex: 0 0 auto; flex-wrap: nowrap; color: var(--muted-foreground); }
 .flower-task-load-more { align-self: flex-start; }
 .flower-task-files-empty { padding: .625rem 0; color: var(--muted-foreground); font-size: .75rem; }
 .flower-task-working, .flower-task-media { min-width: 0; }
@@ -12646,7 +12637,6 @@ button.flower-task-file-path[aria-expanded='true'] > svg { transform: rotate(180
 .flower-task-disclosure-chevron { flex-shrink: 0; margin-left: auto; color: var(--muted-foreground); transition: transform 140ms ease; }
 .flower-task-working[open] > summary .flower-task-disclosure-chevron, .flower-task-media[open] > summary .flower-task-disclosure-chevron { transform: rotate(90deg); }
 .flower-task-disclosure-body { display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; padding: .5rem 0; }
-.flower-task-disclosure-body > .flower-task-file-path { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .flower-task-working-list { align-self: stretch; max-height: 16rem; overflow-y: auto; font-size: .75rem; }
 .flower-task-working-list > div { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: .75rem; padding: .375rem 0; border-bottom: 1px solid var(--floe-line); }
 .flower-task-working-list > div:last-child { border-bottom: 0; }
@@ -12655,14 +12645,12 @@ button.flower-task-file-path[aria-expanded='true'] > svg { transform: rotate(180
 .flower-task-files-notice .flower-task-file-actions { margin-top: .75rem; }
 @media (max-width: 480px) {
   .flower-task-files-content { padding: .625rem .875rem .875rem; }
-  .flower-task-file-row { flex-wrap: wrap; gap: .375rem; }
-  .flower-task-file-identity { flex-basis: 100%; }
-  .flower-task-file-row > .flower-task-file-actions { margin: 0 0 0 1.875rem; }
+  .flower-task-file-row { gap: .5rem; }
   .flower-task-file-identity { column-gap: .5rem; }
   .flower-task-working-list > div { column-gap: .5rem; }
 }
 @media (pointer: coarse) {
-  .flower-task-file-actions button, .flower-task-file-preview, button.flower-task-file-path { min-height: 2.75rem; }
+  .flower-task-file-actions button, .flower-task-file-preview { min-height: 2.75rem; }
   .flower-task-file-actions button { min-width: 2.75rem; }
   .flower-task-working summary, .flower-task-media summary { min-height: 2.75rem; }
 }

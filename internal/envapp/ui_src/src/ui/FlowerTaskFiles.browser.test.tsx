@@ -95,6 +95,12 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
     await waitFor(() => download.mock.calls.length === 1);
     expect(download).toHaveBeenCalledWith('one', '/project/report.html', false, expect.any(AbortSignal));
     document.querySelector<HTMLDetailsElement>('.flower-task-working')!.open = true;
+    const working = document.querySelector<HTMLElement>('.flower-task-working')!;
+    expect(working.textContent).not.toContain(fixture().working_path);
+    expect(working.querySelector('[title]')).toBeNull();
+    [...working.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim() === 'Download')!.click();
+    await waitFor(() => download.mock.calls.length === 2);
+    expect(download).toHaveBeenLastCalledWith('one', '/state/task-files/one/scratch/helper.py', true, expect.any(AbortSignal));
     for (const width of [1280, 390]) {
       await page.viewport(width, 900);
       const dialog = document.querySelector<HTMLElement>('.flower-task-files-dialog')!;
@@ -274,8 +280,15 @@ for (const theme of ['light', 'dark'] as const) {
       const cards = [...dialog.querySelectorAll<HTMLElement>('.flower-task-file-row')];
       const title = cards[0].querySelector<HTMLElement>('.flower-task-file-name')!;
       expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
+      const identityBounds = cards[0].querySelector('.flower-task-file-identity')!.getBoundingClientRect();
+      const actionsBounds = cards[0].querySelector('.flower-task-file-actions')!.getBoundingClientRect();
+      expect(actionsBounds.left).toBeGreaterThanOrEqual(identityBounds.right);
+      expect(actionsBounds.top).toBeLessThan(identityBounds.bottom);
       expect(dialog.textContent).not.toContain('runtime-one');
-      expect(cards[0].querySelector('.flower-task-file-path')?.getAttribute('title')).toBe(path);
+      expect(dialog.textContent).not.toContain(path);
+      expect(dialog.querySelector('.flower-task-file-path')).toBeNull();
+      expect([...dialog.querySelectorAll('[title], [aria-label]')].some(element =>
+        element.getAttribute('title')?.includes(path) || element.getAttribute('aria-label')?.includes(path))).toBe(false);
       expect(cards[0].querySelector('.flower-task-file-meta')?.textContent).not.toContain('charset');
       expect(cards[0].querySelector('.flower-task-file-icon svg')).not.toBeNull();
       expect(cards[0].querySelector('[data-status="available"]')).toBeNull();
@@ -294,16 +307,10 @@ for (const theme of ['light', 'dark'] as const) {
         const bounds = button.getBoundingClientRect(), card = button.closest('article')!.getBoundingClientRect();
         expect(bounds.right).toBeLessThanOrEqual(card.right);
       }
-      const location = cards[0].querySelector<HTMLButtonElement>('button.flower-task-file-path')!;
-      location.click();
-      expect(location.getAttribute('aria-expanded')).toBe('true');
-      expect(location.querySelector('span')!.scrollWidth).toBeLessThanOrEqual(location.querySelector('span')!.clientWidth + 1);
-      location.click();
       const disclosure = dialog.querySelector<HTMLDetailsElement>('.flower-task-media')!;
       expect(disclosure.open).toBe(false);
       expect(getComputedStyle(disclosure.querySelector('summary')!).listStyleType).toBe('none');
-      location.blur();
-      await page.screenshot({ element: dialog, path: '__screenshots__/files-minimal-' + theme + '-' + width + '.png' });
+      await page.screenshot({ element: dialog, path: '__screenshots__/files-clean-' + theme + '-' + width + '.png' });
     }
   });
 }

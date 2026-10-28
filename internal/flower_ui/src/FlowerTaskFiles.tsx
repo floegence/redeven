@@ -149,7 +149,7 @@ export function FlowerTaskFiles(props: {
                           onPreview={props.onPreview || props.adapter.openLinkedFilePreview ? () => void openPath(file.file_path) : undefined}
                           previewLabel={props.copy.preview} previewDisabled={file.status === 'missing' || file.status === 'unavailable'}
                           status={<Show when={file.status !== 'available'}><span class="flower-task-file-status" data-status={file.status}>{props.copy[file.status]}</span></Show>}
-                          path={file.file_path} />
+                        />
                         <div class="flower-task-file-actions">
                           <Show when={props.adapter.downloadTaskFile}>
                             <Button
@@ -194,7 +194,6 @@ export function FlowerTaskFiles(props: {
                 <ChevronRight class="flower-task-disclosure-chevron size-4" aria-hidden="true" />
               </summary>
               <div class="flower-task-disclosure-body">
-                <p class="flower-task-file-path" title={value().working_path}>{value().working_path}</p>
                 <div class="flower-task-working-list">
                   <For each={value().working ?? []}>
                     {(file) => (

@@ -51,9 +51,11 @@ Deliverables and materials have counted section headings; conversation images
 and working files use keyboard-operable, initially collapsed disclosures. Flat
 rows prioritize clickable file titles, compact type/size and exceptional
 availability states; successful availability does not add a badge. Raw MIME
-parameters and internal endpoint IDs do not occupy primary reading space. Paths
-remain in the DOM with full-path tooltips and click/tap expansion; long titles wrap and whole actions
-reflow at phone widths. The filename is the preview action; always-visible,
+parameters and internal endpoint IDs do not occupy primary reading space. Absolute
+file paths and the working-directory address are not rendered, including tooltips
+and expansion controls. Canonical paths remain action inputs for previews,
+downloads and folder navigation. Long titles wrap while icon actions stay beside
+the file identity at phone widths. The filename is the preview action; always-visible,
 accessibly named icon controls provide downloads, folder navigation and source
 messages. Counts are plain text and file icons have no backing tile. A single
 header close control replaces a redundant footer; refresh sits beside the first
