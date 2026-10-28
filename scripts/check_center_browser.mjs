@@ -209,6 +209,122 @@ async function verifyAttachmentPicker(page) {
   await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
   await verifyRuntimeWorkspace(page, false);
 }
+async function verifyNativeDownloadPicker(page, bundle) {
+  if (engine !== 'chromium' || process.env.REDEVEN_CENTER_HEADED !== '1' || !reportDir) throw new Error('Native save qualification requires visible Chrome and a report directory');
+  const permissionDirectory = path.join(temporary, 'permission-download');
+  const qualifyPermissions = process.env.REDEVEN_CENTER_NATIVE_SAVE_PERMISSIONS === '1';
+  if (qualifyPermissions) await mkdir(permissionDirectory, { mode: 0o700 });
+  await page.addScriptTag({ path: bundle });
+  const probe = await page.evaluate(async () => {
+    window.centerDownloadProbe = await GatewayAcceptance.createNativeDownloadProbe();
+    const { home, name, content } = window.centerDownloadProbe;
+    return { home, name, content };
+  });
+  try {
+    await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+    await page.locator('nav[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'File Browser', exact: true }).click();
+    await page.getByTitle('Go to path', { exact: true }).filter({ visible: true }).last().click();
+    const pathInput = page.getByRole('textbox', { name: 'Go to path', exact: true });
+    await pathInput.fill(probe.home);
+    await pathInput.press('Enter');
+    const file = page.getByText(probe.name, { exact: true }).filter({ visible: true }).last();
+    await file.waitFor({ timeout: 30000 });
+    await file.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Download', exact: true }).waitFor();
+    await page.evaluate(qualifyPermissions => {
+      if (typeof window.showSaveFilePicker !== 'function') throw new Error('Native save picker is unavailable');
+      document.title = 'Redeven Center native save acceptance';
+      window.centerNativeSave = [];
+      window.centerNativeSaveContinue = false;
+      const picker = window.showSaveFilePicker.bind(window);
+      // Observe the real browser promise without replacing its result or errors.
+      window.showSaveFilePicker = async (...args) => {
+        const result = { state: 'pending' };
+        window.centerNativeSave.push(result);
+        try {
+          const handle = await picker(...args);
+          result.state = 'selected';
+          // Let the OS owner revoke access before the production sink opens
+          // its writable. The real browser handle/error remains untouched.
+          if (qualifyPermissions && window.centerNativeSave.length === 3) {
+            await new Promise(resolve => {
+              const timer = setInterval(() => {
+                if (window.centerNativeSaveContinue) { clearInterval(timer); resolve(); }
+              }, 20);
+            });
+          }
+          return handle;
+        } catch (error) {
+          result.state = 'rejected';
+          result.error = error.name;
+          throw error;
+        }
+      };
+    }, qualifyPermissions);
+    await page.bringToFront();
+    const destination = path.join(reportDir, 'native-center-download.txt');
+    await writeFile(path.join(reportDir, 'native-save-ready.json'), JSON.stringify({ status: 'waiting_for_download_then_cancel', origin: new URL(page.url()).origin }));
+    await page.waitForFunction(() => window.centerNativeSave[0]?.state === 'rejected', undefined, { timeout: 180000 });
+    const canceled = await page.evaluate(() => window.centerNativeSave[0]);
+    if (canceled.error !== 'AbortError') throw new Error('Native cancellation did not reject with AbortError');
+    await page.getByRole('button', { name: 'Downloads', exact: true }).filter({ visible: true }).last().click();
+    const task = page.locator('[data-download-task-id]').filter({ hasText: probe.name });
+    await until(async () => await task.getAttribute('data-download-task-status') === 'canceled', 'Native save cancellation did not reach canceled state');
+    if (!await task.getByRole('button', { name: 'Retry', exact: true }).isEnabled()) throw new Error('Canceled download cannot retry');
+    const taskID = await task.getAttribute('data-download-task-id');
+    const original = page.locator('[data-download-task-id="' + taskID + '"]');
+    await writeFile(path.join(reportDir, 'native-save-retry-ready.json'), JSON.stringify({ status: 'waiting_for_retry_then_save', destination }));
+    await page.waitForFunction(() => window.centerNativeSave[1]?.state === 'selected', undefined, { timeout: 180000 });
+    const retried = page.locator('[data-download-task-id]:not([data-download-task-id="' + taskID + '"])').filter({ hasText: probe.name });
+    await until(async () => await retried.getAttribute('data-download-task-status') === 'completed', 'Native save retry did not complete');
+    const actual = await readFile(destination);
+    const expected = Buffer.from(probe.content);
+    if (!actual.equals(expected) || await original.getAttribute('data-download-task-status') !== 'canceled' || await task.count() !== 2) throw new Error('Native save retry lost canceled history or changed file bytes');
+    const outcomes = await page.evaluate(() => window.centerNativeSave);
+    if (outcomes.length !== 2) throw new Error('Unexpected native save picker invocation count');
+    const result = { scope: 'Actual File Browser Download action and native macOS save dialog cancellation, Retry retains canceled history and saves exact bytes in a new attempt', outcomes, bytes: actual.length, sha256: createHash('sha256').update(actual).digest('hex'), canceledHistoryPreserved: true };
+    report.cases.push(result);
+    await writeFile(path.join(reportDir, 'native-save-complete.json'), JSON.stringify(result));
+    if (qualifyPermissions) {
+      const rejectedDestination = path.join(permissionDirectory, 'permission-denied.txt');
+      const recoveredDestination = path.join(permissionDirectory, 'permission-recovered.txt');
+      const before = await task.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-download-task-id')));
+      await writeFile(path.join(reportDir, 'native-permission-ready.json'), JSON.stringify({ status: 'retry_canceled_task_then_save', destination: rejectedDestination }));
+      await page.waitForFunction(() => window.centerNativeSave[2]?.state === 'selected', undefined, { timeout: 180000 });
+      await chmod(permissionDirectory, 0o500);
+      await page.evaluate(() => { window.centerNativeSaveContinue = true; });
+      const failed = page.locator('[data-download-task-status="failed"]').filter({ hasText: probe.name });
+      try {
+        await failed.waitFor({ timeout: 20000 });
+        if (before.includes(await failed.getAttribute('data-download-task-id')) || !await failed.getByRole('button', { name: 'Retry', exact: true }).isEnabled()) throw new Error('Permission failure did not retain a new retryable attempt');
+        await failed.getByText(/could not be modified due to the state of the underlying filesystem/).waitFor();
+        if (await runtimeStatus(page) !== 200) throw new Error('Local write denial changed Runtime authority');
+      } finally {
+        await chmod(permissionDirectory, 0o700);
+      }
+      await writeFile(path.join(reportDir, 'native-permission-retry-ready.json'), JSON.stringify({ status: 'retry_failed_task_then_save', destination: recoveredDestination }));
+      await page.waitForFunction(() => window.centerNativeSave[3]?.state === 'selected', undefined, { timeout: 180000 });
+      const completed = page.locator('[data-download-task-status="completed"]').filter({ hasText: probe.name });
+      await until(async () => await completed.count() === 2, 'Permission recovery did not complete the retry');
+      const recovered = await readFile(recoveredDestination);
+      if (!recovered.equals(expected) || await failed.count() !== 1 || await original.getAttribute('data-download-task-status') !== 'canceled') throw new Error('Permission retry changed content or prior outcomes');
+      report.cases.push({ scope: 'Actual OS directory write permission revoked after native selection; production createWritable fails, filesystem error detail and Retry remain available, restoring access saves exact bytes', revokedMode: '0500', restoredMode: '0700', bytes: recovered.length, sha256: createHash('sha256').update(recovered).digest('hex'), canceledAndFailedHistoryPreserved: true, browserPermissionRevocationQualified: false });
+    }
+    if (reportDir) await page.screenshot({ path: path.join(reportDir, engine + '-download-complete.png'), fullPage: true });
+    await rm(destination);
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
+    await verifyRuntimeWorkspace(page, false);
+  } finally {
+    try { await page.evaluate(() => window.centerDownloadProbe.close()); } finally {
+      if (qualifyPermissions) {
+        await chmod(permissionDirectory, 0o700);
+        await rm(permissionDirectory, { recursive: true });
+      }
+      await rm(path.join(reportDir, 'native-center-download.txt'), { force: true });
+    }
+  }
+}
 async function checkAccessibility(page) {
   await page.evaluate(await readFile(path.join(root, 'internal/envapp/ui_src/node_modules/axe-core/axe.min.js'), 'utf8'));
   const violations = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(item => ({ id: item.id, impact: item.impact, nodes: item.nodes.map(node => node.target) })));
@@ -463,6 +579,7 @@ try {
       report.cases.push(await environment.evaluate(() => GatewayAcceptance.verifyAttachmentUpload()));
       await verifyAttachmentPicker(environment);
     }
+    if (index === 0 && process.env.REDEVEN_CENTER_NATIVE_SAVE === '1') await verifyNativeDownloadPicker(environment, bundled);
     const cookies = await context.cookies(target.origin);
     if (cookies.some(cookie => cookie.domain !== new URL(target.origin).hostname || !cookie.secure)) throw new Error('Cookies escaped environment HTTPS host');
     if (reportDir) await environment.screenshot({ path: path.join(reportDir, engine + '-runtime-' + index + '.png'), fullPage: true });

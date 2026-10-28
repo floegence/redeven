@@ -274,6 +274,34 @@ export async function verifyWebEntryServices(): Promise<string[]> {
 }
 
 
+export async function createNativeDownloadProbe() {
+  const { current } = await openRuntimeSession();
+  const rpc = async (type: number, payload: JsonValue) => {
+    const result = await current.rpc.call(type, payload, value => value, { signal: AbortSignal.timeout(10000) });
+    if (!result.ok) throw new Error('Download probe RPC rejected: ' + type + ' ' + result.error.code);
+    return result.payload as Record<string, JsonValue>;
+  };
+  try {
+    const owner = await rpc(1010, {});
+    const home = String(owner.agent_home_path_abs);
+    const name = 'center-download-' + crypto.randomUUID() + '.txt';
+    const path = home + '/' + name;
+    const content = 'Center native download integrity λ 中\n'.repeat(1024);
+    await rpc(1003, { path, content, encoding: 'utf8' });
+    return { home, name, content, async close() {
+      // Native picker interaction can outlive an idle fixture connection.
+      // Acquire fresh authority for cleanup instead of retaining that lease.
+      const { current: cleanup } = await openRuntimeSession();
+      try {
+        const result = await cleanup.rpc.call(1006, { path }, value => value, { signal: AbortSignal.timeout(10000) });
+        if (!result.ok) throw new Error('Download probe cleanup rejected: ' + result.error.code);
+      } finally { await cleanup.close(); }
+    } };
+  } finally {
+    await current.close();
+  }
+}
+
 export async function createManualInputProbe() {
   const { current } = await openRuntimeSession();
   const rpc = async (type: number, payload: JsonValue) => {
