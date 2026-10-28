@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -25,6 +26,74 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/settings"
 )
+
+// Inject one wire result without replacing the production adapter, discovery,
+// readiness, resource ownership or cancellation implementation.
+type qualificationReadFaultTransport struct {
+	http.RoundTripper
+	scenario         string
+	injected, inputs *atomic.Int32
+	ready            atomic.Bool
+}
+
+func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	var command struct {
+		Method string
+		Params struct{ Request playwrightTargetRequest }
+	}
+	if request.GetBody != nil {
+		body, err := request.GetBody()
+		if err != nil {
+			return nil, err
+		}
+		err = json.NewDecoder(body).Decode(&command)
+		_ = body.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	call := command.Params.Request
+	action := call.Args["action"]
+	if command.Method == "source.tool" && f.injected.Load() > 0 && action == "key" {
+		f.inputs.Add(1)
+	}
+	response, err := f.RoundTripper.RoundTrip(request)
+	if err != nil || command.Method != "source.tool" {
+		return response, err
+	}
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	var reply struct {
+		ID     string
+		Error  string
+		Result playwrightTargetResponse
+	}
+	if err = json.Unmarshal(body, &reply); err != nil {
+		return nil, err
+	}
+	if reply.Error == "" && reply.Result.Error == "" {
+		if action == "click" && reply.Result.Result["action_executed"] == true {
+			f.ready.Store(true)
+		}
+		wanted := f.scenario == "missing_snapshot" && call.ToolName == "computer.observe" || f.scenario == "missing_text" && action == "text" || f.scenario == "missing_wait" && action == "wait"
+		if f.ready.Load() && wanted && f.injected.CompareAndSwap(0, 1) {
+			reply.Result.Result = map[string]any{"action_executed": false, "observation_invalidated": true}
+			reply.Result.Safety = &InteractionSafetyDecision{Level: "routine", SafeToCapture: false, SafeToSendToModel: false}
+			reply.Result.Screenshot = nil
+			// Preserve the host's lowercase framing and exact invocation IDs.
+			body, err = json.Marshal(map[string]any{"id": reply.ID, "result": reply.Result})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	response.Body = io.NopCloser(bytes.NewReader(body))
+	response.ContentLength = int64(len(body))
+	return response, nil
+}
 
 // Paid acceptance uses the production Service, provider, tool registry and
 // installed Chromium. Only the website and task-owned state are fixtures.
@@ -102,7 +171,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -216,6 +285,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				profileDirectory := t.TempDir()
 				runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, profileDirectory)}, t.TempDir())
 				configureBrowserFixture(t, runtime)
+				var injected, blockedInputs atomic.Int32
 				var nativeName string
 				var nativeFacts func() map[string]any
 				if scenario == "native_entry" {
@@ -281,6 +351,27 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "read_failure_recovery":
+					prompt = "Run this read diagnostic exactly once: const root=(await ui.snapshot({emit:false})).nodes.find(n=>n.role==='document'); await ui.ref(root.ref).text(); . A document root is not a rendered element. Do not catch or replace the read. Report its actual error, then in a separate computer.exec read the region named Scrollable with locator.text and capture a screenshot. Do not click, key, navigate, or use terminal/network tools."
+				case "excess_click":
+					prompt = "Run this intentional unsupported-argument diagnostic exactly once: await ui.getByRole('button',{name:'Save once',exact:true}).click({force:true}); . Do not remove the option or catch the failure. Report the returned diagnostic, then observe Save status in a separate call. Do not save or click again."
+				case "excess_screenshot":
+					prompt = "Run await ui.screenshot({emit:false}) exactly once as an intentional diagnostic. Do not remove the argument or catch the failure. Report the returned diagnostic, then capture one screenshot using the documented signature in a separate call. Do not input anything."
+				case "excess_key":
+					prompt = "Run await ui.key('Enter',{unsupported:true}) exactly once as an intentional diagnostic, without catching it. Report the returned diagnostic, then read the page in a separate call. Do not press any key again."
+				case "excess_image":
+					prompt = "Run this intentional diagnostic exactly once: const image=await ui.screenshot(); await image.click(4,4,{force:true}); . Do not remove the extra argument or catch the failure. Report its returned diagnostic, then observe the page in a separate call. Do not click again."
+				case "missing_snapshot", "missing_text", "missing_wait":
+					read := "await ui.snapshot({emit:false});"
+					if scenario == "missing_text" {
+						read = "await ui.getByRole('region',{name:'Scrollable',exact:true}).text();"
+					}
+					if scenario == "missing_wait" {
+						read = "await ui.getByRole('button',{name:'Save once',exact:true}).requireState({state:'visible',timeout_ms:0});"
+					}
+					prompt = "Run this fixture diagnostic exactly once as one computer.exec without changing statements or catching errors: await ui.getByRole('button',{name:'Save once',exact:true}).click(); " + read + " await ui.key('PageDown'); . Report actual completed_actions and failure. Then inspect Save status in a separate call. Never repeat the save or key."
+				case "empty_values":
+					prompt = "Run this read-only contract diagnostic: const empty=ui.getByRole('button',{name:'Absent fixture button',exact:true}); log({empty_items:(await empty.query()).items,empty_count:await empty.count(),null_attribute:await ui.getByRole('button',{name:'Save once',exact:true}).attribute('title'),empty_text:await ui.getByRole('status',{name:'Save status',exact:true}).text()}); . Report the returned values. Do not click or input anything."
 				case "observation_capture":
 					prompt = "Run exactly one computer.exec containing: for(let i=0;i<4;i++) await ui.key('PageDown'); await ui.screenshot(); . Do not add waits or repeat any key. Report the tool's observation_status and needs_observation."
 				case "frame_refs":
@@ -292,7 +383,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "native_entry":
 					prompt = "Open the installed native application named " + nativeName + " using Computer Use discovery and selection. Enter exactly Flash 1017 in Acceptance code, click Confirm exactly once, read the resulting confirmation and capture a screenshot. This is a disposable acceptance app; do not touch any other application."
 				case "mixed_download":
-					prompt = "Export Orchid domains exactly once from the selected page. Save the exact completed download through browser.saveDownload, then use a terminal script to calculate total divided by count and save that result as acceptance-ratio.txt in the selected project directory. Inspect the file and report its absolute path. Use the normal tools available; do not fetch the export URL outside the browser or switch accounts."
+					prompt = "Export Orchid domains exactly once from the selected page. Save the exact completed download through browser.saveDownload, then use a terminal script to calculate total divided by count and save that result as acceptance-ratio.txt in the selected project directory. Inspect the file and report its absolute path. Use the normal tools available, restricted to this fixture, the selected project and task scratch directory. Do not inspect personal directories, fetch the export URL outside the browser or switch accounts."
 				case "bounded_read":
 					prompt = "Use ui.help('read') and locator.text() to read visible text of the region named Scrollable, then log its text, truncated and scope. Do not click, scroll, navigate or use shell/network tools."
 				case "repair_limit":
@@ -331,6 +422,13 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Observe the selected page, then scroll the region named Scrollable downward by 80 pixels using locator.scroll. Log its scroll_progress with before, after and measurement. Observe afterwards and report what was measured; do not assume unchanged means failure."
 				case "condition_wait":
 					prompt = "Wait for the Ready button to become enabled using locator.waitFor({state:'enabled',timeout_ms:5000}). Log the returned state and read the button. Do not click any buttons. Report the observed enabled state."
+				}
+
+				if strings.HasPrefix(scenario, "missing_") {
+					client := runtime.browserHost.client
+					transport := client.Transport
+					client.Transport = &qualificationReadFaultTransport{RoundTripper: transport, scenario: scenario, injected: &injected, inputs: &blockedInputs}
+					defer func() { client.Transport = transport }()
 				}
 
 				ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
@@ -446,6 +544,11 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				report["pointer_clicks"] = pointerClicks.Load()
 				report["typed_value"] = typedValue.Load()
 				report["surface"] = "production_default"
+				report["injected_read_failures"] = injected.Load()
+				report["inputs_after_failed_read"] = blockedInputs.Load()
+				if strings.HasPrefix(scenario, "missing_") {
+					report["scope"] = "real-provider-real-browser-single-read-fault-injection"
+				}
 				if scenario == "wait_default" {
 					report["surface"] = "explicit_legacy_consumer"
 				}
@@ -480,6 +583,69 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "read_failure_recovery":
+					failure, read, captured := false, false, false
+					for _, fact := range confirmedToolFacts {
+						if fact["script_error"] == "TARGET_OBSERVATION_UNAVAILABLE" && fact["failed_action"] == "text" && fact["action_executed"] == false {
+							failure = true
+						}
+						if failure {
+							for _, action := range toAnySlice(fact["completed_actions"]) {
+								read = read || action == "text"
+								// A later guest error does not undo a confirmed screenshot.
+								captured = captured || action == "screenshot" && fact["observation_status"] == "current"
+							}
+						}
+					}
+					report["recovery_read_confirmed"], report["recovery_screenshot_confirmed"] = read, captured
+					if !failure || !read || !captured || pointerClicks.Load() != 0 || submissions.Load() != 0 {
+						t.Errorf("read failure/recovery: failure=%v read=%v screenshot=%v clicks=%d saves=%d", failure, read, captured, pointerClicks.Load(), submissions.Load())
+					}
+				case "excess_click", "excess_screenshot", "excess_key", "excess_image":
+					method := map[string]string{"excess_click": "locator.click", "excess_screenshot": "ui.screenshot", "excess_key": "ui.key", "excess_image": "image.click"}[scenario]
+					verified := false
+					for _, fact := range confirmedToolFacts {
+						d, _ := fact["diagnostic"].(map[string]any)
+						verified = verified || fact["script_error"] == "SCRIPT_ARGUMENT_ERROR" && d["method"] == method
+					}
+					if !verified || submissions.Load() != 0 || pointerClicks.Load() != 0 {
+						t.Errorf("excess argument not rejected: method=%s verified=%v saves=%d clicks=%d", method, verified, submissions.Load(), pointerClicks.Load())
+					}
+				case "missing_snapshot", "missing_text", "missing_wait":
+					verified := false
+					for _, fact := range confirmedToolFacts {
+						if fact["script_error"] != "TARGET_OBSERVATION_UNAVAILABLE" {
+							continue
+						}
+						actions := toAnySlice(fact["completed_actions"])
+						verified = len(actions) == 1 && actions[0] == "click" && fact["failed_operation_index"] == float64(1) && fact["action_executed"] == true
+					}
+					// Recovery task completion is a separate model outcome. The tool
+					// contract is established by dispatch facts and fixture effects.
+					report["recovery_status_observed"] = strings.Contains(text, "Saved once")
+					report["read_contract_passed"] = injected.Load() == 1 && blockedInputs.Load() == 0 && verified && submissions.Load() == 1
+					if report["read_contract_passed"] != true {
+						t.Errorf("read failure contract: injected=%d subsequent_inputs=%d verified=%v saves=%d", injected.Load(), blockedInputs.Load(), verified, submissions.Load())
+					}
+				case "empty_values":
+					verified := false
+					for _, fact := range confirmedToolFacts {
+						for _, line := range toAnySlice(fact["logs"]) {
+							for _, value := range toAnySlice(line) {
+								values, ok := value.(map[string]any)
+								if !ok {
+									continue
+								}
+								items, itemsOK := values["empty_items"].([]any)
+								attr, hasAttr := values["null_attribute"]
+								text, _ := values["empty_text"].(map[string]any)
+								verified = verified || itemsOK && len(items) == 0 && values["empty_count"] == float64(0) && hasAttr && attr == nil && text["text"] == "" && text["truncated"] == false
+							}
+						}
+					}
+					if !verified || submissions.Load() != 0 || pointerClicks.Load() != 0 {
+						t.Errorf("legitimate empty values not verified: %v", scriptErrors)
+					}
 				case "observation_capture", "frame_refs":
 					verified := false
 					for _, fact := range confirmedToolFacts {

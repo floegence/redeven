@@ -13,7 +13,11 @@ func TestComputerApprovedFileURLIsTemporaryAndBoundToTargetLease(t *testing.T) {
 	var calls []TargetToolCall
 	runtime.executors["browser-main"] = scriptTestExecutor{func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 		calls = append(calls, call)
-		return TargetToolResult{Result: map[string]any{"action_executed": call.ToolName == "browser.navigate"}}, nil
+		result := map[string]any{"action_executed": call.ToolName == "browser.navigate"}
+		if call.ToolName == "computer.observe" {
+			result["observation"] = semanticTestTree()
+		}
+		return TargetToolResult{Result: result}, nil
 	}}
 	url := "file:///tmp/animation.html"
 	args, _ := json.Marshal(map[string]any{"url": url})

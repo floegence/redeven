@@ -69,6 +69,29 @@ request carries batch metadata into the host handler; a multiple-call batch retu
 paired INVALID_REQUEST feedback before any target operation. It does not stop the
 turn, replay input, change target binding or disable unrelated tool concurrency.
 
+## Successful reads and argument counts
+All guest methods, including image and download-cursor methods, validate explicit
+minimum/maximum argument counts before dispatch. Existing type and option
+validation remains authoritative; extra arguments return SCRIPT_ARGUMENT_ERROR
+with a closed method and documented_arity diagnostic. Valid signatures do not change.
+
+Runtime requires the promised result for semantic observations, node/text/collection/
+attribute reads and condition waits. Missing or invalidated reads fail through the
+existing observation-error boundary, seal the invocation and retain completed
+input without replay. Empty arrays, empty text, zero counts and null attributes
+remain valid data. Snapshot projection never fills absent observations with an
+empty tree. A confirmed action may invalidate an old observation and still be
+followed by an explicit fresh read. A documented wait timeout remains a result;
+requireState turns it into CONDITION_TIMEOUT. Takeovers and target changes keep
+their existing control boundaries.
+
+The browser controller routes node/text/query/table/attribute/condition reads
+through one observation boundary, including direct lower-level read exceptions.
+It supplies the required semantic_read failure stage, retains the live source,
+and uses the existing bounded read retry only; inputs never enter that retry.
+A rejected read cannot become a malformed transport response that disconnects
+the target. A later explicitly requested read can recover on the same page.
+
 ## Observation and references
 The [semantic snapshot contract](computer-use-semantics.md) owns schema v2, role normalization, tree validation, states, relationships and privacy projection. `ui.getByRole(role, {name?, exact?, root_ref?})` uses a canonical role.
 

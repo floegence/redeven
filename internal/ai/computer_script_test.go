@@ -61,7 +61,11 @@ func TestComputerScriptNamespaceLifetimeAndPartialResult(t *testing.T) {
 		if calls == 3 {
 			return TargetToolResult{}, computerTargetFailure(call, "STALE_REFERENCE")
 		}
-		return TargetToolResult{Result: map[string]any{"action_executed": computerCallMutates(call)}}, nil
+		result := map[string]any{"action_executed": computerCallMutates(call)}
+		if call.ToolName == "computer.observe" {
+			result["observation"] = map[string]any{"semantic_schema_version": 2, "document_id": "fixture:1", "nodes": []any{}, "truncated": false}
+		}
+		return TargetToolResult{Result: result}, nil
 	})
 	first, err := executeTestScript(t.Context(), runtime, call, `globalThis.count = 10; await ui.observe(); log(count);`)
 	if err != nil || first.Result.(map[string]any)["action_executed"] != false {
@@ -435,7 +439,7 @@ func TestComputerScriptHelpAndStrictWaitPreserveEffects(t *testing.T) {
 		var input map[string]any
 		_ = json.Unmarshal(c.Arguments, &input)
 		if input["action"] == "wait" {
-			return TargetToolResult{Result: map[string]any{"state": "timeout"}}, nil
+			return TargetToolResult{Result: map[string]any{"state": "timeout", "requested_state": "visible"}}, nil
 		}
 		return TargetToolResult{Result: map[string]any{"action_executed": true}}, nil
 	})
@@ -479,7 +483,7 @@ func TestComputerScriptCompactSnapshotAndNativeCapability(t *testing.T) {
 
 func TestComputerScriptReferenceDiagnosticReportsContextReset(t *testing.T) {
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
-		return TargetToolResult{Result: map[string]any{}}, nil
+		return TargetToolResult{Result: map[string]any{"observation": map[string]any{"semantic_schema_version": 2, "document_id": "fixture:1", "nodes": []any{}, "truncated": false}}}, nil
 	})
 	result, err := executeTestScript(t.Context(), runtime, call, "globalThis.pages=[1,2,3];\nawait ui.observe();\nsetTimeout(()=>{},1)")
 	if err == nil {
@@ -528,7 +532,7 @@ func TestComputerScriptFailureDiscardsDormantPromise(t *testing.T) {
 	calls := 0
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
 		calls++
-		return TargetToolResult{Result: map[string]any{}}, nil
+		return TargetToolResult{Result: map[string]any{"observation": map[string]any{"semantic_schema_version": 2, "document_id": "fixture:1", "nodes": []any{}, "truncated": false}}}, nil
 	})
 	result, err := executeTestScript(t.Context(), runtime, call, `globalThis.wake=undefined; new Promise(resolve=>{globalThis.wake=resolve}).then(()=>ui.click(1,2)); missingSymbol();`)
 	if err == nil || result.Result.(map[string]any)["context_reset"] != true {
@@ -591,7 +595,7 @@ func TestComputerScriptScreenshotInvalidationPreservesRecoveryFacts(t *testing.T
 	})
 	result, err := executeTestScript(t.Context(), rt, call, "await ui.screenshot();")
 	p := result.Result.(map[string]any)
-	if err != nil || p["observation_invalidated"] != true || p["needs_observation"] != true {
+	if err == nil || p["completed"] != false || p["script_error"] != "TARGET_OBSERVATION_UNAVAILABLE" || p["observation_invalidated"] != true || p["needs_observation"] != true {
 		t.Fatalf("unexpected: %#v %v", p, err)
 	}
 }

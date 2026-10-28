@@ -5,7 +5,7 @@ import { mkdtemp, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createComputerScript } from './redevenComputerScript.mjs';
+import { createComputerScript, computerScriptMethods } from './redevenComputerScript.mjs';
 
 test('one invocation combines page navigation, loops, conditional reads and a final screenshot', async () => {
   const script = await createComputerScript();
@@ -41,7 +41,7 @@ test('download byte reads validate ranges before dispatch', async () => {
 test('budget and closed argument diagnostics describe repair', async () => {
   const script = await createComputerScript();
   try {
-    const r = await script.execute('log(ui.budget()); await ui.snapshot(); log(ui.budget());', async () => ({}));
+    const r = await script.execute('log(ui.budget()); await ui.snapshot(); log(ui.budget());', async () => ({observation:{nodes:[]}}));
     assert.equal(r.logs[0][0].remaining_operations, 50);
     assert.equal(r.logs[1][0].remaining_operations, 49);
     assert.ok(r.logs[1][0].remaining_ms <= r.logs[0][0].remaining_ms);
@@ -260,3 +260,23 @@ test('caught invalid arguments seal later input and native waits reject browser 
   }finally{script.dispose();}
  }
 });
+
+for (const [owner,methods] of Object.entries(computerScriptMethods)) {
+  for(const [method,[min,max]] of Object.entries(methods)) {
+    test(owner+'.'+method+' rejects undocumented argument counts before dispatch',async()=>{
+      const script=await createComputerScript();
+      const target={ui:'ui',locator:"ui.ref('known')",browser:'browser',image:'image',downloadCursor:'cursor'}[owner];
+      try {
+        if(owner==='image') await script.execute('globalThis.image=await ui.screenshot();',async()=>({frame_geometry:{frame:'f',document_id:'d'}}));
+        if(owner==='downloadCursor') await script.execute('globalThis.cursor=await browser.downloadCursor();',async()=>({cursor:'c'}));
+        for(const count of [max+1,...(min?[min-1]:[])]) {
+          await assert.rejects(script.execute(target+'.'+method+'('+Array(count).fill('null').join(',')+');',async()=>assert.fail('invalid arguments dispatched')),error=>{
+            assert.equal(error.result.diagnostic.method,owner+'.'+method);
+            assert.equal(error.result.diagnostic.expected,'documented_arity');
+            return true;
+          });
+        }
+      } finally {script.dispose();}
+    });
+  }
+}

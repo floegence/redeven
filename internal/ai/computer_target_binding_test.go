@@ -17,6 +17,9 @@ type bindingTestExecutor struct {
 
 func (e *bindingTestExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
 	result, err := e.recordingTargetExecutor.ExecuteTargetTool(ctx, call)
+	if call.ToolName == "computer.observe" {
+		result.Result.(map[string]any)["observation"] = semanticTestTree()
+	}
 	if call.ToolName == "computer.screenshot" && len(e.frameBytes) > 0 {
 		attachment := e.frameAttachment
 		attachment.ResourceRef = "computer://" + call.TargetID + "/" + attachment.SHA256

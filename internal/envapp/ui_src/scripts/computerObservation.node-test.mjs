@@ -127,7 +127,7 @@ test('required wait failure retains its operation and condition without conditio
   try {
     await assert.rejects(script.execute("await ui.snapshot(); try { await ui.ref('r').requireState({state:'text',equals:'private-value',timeout_ms:0}); } catch {} await ui.type('must not run');",async op=>{
       assert.notEqual(op.action,'type');
-      return op.action==='wait'?{state:'timeout'}:{};
+      return op.action==='wait'?{state:'timeout',requested_state:'text'}:{observation:{nodes:[],document_id:'fixture',truncated:false}};
     }),error=>{
       assert.equal(error.result.diagnostic.code,'CONDITION_TIMEOUT');
       assert.equal(error.result.diagnostic.method,'locator.requireState');

@@ -514,9 +514,19 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		}
 	}
 	payload, _ := result.Result.(map[string]any)
-	invalidatedFrame := result.TargetID == call.TargetID && payload["observation_invalidated"] == true && len(result.Attachments) == 0 && len(result.frameBytes) == 0 && result.Safety != nil && result.Safety.Level == "routine" && !result.Safety.SafeToCapture && !result.Safety.SafeToSendToModel
 	if result.Safety != nil && (!result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel) {
 		result.Attachments, result.frameBytes = nil, nil
+	}
+	if err == nil && !takeoverResult(result, err) && !computerReadResultValid(call, result) {
+		stage := "semantic_read"
+		if call.ToolName == "computer.screenshot" {
+			stage = "capture"
+		}
+		failed, failure := computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": stage}, result.ExecutionLocation)
+		if payload["observation_invalidated"] == true {
+			failed.Result.(map[string]any)["observation_invalidated"] = true
+		}
+		return failed, failure
 	}
 	if err == nil && (result.Safety == nil || result.Safety.SafeToSendToModel) {
 		if semanticErr := normalizeComputerSemanticResult(&result); semanticErr != nil {
@@ -524,7 +534,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			return computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": "semantic_read"}, result.ExecutionLocation)
 		}
 	}
-	if err == nil && !takeoverResult(result, err) && call.ToolName == "computer.screenshot" && !invalidatedFrame && (result.TargetID != call.TargetID || len(result.Attachments) != 1 || !strings.HasPrefix(result.Attachments[0].ResourceRef, "computer://"+call.TargetID+"/") || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
+	if err == nil && !takeoverResult(result, err) && call.ToolName == "computer.screenshot" && payload["target_changed"] != true && (result.TargetID != call.TargetID || len(result.Attachments) != 1 || !strings.HasPrefix(result.Attachments[0].ResourceRef, "computer://"+call.TargetID+"/") || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
 		return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
 	}
 	if err == nil && len(result.Attachments) > 0 {

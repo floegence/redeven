@@ -3,6 +3,15 @@ import { getQuickJS } from 'quickjs-emscripten';
 
 // The guest receives JSON capabilities, never Node, Playwright, CDP or native
 // objects. This process is disposable; the Runtime owns its lifetime and IPC.
+// Explicit arity includes optional/default parameters; function.length cannot.
+export const computerScriptMethods = Object.freeze({
+  ui: {budget:[0,0],observe:[0,1],snapshot:[0,1],screenshot:[0,0],help:[0,1],type:[1,1],doubleClick:[2,2],scroll:[1,2],scrollAt:[3,4],getByRole:[1,2],ref:[1,1],click:[2,3],drag:[4,6],key:[1,1],assert:[1,2]},
+  locator: {node:[0,0],snapshot:[0,1],read:[0,0],text:[0,0],query:[0,1],count:[0,0],rows:[0,1],attribute:[1,1],linkSummary:[0,0],getAttribute:[1,1],click:[0,0],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
+  browser: {navigate:[1,1],back:[0,0],reload:[0,0],saveDownload:[1,1],readDownload:[1,2],downloadCursor:[0,0],waitForDownload:[0,1]},
+  image: {click:[2,2],doubleClick:[2,2],drag:[4,5],scroll:[3,4]},
+  downloadCursor: {wait:[0,1]},
+});
+
 export async function createComputerScript({ browser = true } = {}) {
   const engine = await getQuickJS();
   const runtime = engine.newRuntime();
@@ -83,7 +92,16 @@ export async function createComputerScript({ browser = true } = {}) {
       const invoke = __operation, emit = __log, reject = __invalidArgument, timedOut = __conditionTimeout, budget = __budget;
       let currentMethod = 'ui';
       const invalid = (field='arguments',expected='documented_fields') => reject(currentMethod,field,expected);
-      const expose = (prefix, methods) => Object.freeze(Object.fromEntries(Object.entries(methods).map(([name,method])=>[name,(...args)=>{currentMethod=prefix+'.'+name;return method(...args);}])));
+      const methodContracts = ${JSON.stringify(computerScriptMethods)};
+      const expose = (prefix, methods) => Object.freeze(Object.fromEntries(Object.entries(methods).map(([name,method])=>{
+        const bounds=methodContracts[prefix]?.[name];
+        if(!bounds) throw new Error('Missing method contract');
+        return [name,(...args)=>{
+          currentMethod=prefix+'.'+name;
+          if(args.length<bounds[0]||args.length>bounds[1]) invalid('arguments','documented_arity');
+          return method(...args);
+        }];
+      })));
       delete globalThis.__operation; delete globalThis.__log; delete globalThis.__invalidArgument; delete globalThis.__conditionTimeout; delete globalThis.__budget;
       const options = (value, keys) => {
         if (!value || Object.getPrototypeOf(value) !== Object.prototype) invalid();
@@ -123,8 +141,8 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const snapshot = async (value = {}) => {
         const result = await call({action:'snapshot', ...observeOptions(value)});
-        const observation = result.observation || result;
-        return {...observation, ...(result.url === undefined ? {} : {url:result.url}), ...(result.title === undefined ? {} : {title:result.title}), nodes:(observation.nodes || []).map(canonicalNode)};
+        const observation = result.observation;
+        return {...observation, ...(result.url === undefined ? {} : {url:result.url}), ...(result.title === undefined ? {} : {title:result.title}), nodes:observation.nodes.map(canonicalNode)};
       };
       const pageOptions = (value) => {
         options(value,['limit','cursor']);
@@ -142,12 +160,12 @@ export async function createComputerScript({ browser = true } = {}) {
         if (!${browser ? 'true' : 'false'}) return result;
         // Capture scalar identities so guest mutation cannot retarget an image.
         const identity = {coordinate_space:'image_pixels',frame:result.frame_geometry?.frame,document_id:result.frame_geometry?.document_id};
-        return Object.freeze({...result,
+        return Object.freeze({...result, ...expose('image',{
           click:(x,y)=>call({action:'pointer_click',x:number(x),y:number(y),...imageOptions(identity)}),
           doubleClick:(x,y)=>call({action:'double_click',x:number(x),y:number(y),...imageOptions(identity)}),
           drag:(from_x,from_y,to_x,to_y,duration_ms=0)=>call({action:'drag',from_x:number(from_x),from_y:number(from_y),to_x:number(to_x),to_y:number(to_y),duration_ms:number(duration_ms),...imageOptions(identity)}),
           scroll:(x,y,delta_y,delta_x=0)=>call({action:'scroll',x:number(x),y:number(y),delta_y:number(delta_y),delta_x:number(delta_x),...imageOptions(identity)}),
-        });
+        })});
       };
       const locator = (selector) => expose('locator',{
         node: async () => canonicalNode((await call({action:'read',selector})).node),
@@ -208,10 +226,10 @@ export async function createComputerScript({ browser = true } = {}) {
           },
           downloadCursor: async () => {
             const result=await call({action:'download_cursor'}), cursor=result.cursor;
-            return Object.freeze({...result, wait:(value={})=>{
+            return Object.freeze({...result, ...expose('downloadCursor',{wait:(value={})=>{
               options(value,['timeout_ms']); waitOptions(value);
               return call({action:'wait_for_download',after:string(cursor,'cursor'),...value});
-            }});
+            }})});
           },
           waitForDownload: (value = {}) => {
             options(value, ['id', 'after', 'timeout_ms']);

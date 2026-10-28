@@ -157,7 +157,10 @@ export class BrowserComputerController {
         validateBrowserAction(operation, privateInput);
         const mapped = operation.frame !== undefined || operation.coordinate_space !== undefined || operation.document_id !== undefined
           ? imageCoordinates(operation, this.frameAnchor, await this.readObservation(() => viewportGeometry(this.transport), 'capture'), `${page.prefix}:${page.revision}`, request.target_id) : operation;
-        result = await page.action(mapped);
+        // Every semantic read uses the same error/observation boundary.
+        // Invalid inputs remain rejections; read failures never retire a source.
+        result = ['read', 'text', 'query', 'table', 'attribute', 'wait'].includes(mapped.action)
+          ? await this.readObservation(() => page.action(mapped)) : await page.action(mapped);
       }
       if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
       if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };

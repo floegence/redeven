@@ -23,7 +23,7 @@ func TestComputerObservationRecoveryFacts(t *testing.T) {
 				if c.ToolName == "computer.observe" {
 					return TargetToolResult{Result: map[string]any{"observation": semanticTestTree()}}, nil
 				}
-				return TargetToolResult{Result: map[string]any{"action_executed": computerCallMutates(c), "state": "timeout"}}, nil
+				return TargetToolResult{Result: map[string]any{"action_executed": computerCallMutates(c), "state": "timeout", "requested_state": "enabled"}}, nil
 			})
 			result, err := executeTestScript(t.Context(), runtime, call, tc.code)
 			p := result.Result.(map[string]any)
