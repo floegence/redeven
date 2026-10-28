@@ -421,11 +421,12 @@ describe('Flower bottom decision surface', () => {
     const inputSurface = runtime.querySelector('[data-flower-bottom-mode="input_request"]') as HTMLElement;
     const inputRadius = getComputedStyle(inputSurface).borderRadius;
     expect(inputSurface.querySelector('textarea')).toBeNull();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-answer-kind="choice"]')));
     const choice = runtime.querySelector('[data-flower-input-answer-kind="choice"]') as HTMLButtonElement;
     choice.click();
     const continueButton = runtime.querySelector('.flower-composer-continue') as HTMLButtonElement;
     continueButton.focus();
-    continueButton.click();
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => submitInput.mock.calls.length === 1);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
     expect(runtime.querySelectorAll('[data-flower-bottom-mode]')).toHaveLength(1);
@@ -438,7 +439,11 @@ describe('Flower bottom decision surface', () => {
     expect(parseFloat(focusedDecisionStyle.borderRadius)).toBeGreaterThanOrEqual(focusedDecision.getBoundingClientRect().height / 2);
     const decisions = Array.from(approvalSurface.querySelectorAll<HTMLElement>('.flower-composer-approval-decision'));
     expect(decisions[1]!.getBoundingClientRect().left - decisions[0]!.getBoundingClientRect().right).toBeGreaterThanOrEqual(7);
-    expect(focusedDecisionStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    // Published outline buttons use a transparent fill and a keyboard ring.
+    // Assert the actual focus affordance after the input-to-approval handoff.
+    expect(focusedDecision.matches(':focus-visible')).toBe(true);
+    await waitFor(() => /2px/.test(getComputedStyle(focusedDecision).boxShadow));
+    expect(getComputedStyle(focusedDecision).boxShadow).toMatch(/2px/);
     focusedDecision.click();
     await waitFor(() => submitApproval.mock.calls.length === 1);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));

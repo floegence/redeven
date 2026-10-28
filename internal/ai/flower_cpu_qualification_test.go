@@ -84,6 +84,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 	mode.Store("mixed")
 	var initialBytes atomic.Int64
 	var sequence atomic.Int64
+	var seededTurns int
 	type outputEvidence struct {
 		index     int
 		nextAt    time.Time
@@ -153,7 +154,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 	}
 	seed := func(count int) error {
 		for i := 0; i < count; i++ {
-			serial := sequence.Add(1)
+			serial := int64(seededTurns + 1)
 			gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "qualification", StateCompatibilityKey: "qualification:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
 				florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: fmt.Sprintf("a-%d", serial), Name: "qualification_inspect", Args: "{}"}, {ID: fmt.Sprintf("b-%d", serial), Name: "qualification_inspect", Args: "{}"}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}},
 				florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: qualificationHistoryResponse(int(serial))}, {Type: flprovider.EventDone, Reason: "stop"}}})
@@ -163,13 +164,19 @@ func TestFlowerCPUQualification(t *testing.T) {
 			if e := waitIdle(rootID); e != nil {
 				return e
 			}
-			view, e := service.threadRuntime.View(t.Context(), identity.ThreadID(rootID))
-			if e != nil {
-				return e
+			seededTurns++
+			if seededTurns%50 == 0 {
+				t.Logf("admitted %d synthetic history turns", seededTurns)
 			}
-			if e := verifyQualificationHistory(view, int(serial)); e != nil {
-				return fmt.Errorf("seed %d: %w", serial, e)
-			}
+		}
+		// Validate the complete canonical history once, avoiding quadratic reads
+		// after every seed admission. No historical content check is omitted.
+		view, e := service.threadRuntime.View(t.Context(), identity.ThreadID(rootID))
+		if e != nil {
+			return e
+		}
+		if e := verifyQualificationHistory(view, seededTurns); e != nil {
+			return e
 		}
 		return nil
 	}

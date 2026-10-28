@@ -31,5 +31,33 @@ class IntegrationEntryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
 
 
+    def test_flower_performance_failure_blocks_the_exact_tip_profile(self):
+        # Use the actual manifest/runner while replacing unrelated expensive
+        # commands. The mandatory group must be reached and its failure retained.
+        import os
+        source = Path(__file__).resolve().parents[1]
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "LOCAL_GATE_"))}
+        def git(*args):
+            return subprocess.check_output(["git", *args], cwd=self.root, env=env, text=True).strip()
+        git("init", "-q", "-b", "main")
+        git("config", "user.name", "Gate Test")
+        git("config", "user.email", "gate@invalid.example")
+        (self.root / "scripts/local_gate.py").write_bytes((source / "local_gate.py").read_bytes())
+        manifest = json.loads((source / "local_gate_groups.json").read_text())
+        manifest["environment"] = {}
+        for group in manifest["groups"]:
+            group.pop("environment", None)
+            group["command"] = ["python3", "-c", "raise SystemExit(17)" if group["id"] == "flower-long-thread" else "pass"]
+        (self.root / "scripts/local_gate_groups.json").write_text(json.dumps(manifest))
+        git("add", ".")
+        git("commit", "-qm", "initial")
+        tip = git("rev-parse", "HEAD")
+        result = subprocess.run(["python3", "scripts/local_gate.py", "--profile", "full", "--mode", "committed", "--base", tip, "--tip", tip], cwd=self.root, env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 17, result.stdout + result.stderr)
+        state = json.loads((self.root / ".git/local-gate/state.json").read_text())
+        self.assertEqual(state["groups"]["flower-long-thread"]["status"], "failed")
+        self.assertNotIn("full", state["rounds"])
+
+
 if __name__ == "__main__":
     unittest.main()

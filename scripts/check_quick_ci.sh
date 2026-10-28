@@ -22,6 +22,7 @@ python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="ut
 
 echo "[INFO] checking bounded cloud policy and committed knowledge artifacts"
 node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs scripts/check_go_version_consistency.test.mjs scripts/floeterm_native_build_contract.test.mjs scripts/node_toolchain_contract.test.mjs
+node --test scripts/flower_long_thread_contract.test.mjs
 node --test scripts/desktop_test_session_policy.test.mjs scripts/desktop_test_session.test.mjs
 node --test scripts/dev_desktop_build_proxy.test.mjs
 node --test scripts/computer_webtop_cleanup.test.mjs scripts/computer_webtop_acceptance.test.mjs scripts/qualification_response_stream.test.mjs

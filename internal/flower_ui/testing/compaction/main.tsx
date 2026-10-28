@@ -5,6 +5,7 @@ import { render } from 'solid-js/web';
 import { FlowerSurface } from '../../src/FlowerSurface';
 import { createFlowerComposerDraftCoordinator } from '../../src/composer/createFlowerComposerDraftCoordinator';
 import { createRuntimeFlowerSurfaceAdapter } from '../../src/runtimeFlowerSurfaceAdapter';
+import { LongThreadWindows } from '../performance/LongThreadWindows';
 import { streamingFixture } from '../streamingFixture';
 import '../../src/styles/flower.css';
 
@@ -78,6 +79,7 @@ function mountSurface(threadID = id) {
     <Show when={visible()}><FlowerSurface adapter={qualified} notify={message => setNotice(message.message)}
       draftCoordinator={draftCoordinator}
       focusThreadRequest={{ request_id: 'qualification', thread_id: threadID }} /></Show>
+    <Show when={new URLSearchParams(location.search).has('long-thread')}><LongThreadWindows /></Show>
   </FloeProvider>, document.getElementById('root')!);
 }
 mountSurface();

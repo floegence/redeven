@@ -37,6 +37,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 - Retain [media/read qualification](ai/computer-media-read-qualification.md) with 31/36 original and 4/6 supplemental real DeepSeek assertion passes, separating contract correctness, model errors and test-parser defects.
 
 - Let interactive [media writes](ai/image-read-and-retention.md) cancel maintenance scans while preserving canonical retention and cancellable gate waits. Unify native [single-node and subtree completeness](ai/computer-use-semantics.md) with browser facts; clarify [script read scope](ai/computer-use-scripts.md) without application-specific rules.
+- Require [long-thread correctness and responsive drag](operations/flower-long-thread-gate.md) at affected staged commits and exact-tip main integration. Retain independent producer/input rates, compositor evidence, canonical content checks and supervised cleanup.
 
 ## 2026-10-27
 
