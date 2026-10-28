@@ -215,6 +215,30 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		canonicalItems[item.ID] = value
 	}
 	allowFullView.Store(false)
+	materialsStart := time.Now()
+	materialsPages := 0
+	materialsCursor := ""
+	for {
+		page, e := svc.GetTaskMaterials(t.Context(), meta, thread.ThreadID, materialsCursor)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if len(page.Items) != 0 {
+			t.Fatal("text history produced materials")
+		}
+		materialsPages++
+		if page.NextCursor == "" {
+			break
+		}
+		if page.NextCursor == materialsCursor || materialsPages > 10 {
+			t.Fatal("materials pagination did not advance")
+		}
+		materialsCursor = page.NextCursor
+	}
+	if materialsPages < 4 {
+		t.Fatalf("unbounded materials history: %d pages", materialsPages)
+	}
+	t.Logf("materials: %d bounded windows over 180 large tool results in %s, no full View", materialsPages, time.Since(materialsStart))
 	seen := map[string]bool{}
 	input := FlowerHistoryRequest{}
 	pages := 0

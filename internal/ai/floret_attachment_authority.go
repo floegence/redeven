@@ -22,7 +22,7 @@ type openedCanonicalAttachment struct {
 	Upload     *OpenUploadResult
 }
 
-func (service *Service) retainCanonicalUploadResources(ctx context.Context, endpointID string, view flruntime.ThreadView) error {
+func canonicalViewAttachments(view flruntime.ThreadView) []flruntime.MessageAttachment {
 	var attachments []flruntime.MessageAttachment
 	for _, item := range view.Items {
 		attachments = append(attachments, item.Attachments...)
@@ -33,10 +33,22 @@ func (service *Service) retainCanonicalUploadResources(ctx context.Context, endp
 	for _, item := range view.RestoredInputs {
 		attachments = append(attachments, item.Input.Attachments...)
 	}
-	return service.retainCanonicalUploadDescriptors(ctx, endpointID, view.ThreadID.String(), attachments)
+	return attachments
+}
+
+func (service *Service) retainCanonicalUploadResources(ctx context.Context, endpointID string, view flruntime.ThreadView) error {
+	return service.retainCanonicalUploadDescriptors(ctx, endpointID, view.ThreadID.String(), canonicalViewAttachments(view))
 }
 
 func (service *Service) retainCanonicalUploadDescriptors(ctx context.Context, endpointID, threadID string, attachments []flruntime.MessageAttachment) error {
+	ids, err := service.canonicalUploadIDs(ctx, endpointID, threadID, attachments)
+	if err != nil {
+		return err
+	}
+	return service.threadsDB.RetainCanonicalUploads(ctx, endpointID, threadID, ids)
+}
+
+func (service *Service) canonicalUploadIDs(ctx context.Context, endpointID, threadID string, attachments []flruntime.MessageAttachment) ([]string, error) {
 	var ids []string
 	for _, attachment := range attachments {
 		if isToolMediaRef(attachment.ResourceRef) {
@@ -44,22 +56,22 @@ func (service *Service) retainCanonicalUploadDescriptors(ctx context.Context, en
 		}
 		id, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		record, err := service.threadsDB.GetUpload(ctx, endpointID, id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if record == nil || record.State != threadstore.UploadStateLive || record.Name != attachment.Name || normalizeMediaType(record.DetectedMediaType) != normalizeMediaType(attachment.MIMEType) || record.SizeBytes != attachment.SizeBytes || !strings.EqualFold(record.ContentSHA256, digest) {
-			return errors.New("canonical attachment does not match the retained upload")
+			return nil, errors.New("canonical attachment does not match the retained upload")
 		}
 		if _, err := service.threadsDB.GetThreadOwnedUpload(ctx, endpointID, threadID, id); errors.Is(err, sql.ErrNoRows) {
 			ids = appendUniqueString(ids, id)
 		} else if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return service.threadsDB.RetainCanonicalUploads(ctx, endpointID, threadID, ids)
+	return ids, nil
 }
 
 func (service *Service) retainCanonicalUploadForOwner(ctx context.Context, owner UploadOwner, threadID string, membership CanonicalAttachmentMembership) error {

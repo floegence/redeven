@@ -1,3 +1,4 @@
+import { FlowerTaskMaterials } from './FlowerTaskMaterials';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { FileText, Folder, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
@@ -10,9 +11,11 @@ export function FlowerTaskFiles(props: {
   threadID: string;
   adapter: FlowerSurfaceAdapter;
   copy: TaskFilesCopy;
+  onSource?: (itemID: string) => void;
   onPreview?: (path: string) => Promise<void>;
   onOpenFolder?: (path: string) => Promise<void>;
 }) {
+  const [materialsRefresh, setMaterialsRefresh] = createSignal(0);
   const [data, setData] = createSignal<TaskFiles>();
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
@@ -25,6 +28,7 @@ export function FlowerTaskFiles(props: {
     downloadController?.abort();
   });
   const load = async (more = false) => {
+    if (!more) setMaterialsRefresh(value => value + 1);
     const id = props.threadID,
       epoch = ++generation;
     setLoading(true);
@@ -205,6 +209,7 @@ export function FlowerTaskFiles(props: {
                 {props.copy.more}
               </Button>
             </Show>
+            <Show when={props.adapter.loadTaskMaterials}><FlowerTaskMaterials threadID={props.threadID} adapter={props.adapter} copy={props.copy} refresh={materialsRefresh()} onSource={props.onSource} /></Show>
             <details class="flower-task-working">
               <summary>
                 {props.copy.working} · {value().working_files}

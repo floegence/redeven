@@ -29,7 +29,7 @@ func toolSuccessSummary(toolName string) string {
 		return "terminal.write"
 	case "terminal.terminate":
 		return "terminal.terminate"
-	case "attachment.read", "image.read":
+	case "attachment.read", "attachment.materialize", "image.read":
 		return toolName
 	case "file.edit", "file.write":
 		return "file.updated"
@@ -214,7 +214,7 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, err
 			m["truncated"] = true
 		}
 		return m, truncated, nil
-	case "attachment.read", "image.read":
+	case "attachment.read", "attachment.materialize", "image.read":
 		return payload, false, nil
 	case "file.edit", "file.write":
 		return normalizeFileMutationPayload(payload)
@@ -549,6 +549,14 @@ func builtInToolDefinitions() []ToolDef {
 	}
 	defs := []ToolDef{
 		{
+			Name:        "attachment.materialize",
+			Description: "Copy an admitted attachment or media:v1 image into this thread's scratch directory for local processing. Returns a new independent work file; never changes the original. Supply only its locator. Save final deliverables in the project or requested destination.",
+			InputSchema: toSchema(map[string]any{"type": "object", "properties": map[string]any{"locator": map[string]any{"type": "string", "minLength": 1, "maxLength": 1024}}, "required": []string{"locator"}, "additionalProperties": false}),
+			Mutating:    true, RequiresApproval: true, Visibility: ToolVisibilityStandard,
+			Capabilities: []ToolCapabilityClass{ToolCapabilityMutation},
+			Source:       "builtin", Namespace: "builtin.attachment", Priority: 100,
+		},
+		{
 			Name:             "attachment.read",
 			Description:      "Read a UTF-8 thread attachment by manifest locator. Continue with next_cursor while truncated.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"locator": map[string]any{"type": "string", "minLength": 1, "maxLength": 1024}, "cursor": map[string]any{"type": "string", "maxLength": 2048}, "max_bytes": map[string]any{"type": "integer", "minimum": 1}, "max_lines": map[string]any{"type": "integer", "minimum": 1}}, "required": []string{"locator"}, "additionalProperties": false}),
@@ -824,6 +832,9 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run, webBindings ...map[
 			continue
 		}
 		if isComputerUseToolName(def.Name) && r != nil && r.cfg != nil && !r.cfg.IsComputerUseEnabled() {
+			continue
+		}
+		if def.Name == "attachment.materialize" && (r == nil || r.host.openLiveAttachment == nil || r.stateDir == "" || r.threadID == "") {
 			continue
 		}
 		if def.Name == "attachment.read" && (r == nil || r.host.openLiveAttachment == nil || !r.attachmentToolReadEnabled) {

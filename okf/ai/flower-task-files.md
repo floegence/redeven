@@ -5,7 +5,7 @@ description: Thread-owned intermediate files, canonical delivery references, aut
 tags: [flower, files, tools, storage, permissions]
 timestamp: 2026-10-26T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -32,7 +32,7 @@ One action with no file selector/technical warning copies current scratch/stagin
 
 Preparation excludes new source admissions/cleanup, waits cancellably for admitted work and rejects unreaped processes. Rooted bounded-buffer copying preserves executable helpers and validates identity/size/time plus final tree. Rename only a complete private staging tree into new ThreadID. Reject unsupported types/external links; no hard links or writable ancestor aliases.
 
-Publish product settings only when files are ready. Failed preparation is not visible/admitted; replaying that canonical Fork request completes preparation. Never recopy admitted forks after edits/cleanup. A small source marker supports interrupted publication/context, not artifact/conversation ledgers. Cleanup preserves it; deletion removes it. Remove unpublished copies on failure; interrupted-process retry replaces them.
+Publish product settings and validated canonical upload retention claims in one transaction only when files are ready. Source deletion shares the preparation gate through that publication. Failed preparation is not visible/admitted; replaying that canonical Fork request completes preparation. Never recopy admitted forks after edits/cleanup. A small source marker supports interrupted publication/context, not artifact/conversation ledgers. Cleanup preserves it; deletion removes it. Remove unpublished copies on failure; interrupted-process retry replaces them.
 
 Context instructs the model to inspect inherited files, map old scratch/staging suffixes into its own root and repair hardcoded paths before use, including nested forks. Do not rewrite history/content or ask users to select snapshot semantics. Ancestor cleanup/deletion cannot remove descendant copies.
 
@@ -42,13 +42,13 @@ file.present verifies a regular file outside application state, hashes cancellab
 
 Files panel queries successful canonical results through authorized public Floret boundaries: 50 records/page, ≤32 KiB/record, original Fork/restart provenance. No startup crawl/second ledger. Recheck read authority. Available means current accessible file with unchanged size/mtime, not rehashed historical identity. Changed/missing/unavailable are observations; stored hashes describe delivery-time bytes. Files stay user-mutable, without hidden version copies.
 
-Desktop/mobile dialog shows final results then expandable working files, source Runtime and actual path. Existing host preview/directory routing and HTML isolation remain; absent callbacks use shared image/PDF/text preview and read-only listing. Existing save destinations reauthorize each 256 KiB download chunk; version/offset drift aborts destination. Desktop allows exact thread endpoints/query keys only. Downloads neither publish nor relocate originals; browser Blob fallback retains its memory behavior.
+Desktop/mobile dialog shows final results, original inputs, collapsed conversation images and expandable working files. Inputs and images reuse authorized attachment preview/download and can navigate to their source message. Material discovery reads exactly one 50-item canonical window per request, with 128-byte body previews and no full-history View or retention inventory scan. Empty intervals retain their next cursor; refresh resets a changed canonical leaf. Existing host preview/directory routing and HTML isolation remain; absent callbacks use shared image/PDF/text preview and read-only listing. Existing save destinations reauthorize each 256 KiB download chunk; version/offset drift aborts destination. Desktop allows exact thread endpoints/query keys only. Downloads neither publish nor relocate originals; browser Blob fallback retains its memory behavior.
 
 ## Cleanup
 
 List ≤200 files while inspecting ≤10,000 entries; show truncation/lower bounds. Explicit confirmed RWX cleanup uses rooted operations on owned scratch/staging only. Active/queued turns, interactions, admitted work and unreaped terminals block it. In-process admissions and canonical view suffice; no durable cleanup lease/ledger.
 
-Deletion settles canonical work and stops owned terminals before removing private files. Normal deletion refuses live work; force uses explicit cancellation. Final files are excluded, archival deletes nothing, no TTL; disclose project-local state.
+Deletion settles canonical work and stops owned terminals before removing private files. Interrupted deletion resumes from existing product settings only when canonical Summary confirms ErrThreadDeleted; a missing/unavailable thread is never deletion authority. Maintenance checks at most 50 settings per pass and removes the retry anchor only after cleanup succeeds. Normal deletion refuses live work; force uses explicit cancellation. Cleanup preserves original uploads and conversation images. Thread deletion releases upload claims; the canonical retention inventory protects other paths, queues and forks until the last reference is gone. Final files are excluded, archival deletes nothing, no TTL; disclose project-local state.
 
 # Boundaries
 

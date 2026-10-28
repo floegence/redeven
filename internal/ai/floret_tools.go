@@ -541,7 +541,7 @@ func floretToolResourceKinds(toolName string) []string {
 		return []string{"command"}
 	case "image.read", "read_file", "read_files", "rgrep", "find", "file.edit", "file.write", "file.present", "apply_patch":
 		return []string{"file"}
-	case "attachment.read":
+	case "attachment.read", "attachment.materialize":
 		return []string{"attachment"}
 	case "web.search":
 		return []string{"web_query"}
@@ -571,7 +571,7 @@ func floretToolOpenWorld(def ToolDef) bool {
 func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
 	args := cloneAnyMap(inv.Args)
 	switch strings.TrimSpace(inv.Name) {
-	case "attachment.read":
+	case "attachment.read", "attachment.materialize":
 		if locator := strings.TrimSpace(anyToString(args["locator"])); locator != "" {
 			return []fltools.ResourceRef{{Kind: "attachment", Value: locator}}, nil
 		}
@@ -769,7 +769,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 		return []fltools.Effect{fltools.EffectNetwork}
 	case "use_skill":
 		return []fltools.Effect{fltools.EffectNetwork}
-	case "report_to_parent", "file.edit", "file.write", "apply_patch":
+	case "report_to_parent", "file.edit", "file.write", "apply_patch", "attachment.materialize":
 		return []fltools.Effect{fltools.EffectWrite}
 	default:
 		return []fltools.Effect{fltools.EffectRead}

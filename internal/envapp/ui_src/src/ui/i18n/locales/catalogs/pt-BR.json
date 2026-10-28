@@ -6537,7 +6537,7 @@
       "refresh": "Atualizar",
       "more": "Carregar mais",
       "clean": "Limpar arquivos de trabalho",
-      "confirm": "Excluir os arquivos de trabalho? Os resultados permanecerão no local salvo.",
+      "confirm": "Excluir os arquivos de trabalho? Os materiais enviados, as imagens da conversa e os resultados salvos serão mantidos.",
       "cancel": "Cancelar",
       "close": "Fechar",
       "loading": "Carregando arquivos…",
@@ -6548,7 +6548,12 @@
       "unavailable": "Indisponível",
       "busy": "Não é possível limpar durante uma conversa ou processo ativo.",
       "warning": "Os dados do aplicativo estão neste espaço de trabalho. Mova-os para fora do projeto para separar os arquivos intermediários.",
-      "truncated": "Apenas os primeiros 200 arquivos de trabalho são exibidos."
+      "truncated": "Apenas os primeiros 200 arquivos de trabalho são exibidos.",
+      "materials": "Materiais",
+      "media": "Imagens da conversa",
+      "source": "Mostrar mensagem",
+      "materialsEmpty": "Esta conversa não contém materiais.",
+      "materialsEarlier": "Carregue mensagens anteriores para encontrar mais materiais."
     }
   },
   "uiCopy": {

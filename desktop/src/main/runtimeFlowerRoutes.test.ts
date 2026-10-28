@@ -256,3 +256,15 @@ describe('Flower saved tool preview route', () => {
   expect(runtimeFlowerMethodAllowed(root+'/task-files?cursor=next','DELETE')).toBe(false);
   for(const suffix of ['?path=x&kind=working&offset=-1','?path=x&path=y&kind=working&offset=0','?path=x&kind=unknown&offset=0','?path=x&kind=working&offset=0&extra=1'])expect(()=>runtimeFlowerPath(root+'/task-file-content'+suffix)).toThrow();
  });
+
+
+it('allows only bounded read-only conversation material requests', () => {
+  const path = '/_redeven_proxy/api/ai/threads/thread-1/task-materials';
+  for (const suffix of ['', '?cursor=opaque']) {
+    expect(runtimeFlowerPath(path + suffix)).toBe(path + suffix);
+    for (const method of ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const)
+      expect(runtimeFlowerMethodAllowed(path + suffix, method)).toBe(method === 'GET');
+  }
+  for (const suffix of ['/child', '?user=other', '?cursor=a&cursor=b', '#fragment'])
+    expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+});

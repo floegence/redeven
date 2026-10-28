@@ -1,4 +1,4 @@
-import type { FlowerTaskFiles } from "./contracts/flowerSurfaceContracts";
+import type { FlowerTaskFiles, FlowerTaskMaterials } from "./contracts/flowerSurfaceContracts";
 import { flowerTurnAdmissionError } from './flowerTurnAdmission';
 import { isComputerSafetyAssistanceKind } from './computerAssistance';
 import type { FlowerModelCatalogDiscovery } from './contracts/flowerSurfaceContracts';
@@ -130,6 +130,7 @@ export type FlowerRuntimeTransport = Readonly<{
   loadSubagentDetail(parentThreadID: string, childThreadID: string, input?: FlowerHistoryRequest, signal?: AbortSignal): Promise<LoadSubagentDetailResponse>;
   operateSubagentInput?(parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation): Promise<LoadSubagentDetailResponse>;
   loadTaskFiles?(threadID: string, cursor?: string): Promise<FlowerTaskFiles>;
+  loadTaskMaterials?(threadID: string, cursor?: string): Promise<FlowerTaskMaterials>;
   cleanTaskFiles?(threadID: string): Promise<void>;
   downloadTaskFile?(threadID: string, path: string, working: boolean, signal: AbortSignal): Promise<void>;
   loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
@@ -730,6 +731,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       });
     },
     ...(options.transport.loadTaskFiles ? { loadTaskFiles: (id: string, cursor?: string) => options.transport.loadTaskFiles!(id, cursor) } : {}),
+    ...(options.transport.loadTaskMaterials ? { loadTaskMaterials: (id: string, cursor?: string) => options.transport.loadTaskMaterials!(id, cursor) } : {}),
     ...(options.transport.cleanTaskFiles ? { cleanTaskFiles: (id: string) => options.transport.cleanTaskFiles!(id) } : {}),
     ...(options.transport.downloadTaskFile ? { downloadTaskFile: options.transport.downloadTaskFile } : {}),
     ...(options.transport.loadToolPreview ? {

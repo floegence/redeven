@@ -33,7 +33,7 @@ func capabilitiesForToolName(toolName string) []ToolCapabilityClass {
 		return []ToolCapabilityClass{ToolCapabilityInteraction}
 	case "terminal.exec":
 		return []ToolCapabilityClass{ToolCapabilityShell, ToolCapabilityOpenWorld}
-	case "file.edit", "file.write", "apply_patch":
+	case "file.edit", "file.write", "apply_patch", "attachment.materialize":
 		return []ToolCapabilityClass{ToolCapabilityMutation}
 	case "read_file", "read_files", "rgrep", "find", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
 		return []ToolCapabilityClass{ToolCapabilityReadonlyLocal}

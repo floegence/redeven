@@ -1030,10 +1030,11 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	forked.PinRank = 0
 	forked.SettingsCreatedAtUnixMs = now
 	forked.SettingsUpdatedAtUnixMs = now
-	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), forked); err != nil {
+	uploadIDs, err := s.canonicalUploadIDs(ctxOrBackground(ctx), endpointID, current.ThreadID.String(), canonicalViewAttachments(current))
+	if err != nil {
 		return nil, err
 	}
-	if err := s.retainCanonicalUploadResources(ctxOrBackground(ctx), endpointID, current); err != nil {
+	if err := db.AdoptCanonicalRootWithUploads(ctxOrBackground(ctx), forked, uploadIDs); err != nil {
 		return nil, err
 	}
 	if title != "" {
@@ -1393,6 +1394,13 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 			return cancelErr
 		}
 	}
+	// Fork holds the same source gate through work-copy preparation and upload
+	// claim publication. Deletion must not remove its source authority midway.
+	releaseFiles, err := s.taskFiles.freeze(ctxOrBackground(ctx), threadID)
+	if err != nil {
+		return err
+	}
+	defer releaseFiles()
 	if !canonicalDeleted {
 		if err := runtime.Delete(ctxOrBackground(ctx), flruntime.DeleteThreadInput{
 			ThreadID: identity.ThreadID(threadID), RequestKey: requestKey,
@@ -1400,6 +1408,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 			return err
 		}
 	}
+	releaseFiles()
 	s.mu.Lock()
 	pool, desktop := s.openAIConnections, s.desktopModelSource
 	s.mu.Unlock()

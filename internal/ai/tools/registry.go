@@ -185,6 +185,14 @@ var builtinDefinitions = map[string]Definition{
 			resultPayloadFields("display_name", "mime_type", "width", "height", "size_bytes", "first_frame"),
 		),
 	},
+	"attachment.materialize": {
+		Name: "attachment.materialize", Mutating: true, RequiresApproval: true,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationContext, "write", "file", "context", "args", "result"),
+			operation("write"), labelFields("display_name", "locator"), callPayloadFields("locator"),
+			resultPayloadFields("file_path", "display_name", "mime_type", "size_bytes"),
+		),
+	},
 	"attachment.read": {
 		Name:             "attachment.read",
 		Mutating:         false,

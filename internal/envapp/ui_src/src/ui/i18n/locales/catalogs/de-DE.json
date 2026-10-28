@@ -6537,7 +6537,7 @@
       "refresh": "Aktualisieren",
       "more": "Mehr laden",
       "clean": "Arbeitsdateien bereinigen",
-      "confirm": "Arbeitsdateien löschen? Ergebnisse bleiben an ihrem Speicherort.",
+      "confirm": "Arbeitsdateien löschen? Hochgeladene Materialien, Gesprächsbilder und gespeicherte Ergebnisse bleiben erhalten.",
       "cancel": "Abbrechen",
       "close": "Schließen",
       "loading": "Dateien werden geladen…",
@@ -6548,7 +6548,12 @@
       "unavailable": "Nicht verfügbar",
       "busy": "Während aktiver Gespräche oder Prozesse ist keine Bereinigung möglich.",
       "warning": "Der Anwendungsstatus liegt in diesem Arbeitsbereich. Verschieben Sie ihn aus dem Projekt, um Zwischendateien zu trennen.",
-      "truncated": "Nur die ersten 200 Arbeitsdateien werden angezeigt."
+      "truncated": "Nur die ersten 200 Arbeitsdateien werden angezeigt.",
+      "materials": "Materialien",
+      "media": "Bilder im Gespräch",
+      "source": "Nachricht anzeigen",
+      "materialsEmpty": "Dieses Gespräch enthält keine Materialien.",
+      "materialsEarlier": "Frühere Nachrichten laden, um weitere Materialien zu finden."
     }
   },
   "uiCopy": {

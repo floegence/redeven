@@ -5,7 +5,7 @@ description: Owner-scoped uploads, canonical membership, provider reads, quotas,
 tags: [ai, flower, attachments, storage, security]
 timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -27,6 +27,14 @@ Historical reads repeat canonical membership and byte-integrity checks rather th
 ## Canonical image recovery
 Floret v7.51.1 exposes user and confirmed tool attachment descriptors through one canonical view. Upload retention recognizes tool media separately and never parses tool image references as upload records.
 
+## Local processing and lifecycle
+
+Immutable originals and mutable working copies share canonical thread references but have different lifetimes. attachment.materialize reauthorizes the execution identity and canonical attachment, requires RWX and the normal write-effect policy, then creates a unique regular work copy under the current thread scratch directory. Upload copies stream through a 32 KiB buffer with cancellation, exact size and SHA-256 validation. Image locators reuse bounded canonical image validation. Failed copies remove private staging; repeated same-name inputs never overwrite edited copies. Only the working path is returned, never the original backing path.
+
+Working-file cleanup deletes copies, not inputs or historical images. Originals can be materialized again after cleanup, restart, compaction or parent deletion when another conversation retains them. Historical Fork inherits input references only through its canonical cut and independently copies current scratch/staging. Product settings and upload claims publish transactionally; no second admitted-message mapping is stored.
+
+The Files panel derives input/media pages from the public Floret window interface with fresh product authorization. The last-reference inventory remains separate and includes inactive paths and queued inputs. External referenced files and delivered outputs keep their existing destinations and are never removed by conversation cleanup. Existing upload/media backup scope is unchanged; disposable task files are not added to backups.
+
 # Boundaries
 
 Redeven does not inspect or migrate Floret storage, persist message ordering, expose a filesystem path, accept a client owner, authorize by locator, or infer canonical membership from its claim table. Neither transport embeds bytes or a URL identity in a turn JSON body.
@@ -36,3 +44,7 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 - `redeven:internal/ai/threadstore/schema.go` - Product v1 declares user-owned attachment resources, attempts, claims, and neutral staging targets without legacy upload shapes.
 
 - `redeven:internal/ai/threadstore/uploads.go` - Transactional idempotency, quotas, claims, and last-reference deletion are enforced in the resource store.
+
+- [Materialization and integrity tests](../../internal/ai/attachment_materialize_test.go).
+- [Fork cuts, cleanup and last-reference tests](../../internal/ai/task_materials_test.go).
+- [Image compaction/restart qualification](../../internal/ai/tool_image_compaction_test.go).

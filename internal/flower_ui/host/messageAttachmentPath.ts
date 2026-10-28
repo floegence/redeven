@@ -1,5 +1,7 @@
 export function messageAttachmentPath(source: string): string {
   const parsed = new URL(source, 'http://flower.local');
+  if (source.startsWith('/_redeven_proxy/api/ai/threads/') && parsed.origin === 'http://flower.local' && !parsed.search && !parsed.hash
+    && /^\/_redeven_proxy\/api\/ai\/threads\/[A-Za-z0-9_-]+\/tool-media\/locator\/[a-f0-9]{64}$/u.test(parsed.pathname)) return parsed.pathname;
   const keys = [...parsed.searchParams.keys()];
   const scopeKeys = ['turn_id', 'queue_id'].filter((key) => parsed.searchParams.has(key));
   if (!source.startsWith('/_redeven_proxy/api/ai/uploads/')

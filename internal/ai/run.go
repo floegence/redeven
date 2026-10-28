@@ -1873,6 +1873,8 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.execTargetTool(ctx, toolID, toolName, args)
 	}
 	switch toolName {
+	case "attachment.materialize":
+		return r.toolAttachmentMaterialize(ctx, meta, anyToString(args["locator"]))
 	case "attachment.read":
 		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")

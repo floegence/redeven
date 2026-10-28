@@ -28,6 +28,12 @@ func (s *Store) GetThreadSettingsByCanonicalThreadID(ctx context.Context, thread
 }
 
 func (s *Store) AdoptCanonicalRootSettings(ctx context.Context, settings ThreadSettings) error {
+	return s.AdoptCanonicalRootWithUploads(ctx, settings, nil)
+}
+
+// AdoptCanonicalRootWithUploads publishes product ownership and retained upload
+// claims together. Callers must supply only canonical fork attachments.
+func (s *Store) AdoptCanonicalRootWithUploads(ctx context.Context, settings ThreadSettings, uploadIDs []string) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -60,6 +66,9 @@ func (s *Store) AdoptCanonicalRootSettings(ctx context.Context, settings ThreadS
 		if existing.ThreadID == settings.ThreadID && existing.EndpointID == settings.EndpointID && existing.NamespacePublicID == settings.NamespacePublicID &&
 			existing.ModelID == settings.ModelID && existing.ReasoningSelectionJSON == settings.ReasoningSelectionJSON &&
 			existing.PermissionType == settings.PermissionType && existing.WorkingDir == settings.WorkingDir {
+			if err := bindUploadsToRefTx(ctx, tx, settings.EndpointID, settings.ThreadID, UploadRefKindThread, settings.ThreadID, uploadIDs, "", "", ""); err != nil {
+				return err
+			}
 			return tx.Commit()
 		}
 		return ErrCanonicalThreadSettingsConflict
@@ -74,6 +83,9 @@ func (s *Store) AdoptCanonicalRootSettings(ctx context.Context, settings ThreadS
 		settings.NamespacePublicID, settings.ModelID, settings.ReasoningSelectionJSON, settings.PermissionType, settings.WorkingDir,
 		now, now)
 	if err != nil {
+		return err
+	}
+	if err := bindUploadsToRefTx(ctx, tx, settings.EndpointID, settings.ThreadID, UploadRefKindThread, settings.ThreadID, uploadIDs, "", "", ""); err != nil {
 		return err
 	}
 	return tx.Commit()

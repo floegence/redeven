@@ -1680,7 +1680,7 @@
       "refresh": "Actualizar",
       "more": "Cargar más",
       "clean": "Limpiar archivos de trabajo",
-      "confirm": "¿Eliminar los archivos de trabajo? Los resultados permanecerán en su ubicación.",
+      "confirm": "¿Eliminar los archivos de trabajo? Se conservarán los materiales subidos, las imágenes de la conversación y los resultados guardados.",
       "cancel": "Cancelar",
       "close": "Cerrar",
       "loading": "Cargando archivos…",
@@ -1691,7 +1691,12 @@
       "unavailable": "No disponible",
       "busy": "No se puede limpiar durante una conversación o un proceso activo.",
       "warning": "Los datos de la aplicación están dentro de este espacio de trabajo. Muévelos fuera del proyecto para separar los archivos intermedios.",
-      "truncated": "Solo se muestran los primeros 200 archivos de trabajo."
+      "truncated": "Solo se muestran los primeros 200 archivos de trabajo.",
+      "materials": "Materiales",
+      "media": "Imágenes de la conversación",
+      "source": "Mostrar mensaje",
+      "materialsEmpty": "Esta conversación no contiene materiales.",
+      "materialsEarlier": "Carga mensajes anteriores para encontrar más materiales."
     }
   },
   "common": {

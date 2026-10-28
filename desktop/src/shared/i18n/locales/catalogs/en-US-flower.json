@@ -1532,7 +1532,7 @@
     "refresh": "Refresh",
     "more": "Load more",
     "clean": "Clean working files",
-    "confirm": "Delete working files? Delivered files stay in their saved locations.",
+    "confirm": "Delete working files? Uploaded materials and conversation images are kept. Delivered files stay in their saved locations.",
     "cancel": "Cancel",
     "close": "Close",
     "loading": "Loading files…",
@@ -1543,6 +1543,11 @@
     "unavailable": "Unavailable",
     "busy": "Working files cannot be cleaned while this conversation or its processes are active.",
     "warning": "Application state is inside this workspace. Move it outside the project to keep intermediate files separate.",
-    "truncated": "Only the first 200 working files are shown."
+    "truncated": "Only the first 200 working files are shown.",
+    "materials": "Materials",
+    "media": "Conversation images",
+    "source": "Show message",
+    "materialsEmpty": "No materials in this conversation.",
+    "materialsEarlier": "Load earlier messages to find more materials."
   }
 }

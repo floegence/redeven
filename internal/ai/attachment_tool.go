@@ -174,40 +174,51 @@ func attachmentReadLimits(args attachmentReadArgs) (int, int) {
 	return maxBytes, maxLines
 }
 
-func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args attachmentReadArgs) (map[string]any, error) {
+func (r *run) openToolAttachment(ctx context.Context, meta *session.Meta, locator string) (openedCanonicalAttachment, error) {
 	if r == nil || meta == nil || !meta.CanRead || r.host.openLiveAttachment == nil {
-		return nil, errors.New("attachment read is unavailable")
+		return openedCanonicalAttachment{}, errors.New("attachment read is unavailable")
 	}
 	canonicalRunID, canonicalThreadID, _ := r.floretCanonicalIdentity()
 	if canonicalRunID == "" || canonicalThreadID == "" {
-		return nil, errors.New("attachment read canonical identity is unavailable")
+		return openedCanonicalAttachment{}, errors.New("attachment read canonical identity is unavailable")
 	}
 	if strings.TrimSpace(meta.EndpointID) != strings.TrimSpace(r.endpointID) ||
 		strings.TrimSpace(meta.UserPublicID) != strings.TrimSpace(r.userPublicID) ||
 		strings.TrimSpace(meta.ChannelID) != strings.TrimSpace(r.channelID) {
-		return nil, errors.New("attachment not found")
+		return openedCanonicalAttachment{}, errors.New("attachment not found")
 	}
-	attachmentID, displayName, err := parseAttachmentLocator(args.Locator)
+	attachmentID, displayName, err := parseAttachmentLocator(locator)
 	if err != nil {
-		return nil, err
+		return openedCanonicalAttachment{}, err
 	}
 	owner, err := NewUploadOwner(r.endpointID, meta.UserPublicID, meta.ChannelID)
 	if err != nil {
-		return nil, errors.New("attachment read is unavailable")
+		return openedCanonicalAttachment{}, errors.New("attachment read is unavailable")
 	}
 	opened, err := r.host.openLiveAttachment(ctxOrBackground(ctx), owner, attachmentID)
 	if err != nil || opened.Upload == nil || opened.Upload.Info == nil {
-		return nil, errors.New("attachment not found")
+		return openedCanonicalAttachment{}, errors.New("attachment not found")
 	}
 	info := opened.Upload.Info
-	if info.Name != displayName || logicalAttachmentLocator(info.AttachmentID, info.Name) != strings.TrimSpace(args.Locator) {
-		return nil, errors.New("attachment not found")
+	if info.Name != displayName || logicalAttachmentLocator(info.AttachmentID, info.Name) != strings.TrimSpace(locator) {
+		return openedCanonicalAttachment{}, errors.New("attachment not found")
 	}
 	if opened.Membership.ThreadID != canonicalThreadID || opened.Membership.AttachmentID != attachmentID ||
 		opened.Membership.Name != info.Name || normalizeMediaType(opened.Membership.DetectedMediaType) != normalizeMediaType(info.DetectedMediaType) ||
 		opened.Membership.SizeBytes != info.SizeBytes || !strings.EqualFold(opened.Membership.ContentSHA256, info.ContentSHA256) {
-		return nil, errors.New("attachment not found")
+		return openedCanonicalAttachment{}, errors.New("attachment not found")
 	}
+	return opened, nil
+}
+
+func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args attachmentReadArgs) (map[string]any, error) {
+	opened, err := r.openToolAttachment(ctx, meta, args.Locator)
+	if err != nil {
+		return nil, err
+	}
+	info := opened.Upload.Info
+	attachmentID := info.AttachmentID
+	canonicalRunID, canonicalThreadID, _ := r.floretCanonicalIdentity()
 	if info.UnicodeCodePoints == nil || info.LogicalLineCount == nil || normalizeMediaType(info.DetectedMediaType) != "text/plain; charset=utf-8" {
 		return nil, errors.New("attachment.read supports only strict UTF-8 text attachments")
 	}

@@ -609,6 +609,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       ),
       loadTaskFiles: (threadID, cursor) => fetchLocalApiJSON(
         '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), { method: 'GET' }),
+      loadTaskMaterials: (threadID, cursor) => fetchLocalApiJSON(
+        '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-materials' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), { method: 'GET' }),
       cleanTaskFiles: async (threadID) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', { method: 'DELETE' }); },
       downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => fetchLocalApiJSON<FlowerTaskFileChunk>(flowerTaskFilePath(threadID,path,working,offset), {method:'GET',signal}),signal),
       loadToolPreview: (input) => fetchLocalApiJSON<FlowerToolPreview>(

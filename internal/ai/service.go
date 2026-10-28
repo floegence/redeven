@@ -215,6 +215,7 @@ type Service struct {
 	compactionScheduled       bool
 	uploadAttemptPruneCursor  threadstore.UploadAttemptPruneCursor
 	executionAuthorityCursor  threadstore.ExecutionAuthorityCursor
+	deletedFilesCursor        threadstore.ThreadSettingsRecoveryCursor
 	lifecycleCtx              context.Context
 	lifecycleCancel           context.CancelFunc
 }

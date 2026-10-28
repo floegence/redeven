@@ -8,6 +8,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 - Keep single-target [SubAgent operation capsules](ui/flower-subagent-detail.md) on the title line through deferred identity reads, with stable narrow/touch geometry and unchanged read ownership. Retain informational portraits without granting child navigation.
 
+- Unify conversation-file discovery while preserving distinct lifetimes for [immutable inputs](ai/flower-attachment-resources.md), disposable work copies and [final deliveries](ai/flower-task-files.md). Add canonical materialization, bounded material pages, atomic Fork upload claims and interrupted deletion cleanup. Qualify historical cuts, image compaction/restart, concurrent cleanup, responsive UI and the configured DeepSeek V4.1 Flash (1017).
+
 - Normalize [tool disclosure](ui/flower-activity-interaction.md) chevrons to right when collapsed and down when expanded using existing accessible state. Remove absent-observation filler from BrowserUse/ComputerUse while preserving meaningful outcomes and failure notices.
 
 - Replace the right group action with a left folding rail and inline summary disclosure. Remove per-row connector hit testing, keep tool icons and stable indentation, align Goal history with prose, and place individual controls next to their text. Preserve reading, touch targets and fold sequencing; qualify [activity interaction](ui/flower-activity-interaction.md) and [sequence behavior](ui/flower-tool-sequences.md).

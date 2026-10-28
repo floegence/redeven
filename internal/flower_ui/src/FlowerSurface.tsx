@@ -14561,6 +14561,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     )).join(' · ')}`;
   };
   const [taskFilesOpen, setTaskFilesOpen] = createSignal(false);
+  const showTaskMaterialSource = async (itemID: string) => {
+    const tid = selectedThreadID(), signal = navigationReadController.signal, epoch = liveTransport.connectionEpoch();
+    if (!tid || !props.adapter.loadHistory) return;
+    setTaskFilesOpen(false);
+    transcriptScroll.stopFollowing();
+    setHistoryBusy(true); setHistoryError('');
+    const release = threadCache().beginRuntimeRead(tid);
+    try {
+      const view = await readDetail(readSignal => readHistory(tid, { anchor_id: itemID, direction: 'around', limit: 50 }, readSignal, true), signal);
+      signal.throwIfAborted();
+      if (tid !== selectedThreadID() || epoch !== liveTransport.connectionEpoch()) return;
+      receiveThreadView(view, 'user_action', epoch, true);
+      const sourceTurn = view.current?.items?.find(item => item.id === itemID)?.turn_id;
+      if (sourceTurn) turnDisclosureChoices.reveal(JSON.stringify([props.adapter.runtime.runtime_id, tid, sourceTurn]));
+      requestTranscriptAnimationFrame(() => {
+        if (tid !== selectedThreadID()) return;
+        const rows = transcriptScroll.viewport()?.querySelectorAll<HTMLElement>('[data-flower-message-id]');
+        const row = [...(rows ?? [])].find(element => element.dataset.flowerMessageId === itemID);
+        row?.scrollIntoView({ block: 'center' });
+      });
+    } catch { if (!signal.aborted && tid === selectedThreadID()) setHistoryError(copy().chat.history.failed); }
+    finally { release(); if (tid === selectedThreadID()) setHistoryBusy(false); }
+  };
+
   const headerActionDefinitions: readonly (Omit<FlowerConversationAction, 'label' | 'disabled'> & {
     visible: Accessor<boolean>;
     label: Accessor<string>;
@@ -14741,7 +14765,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       </div>
       </Show>
-      <FlowerTaskFiles open={taskFilesOpen()} onOpenChange={setTaskFilesOpen} threadID={selectedThreadID()} adapter={props.adapter} copy={copy().taskFiles}
+      <FlowerTaskFiles onSource={props.adapter.loadHistory ? itemID => void showTaskMaterialSource(itemID) : undefined} open={taskFilesOpen()} onOpenChange={setTaskFilesOpen} threadID={selectedThreadID()} adapter={props.adapter} copy={copy().taskFiles}
         onPreview={!props.adapter.openLinkedFilePreview && props.adapter.loadMessageFile ? path => openQueuedPathPreview(
           { kind: 'file', label: path.split(/[/\\]/).pop() || path, path }, { thread_id: selectedThreadID(), message_id: '' }) : undefined}
         onOpenFolder={!props.adapter.openLinkedDirectoryBrowser && props.adapter.listWorkingDirectoryEntries ? path => openQueuedPathPreview(

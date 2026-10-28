@@ -5220,6 +5220,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 
+		case action == "task-materials" && len(parts) == 2 && r.Method == http.MethodGet:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			page, err := aiSvc.GetTaskMaterials(r.Context(), meta, threadID, r.URL.Query().Get("cursor"))
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: page})
+			return
 		case action == "task-files" && len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodDelete):
 			permission := requiredPermissionRead
 			if r.Method == http.MethodDelete {

@@ -19,6 +19,7 @@ import (
 	flstorage "github.com/floegence/floret/v7/storage"
 	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
@@ -54,7 +55,13 @@ func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
 		return host, threads
 	}
 	host, threads := open()
-	svc := newTestService(t, &config.AIConfig{CurrentModelID: "openai/vision", Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "vision", InputModalities: []string{"text", "image"}}}}}})
+	// This fixture owns a separate public Floret Host. Keep product background
+	// workers deferred so swapping that Host at restart has no concurrent readers.
+	svc, err := NewService(Options{DeferExecution: true, StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/sh", Config: &config.AIConfig{CurrentModelID: "openai/vision", Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "vision", InputModalities: []string{"text", "image"}}}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
 	svc.threadRuntime = threads
 	meta := testSendTurnMeta()
 	product, err := svc.CreateThread(t.Context(), meta, "Image history", "", "", "")
@@ -151,6 +158,25 @@ func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
 	}
 	checkOriginal := func(threadID string) {
 		t.Helper()
+		materials, e := svc.GetTaskMaterials(t.Context(), meta, threadID, "")
+		if e != nil || len(materials.Items) != 1 || materials.Items[0].Kind != "media" || materials.Items[0].Locator != locator {
+			t.Fatalf("historical media listing: %+v %v", materials, e)
+		}
+		work := &run{id: "materialize-image", threadID: threadID, endpointID: meta.EndpointID, userPublicID: meta.UserPublicID, channelID: meta.ChannelID, stateDir: svc.stateDir}
+		work.expectFloretRuntimeEventIdentity(work.id, threadID, "materialize-turn", true)
+		work.host.readImageAttachment = func(ctx context.Context, audience *session.Meta, source string) (canonicalImageSnapshot, error) {
+			return svc.readCanonicalThreadImage(ctx, audience, threadID, source, "")
+		}
+		copy, e := work.toolAttachmentMaterialize(t.Context(), meta, locator)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if body, e := os.ReadFile(copy["file_path"].(string)); e != nil || !bytes.Equal(body, imageBody) {
+			t.Fatal("materialized image differs", e)
+		}
+		if e := svc.CleanTaskFiles(t.Context(), meta, threadID); e != nil {
+			t.Fatal(e)
+		}
 		snapshot, err := svc.readCanonicalThreadImage(t.Context(), meta, threadID, locator, "")
 		if err != nil || !bytes.Equal(snapshot.Body, imageBody) || snapshot.SHA256 != attachment.SHA256 {
 			t.Fatalf("historical original changed: %v", err)

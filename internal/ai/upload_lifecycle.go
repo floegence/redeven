@@ -520,6 +520,9 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	ctx, cancel := context.WithTimeout(context.Background(), uploadCleanupSweepTimeout)
 	defer cancel()
 	defer s.scheduleThreadstoreCompaction("maintenance:" + reason)
+	if err := s.sweepDeletedThreadFiles(ctx); err != nil && s.log != nil {
+		s.log.Warn("ai deleted thread file cleanup deferred", "reason", reason, "error", err)
+	}
 	s.maintainToolMedia(ctx, reason, false)
 	expiredScopes, expiredScopeErr := s.sweepExpiredUploadStagingScopes(ctx)
 	if expiredScopeErr != nil {

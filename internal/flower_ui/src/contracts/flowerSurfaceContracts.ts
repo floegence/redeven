@@ -1783,6 +1783,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   stopThread: (threadID: string) => Promise<void>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalCommandResult>;
+  loadTaskMaterials?: (threadID: string, cursor?: string) => Promise<FlowerTaskMaterials>;
   loadTaskFiles?: (threadID: string, cursor?: string) => Promise<FlowerTaskFiles>;
   cleanTaskFiles?: (threadID: string) => Promise<void>;
   downloadTaskFile?: (threadID: string, path: string, working: boolean, signal: AbortSignal) => Promise<void>;
@@ -1810,3 +1811,6 @@ export type FlowerComputerInputCommand = Omit<FlowerComputerUserInput, 'thread_i
 
 export type FlowerDeliveredFile = Readonly<{ file_path: string; name: string; title: string; mime: string; size: number; sha256: string; endpoint_id: string; thread_id: string; run_id: string; turn_id: string; status: 'available' | 'changed' | 'missing' | 'unavailable' }>;
 export type FlowerTaskFiles = Readonly<{ files: readonly FlowerDeliveredFile[]; next_cursor?: string; working_path: string; working_bytes: number; working_files: number; working?: readonly Readonly<{ path: string; name: string; size: number }>[]; working_truncated: boolean; can_clean: boolean; state_in_workspace: boolean }>;
+
+export type FlowerTaskMaterial = Readonly<{ id: string; locator: string; name: string; mime: string; size: number; kind: 'input' | 'media'; url: string; item_id: string; turn_id: string; created_at: string }>;
+export type FlowerTaskMaterials = Readonly<{ items: readonly FlowerTaskMaterial[]; next_cursor?: string }>;

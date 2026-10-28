@@ -148,7 +148,7 @@ func (s *Service) GetTaskFiles(ctx context.Context, meta *session.Meta, threadID
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return out, e
 	}
-	current, err := s.threadRuntime.View(ctx, identity.ThreadID(threadID))
+	current, _, err := readFlowerHistory(ctx, s.threadRuntime, scope, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(threadID), Limit: 1, PreviewBytes: 128, ActivityFields: true})
 	if err != nil {
 		return out, err
 	}

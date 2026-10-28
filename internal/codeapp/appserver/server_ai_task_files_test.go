@@ -62,6 +62,14 @@ func TestServer_TaskFileAuthorizationAndBoundedTransfer(t *testing.T) {
 				t.Fatal(e)
 			}
 			root := "/_redeven_proxy/api/ai/threads/" + thread.ThreadID
+			materials := performServerRequest(srv, http.MethodGet, root+"/task-materials", envOriginWithChannel("files-channel"), "")
+			if access == "foreign" || access == "denied" {
+				if materials.Code == 200 {
+					t.Fatal("unauthorized materials")
+				}
+			} else if materials.Code != 200 || !bytes.Contains(materials.Body.Bytes(), []byte("\"items\":[]")) {
+				t.Fatalf("materials %d %s", materials.Code, materials.Body.String())
+			}
 			for _, kind := range []string{"working", "delivered"} {
 				path := final
 				if kind == "working" {

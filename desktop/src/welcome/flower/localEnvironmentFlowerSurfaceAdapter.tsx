@@ -844,6 +844,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/input`, input,
       ),
       loadTaskFiles: (threadID, cursor) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID),
+      loadTaskMaterials: (threadID, cursor) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-materials' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID),
       downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET', flowerTaskFilePath(threadID,path,working,offset), undefined, undefined, options.runtimeEnvironmentID, signal),signal),
       cleanTaskFiles: async (threadID) => { await runtimeJSON(bridge, 'DELETE', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', undefined, undefined, options.runtimeEnvironmentID); },
       loadToolPreview: (input) => runtimeJSON<FlowerToolPreview>(bridge, 'POST',
