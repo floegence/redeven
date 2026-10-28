@@ -5,7 +5,7 @@ description: Show candidate filenames while tool arguments stream without author
 tags: [ui, flower, tools, streaming]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -19,7 +19,12 @@ execution.
 
 Tool schemas are the single declaration-order authority. For `apply_patch`, Redeven observes complete canonical Add/Update/Delete headers and optional Move headers before the body finishes.
 
-Actual result names and counts replace previews on settlement.
+Actual result names and counts replace previews on settlement. A failed patch
+shows only confirmed mutation diffs before its error, retaining the error status
+and stable disclosure row. Validation failure shows no completed-edit preview.
+A partial Move presents the confirmed destination create/update, not a rename.
+Confirmed local mutation targets support the existing authorized file navigation;
+preview paths and unconfirmed operations never acquire file actions.
 
 # Boundaries
 
@@ -30,3 +35,5 @@ Candidate names never create file actions, authorize paths, admit tool execution
 - `redeven:internal/ai/flower_argument_preview.go` - Incremental bounded filename extraction from canonical patch headers.
 
 - `redeven:internal/ai/flower_argument_preview_test.go` - Partial paths, chunk boundaries, rename/delete, Unicode, body isolation, and display bounds.
+
+- [Browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.toolFailures.browser.test.tsx) - No-edit validation and confirmed destination diffs remain readable with one error notice at desktop English/light and narrow Chinese/dark sizes.

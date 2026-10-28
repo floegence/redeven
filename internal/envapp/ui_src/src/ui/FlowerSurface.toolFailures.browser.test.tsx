@@ -22,6 +22,14 @@ it.each([['en-US', 1200, 'light'], ['zh-CN', 390, 'dark']] as const)(
         payload: { operation: 'read', display_name: 'report.txt', content: 'Partial file content', line_count: 1, total_lines: 2, error: { message: 'Read access was revoked.' } } },
       { item_id: 'patch-failed', tool_name: 'apply_patch', renderer: 'patch', label: 'report.txt',
         payload: { mutations: [{ display_name: 'report.txt', change_type: 'update', unified_diff: '@@ -1 +1 @@\n-old\n+new' }], error: { message: 'The next edit could not be applied.' } } },
+      { item_id: 'patch-validation', tool_name: 'apply_patch', renderer: 'patch', label: 'apply_patch',
+        payload: { error: { message: 'Patch validation failed; no files changed.', meta: { effect: 'none' } } } },
+      { item_id: 'patch-partial-move', tool_name: 'apply_patch', renderer: 'patch', label: 'destination.txt',
+        payload: { files_changed: 1, additions: 1, deletions: 1,
+          mutations: [{ display_name: 'destination.txt', change_type: 'update', additions: 1, deletions: 1,
+            target: { kind: 'file', path: '/workspace/destination.txt', label: 'destination.txt' },
+            unified_diff: '--- a/destination.txt\n+++ b/destination.txt\n@@ -1 +1 @@\n-destination-before\n+confirmed-destination' }],
+          error: { message: 'Destination written; source deletion failed. Inspect affected files before continuing.', meta: { effect: 'uncertain', completed_files: [] } } } },
       { item_id: 'search-failed', tool_name: 'web.search', renderer: 'web_search', label: 'Search release notes',
         payload: { operation: 'search', query: 'release notes', error: { message: 'The search service is unavailable.' } } },
       { item_id: 'computer-failed', tool_name: 'computer.exec', renderer: 'computer', label: 'Inspect the current page',
@@ -58,6 +66,13 @@ it.each([['en-US', 1200, 'light'], ['zh-CN', 390, 'dark']] as const)(
     expect(surface.querySelectorAll('.flower-activity-error-panel')).toHaveLength(cases.length);
     const skill = surface.querySelector('[data-flower-activity-item-id="skill-failed"]')!;
     expect(skill.querySelector('.flower-activity-detail-notice')).toBeNull();
+    const validation = surface.querySelector('[data-flower-activity-item-id="patch-validation"]')!;
+    expect(validation.querySelector('.flower-activity-file-diff-file')).toBeNull();
+    const partialMove = surface.querySelector('[data-flower-activity-item-id="patch-partial-move"]')!;
+    expect(partialMove.querySelectorAll('.flower-activity-file-diff-file')).toHaveLength(1);
+    expect(partialMove.querySelector('.flower-activity-file-diff-line-del')?.textContent).toContain('destination-before');
+    expect(partialMove.querySelector('.flower-activity-file-diff-line-add')?.textContent).toContain('confirmed-destination');
+    expect(partialMove.querySelector('[data-flower-disclosure-trigger]')?.textContent).toContain('destination.txt');
     expect(surface.querySelector('.flower-activity-error-repair')?.textContent).toContain('Select an available page');
     expect(surface.querySelector('.flower-activity-error-targets')?.textContent).toContain('Browser');
     await page.screenshot({ element: surface, path: `__screenshots__/flower-tool-failures-${locale}.png` });

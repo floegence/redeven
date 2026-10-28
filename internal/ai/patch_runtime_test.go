@@ -21,17 +21,22 @@ import (
 
 func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 	t.Parallel()
+	for _, scratch := range []bool{false, true} {
+		t.Run(map[bool]string{false: "cwd", true: "detached-scratch"}[scratch], func(t *testing.T) {
+			t.Parallel()
+			qualifyPatchHostedRun(t, scratch)
+		})
+	}
+}
+
+func qualifyPatchHostedRun(t *testing.T, scratch bool) {
+	t.Helper()
 	stateDir := t.TempDir()
-	path := filepath.Join(stateDir, "note.txt")
+	workingDir := t.TempDir()
+	var path, patch, ordered, backwards, uniqueBackwards string
 	var calls atomic.Int32
 	var outputMu sync.Mutex
 	var outputs []openAIFunctionOutput
-	patch := "*** Begin Patch\n*** Update File: " + path + "\n@@ beta:\n-same\n+changed\n*** End of File\n*** End Patch"
-	alpha := "@@ alpha:\n-same\n+ALPHA\n"
-	beta := "@@ beta:\n-changed\n+BETA\n"
-	ordered := "*** Begin Patch\n*** Update File: " + path + "\n" + alpha + beta + "*** End Patch"
-	backwards := "*** Begin Patch\n*** Update File: " + path + "\n" + beta + alpha + "*** End Patch"
-	uniqueBackwards := "*** Begin Patch\n*** Update File: " + path + "\n@@\n-BETA\n+final-beta\n@@\n-ALPHA\n+final-alpha\n*** End Patch"
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -111,7 +116,7 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 	}))
 	t.Cleanup(provider.Close)
 	opts := Options{
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: workingDir, Shell: "/bin/sh",
 		Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{
 			ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1",
 			Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
@@ -130,6 +135,20 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	path = filepath.Join(workingDir, "note.txt")
+	if scratch {
+		space, err := prepareTaskFiles(stateDir, thread.ThreadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path = filepath.Join(space.Scratch, "note.txt")
+	}
+	patch = "*** Begin Patch\n*** Update File: " + path + "\n@@ beta:\n-same\n+changed\n*** End of File\n*** End Patch"
+	alpha := "@@ alpha:\n-same\n+ALPHA\n"
+	beta := "@@ beta:\n-changed\n+BETA\n"
+	ordered = "*** Begin Patch\n*** Update File: " + path + "\n" + alpha + beta + "*** End Patch"
+	backwards = "*** Begin Patch\n*** Update File: " + path + "\n" + beta + alpha + "*** End Patch"
+	uniqueBackwards = "*** Begin Patch\n*** Update File: " + path + "\n@@\n-BETA\n+final-beta\n@@\n-ALPHA\n+final-alpha\n*** End Patch"
 	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
 		t.Fatal(err)
 	}

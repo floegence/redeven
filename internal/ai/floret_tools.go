@@ -1354,6 +1354,11 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		applyFileActivityTargets(activity, toolName, result.Data)
 		applyParentEventActivity(activity, toolName, result.Data)
 	}
+	if status == toolResultStatusError && toolName == "apply_patch" && result.effectUncertain && (r == nil || !r.shouldRouteTargetTool(toolName)) {
+		// Partial patch data contains only confirmed edits. Navigation facts do
+		// not imply completion or grant permission to read the affected files.
+		applyFileActivityTargets(activity, toolName, result.Data)
+	}
 	if isComputerUseTool(toolName) {
 		activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))
 		activity.Chips = nil

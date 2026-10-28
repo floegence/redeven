@@ -125,14 +125,14 @@ func TestPatchCommitFailureRetainsCompletedFacts(t *testing.T) {
 	}
 	var plans []patchFilePlan
 	for _, fd := range parsed.files {
-		p, err := buildPatchFilePlan(dir, fd)
+		p, err := buildPatchFilePlan(patchTestScope(t, dir), fd)
 		if err != nil {
 			t.Fatal(err)
 		}
 		plans = append(plans, p)
 	}
 	writes := 0
-	_, err = commitPatchPlans(t.Context(), dir, plans, func(path string, data []byte, mode fs.FileMode) error {
+	mutations, err := commitPatchPlans(t.Context(), patchTestScope(t, dir), plans, func(path string, data []byte, mode fs.FileMode) error {
 		writes++
 		if writes == 2 {
 			return errors.New("injected write failure")
@@ -147,12 +147,21 @@ func TestPatchCommitFailureRetainsCompletedFacts(t *testing.T) {
 	if classified.Code != aitools.ErrorCodePatchCommitFailed || classified.Retryable || classified.Meta["effect"] != "uncertain" {
 		t.Fatalf("classification=%+v", classified)
 	}
-	result, err := floretToolResultFromFlower(&run{}, ToolResult{ToolID: "patch", ToolName: "apply_patch", Status: toolResultStatusError, Error: classified, effectUncertain: true})
+	parsed.mutations = mutations
+	partial := confirmedPatchResult(parsed)
+	if partial.FilesChanged != 1 || partial.Additions != 1 || partial.Hunks != 1 || partial.Files[0].Path != plans[0].newAbs {
+		t.Fatalf("confirmed result=%+v", partial)
+	}
+	result, err := floretToolResultFromFlower(&run{}, ToolResult{ToolID: "patch", ToolName: "apply_patch", Status: toolResultStatusError, Data: partial, Error: classified, effectUncertain: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.EffectOutcome != fltools.EffectOutcomeUncertain || !strings.Contains(result.Text, "completed_files") || !strings.Contains(result.Text, "suggested_fixes") {
 		t.Fatalf("result=%+v", result)
+	}
+	payload, ok := result.Activity.Payload.(fltools.PatchActivityPayload)
+	if !ok || payload.Status != "error" || payload.Error == nil || payload.Mutations == nil || len(*payload.Mutations) != 1 || (*payload.Mutations)[0].UnifiedDiff == "" || (*payload.Mutations)[0].Target == nil || (*payload.Mutations)[0].Target.Path != plans[0].newAbs {
+		t.Fatalf("partial activity=%+v", payload)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "a.txt"))
 	if string(got) != "a\n" {
@@ -171,7 +180,7 @@ func TestPatchValidationAndCancellationHaveNoEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 	parsed, _ := parsePatchText("*** Begin Patch\n*** Update File: f.txt\n@@\n-old\n+new\n*** End Patch")
-	plan, err := buildPatchFilePlan(dir, parsed.files[0])
+	plan, err := buildPatchFilePlan(patchTestScope(t, dir), parsed.files[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +199,7 @@ func TestPatchValidationAndCancellationHaveNoEffects(t *testing.T) {
 				stop()
 			}
 			calls := 0
-			_, err := commitPatchPlans(ctx, dir, []patchFilePlan{plan}, func(string, []byte, fs.FileMode) error { calls++; return nil }, os.Remove)
+			_, err := commitPatchPlans(ctx, patchTestScope(t, dir), []patchFilePlan{plan}, func(string, []byte, fs.FileMode) error { calls++; return nil }, os.Remove)
 			var failure *patchApplyError
 			if !errors.As(err, &failure) || failure.attempted || calls != 0 {
 				t.Fatalf("failure=%+v calls=%d", err, calls)
@@ -274,27 +283,55 @@ func TestPatchInputResourcesAndActivity(t *testing.T) {
 
 func TestPatchRenameDeleteFailureRemainsUncertain(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	source := filepath.Join(dir, "source.txt")
-	if err := os.WriteFile(source, []byte("old\n"), 0600); err != nil {
-		t.Fatal(err)
+	for _, existing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "new-destination", true: "existing-destination"}[existing], func(t *testing.T) {
+			dir := t.TempDir()
+			source := filepath.Join(dir, "source.txt")
+			destination := filepath.Join(dir, "dest.txt")
+			if existing {
+				if err := os.WriteFile(destination, []byte("destination-before\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(source, []byte("old\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			parsed, _ := parsePatchText("*** Begin Patch\n*** Update File: source.txt\n*** Move to: dest.txt\n@@\n-old\n+new\n*** End Patch")
+			plan, err := buildPatchFilePlan(patchTestScope(t, dir), parsed.files[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutations, err := commitPatchPlans(t.Context(), patchTestScope(t, dir), []patchFilePlan{plan}, atomicWriteFile, func(string) error { return errors.New("injected remove failure") })
+			var failure *patchApplyError
+			if !errors.As(err, &failure) || !failure.attempted {
+				t.Fatalf("failure=%v", err)
+			}
+			if len(failure.completed) != 0 || len(mutations) != 1 {
+				t.Fatalf("completed=%v mutations=%+v", failure.completed, mutations)
+			}
+			mutation := mutations[0]
+			if mutation.FilePath != plan.newAbs || mutation.ChangeType == "rename" || strings.Contains(mutation.UnifiedDiff, "-old") || !strings.Contains(mutation.UnifiedDiff, "+new") {
+				t.Fatalf("unconfirmed rename=%+v", mutation)
+			}
+			if existing && (mutation.ChangeType != "update" || !strings.Contains(mutation.UnifiedDiff, "-destination-before")) {
+				t.Fatalf("destination baseline lost: %+v", mutation)
+			}
+			if !existing && (mutation.ChangeType != "create" || mutation.OldPath != "") {
+				t.Fatalf("new destination=%+v", mutation)
+			}
+			got, _ := os.ReadFile(filepath.Join(dir, "dest.txt"))
+			if string(got) != "new\n" {
+				t.Fatalf("destination=%q", got)
+			}
+			got, _ = os.ReadFile(source)
+			if string(got) != "old\n" {
+				t.Fatalf("source=%q", got)
+			}
+		})
 	}
-	parsed, _ := parsePatchText("*** Begin Patch\n*** Update File: source.txt\n*** Move to: dest.txt\n@@\n-old\n+new\n*** End Patch")
-	plan, err := buildPatchFilePlan(dir, parsed.files[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = commitPatchPlans(t.Context(), dir, []patchFilePlan{plan}, atomicWriteFile, func(string) error { return errors.New("injected remove failure") })
-	var failure *patchApplyError
-	if !errors.As(err, &failure) || !failure.attempted {
-		t.Fatalf("failure=%v", err)
-	}
-	got, _ := os.ReadFile(filepath.Join(dir, "dest.txt"))
-	if string(got) != "new\n" {
-		t.Fatalf("destination=%q", got)
-	}
-	got, _ = os.ReadFile(source)
-	if string(got) != "old\n" {
-		t.Fatalf("source=%q", got)
-	}
+}
+
+func patchTestScope(t *testing.T, dir string) runPathScope {
+	t.Helper()
+	return runPathScope{Registry: flowerTestFilesystemScope(t, dir), WorkingDirAbs: dir}
 }

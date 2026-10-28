@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 type unifiedDiffHunk struct {
@@ -31,6 +31,10 @@ type unifiedDiffHunk struct {
 type unifiedDiffFile struct {
 	oldPath string // "/dev/null" or path without a/ prefix
 	newPath string // "/dev/null" or path without b/ prefix
+
+	// Preserve submitted paths after canonicalization for commit-time checks.
+	oldInput string
+	newInput string
 
 	isNew    bool
 	isDelete bool
@@ -531,6 +535,8 @@ func classifyPatchFileChange(fd unifiedDiffFile) string {
 }
 
 type patchFilePlan struct {
+	oldInput            string
+	newInput            string
 	oldAbs              string
 	newAbs              string
 	delete              bool
@@ -560,32 +566,36 @@ func (e *patchApplyError) Error() string {
 }
 func (e *patchApplyError) Unwrap() error { return e.cause }
 
-func resolvePatchFiles(workingDir string, files []unifiedDiffFile) ([]unifiedDiffFile, error) {
+func resolvePatchFiles(scope runPathScope, files []unifiedDiffFile) ([]unifiedDiffFile, error) {
 	resolved := append([]unifiedDiffFile(nil), files...)
 	for i := range resolved {
-		for _, path := range []*string{&resolved[i].oldPath, &resolved[i].newPath} {
-			target, err := resolvePatchPath(workingDir, *path)
+		fd := &resolved[i]
+		if fd.oldInput == "" {
+			fd.oldInput = fd.oldPath
+		}
+		if fd.newInput == "" {
+			fd.newInput = fd.newPath
+		}
+		for _, binding := range []struct {
+			input  string
+			target *string
+		}{
+			{fd.oldInput, &fd.oldPath}, {fd.newInput, &fd.newPath},
+		} {
+			target, err := resolvePatchPath(scope, binding.input)
 			if err != nil {
 				return nil, err
 			}
 			if target != "" {
-				*path = target
+				*binding.target = target
 			}
 		}
 	}
 	return resolved, nil
 }
 
-func applyUnifiedDiff(workingDirAbs string, patchText string) (parsedPatch, error) {
-	parsed, err := parsePatchText(patchText)
-	if err != nil {
-		return parsedPatch{}, &patchApplyError{cause: err}
-	}
-	return applyParsedPatch(context.Background(), workingDirAbs, parsed)
-}
-
-func applyParsedPatch(ctx context.Context, workingDir string, parsed parsedPatch) (parsedPatch, error) {
-	files, err := resolvePatchFiles(workingDir, parsed.files)
+func applyParsedPatch(ctx context.Context, scope runPathScope, parsed parsedPatch) (parsedPatch, error) {
+	files, err := resolvePatchFiles(scope, parsed.files)
 	if err != nil {
 		return parsedPatch{}, &patchApplyError{cause: err}
 	}
@@ -607,7 +617,7 @@ func applyParsedPatch(ctx context.Context, workingDir string, parsed parsedPatch
 			}
 			seen[path] = true
 		}
-		plan, err := buildPatchFilePlan(workingDir, fd)
+		plan, err := buildPatchFilePlan(scope, fd)
 		if err != nil {
 			return parsedPatch{}, &patchApplyError{cause: err}
 		}
@@ -618,17 +628,14 @@ func applyParsedPatch(ctx context.Context, workingDir string, parsed parsedPatch
 	}
 	// Complete planning before the first effect. A single-file atomic replacement
 	// does not make a multi-file patch atomic; retain confirmed operations on error.
-	mutations, err := commitPatchPlans(ctx, workingDir, plans, atomicWriteFile, os.Remove)
-	if err != nil {
-		return parsedPatch{}, err
-	}
+	mutations, err := commitPatchPlans(ctx, scope, plans, atomicWriteFile, os.Remove)
 	parsed.mutations = mutations
-	return parsed, nil
+	return parsed, err
 }
 
-func commitPatchPlans(ctx context.Context, workingDir string, plans []patchFilePlan, write func(string, []byte, fs.FileMode) error, remove func(string) error) ([]FileMutationResult, error) {
+func commitPatchPlans(ctx context.Context, scope runPathScope, plans []patchFilePlan, write func(string, []byte, fs.FileMode) error, remove func(string) error) ([]FileMutationResult, error) {
 	for _, plan := range plans {
-		if err := validatePatchPlan(workingDir, plan); err != nil {
+		if err := validatePatchPlan(scope, plan); err != nil {
 			return nil, &patchApplyError{cause: err}
 		}
 	}
@@ -641,12 +648,12 @@ func commitPatchPlans(ctx context.Context, workingDir string, plans []patchFileP
 			path = plan.oldAbs
 		}
 		failure := func(err error) ([]FileMutationResult, error) {
-			return nil, &patchApplyError{cause: err, attempted: attempted, completed: append([]string(nil), completed...), path: path}
+			return mutations, &patchApplyError{cause: err, attempted: attempted, completed: append([]string(nil), completed...), path: path}
 		}
 		if err := ctx.Err(); err != nil {
 			return failure(err)
 		}
-		if err := validatePatchPlan(workingDir, plan); err != nil {
+		if err := validatePatchPlan(scope, plan); err != nil {
 			return failure(err)
 		}
 		attempted = true
@@ -662,9 +669,22 @@ func commitPatchPlans(ctx context.Context, workingDir string, plans []patchFileP
 				return failure(err)
 			}
 			if plan.oldAbs != "" && plan.oldAbs != plan.newAbs {
+				// This is a confirmed destination edit until source deletion succeeds.
+				change, oldPath := "create", ""
+				if plan.destinationExisted {
+					change, oldPath = "update", plan.newAbs
+				}
+				mutations = append(mutations, newFileMutationResultWithPaths(plan.newAbs, oldPath, plan.newAbs, change, string(plan.destinationBaseline), string(plan.contents)))
+				if err := ctx.Err(); err != nil {
+					return failure(err)
+				}
+				if err := validatePatchSource(scope, plan); err != nil {
+					return failure(err)
+				}
 				if err := remove(plan.oldAbs); err != nil {
 					return failure(err)
 				}
+				mutations = mutations[:len(mutations)-1]
 			}
 		}
 		completed = append(completed, path)
@@ -673,23 +693,48 @@ func commitPatchPlans(ctx context.Context, workingDir string, plans []patchFileP
 	return mutations, nil
 }
 
-func validatePatchPlan(workingDir string, plan patchFilePlan) error {
-	for _, path := range []string{plan.oldAbs, plan.newAbs} {
-		if path == "" {
-			continue
-		}
-		current, err := resolvePatchPath(workingDir, path)
-		if err != nil {
-			return err
-		}
-		if current != path {
-			return fmt.Errorf("patch target changed before write: %s", path)
-		}
-		if info, err := os.Stat(path); err == nil && !info.Mode().IsRegular() {
-			return fmt.Errorf("patch target is not a regular file: %s", path)
-		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
+func validatePatchTarget(scope runPathScope, input, target string) error {
+	if target == "" {
+		return nil
+	}
+	current, err := resolvePatchPath(scope, input)
+	if err != nil {
+		return err
+	}
+	if current != target {
+		return fmt.Errorf("patch target changed before write: %s", input)
+	}
+	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
+		return fmt.Errorf("patch target is not a regular file: %s", target)
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func validatePatchSource(scope runPathScope, plan patchFilePlan) error {
+	if plan.oldAbs == "" {
+		return nil
+	}
+	if err := validatePatchTarget(scope, plan.oldInput, plan.oldAbs); err != nil {
+		return err
+	}
+	current, err := os.ReadFile(plan.oldAbs)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(current, plan.baseline) {
+		return fmt.Errorf("file changed before patch could be applied: %s; read the current file and regenerate the patch", plan.oldAbs)
+	}
+	return nil
+}
+
+func validatePatchPlan(scope runPathScope, plan patchFilePlan) error {
+	if err := validatePatchSource(scope, plan); err != nil {
+		return err
+	}
+	if err := validatePatchTarget(scope, plan.newInput, plan.newAbs); err != nil {
+		return err
 	}
 	if plan.newAbs != "" && plan.newAbs != plan.oldAbs {
 		current, err := os.ReadFile(plan.newAbs)
@@ -704,30 +749,21 @@ func validatePatchPlan(workingDir string, plan patchFilePlan) error {
 			return fmt.Errorf("destination appeared before patch could be applied: %s", plan.newAbs)
 		}
 	}
-	if plan.oldAbs != "" {
-		current, err := os.ReadFile(plan.oldAbs)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(current, plan.baseline) {
-			return fmt.Errorf("file changed before patch could be applied: %s; read the current file and regenerate the patch", plan.oldAbs)
-		}
-	}
 	return nil
 }
 
-func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan, error) {
-	oldPath := strings.TrimSpace(fd.oldPath)
-	newPath := strings.TrimSpace(fd.newPath)
+func buildPatchFilePlan(scope runPathScope, fd unifiedDiffFile) (patchFilePlan, error) {
+	oldPath := firstNonEmptyString(fd.oldInput, fd.oldPath)
+	newPath := firstNonEmptyString(fd.newInput, fd.newPath)
 	if oldPath == "" || newPath == "" {
 		return patchFilePlan{}, errors.New("invalid diff paths")
 	}
 
-	oldAbs, err := resolvePatchPath(workingDirAbs, oldPath)
+	oldAbs, err := resolvePatchPath(scope, oldPath)
 	if err != nil {
 		return patchFilePlan{}, err
 	}
-	newAbs, err := resolvePatchPath(workingDirAbs, newPath)
+	newAbs, err := resolvePatchPath(scope, newPath)
 	if err != nil {
 		return patchFilePlan{}, err
 	}
@@ -741,6 +777,8 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 			return patchFilePlan{}, err
 		}
 		return patchFilePlan{
+			oldInput: oldPath,
+			newInput: newPath,
 			oldAbs:   oldAbs,
 			delete:   true,
 			baseline: originalBytes,
@@ -799,6 +837,8 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 	}
 	mutation := newFileMutationResultWithPaths(newAbs, oldAbs, newAbs, changeType, string(before), string(next))
 	return patchFilePlan{
+		oldInput:            oldPath,
+		newInput:            newPath,
 		oldAbs:              oldAbs,
 		newAbs:              newAbs,
 		delete:              false,
@@ -825,7 +865,8 @@ func patchMutationChangeType(fd unifiedDiffFile) string {
 	}
 }
 
-func resolvePatchPath(workingDirAbs string, raw string) (string, error) {
+// cwd is a relative-path base; Registry owns logical and canonical path policy.
+func resolvePatchPath(scope runPathScope, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "/dev/null" {
 		return "", nil
@@ -833,22 +874,14 @@ func resolvePatchPath(workingDirAbs string, raw string) (string, error) {
 	if raw == "" {
 		return "", errors.New("invalid path: missing patch file path")
 	}
-	root, err := pathutil.CanonicalizeExistingDirAbs(workingDirAbs)
+	if scope.Registry == nil {
+		return "", errors.New("invalid path: nil filesystem scope")
+	}
+	resolved, err := scope.Registry.ResolveTarget(scope.resolveInput(raw), filesystemscope.ResolveOptions{ForWrite: true})
 	if err != nil {
-		return "", fmt.Errorf("invalid path: working directory: %w", err)
+		return "", fmt.Errorf("invalid path: patch target %q: %w", raw, err)
 	}
-	target := raw
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(root, target)
-	}
-	resolved, err := pathutil.ResolveTargetScopedPath(target, root)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: patch target %q must resolve inside the run working directory: %w", raw, err)
-	}
-	if resolved == root {
-		return "", fmt.Errorf("invalid path: patch target must name a file: %q", raw)
-	}
-	return resolved, nil
+	return resolved.RealAbs, nil
 }
 
 func comparePatchLine(mode hunkMatchMode, actual string, expected string) bool {

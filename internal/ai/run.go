@@ -1537,7 +1537,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if errors.As(toolErrRaw, &patchFailure) {
 			outcome.effectUncertain = patchFailure.attempted
 			outcome.executionFacts.completed = !patchFailure.attempted
-			setToolError(patchToolError(patchFailure), "", nil)
+			setToolError(patchToolError(patchFailure), "", result)
 			return outcome, nil
 		}
 		var partial any
@@ -3436,7 +3436,7 @@ func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error)
 		return nil, errors.New("missing patch")
 	}
 
-	workingDirAbs, err := r.workingDirAbs()
+	scope, err := r.runPathScope()
 	if err != nil {
 		return nil, mapToolCwdError(err)
 	}
@@ -3444,12 +3444,15 @@ func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	parsed, err := r.resolveToolPatch(patchText)
+	parsed, err := parsePatchText(patchText)
 	if err != nil {
-		return nil, err
+		return nil, &patchApplyError{cause: err}
 	}
-	parsed, err = applyParsedPatch(ctx, workingDirAbs, parsed)
+	parsed, err = applyParsedPatch(ctx, scope, parsed)
 	if err != nil {
+		if len(parsed.mutations) > 0 {
+			return confirmedPatchResult(parsed), err
+		}
 		return nil, err
 	}
 

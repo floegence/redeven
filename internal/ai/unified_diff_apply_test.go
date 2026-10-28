@@ -1,11 +1,15 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 func TestApplyUnifiedDiff_AcceptsBeginPatchAddFile(t *testing.T) {
@@ -256,4 +260,18 @@ func TestFindHunkStart_PrefersExactMatchMode(t *testing.T) {
 	if match.mode != hunkMatchModeExact {
 		t.Fatalf("mode=%q, want %q", match.mode, hunkMatchModeExact)
 	}
+}
+
+func applyUnifiedDiff(workingDir string, patchText string) (parsedPatch, error) {
+	parsed, err := parsePatchText(patchText)
+	if err != nil {
+		return parsedPatch{}, &patchApplyError{cause: err}
+	}
+	registry, err := filesystemscope.NewRegistry(&config.Config{AgentHomeDir: workingDir, FilesystemScope: &config.FilesystemScope{
+		SchemaVersion: 1, DefaultRootID: "workspace", Roots: []config.FilesystemRootPolicy{{ID: "workspace", Label: "Workspace", Path: workingDir, Kind: config.FilesystemRootCustom, Permissions: config.FilesystemPermissionSet{Read: true, Write: true}}},
+	}})
+	if err != nil {
+		return parsedPatch{}, err
+	}
+	return applyParsedPatch(context.Background(), runPathScope{Registry: registry, WorkingDirAbs: workingDir}, parsed)
 }

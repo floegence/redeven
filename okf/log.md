@@ -4,6 +4,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-28
 
+- Align [patch paths](ai/tool-permission-runtime.md) with filesystem registry policy, preserving logical bindings and ordered authorization. Support detached [task scratch](ai/flower-task-files.md), retain truthful partial Move diffs and [error presentation](ui/flower-edit-preparation.md), and qualify restart/Fork without replay.
+
 - Render name-only [SubAgent targets](ui/flower-subagent-detail.md) in compact informational capsules, keeping names out of action titles and preserving existing reads and identity-based navigation.
 
 - Keep [parent event](ui/flower-parent-events.md) timestamps next to their source/status and remove duplicate child-navigation actions. Retain name-button navigation, report disclosure and compact responsive headers.

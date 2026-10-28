@@ -5,7 +5,7 @@ description: Tool registration, scheduling, permission, readonly, and target-rou
 tags: [ai, tools, permissions, dispatch]
 timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -22,11 +22,18 @@ The resolver validates MIME, size, and digest through the target-owned media sto
 
 ## File editing
 
-Redeven owns Flower patch execution. Local edits use the filesystem registry;
-patch and move paths must resolve inside cwd. Relative and absolute paths are
-accepted. Symlinks and new-file ancestors resolve before approval; execution
-rechecks approved canonical targets. Readonly roots reject writes. Target-routed
-tools retain target-owned policy.
+Redeven owns Flower patch execution. cwd only resolves relative input paths;
+the filesystem registry owns logical/canonical write policy for every local
+patch and Move endpoint, including authorized roots outside cwd and the current
+thread's private scratch. Readonly roots, private siblings/ancestors and their
+symlink aliases remain denied. Target-routed tools retain target-owned policy.
+
+Symlinks and new-file ancestors resolve before Floret authorization. Execution
+compares the ordered canonical resource sequence, rejecting swapped destinations
+as well as changed targets. Plans retain submitted paths and re-resolve them at
+full preflight, before each file commit and before Move source deletion. Source
+and destination snapshots must still match. These checks do not eliminate every
+filesystem TOCTOU race or constitute an OS sandbox.
 
 Use file.edit for unique literal replacements, file.write for complete files,
 and apply_patch for multi-chunk/file changes. Its strict JSON input argument and
@@ -51,9 +58,14 @@ when available, and a remedy. They never select writes. Floret validates JSON.
 
 Plans validate before writing and recheck source/destination snapshots per commit.
 Validation errors confirm no writes; commit errors report completed operations
-and uncertain effects, never permission to replay. Replacement is atomic per
-file, not per patch. Success retains confirmed paths/counts; canonical Activity
-retains before/after diffs and format metadata.
+and uncertain effects, never permission to replay. completed_files retains whole
+operation completion semantics. Partial result data and canonical Activity carry
+only confirmed mutations, paths, counts and actual before/after diffs. If a Move
+writes its destination but cannot delete its source, report the destination's
+create/update diff against its own prior contents, not a completed rename.
+Replacement is atomic per file, not per patch or Move. The existing published
+Floret ordered-resource, EffectOutcome and typed PatchActivity contracts own
+authorization, settlement and persistence; no second lifecycle is introduced.
 
 # Boundaries
 
@@ -67,5 +79,5 @@ Flower must not infer remote execution from thread context alone; it can only cl
 
 - `redeven:internal/ai/floret_native_tools.go` - The unique native factory derives `web_fetch` from Floret and binds invocation product permission.
 
-- Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.
+- Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.
 - internal/ai/patch_prompt_qualification_test.go uses the isolated live-model lane for multi-chunk, order and duplicate-header recovery. Patches run only in memory; proposed tools never execute. Small samples do not establish production failure rates.

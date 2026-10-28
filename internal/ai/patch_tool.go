@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	fltools "github.com/floegence/floret/v7/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -12,6 +13,21 @@ import (
 )
 
 type authorizedPatchResourcesKey struct{}
+
+// Failed patches expose only confirmed mutations, never the original plan.
+func confirmedPatchResult(parsed parsedPatch) ApplyPatchResult {
+	result := ApplyPatchResult{InputFormat: string(parsed.inputFormat), NormalizedFormat: string(parsed.normalizedFormat), Mutations: parsed.mutations}
+	for _, mutation := range parsed.mutations {
+		change := map[string]string{"create": "added", "update": "modified", "delete": "deleted", "rename": "renamed"}[mutation.ChangeType]
+		hunks := strings.Count(mutation.UnifiedDiff, "\n@@ ")
+		result.Files = append(result.Files, patchFileSummary{Path: mutation.FilePath, OldPath: mutation.OldPath, NewPath: mutation.NewPath, Change: change, Hunks: hunks, Additions: mutation.Additions, Deletions: mutation.Deletions})
+		result.Hunks += hunks
+		result.Additions += mutation.Additions
+		result.Deletions += mutation.Deletions
+	}
+	result.FilesChanged = len(result.Files)
+	return result
+}
 
 func (r *run) resolveToolPatch(text string) (parsedPatch, error) {
 	parsed, err := parsePatchText(text)
@@ -22,18 +38,9 @@ func (r *run) resolveToolPatch(text string) (parsedPatch, error) {
 	if err != nil {
 		return parsedPatch{}, &patchApplyError{cause: err}
 	}
-	files, err := resolvePatchFiles(scope.WorkingDirAbs, parsed.files)
+	files, err := resolvePatchFiles(scope, parsed.files)
 	if err != nil {
 		return parsedPatch{}, &patchApplyError{cause: err}
-	}
-	for _, ref := range resourceRefsFromPatchFiles(files) {
-		resolved, err := scope.Registry.ResolveTarget(ref.Value, filesystemscope.ResolveOptions{ForWrite: true})
-		if err != nil {
-			return parsedPatch{}, &patchApplyError{cause: err}
-		}
-		if resolved.RealAbs != ref.Value {
-			return parsedPatch{}, &patchApplyError{cause: fmt.Errorf("patch target changed during resolution: %s", ref.Value)}
-		}
 	}
 	parsed.files = files
 	return parsed, nil
@@ -61,8 +68,7 @@ func validateAuthorizedPatchResources(ctx context.Context, parsed parsedPatch) e
 	for i, ref := range actual {
 		got[i] = key(ref)
 	}
-	slices.Sort(want)
-	slices.Sort(got)
+	// Order binds operations to approved targets, including swapped symlinks.
 	if !slices.Equal(want, got) {
 		return &patchApplyError{cause: fmt.Errorf("patch targets changed after authorization; inspect the current paths and submit a new patch")}
 	}
@@ -79,7 +85,7 @@ func patchToolError(failure *patchApplyError) *aitools.ToolError {
 	if classified.Code == aitools.ErrorCodeUnknown || classified.Code == aitools.ErrorCodeNotFound {
 		classified.Code = aitools.ErrorCodePatchValidationFailed
 	}
-	if errors.Is(failure.cause, filesystemscope.ErrWriteDenied) {
+	if errors.Is(failure.cause, filesystemscope.ErrWriteDenied) || errors.Is(failure.cause, filesystemscope.ErrReadDenied) || errors.Is(failure.cause, filesystemscope.ErrPathOutsideScope) {
 		classified.Code = aitools.ErrorCodePermissionDenied
 	}
 	classified.Message = failure.Error()

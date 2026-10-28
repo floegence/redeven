@@ -178,8 +178,12 @@ func TestFlowerAuthorizedWorktreeUsesExplicitPaths(t *testing.T) {
 	if _, err := r.toolFileWrite(t.Context(), FileWriteArgs{FilePath: filepath.Join(worktree, "new.txt"), Content: "created"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.toolApplyPatch(t.Context(), "*** Begin Patch\n*** Update File: ../sibling-worktree/README.md\n@@\n-updated\n+escaped\n*** End Patch"); err == nil {
-		t.Fatal("patch must remain confined to the run working directory")
+	if _, err := r.toolApplyPatch(t.Context(), "*** Begin Patch\n*** Update File: ../sibling-worktree/README.md\n@@\n-updated\n+patched\n*** End Patch"); err != nil {
+		t.Fatalf("authorized worktree patch: %v", err)
+	}
+	patched, err := os.ReadFile(path)
+	if err != nil || string(patched) != "patched\n" {
+		t.Fatalf("worktree patch=%q err=%v", patched, err)
 	}
 	outside := filepath.Join(t.TempDir(), "outside.txt")
 	denied := newRun(runOptions{AgentHomeDir: repo, WorkingDir: repo, FilesystemScope: flowerTestFilesystemScope(t, repo)})
@@ -188,6 +192,13 @@ func TestFlowerAuthorizedWorktreeUsesExplicitPaths(t *testing.T) {
 	}
 	if _, err := denied.toolFileWrite(t.Context(), FileWriteArgs{FilePath: outside, Content: "denied"}); err == nil {
 		t.Fatal("out-of-root write accepted")
+	}
+	if _, err := denied.toolApplyPatch(t.Context(), "*** Begin Patch\n*** Update File: ../sibling-worktree/README.md\n@@\n-patched\n+denied\n*** End Patch"); err == nil {
+		t.Fatal("out-of-scope worktree patch accepted")
+	}
+	unchanged, err := os.ReadFile(path)
+	if err != nil || string(unchanged) != "patched\n" {
+		t.Fatal("denied patch changed worktree")
 	}
 	original, err := os.ReadFile(filepath.Join(repo, "README.md"))
 	if err != nil || string(original) != "hello\n" {

@@ -24,7 +24,7 @@ Terminal children receive FLOWER_SCRATCH_DIR/FLOWER_STAGING_DIR, no FLOWER_OUTPU
 
 Final files go to requested/established output destinations, otherwise selected project/worktree; temporary cwd cannot redirect them. No extra export step. Source/tests/conventional builds retain normal paths. Prompts do not sandbox shell effects, and filename heuristics cannot reroute writes.
 
-Current policy grants one private writable root without expanding project permission; sibling roots and symlink aliases are denied. Fork gets independent writable scratch; historical references grant no ancestor access.
+Current policy grants one private writable root without expanding project permission; sibling roots and symlink aliases are denied. Fork gets independent writable scratch; historical references grant no ancestor access. file.write, file.edit and apply_patch share this registry policy; patch cwd is only the relative-path base. Detached scratch and authorized external roots need no special patch whitelist. See [file editing](tool-permission-runtime.md).
 
 ## Fork
 
