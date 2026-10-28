@@ -12,7 +12,7 @@ reviewed_at: "2026-10-27"
 
 Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.
 
-Pins are Floe Webapp Boot, Core, and Protocol v0.86.63 (Env App Core v0.86.63), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.
+Pins are Floe Webapp Boot, Core, and Protocol v0.86.64 (Env App Core v0.86.64), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.
 
 [Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.
 
