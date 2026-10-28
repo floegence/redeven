@@ -391,6 +391,108 @@ async function verifyTerminalRecovery(page, context, portal, other, bundle) {
     if (observer) await observer.close();
   }
 }
+async function verifyFlowerRecovery(page, context, portal, other, bundle) {
+  if (engine !== 'chromium') throw new Error('Flower recovery qualification requires Chrome CDP');
+  await page.addScriptTag({ path: bundle });
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+  await page.locator('nav[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'Flower', exact: true }).click();
+  const composer = page.locator('[data-flower-text-entry="true"]:visible textarea').last();
+  await composer.fill('Return the bounded recovery fixture response without tools or delegation.');
+  const [submitted] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/_redeven_proxy/api/ai/turns' && response.request().method() === 'POST', { timeout: 30000 }),
+    composer.press('Enter'),
+  ]);
+  const receipt = await submitted.json();
+  if (!submitted.ok() || !receipt.ok) throw new Error('UI Flower admission rejected: ' + JSON.stringify(receipt));
+  const probe = { threadID: receipt.data.thread_id, runID: receipt.data.run_id };
+  if (!probe.threadID || !probe.runID) throw new Error('UI Flower receipt missing identity: ' + JSON.stringify(receipt));
+  const provider = async (method = 'GET') => {
+    const response = await fetch(fixture.control + '/flower-recovery', { method });
+    if (!response.ok) throw new Error('Recovery provider control rejected');
+    const status = await response.json();
+    if (status.requests > 1 || status.canceled !== 0) throw new Error('Browser lifecycle canceled or duplicated inference: ' + JSON.stringify(status));
+    return status;
+  };
+  const inspect = target => target.evaluate(id => GatewayAcceptance.inspectFlowerRecoveryProbe(id), probe.threadID);
+  const showThread = async target => {
+    await target.getByRole('tab', { name: 'Activity', exact: true }).click();
+    await target.locator('nav[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'Flower', exact: true }).click();
+    try { await target.locator('[data-thread-id="' + probe.threadID + '"] button').first().click({ timeout: 30000 }); }
+    catch (error) {
+      console.error('FLOWER_RECOVERY_LIST', await target.evaluate(async () => ({ list: await (await fetch('/_redeven_proxy/api/ai/threads?limit=25')).json(), ids: [...document.querySelectorAll('[data-thread-id]')].map(element => element.getAttribute('data-thread-id')) })));
+      throw error;
+    }
+    await target.getByText(/CENTER_FLOWER_RECOVERY_START/).first().waitFor({ timeout: 30000 });
+  };
+  let observer, reopened;
+  let cleaned = false;
+  const cdp = await context.newCDPSession(page);
+  let frozen = false, offline = false, detached = false;
+  try {
+    await until(async () => {
+      const view = await inspect(page);
+      if (view.error) throw new Error('Recovery turn failed before streaming: ' + JSON.stringify(view));
+      return (await provider()).chunks > 0;
+    }, 'Provider never started');
+    await showThread(page);
+    observer = await openEnvironment(portal, context, 0);
+    await until(async () => await runtimeStatus(observer) === 200, 'Flower observer could not reuse valid authority');
+    await observer.addScriptTag({ path: bundle });
+    const initial = await provider();
+    await cdp.send('Page.setWebLifecycleState', { state: 'frozen' }); frozen = true;
+    await portal.bringToFront();
+    await until(async () => (await provider()).chunks > initial.chunks + 2, 'Frozen page stopped remote generation');
+    const frozenView = await inspect(observer);
+    await cdp.send('Page.setWebLifecycleState', { state: 'active' }); frozen = false;
+    await page.bringToFront();
+    await cdp.send('Network.enable');
+    await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 }); offline = true;
+    const denied = await page.evaluate(async () => { try { await fetch('/api/local/runtime', { signal: AbortSignal.timeout(3000) }); return false; } catch { return true; } });
+    if (!denied) throw new Error('Flower tab did not become offline');
+    const beforeOffline = await provider();
+    await until(async () => (await provider()).chunks > beforeOffline.chunks + 2, 'Offline page stopped remote generation');
+    const offlineView = await inspect(observer);
+    if (await runtimeStatus(other) !== 200 || (await centerCall(portal, 'directory')).status !== 200) throw new Error('Flower interruption affected another authority');
+    await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); offline = false;
+    await cdp.detach(); detached = true;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await until(async () => await runtimeStatus(page) === 200, 'Flower reload lost Runtime authority');
+    await showThread(page);
+    await page.close();
+    const beforeClose = await provider();
+    await until(async () => (await provider()).chunks > beforeClose.chunks + 2, 'Closed page stopped remote generation');
+    const closedView = await inspect(observer);
+    reopened = await openEnvironment(portal, context, 0);
+    await until(async () => await runtimeStatus(reopened) === 200, 'Reopened Flower page lost Runtime authority');
+    await reopened.addScriptTag({ path: bundle });
+    await showThread(reopened);
+    await provider('POST');
+    let completed;
+    await until(async () => { completed = await inspect(reopened); return completed.answers?.some(answer => answer.text?.includes('CENTER_FLOWER_RECOVERY_COMPLETE') && !answer.live); }, 'Recovered Flower run did not complete');
+    await reopened.getByText(/CENTER_FLOWER_RECOVERY_COMPLETE/).first().waitFor({ timeout: 30000 });
+    for (const view of [frozenView, offlineView, closedView, completed]) {
+      if (view.threadID !== probe.threadID || view.runID !== probe.runID || view.error || view.users !== 1 || view.answers.length !== 1) throw new Error('Recovery changed canonical turn: ' + JSON.stringify(view));
+    }
+    const finalProvider = await provider();
+    if (finalProvider.requests !== 1 || finalProvider.titles !== 1) throw new Error('Recovery duplicated the reply or automatic title');
+    const cleanup = await reopened.evaluate(id => GatewayAcceptance.inspectFlowerRecoveryProbe(id, true), probe.threadID);
+    cleaned = true;
+    report.cases.push({ scope: 'Real Chrome Flower UI freeze/offline/reload/close/reopen, with one controlled local streaming model request through actual Runtime/Floret; no paid inference', probe, initial, finalProvider, frozenView, offlineView, closedView, completed, cleanup });
+    await reopened.getByRole('tab', { name: 'Workbench', exact: true }).click();
+    await verifyRuntimeWorkspace(reopened, false);
+    return reopened;
+  } finally {
+    if (!detached && !page.isClosed()) {
+      if (frozen) await cdp.send('Page.setWebLifecycleState', { state: 'active' });
+      if (offline) await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+      await cdp.detach();
+    }
+    await fetch(fixture.control + '/flower-recovery', { method: 'POST' });
+    const cleanupPage = observer ?? reopened ?? page;
+    if (!cleaned) await cleanupPage.evaluate(id => GatewayAcceptance.inspectFlowerRecoveryProbe(id, true), probe.threadID);
+    if (observer) await observer.close();
+  }
+}
 async function checkAccessibility(page) {
   await page.evaluate(await readFile(path.join(root, 'internal/envapp/ui_src/node_modules/axe-core/axe.min.js'), 'utf8'));
   const violations = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(item => ({ id: item.id, impact: item.impact, nodes: item.nodes.map(node => node.target) })));
@@ -672,6 +774,11 @@ try {
   if (process.env.REDEVEN_CENTER_TERMINAL_RECOVERY === '1') {
     const previous = environments[0];
     environments[0] = await verifyTerminalRecovery(previous, context, portal, environments[1], bundled);
+    if (applicationEnv === previous) applicationEnv = environments[0];
+  }
+  if (process.env.REDEVEN_CENTER_FLOWER_RECOVERY === '1') {
+    const previous = environments[0];
+    environments[0] = await verifyFlowerRecovery(previous, context, portal, environments[1], bundled);
     if (applicationEnv === previous) applicationEnv = environments[0];
   }
   if (process.env.REDEVEN_CENTER_PERFORMANCE === '1') {

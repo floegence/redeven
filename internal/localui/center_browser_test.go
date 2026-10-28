@@ -129,6 +129,13 @@ func TestCenterBrowserQualification(t *testing.T) {
 	hostCall("clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, &code)
 	targets := []*webEntryFixture{}
 	var uploadConfig *config.AIConfig
+	var flowerRecovery *centerFlowerRecoveryFixture
+	if os.Getenv("REDEVEN_CENTER_FLOWER_RECOVERY") == "1" {
+		if os.Getenv("REDEVEN_CENTER_UPLOADS") == "1" || os.Getenv("REDEVEN_CENTER_EXTERNAL_FIXTURE") != "" {
+			t.Fatal("Flower recovery requires its isolated local provider fixture")
+		}
+		flowerRecovery, uploadConfig = newCenterFlowerRecoveryFixture(t)
+	}
 	if os.Getenv("REDEVEN_CENTER_UPLOADS") == "1" {
 		// Attachment staging needs a model profile but never invokes inference.
 		var requests atomic.Int64
@@ -346,6 +353,9 @@ func TestCenterBrowserQualification(t *testing.T) {
 		})
 	}
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if flowerRecovery != nil && flowerRecovery.serveControl(w, r) {
+			return
+		}
 		if r.Method == "POST" && r.URL.Path == "/restart-connector" && restartConnector != nil {
 			if err := restartConnector(); err != nil {
 				http.Error(w, "Connector restart failed", 500)

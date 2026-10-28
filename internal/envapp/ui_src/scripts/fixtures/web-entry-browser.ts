@@ -51,6 +51,27 @@ export async function verifyAttachmentUpload() {
   }
 }
 
+async function recoveryFlowerCall(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST') {
+  return (await fetchLocalApiJSONResponse<any>('/_redeven_proxy/api/ai/' + path, { method,
+    signal: AbortSignal.timeout(30000), ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })).data;
+}
+
+export async function inspectFlowerRecoveryProbe(threadID: string, cleanup = false) {
+  if (cleanup) {
+    await recoveryFlowerCall('threads/' + encodeURIComponent(threadID) + '?force=true', undefined, 'DELETE');
+    const threads = await recoveryFlowerCall('threads');
+    if (threads.threads?.some((thread: { thread_id: string }) => thread.thread_id === threadID)) throw new Error('Recovery thread survived deletion');
+    return { deleted: true };
+  }
+  const detail = await recoveryFlowerCall('threads/' + encodeURIComponent(threadID));
+  const items = detail.current?.items ?? [];
+  return { threadID: detail.thread?.thread_id, runID: detail.current?.run_id, error: detail.current?.error,
+    users: items.filter((item: { kind: string }) => item.kind === 'user').length,
+    answers: items.filter((item: { kind: string }) => item.kind === 'assistant').map((item: { text?: string; live?: boolean }) => ({ text: item.text, live: item.live })),
+  };
+}
+
 export async function verifyModelTurn() {
   const {current,acquisition}=await openRuntimeSession();
   const headers={'Content-Type':'application/json','X-Redeven-Plugin-Session':acquisition.plugin_session_credential};
