@@ -5907,11 +5907,11 @@ button.flower-composer-context-source:focus-visible,
   appearance: none;
   position: relative;
   isolation: isolate;
-  display: grid;
+  /* Keep metadata beside intrinsic text while retaining a stable full-row target. */
+  display: flex;
   width: 100%;
   min-width: 0;
   min-height: 2rem;
-  grid-template-columns: 1rem minmax(0, 1fr) auto 1rem;
   align-items: center;
   gap: 0.42rem;
   border: 0;
@@ -5928,6 +5928,11 @@ button.flower-composer-context-source:focus-visible,
 .flower-activity-inline-button > * {
   position: relative;
   z-index: 1;
+}
+
+/* Titles may truncate; elapsed time and detail controls remain reachable. */
+.flower-activity-inline-button > :is(.flower-activity-inline-duration, .flower-activity-inline-chevron, .flower-thinking-toggle-icon) {
+  flex: none;
 }
 
 .flower-activity-inline-button-static {
@@ -6497,10 +6502,6 @@ button.flower-composer-context-source:focus-visible,
   transform: rotate(180deg);
 }
 
-.flower-activity-inline-row-subagents .flower-activity-inline-button {
-  grid-template-columns: 1rem minmax(0, 1fr) auto;
-}
-
 .flower-activity-inline-row-subagents .flower-activity-inline-title,
 .flower-activity-inline-row-subagents .flower-activity-inline-detail {
   font-family: var(--font-sans, inherit);
@@ -6785,10 +6786,6 @@ button.flower-composer-context-source:focus-visible,
   flex: 0 0 0.875rem;
   align-items: center;
   justify-content: center;
-}
-
-.flower-activity-inline-row-single-subagent .flower-activity-inline-button {
-  grid-template-columns: 1rem minmax(0, 1fr) auto;
 }
 
 .flower-activity-inline-row-single-subagent .flower-activity-inline-copy {
@@ -7851,10 +7848,6 @@ button.flower-composer-context-source:focus-visible,
   .flower-message-block-stack,
   .flower-activity-inline {
     width: 100%;
-  }
-
-  .flower-activity-inline-button {
-    grid-template-columns: 1rem minmax(0, 1fr) auto 1rem;
   }
 
   .flower-activity-inline-duration {
@@ -12221,10 +12214,6 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   flex: 0 1 auto;
 }
 
-.flower-activity-inline-row-reports .flower-activity-inline-button-static {
-  grid-template-columns: 1rem minmax(0, 1fr) auto;
-}
-
 .flower-activity-report-sources {
   display: inline-flex;
   flex: 0 1 auto;
@@ -12293,7 +12282,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-goal-command-chip { display: inline-flex; align-items: center; gap: 0.375rem; flex-shrink: 0; padding: 0.2rem 0.4rem; margin-top: 0.125rem; border-radius: 0.375rem; background: var(--muted); color: var(--foreground); font-size: 0.75rem; line-height: 1.4; }
 .flower-goal-command-chip button { display: inline-flex; cursor: pointer; color: var(--muted-foreground); }
 .flower-goal-history { min-width: 0; max-width: 100%; font-size: 0.75rem; color: var(--muted-foreground); }
-.flower-goal-history summary { display: flex; align-items: center; gap: 0.5rem; min-width: 0; min-height: 2rem; padding: 0.35rem 0.25rem; border-radius: 0.4rem; list-style: none; cursor: pointer; }
+.flower-goal-history summary { display: flex; align-items: center; gap: 0.42rem; min-width: 0; min-height: 2rem; padding: 0.35rem 0.25rem 0.35rem 0; border-radius: 0.4rem; list-style: none; cursor: pointer; }
 .flower-goal-history summary::-webkit-details-marker { display: none; }
 .flower-goal-history summary:hover { color: var(--foreground); }
 .flower-goal-history-icon { flex: none; opacity: 0.85; }
@@ -12302,7 +12291,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-goal-history-chevron { flex: none; width: 0.75rem; height: 0.75rem; margin-left: auto; opacity: 0.55; transition: transform 140ms ease; }
 .flower-goal-history[open] .flower-goal-history-chevron { transform: rotate(90deg); }
 .flower-goal-history[open] .flower-goal-history-preview { visibility: hidden; }
-.flower-goal-history-body { margin: 0.125rem 0.25rem 0.625rem 1.75rem; }
+.flower-goal-history-body { margin: 0.125rem 0.25rem 0.625rem calc(1rem + 0.42rem); }
 .flower-goal-history-text { margin: 0; color: var(--foreground); font-size: 0.8125rem; line-height: 1.65; }
 @media (prefers-reduced-motion: reduce) { .flower-goal-tag, .flower-goal-history-chevron { transition: none; } }
 
@@ -12321,8 +12310,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 
 /* Goal reviews share the quiet, borderless Goal history treatment. */
 .flower-activity-inline-goal { border-left: 0; padding-left: 0; }
-.flower-activity-inline-row-goal .flower-activity-inline-button { grid-template-columns: 1rem minmax(0, 1fr) auto; }
-.flower-activity-inline-row-goal .flower-activity-inline-copy { flex: 1; overflow: hidden; flex-direction: row; align-items: baseline; }
+.flower-activity-inline-row-goal .flower-activity-inline-copy { overflow: hidden; flex-direction: row; align-items: baseline; }
 .flower-activity-inline-row-goal .flower-activity-inline-title { flex: none; width: auto; }
 .flower-activity-inline-row-goal .flower-activity-inline-detail { font-family: var(--font-sans); font-weight: 400; }
 .flower-activity-inline-row-goal .flower-activity-inline-detail::before { content: '·'; margin-right: 0.4rem; opacity: 0.5; }
@@ -12354,13 +12342,15 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-tool-sequence-slot { display: contents; }
 .flower-tool-sequence-node, .flower-tool-sequence-content { position: relative; min-width: 0; }
 .flower-tool-sequence-body { min-width: 0; }
-/* Prose and activity icons share the transcript's left edge. Reserve the
-   trailing group action before membership is known; item details keep their
-   own hit target. The same control covers the summary after folding. */
+/* A permanent outer gutter keeps prose, activity icons and status aligned.
+   Membership never changes indentation; only the left folding rail appears. */
+.flower-chat-shell, .flower-subagent-detail-transcript { --flower-sequence-rail-width: 1.5rem; }
+.flower-chat-transcript, .flower-chat-bottom-dock,
+.flower-surface-companion .flower-chat-transcript,
+.flower-surface-companion .flower-chat-bottom-dock,
+.flower-subagent-detail-timeline { padding-inline-start: max(2rem, calc(var(--flower-sequence-rail-width) + 0.5rem)); }
 .flower-tool-sequence-node:has(> .flower-tool-sequence-header) {
-  --flower-sequence-control-width: 6.25rem;
   min-height: var(--flower-sequence-row-height, 2rem);
-  padding-inline-end: var(--flower-sequence-control-width);
 }
 /* Reserve the same native gutter while the first candidate is still alone.
    Group members use only their outer sequence gutter, never a nested one. */
@@ -12380,35 +12370,55 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-tool-sequence-viewport[data-state='open'] { overflow: visible; }
 .flower-tool-sequence-node[data-state='closed'][data-flower-sequence-start='false'] { display: none; }
 .flower-tool-sequence-header {
-  position: absolute; inset-block-start: 0; inset-inline: 0;
-  z-index: 1; display: flex; justify-content: flex-end;
-  height: var(--flower-sequence-row-height, 2rem);
+  position: absolute; inset: 0;
+  z-index: 1; container-type: inline-size;
   pointer-events: none;
 }
 .flower-tool-sequence-toggle {
-  box-sizing: border-box; height: var(--flower-sequence-row-height, 2rem);
-  display: flex; align-items: center; justify-content: flex-end; gap: 0; min-width: 0; width: 100%; min-height: var(--flower-sequence-row-height, 2rem);
-  padding: 0.25rem 0; border: 0; border-radius: 0.1875rem; background: transparent;
+  position: absolute; inset-block: 0; inset-inline-start: 0;
+  box-sizing: border-box; width: 100%; min-height: var(--flower-sequence-row-height, 2rem);
+  padding: 0; border: 0; border-radius: 0.25rem; background: transparent;
   color: var(--flower-activity-tool-row-quiet); cursor: pointer; text-align: left; pointer-events: auto;
   font-family: inherit; font-size: 0.75rem; font-weight: 400; line-height: 1.125rem;
 }
 .flower-tool-sequence-toggle:hover { color: var(--foreground); }
 .flower-tool-sequence-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-/* One composited summary layer crossfades over the shared first line. Keeping
-   its bounds stable avoids swapping clipped text in at the last frame. */
-.flower-tool-sequence-toggle[aria-expanded='true'] { width: var(--flower-sequence-control-width); }
+.flower-tool-sequence-toggle[aria-expanded='true'] {
+  inset-inline-start: calc(-1 * var(--flower-sequence-rail-width)); width: var(--flower-sequence-rail-width);
+}
+/* Container units keep the summary's text bounds fixed while the same native
+   button switches between the outer rail and the full folded summary. */
 .flower-tool-sequence-summary {
-  position: absolute; inset-block: 0; inset-inline-start: 0; inset-inline-end: var(--flower-sequence-control-width);
+  position: absolute; inset-block-start: 0; inset-inline-start: 0;
+  width: 100cqw; height: var(--flower-sequence-row-height, 2rem);
   display: flex; align-items: center; gap: 0.42rem; min-width: 0; pointer-events: none;
   opacity: 1; transition: opacity 100ms ease-out 140ms;
 }
 .flower-tool-sequence-toggle[aria-expanded='true'] > .flower-tool-sequence-summary {
+  inset-inline-start: var(--flower-sequence-rail-width);
   opacity: 0; transition: opacity 140ms ease-out;
 }
-.flower-tool-sequence-current { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--flower-activity-tool-row-foreground-strong); }
+.flower-tool-sequence-rail {
+  position: absolute; inset-block: 0; inset-inline-start: calc(-1 * var(--flower-sequence-rail-width));
+  width: var(--flower-sequence-rail-width); pointer-events: none;
+  opacity: 0; transition: opacity 140ms ease-out;
+}
+.flower-tool-sequence-toggle[aria-expanded='true'] > .flower-tool-sequence-rail { inset-inline-start: 0; opacity: 1; }
+.flower-tool-sequence-rail::before {
+  content: ''; position: absolute;
+  inset-inline-start: calc(50% - 0.5px); inset-block: calc(var(--flower-sequence-row-height, 2rem) / 2 + 0.5rem) 0.5rem;
+  width: 0.375rem; border-inline-start: 1px solid currentColor; border-block-end: 1px solid currentColor;
+  border-end-start-radius: 0.25rem; opacity: 0.45;
+}
+.flower-tool-sequence-fold-icon {
+  position: absolute; inset-inline-start: calc(50% - 0.375rem); inset-block-start: calc(var(--flower-sequence-row-height, 2rem) / 2 - 0.375rem);
+  width: 0.75rem; height: 0.75rem; transform: rotate(90deg); opacity: 0.7;
+}
+.flower-tool-sequence-toggle:is(:hover, :focus-visible) .flower-tool-sequence-rail::before,
+.flower-tool-sequence-toggle:is(:hover, :focus-visible) .flower-tool-sequence-fold-icon { opacity: 1; }
+/* Shrink optional live previews before truncating the group counts. */
+.flower-tool-sequence-current { min-width: 0; flex: 0 1000 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--flower-activity-tool-row-foreground-strong); }
 .flower-tool-sequence-icon { width: 1rem; height: 1rem; flex-shrink: 0; }
-.flower-tool-sequence-action { display: flex; align-items: center; justify-content: flex-end; gap: 0.375rem; width: var(--flower-sequence-control-width); padding-inline: 0.375rem 0.25rem; box-sizing: border-box; }
-.flower-tool-sequence-action-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flower-tool-sequence-current::before { content: '·'; margin-inline: 0.375rem; color: var(--flower-activity-tool-row-quiet); }
 .flower-tool-sequence-scroll .flower-activity-inline-button { min-height: var(--flower-sequence-row-height); }
 .flower-tool-sequence-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -12422,13 +12432,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   width: 0.875rem; height: 0.875rem; flex-shrink: 0;
   transition: transform 140ms ease;
 }
-.flower-tool-sequence-toggle[aria-expanded='true'] .flower-tool-sequence-chevron { transform: rotate(90deg); }
-.flower-tool-sequence-running { margin-inline-start: auto; color: var(--flower-activity-tool-row-foreground-strong); white-space: nowrap; }
-.flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after {
-  content: ''; position: absolute; inset-inline-start: calc(0.5rem - 0.5px); top: 1.75rem; bottom: -0.25rem; width: 1px;
-  background: var(--flower-activity-tool-row-foreground, var(--flower-reading-title)); opacity: 0.62; pointer-events: none;
-}
-.flower-tool-sequence-content[data-flower-connector-clipped]::after { visibility: hidden; }
+.flower-tool-sequence-running { flex-shrink: 0; color: var(--flower-activity-tool-row-foreground-strong); white-space: nowrap; }
 .flower-tool-sequence-node:has(> .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content > .flower-parent-event) .flower-parent-event {
   min-height: var(--flower-sequence-row-height, 2rem); margin: 0; padding: 0.5rem 0; box-sizing: border-box;
 }
@@ -12441,22 +12445,16 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-message-block-stack-assistant > .flower-tool-sequence-slot:has(> .flower-tool-sequence-node[data-flower-sequence-start='false']),
 .flower-message-block-stack-assistant > .flower-activity-inline:has(> .flower-tool-sequence-node[data-flower-sequence-start='false']:first-child) { margin-top: 0; }
 .flower-activity-inline:has(> .flower-tool-sequence-node[data-flower-sequence]):not(:has(> .flower-tool-sequence-node:not([data-state='closed']))):not(:has(> .flower-tool-sequence-node[data-flower-sequence-start='true'])) { display: none; }
-.flower-thinking-disclosure .flower-thinking-toggle-icon { width: 0.875rem; height: 0.875rem; justify-self: end; }
+.flower-thinking-disclosure .flower-thinking-toggle-icon { width: 0.875rem; height: 0.875rem; }
 @media (pointer: coarse) {
-  .flower-tool-sequence-toggle { min-height: 2.75rem; }
+  .flower-chat-shell, .flower-subagent-detail-transcript { --flower-sequence-rail-width: 2.75rem; }
   .flower-turn-timeline { --flower-sequence-row-height: 2.75rem; }
   .flower-turn-summary-button { min-height: 2.75rem; }
-  .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after { top: 2.125rem; bottom: -0.625rem; }
 }
-@media (max-width: 640px) {
-  .flower-tool-sequence-node:has(> .flower-tool-sequence-header) { --flower-sequence-control-width: 2.75rem; }
-  .flower-tool-sequence-action { justify-content: center; padding-inline: 0; }
-  .flower-tool-sequence-action-label { display: none; }
-}
-@media (prefers-reduced-motion: reduce) { .flower-tool-sequence-chevron, .flower-tool-sequence-summary { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .flower-tool-sequence-chevron, .flower-tool-sequence-summary, .flower-tool-sequence-rail { transition: none; } }
 @media (forced-colors: active) {
   .flower-tool-sequence-toggle { color: ButtonText; }
-  .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after { background: GrayText; opacity: 1; }
+  .flower-tool-sequence-rail::before { border-color: ButtonText; opacity: 1; }
 }
 
 .flower-chat-notices {

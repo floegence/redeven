@@ -476,6 +476,7 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
     { id: 'goal-set', ordinal: 2, canonical_ordinal: 2, kind: 'goal', turn_id: 'goal-turn', run_id: 'goal-run', goal: { goal: { ...goal, status: 'active' }, operation: 'set', actor: 'model', at: '2026-10-18T00:00:00Z' } },
     { id: 'goal-user-set', ordinal: 3, canonical_ordinal: 3, kind: 'goal', goal: { goal: { ...goal, status: 'active', actor: 'user' }, operation: 'set', actor: 'user', at: '2026-10-18T00:00:30Z' } },
     { id: 'goal-done', ordinal: 4, canonical_ordinal: 4, kind: 'goal', goal: { goal, operation: 'completed', actor: 'model', at: '2026-10-18T00:01:00Z' } },
+    { id: 'goal-alignment-prose', ordinal: 5, canonical_ordinal: 5, turn_id: 'goal-turn', run_id: 'goal-run', kind: 'assistant', text: 'Goal history shares this transcript edge.' },
   ] };
   const surface = renderSurfaceWithAdapterProps({ ...base, listThreads: async () => [snapshot], loadThread: async () => ({ thread: applyFlowerRuntimeCurrentView(snapshot, current), current }) }, { copy, focusThreadRequest: focus });
   surface.style.cssText = 'width:100%;height:800px;position:relative;';
@@ -487,6 +488,8 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
     const row = surface.querySelectorAll<HTMLDetailsElement>('.flower-goal-history')[index]!;
     const summary = row.querySelector('summary')!;
     expect(summary.querySelector('[data-flower-goal-icon]')).not.toBeNull();
+    const prose = surface.querySelector('[data-flower-message-id="goal-alignment-prose"] .flower-message-bubble')!;
+    expect(Math.abs(summary.querySelector('[data-flower-goal-icon]')!.getBoundingClientRect().left - prose.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
     expect(summary.querySelector('.flower-goal-history-label')?.textContent).toBe(label);
     expect(summary.querySelector('.flower-goal-history-preview')?.textContent).toBe(text);
     expect(getComputedStyle(summary.querySelector('.flower-goal-history-preview')!).textOverflow).toBe('ellipsis');

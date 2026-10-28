@@ -5,7 +5,6 @@ import type { FlowerToolSequence, FlowerToolSequenceProjection } from './flowerT
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 import type { FlowerToolSequenceElement } from './flowerToolSequenceLayout';
 import { createFlowerScrollTailController } from './flowerScrollTail';
-import { createFlowerSequenceConnectorClip } from './flowerSequenceConnectorClip';
 
 export const FlowerToolSequenceContext = createContext<Readonly<{
   projection: Accessor<FlowerToolSequenceProjection>;
@@ -44,7 +43,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   let slot!: HTMLDivElement;
   let node!: HTMLDivElement;
   let body!: HTMLDivElement;
-  const connectorClip = createFlowerSequenceConnectorClip();
+  let summary: HTMLSpanElement | undefined;
   const scroll = createFlowerScrollTailController({
     preparing: () => context?.preparing() || motion.state() === 'opening',
     reducedMotionPreferred: () => context?.reducedMotion() ?? false,
@@ -52,7 +51,6 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     cancelAnimationFrame: handle => cancelAnimationFrame(handle),
     nearBottomThreshold: 24,
     observeChildren: true,
-    onLayout: () => { if (first() && body) connectorClip.update(body); },
   });
   const scrollToLatest = () => scroll.flushLayout(false);
   const prepareArrival = () => scroll.prepareArrival();
@@ -74,7 +72,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     closeEasing: 'cubic-bezier(0.32, 0, 0.2, 1)',
     // The summary occupies the same first row; never animate past that row
     // into invisible space beneath the node's minimum height. Read once per fold.
-    collapsedHeight: () => first() ? trigger?.getBoundingClientRect().height ?? 0 : 0,
+    collapsedHeight: () => first() ? summary?.getBoundingClientRect().height ?? 0 : 0,
     reducedMotion,
     onLayoutFrame: () => {
       if (first() && expanded() && scroll.followingLatest()) scrollToLatest();
@@ -96,7 +94,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   createEffect(() => {
     if (!first() || !expanded()) return;
     untrack(() => scroll.bind(body));
-    const onScroll = () => { scroll.onScroll(); connectorClip.update(body); };
+    const onScroll = scroll.onScroll;
     body.addEventListener('scroll', onScroll);
     body.addEventListener('wheel', scroll.onWheel, { passive: true });
     body.addEventListener('pointerdown', scroll.onPointerDown);
@@ -104,7 +102,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     body.addEventListener('keydown', scroll.onKeyDown);
     // Placement completes in the same microtask checkpoint, before first paint.
     let cancelled = false;
-    queueMicrotask(() => { if (!cancelled) { scroll.scrollToBottom(); connectorClip.update(body); } });
+    queueMicrotask(() => { if (!cancelled) scroll.scrollToBottom(); });
     onCleanup(() => {
       cancelled = true;
       body.removeEventListener('scroll', onScroll);
@@ -113,7 +111,6 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
       body.removeEventListener('touchmove', scroll.onTouchMove);
       body.removeEventListener('keydown', scroll.onKeyDown);
       scroll.bind(undefined);
-      connectorClip.clear();
     });
   });
   const label = () => {
@@ -148,7 +145,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         aria-expanded={expanded()} data-flower-manual-open={context!.manuallyExpanded(member()!.group) ? 'true' : undefined} aria-controls={member()!.group.nodeKeys.map(context!.contentID).join(' ')}
         aria-label={`${expanded() ? context!.copy().collapseTools : context!.copy().expandTools}: ${[label(), currentLabel()].filter(Boolean).join(' · ')}`}
         onClick={event => context!.toggle(member()!.group, event.currentTarget)}>
-        <span class="flower-tool-sequence-summary">
+        <span ref={summary} class="flower-tool-sequence-summary">
           <Layers class="flower-tool-sequence-icon" aria-hidden="true" />
           <span class="flower-tool-sequence-label">
             <Show when={member()!.group.countsComplete} fallback={<span classList={{ 'flower-tool-sequence-failures': Boolean(member()!.group.failedCount || member()!.group.uncertainCount || member()!.group.failedSubagentEventCount) }}>{context!.copy().continuousTools}</span>}>
@@ -164,10 +161,10 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
             {label => <span class="flower-tool-sequence-current" title={label()}>{label()}</span>}
           </Show>
           <Show when={member()!.group.countsComplete && member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
-        </span>
-        <span class="flower-tool-sequence-action" aria-hidden="true">
-          <span class="flower-tool-sequence-action-label">{expanded() ? context!.copy().collapseToolsShort : context!.copy().expandToolsShort}</span>
           <ChevronRight class="flower-tool-sequence-chevron" aria-hidden="true" />
+        </span>
+        <span class="flower-tool-sequence-rail" aria-hidden="true">
+          <ChevronRight class="flower-tool-sequence-fold-icon" />
         </span>
       </button>
     );

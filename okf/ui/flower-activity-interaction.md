@@ -17,6 +17,8 @@ Desktop and Env App share this contract.
 # Contract
 
 ## Stable disclosure and safe content
+The permanent left folding-rail gutter aligns prose, activity and progress before groups form. Goal history icons share the prose/tool leading edge; their expanded text aligns with the summary label. Individual tool and thinking metadata/disclosure controls follow the text tail with the same compact gap, retaining the full-row activation area.
+
 Activity identity is thread, run, turn and canonical item ID. [Tool sequences](flower-tool-sequences.md) own grouping and bounded thinking; individual details remain available.
 
 Field summaries preserve collapsed labels and result shape without transferring hidden payloads. Disclosure reads selected values; long text uses 16 KiB ranges and a 128 KiB reading window, with explicit selection pins. Closing, hiding or navigating cancels obsolete demand. Markdown reads exact UTF-8 chunks and yields between batches: whitespace cannot be sampled or silently removed because it affects parsing and copied code. A selected Markdown document remains a complete working set rather than a fixed-memory preview.
