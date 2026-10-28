@@ -16,6 +16,18 @@ include September and October 2026 runs. A passing worktree run does not replace
 pre-push gate, certify arbitrary applications, or turn earlier failed runs into
 successes. Private text and pixels are excluded from retained diagnostics.
 
+# Contract
+
+Keep measurements bound to their declared platform, provider and source build. Never infer cross-platform success from one adapter or from a model request returning HTTP 200.
+
+# Boundaries
+
+The source runners, not these aggregate counts, define pass/fail invariants.
+
+See the acceptance contract for cleanup, evidence binding and scope restrictions.
+
+# Evidence
+
 ## Generic contract qualification — 2026-10-27
 
 Published Floret v7.88.0 owns batch exclusion; Redeven only declares its shared
@@ -40,18 +52,6 @@ skip; the ten browser qualification suites passed. Go package, focused race,
 macOS native and Linux private-display checks passed. One combined safety run
 timed out waiting for a helper; the independent rerun and three consecutive
 four-fixture runs passed. The original timeout remains in external evidence.
-
-# Contract
-
-Keep measurements bound to their declared platform, provider and source build. Never infer cross-platform success from one adapter or from a model request returning HTTP 200.
-
-# Boundaries
-
-The source runners, not these aggregate counts, define pass/fail invariants.
-
-See the acceptance contract for cleanup, evidence binding and scope restrictions.
-
-# Evidence
 
 ## Script batches, downloads and native entry — October 27
 
