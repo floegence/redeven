@@ -10,12 +10,18 @@ type Meta struct {
 	// It is never accepted from a session DTO or persisted as execution authority.
 	DesktopSource string `json:"-"`
 	// LocalHostAccess is set only by the authenticated native host boundary.
-	LocalHostAccess   string `json:"-"`
-	ChannelID         string `json:"channel_id"`
-	EndpointID        string `json:"endpoint_id"`
-	FloeApp           string `json:"floe_app"`
-	CodeSpaceID       string `json:"code_space_id,omitempty"`
-	SessionKind       string `json:"session_kind,omitempty"`
+	LocalHostAccess string `json:"-"`
+	ChannelID       string `json:"channel_id"`
+	EndpointID      string `json:"endpoint_id"`
+	FloeApp         string `json:"floe_app"`
+	CodeSpaceID     string `json:"code_space_id,omitempty"`
+	SessionKind     string `json:"session_kind,omitempty"`
+	// AppOrigin is the control-plane-confirmed browser-visible origin of the app
+	// window served over this session. Isolated runtimes front the same agent
+	// upstream from a minted app-* host that the agent cannot derive locally, so
+	// the data plane admits it as an additional allowed origin. Empty for direct
+	// deployments, where the app origin is the external origin itself.
+	AppOrigin         string `json:"app_origin,omitempty"`
 	UserPublicID      string `json:"user_public_id"`
 	UserEmail         string `json:"user_email"`
 	NamespacePublicID string `json:"namespace_public_id"`

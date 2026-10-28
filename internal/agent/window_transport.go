@@ -23,7 +23,12 @@ func (a *Agent) registerWindowSessionProxy(handlers flowersec.StreamHandlerRegis
 	if err != nil {
 		return nil, err
 	}
-	proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, runtimeproxy.Options{Upstream: upstream, UpstreamOrigin: origin, BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders()})
+	proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, runtimeproxy.Options{
+		Upstream:               upstream,
+		UpstreamOrigin:         origin,
+		AllowedOrigins:         sessionProxyAllowedOrigins(origin, meta.AppOrigin),
+		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
+	})
 	if err != nil {
 		closeUpstream()
 		return nil, err

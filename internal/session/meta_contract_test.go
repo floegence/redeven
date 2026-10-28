@@ -17,6 +17,7 @@ func TestMetaJSONContract(t *testing.T) {
 		"FloeApp":                      "floe_app",
 		"CodeSpaceID":                  "code_space_id",
 		"SessionKind":                  "session_kind",
+		"AppOrigin":                    "app_origin",
 		"UserPublicID":                 "user_public_id",
 		"UserEmail":                    "user_email",
 		"NamespacePublicID":            "namespace_public_id",
@@ -45,7 +46,7 @@ func TestMetaJSONContract(t *testing.T) {
 			t.Fatalf("Meta.%s json tag mismatch: got=%q want=%q (full tag=%q)", f.Name, gotName, wantName, gotTag)
 		}
 
-		if (f.Name == "CodeSpaceID" || f.Name == "SessionKind") && !strings.Contains(gotTag, "omitempty") {
+		if (f.Name == "CodeSpaceID" || f.Name == "SessionKind" || f.Name == "AppOrigin") && !strings.Contains(gotTag, "omitempty") {
 			t.Fatalf("Meta.%s must be omitempty (full tag=%q)", f.Name, gotTag)
 		}
 

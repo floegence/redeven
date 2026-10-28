@@ -31,8 +31,14 @@ func EnvAppResponseHeaders() []string {
 // Options is the Redeven-owned policy subset applied to Flowersec's public
 // carrier-neutral ProxyServer.
 type Options struct {
-	Upstream                    string
-	UpstreamOrigin              string
+	Upstream       string
+	UpstreamOrigin string
+	// AllowedOrigins admits browser-visible origins that legitimately front this
+	// upstream besides UpstreamOrigin itself. The isolated runtime serves an app
+	// window from a control-plane minted origin (app-*/rt-*) that the agent cannot
+	// derive from its own configuration, so the control plane must state it.
+	// Empty keeps Flowersec's default of the UpstreamOrigin alone.
+	AllowedOrigins              []string
 	DefaultHTTPRequestTimeout   time.Duration
 	MaxHTTPRequestTimeout       time.Duration
 	MaxConcurrentStreams        int
@@ -56,6 +62,7 @@ func New(opts Options) (*flowersec.ProxyServer, error) {
 	return flowersec.NewProxyServer(flowersec.ProxyServerOptions{
 		Upstream:                    opts.Upstream,
 		UpstreamOrigin:              opts.UpstreamOrigin,
+		AllowedOrigins:              opts.AllowedOrigins,
 		MaxConcurrentStreams:        opts.MaxConcurrentStreams,
 		MaxWebSocketFrameBytes:      MaxWSFrameBytes,
 		MaxBodyBytes:                opts.MaxBodyBytes,

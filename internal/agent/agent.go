@@ -1533,6 +1533,7 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess flowersec.Session,
 	proxyOpts := runtimeproxy.Options{
 		Upstream:               up,
 		UpstreamOrigin:         origin,
+		AllowedOrigins:         sessionProxyAllowedOrigins(origin, meta.AppOrigin),
 		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
 	}
 	proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, proxyOpts)
@@ -1591,6 +1592,7 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess flowersec.Sess
 	proxyOpts := runtimeproxy.Options{
 		Upstream:               up,
 		UpstreamOrigin:         origin,
+		AllowedOrigins:         sessionProxyAllowedOrigins(origin, meta.AppOrigin),
 		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
 	}
 	proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, proxyOpts)
@@ -1730,6 +1732,7 @@ func (a *Agent) registerEnvSessionProxy(handlers flowersec.StreamHandlerRegistra
 	}
 	proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, runtimeproxy.Options{
 		Upstream: upstream, UpstreamOrigin: origin,
+		AllowedOrigins:         sessionProxyAllowedOrigins(origin, meta.AppOrigin),
 		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
 		ExtraRequestHeaders:    runtimeproxy.EnvAppRequestHeaders(),
 		ExtraResponseHeaders:   runtimeproxy.EnvAppResponseHeaders(),
