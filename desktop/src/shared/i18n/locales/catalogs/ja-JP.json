@@ -883,7 +883,9 @@
           }
         },
         "expandTools": "ツール呼び出しを展開",
-        "collapseTools": "ツール呼び出しを折りたたむ"
+        "collapseTools": "ツール呼び出しを折りたたむ",
+        "expandToolsShort": "展開",
+        "collapseToolsShort": "折りたたむ"
       },
       "modelUnavailableMissingKeys": "このモデルプロバイダーの認証情報が設定されていません。設定で認証情報を追加してください。",
       "modelUnavailableProviderDisabled": "このモデルプロバイダーは無効です。設定で有効にするか、別のモデルを選択してください。",

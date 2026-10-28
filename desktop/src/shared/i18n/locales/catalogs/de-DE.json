@@ -883,7 +883,9 @@
           }
         },
         "expandTools": "Werkzeugaufrufe aufklappen",
-        "collapseTools": "Werkzeugaufrufe zuklappen"
+        "collapseTools": "Werkzeugaufrufe zuklappen",
+        "expandToolsShort": "Aufklappen",
+        "collapseToolsShort": "Zuklappen"
       },
       "modelUnavailableMissingKeys": "Für diesen Modellanbieter sind keine Zugangsdaten eingerichtet. Füge sie in den Einstellungen hinzu.",
       "modelUnavailableProviderDisabled": "Dieser Modellanbieter ist deaktiviert. Aktiviere ihn in den Einstellungen oder wähle ein anderes Modell.",

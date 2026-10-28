@@ -1458,6 +1458,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [expandedDetails, setExpandedDetails] = createStore<Record<string, boolean>>({});
   const detailDisclosureKey = (threadID: string, kind: string, id: string) =>
     JSON.stringify([props.adapter.runtime.runtime_id, threadID, kind, id]);
+  let transcriptGutter: number | undefined;
+  let pendingTranscriptGutter: number | undefined;
   const transcriptScroll = createFlowerScrollTailController({
     smoothContentGrowth: true,
     preparing: () => selectedThreadTailPreparing(),
@@ -1465,7 +1467,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && (selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0),
     onUserInteraction: () => { if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal(); },
     onScrollIntent: direction => requestHistoryReading(direction),
+    onViewportResize: viewport => {
+      // Reuse the viewport's resize delivery; streamed rows never measure or
+      // rewrite the horizontal layout of the status/composer column.
+      const gutter = viewport.offsetWidth - viewport.clientWidth;
+      if (gutter === transcriptGutter) return;
+      transcriptGutter = gutter;
+      pendingTranscriptGutter = gutter;
+    },
     onLayout: () => {
+      // Publish outside ResizeObserver delivery through the existing frame.
+      if (surfaceRef && pendingTranscriptGutter !== undefined) {
+        surfaceRef.style.setProperty('--flower-transcript-gutter', pendingTranscriptGutter + 'px');
+        pendingTranscriptGutter = undefined;
+      }
       const pending = selectedThreadTailReveal();
       if (pending) settleSelectedThreadTailReveal(pending.threadID, pending.sequence);
     },

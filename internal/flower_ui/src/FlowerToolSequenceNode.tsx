@@ -1,5 +1,5 @@
 import { Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, useContext, type Accessor, type JSX } from 'solid-js';
-import { ChevronRight } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Layers } from '@floegence/floe-webapp-core/icons';
 import type { FlowerTurnProcessCopy } from './copy';
 import type { FlowerToolSequence, FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
@@ -148,8 +148,8 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         aria-expanded={expanded()} data-flower-manual-open={context!.manuallyExpanded(member()!.group) ? 'true' : undefined} aria-controls={member()!.group.nodeKeys.map(context!.contentID).join(' ')}
         aria-label={`${expanded() ? context!.copy().collapseTools : context!.copy().expandTools}: ${[label(), currentLabel()].filter(Boolean).join(' · ')}`}
         onClick={event => context!.toggle(member()!.group, event.currentTarget)}>
-        <ChevronRight class="flower-tool-sequence-chevron" aria-hidden="true" />
         <span class="flower-tool-sequence-summary">
+          <Layers class="flower-tool-sequence-icon" aria-hidden="true" />
           <span class="flower-tool-sequence-label">
             <Show when={member()!.group.countsComplete} fallback={<span classList={{ 'flower-tool-sequence-failures': Boolean(member()!.group.failedCount || member()!.group.uncertainCount || member()!.group.failedSubagentEventCount) }}>{context!.copy().continuousTools}</span>}>
             <Show when={member()!.group.toolCount}>{count => <span>{context!.copy().toolCalls(count())}</span>}</Show>
@@ -164,6 +164,10 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
             {label => <span class="flower-tool-sequence-current" title={label()}>{label()}</span>}
           </Show>
           <Show when={member()!.group.countsComplete && member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
+        </span>
+        <span class="flower-tool-sequence-action" aria-hidden="true">
+          <span class="flower-tool-sequence-action-label">{expanded() ? context!.copy().collapseToolsShort : context!.copy().expandToolsShort}</span>
+          <ChevronRight class="flower-tool-sequence-chevron" aria-hidden="true" />
         </span>
       </button>
     );

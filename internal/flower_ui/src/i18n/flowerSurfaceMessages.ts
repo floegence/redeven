@@ -354,6 +354,7 @@ export const flowerSurfaceEnUS = {
       thinkingSegments: { one: '{count} thinking segment', other: '{count} thinking segments' },
       runningTools: { one: '{count} running', other: '{count} running' },
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
+      expandToolsShort: 'Expand', collapseToolsShort: 'Collapse',
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
       worked: 'Worked for {duration}',
       subtaskUpdates: { one: '{count} subtask update', other: '{count} subtask updates' },

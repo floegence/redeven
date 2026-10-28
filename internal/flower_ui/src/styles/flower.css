@@ -618,6 +618,7 @@
 
 .flower-surface-companion :is(.flower-chat-bottom-dock) {
   padding: 0 clamp(0.75rem, 2.4vw, 2rem) 0.5rem;
+  padding-inline-end: calc(clamp(0.75rem, 2.4vw, 2rem) + var(--flower-transcript-gutter, 0px));
 }
 
 .flower-composer-content {
@@ -3469,6 +3470,7 @@
   overflow: visible;
   /* The host owns safe areas; the dock is inside its usable content bounds. */
   padding: 0 clamp(0.875rem, 3vw, 1.5rem) 0.75rem;
+  padding-inline-end: calc(clamp(0.875rem, 3vw, 1.5rem) + var(--flower-transcript-gutter, 0px));
 }
 
 .flower-chat-bottom-dock::before {
@@ -4329,7 +4331,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.38rem 0.62rem;
-  padding: 0 0.375rem 0.35rem;
+  padding: 0 0 0.35rem;
 }
 
 .flower-model-status-lane--conversation {
@@ -5919,6 +5921,7 @@ button.flower-composer-context-source:focus-visible,
   cursor: pointer;
   overflow: hidden;
   padding: 0.125rem 0.25rem;
+  padding-inline-start: 0;
   text-align: left;
 }
 
@@ -12351,13 +12354,13 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-tool-sequence-slot { display: contents; }
 .flower-tool-sequence-node, .flower-tool-sequence-content { position: relative; min-width: 0; }
 .flower-tool-sequence-body { min-width: 0; }
-/* The first activity owns the first line. Reserve only its disclosure column,
-   before grouping is known, so tools and leading thinking never move sideways.
-   The same control becomes a full-width summary when the body is folded. */
+/* Prose and activity icons share the transcript's left edge. Reserve the
+   trailing group action before membership is known; item details keep their
+   own hit target. The same control covers the summary after folding. */
 .flower-tool-sequence-node:has(> .flower-tool-sequence-header) {
-  --flower-sequence-control-width: 1.5rem;
+  --flower-sequence-control-width: 6.25rem;
   min-height: var(--flower-sequence-row-height, 2rem);
-  padding-inline-start: var(--flower-sequence-control-width);
+  padding-inline-end: var(--flower-sequence-control-width);
 }
 /* Reserve the same native gutter while the first candidate is still alone.
    Group members use only their outer sequence gutter, never a nested one. */
@@ -12378,12 +12381,13 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-tool-sequence-node[data-state='closed'][data-flower-sequence-start='false'] { display: none; }
 .flower-tool-sequence-header {
   position: absolute; inset-block-start: 0; inset-inline: 0;
+  z-index: 1; display: flex; justify-content: flex-end;
   height: var(--flower-sequence-row-height, 2rem);
   pointer-events: none;
 }
 .flower-tool-sequence-toggle {
   box-sizing: border-box; height: var(--flower-sequence-row-height, 2rem);
-  display: flex; align-items: center; gap: 0; min-width: 0; width: 100%; min-height: var(--flower-sequence-row-height, 2rem);
+  display: flex; align-items: center; justify-content: flex-end; gap: 0; min-width: 0; width: 100%; min-height: var(--flower-sequence-row-height, 2rem);
   padding: 0.25rem 0; border: 0; border-radius: 0.1875rem; background: transparent;
   color: var(--flower-activity-tool-row-quiet); cursor: pointer; text-align: left; pointer-events: auto;
   font-family: inherit; font-size: 0.75rem; font-weight: 400; line-height: 1.125rem;
@@ -12394,14 +12398,17 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
    its bounds stable avoids swapping clipped text in at the last frame. */
 .flower-tool-sequence-toggle[aria-expanded='true'] { width: var(--flower-sequence-control-width); }
 .flower-tool-sequence-summary {
-  position: absolute; inset-block: 0; inset-inline-start: var(--flower-sequence-control-width); inset-inline-end: 0;
-  display: flex; align-items: center; min-width: 0; pointer-events: none;
+  position: absolute; inset-block: 0; inset-inline-start: 0; inset-inline-end: var(--flower-sequence-control-width);
+  display: flex; align-items: center; gap: 0.42rem; min-width: 0; pointer-events: none;
   opacity: 1; transition: opacity 100ms ease-out 140ms;
 }
 .flower-tool-sequence-toggle[aria-expanded='true'] > .flower-tool-sequence-summary {
   opacity: 0; transition: opacity 140ms ease-out;
 }
 .flower-tool-sequence-current { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--flower-activity-tool-row-foreground-strong); }
+.flower-tool-sequence-icon { width: 1rem; height: 1rem; flex-shrink: 0; }
+.flower-tool-sequence-action { display: flex; align-items: center; justify-content: flex-end; gap: 0.375rem; width: var(--flower-sequence-control-width); padding-inline: 0.375rem 0.25rem; box-sizing: border-box; }
+.flower-tool-sequence-action-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flower-tool-sequence-current::before { content: '·'; margin-inline: 0.375rem; color: var(--flower-activity-tool-row-quiet); }
 .flower-tool-sequence-scroll .flower-activity-inline-button { min-height: var(--flower-sequence-row-height); }
 .flower-tool-sequence-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -12413,18 +12420,17 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-tool-sequence-subtasks::before { content: '·'; margin-inline: 0.375rem; color: var(--flower-activity-tool-row-quiet); }
 .flower-tool-sequence-chevron {
   width: 0.875rem; height: 0.875rem; flex-shrink: 0;
-  margin-inline: calc((var(--flower-sequence-control-width) - 0.875rem) / 2);
   transition: transform 140ms ease;
 }
 .flower-tool-sequence-toggle[aria-expanded='true'] .flower-tool-sequence-chevron { transform: rotate(90deg); }
 .flower-tool-sequence-running { margin-inline-start: auto; color: var(--flower-activity-tool-row-foreground-strong); white-space: nowrap; }
 .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after {
-  content: ''; position: absolute; inset-inline-start: calc(0.75rem - 0.5px); top: 1.75rem; bottom: -0.25rem; width: 1px;
+  content: ''; position: absolute; inset-inline-start: calc(0.5rem - 0.5px); top: 1.75rem; bottom: -0.25rem; width: 1px;
   background: var(--flower-activity-tool-row-foreground, var(--flower-reading-title)); opacity: 0.62; pointer-events: none;
 }
 .flower-tool-sequence-content[data-flower-connector-clipped]::after { visibility: hidden; }
 .flower-tool-sequence-node:has(> .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content > .flower-parent-event) .flower-parent-event {
-  min-height: var(--flower-sequence-row-height, 2rem); margin: 0; padding: 0.5rem 0 0.5rem 0.25rem; box-sizing: border-box;
+  min-height: var(--flower-sequence-row-height, 2rem); margin: 0; padding: 0.5rem 0; box-sizing: border-box;
 }
 .flower-tool-sequence-node:has(> .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content > .flower-parent-event) .flower-parent-event-avatar {
   position: relative; top: -1px; width: 1rem; height: 1rem;
@@ -12437,11 +12443,15 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-activity-inline:has(> .flower-tool-sequence-node[data-flower-sequence]):not(:has(> .flower-tool-sequence-node:not([data-state='closed']))):not(:has(> .flower-tool-sequence-node[data-flower-sequence-start='true'])) { display: none; }
 .flower-thinking-disclosure .flower-thinking-toggle-icon { width: 0.875rem; height: 0.875rem; justify-self: end; }
 @media (pointer: coarse) {
-  .flower-tool-sequence-node:has(> .flower-tool-sequence-header) { --flower-sequence-control-width: 2.75rem; }
   .flower-tool-sequence-toggle { min-height: 2.75rem; }
   .flower-turn-timeline { --flower-sequence-row-height: 2.75rem; }
   .flower-turn-summary-button { min-height: 2.75rem; }
   .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after { top: 2.125rem; bottom: -0.625rem; }
+}
+@media (max-width: 640px) {
+  .flower-tool-sequence-node:has(> .flower-tool-sequence-header) { --flower-sequence-control-width: 2.75rem; }
+  .flower-tool-sequence-action { justify-content: center; padding-inline: 0; }
+  .flower-tool-sequence-action-label { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .flower-tool-sequence-chevron, .flower-tool-sequence-summary { transition: none; } }
 @media (forced-colors: active) {

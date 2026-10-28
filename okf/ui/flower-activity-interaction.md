@@ -30,6 +30,8 @@ Use one localized action title for visible and accessible labels. Expanded detai
 ## Semantic tool icons
 Shared Desktop/Env App rows retain compact geometry and explicit glyphs for registered tools, hosted web search, sources, MCP and unknown extensions.
 
+Tool/thinking icons, prose and the full/companion progress lane share one left edge. The composer/status column uses the transcript's native scrollbar gutter. Its existing resize observer reads gutter width only when viewport inline size changes; the existing scheduled layout phase publishes changed geometry. Row growth adds no width reads, observer or frame scheduler. Embedded hosts retain their own status/composer layout.
+
 ## Intent, inputs and results
 Collapsed titles describe invocation intent, never substituted outcomes. Presentation cannot supply execution input or authorization.
 

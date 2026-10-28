@@ -47,6 +47,7 @@ export type FlowerScrollTailControllerOptions = Readonly<{
   onUserInteraction?: () => void;
   onScrollIntent?: (direction: 'before' | 'after') => void;
   onLayout?: () => void;
+  onViewportResize?: (viewport: HTMLDivElement) => void;
 }>;
 
 export function createFlowerScrollTailController(
@@ -642,7 +643,15 @@ export function createFlowerScrollTailController(
     // including skipped historical rows that become relevant above the tail.
     // Consume the queued pass without revealing/loading DOM inside this resize
     // delivery. Presentation mutations stay in rAF to avoid observer loops.
-    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    let viewportInlineSize: number | undefined;
+    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
+      if (options.onViewportResize && node) {
+        const entry = entries.find(entry => entry.target === node);
+        if (entry && entry.contentRect.width !== viewportInlineSize) {
+          viewportInlineSize = entry.contentRect.width;
+          options.onViewportResize(node);
+        }
+      }
       layoutFrame = clearFrame(layoutFrame);
       layout(performance.now(), false);
       if (options.onLayout) layoutNotificationPending = true;

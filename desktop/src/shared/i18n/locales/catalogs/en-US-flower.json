@@ -697,7 +697,9 @@
         }
       },
       "expandTools": "Expand tool calls",
-      "collapseTools": "Collapse tool calls"
+      "collapseTools": "Collapse tool calls",
+      "expandToolsShort": "Expand",
+      "collapseToolsShort": "Collapse"
     },
     "modelUnavailableMissingKeys": "This model provider has no credentials configured. Add credentials in settings.",
     "modelUnavailableProviderDisabled": "This model provider is disabled. Enable it in settings or select another model.",

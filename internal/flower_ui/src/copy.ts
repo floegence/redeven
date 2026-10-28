@@ -25,6 +25,8 @@ export type FlowerTurnProcessCopy = Readonly<{
   runningTools: (count: number) => string;
   expandTools: string;
   collapseTools: string;
+  expandToolsShort: string;
+  collapseToolsShort: string;
   failed: string;
   cancelled: string;
   interrupted: string;
@@ -1209,6 +1211,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       thinkingSegments: count => `${count} ${count === 1 ? 'thinking segment' : 'thinking segments'}`,
       runningTools: count => `${count} running`,
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
+      expandToolsShort: 'Expand', collapseToolsShort: 'Collapse',
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
       worked: (duration) => `Worked for ${duration}`,
       subtaskUpdates: (count) => count === 1 ? '1 subtask update' : count + ' subtask updates',

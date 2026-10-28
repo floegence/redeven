@@ -5763,7 +5763,9 @@
           "other": "{count} 項執行中"
         },
         "expandTools": "展開工具呼叫",
-        "collapseTools": "收合工具呼叫"
+        "collapseTools": "收合工具呼叫",
+        "expandToolsShort": "展開",
+        "collapseToolsShort": "收合"
       },
       "modelUnavailableMissingKeys": "此模型的模型供應商尚未設定憑證。請在設定中新增憑證。",
       "modelUnavailableProviderDisabled": "此模型的模型供應商已停用。請在設定中啟用，或選擇其他模型。",

@@ -5763,7 +5763,9 @@
           "other": "{count} em execução"
         },
         "expandTools": "Expandir chamadas de ferramentas",
-        "collapseTools": "Recolher chamadas de ferramentas"
+        "collapseTools": "Recolher chamadas de ferramentas",
+        "expandToolsShort": "Expandir",
+        "collapseToolsShort": "Recolher"
       },
       "modelUnavailableMissingKeys": "Este provedor de modelos não tem credenciais configuradas. Adicione-as nas configurações.",
       "modelUnavailableProviderDisabled": "Este provedor de modelos está desativado. Ative-o nas configurações ou selecione outro modelo.",

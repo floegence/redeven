@@ -883,7 +883,9 @@
           }
         },
         "expandTools": "展开工具调用",
-        "collapseTools": "收起工具调用"
+        "collapseTools": "收起工具调用",
+        "expandToolsShort": "展开",
+        "collapseToolsShort": "收起"
       },
       "modelUnavailableMissingKeys": "此模型的模型提供商尚未配置凭据。请在设置中添加凭据。",
       "modelUnavailableProviderDisabled": "此模型的模型提供商已停用。请在设置中启用，或选择其他模型。",

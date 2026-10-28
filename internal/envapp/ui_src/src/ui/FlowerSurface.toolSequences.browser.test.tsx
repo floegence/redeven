@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerRuntimeCurrentView, FlowerRuntimeCurrentItem, FlowerToolCallPreview } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import type { FlowerSurfaceCopy } from '../../../../flower_ui/src/copy';
+import type { FlowerSurfaceProps } from '../../../../flower_ui/src/FlowerSurface';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import type { EnvAppTranslationKey } from './i18n';
@@ -38,7 +39,7 @@ const preview = (id: string): FlowerToolCallPreview => ({
   attempt_id: 'attempt', attempt_epoch: 0, call_id: id, name: 'apply_patch', arguments_complete: false,
   preview: { display_name: `${id}.ts`, additions: 2 },
 });
-async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], parentEvents: readonly FlowerParentEvent[] = [], partial = false, copy?: FlowerSurfaceCopy) {
+async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], parentEvents: readonly FlowerParentEvent[] = [], partial = false, copy?: FlowerSurfaceCopy, surfaceProps?: Pick<FlowerSurfaceProps, 'presentation'>) {
   await page.viewport(1280, 900);
   const window = partial ? { first_item_id: items[0].id, last_item_id: items.at(-1)!.id, has_before: true, has_after: false } : undefined;
   let latest = { ...current(items, 1, parentEvents), ...(window ? { window } : {}), ...(previews.length ? { tool_call_previews: previews } : {}) };
@@ -53,7 +54,7 @@ async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly Flowe
       try { while (!signal.aborted) { const value = values.shift(); if (value) yield value; else await new Promise<void>(resolve => { wake = resolve; }); } }
       finally { signal.removeEventListener('abort', abort); }
     },
-  }, { copy });
+  }, { copy, ...surfaceProps });
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="sequences"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="sequences"] button')!.click();
@@ -379,7 +380,8 @@ describe('consecutive tools in the shared Flower surface', () => {
   });
   it.each([{ width: 1280, touch: false }, { width: 360, touch: false }, { width: 360, touch: true }])('shares the first activity row without blank space or movement at $width pixels, touch=$touch', async ({ width, touch }) => {
     await media.emulateTouchInput(touch);
-    const { root, push } = await mount([tool('reserve-first', 'running')]);
+    const prose = item('alignment-prose', 'assistant', 'Keep the conversation on one left edge.');
+    const { root, push } = await mount([prose, tool('reserve-first')]);
     await page.viewport(width, 900);
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(matchMedia('(pointer: coarse)').matches).toBe(touch);
@@ -389,8 +391,15 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(Math.abs(top - group(root, 'reserve-first').getBoundingClientRect().top)).toBeLessThanOrEqual(1);
     const height = first.getBoundingClientRect().height;
     const widthBefore = first.getBoundingClientRect().width;
+    const icon = first.querySelector<HTMLElement>('.flower-activity-inline-icon')!;
+    const toolIcon = icon.querySelector('svg')!;
+    expect(toolIcon).not.toBeNull();
+    const toolGlyph = toolIcon.innerHTML;
+    const proseLeft = root.querySelector('[data-flower-message-id="alignment-prose"] .flower-message-bubble')!.getBoundingClientRect().left;
+    expect(Math.abs(icon.getBoundingClientRect().left - proseLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(root.querySelector('.flower-model-status-indicator')!.getBoundingClientRect().left - proseLeft)).toBeLessThanOrEqual(1);
     expect(height).toBe(touch ? 44 : 32);
-    push([tool('reserve-first'), tool('reserve-second', 'running')]);
+    push([prose, tool('reserve-first'), tool('reserve-second', 'running', 'web_search', 'web_search')]);
     await waitFor(() => Boolean(toggle(root, 'reserve-first')));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(Math.abs(first.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
@@ -401,28 +410,80 @@ describe('consecutive tools in the shared Flower surface', () => {
     const control = toggle(root, 'reserve-first');
     const bounds = control.getBoundingClientRect();
     expect(Math.abs(bounds.top - top)).toBeLessThanOrEqual(1);
-    expect(bounds.right).toBeLessThanOrEqual(first.getBoundingClientRect().left);
-    expect(bounds.width).toBe(touch ? 44 : 24);
+    expect(bounds.left).toBeGreaterThanOrEqual(first.getBoundingClientRect().right);
+    expect(bounds.right).toBe(group(root, 'reserve-first').getBoundingClientRect().right);
+    expect(bounds.width).toBeGreaterThanOrEqual(touch ? 44 : 24);
     expect(control.getAttribute('aria-label')).toContain('2 tool calls');
+    expect(first.querySelector('.flower-activity-inline-icon svg')).toBe(toolIcon);
+    expect(toolIcon.innerHTML).toBe(toolGlyph);
+    expect(row(root, 'reserve-second').querySelector('.flower-activity-inline-icon svg')).not.toBeNull();
+    const action = control.querySelector<HTMLElement>('.flower-tool-sequence-action')!;
+    const actionLeft = action.getBoundingClientRect().left;
+    const titleLeft = first.querySelector('.flower-activity-inline-title')!.getBoundingClientRect().left;
+    const shortLabel = control.querySelector<HTMLElement>('.flower-tool-sequence-action-label')!;
+    expect(getComputedStyle(shortLabel).display === 'none').toBe(width <= 640);
+    expect(shortLabel.textContent).toBe('Collapse');
+    await userEvent.click(control);
+    await waitFor(() => group(root, 'reserve-first').dataset.state === 'closed');
+    expect(Math.abs(control.querySelector('.flower-tool-sequence-icon')!.getBoundingClientRect().left - proseLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(control.querySelector('.flower-tool-sequence-label')!.getBoundingClientRect().left - titleLeft)).toBeLessThanOrEqual(1);
+    expect(action.getBoundingClientRect().left).toBe(actionLeft);
+    expect(shortLabel.textContent).toBe('Expand');
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-sequence-aligned-folded-' + width + '-' + touch + '.png' });
+    await userEvent.click(control);
+    await waitFor(() => group(root, 'reserve-first').dataset.state === 'open');
+    expect(action.getBoundingClientRect().left).toBe(actionLeft);
+    expect(first.querySelector('.flower-activity-inline-icon svg')).toBe(toolIcon);
+    expect(first.getBoundingClientRect().width).toBe(widthBefore);
+    expect(icon.getBoundingClientRect().left).toBe(proseLeft);
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: `__screenshots__/flower-sequence-first-row-${width}-${touch}.png` });
+  });
+
+  it.each(['full', 'companion'] as const)('keeps prose, activity and progress aligned through resize in %s', async presentation => {
+    const prose = item('resize-prose', 'assistant', 'Stable transcript alignment.');
+    const { root, push } = await mount([prose, tool('resize-tool')], [], [], false, undefined, { presentation });
+    for (const width of [1280, 800, 360, 1280]) {
+      await page.viewport(width, 900);
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const left = root.querySelector('[data-flower-message-id="resize-prose"] .flower-message-bubble')!.getBoundingClientRect().left;
+      expect(Math.abs(row(root, 'resize-tool').querySelector('.flower-activity-inline-icon')!.getBoundingClientRect().left - left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(root.querySelector('.flower-model-status-indicator')!.getBoundingClientRect().left - left)).toBeLessThanOrEqual(1);
+    }
+    const progress = root.querySelector('.flower-model-status-indicator')!;
+    const left = progress.getBoundingClientRect().left;
+    const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const widthRead = vi.spyOn(viewport, 'offsetWidth', 'get');
+    try {
+      push([prose, tool('resize-tool'), tool('resize-second', 'running')]);
+      await waitFor(() => Boolean(toggle(root, 'resize-tool')));
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      expect(progress.getBoundingClientRect().left).toBe(left);
+      expect(widthRead).not.toHaveBeenCalled();
+    } finally { widthRead.mockRestore(); }
   });
 
   it('shares the leading thinking row before and after the first tool arrives', async () => {
     const thought = { ...item('reserved-thinking', 'thinking', 'Reviewing the evidence.'), live: true };
-    const { root, push } = await mount([thought]);
+    const prose = item('thinking-alignment-prose', 'assistant', 'Review the tool results.');
+    const { root, push } = await mount([prose, thought]);
     const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
     const title = thinking.querySelector<HTMLElement>('.flower-thinking-toggle')!;
     const header = thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header');
     expect(header).not.toBeNull();
     const top = title.getBoundingClientRect().top;
     const left = title.getBoundingClientRect().left;
+    const proseLeft = root.querySelector('[data-flower-message-id="thinking-alignment-prose"] .flower-message-bubble')!.getBoundingClientRect().left;
+    const icon = title.querySelector('.flower-activity-inline-icon')!;
+    expect(icon.getBoundingClientRect().left).toBe(proseLeft);
     expect(Math.abs(top - thinking.closest('.flower-tool-sequence-node')!.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
-    push([thought, tool('thinking-first', 'running')]);
+    push([prose, thought, tool('thinking-first', 'running')]);
     await waitFor(() => Boolean(root.querySelector('.flower-tool-sequence-toggle')));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header')).toBe(header);
     expect(Math.abs(title.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(title.getBoundingClientRect().left).toBe(left);
+    expect(icon.getBoundingClientRect().left).toBe(proseLeft);
+    expect(root.querySelector('.flower-tool-sequence-toggle')!.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.getBoundingClientRect().right);
   });
 
   it.each(['reduce', 'no-preference'] as const)('keeps the first-row group and detail controls independent with %s motion', async reducedMotion => {
@@ -455,8 +516,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     await waitFor(() => node.dataset.state === 'open');
     expect(row(root, 'shared-first')).toBe(first);
     expect(details.getAttribute('aria-expanded')).toBe('true');
-    expect(control.getBoundingClientRect().width).toBe(24);
-    expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(details.getBoundingClientRect().left);
+    expect(control.getBoundingClientRect().width).toBeLessThan(node.getBoundingClientRect().width);
+    expect(control.getBoundingClientRect().left).toBeGreaterThanOrEqual(details.getBoundingClientRect().right);
   });
 
   it.each([
@@ -502,27 +563,37 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(viewport.scrollTop).toBeLessThan(initialOffset);
   });
 
-  it.each(['zh-CN', 'en-US', 'de-DE', 'ja-JP'] as const)('keeps the incomplete label concise and accessible at 320 pixels in %s', async locale => {
+  it.each(['zh-CN', 'zh-TW', 'en-US', 'de-DE', 'ja-JP', 'ko-KR', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'] as const)('keeps localized group actions readable at desktop and narrow widths in %s', async locale => {
     const i18n = createTestI18nHelpers(locale);
     const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
       tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
     const { root } = await mount([tool('a'), tool('b', 'running')], [], [], true, copy);
-    await page.viewport(320, 850);
     const button = toggle(root, 'a');
-    expect(button.textContent).toBe(copy.chat.turnProcess.continuousTools);
+    const action = button.querySelector<HTMLElement>('.flower-tool-sequence-action-label')!;
+    expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth + 1);
+    button.click();
+    await waitFor(() => collapsed(root, 'a'));
+    expect(action.textContent).toBe(copy.chat.turnProcess.expandToolsShort);
+    expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth + 1);
+    button.click();
+    await waitFor(() => group(root, 'a').dataset.state === 'open');
+    await page.viewport(320, 850);
+    expect(button.querySelector('.flower-tool-sequence-label')!.textContent).toBe(copy.chat.turnProcess.continuousTools);
+    expect(button.querySelector('.flower-tool-sequence-action-label')!.textContent).toBe(copy.chat.turnProcess.collapseToolsShort);
+    expect(getComputedStyle(button.querySelector('.flower-tool-sequence-action-label')!).display).toBe('none');
     expect(button.getAttribute('aria-label')).toContain(copy.chat.turnProcess.continuousTools);
     expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
-    if (locale === 'zh-CN') expect(button.textContent).toBe('连续工具调用');
+    if (locale === 'zh-CN') expect(button.querySelector('.flower-tool-sequence-label')!.textContent).toBe('连续工具调用');
   });
   it('shows only the generic label for an incomplete live group, including accessible text', async () => {
     const { root, push } = await mount([tool('a'), tool('b', 'running')], [], [], true);
     const button = toggle(root, 'a');
-    expect(button.textContent).toBe('Consecutive tool calls');
+    expect(button.querySelector('.flower-tool-sequence-label')!.textContent).toBe('Consecutive tool calls');
     expect(button.getAttribute('aria-label')).toBe('Collapse tool calls: Consecutive tool calls');
     button.click();
     push([tool('a'), tool('b'), tool('c', 'running')]);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    expect(button.textContent).toBe('Consecutive tool calls');
+    expect(button.querySelector('.flower-tool-sequence-label')!.textContent).toBe('Consecutive tool calls');
     expect(button.querySelector('.flower-tool-sequence-running, .flower-tool-sequence-current')).toBeNull();
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
