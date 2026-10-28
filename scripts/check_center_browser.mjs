@@ -1,5 +1,5 @@
 import { readFile, mkdtemp, rm, mkdir, writeFile, realpath, readdir, chmod } from 'node:fs/promises';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -140,6 +140,72 @@ async function verifyDeniedClipboardManualInput(page, context, bundle) {
     try { if (probeStarted) await page.evaluate(id => window.manualInputProbe.close(id), sessionID); }
     finally { await context.clearPermissions(); await cdp.detach(); }
   }
+  await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
+  await verifyRuntimeWorkspace(page, false);
+}
+async function verifyAttachmentPicker(page) {
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+  await page.locator('nav[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'Flower', exact: true }).click();
+  const add = page.locator('.flower-composer-attachment-button:visible').last();
+  await until(() => add.isEnabled(), 'Flower attachment control never became available');
+  if (process.env.REDEVEN_CENTER_NATIVE_PICKER === '1') {
+    if (process.env.REDEVEN_CENTER_HEADED !== '1' || !reportDir) throw new Error('Native picker qualification requires a visible browser and report directory');
+    const composer = page.locator('[data-flower-text-entry="true"]:visible textarea').last();
+    const draft = 'Keep this draft when file selection is canceled.';
+    await composer.fill(draft);
+    await page.evaluate(() => {
+      document.title = 'Redeven Center native picker acceptance';
+      window.centerNativePicker = { canceled: 0, changed: 0 };
+      for (const input of document.querySelectorAll('input[type="file"]')) {
+        input.addEventListener('cancel', () => { window.centerNativePicker.canceled++; });
+        input.addEventListener('change', () => { window.centerNativePicker.changed++; });
+      }
+    });
+    await page.bringToFront();
+    await writeFile(path.join(reportDir, 'native-picker-ready.json'), JSON.stringify({ status: 'waiting_for_native_selection_cancel', origin: new URL(page.url()).origin }));
+    await page.waitForFunction(() => window.centerNativePicker.canceled === 1, undefined, { timeout: 180000 });
+    const native = await page.evaluate(() => window.centerNativePicker);
+    if (native.changed !== 0 || await page.locator('.flower-attachment-item:visible').count() !== 0 || !await add.isEnabled() || await composer.inputValue() !== draft) throw new Error('Canceling native selection changed attachments or draft, or blocked retry');
+    await composer.fill('');
+    report.cases.push({ scope: 'Native Chrome operating-system file chooser canceled through visible desktop UI; cancel event observed, draft preserved and composer remains available', ...native, draftPreserved: true });
+    await writeFile(path.join(reportDir, 'native-picker-complete.json'), JSON.stringify(native));
+  }
+  const content = Buffer.from('Center browser file selection integrity λ 中\n'.repeat(1024));
+  const digest = createHash('sha256').update(content).digest('hex');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), add.click()]);
+  const [response] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/_redeven_proxy/api/ai/uploads' && response.request().method() === 'POST'),
+    chooser.setFiles({ name: 'center-picker.txt', mimeType: 'text/plain', buffer: content }),
+  ]);
+  const result = await response.json();
+  if (!response.ok() || !result.ok || result.data.content_sha256 !== digest || result.data.size_bytes !== content.length) throw new Error('Flower file selection failed upload integrity');
+  const item = page.locator('.flower-attachment-item:visible').filter({ hasText: 'center-picker.txt' });
+  await until(async () => await item.getAttribute('data-attachment-status') === 'staged_ready', 'Flower attachment never became ready');
+  const requestHeaders = await response.request().allHeaders();
+  const proof = {
+    url: '/_redeven_proxy/api/ai/uploads/' + encodeURIComponent(result.data.attachment_id),
+    headers: { 'Upload-Staging-Scope-ID': requestHeaders['upload-staging-scope-id'], 'Upload-Staging-Capability': requestHeaders['upload-staging-capability'] },
+  };
+  const actual = await page.evaluate(async ({ url, headers }) => {
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error('Uploaded attachment read failed');
+    return [...new Uint8Array(await crypto.subtle.digest('SHA-256', await response.arrayBuffer()))].map(value => value.toString(16).padStart(2, '0')).join('');
+  }, proof);
+  if (actual !== digest) throw new Error('Selected file bytes changed in transport');
+  if (reportDir) await page.screenshot({ path: path.join(reportDir, engine + '-attachment-ready.png'), fullPage: true });
+  // Removing an editor chip preserves staged bytes that a queued draft may
+  // still reference. The staging owner, not this UI action, deletes them.
+  await item.hover();
+  await item.getByRole('button', { name: 'Remove attachment', exact: true }).click();
+  await item.waitFor({ state: 'hidden' });
+  const cleanup = await page.evaluate(async ({ url, headers }) => {
+    const retainedStatus = (await fetch(url, { headers })).status;
+    const release = await fetch('/_redeven_proxy/api/ai/upload-staging-scopes/' + encodeURIComponent(headers['Upload-Staging-Scope-ID']), { method: 'DELETE', headers });
+    if (!release.ok) throw new Error('Picker qualification staging cleanup failed');
+    return { retainedStatus, releasedStatus: (await fetch(url, { headers })).status };
+  }, proof);
+  if (cleanup.retainedStatus !== 200 || cleanup.releasedStatus !== 404) throw new Error('Attachment draft removal and staging cleanup violated ownership');
+  report.cases.push({ scope: 'Actual Flower Add attachment button and Chrome filechooser selection, ready state, exact content digest, Remove attachment action with retained staged copy, then explicit staging cleanup', bytes: content.length, sha256: digest, ...cleanup, nativePickerCancellationQualified: process.env.REDEVEN_CENTER_NATIVE_PICKER === '1' });
   await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
   await verifyRuntimeWorkspace(page, false);
 }
@@ -392,6 +458,11 @@ try {
     await until(async () => await runtimeStatus(environment) === 200, 'Reload lost valid Runtime session');
     await verifyRuntimeWorkspace(environment, index === 0);
     if (index === 0 && process.env.REDEVEN_CENTER_PERMISSIONS === '1') await verifyDeniedClipboardManualInput(environment, context, bundled);
+    if (index === 0 && process.env.REDEVEN_CENTER_UPLOADS === '1') {
+      await environment.addScriptTag({ path: bundled });
+      report.cases.push(await environment.evaluate(() => GatewayAcceptance.verifyAttachmentUpload()));
+      await verifyAttachmentPicker(environment);
+    }
     const cookies = await context.cookies(target.origin);
     if (cookies.some(cookie => cookie.domain !== new URL(target.origin).hostname || !cookie.secure)) throw new Error('Cookies escaped environment HTTPS host');
     if (reportDir) await environment.screenshot({ path: path.join(reportDir, engine + '-runtime-' + index + '.png'), fullPage: true });

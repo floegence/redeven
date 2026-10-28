@@ -18,9 +18,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/environmentcenter"
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewaymembership"
@@ -126,6 +128,30 @@ func TestCenterBrowserQualification(t *testing.T) {
 	var code gp.ClientAccessCodeResponse
 	hostCall("clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, &code)
 	targets := []*webEntryFixture{}
+	var uploadConfig *config.AIConfig
+	if os.Getenv("REDEVEN_CENTER_UPLOADS") == "1" {
+		// Attachment staging needs a model profile but never invokes inference.
+		var requests atomic.Int64
+		endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && r.URL.Path == "/v1/models" {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"data":[{"id":"test"}]}`))
+				return
+			}
+			requests.Add(1)
+			http.Error(w, "inference is forbidden during upload qualification", http.StatusServiceUnavailable)
+		}))
+		t.Cleanup(endpoint.Close)
+		t.Cleanup(func() {
+			if count := requests.Load(); count != 0 {
+				t.Errorf("upload qualification invoked inference %d times", count)
+			}
+		})
+		uploadConfig = &config.AIConfig{CurrentModelID: "upload-fixture/test", Providers: []config.AIProvider{{
+			ID: "upload-fixture", Type: "openai_compatible", BaseURL: endpoint.URL + "/v1",
+			Models: []config.AIProviderModel{{ModelName: "test", ContextWindow: 32768, InputModalities: []string{"text"}}},
+		}}}
+	}
 	var external struct {
 		RuntimeID     string
 		Secret        string
@@ -193,7 +219,7 @@ func TestCenterBrowserQualification(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		targets = append(targets, newWebEntryFixture(t, webFixtureOptions{runtimeID: id, browser: true, enrolled: state, lifetime: qualificationTimeout}))
+		targets = append(targets, newWebEntryFixture(t, webFixtureOptions{runtimeID: id, browser: true, enrolled: state, lifetime: qualificationTimeout, aiConfig: uploadConfig}))
 	}
 	web := httptest.NewUnstartedServer(nil)
 	if os.Getenv("REDEVEN_CENTER_CAPACITY") == "1" {

@@ -281,6 +281,21 @@ func newTestLocalUIDeviceCA(t *testing.T) *deviceCA {
 }
 
 func newRuntimeHealthTestAgent(t *testing.T, cfgPath string, gate *accessgate.Gate, identities ...string) *agent.Agent {
+	t.Helper()
+	return newRuntimeHealthTestAgentWithAI(t, cfgPath, gate, nil, identities...)
+}
+
+func newRuntimeHealthTestAgentWithAI(t *testing.T, cfgPath string, gate *accessgate.Gate, aiConfig *config.AIConfig, identities ...string) *agent.Agent {
+	if aiConfig != nil {
+		fixtureConfig, err := config.Load(cfgPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixtureConfig.AI = aiConfig
+		if err := config.Save(cfgPath, fixtureConfig); err != nil {
+			t.Fatal(err)
+		}
+	}
 	identity := "runtime_local_ui_test"
 	if len(identities) > 0 {
 		identity = identities[0]
@@ -310,6 +325,7 @@ func newRuntimeHealthTestAgent(t *testing.T, cfgPath string, gate *accessgate.Ga
 			AgentInstanceID:          "agent_local_ui_test",
 			AgentHomeDir:             t.TempDir(),
 			PermissionPolicy:         policy,
+			AI:                       aiConfig,
 		},
 		ConfigPath:             cfgPath,
 		AccessGate:             gate,

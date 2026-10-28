@@ -24264,7 +24264,7 @@
         "title": "Deploy and qualify standalone Web Center",
         "type": "Operations Contract"
       },
-      "body_length": 7891,
+      "body_length": 8802,
       "summary": "Center binary/UI deploy separately from Desktop and Runtime. Evidence records source/artifacts, host, browser, real elapsed duration, cleanup and limits. Smoke tests cannot certify an eight-hour soak or a different native browser. Qualification uses isolated service names, ports and state, and preserves existing Runtime processes.",
       "sections": [
         {
@@ -32846,5 +32846,5 @@
       ]
     }
   ],
-  "source_sha256": "89b432a1de4dbf51c39b47a075616b94a72bb5ff9fa1e1c008f122a48e330e41"
+  "source_sha256": "16f383233d2e4d8b2e3e5089ab8a9568b78ea4880a48ebdec8ccb1f05705427e"
 }

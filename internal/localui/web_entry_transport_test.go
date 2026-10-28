@@ -98,6 +98,7 @@ func newWebGatewayFixture(t *testing.T) *webGatewayFixture {
 }
 
 type webFixtureOptions struct {
+	aiConfig  *config.AIConfig
 	browser   bool
 	gateway   *webGatewayFixture
 	runtimeID string
@@ -188,7 +189,7 @@ func newWebEntryFixture(t *testing.T, options ...webFixtureOptions) *webEntryFix
 	}
 	runtime := newTestServer(t, gate)
 	runtime.localPermissionCap = &config.PermissionSet{Read: true, Write: true, Execute: true}
-	runtime.a = newRuntimeHealthTestAgent(t, runtime.configPath, gate, opts.runtimeID)
+	runtime.a = newRuntimeHealthTestAgentWithAI(t, runtime.configPath, gate, opts.aiConfig, opts.runtimeID)
 	runtime.appServer = runtime.a.CodeAppServer()
 	bindings, err := webbinding.Open(t.TempDir(), opts.runtimeID)
 	if err != nil {

@@ -3,6 +3,53 @@ import { openRuntimeSession, verifyRuntimeServices } from '../../../../../deskto
 import { connectTerminalLive } from '@floegence/floeterm-terminal-web/live';
 import type { JsonValue } from '@floegence/flowersec-core/browser';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { fetchLocalApi, fetchLocalApiJSONResponse, uploadLocalApiAttachment } from '../../src/ui/services/localApi';
+
+export async function verifyAttachmentUpload() {
+  const scope = await fetchLocalApiJSONResponse<{ staging_scope_id: string }>(
+    '/_redeven_proxy/api/ai/upload-staging-scopes',
+    { method: 'POST', body: JSON.stringify({ target_id: 'center-upload-' + crypto.randomUUID() }) },
+  );
+  const scopeID = scope.data.staging_scope_id;
+  const capability = scope.headers.get('Upload-Staging-Capability');
+  if (!scopeID || !capability) throw new Error('Upload staging authorization missing');
+  const headers = { 'Upload-Staging-Scope-ID': scopeID, 'Upload-Staging-Capability': capability };
+  const hex = (bytes: Uint8Array) => [...sha256(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
+  const content = 'Center attachment integrity λ 中\n'.repeat(65536);
+  const file = new File([content], 'center-upload.txt', { type: 'text/plain' });
+  const digest = hex(new Uint8Array(await file.arrayBuffer()));
+  const progress: number[] = [];
+  const request = {
+    file, source: 'uploaded_file' as const, requestID: crypto.randomUUID(),
+    stagingScopeID: scopeID, stagingCapability: capability, contentSHA256: digest,
+    displayNameSHA256: hex(new TextEncoder().encode(file.name)), signal: AbortSignal.timeout(30000),
+    onProgress: (loaded: number) => { progress.push(loaded); },
+  };
+  let released = false;
+  try {
+    const uploaded = await uploadLocalApiAttachment(request);
+    if (!uploaded.attachment_id || uploaded.content_sha256 !== digest || uploaded.size_bytes !== file.size) throw new Error('Uploaded metadata differs from browser File');
+    const repeated = await uploadLocalApiAttachment(request);
+    if (repeated.attachment_id !== uploaded.attachment_id) throw new Error('Upload retry created another attachment');
+    const url = '/_redeven_proxy/api/ai/uploads/' + encodeURIComponent(uploaded.attachment_id);
+    const bytes = await fetchLocalApi(url, { headers, signal: AbortSignal.timeout(30000) });
+    if (!bytes.ok || hex(new Uint8Array(await bytes.arrayBuffer())) !== digest) throw new Error('Uploaded bytes did not survive Center transport');
+    const denied = await fetchLocalApi(url, { headers: { ...headers, 'Upload-Staging-Capability': 'invalid-qualification-capability' } });
+    if (denied.status !== 404) throw new Error('Invalid upload capability was not hidden');
+    const release = await fetchLocalApi('/_redeven_proxy/api/ai/upload-staging-scopes/' + encodeURIComponent(scopeID), { method: 'DELETE', headers });
+    if (!release.ok) throw new Error('Upload staging cleanup rejected');
+    released = true;
+    const stale = await fetchLocalApi(url, { headers });
+    if (stale.status !== 404) throw new Error('Released upload remained readable');
+    if (!progress.some(loaded => loaded >= file.size)) throw new Error('Browser upload progress was not observed');
+    return { scope: 'Production browser XHR multipart attachment upload through Center, byte digest, idempotent retry, invalid capability and staging cleanup', bytes: file.size, sha256: digest, progressEvents: progress.length, retryReusedAttachment: true, invalidCapabilityStatus: denied.status, releasedReadStatus: stale.status };
+  } finally {
+    if (!released) {
+      const cleanup = await fetchLocalApi('/_redeven_proxy/api/ai/upload-staging-scopes/' + encodeURIComponent(scopeID), { method: 'DELETE', headers });
+      if (!cleanup.ok) throw new Error('Failed upload qualification cleanup');
+    }
+  }
+}
 
 export async function verifyModelTurn() {
   const {current,acquisition}=await openRuntimeSession();
