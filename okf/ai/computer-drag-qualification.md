@@ -11,6 +11,13 @@ reviewed_at: "2026-10-28"
 Browser drag timing is measured from actual input events, with all model and
 assertion failures retained. [Script contracts](computer-use-scripts.md) define
 behavior; [qualification](computer-use-qualification.md) defines the test lane.
+Browser measurements certify only the tested browser paths and durations.
+
+# Contract
+
+Measure drag duration between delivered press and release events. Keep
+deterministic adapter assertions separate from real-provider task outcomes,
+and retain original failures when correcting test expectations.
 
 # Evidence
 
@@ -33,6 +40,8 @@ the remaining two were a model-supplied invalid wait condition and an omitted
 requested wait. Raw reports remain distinct. All six invalid-duration tasks
 rejected before input and then performed one timed drag. These results do not
 claim zero model errors or a general success probability.
+
+# Boundaries
 
 Native macOS event construction/delivery was reviewed but not changed or timed
 in this browser qualification. Its duration currently affects path sampling

@@ -11,6 +11,7 @@ reviewed_at: "2026-10-28"
 Browser and native script reads return promised shapes or explicit errors.
 Missing observations never become empty data, and invalid input never dispatches.
 [Script execution](computer-use-scripts.md) owns the namespace and failure barrier.
+Completed input stays recorded even when a later read fails.
 
 # Contract
 
@@ -77,6 +78,12 @@ target, adds a planner, or persists a second lifecycle.
 Single-node detail does not enumerate a subtree. child_refs describes only
 returned relationships; check children_truncated, use snapshot for a subtree
 and browser rows/query/count for loaded collections.
+
+# Boundaries
+
+Collection results describe only the authorized loaded tree; they do not certify
+unloaded content. Native targets reject browser-only reads before dispatch.
+Validation and observation recovery never replay completed input.
 
 # Evidence
 
