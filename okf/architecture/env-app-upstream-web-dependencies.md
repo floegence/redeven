@@ -6,7 +6,7 @@ tags: [architecture, dependencies, protocol, ui]
 timestamp: 2026-10-18T00:00:00Z
 quality_exception: Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -27,6 +27,10 @@ duplicate these imports. Every document retains the enforced 122 KiB gzip
 initial CSS budget, including Desktop development builds.
 
 Floe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).
+
+Floe owns progress-shimmer paint scheduling during drag and resize. Hosts consume
+its published CSS and shared interaction marker; they do not copy its animation
+implementation or suppress model output to keep input responsive.
 
 Core supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.
 

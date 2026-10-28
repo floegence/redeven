@@ -12899,7 +12899,7 @@
         "description": "Env App composes published floe-webapp, FloeBrowser, Floeterm, and Flowersec packages.",
         "lifecycle": "contract",
         "quality_exception": "Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.",
-        "reviewed_at": "2026-10-27",
+        "reviewed_at": "2026-10-28",
         "tags": [
           "architecture",
           "dependencies",
@@ -12910,15 +12910,15 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 2935,
+      "body_length": 3164,
       "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.86.64 (Env App Core v0.86.64), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
-          "char_count": 823
+          "body": "## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "char_count": 1052
         },
         {
           "id": "boundaries",
@@ -21718,7 +21718,7 @@
         "title": "Flower long-thread mandatory acceptance",
         "type": "Validation Contract"
       },
-      "body_length": 8497,
+      "body_length": 8998,
       "summary": "Long conversations must preserve complete content and responsive interaction while\nwork continues. This is a required product property, not optional release tuning.\nThe staged commit gate runs focused deterministic regressions. The exact-tip main\nintegration gate runs browser correctness cases and a sustained real-runtime drag\nscenario whenever Flower, runtime, host UI, locked dependencies or gate code change.",
       "sections": [
         {
@@ -21732,8 +21732,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The desktop test supervisor owns the fixture, build, Electron, profile/state\ndirectories and ports, and verifies cleanup before reporting success. Synthetic\nmetrics/traces remain outside Git. The report records source, lock hashes and host;\nstandalone dirty development measurements do not certify an exact committed tip.\nHistorical seeding verifies the full canonical result once instead of rescanning\nthe complete prefix after each admission; this changes setup cost, not coverage.\n\nOptimization must reduce the synchronous work per envelope: stable per-turn and\nper-row inputs, keyed mounted subscriptions, linear membership checks, and bounded\noffscreen layout with reading/selection/focus pins. Layout sections retain their\nDOM and disclosure owners; this is layout containment, not DOM virtualization.\nSkipping offscreen layout must also cover a growing active turn. Preserve canonical order and semantic boundaries,\nfull history access, drafts and disclosure state. Throttling, suppressed output,\na second lifecycle, or shortened fixtures cannot substitute for those invariants.\nShared floating-window mechanics belong to Floe; product projection belongs here.",
-          "char_count": 1167
+          "body": "The desktop test supervisor owns the fixture, build, Electron, profile/state\ndirectories and ports, and verifies cleanup before reporting success. Synthetic\nmetrics/traces remain outside Git. The report records source, lock hashes and host;\nstandalone dirty development measurements do not certify an exact committed tip.\nHistorical seeding verifies the full canonical result once instead of rescanning\nthe complete prefix after each admission; this changes setup cost, not coverage.\n\nOptimization must reduce the synchronous work per envelope: stable per-turn and\nper-row inputs, keyed mounted subscriptions, linear membership checks, and bounded\noffscreen layout with reading/selection/focus pins. Layout sections retain their\nDOM and disclosure owners; this is layout containment, not DOM virtualization.\nSkipping offscreen layout must also cover a growing active turn. Preserve canonical order and semantic boundaries,\nfull history access, drafts and disclosure state. Throttling, suppressed output,\na second lifecycle, or shortened fixtures cannot substitute for those invariants.\nShared floating-window mechanics belong to Floe; product projection belongs here.\nFloe's published progress shimmer pauses only its decorative paint while its shared\ndrag/resize marker is active, preserving animation identity and phase on release.\nProgress text, token counts, streamed content and terminal state remain live. Browser\nregressions cover native release, pointer cancellation and window blur, including\npreserved preview drafts and selection. The acceptance workload and latency budgets\nremain unchanged; disabling streaming or masking failure cannot satisfy this rule.",
+          "char_count": 1668
         }
       ],
       "snippet": "Long conversations must preserve complete content and responsive interaction while work continues. This is a required product property, not optional release tuning. The staged commit gate runs focused deterministic regressions. The exact-ti",
@@ -32531,5 +32531,5 @@
       ]
     }
   ],
-  "source_sha256": "811d560a34876b5fe2d8e20f01a012b495062ca46592b5dcaa591c60da64f140"
+  "source_sha256": "75fda49a58b1b1e1bc042950c6a826147846345e4694a0356968e57921e0747d"
 }

@@ -7,6 +7,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 - Limit expanded [tool sequences](ui/flower-tool-sequences.md) to eight visible rows on desktop and touch surfaces, preserving complete scrollable contents, short-list geometry and retained disclosure state.
 
 - Separate visible-region [wheel geometry](ai/computer-script-read-contract.md) from click actionability and preserve unknown [reference-read failures](ai/computer-use-semantics.md) without invalidation or input replay. Extend managed/extension and real-provider [qualification](ai/computer-use-qualification.md); clarify role fields, full-name reference identity and navigation load semantics.
+- Keep [progress paint](operations/flower-long-thread-gate.md) behind direct manipulation through published Floe scheduling. Require native release, cancellation and blur regressions with live token/text updates and retained drafts, selection and animation identity.
 
 - Reconcile [same-source body progress](ui/flower-live-timeline.md) atomically when live segments end. Validate covered reads without false Retry states, preserve readable text and source handoff, and qualify deterministic completion order, UTF-8 overlap and rendering continuity.
 - Keep [body-chunk provenance](operations/flower-long-thread-gate.md) local to admitted content. Preserve root/child title animations and historical disclosure observers across live body reads; full item and baseline restoration remain explicit.

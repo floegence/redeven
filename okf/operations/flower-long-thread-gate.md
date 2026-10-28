@@ -127,6 +127,12 @@ Skipping offscreen layout must also cover a growing active turn. Preserve canoni
 full history access, drafts and disclosure state. Throttling, suppressed output,
 a second lifecycle, or shortened fixtures cannot substitute for those invariants.
 Shared floating-window mechanics belong to Floe; product projection belongs here.
+Floe's published progress shimmer pauses only its decorative paint while its shared
+drag/resize marker is active, preserving animation identity and phase on release.
+Progress text, token counts, streamed content and terminal state remain live. Browser
+regressions cover native release, pointer cancellation and window blur, including
+preserved preview drafts and selection. The acceptance workload and latency budgets
+remain unchanged; disabling streaming or masking failure cannot satisfy this rule.
 
 # Evidence
 
