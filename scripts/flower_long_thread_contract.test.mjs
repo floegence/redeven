@@ -75,6 +75,7 @@ test('commit and exact-tip integration must enforce the long-thread gate', () =>
   assert.match(read('scripts/check_quick_ci.sh'), /flower_long_thread_contract.test.mjs/u);
   const runner = read('scripts/qualify_flower_long_thread.mjs');
   assert.match(runner, /assertLongThread\(report\)/u);
+  assert.match(runner, /nativeWindow[.]evaluate[(]window => window[.]setIgnoreMouseEvents[(]true[)][)]/u);
   assert.match(runner, /await session.run\(/u);
   assert.doesNotMatch(runner, /--ref|headless: true|--candidate-gates/u);
 });

@@ -9,6 +9,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 - Separate visible-region [wheel geometry](ai/computer-script-read-contract.md) from click actionability and preserve unknown [reference-read failures](ai/computer-use-semantics.md) without invalidation or input replay. Extend managed/extension and real-provider [qualification](ai/computer-use-qualification.md); clarify role fields, full-name reference identity and navigation load semantics.
 
 - Reconcile [same-source body progress](ui/flower-live-timeline.md) atomically when live segments end. Validate covered reads without false Retry states, preserve readable text and source handoff, and qualify deterministic completion order, UTF-8 overlap and rendering continuity.
+- Isolate [long-thread drag qualification](operations/flower-long-thread-gate.md) from physical desktop pointer motion while retaining the visible compositor, independent CDP input and strict interruption checks.
 
 - Preserve structured protocol facts in [computer scripts](ai/computer-use-scripts.md), report objective [pause reasons](ai/computer-use-takeover.md) without inferring user intent, and extend isolated [qualification](ai/computer-use-qualification.md) with natural visual/form/table tasks and programmatic native focus changes.
 

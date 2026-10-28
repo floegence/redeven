@@ -80,7 +80,10 @@ must not force clicks through hidden content or mutate product disclosure state.
 Sample idle, early work, late work and a repeat on the same visible production UI
 with two production PersistentFloatingWindows. Each sample lasts at least twelve
 seconds measured with a monotonic clock. Pointer cancellation, released buttons,
-window blur or a hidden document invalidates the sample. Independent 60 Hz CDP
+window blur or a hidden document invalidates the sample. The visible test-only
+Electron host ignores physical mouse events so normal desktop pointer motion
+cannot cancel the independently injected CDP drag. Input handlers, compositor
+presentation and every interruption check remain active. Independent 60 Hz CDP
 input scheduling must offer at least 55 events/second;
 awaiting every dispatch in the producer is prohibited. Require at least 45 actual
 position commits/second and 80% of idle cadence, not merely low latency among the

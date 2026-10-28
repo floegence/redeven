@@ -67,6 +67,11 @@ await session.run(async () => {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, FLOWER_PERF_PROFILE: path.join(temporary, 'profile'), FLOWER_PERF_URL: info.url + '/?cpu=1&long-thread=1&thread=' + configured.threads[0] },
   });
   const page = await application.firstWindow();
+  // Native pointer motion on a shared desktop must not release the independent
+  // CDP drag. Keep the real visible compositor and renderer input path; only
+  // prevent unrelated physical mouse events from entering this test window.
+  const nativeWindow = await application.browserWindow(page);
+  await nativeWindow.evaluate(window => window.setIgnoreMouseEvents(true));
   const errors = [];
   page.on('pageerror', error => errors.push(String(error)));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
