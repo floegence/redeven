@@ -25,6 +25,8 @@ Counts require known boundaries and no missing internal items/events; partial wi
 
 ## Disclosure and bodies
 
+History restoration settles automatic sequence and whole-turn policy without motion before destination exposure; explicit user choices survive. The disclosure choice records whether its transition may animate, so ordinary manual actions restore motion without changing the automatic default. Only admitted live arrivals use the fold-before-prose handoff. Preparation waits for queued row placement even if the latest group is automatic, and skips inner positioning inside folded turns.
+
 Session choices key runtime/thread/tool. Defaults settle initially and once when an active open group becomes eligible to fold. Explicit choices survive updates, completion, reconnect and navigation until refresh. Focus/selection/gestures/open details/thinking/away-from-tail reading protect expansion but cannot reopen a closed group; direct disclosure or explicit navigation can. Choice subscriptions are per-group.
 
 An eligible live sequence closes over 260 ms into the actual shared summary-row height (2rem desktop, 2.75rem coarse pointer), never through zero beneath that row. The summary fades in during the final 100 ms after a 140 ms delay; only one summary layer and the shared viewport animate. Newly arriving prose remains mounted, invisible and inert until geometry settles, then fades in over 160 ms with no translation. Runtime delivery and streaming continue without buffering or remounting. Existing prose, inspected groups, history, navigation and reduced motion do not wait.

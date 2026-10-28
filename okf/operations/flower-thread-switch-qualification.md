@@ -5,7 +5,7 @@ description: Reproduce point-read scaling, bounded read recovery and actual side
 tags: [flower, performance, qualification, navigation]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -61,6 +61,12 @@ failing fixtures. Canonical history remains complete.
 ## Scope
 
 All timings below are local sequential diagnostics, not population P95, arbitrary-upgrade bounds or universal smooth-frame guarantees. Historical copies are isolated and consistent; execution is deferred, source databases remain untouched, and private text is not committed. Preserve failed samples alongside passing runs. Browser/backend/render timings have separate scopes.
+
+## Stable running-thread entry — 2026-10-28
+
+- Baseline `3108347bf` exposes stale cached rows: a completed sequence shrinks from 64 to 32 px and unseen titles replay. Delayed warm-entry fixtures cover ordinary and observer-bound history, manual disclosure, completed turns, narrow reduced-motion companion, child reopen, reconnect, reselection, stale A/B/A reads, user reading and refresh failure/retry. Forty sampled entry frames retain one exposed height and no restored title/fold animation; post-ready live titles still animate. Each warm fixture uses exactly two bounded reads.
+- Current recovery suites pass 88 cases; disclosure/cache/loader/queue/scroll units pass 176. The earlier twelve-suite browser run passes 423/428: three child-loading expectations are updated and pass in the recovery rerun; two companion settings-recovery geometry failures reproduce on the baseline and remain unqualified. Tool sequencing and streaming pass independently. Both host typechecks and lint pass.
+- Paired production Chromium/Electron profiles use 72/500 messages, 20/100 tools, 30/60 Hz and toggled disclosure (eight runs per revision). Candidate frame P95 is 16.8–17.6 ms and click P95 29.1–34.0 ms; no streaming long tasks, protected-DOM changes, continuity flashes or detail reads. Paired renderer CPU changes range from -12.7% to +1.1%, layout from -13.2% to +1.5%, sampled allocation from -2.5% to +3.6%. These single-run local samples show no material rendering regression, not population guarantees; baseline's first Electron click sample is 135 ms and is retained. Both owned process cleanups pass.
 
 ## Bounded statistics and reading — 2026-10-27
 

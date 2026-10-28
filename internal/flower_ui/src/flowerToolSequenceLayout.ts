@@ -76,9 +76,9 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
   onCleanup(() => { disposed = true; elements.clear(); });
   return {
     prepareDestination: () => {
+      if (scheduled) return false;
       const latest = [...untrack(projection).groups.values()].at(-1);
       if (!latest || latest.disclosure !== 'manual') return true;
-      if (scheduled) return false;
       return elements.get(latest.nodeKeys[0])?.prepareDestination() ?? false;
     },
     prepareArrival: (key: string) => {

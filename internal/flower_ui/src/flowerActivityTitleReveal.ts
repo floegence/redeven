@@ -13,12 +13,14 @@ export function createFlowerActivityTitleReveal(options: {
   entries: Accessor<readonly FlowerTimelineEntry[]>;
   liveConfirmed: Accessor<boolean>;
   reducedMotion: Accessor<boolean>;
+  restoration: Accessor<number>;
   isVisible: (key: string) => boolean;
   prepareArrival: (key: string) => number;
 }) {
   let threadID: string | undefined;
   let wasLive = false;
   let wasRunning = false;
+  let restoration = options.restoration();
   let known = new Map<string, { deadline: number; entryKey: string }>();
   const [revision, setRevision] = createSignal(0);
   const animations = new Map<string, {
@@ -38,15 +40,17 @@ export function createFlowerActivityTitleReveal(options: {
     const thread = options.thread();
     const entries = options.entries();
     const live = options.liveConfirmed();
+    const restored = restoration !== options.restoration();
+    restoration = options.restoration();
     const sameThread = Boolean(threadID && threadID === thread?.thread_id);
-    if (!sameThread || !live) { finishAll(); known.clear(); }
+    if (!sameThread || !live || restored) { finishAll(); known.clear(); }
     const execution = thread?.current_execution;
     const now = performance.now();
     const next = new Map<string, { deadline: number; entryKey: string }>();
     for (const entry of entries) {
       if (entry.type !== 'message' || !execution || entry.message.thread_id !== thread?.thread_id
         || entry.message.turn_id !== execution.turn_id || entry.message.run_id !== execution.run_id) continue;
-      const fresh = sameThread && wasLive && live && !document.hidden && (thread?.status === 'running' || wasRunning);
+      const fresh = !restored && sameThread && wasLive && live && !document.hidden && (thread?.status === 'running' || wasRunning);
       const add = (key: string) => next.set(key, { entryKey: entry.key, deadline:
         !options.isVisible(key) ? 0 : sameThread && live && known.has(key) ? known.get(key)!.deadline : fresh ? now + FRESH_WINDOW_MS : 0 });
       for (const block of entry.blocks) {

@@ -28,6 +28,7 @@ type TimelineProps = Readonly<{
   scroll: FlowerScrollTailController;
   reducedMotion: Accessor<boolean>;
   liveConfirmed?: Accessor<boolean>;
+  receipt?: Readonly<{ live: boolean; restoration: number }>;
   copy: FlowerTurnProcessCopy;
   readingBreaks?: ReadonlySet<string>;
   missingEvents?: readonly Readonly<{ after: number; before: number }>[];
@@ -83,6 +84,14 @@ function HistorySection(props: Readonly<{ entries: readonly FlowerTimelineEntry[
 }
 
 export function FlowerTurnTimeline(props: TimelineProps) {
+  let restoration = props.receipt?.restoration;
+  const liveArrival = createMemo(() => {
+    void props.thread;
+    void props.entries;
+    const restored = restoration !== props.receipt?.restoration;
+    restoration = props.receipt?.restoration;
+    return !restored && (props.receipt?.live ?? true) && (props.liveConfirmed?.() ?? false) && !props.scroll.isPreparing();
+  });
   const sections = createMemo<{ key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[]>((previous = []) => {
     const threadID = props.thread?.thread_id;
     const prior = new Map(previous.filter(section => section.threadID === threadID).map(section => [section.key, section]));
@@ -273,7 +282,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         // its final tool arrives. Let that row mount and claim its title reveal
         // before the existing automatic-disclosure observer settles the group.
         if (!previous.groups.has(group.key) && previous.headerKeys.has(group.nodeKeys[0])
-          && sequenceLayout.element(group.nodeKeys[0]) && props.liveConfirmed?.()) {
+          && sequenceLayout.element(group.nodeKeys[0]) && liveArrival()) {
           props.choices.observe(sequenceIdentity(group.key), 'manual');
         }
         const addedKeys = new Set(group.nodeKeys.filter(key => !previous.members.has(key)));
@@ -293,7 +302,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       const pending = new Map(pendingSequenceContent());
       const owners = new Set([...next.groups.values()].map(group => group.nodeKeys[0]));
       for (const [key, owner] of pending) if (!previous || !owners.has(owner.nodeKey)) pending.delete(key);
-      if (previous && props.liveConfirmed?.() && !props.reducedMotion() && !props.scroll.isPreparing()) {
+      if (previous && liveArrival() && !props.reducedMotion()) {
         for (const group of next.groups.values()) {
           const prior = previous.groups.get(group.key);
           const waiting = group.followingContentKeys.map(key => pending.get(key)).find(owner => owner?.nodeKey === group.nodeKeys[0]);
@@ -319,6 +328,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   const sequenceLayout = createFlowerToolSequenceLayout(sequences);
   createEffect(() => {
     const groups = processes();
+    const animate = liveArrival();
     const pending = pendingSequenceContent();
     titleReveal.revealingEntries();
     const threadID = props.thread?.thread_id;
@@ -357,13 +367,14 @@ export function FlowerTurnTimeline(props: TimelineProps) {
               setPendingSequenceContent(previous => new Map([...previous].map(([key, owner]) =>
                 [key, owners.get(owner.nodeKey) ?? owner])));
             }
-          });
+          }, animate);
       }
     }));
   });
 
   createEffect(() => {
     const projection = sequences();
+    const animate = liveArrival();
     pendingSequenceContent();
     titleReveal.revealingEntries();
     let cancelled = false;
@@ -384,7 +395,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
           });
           const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
           return inspectionProtected(turnID, group.entryKeys, true, inspectedNodes);
-        }, () => preserveReadingAnchor(group.entryKeys));
+        }, () => preserveReadingAnchor(group.entryKeys), animate);
         if (props.choices.expanded(sequenceIdentity(group.key), group.disclosure) && !motions.has(`tools:${group.nodeKeys[0]}`)) {
           releaseMotionContent('tools:' + group.nodeKeys[0]);
         }
@@ -404,6 +415,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     ...sequenceLayout,
     projection: sequences,
     preparing: props.scroll.isPreparing,
+    motionEnabled: (group: FlowerToolSequence) => props.choices.motionEnabled(sequenceIdentity(group.key)),
     expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
     manuallyExpanded: (group: FlowerToolSequence) => props.choices.manuallyExpanded(sequenceIdentity(group.key)),
     toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => {
@@ -435,7 +447,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   };
   const titleReveal = createFlowerActivityTitleReveal({
     thread: () => props.thread, entries: () => props.entries,
-    liveConfirmed: () => props.liveConfirmed?.() ?? false, reducedMotion: props.reducedMotion,
+    liveConfirmed: () => Boolean(props.liveConfirmed?.()) && !props.scroll.isPreparing(), reducedMotion: props.reducedMotion,
+    restoration: () => props.receipt?.restoration ?? 0,
     prepareArrival: key => Math.max(sequenceLayout.prepareArrival(key), props.scroll.prepareArrival()),
     isVisible: key => {
       const group = sequences().members.get(key)?.group;
@@ -477,9 +490,11 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       return group()?.interleavedInputs === true && current.type === 'message'
         && current.blocks.some((block) => block.type === 'input_response');
     });
+    const rowReducedMotion = createMemo(() => props.reducedMotion() || props.scroll.isPreparing()
+      || Boolean(group() && !props.choices.motionEnabled(identity(group()!.turnID))));
     const motion = createFlowerActivityDisclosureMotion(expanded, {
       initialOpen: untrack(expanded),
-      reducedMotion: props.reducedMotion,
+      reducedMotion: rowReducedMotion,
       closeDurationMs: 260,
       closeEasing: 'cubic-bezier(0.32, 0, 0.2, 1)',
       closePresentation: current => {

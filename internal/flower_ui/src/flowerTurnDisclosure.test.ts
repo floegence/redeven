@@ -3,6 +3,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 
 describe('stable disclosure state', () => {
+  it('settles restoration without motion and restores animation for explicit interaction', () => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    store.observe('tools', 'manual');
+    expect(store.observe('tools', 'automatic', () => false, undefined, false)).toBe(true);
+    expect(store.expanded('tools', 'automatic')).toBe(false);
+    expect(store.motionEnabled('tools')).toBe(false);
+    store.toggle('tools', 'automatic');
+    expect(store.expanded('tools', 'automatic')).toBe(true);
+    expect(store.motionEnabled('tools')).toBe(true);
+    store.observe('tools', 'manual', () => false, undefined, false);
+    store.observe('tools', 'automatic', () => false, undefined, false);
+    expect(store.manuallyExpanded('tools')).toBe(true);
+    store.toggle('tools', 'automatic');
+    expect(store.motionEnabled('tools')).toBe(true);
+    dispose();
+  }));
   it('shares a prepended group choice with the canonical anchor used after navigation', () => createRoot(dispose => {
     const store = createFlowerTurnDisclosureStore();
     store.observe('partial', 'automatic');

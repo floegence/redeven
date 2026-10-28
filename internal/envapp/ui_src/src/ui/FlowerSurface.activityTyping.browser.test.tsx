@@ -2,9 +2,9 @@ import '../index.css';
 import './flower-feature.css';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page } from 'vitest/browser';
-import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerToolCallPreview } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerToolCallPreview } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
-import { adapter, liveBootstrap, renderSurfaceWithAdapter, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const media = commands as unknown as { emulateMediaPreferences: (input: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
 const titleText = '搜索 BrowserBench bilingual long-horizon browser agent 👩🏽‍💻 é 浏览器任务';
@@ -33,14 +33,23 @@ async function mount(initial = [tool('history', 'success')], child = false) {
   const parent = thread({ thread_id: 'typing-parent', title: 'Parent conversation', subagents: [summary] });
   const selected = child ? parent : seed;
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
-  const values: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [selected, peer] }];
+  const values: (FlowerLiveStreamEnvelope | Error)[] = [];
+  let connections = 0;
   let wake: (() => void) | undefined;
+  let delayedChildRead: Promise<void> | undefined;
+  const loadChild = vi.fn(async () => {
+    const captured = latest;
+    if (delayedChildRead) await delayedChildRead;
+    return subagentDetail({ summary, current: captured });
+  });
   const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [child ? parent : applyFlowerRuntimeCurrentView(seed, latest), peer]),
     loadThread: vi.fn(async id => id === peer.thread_id ? liveBootstrap(peer) : child ? liveBootstrap(parent) : { thread: applyFlowerRuntimeCurrentView(seed, latest), current: latest }),
-    loadSubagentDetail: vi.fn(async () => subagentDetail({ summary, current: latest })),
+    loadSubagentDetail: loadChild,
     async *connectLiveStream({ signal }) {
+      connections++;
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [selected, peer] };
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
-      try { while (!signal.aborted) { const value = values.shift(); if (value) yield value; else await new Promise<void>(resolve => { wake = resolve; }); } }
+      try { while (!signal.aborted) { const value = values.shift(); if (value instanceof Error) throw value; if (value) yield value; else await new Promise<void>(resolve => { wake = resolve; }); } }
       finally { signal.removeEventListener('abort', abort); }
     },
   });
@@ -63,7 +72,15 @@ async function mount(initial = [tool('history', 'success')], child = false) {
   }
   await waitFor(() => Boolean(surface.querySelector(initial.length ? '[data-flower-activity-item-id]' : '.flower-turn-timeline')));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
-  return { root: surface, parentRoot: root, push(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], completed = false) {
+  return { root: surface, parentRoot: root, loadChild, delayChildRead(items: FlowerRuntimeCurrentItem[]) {
+    latest = current(items, latest.view_version + 1);
+    let release!: () => void;
+    delayedChildRead = new Promise<void>(resolve => { release = resolve; });
+    return release;
+  }, connections: () => connections, reconnect(items: FlowerRuntimeCurrentItem[]) {
+    latest = current(items, latest.view_version + 1);
+    values.push(new Error('Synthetic reconnect')); wake?.();
+  }, push(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], completed = false) {
     latest = { ...current(items, latest.view_version + 1), tool_call_previews: previews,
       ...(completed ? { activity: 'idle', last_outcome: 'completed', run_progress: null } as const : {}),
     };
@@ -489,4 +506,156 @@ it('keeps newly received hidden rows static when their sequence is reopened', as
   group.click();
   await waitFor(() => Boolean(title(root, 'hidden')));
   expect(reveals(title(root, 'hidden')!)).toHaveLength(0);
+});
+
+it.each([
+  [false, false, false, false], [true, false, false, false], [true, true, false, false], [true, false, true, false], [true, false, false, true],
+] as const)('settles warm-entry work before exposure (observer=%s, manual=%s, completed=%s, narrow=%s)', async (observer, manual, completed, narrow) => {
+  await page.viewport(1280, 900);
+  let latest = current([tool('before', 'success'), tool('was-running')]);
+  if (observer) latest = { ...latest, window: { leaf_id: 'baseline-one', first_item_id: 'before', last_item_id: 'was-running', has_before: false, has_after: false } };
+  const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'typing', title: 'Long-running thread', messages: [] }), latest);
+  const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
+  let reads = 0;
+  let releaseRefresh: (() => void) | undefined;
+  let readingRevision: number | undefined;
+  const events: FlowerLiveStreamEnvelope[] = [];
+  let wake: (() => void) | undefined;
+  const push = (view: FlowerRuntimeCurrentView) => {
+    events.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'typing', current: view, reading_revision: readingRevision });
+    wake?.();
+  };
+  const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [seed, peer]),
+    loadHistory: vi.fn(async (id, input: FlowerHistoryRequest) => {
+      if (id === peer.thread_id) return liveBootstrap(peer);
+      const captured = latest;
+      readingRevision = input.reading_revision;
+      if (++reads > 1) await new Promise<void>(resolve => { releaseRefresh = resolve; });
+      return { thread: applyFlowerRuntimeCurrentView(seed, captured), current: captured };
+    }),
+    async *connectLiveStream({ signal }) {
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [seed, peer], ...(observer ? { observer_id: 'entry-observer' } : {}) };
+      const abort = () => wake?.();
+      signal.addEventListener('abort', abort, { once: true });
+      try { while (!signal.aborted) {
+        const event = events.shift();
+        if (event) yield event; else await new Promise<void>(resolve => { wake = resolve; });
+      } } finally { signal.removeEventListener('abort', abort); }
+    },
+  }, narrow ? { presentation: 'companion', companionOpen: true } : {});
+  root.style.height = '780px';
+  if (narrow) {
+    root.style.width = '420px';
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+  }
+  await waitFor(() => Boolean(root.querySelector('[data-thread-id="typing"] button')));
+  root.querySelector<HTMLButtonElement>('[data-thread-id="typing"] button')!.click();
+  await waitFor(() => Boolean(title(root, 'was-running')) && root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
+  if (manual) {
+    const toggle = root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+    toggle.click(); toggle.click();
+    await waitFor(() => root.querySelector('.flower-tool-sequence-node')?.getAttribute('data-state') === 'open');
+  }
+  root.querySelector<HTMLButtonElement>('[data-thread-id="peer"] button')!.click();
+  await waitFor(() => !title(root, 'was-running'));
+  latest = current([tool('before', 'success'), tool('was-running', 'success'),
+    { id: 'older-prose', ordinal: 3, kind: 'assistant', text: 'This work already finished while the user was away.', turn_id: 'turn', run_id: 'run' },
+    tool('unseen-a', 'success'), tool('unseen-b')], 2);
+  if (observer) latest = { ...latest, window: { leaf_id: 'baseline-two', first_item_id: 'before', last_item_id: 'unseen-b', has_before: false, has_after: false } };
+  if (completed) latest = { ...latest, activity: 'idle', last_outcome: 'completed', run_progress: null,
+    turns: latest.turns!.map(turn => ({ ...turn, outcome: 'completed', ended_at: '2026-10-22T12:01:00Z',
+      elapsed_ms: 60000, work_duration_ms: 60000, final_item_ids: ['older-prose'], final_boundary_complete: true })) };
+  root.querySelector<HTMLButtonElement>('[data-thread-id="typing"] button')!.click();
+  await waitFor(() => Boolean(releaseRefresh) && Boolean(title(root, 'was-running')));
+  expect(root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing')).toBe('true');
+  expect(title(root, 'was-running')!.checkVisibility({ visibilityProperty: true })).toBe(false);
+  const before = root.querySelector<HTMLElement>('.flower-tool-sequence-node[data-flower-sequence-start="true"]')!;
+  // The selected observer can advance before its HTTP baseline returns. It
+  // belongs to the same finite handoff and must never replay as a fresh arrival.
+  if (observer && !completed) {
+    latest = { ...latest, view_version: 3, items: [...latest.items!, { ...tool('handoff'), ordinal: 6 }] };
+    push(latest);
+  }
+  for (let frame = 0; frame < 3; frame++) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    expect(root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing')).toBe('true');
+  }
+  const samples: { oldGroup: string | undefined; titleReveals: number; proseVisible: boolean; preparing: boolean; height: number }[] = [];
+  releaseRefresh!();
+  for (let frame = 0; frame < 40; frame++) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    const prose = root.querySelector<HTMLElement>('[data-flower-message-id="older-prose"] .flower-message-bubble');
+    samples.push({ oldGroup: before.dataset.state,
+      titleReveals: [title(root, 'unseen-a'), title(root, 'unseen-b'), title(root, 'handoff')].filter(Boolean).reduce((sum, node) => sum + reveals(node!).length, 0),
+      proseVisible: prose?.checkVisibility({ visibilityProperty: true }) ?? false,
+      preparing: root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') === 'true',
+      height: before.getBoundingClientRect().height });
+    if (frame === 4 && !narrow) await page.screenshot({ element: root, path: '__screenshots__/fixed-warm-entry-' + [observer, manual, completed].join('-') + '.png' });
+  }
+  expect(reads).toBe(2);
+  expect(samples.some(sample => !sample.preparing && sample.proseVisible)).toBe(true);
+  expect(new Set(samples.filter(sample => !sample.preparing).map(sample => sample.height)).size).toBe(1);
+  expect(samples.some(sample => sample.titleReveals > 0), 'Already-existing tools must not replay arrival motion').toBe(false);
+  expect(samples.some(sample => sample.oldGroup === 'closing' && !sample.preparing), 'History catch-up must settle before first reveal').toBe(false);
+  expect(root.querySelector('.flower-turn-row-viewport[data-state="closing"]')).toBeNull();
+  if (!completed) {
+    expect(before.dataset.state).toBe(manual ? 'open' : 'closed');
+    latest = { ...latest, view_version: latest.view_version + 1, items: [...latest.items!, { ...tool('after-ready'), ordinal: 7 }] };
+    push(latest);
+    await waitFor(() => Boolean(title(root, 'after-ready')));
+    expect(reveals(title(root, 'after-ready')!)).toHaveLength(narrow ? 0 : 1);
+    expect(reveals(title(root, 'unseen-b')!)).toHaveLength(0);
+  }
+});
+
+
+it.each([false, true])('does not replay titles or fold transitions after reconnect (child=%s)', async child => {
+  const { root, parentRoot, reconnect, connections, push } = await mount([tool('previous'), tool('previous-two')], child);
+  const restored = [tool('previous', 'success'), tool('previous-two', 'success'),
+    { id: 'recovered-prose', kind: 'assistant' as const, ordinal: 3, text: 'Already produced before reconnection.', turn_id: 'turn', run_id: 'run' },
+    tool('recovered-a', 'success'), tool('recovered-b')];
+  reconnect(restored);
+  await waitFor(() => Boolean(parentRoot.querySelector('[data-flower-sync-state="failed"] button')));
+  parentRoot.querySelector<HTMLButtonElement>('[data-flower-sync-state="failed"] button')!.click();
+  await waitFor(() => connections() === 2 && Boolean(title(root, 'recovered-b')), 5000);
+  for (let frame = 0; frame < 25; frame++) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    expect(reveals(title(root, 'recovered-b')!)).toHaveLength(0);
+    expect(root.querySelector('.flower-tool-sequence-node[data-state="closing"]')).toBeNull();
+  }
+  expect(parentRoot.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+  push([...restored, tool('after-reconnect')]);
+  await waitFor(() => Boolean(title(root, 'after-reconnect')));
+  expect(reveals(title(root, 'after-reconnect')!)).toHaveLength(1);
+});
+
+
+it('prepares a reopened child against its new baseline without exposing the cached layout', async () => {
+  const { root, parentRoot, delayChildRead, loadChild } = await mount([tool('child-old'), tool('child-running')], true);
+  const window = root.closest<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
+  const close = [...window.querySelectorAll<HTMLButtonElement>('button')].find(button => /close/i.test(button.getAttribute('aria-label') ?? ''))!;
+  expect(close).toBeDefined();
+  close.click();
+  await waitFor(() => !document.querySelector('[data-flower-subagent-detail="open"]'));
+  const release = delayChildRead([tool('child-old', 'success'), tool('child-running', 'success'),
+    { id: 'child-prose', kind: 'assistant', ordinal: 3, text: 'Finished while the child was closed.', turn_id: 'turn', run_id: 'run' },
+    tool('child-catchup')]);
+  parentRoot.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
+  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
+  document.querySelector<HTMLButtonElement>('[data-flower-subagent-row="0"]')!.click();
+  await waitFor(() => loadChild.mock.calls.length === 2);
+  const child = document.querySelector<HTMLElement>('[data-flower-subagent-detail="open"]')!;
+  for (let frame = 0; frame < 5; frame++) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    expect(child.querySelector('.flower-subagent-detail-transcript')?.getAttribute('data-flower-tail-preparing')).toBe('true');
+    expect(title(child, 'child-running')!.checkVisibility({ visibilityProperty: true })).toBe(false);
+  }
+  release();
+  await waitFor(() => Boolean(title(child, 'child-catchup')) && child.querySelector('.flower-subagent-detail-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
+  for (let frame = 0; frame < 20; frame++) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    expect(reveals(title(child, 'child-catchup')!)).toHaveLength(0);
+    expect(child.querySelector('.flower-tool-sequence-node[data-state="closing"]')).toBeNull();
+  }
+  expect(loadChild).toHaveBeenCalledTimes(2);
 });

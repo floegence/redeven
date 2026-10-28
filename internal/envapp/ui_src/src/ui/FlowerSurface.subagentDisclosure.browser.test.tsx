@@ -283,14 +283,17 @@ describe('Subagent inline capsules', () => {
       const requestCount = requests.length;
       target.click();
       await waitFor(() => requests.length === requestCount + 1);
-      expect(Boolean(surface.querySelector('.flower-subagent-detail-loading'))).toBe(index !== 0);
+      expect(surface.querySelector('.flower-subagent-detail-loading')).not.toBeNull();
+      // Even a cached child must renew its baseline before exposing content.
+      if (index === 0) expect(surface.querySelector<HTMLElement>('.flower-subagent-detail-timeline')!.checkVisibility({ visibilityProperty: true })).toBe(false);
       if (index === 0) expect(surface.querySelector('.flower-subagent-detail-transcript')).not.toBeNull();
       checkGeometry();
       const detail = detailFor(summaries[index]!);
       requests.at(-1)!.resolve(index === 0 ? { ...detail, model_context: modelContext } : {
         ...detail, current: { ...detail.current, activity: 'idle', run_progress: undefined },
       });
-      await waitFor(() => Boolean(surface.querySelector('.flower-subagent-detail-transcript')));
+      await waitFor(() => Boolean(surface.querySelector('.flower-subagent-detail-transcript'))
+        && surface.querySelector('.flower-subagent-detail-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
       checkGeometry();
       expect(document.activeElement).toBe(target);
       expect(surface.querySelector('[data-flower-subagent-switch="' + summaries[index]!.thread_id + '"]')).toBe(target);

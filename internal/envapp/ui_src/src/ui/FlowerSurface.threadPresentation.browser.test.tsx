@@ -38,8 +38,10 @@ async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boole
   const detail = deferred<FlowerThreadView>();
   const bodies = new Map<string, ReturnType<typeof deferred<FlowerRuntimeCurrentItem>>>();
   const events: string[] = [];
+  let nextRead: ReturnType<typeof deferred<FlowerThreadView>> | undefined;
   const loadHistory = vi.fn(async (id: string) => {
     if (id === 'peer') return liveBootstrap(peer, 1);
+    if (nextRead) { const pending = nextRead; nextRead = undefined; return pending.promise; }
     if (options.failDetail) throw new Error('Detail unavailable');
     return options.delayedDetail ? detail.promise : { thread: applyFlowerRuntimeCurrentView(target, current), current };
   });
@@ -64,6 +66,8 @@ async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boole
   select(root, 'target');
   await waitFor(() => loadHistory.mock.calls.some(call => call[0] === 'target'));
   return { root, loadHistory, loadHistoryItem, bodies, events,
+    delayNextRead: () => { nextRead = deferred<FlowerThreadView>(); return nextRead; },
+    view: { thread: applyFlowerRuntimeCurrentView(target, current), current },
     resolveDetail: () => detail.resolve({ thread: applyFlowerRuntimeCurrentView(target, current), current }) };
 }
 
@@ -250,13 +254,64 @@ describe('Flower destination presentation', () => {
     for (let frame = 0; frame < 10; frame++) {
       await afterPaint();
       if (!root.querySelector('[data-flower-message-id="body-23"]')) continue;
+      // A cached window still renews its observer interest. Only its first
+      // exposed frame, not the hidden mounted DOM, is a presentation.
+      if (preparing(root)) {
+        expect(root.querySelector<HTMLElement>('[data-flower-message-id="body-23"]')!.checkVisibility({ visibilityProperty: true })).toBe(false);
+        continue;
+      }
       sawTarget = true;
-      expect(preparing(root)).toBe(false);
       expect(root.querySelector('.flower-thread-preparing')).toBeNull();
       expect(bottomDistance(root)).toBeLessThanOrEqual(1);
     }
     expect(sawTarget).toBe(true);
     expect(loadHistoryItem).toHaveBeenCalledTimes(count);
+  });
+
+  it.each(['reselect', 'switch', 'read', 'failure'] as const)('keeps delayed warm-entry ownership correct after %s', async action => {
+    const { root, loadHistory, loadHistoryItem, delayNextRead, view } = await fixture({ fullText: true, count: 2 });
+    await waitFor(() => !preparing(root));
+    select(root, 'peer');
+    await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="peer-message"]')));
+    const pending = delayNextRead();
+    const reads = loadHistory.mock.calls.length;
+    select(root, 'target');
+    await waitFor(() => loadHistory.mock.calls.length > reads && preparing(root));
+    await pause(220);
+    expect(root.querySelectorAll('.flower-chat-notices .flower-thread-loading')).toHaveLength(1);
+    if (action === 'switch') {
+      select(root, 'peer');
+      await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="peer-message"]')));
+      pending.resolve(view);
+      await afterPaint();
+      expect(root.querySelector('[data-flower-message-id="body-23"]')).toBeNull();
+      select(root, 'target');
+    } else if (action === 'reselect') {
+      select(root, 'target');
+      await afterPaint();
+      expect(preparing(root)).toBe(true);
+      pending.resolve(view);
+    } else if (action === 'read') {
+      viewport(root).dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+      viewport(root).scrollTop = 0;
+      expect(preparing(root)).toBe(false);
+      pending.resolve(view);
+    } else {
+      pending.reject(new Error('Synthetic warm refresh failure'));
+      await waitFor(() => Boolean(root.querySelector('.flower-thread-sync-error button')));
+      expect(preparing(root)).toBe(false);
+      root.querySelector<HTMLButtonElement>('.flower-thread-sync-error button')!.click();
+    }
+    await waitFor(() => !preparing(root) && !root.querySelector('.flower-thread-sync-error')
+      && Boolean(root.querySelector('[data-flower-message-id="body-23"]')));
+    for (let frame = 0; frame < 8; frame++) {
+      await afterPaint();
+      expect(root.querySelector('[data-flower-message-id="body-23"]')).not.toBeNull();
+      if (action === 'read') expect(viewport(root).scrollTop).toBe(0);
+      else expect(bottomDistance(root)).toBeLessThanOrEqual(1);
+    }
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+    expect(loadHistoryItem).not.toHaveBeenCalled();
   });
 
   it('cancels stale body preparation without moving or replacing the newly selected conversation', async () => {

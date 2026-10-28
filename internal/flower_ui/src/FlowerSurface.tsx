@@ -408,6 +408,7 @@ type FlowerFloatingPoint = Readonly<{
 type SelectedThreadTailReveal = Readonly<{
   threadID: string;
   sequence: number;
+  baselineReady: boolean;
 }>;
 type ActiveSubagentDetail = Readonly<{
   parentThreadID: string;
@@ -1009,7 +1010,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     else historyAcceptedReadingRevision = revision;
     const pending = child ? subagentPendingEnvelopes : historyPendingEnvelopes;
     const envelopes = pending.take();
-    for (const envelope of envelopes) if (envelope.reading_revision === revision) applyFlowerLiveStreamEnvelope(envelope);
+    for (const envelope of envelopes) if (envelope.reading_revision === revision) applyFlowerLiveStreamEnvelope(envelope, true);
   };
   let historyRecoveryUsed = false;
   let historyEdgeRecoverable = false;
@@ -1104,6 +1105,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [subagentTailReveal, setSubagentTailReveal] = createSignal('');
   const subagentTailPreparing = () => Boolean(subagentTailReveal() && subagentTailReveal() === activeSubagentID());
   const [selectedThreadTailReveal, setSelectedThreadTailReveal] = createSignal<SelectedThreadTailReveal | null>(null);
+  // Receipt provenance belongs to the two visible presentations, not durable
+  // history. A restore revision survives batched baseline/live handoffs.
+  const [selectedTimelineReceipt, setSelectedTimelineReceipt] = createSignal({ live: false, restoration: 0 });
+  const [subagentTimelineReceipt, setSubagentTimelineReceipt] = createSignal({ live: false, restoration: 0 });
+  const recordTimelineReceipt = (threadID: string, live: boolean) => {
+    const record = (set: typeof setSelectedTimelineReceipt) => set(previous => live
+      ? previous.live ? previous : { ...previous, live: true }
+      : { live: false, restoration: previous.restoration + 1 });
+    if (threadID === selectedThreadID()) record(setSelectedTimelineReceipt);
+    if (threadID === activeSubagentID()) record(setSubagentTimelineReceipt);
+  };
   const [threadSwitcherOpen, setThreadSwitcherOpen] = createSignal(false);
   const [threadSwitcherQuery, setThreadSwitcherQuery] = createSignal('');
   const [presentedSelection, setPresentedSelection] = createSignal<Readonly<{ threadID: string; sequence: number; contentRevision: number }> | null>(null);
@@ -1544,7 +1556,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const settleSelectedThreadTailReveal = (threadID: string, sequence: number) => {
     if (!selectedThreadTailRevealIsCurrent(threadID, sequence)) return;
     if (threadLoadError()) { cancelSelectedThreadTailReveal(); return; }
-    if (!selectedThread()) return;
+    if (!selectedThread() || !selectedThreadTailReveal()?.baselineReady) return;
     if (!parentEventReading.initialReady()) return;
     if (!prepareTranscriptDestination(threadID, transcriptScroll, preparingBodyReads)) return;
     releasePreparingBodyReads();
@@ -1615,16 +1627,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const settleSubagentTailReveal = () => {
     if (!subagentTailPreparing()) return;
     if (subagentDetailError()) { cancelSubagentTailReveal(); return; }
-    if (!subagentDetailThread() || !subagentParentEventReading.initialReady()) return;
+    if (!subagentDetailThread() || activeSubagentDetail()?.requestStatus === 'loading' || !subagentParentEventReading.initialReady()) return;
     if (prepareTranscriptDestination(activeSubagentID(), subagentDetailScroll, subagentPreparingBodyReads)) cancelSubagentTailReveal();
   };
   onCleanup(() => { for (const controller of subagentPreparingBodyReads.values()) controller.abort(); });
   const scheduleSelectedThreadTailReveal = (threadID: string, sequence: number) => {
     if (selectedThreadTailRevealIsCurrent(threadID, sequence)) transcriptScroll.measureAfterLayout();
   };
-  const beginSelectedThreadTailReveal = (threadID: string, sequence: number) => {
+  const beginSelectedThreadTailReveal = (threadID: string, sequence: number, baselineReady = true) => {
     releasePreparingBodyReads();
-    setSelectedThreadTailReveal({ threadID, sequence });
+    setSelectedThreadTailReveal({ threadID, sequence, baselineReady });
+  };
+  const acceptSelectedThreadBaseline = (threadID: string) => {
+    const pending = selectedThreadTailReveal();
+    if (!pending || pending.baselineReady || !selectedThreadTailRevealIsCurrent(threadID, pending.sequence)) return;
+    setSelectedThreadTailReveal({ ...pending, baselineReady: true });
+    transcriptScroll.measureAfterLayout();
   };
   const cancelSelectedThreadTailReveal = () => {
     releasePreparingBodyReads();
@@ -1848,7 +1866,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   // through detail, visible body reads and layout; a new selection owns its own.
   const threadLoadingFeedbackKey = createMemo(() => {
     if (threadLoadError()) return null;
-    if (selectedThreadTailPreparing()) return selectedThreadTailReveal();
+    if (selectedThreadTailPreparing()) return 'selection:' + selectedThreadTailReveal()!.sequence;
     return selectedThreadDetailPending() || selectedThreadTerminalSyncing() ? selectedThreadID() : null;
   });
   const [visibleThreadLoadingKey, setVisibleThreadLoadingKey] = createSignal<ReturnType<typeof threadLoadingFeedbackKey>>(null);
@@ -3909,6 +3927,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     current?: FlowerRuntimeCurrentView,
     canonicalTitle = true,
     installedBaseline = false,
+    liveReceipt = source === 'live_current',
   ): ThreadDetailReceiveResult => batch(() => {
     const threadID = trimString(candidate.thread.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) {
@@ -3945,7 +3964,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       activityState,
       settingsState,
     } = result;
-    if (runtimeState === 'accepted') commitReadingGaps?.(result.cache);
+    if (runtimeState === 'accepted') {
+      recordTimelineReceipt(threadID, liveReceipt);
+      commitReadingGaps?.(result.cache);
+    }
     const retained = result.cache.views.get(threadID)?.thread ?? candidate.thread;
     let nextCache = reconcileRuntimeObservation(current, result.cache, threadID);
     for (const observation of result.observations ?? []) nextCache = reconcileRuntimeObservation(observation, nextCache, threadID);
@@ -4207,7 +4229,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         viewportScope!.preserveLayoutAnchor(anchor);
         requestTranscriptAnimationFrame(() => viewportScope!.finishDisclosure(anchor));
       }
-      if (!(chunk ? threadCache().appendBody(threadID, chunk) : threadCache().hydrateItem(threadID, expected, item!))) {
+      const hydrated = batch(() => {
+        const accepted = chunk ? threadCache().appendBody(threadID, chunk) : threadCache().hydrateItem(threadID, expected, item!);
+        if (accepted) recordTimelineReceipt(threadID, false);
+        return accepted;
+      });
+      if (!hydrated) {
         if (threadCache().runtimeItem(threadID, itemID)?.body || threadCache().runtimeItem(threadID, itemID)?.activity_bodies?.length) throw new Error('Body changed during read.');
         return;
       }
@@ -4441,6 +4468,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && threadDetailRuntimeKey(latest) === target.runtimeKey) {
         throw new Error('thread detail did not converge to the requested revision');
       }
+      if (foreground) acceptSelectedThreadBaseline(tid);
       return result.thread;
       } finally { releaseRead(); }
     },
@@ -4803,7 +4831,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     releaseNavigationReads();
     const sequence = claimedSequence ?? ++threadLoadSequence;
-    const detailAvailable = threadCache().views.has(tid);
+    const interruptionRevision = transcriptScroll.userInterruptionRevision();
+    const cached = threadCache().views.get(tid);
+    const detailAvailable = Boolean(cached);
+    const refreshNeeded = !cached || Boolean(props.adapter.loadHistory || revalidateWarmDetail
+      || threadNeedsFileActivityTargets(cached.thread)
+      || threadSummaryNeedsDetail(threadCache().summaries.get(tid), cached.thread, cached.contentRevision));
     batch(() => {
       setThreadNavigationOpen(false);
       cancelDeferredThreadSelection();
@@ -4816,7 +4849,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       beginThreadDetailDisplayCycle(tid);
       setThreadLoadError('');
       transcriptScroll.startFollowing();
-      beginSelectedThreadTailReveal(tid, sequence);
+      beginSelectedThreadTailReveal(tid, sequence, !refreshNeeded);
       // ThreadCache remains the single owner of the committed conversation identity.
       setSelectedThreadID(tid);
     });
@@ -4826,30 +4859,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleSelectedThreadTailReveal(tid, sequence);
     returnToChat();
     if (detailAvailable) {
-      // Cached DOM is mounted by this batch's render effects. Position and
-      // reveal it in the same task, before a loading frame can be painted.
+      // Prepare cached DOM in the same task. Reveal only when no new baseline
+      // is needed; otherwise keep its obsolete geometry behind preparation.
       queueMicrotask(() => {
         if (selectedThreadTailRevealIsCurrent(tid, sequence)) transcriptScroll.flushLayout();
       });
       if (!mobileNavigation()) requestComposerFocus(focusOwner);
-      if (props.adapter.loadHistory || revalidateWarmDetail || threadNeedsFileActivityTargets(threadCache().views.get(tid)!.thread)) {
-        void requestThreadDetail(
-          tid,
-          'background_refresh',
-          true,
-        );
-      }
-      return;
+      if (!refreshNeeded) return;
     }
-    await requestThreadDetail(tid, 'initial_load');
+    // The already-required bounded read is the finite entry boundary. Do not
+    // expose a warm but obsolete layout or wait for a continuously running
+    // thread to become quiet. Cancellation and observer handoff stay in the loader.
+    const accepted = await requestThreadDetail(tid, detailAvailable ? 'background_refresh' : 'initial_load', detailAvailable);
     if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+    // A disconnected or superseded read returns null; only the replacement
+    // reader may accept that baseline, never the canceled promise's cache.
+    if (accepted && threadCache().views.get(tid)?.version) acceptSelectedThreadBaseline(tid);
     const loaded = threadCache().views.get(tid)?.thread;
     if (loaded) {
       setSelectedThreadWithDetail(loaded.thread_id);
       scheduleThreadSelectionContentPresented(loaded.thread_id);
       if (selectedThreadTailRevealIsCurrent(loaded.thread_id, sequence)) {
         scheduleSelectedThreadTailReveal(loaded.thread_id, sequence);
-      } else {
+      } else if (transcriptScroll.userInterruptionRevision() === interruptionRevision) {
         scrollSelectedThreadToLatestAfterLayout(loaded.thread_id, sequence);
       }
       if (!mobileNavigation()) requestComposerFocus(focusOwner);
@@ -5156,6 +5188,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     source: ThreadDetailSource = 'user_action',
     admissionSettings?: TransportOutboxProvisionalThreadSettings,
     modelContext?: FlowerLiveStreamEnvelope['model_context'],
+    restoring = false,
   ): boolean => {
     const threadID = trimString(current.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) return false;
@@ -5216,7 +5249,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
         contentRevision: threadCache().views.get(threadID)?.contentRevision ?? 0,
-      }, source, current, false);
+      }, source, current, false, false, source === 'live_current' && !restoring);
       if (received.runtimeState === 'unchanged') {
         applyThreadContext(threadID, {
           model_context: modelContext, context_usage: contextUsage,
@@ -5466,7 +5499,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
 
-  const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
+  const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope, restoring = false): void => {
     const childReading = Boolean(envelope.subagent_update || envelope.subagent_current || envelope.history_invalidated?.parent_thread_id);
     const readingRevision = childReading ? subagentReadingRevision : historyReadingRevision;
     const acceptedReadingRevision = childReading ? subagentAcceptedReadingRevision : historyAcceptedReadingRevision;
@@ -5484,7 +5517,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           batch(() => {
             if (childReading) subagentAcceptedReadingRevision = readingRevision;
             else historyAcceptedReadingRevision = readingRevision;
-            applyFlowerLiveStreamEnvelope(envelope);
+            applyFlowerLiveStreamEnvelope(envelope, true);
             acceptHistoryReading(readingRevision, childReading);
           });
           requestTranscriptAnimationFrame(() => {
@@ -5546,6 +5579,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           queue: update.queue?.value ?? [], interactions: update.interactions?.value ?? [],
           turns: update.turns?.value ?? [], goal: update.goal?.value ?? undefined,
         };
+        if (received.accepted) recordTimelineReceipt(update.thread_id, !restoring);
         const nextCache = reconcileRuntimeObservation(observation, received.cache, update.thread_id);
         setThreadCache(nextCache);
         if (received.accepted && received.observation) {
@@ -5638,10 +5672,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (envelope.kind === 'thread.batch' && envelope.subagent_current) {
       const parentThreadID = trimString(envelope.thread_id);
-      acceptActiveSubagentCurrent(parentThreadID, envelope.window ? { ...envelope.subagent_current, window: envelope.window } : envelope.subagent_current, undefined, envelope.model_context, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations);
+      acceptActiveSubagentCurrent(parentThreadID, envelope.window ? { ...envelope.subagent_current, window: envelope.window } : envelope.subagent_current, undefined, envelope.model_context, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations, restoring);
       const navigation = attentionNavigation();
       if (navigation?.parentThreadID === parentThreadID && navigation.childThreadID === selectedThreadID() && navigation.childThreadID === envelope.subagent_current.thread_id) {
-        applyRuntimeCurrent(envelope.subagent_current, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations, 'live_current', undefined, envelope.model_context);
+        applyRuntimeCurrent(envelope.subagent_current, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations, 'live_current', undefined, envelope.model_context, restoring);
       }
       return;
     }
@@ -5654,6 +5688,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         'live_current',
         undefined,
         envelope.model_context,
+        restoring,
       );
       if (accepted && envelope.kind === 'thread.batch') {
         const observation = companionRunTracker.observe(envelope.current);
@@ -5969,6 +6004,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     contextUsage?: FlowerLiveStreamEnvelope['context_usage'],
     contextCompactions?: FlowerLiveStreamEnvelope['context_compactions'],
     timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
+    restoring = false,
   ): boolean => {
     const childThreadID = trimString(current.thread_id);
     const viewVersion = Math.max(0, Math.floor(Number(current.view_version) || 0));
@@ -5990,7 +6026,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     buildFlowerTimelineEntries(projected);
     const cached = threadCache().views.get(childThreadID);
     if (cached?.version && viewVersion < cached.version) return false;
-    const result = receiveThreadDetail({ thread: projected, version: viewVersion }, 'live_current', current, true, false);
+    const result = receiveThreadDetail({ thread: projected, version: viewVersion }, 'live_current', current, true, false, !restoring);
     if (cached?.version === viewVersion) {
       // Context supplements have independent acceptance at the same actor
       // version, exactly as the selected root detail does.
@@ -6064,7 +6100,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (readingAnchor) subagentDetailScroll.preserveLayoutAnchor(readingAnchor);
       if (preserveReading) subagentDetailScroll.stopFollowing();
       batch(() => {
-        acceptActiveSubagentCurrent(request.parentThreadID, { ...detail.current, ...(detail.window ? { window: detail.window } : {}) }, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
+        acceptActiveSubagentCurrent(request.parentThreadID, { ...detail.current, ...(detail.window ? { window: detail.window } : {}) }, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations, true);
         acceptHistoryReading(revision, true);
       });
       setActiveSubagentDetail((latest) => (
@@ -6874,7 +6910,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelThreadSelectionTransaction();
     releaseNavigationReads();
     const claimedSequence = ++threadLoadSequence;
-    if (tid === selectedThreadID() && threadCache().views.has(tid) && !threadLoadError()) {
+    if (tid === selectedThreadID() && threadCache().views.has(tid) && !threadLoadError()
+      && selectedThreadTailReveal()?.baselineReady !== false) {
       returnToChat();
       if (selectedThreadSummaryNeedsDetail()) {
         beginThreadDetailDisplayCycle(tid);
@@ -12980,7 +13017,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineDocument().thread} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
-        scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed} copy={copy().chat.turnProcess}
+        scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
+        receipt={subagentTimelineReceipt()} copy={copy().chat.turnProcess}
         renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia, visible, subagentParentEventReading)} /></>}
       bindScroll={bindSubagentDetailViewport}
       onScroll={updateSubagentHistoryScroll}
@@ -14789,7 +14827,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <FlowerTurnTimeline thread={selectedTimelineDocument().thread} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
-                scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed} copy={copy().chat.turnProcess}
+                scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
+                receipt={selectedTimelineReceipt()} copy={copy().chat.turnProcess}
                 renderEntry={(entry, visible) => timelineEntry(entry, transcriptScroll, selectedThread, selectedThreadMedia, visible)} />
               {threadLevelApprovalPanel()}
             </Show>

@@ -19,6 +19,7 @@ export const FlowerToolSequenceContext = createContext<Readonly<{
   parentCollapsed: (group: FlowerToolSequence) => boolean;
   parentFolding: (group: FlowerToolSequence) => boolean;
   reducedMotion: Accessor<boolean>;
+  motionEnabled: (group: FlowerToolSequence) => boolean;
   preparing: Accessor<boolean>;
   register: (key: string, element: FlowerToolSequenceElement) => () => void;
 }>>();
@@ -55,7 +56,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const scrollToLatest = () => scroll.flushLayout(false);
   const prepareArrival = () => scroll.prepareArrival();
   const prepareDestination = () => {
-    if (!first() || !expanded()) return true;
+    if (!first() || !expanded() || context?.parentCollapsed(member()!.group)) return true;
     if (!body.isConnected || body.clientHeight <= 0) return false;
     scroll.scrollToBottom();
     return motion.state() === 'open';
@@ -66,6 +67,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   // throughout closing instead of compounding the same height animation.
   const bodyExpanded = createMemo(() => member() && (!first() || context?.parentFolding(member()!.group)) ? true : expanded());
   const reducedMotion = createMemo(() => Boolean(context?.preparing() || context?.reducedMotion()
+    || member() && context && !context.motionEnabled(member()!.group)
     || first() && context?.parentCollapsed(member()!.group)));
   const motion = createFlowerActivityDisclosureMotion(bodyExpanded, {
     initialOpen: untrack(bodyExpanded), closeDurationMs: 260,

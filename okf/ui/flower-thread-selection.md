@@ -5,7 +5,7 @@ description: Present navigation feedback before committing content and coordinat
 tags: [flower, navigation, cancellation, recovery, detail]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -19,9 +19,9 @@ Readiness controls reveal; elapsed time controls feedback only.
 ## Selection and navigation
 Rail feedback precedes visible commit by two animation callbacks and a task; hidden documents do not wait for frames. Latest intent supersedes earlier work; summary effects cannot bypass foreground coordination.
 
-Reveal only after accepted detail, measurable layout and visible historical text settle. The scroll owner also prepares the latest active tool sequence after row placement, so both outer and inner tails are positioned before reveal. Restored activity details settle without opening animation; explicit group folds survive and retain a current activity label. Initial positioning has no smooth scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and failed body reads remain local and retry with renewed viewport demand or reconnect.
+Reveal only after the current selection accepts its required baseline/handoff, measurable layout and visible historical text settle. Cached windows requiring renewed interest remain hidden through that existing bounded read; a cache needing no read prepares immediately. The boundary is finite and never waits for runtime quiet. Canceled reads cannot release a newer selection; reselect, reconnect and retry retain the same loader ownership. The scroll owner also prepares the latest active tool sequence after row placement, so both outer and inner tails are positioned before reveal. Restored title, sequence and whole-turn disclosure settle without animation; a sequence inside a folded turn cannot block readiness; explicit group folds survive and retain a current activity label. Initial positioning has no smooth scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and failed body reads remain local and retry with renewed viewport demand or reconnect.
 
-Cached destinations flush render effects; visible rows pass `checkVisibility({ contentVisibilityAuto: true })`. ResizeObserver adjusts above-viewport growth before paint, while reveal/body work stays in rAF; visibility events reuse this pass. Navigation clears arrival motion. No positioning polls or per-row observers. Explicit wheel/touch/scrollbar/keyboard input can interrupt preparation; scroll events alone cannot.
+Cached destinations flush render effects; visible rows pass `checkVisibility({ contentVisibilityAuto: true })`. ResizeObserver adjusts above-viewport growth before paint, while reveal/body work stays in rAF; visibility events reuse this pass. Navigation clears arrival motion. No positioning polls or per-row observers. Explicit wheel/touch/scrollbar/keyboard input can interrupt preparation, and the awaited refresh cannot resume following afterward; scroll events alone cannot.
 
 Two read slots prioritize visible text/margin and cancel obsolete demand. ThreadCache retains immutable bodies. Growth/refresh/completion never restart selection or remove accepted prose; [live delivery](flower-live-timeline.md) owns validation/retry. Selection opens Latest; reading restoration is separate. Ordinary threads sort by descending creation time, then ascending ThreadID.
 
