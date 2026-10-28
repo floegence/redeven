@@ -40,3 +40,5 @@ dialog.modal .center-error{position:static;transform:none;width:100%;box-sizing:
 
 .redeven-gateway-environment { flex-wrap: wrap; }
 .redeven-gateway-environment > .route-tools { flex: 0 0 100%; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--border); }
+
+.binding-copy-actions { display:flex; flex-wrap:wrap; gap:10px; }.binding-descriptor > [role="status"] { margin:10px 0 0; font-size:13px; color:var(--muted-foreground); }.binding-descriptor > [role="status"]:empty { display:none; }

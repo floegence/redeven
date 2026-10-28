@@ -330,6 +330,27 @@ try {
     await routeDialog.getByRole('button', { name: 'Continue', exact: true }).click();
     await authenticate(portal, true);
     const descriptor = JSON.parse(await portal.locator('#binding-title').locator('..').locator('pre').textContent());
+    if (target === fixture.targets[0] && process.env.REDEVEN_CENTER_PORTAL_PERMISSIONS === '1') {
+      const dialog = portal.getByRole('dialog', { name: 'Enable Web entry', exact: true });
+      const cdp = await context.newCDPSession(portal);
+      const { targetInfo } = await cdp.send('Target.getTargetInfo');
+      await cdp.send('Browser.grantPermissions', { permissions: [], origin: fixture.origin, browserContextId: targetInfo.browserContextId });
+      try {
+        await dialog.getByRole('button', { name: 'Copy', exact: true }).click();
+        await dialog.getByText('Automatic copy is unavailable. Select the descriptor and copy it with your browser.', { exact: true }).waitFor({ timeout: 5000 });
+        await dialog.getByRole('button', { name: 'Select text', exact: true }).focus();
+        await portal.keyboard.press('Enter');
+        if (await portal.evaluate(() => window.getSelection()?.toString()) !== JSON.stringify(descriptor, null, 2)) throw new Error('Manual binding selection did not preserve the complete descriptor');
+        if ((await centerCall(portal, 'directory')).status !== 200) throw new Error('Denied clipboard disrupted Center authority');
+        if (process.env.REDEVEN_CENTER_ACCESSIBILITY === '1') await checkAccessibility(portal);
+        if (reportDir) await dialog.screenshot({ path: path.join(reportDir, engine + '-binding-copy-denied.png'), mask: [dialog.locator('.secret')] });
+        await cdp.send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: fixture.origin, browserContextId: targetInfo.browserContextId });
+        await dialog.getByRole('button', { name: 'Copy', exact: true }).click();
+        await dialog.getByText('Copied to clipboard.', { exact: true }).waitFor();
+        if (await portal.evaluate(() => navigator.clipboard.readText()) !== JSON.stringify(descriptor, null, 2)) throw new Error('Copy reported success without the complete binding descriptor');
+        report.cases.push('Center Copy reports actual Chrome clipboard denial; keyboard manual selection preserves the complete descriptor; granting permission and retrying copies exact text');
+      } finally { await context.clearPermissions(); await cdp.detach(); }
+    }
     const applied = await fetch(fixture.control + '/binding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(descriptor) });
     if (applied.status !== 204) throw new Error('Runtime owner rejected binding: ' + await applied.text());
     await portal.locator('#binding-title').locator('..').getByRole('button', { name: 'Continue', exact: true }).click();

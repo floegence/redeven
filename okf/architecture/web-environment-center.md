@@ -25,6 +25,8 @@ Labels/hostnames grant no trust. Directory revisions and operation sequences rej
 
 Portal, each Env and each child application use distinct HTTPS origins on the same registrable domain and port. TLS covers all origins. Browser bookmarks remain explicitly direct links.
 
+Binding descriptor copy is a browser capability, not a network operation. Clipboard denial or absence produces local, localized manual-copy guidance without discarding the descriptor or changing authorization. Keyboard-accessible text selection remains available, and success is announced only after the browser confirms the write.
+
 Center pairs as an access-only Gateway client after fingerprint confirmation. Runtime consent is independently persisted by `redeven web-binding apply --stdin --yes`. Binding pins Runtime ID, exact origin, client SPKI, application scope and revision. Published Flowersec carries mutually authenticated TLS 1.3 to the signed, pinned Runtime service. The target needs no inbound application TCP listener.
 
 Each operation belongs to one administrator device and route. Browser nonce, exact origins, bounded redemption and a single-use code complete handoff. Same-request response-loss retry recovers one outcome. Host-only cookies do not replace Runtime password/MFA. Logout, security changes and source/route revocation cancel derived admissions/streams.

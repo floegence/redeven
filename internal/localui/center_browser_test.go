@@ -227,7 +227,11 @@ func TestCenterBrowserQualification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assets := http.FileServer(http.Dir("../envcenter_web/dist"))
+	assetPath := os.Getenv("REDEVEN_CENTER_ASSETS")
+	if assetPath == "" {
+		assetPath = "../envcenter_web/dist"
+	}
+	assets := http.FileServer(http.Dir(assetPath))
 	server := environmentcenter.NewServer(center, assets)
 	defer server.Close()
 	var restartConnector func() error
