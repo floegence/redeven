@@ -6,15 +6,28 @@ import path from 'node:path';
 
 // TLS handshake disconnects use 35; certificate validation errors must stop.
 const transientCurlFailures = new Set([6, 7, 18, 28, 35, 52, 55, 56, 92]);
+const transientHttpFailures = new Set([408, 429, 500, 502, 503, 504]);
+const curlStatusPattern = /\nREDEVEN_CURL_STATUS:(\d{3}):(\d{3})\n$/u;
 
-function curlWithRetry(label, args, options) {
+function curlWithRetry(label, args) {
+  // Keep response metadata separate from checksum bytes and download files.
+  // http_connect identifies a proxy failure before an HTTPS response exists.
+  const requestArgs = ['--write-out', '\nREDEVEN_CURL_STATUS:%{http_code}:%{http_connect}\n', ...args];
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return execFileSync('curl', args, options);
+      const output = execFileSync('curl', requestArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+      if (!curlStatusPattern.test(output)) throw new Error('curl did not report the HTTP response status.');
+      return output.replace(curlStatusPattern, '');
     } catch (cause) {
-      if (attempt === 3 || !transientCurlFailures.has(cause.status)) throw cause;
+      const status = cause.stdout?.match(curlStatusPattern);
+      const httpCode = Number(status?.[1]) || Number(status?.[2]);
+      const retryable = httpCode >= 400
+        ? [22, 56].includes(cause.status) && transientHttpFailures.has(httpCode)
+        : transientCurlFailures.has(cause.status);
+      if (attempt === 3 || !retryable) throw cause;
       const delaySeconds = 2 ** (attempt - 1);
-      console.warn(`[WARN] ${label} interrupted (curl ${cause.status}); retrying in ${delaySeconds}s, attempt ${attempt + 1}/3.`);
+      const reason = httpCode >= 400 ? `HTTP ${httpCode}, curl ${cause.status}` : `curl ${cause.status}`;
+      console.warn(`[WARN] ${label} interrupted (${reason}); retrying in ${delaySeconds}s, attempt ${attempt + 1}/3.`);
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delaySeconds * 1000);
     }
   }
@@ -31,7 +44,7 @@ export function resolveNodeArchive({
   const curlArgs = ['--fail', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--connect-timeout', '30'];
   let checksums;
   try {
-    checksums = curlWithRetry('Node checksum retrieval', [...curlArgs, '--silent', '--max-time', '60', `${base}/SHASUMS256.txt`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+    checksums = curlWithRetry('Node checksum retrieval', [...curlArgs, '--silent', '--max-time', '60', `${base}/SHASUMS256.txt`]);
   } catch (cause) {
     throw new Error(`Could not retrieve official Node ${version} checksums. Check access to ${base}/SHASUMS256.txt and rerun the build.`, { cause });
   }
@@ -61,7 +74,7 @@ export function resolveNodeArchive({
     try {
       // A progressing transfer has no total deadline; each new attempt resumes
       // only this build's temporary file after a transient transport failure.
-      curlWithRetry('Node archive transfer', [...curlArgs, '--progress-bar', '--speed-limit', '1024', '--speed-time', '60', '--continue-at', '-', '--output', partial, `${base}/${archiveName}`], { stdio: ['ignore', 'inherit', 'inherit'] });
+      curlWithRetry('Node archive transfer', [...curlArgs, '--progress-bar', '--speed-limit', '1024', '--speed-time', '60', '--continue-at', '-', '--output', partial, `${base}/${archiveName}`]);
     } catch (cause) {
       throw new Error(`Official Node archive download failed for ${archiveName}. Check the connection and rerun the build, or set REDEVEN_NODE_ARCHIVE to a complete official archive.`, { cause });
     }

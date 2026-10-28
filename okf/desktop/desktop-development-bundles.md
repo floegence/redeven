@@ -24,6 +24,8 @@ scripts/dev_desktop.sh captures HEAD/current tracked and non-ignored source; con
 
 On macOS, preparation reads enabled static HTTP/HTTPS system proxies once and exports them to dependency and bundle build tools. Any explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY variable (including lowercase or empty values) owns network policy and disables discovery; REDEVEN_DEV_SYSTEM_PROXY=0 also opts out. Preserve explicit NO_PROXY; otherwise include loopback and compatible system exclusions. PAC/SOCKS-only settings require explicit environment policy. Diagnostics never expose credentials; TLS and official artifact verification remain mandatory. Remove only inferred variables before launching Desktop, Runtime or Gateways.
 
+Official Node checksum and archive acquisition share a three-attempt budget per transfer, with one- and two-second backoff for transient transport failures and HTTP 408/429/500/502/503/504. Read origin and proxy CONNECT status separately from artifact bytes; permanent HTTP and certificate errors stop immediately. Retry the same official URL under the existing proxy policy. Resume only the current build's temporary archive; verify the complete checksum before caching, remove failed partial files, and require fresh official checksums even for cached archives.
+
 Development may cache Cargo registry/targets while staging exact locked published crates freshly. Verify digest/execution/consumption and regenerate evidence. Complete caches resolve/install offline; incomplete caches follow acquisition policy with diagnostics. Corrupt crates or compiler failure cannot retry via another path. Release Cargo dirs stay isolated. Source changes rebuild whole product, not component/watch mode.
 
 Desktop compilation overlaps Runtime preparation. Runtime assets/Go, plugin staging and Computer resources have independent outputs. Env App no-emit typecheck overlaps bundling under its checkout lock. Notices run after all asset tasks because installed metadata/YAML parser cannot race cold dependency install. Go waits for embeds; publication/receipts wait for all builds and unchanged-input checks. Release order stays sequential.
@@ -52,6 +54,7 @@ in-progress directories.
 - `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Input drift, corruption and toolchain admission.
 - `redeven:scripts/dev_desktop_build_proxy.test.mjs` and `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Proxy precedence, preparation inheritance and launch isolation.
+- `redeven:scripts/resolve_node_archive.test.mjs` - Bounded HTTP/transport retries, real HTTPS 503 recovery, permanent failures, checksum admission and partial cleanup.
 - `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.
 - `redeven:scripts/build_assets.test.mjs` - Cold-install ordering and asset/notice failure propagation.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.
