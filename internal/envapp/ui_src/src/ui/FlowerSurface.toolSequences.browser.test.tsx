@@ -272,7 +272,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     animation.pause();
     try {
       expect(node.dataset.state).toBe('open');
-      expect(node.querySelector<HTMLElement>('.flower-tool-sequence-viewport')!.getBoundingClientRect().height).toBe(320);
+      expect(node.querySelector<HTMLElement>('.flower-tool-sequence-viewport')!.getBoundingClientRect().height).toBeCloseTo(256, 3);
       expect(node.getAnimations({ subtree: true }).filter(active =>
         (active.effect as KeyframeEffect).getKeyframes().some(frame => 'height' in frame))).toHaveLength(0);
       const bubble = root.querySelector<HTMLElement>('[data-flower-message-id="outer-prose"] .flower-message-bubble')!;
@@ -754,15 +754,15 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(body.hasAttribute('data-flower-reading-paused')).toBe(false);
   });
 
-  it('fits ten compact tool rows in the expanded desktop viewport', async () => {
+  it('fits eight compact tool rows in the expanded desktop viewport', async () => {
     const { root } = await mount(Array.from({ length: 30 }, (_, index) => tool(`compact-${index}`)));
     const body = group(root, 'compact-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
     await expect.poll(() => body.scrollHeight - body.clientHeight - body.scrollTop).toBeLessThanOrEqual(1);
     const bounds = body.getBoundingClientRect();
     const rows = [...body.querySelectorAll<HTMLElement>('.flower-activity-inline-button')];
     expect(rows.every(row => Math.abs(row.getBoundingClientRect().height - 32) <= 1)).toBe(true);
-    expect(rows.filter(row => { const rect = row.getBoundingClientRect(); return rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1; })).toHaveLength(10);
-    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-tool-sequence-ten-rows.png' });
+    expect(rows.filter(row => { const rect = row.getBoundingClientRect(); return rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1; })).toHaveLength(8);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-tool-sequence-eight-rows.png' });
   });
 
   it('keeps a manually folded active group closed while showing its latest activity', async () => {
@@ -972,7 +972,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     const sequence = content.closest<HTMLElement>('.flower-tool-sequence-scroll');
     expect(Boolean(sequence)).toBe(grouped);
     if (sequence) {
-      sequence.scrollTop = sequence.scrollHeight;
+      // Start within one input step of the edge, independent of viewport capacity.
+      sequence.scrollTop = Math.min(80, sequence.scrollHeight - sequence.clientHeight);
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       expect(sequence.scrollTop).toBeGreaterThan(0);
       const sequenceEnd = new Promise<void>(resolve => sequence.addEventListener('scrollend', () => resolve(), { once: true }));
@@ -1135,13 +1136,31 @@ describe('consecutive tools in the shared Flower surface', () => {
     }
   });
 
+  it.each([
+    { touch: false, count: 2 }, { touch: false, count: 8 }, { touch: false, count: 9 },
+    { touch: true, count: 2 }, { touch: true, count: 8 }, { touch: true, count: 9 },
+  ])('shows at most eight rows without stretching short sequences (touch=$touch, count=$count)', async ({ touch, count }) => {
+    await media.emulateTouchInput(touch);
+    const { root } = await mount(Array.from({ length: count }, (_, index) => tool(`limit-${index}`)));
+    const viewport = group(root, 'limit-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    const rowHeight = row(root, 'limit-0').querySelector('.flower-activity-inline-button')!.getBoundingClientRect().height;
+    expect(rowHeight).toBe(touch ? 44 : 32);
+    expect(viewport.clientHeight).toBe(Math.min(count, 8) * rowHeight);
+    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+    const bounds = viewport.getBoundingClientRect();
+    const visible = Array.from({ length: count }, (_, index) => row(root, `limit-${index}`).getBoundingClientRect())
+      .filter(rect => rect.bottom > bounds.top + 1 && rect.top < bounds.bottom - 1);
+    expect(visible).toHaveLength(Math.min(count, 8));
+    expect(viewport.scrollHeight > viewport.clientHeight).toBe(count > 8);
+  });
+
   it('bounds a long expanded sequence and scrolls its complete contents below the reachable header', async () => {
     const { root } = await mount(Array.from({ length: 98 }, (_, index) => tool(`bounded-${index}`)));
     const header = toggle(root, 'bounded-0');
     const viewport = group(root, 'bounded-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
     expect(viewport).not.toBeNull();
     expect(viewport.clientHeight).toBeGreaterThan(100);
-    expect(viewport.clientHeight).toBeLessThanOrEqual(384);
+    expect(viewport.clientHeight).toBe(256);
     expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight * 2);
     expect(viewport.contains(row(root, 'bounded-97'))).toBe(true);
     expect(viewport.contains(header)).toBe(false);
@@ -1164,7 +1183,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     header.click();
     await waitFor(() => group(root, 'bounded-97').dataset.state === 'open');
     await expect.poll(() => viewport.scrollTop).toBe(savedTop);
-    expect(viewport.clientHeight).toBeLessThanOrEqual(384);
+    expect(viewport.clientHeight).toBe(256);
     await page.screenshot({ element: root, path: '__screenshots__/flower-bounded-tools.png' });
     await page.viewport(390, 600);
     root.style.height = '520px';
