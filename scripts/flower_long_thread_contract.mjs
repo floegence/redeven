@@ -14,6 +14,7 @@ export const browserTests = Object.freeze([
   'FlowerSurface.decisionSurface.browser.test.tsx', 'FlowerSurface.terminalActivity.browser.test.tsx',
   'FlowerSurface.history.browser.test.tsx', 'FlowerSurface.threadPresentation.browser.test.tsx',
   'FlowerSurface.turnProcess.browser.test.tsx', 'FlowerSurface.toolSequences.browser.test.tsx',
+  'FlowerSurface.toolOutputInteraction.browser.test.tsx',
   'FlowerSurface.parentEvents.browser.test.tsx', 'FlowerSurface.activityTyping.browser.test.tsx',
 ]);
 export function longThreadAffected(file) {
