@@ -259,7 +259,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower activity disclosure interaction](ui/flower-activity-interaction.md)
 - [Flower conversation sidebar](ui/flower-thread-sidebar.md)
 - [Flower inline media](ui/flower-inline-media.md)
-- [Flower long-thread mandatory acceptance](operations/flower-long-thread-gate.md)
+- [Flower explicit long-thread qualification](operations/flower-long-thread-gate.md)
 - [Flower streaming stability](ui/flower-streaming-stability.md)
 - [Flower live queue CPU qualification](operations/flower-live-queue-performance.md)
 - [Flower request-history CPU qualification](operations/flower-request-history-performance.md)

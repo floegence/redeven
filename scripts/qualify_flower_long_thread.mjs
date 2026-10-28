@@ -11,7 +11,7 @@ import { workload, distribution, presentedMouseLatency, evaluateLongThread, asse
 import { collectDrag } from './flower_long_thread_collector.mjs';
 import { verifyFlowerRendered } from './qualify_flower_content.mjs';
 
-assert.equal(process.argv.length, 2, 'The mandatory workload has no reduced-load or threshold overrides');
+assert.equal(process.argv.length, 2, 'The fixed acceptance workload has no reduced-load or threshold overrides');
 const root = path.resolve(import.meta.dirname, '..');
 const ui = path.join(root, 'internal/envapp/ui_src');
 const require = createRequire(path.join(ui, 'package.json'));

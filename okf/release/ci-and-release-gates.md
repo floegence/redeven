@@ -12,7 +12,7 @@ reviewed_at: "2026-10-28"
 Redeven runs focused development checks, a fast staged pre-commit gate and one
 bounded integration gate for the exact main tip being pushed. Published
 dependencies, generated assets, localization, compatibility and OKF must agree.
-Affected Flower changes require [long-thread correctness and responsiveness](../operations/flower-long-thread-gate.md) at commit and exact-tip main integration. Other broad browser, Desktop, Docker and native qualification run explicitly;
+[Long-thread correctness and responsiveness](../operations/flower-long-thread-gate.md) run as explicit acceptance, outside unified commit, integration and CI gates. Broad browser, Desktop, Docker and native qualification also run explicitly;
 release packaging additionally requires same-commit historical conversation
 evidence and authenticated target-specific artifacts. Windows remains an internal
 certification target and cannot enter the formal release inventory.
@@ -21,7 +21,7 @@ certification target and cannot enter the formal release inventory.
 
 ## Checks and provenance
 
-AGENTS.md owns Git workflow/100-line limit and links domain rules; quick_ci_policy.test.mjs enforces this. Development runs affected checks; pre-commit checks staged diff, localization, hygiene and affected notices/viewer assets. Ordinary push/PR runs one bounded source-only job. Main pre-push runs check_final_integration.sh once for the exact clean rebased base/tip. Affected Flower source, host UI, runtime, published dependencies and gate changes additionally run the mandatory sustained long-thread browser/Electron gate. Other broad UI/Docker/native/stress qualifications run explicitly. Releases additionally require target artifacts and same-commit historical-conversation Actions evidence.
+AGENTS.md owns Git workflow/100-line limit and links domain rules; quick_ci_policy.test.mjs enforces this. Development runs affected checks; pre-commit checks staged diff, localization, hygiene and affected notices/viewer assets. Ordinary push/PR runs one bounded source-only job. Main pre-push runs check_final_integration.sh once for the exact clean rebased base/tip. Long-thread browser/Electron acceptance is explicit and does not register a commit or full-profile group. Broad UI/Docker/native/stress qualifications also run explicitly. Releases additionally require target artifacts and same-commit historical-conversation Actions evidence.
 
 Pre-push checks current local main equals pushed tip, handshake ancestry is fast-forward, and no unpublished merge commits. Earlier evidence cannot certify changed tips. Fingerprints include tools/inputs, excluding macOS-variable MANPATH; real-hook tests guard reuse. Generators leave no diff; formatting lists all offending paths before expensive checks.
 

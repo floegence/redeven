@@ -20,8 +20,7 @@
     "commit": [
       "gate-tests",
       "commit-checks",
-      "interaction-continuity",
-      "flower-long-thread-fast"
+      "interaction-continuity"
     ],
     "full": [
       "gate-tests",
@@ -29,8 +28,7 @@
       "integration-dependencies",
       "integration-releases",
       "integration-runtime",
-      "integration-hygiene",
-      "flower-long-thread"
+      "integration-hygiene"
     ]
   },
   "groups": [
@@ -160,40 +158,6 @@
           "internal/envapp/ui_src/node_modules"
         ]
       }
-    },
-    {
-      "id": "flower-long-thread-fast",
-      "command": [
-        "node",
-        "scripts/check_flower_long_thread.mjs",
-        "--staged",
-        "--fast"
-      ],
-      "environment": {
-        "paths": [
-          "desktop/node_modules",
-          "internal/envapp/ui_src/node_modules"
-        ]
-      },
-      "staged_diff": true
-    },
-    {
-      "id": "flower-long-thread",
-      "command": [
-        "node",
-        "scripts/check_flower_long_thread.mjs",
-        "--integration"
-      ],
-      "environment": {
-        "paths": [
-          "desktop/node_modules",
-          "internal/envapp/ui_src/node_modules"
-        ]
-      },
-      "context": [
-        "base",
-        "tip"
-      ]
     }
   ]
 }

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
-// One content oracle shared by CPU and mandatory long-thread qualification.
+// One content oracle shared by CPU and explicit long-thread qualification.
 export async function verifyFlowerRendered({ page, visible, ui, output, bodySelector = '' }) {
   const require = createRequire(path.join(ui, 'package.json'));
   const hash = value => createHash('sha256').update(value).digest('hex');

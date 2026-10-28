@@ -4,6 +4,8 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 
 ## 2026-10-28
 
+- Make [long-thread qualification](operations/flower-long-thread-gate.md) explicit acceptance only, following the requested development-cost policy. Remove fast/full group registration and unified entrypoint calls; retain fixed workloads, correctness budgets and truthful source provenance.
+
 - Limit expanded [tool sequences](ui/flower-tool-sequences.md) to eight visible rows on desktop and touch surfaces, preserving complete scrollable contents, short-list geometry and retained disclosure state.
 
 - Separate visible-region [wheel geometry](ai/computer-script-read-contract.md) from click actionability and preserve unknown [reference-read failures](ai/computer-use-semantics.md) without invalidation or input replay. Extend managed/extension and real-provider [qualification](ai/computer-use-qualification.md); clarify role fields, full-name reference identity and navigation load semantics.
@@ -17,7 +19,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 - Preserve structured protocol facts in [computer scripts](ai/computer-use-scripts.md), report objective [pause reasons](ai/computer-use-takeover.md) without inferring user intent, and extend isolated [qualification](ai/computer-use-qualification.md) with natural visual/form/table tasks and programmatic native focus changes.
 
 - Align [patch paths](ai/tool-permission-runtime.md) with filesystem registry policy, preserving logical bindings and ordered authorization. Support detached [task scratch](ai/flower-task-files.md), retain truthful partial Move diffs and [error presentation](ui/flower-edit-preparation.md), and qualify restart/Fork without replay.
-- Keep [tool-sequence disclosure observations](operations/flower-long-thread-gate.md) local to mounted stable groups. New titles and pending prose release only affected groups; the mandatory 600-group regression protects historical update cost and disposal.
+- Keep [tool-sequence disclosure observations](operations/flower-long-thread-gate.md) local to mounted stable groups. New titles and pending prose release only affected groups; the focused 600-group regression protects historical update cost and disposal.
 
 - Bound [long-thread title arrival work](operations/flower-long-thread-gate.md) to mounted identities and explicit admission/claim checks, preserving restored-title behavior while preventing sequence changes from rescanning completed activity bodies.
 
@@ -38,14 +40,14 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 - Honor browser drag timing through the shared controller, stop on interruption and release at the last confirmed position. Clarify strict lookups and caught host failures in [script contracts](ai/computer-use-scripts.md); qualify independent pointer telemetry and conditional scripts through [real-provider acceptance](ai/computer-use-qualification.md).
 
 - Align [tool sequences](ui/flower-tool-sequences.md) with prose using preserved tool icons and a fixed trailing group action. Match full/companion status geometry through the [existing viewport owner](ui/flower-activity-interaction.md), keep individual details independent, retain fold-before-prose motion, and qualify narrow/touch layouts, localization and streaming performance.
-- Isolate [live timeline](ui/flower-live-timeline.md) mounted subscriptions and content-boundary invalidation, use linear membership checks, bound active-turn offscreen layout and explicitly wait for canonical body-source handoff. Extend the mandatory [long-thread gate](operations/flower-long-thread-gate.md) with focused stability and reading regressions.
+- Isolate [live timeline](ui/flower-live-timeline.md) mounted subscriptions and content-boundary invalidation, use linear membership checks, bound active-turn offscreen layout and explicitly wait for canonical body-source handoff. Extend the explicit [long-thread qualification](operations/flower-long-thread-gate.md) with focused stability and reading regressions.
 
 - Keep final answers visible through [automatic folding](ui/flower-turn-process-disclosure.md): follow the real content edge, remove obsolete offset retention, animate existing-answer settlement, and exclude temporary reading room from return-to-latest distance. Browser checks cover frame geometry, narrow layouts, reduced motion and reading ownership.
 
 - Retain [media/read qualification](ai/computer-media-read-qualification.md) with 31/36 original and 4/6 supplemental real DeepSeek assertion passes, separating contract correctness, model errors and test-parser defects.
 
 - Let interactive [media writes](ai/image-read-and-retention.md) cancel maintenance scans while preserving canonical retention and cancellable gate waits. Unify native [single-node and subtree completeness](ai/computer-use-semantics.md) with browser facts; clarify [script read scope](ai/computer-use-scripts.md) without application-specific rules.
-- Require [long-thread correctness and responsive drag](operations/flower-long-thread-gate.md) at affected staged commits and exact-tip main integration. Retain independent producer/input rates, compositor evidence, canonical content checks and supervised cleanup.
+- Qualify [long-thread correctness and responsive drag](operations/flower-long-thread-gate.md) through the independent acceptance suite. Retain independent producer/input rates, compositor evidence, canonical content checks and supervised cleanup.
 
 ## 2026-10-27
 

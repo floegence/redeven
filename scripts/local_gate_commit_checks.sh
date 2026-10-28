@@ -3,7 +3,6 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 git diff --cached --check
 node --test --test-name-pattern='repository instructions' scripts/quick_ci_policy.test.mjs
-node --test scripts/flower_long_thread_contract.test.mjs
 node --test scripts/desktop_test_session_policy.test.mjs
 node scripts/check_staged_viewer_assets.mjs
 node scripts/check_staged_third_party_notices.mjs

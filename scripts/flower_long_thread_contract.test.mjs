@@ -61,18 +61,17 @@ test('runner requires installed suites and propagates missing tools, signals and
   for (const file of fastTests) assert.ok(existsSync(new URL('../internal/flower_ui/src/' + file, import.meta.url)), file);
   for (const file of browserTests) assert.ok(existsSync(new URL('../internal/envapp/ui_src/src/ui/' + file, import.meta.url)), file);
 });
-test('commit and exact-tip integration must enforce the long-thread gate', () => {
+test('long-thread qualification stays explicit and retains complete native-input evidence', () => {
   const manifest = JSON.parse(read('scripts/local_gate_groups.json'));
-  assert.ok(manifest.profiles.commit.includes('flower-long-thread-fast'));
-  assert.ok(manifest.profiles.full.includes('flower-long-thread'));
-  assert.deepEqual(manifest.groups.find(group => group.id === 'flower-long-thread-fast').command, ['node','scripts/check_flower_long_thread.mjs','--staged','--fast']);
-  assert.equal(manifest.groups.find(group => group.id === 'flower-long-thread-fast').staged_diff, true);
-  assert.deepEqual(manifest.groups.find(group => group.id === 'flower-long-thread').context, ['base','tip']);
-  assert.deepEqual(manifest.groups.find(group => group.id === 'flower-long-thread').command, ['node','scripts/check_flower_long_thread.mjs','--integration']);
-  assert.match(read('.githooks/pre-commit'), /local_gate.py --profile commit --mode staged/u);
-  assert.match(read('.githooks/pre-push'), /check_final_integration.sh --base/u);
-  assert.match(read('scripts/check_final_integration.sh'), /--profile full --mode committed/u);
-  assert.match(read('scripts/check_quick_ci.sh'), /flower_long_thread_contract.test.mjs/u);
+  for (const groups of Object.values(manifest.profiles)) {
+    assert.ok(groups.every(group => !group.startsWith('flower-long-thread')));
+  }
+  assert.ok(manifest.groups.every(group => !group.id.startsWith('flower-long-thread')
+    && !group.command.some(value => /flower[_-]long[_-]thread/u.test(value))));
+  for (const file of ['.githooks/pre-commit', '.githooks/pre-push', 'scripts/local_gate_commit_checks.sh',
+    'scripts/check_quick_ci.sh', 'scripts/check_final_integration.sh']) {
+    assert.doesNotMatch(read(file), /flower[_-]long[_-]thread/u, file);
+  }
   const runner = read('scripts/qualify_flower_long_thread.mjs');
   assert.match(runner, /assertLongThread\(report\)/u);
   assert.match(runner, /nativeWindow[.]evaluate[(]window => window[.]setIgnoreMouseEvents[(]true[)][)]/u);

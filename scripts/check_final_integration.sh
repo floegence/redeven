@@ -187,7 +187,7 @@ if [[ "$group" == source ]]; then
 run_step "checking final rebased diff" git diff --check "${base}...${tip}"
 run_step "checking Go formatting" check_go_formatting
 run_step "checking shell syntax" check_shell_syntax
-run_step "checking bounded CI source policy" node --test scripts/flower_long_thread_contract.test.mjs scripts/quick_ci_policy.test.mjs
+run_step "checking bounded CI source policy" node --test scripts/quick_ci_policy.test.mjs
 run_step "testing Desktop qualification lifecycle" node --test scripts/desktop_test_session_policy.test.mjs scripts/desktop_test_session.test.mjs
 run_step "linting GitHub Actions workflows" check_github_workflows
 run_step "checking Go toolchain consistency" node scripts/check_go_version_consistency.mjs

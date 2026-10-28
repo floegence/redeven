@@ -29,7 +29,7 @@ Canonical repository rules. Keep this file within 100 lines, including headings 
 - Reproduce behavior bugs before changing production code; use a deterministic failing test or document the external blocker.
 - During development and after conflict resolution, run focused checks for affected behavior and contracts; fix failures with the smallest corresponding check first.
 - Pre-commit stays fast and staged-source-only. Main pre-push runs `scripts/check_final_integration.sh` once for the exact base and tip; earlier or pre-rebase evidence does not certify a changed tip.
-- Ordinary CI stays bounded. Flower correctness and responsiveness are mandatory: affected commits run fast long-thread regressions; affected exact-tip main integration runs the sustained real-runtime browser/drag gate. See [long-thread acceptance](okf/operations/flower-long-thread-gate.md). Other broad UI, Desktop, Docker, stress, packaging and native qualification remain explicit.
+- Ordinary CI stays bounded. Flower correctness and responsiveness remain product requirements; [long-thread qualification](okf/operations/flower-long-thread-gate.md) runs explicitly for acceptance, outside unified commit, integration and CI gates. Broad UI, Desktop, Docker, stress, packaging and native qualification also remain explicit.
 - Use isolated task-owned ports, state, and processes for local debugging; identify the actual product target and verify cleanup before reporting successful qualification.
 - `.node-version` is the single source of truth for the first-party Node.js toolchain; `go.mod` owns the Go toolchain. Do not add older-version fallbacks.
 

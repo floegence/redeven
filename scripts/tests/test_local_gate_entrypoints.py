@@ -31,9 +31,9 @@ class IntegrationEntryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
 
 
-    def test_flower_performance_failure_blocks_the_exact_tip_profile(self):
-        # Use the actual manifest/runner while replacing unrelated expensive
-        # commands. The mandatory group must be reached and its failure retained.
+    def test_ordinary_profiles_exclude_long_thread_qualification(self):
+        # Exercise the actual manifest/runner in a temporary repository.
+        # Ordinary commands are harmless probes; no product push gate runs.
         import os
         source = Path(__file__).resolve().parents[1]
         env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "LOCAL_GATE_"))}
@@ -44,19 +44,24 @@ class IntegrationEntryTests(unittest.TestCase):
         git("config", "user.email", "gate@invalid.example")
         (self.root / "scripts/local_gate.py").write_bytes((source / "local_gate.py").read_bytes())
         manifest = json.loads((source / "local_gate_groups.json").read_text())
+        for groups in manifest["profiles"].values():
+            self.assertTrue(all(not group.startswith("flower-long-thread") for group in groups))
         manifest["environment"] = {}
         for group in manifest["groups"]:
+            self.assertFalse(group["id"].startswith("flower-long-thread"))
+            self.assertFalse(any("flower_long_thread" in arg or "flower-long-thread" in arg for arg in group["command"]))
             group.pop("environment", None)
-            group["command"] = ["python3", "-c", "raise SystemExit(17)" if group["id"] == "flower-long-thread" else "pass"]
+            group["command"] = ["python3", "-c", "pass"]
         (self.root / "scripts/local_gate_groups.json").write_text(json.dumps(manifest))
         git("add", ".")
         git("commit", "-qm", "initial")
         tip = git("rev-parse", "HEAD")
-        result = subprocess.run(["python3", "scripts/local_gate.py", "--profile", "full", "--mode", "committed", "--base", tip, "--tip", tip], cwd=self.root, env=env, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 17, result.stdout + result.stderr)
+        for profile, mode in [("commit", "staged"), ("full", "committed")]:
+            result = subprocess.run(["python3", "scripts/local_gate.py", "--profile", profile, "--mode", mode, "--base", tip, "--tip", tip], cwd=self.root, env=env, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         state = json.loads((self.root / ".git/local-gate/state.json").read_text())
-        self.assertEqual(state["groups"]["flower-long-thread"]["status"], "failed")
-        self.assertNotIn("full", state["rounds"])
+        self.assertEqual(set(state["rounds"]), {"commit", "full"})
+        self.assertEqual(set(state["groups"]), {group for groups in manifest["profiles"].values() for group in groups})
 
 
 if __name__ == "__main__":

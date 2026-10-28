@@ -1,6 +1,6 @@
 ---
 type: Validation Contract
-title: Flower long-thread mandatory acceptance
+title: Flower explicit long-thread qualification
 description: Protect complete conversation rendering and responsive interaction during sustained active-turn growth.
 tags: [flower, performance, correctness, gates]
 lifecycle: contract
@@ -10,30 +10,32 @@ reviewed_at: "2026-10-28"
 
 Long conversations must preserve complete content and responsive interaction while
 work continues. This is a required product property, not optional release tuning.
-The staged commit gate runs focused deterministic regressions. The exact-tip main
-integration gate runs browser correctness cases and a sustained real-runtime drag
-scenario whenever Flower, runtime, host UI, locked dependencies or gate code change.
+The long-thread suite runs explicitly for acceptance or targeted investigation.
+It is not registered in unified commit, integration or CI gates, and is not a
+prerequisite for each commit. Keep the independent suite and fixed budgets available
+without adding its setup and sustained measurement cost to ordinary development.
 
 # Contract
 
-## Admission and provenance
+## Explicit execution and provenance
 
-scripts/local_gate_groups.json registers both required groups. Pre-commit uses
-the staged source tree; the shared runner rejects differences between staged and
-working source. Main pre-push binds the full group to the exact base, tip, source
-tree, gate definition, toolchain and installed dependency hashes. Rebase, source,
-dependency or gate changes invalidate earlier evidence. Nonzero exits, absent
-tests/tools, interrupted runs, missing metrics and cleanup failures block admission.
-Gate tests include the observed 110 ms presented-latency / 21 position-commits-per-second
-regression and a real exact-tip runner test that rejects the mandatory group failure.
-A failed run is evidence of failure, never a waived pass. No workload/threshold CLI
-overrides are accepted by the sustained runner.
+Run node scripts/check_flower_long_thread.mjs --fast for focused regressions,
+or omit --fast for browser correctness and the sustained real-runtime scenario.
+Install frozen published Desktop and Env App dependencies before testing. A visible
+composited Electron environment is required; unavailable prerequisites are failures,
+not skips. Unified gate manifests and entrypoints must not invoke this suite.
 
-Run node scripts/check_flower_long_thread.mjs --fast for focused development
-checks, or omit --fast to run the entire required suite. Formal admission remains
-owned by the existing staged/exact-tip gate. Install frozen published Desktop and
-Env App dependencies before testing. A visible composited Electron environment is
-required; unavailable desktop/display prerequisites are failures, not skips.
+Retain the tested source commit/tree, clean status, toolchain, dependency hashes,
+metrics and supervised cleanup evidence. Product or dependency changes invalidate
+their earlier performance result. A later policy-only change may cite that result
+only with an explicit unchanged-product comparison and separate policy tests; never
+label the unmeasured final commit as performance-tested.
+
+Nonzero exits, absent tests/tools, interrupted runs, missing metrics and cleanup
+failures fail the explicit acceptance. Negative tests retain the observed 110 ms
+presented-latency / 21 position-commits-per-second regression. A lightweight runner
+test verifies ordinary profiles exclude this qualification. A failed run is evidence
+of failure, never a waived pass. No workload/threshold overrides are accepted.
 
 ## Correctness
 
@@ -136,7 +138,7 @@ remain unchanged; disabling streaming or masking failure cannot satisfy this rul
 
 # Evidence
 
-- [Runner and required suites](../../scripts/check_flower_long_thread.mjs)
+- [Explicit runner and regression suites](../../scripts/check_flower_long_thread.mjs)
 - [Sustained runtime runner](../../scripts/qualify_flower_long_thread.mjs)
 - [Budgets and fail-closed evaluator](../../scripts/flower_long_thread_contract.mjs)
-- [Gate policy and negative tests](../../scripts/flower_long_thread_contract.test.mjs)
+- [Explicit-execution policy and negative tests](../../scripts/flower_long_thread_contract.test.mjs)
