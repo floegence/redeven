@@ -21,8 +21,8 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-boot':
-        specifier: 0.86.63
-        version: 0.86.63
+        specifier: 0.86.64
+        version: 0.86.64
       '@floegence/flowersec-core':
         specifier: 5.11.1
         version: 5.11.1
@@ -248,8 +248,8 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@floegence/floe-webapp-boot@0.86.63':
-    resolution: {integrity: sha512-4ESjHHAunVvc9T+PQknt5zhRmxPlg5xjTWOlc57vr6tCxyid0Y7sejAAC3N0VlN43HmhScGL9414COojexHa7g==}
+  '@floegence/floe-webapp-boot@0.86.64':
+    resolution: {integrity: sha512-kcw4/P8oArRzok22jVNqf2wZHD1Rvdva8pjnpSlGYpfbup+xu3kG+VKxUcHoTn2myEBzn6BD8aMkd0nbExmomw==}
     engines: {node: '>=24.20.0'}
 
   '@floegence/flowersec-core@5.11.1':
@@ -1231,7 +1231,7 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@floegence/floe-webapp-boot@0.86.63':
+  '@floegence/floe-webapp-boot@0.86.64':
     dependencies:
       '@floegence/flowersec-core': 5.11.1
       '@noble/hashes': 2.4.0
