@@ -1,4 +1,4 @@
-import { createContext, createMemo, createEffect, createSignal, onCleanup, onMount, useContext, type Accessor } from 'solid-js';
+import { createContext, createMemo, createEffect, createSignal, mapArray, onCleanup, onMount, untrack, useContext, type Accessor } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
@@ -37,9 +37,26 @@ export function createFlowerActivityTitleReveal(options: {
     animations.clear();
     for (const arrival of known.values()) arrival.deadline = 0;
   };
+  // Entries own immutable title identities. Classify each mounted entry once;
+  // growth and disclosure changes must not revisit every completed activity.
+  const titleEntries = mapArray(options.entries, entry => {
+    if (entry.type !== 'message') return undefined;
+    const message = readPresentationValue(entry.message);
+    const keys: string[] = [];
+    for (const block of entry.blocks) {
+      if (block.type === 'content' && block.block_type === 'thinking') keys.push(block.key);
+      else if (block.type === 'tool_preview') keys.push(flowerToolCallPreviewIdentity(readPresentationValue(block.block.call)));
+      else if (block.type === 'activity') {
+        const activity = readPresentationValue(block.block);
+        for (const item of activity.items) keys.push(flowerActivityIdentity({ threadID: activity.thread_id, turnID: activity.turn_id, runID: activity.run_id,
+          itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }));
+      }
+    }
+    return { threadID: message.thread_id, turnID: message.turn_id, runID: message.run_id, entryKey: entry.key, keys };
+  });
   const arrivals = createMemo(() => {
     const thread = options.thread();
-    const entries = options.entries();
+    const entries = titleEntries();
     const live = options.liveConfirmed();
     const restored = restoration !== options.restoration();
     restoration = options.restoration();
@@ -48,25 +65,16 @@ export function createFlowerActivityTitleReveal(options: {
     const execution = thread?.current_execution;
     const now = performance.now();
     const next = new Map<string, { deadline: number; entryKey: string }>();
+    const fresh = !restored && sameThread && wasLive && live && !document.hidden && (thread?.status === 'running' || wasRunning);
     for (const entry of entries) {
-      if (entry.type !== 'message' || !execution) continue;
-      const message = readPresentationValue(entry.message);
-      if (message.thread_id !== thread?.thread_id || message.turn_id !== execution.turn_id || message.run_id !== execution.run_id) continue;
-      const fresh = !restored && sameThread && wasLive && live && !document.hidden && (thread?.status === 'running' || wasRunning);
-      const add = (key: string) => {
-        const deadline = sameThread && live && known.has(key) ? known.get(key)!.deadline : fresh ? now + FRESH_WINDOW_MS : 0;
-        // Expired arrivals never reveal again. Their disclosure state cannot
-        // affect this decision and must not fan out through every old title.
-        next.set(key, { entryKey: entry.key, deadline: deadline > now && options.isVisible(key) ? deadline : 0 });
-      };
-      for (const block of entry.blocks) {
-        if (block.type === 'content' && block.block_type === 'thinking') add(block.key);
-        else if (block.type === 'tool_preview') add(flowerToolCallPreviewIdentity(block.block.call));
-        else if (block.type === 'activity') for (const item of readPresentationValue(block.block).items) {
-          const activity = readPresentationValue(block.block);
-          add(flowerActivityIdentity({ threadID: activity.thread_id, turnID: activity.turn_id, runID: activity.run_id,
-            itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }));
-        }
+      if (!entry || !execution || entry.threadID !== thread?.thread_id
+        || entry.turnID !== execution.turn_id || entry.runID !== execution.run_id) continue;
+      for (const key of entry.keys) {
+        const prior = sameThread && live ? known.get(key) : undefined;
+        // Visibility is checked at admission and again against the real node
+        // when claimed. It is not a dependency of every historical arrival.
+        const arrival = prior ?? { entryKey: entry.entryKey, deadline: fresh && untrack(() => options.isVisible(key)) ? now + FRESH_WINDOW_MS : 0 };
+        next.set(key, arrival);
       }
     }
     threadID = thread?.thread_id;
@@ -118,7 +126,7 @@ export function createFlowerActivityTitleReveal(options: {
       // Claim once even when hidden, so opening old disclosures never replays.
       if (arrival) arrival.deadline = 0;
       if (deadline <= performance.now() || !options.liveConfirmed() || options.reducedMotion()
-        || document.hidden || node.closest('[inert]') || !node.getClientRects().length || !node.animate) {
+        || document.hidden || !untrack(() => options.isVisible(key)) || node.closest('[inert]') || !node.getClientRects().length || !node.animate) {
         report(false);
         return () => {};
       }

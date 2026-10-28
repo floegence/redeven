@@ -43,6 +43,12 @@ updates, structural versus mutable field dependencies, sealed-body handoff and i
 Tool sequence classification has one mounted owner per entry: retained rows reuse
 classified facts while live state, pending bodies, preview labels and the first
 non-whitespace prose boundary remain reactive. Removed entries dispose their owners.
+Title arrivals classify identities once per mounted entry and inspect visibility
+only when admitted and claimed. Group/disclosure changes cannot rescan completed
+title bodies; restored and reconnected titles remain static. Fast regressions
+exercise 600 retained rows, and browser cases protect genuine arrival motion.
+Body receipts request synchronous anchor correction only when loading becomes
+complete; growing byte extents of already retained content do not force layout.
 Structural batches publish ordered membership once after every affected record is
 ready; replacing many records must not rescan the full document for each record.
 Parent-event reading intervals track membership and coverage independently of
