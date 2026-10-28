@@ -177,7 +177,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				if !strings.HasPrefix(scenario, "native_") {
@@ -243,6 +243,22 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						return
 					}
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					if scenario == "visual_natural" {
+						_, _ = fmt.Fprintf(w, "<title>Visual fixture</title><p>Click the green square exactly once.</p><canvas width='600' height='240' aria-label='Color exercise'></canvas><output aria-label='Result'></output><script>const c=document.querySelector('canvas'),x=c.getContext('2d');for(let i=0;i<3;i++){x.fillStyle=i===%d?'#008a00':'#e02020';x.fillRect(30+180*i,40,120,120)}c.onclick=e=>{const b=c.getBoundingClientRect(),i=Math.floor((e.clientX-b.left-30)/180);fetch('/pointer',{method:'POST'});document.querySelector('output').textContent=i===%d?'Correct square':'Wrong square';if(i===%d)fetch('/entered',{method:'POST'})};</script>", (repeat+1)%3, (repeat+1)%3, (repeat+1)%3)
+						return
+					}
+					if scenario == "form_natural" {
+						_, _ = fmt.Fprintf(w, `<title>Entry fixture</title><section><h1>Dispatch %d</h1><form onsubmit="event.preventDefault();fetch('/submit',{method:'POST'});document.querySelector('output').textContent='Recorded: '+document.querySelector('input').value"><label>Reference %d <span><input oninput="fetch('/typed?value='+encodeURIComponent(this.value))"></span></label><button>Record %d</button></form><output aria-label='Receipt'></output></section>`, repeat, repeat, repeat)
+						return
+					}
+					if scenario == "table_natural" {
+						_, _ = fmt.Fprintf(w, "<title>Inventory fixture</title><article><h1>Warehouse %d</h1><table aria-label='Inventory %d'><thead><tr><th>Item</th><th>Units</th></tr></thead><tbody>", repeat, repeat)
+						for i := 1; i <= repeat+4; i++ {
+							_, _ = fmt.Fprintf(w, "<tr><td>Parcel %d-%d</td><td>%d</td></tr>", repeat, i, i*3)
+						}
+						_, _ = io.WriteString(w, "</tbody></table></article>")
+						return
+					}
 					if scenario == "timed_drag" || scenario == "drag_validation" {
 						_, _ = io.WriteString(w, `<title>Pointer exercise</title><style>body{margin:0;user-select:none}#pad{position:absolute;left:0;top:0;width:300px;height:160px;background:#ddd}p{margin-top:180px}</style><div id="pad"></div><p>Drag once from CSS coordinates (20,30) to (180,100), holding for 1000 milliseconds. Coordinates are in this document's viewport. The pad is deliberately unconstrained.</p><section aria-label="Pointer telemetry">[]</section><script>let events=[];for(const type of ['mousedown','mousemove','mouseup'])document.addEventListener(type,e=>{events.push({type:e.type,time:performance.now(),x:e.clientX,y:e.clientY,buttons:e.buttons});document.querySelector('section').textContent=JSON.stringify(events);if(type==='mouseup')fetch('/drag-events',{method:'POST',body:JSON.stringify(events)})});</script>`)
 						return
@@ -326,7 +342,11 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				var nativeFacts func() map[string]any
 				if scenario == "native_entry" || scenario == "native_tree" || strings.HasPrefix(scenario, "native_drag") {
 					if strings.HasPrefix(scenario, "native_drag") {
-						nativeName, nativeFacts = prepareComputerEntryFixture(t, "drag")
+						mode := "drag"
+						if scenario == "native_drag_focus_change" {
+							mode = "focus_change"
+						}
+						nativeName, nativeFacts = prepareComputerEntryFixture(t, mode)
 					} else {
 						nativeName, nativeFacts = prepareComputerEntryFixture(t)
 					}
@@ -391,6 +411,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "visual_natural":
+					prompt = "Capture the selected page, inspect the image and click its green square exactly once. Verify and report the displayed result. Use only Computer Use; do not use DOM evaluation, network or terminal. The colored squares are drawn inside one canvas."
+				case "form_natural":
+					prompt = fmt.Sprintf("Enter reference Orchard-%d in this form and submit it exactly once. Read and report its receipt. Use the visible page and documented Computer Use APIs only.", repeat)
+				case "table_natural":
+					prompt = "Read every inventory row and report the exact item count and sum of Units. Use the visible table and documented Computer Use APIs only; do not use terminal or network."
 				case "timed_drag":
 					prompt = "Read the selected Pointer exercise page and complete its drag exactly once using Computer Use. Inspect and report the actual Pointer telemetry afterwards. Do not use terminal/network tools or navigate."
 				case "drag_validation":
@@ -446,6 +472,8 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Run this intentional diagnostic exactly once as one computer.exec: await ui.getByRole('button',{name:'Save once',exact:true}).snapshot({full:true}); . Do not remove the unsupported option. Report the returned method, field and expected form, then use a separate ui.snapshot() call. Do not click or save."
 				case "script_batch":
 					prompt = "Open " + site.URL + "/batch?page=1 in this task's page, read all three scores and calculate their total. Once the page structure is known, process the remaining pages in one computer script using a loop and return a screenshot of the last page. Keep the original browser page available; do not use network scraping."
+				case "native_drag_focus_change":
+					prompt = "Discover and select the disposable native application named " + nativeName + ". Observe it, then drag from (50,100) to (300,150) over 5000 ms exactly once. The app may change its own focus during the drag. If input stops, report only the actual returned reason and progress. Do not repeat the drag, resume control, request user input, or touch other applications."
 				case "native_drag", "native_drag_validation", "native_drag_zero":
 					prompt = "Open the installed native application named " + nativeName + " using Computer Use discovery and selection. Observe its instructions and screenshot, then perform its requested drag exactly once. Read Pointer telemetry and capture a screenshot afterwards. This is a disposable acceptance app; do not touch other applications or use terminal/network tools."
 					if scenario == "native_drag_zero" {
@@ -593,6 +621,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							}
 							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
 							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
+							fact["safety"], fact["input_progress"] = data["safety"], data["input_progress"]
 							fact["logs"], fact["budget"] = data["logs"], data["budget"]
 							if scenario == "field_integrity" || scenario == "native_entry" || scenario == "native_tree" || strings.HasPrefix(scenario, "native_drag") {
 								fact["observation"] = data["observation"]
@@ -608,11 +637,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 								diagnostic, _ := data["diagnostic"].(map[string]any)
 								resetConfirmed = diagnostic["symbol"] == "setTimeout" && diagnostic["line"] != nil
 							}
-							if data["completed"] == true {
-								for _, action := range toAnySlice(data["completed_actions"]) {
-									if action == "wait" {
-										contentWaitConfirmed = true
-									}
+							// A later script error cannot undo a confirmed wait prefix.
+							for index, action := range toAnySlice(data["completed_actions"]) {
+								if action == "wait" && !(data["failed_action"] == "wait" && data["failed_operation_index"] == float64(index)) {
+									contentWaitConfirmed = true
 								}
 							}
 
@@ -695,6 +723,36 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "visual_natural":
+					capturedBeforeInput, sawCapture := false, false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							if action == "pointer_click" {
+								capturedBeforeInput = sawCapture
+							}
+						}
+						// A screenshot must have returned in an earlier tool call.
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							if action == "screenshot" {
+								sawCapture = true
+							}
+						}
+					}
+					report["capture_before_input"] = capturedBeforeInput
+					if !capturedBeforeInput || entered.Load() != 1 || pointerClicks.Load() != 1 || !strings.Contains(finalText, "Correct square") {
+						t.Errorf("visual task failed: captured=%v correct=%d clicks=%d", capturedBeforeInput, entered.Load(), pointerClicks.Load())
+					}
+				case "form_natural":
+					want := fmt.Sprintf("Orchard-%d", repeat)
+					if submissions.Load() != 1 || typedValue.Load() != want || !strings.Contains(finalText, "Recorded: "+want) {
+						t.Errorf("form task failed: submits=%d typed=%v", submissions.Load(), typedValue.Load())
+					}
+				case "table_natural":
+					count := repeat + 4
+					total := 3 * count * (count + 1) / 2
+					if pointerClicks.Load() != 0 || !strings.Contains(finalText, strconv.Itoa(count)) || !strings.Contains(finalText, strconv.Itoa(total)) {
+						t.Errorf("inventory task failed: count=%d sum=%d", count, total)
+					}
 				case "timed_drag", "drag_validation":
 					events, _ := dragEvents.Load().([]qualificationDragEvent)
 					report["pointer_events"] = events
@@ -1036,6 +1094,47 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					if !saved || exports.Load() != 1 || readErr != nil || !strings.Contains(string(file), "20.5") || !strings.Contains(text, "terminal.exec") {
 						t.Errorf("mixed tool handoff failed: exports=%d file=%v", exports.Load(), readErr)
+					}
+				case "native_drag_focus_change":
+					facts := nativeFacts()
+					report["native_facts"] = facts
+					events, _ := facts["drag_events"].([]any)
+					down, up := 0, 0
+					for _, raw := range events {
+						event := raw.(map[string]any)
+						if event["type"] == "down" {
+							down++
+						}
+						if event["type"] == "up" {
+							up++
+							if event["x"].(float64) >= 300 {
+								t.Error("drag continued after focus changed")
+							}
+						}
+					}
+					retained := false
+					for _, fact := range confirmedToolFacts {
+						safety, _ := fact["safety"].(map[string]any)
+						changed := false
+						for _, reason := range toAnySlice(safety["reason_codes"]) {
+							changed = changed || reason == "target_focus_changed"
+							if reason == "user_control" {
+								t.Error("programmatic focus change misattributed to user")
+							}
+						}
+						progress := computerInputProgress(fact["input_progress"])
+						posted, _ := progress["posted"].(int64)
+						expected, _ := progress["expected"].(int64)
+						retained = retained || changed && posted > 0 && expected > posted && fact["action_executed"] == false
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							if action == "drag" {
+								t.Error("interrupted drag reported as completed")
+							}
+						}
+					}
+					report["pause_receipt_retained"] = retained
+					if down != 1 || up != 1 || !retained {
+						t.Errorf("pause contract failed: down=%d up=%d retained=%v", down, up, retained)
 					}
 				case "native_drag", "native_drag_validation", "native_drag_zero":
 					facts := nativeFacts()

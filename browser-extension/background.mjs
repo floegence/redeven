@@ -319,6 +319,7 @@ async function execute(message, task) {
         // rejections establish no effect; arbitrary CDP errors stay unknown.
         let rejection;
         try { rejection = JSON.parse(error.message); } catch { /* Not a protocol rejection. */ }
+        if (Number.isInteger(rejection?.code) && rejection.code >= -2147483648 && rejection.code <= 2147483647) task.protocolCode = rejection.code;
         if (method === 'DOM.focus' && rejection?.code === -32000 && ['Node is not an Element', 'Element is not focusable'].includes(rejection.message)) throw new Error('ELEMENT_NOT_ACTIONABLE');
         throw error;
       }
@@ -395,7 +396,8 @@ async function connect(name, label, remember = false) {
       try { response = { id: message.id, result: await execute(message, task) }; }
       catch (error) {
         const code = String(error.message).split(':')[0];
-        response = { id: message.id, error: ['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE', 'ELEMENT_NOT_ACTIONABLE'].includes(code) ? code : 'EXTENSION_COMMAND_FAILED' };
+        response = { id: message.id, error: ['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE', 'ELEMENT_NOT_ACTIONABLE'].includes(code) ? code : 'EXTENSION_COMMAND_FAILED',
+          ...(task.protocolCode === undefined ? {} : {protocol_code:task.protocolCode}) };
       }
       // Retire before sending: the Runtime can issue another request as soon
       // as it receives the reply. Never race a later .finally callback.

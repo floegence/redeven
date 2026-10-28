@@ -5,7 +5,7 @@ description: Separate operation facts from independent Agent questions and requi
 tags: [ai, computer-use, safety, takeover]
 timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -21,6 +21,16 @@ journal or second conversation lifecycle exists.
 
 ## Operation facts and independent questions
 Structurally confirmed password/one-time-code controls, secure native fields, missing permissions and explicit user control return structured assistance facts. Flower can make another read within its execution budget; persistent failure requires an accurate explanation, never invented instructions to inspect.
+
+Password controls establish secret_input, not login intent. Existing explicit
+login consumers remain supported. NativeWindow retains one set of pause reasons:
+changed foreground/window identity reports target_focus_changed, disabled input
+monitoring reports input_monitor_unavailable, and explicit private control reports
+user_control. These reasons reuse the existing paused assistance and canonical
+recovery path. A fresh recovery observation clears the local latch and rechecks
+permissions/privacy before further input; it never replays actions. The Runtime
+retains the authoritative control barrier. UI instructions describe a state check,
+not an inferred user action.
 
 Tool rows retain their execution outcome; only the separate question displays waiting.
 

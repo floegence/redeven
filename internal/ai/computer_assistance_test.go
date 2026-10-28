@@ -10,7 +10,7 @@ import (
 )
 
 func TestComputerBlockingFactsDoNotCreateQuestionsOrSuccess(t *testing.T) {
-	for _, reason := range []string{"captcha", "otp", "login", "secret_input", "user_control"} {
+	for _, reason := range []string{"captcha", "otp", "login", "secret_input", "user_control", "target_focus_changed", "input_monitor_unavailable"} {
 		t.Run(reason, func(t *testing.T) {
 			safety := InteractionSafetyDecision{ReasonCodes: []string{reason}}
 			execution, failure := computerBlockedExecution(TargetToolCall{ToolCallID: "inspect"}, TargetDescriptor{ID: "browser-main"}, safety,
@@ -19,6 +19,9 @@ func TestComputerBlockingFactsDoNotCreateQuestionsOrSuccess(t *testing.T) {
 				t.Fatal("blocking result reported success")
 			}
 			data := execution.Payload.(map[string]any)
+			if data["safety"].(*InteractionSafetyDecision).ReasonCodes[0] != reason {
+				t.Fatal("pause reason lost at model boundary")
+			}
 			if data["action_executed"] != true || len(data["completed_actions"].([]string)) != 1 {
 				t.Fatal("completed effect lost")
 			}

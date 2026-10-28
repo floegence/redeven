@@ -1498,7 +1498,7 @@
       "untrustedTitle": "Examiner les instructions inattendues",
       "untrustedHint": "La page contient des instructions destinées à l’agent. Ouvrez-la et quittez ou fermez ce contenu avant de continuer.",
       "pausedTitle": "Actions en pause",
-      "pausedHint": "Terminez vos modifications sur la page ou dans l’application, puis choisissez « Poursuivre la vérification ». Flower examinera l’état actuel avant d’agir.",
+      "pausedHint": "Vérifiez la page ou l’application et ses autorisations, puis choisissez « Poursuivre la vérification ». Flower examinera l’état actuel avant d’agir.",
       "automatic": "Flower choisit les pages pour votre tâche",
       "automaticHint": "Décrivez votre besoin dans la conversation. Le choix manuel d’une page est facultatif.",
       "switchTarget": "Choisir une page ou une application",

@@ -27,7 +27,7 @@ final class EntryDelegate: NSObject, NSApplicationDelegate {
         window = NSWindow(contentRect: NSRect(x: 150, y: 150, width: 480, height: 220), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Computer Entry Acceptance"
         window.animationBehavior = .none
-        if mode == "drag" {
+        if mode == "drag" || mode == "focus_change" {
             let pad = EntryDragPad(frame: window.contentView!.bounds)
             pad.wantsLayer = true; pad.layer?.backgroundColor = NSColor.systemTeal.withAlphaComponent(0.15).cgColor
             pad.setAccessibilityElement(true); pad.setAccessibilityRole(.group); pad.setAccessibilityLabel("Drag pad")
@@ -53,6 +53,14 @@ final class EntryDelegate: NSObject, NSApplicationDelegate {
                     self.status.stringValue = "Released after \(Int(held)) ms; \(self.dragEvents.count) pointer events"
                 }
                 self.save()
+                if mode == "focus_change" && event.type == .leftMouseDown {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self.second = NSWindow(contentRect: NSRect(x: 670, y: 150, width: 320, height: 220), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+                        self.second!.title = "Programmatic focus change"
+                        self.second!.makeKeyAndOrderFront(nil)
+                        self.save()
+                    }
+                }
             }
             window.makeKeyAndOrderFront(nil); save(); return
         }

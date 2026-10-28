@@ -79,7 +79,15 @@ export class ExtensionTransport extends EventEmitter {
     const request = this.pending.get(message.id);
     if (!request) throw new Error('BROWSER_EXTENSION_REPLY_INVALID');
     this.pending.delete(message.id); clearTimeout(request.timer);
-    if (message.error) request.reject(Object.assign(new Error(['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(message.error) || request.method === 'DOM.focus' && message.error === 'ELEMENT_NOT_ACTIONABLE' ? message.error : 'BROWSER_EXTENSION_COMMAND_FAILED'), message.error === 'TARGET_PERMISSION_REQUIRED' ? { permissionReason: 'extension_file_access' } : {}));
+    if (message.error) {
+      const error = Object.assign(new Error(['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(message.error) || request.method === 'DOM.focus' && message.error === 'ELEMENT_NOT_ACTIONABLE' ? message.error : 'BROWSER_EXTENSION_COMMAND_FAILED'), message.error === 'TARGET_PERMISSION_REQUIRED' ? { permissionReason: 'extension_file_access' } : {});
+      // The method belongs to this pending request; peer text/arguments never
+      // become a diagnosis. A numeric protocol code does not authorize retry.
+      if (Number.isInteger(message.protocol_code) && message.protocol_code >= -2147483648 && message.protocol_code <= 2147483647) {
+        error.protocolDiagnostic = {phase:'protocol',method:request.method,code:message.protocol_code};
+      }
+      request.reject(error);
+    }
     else request.resolve(message.result ?? {});
     if (message.sequence) this.write({ ack: message.sequence });
   }

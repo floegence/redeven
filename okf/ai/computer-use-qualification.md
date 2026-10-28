@@ -35,13 +35,26 @@ Foreground macOS and credentialed model qualification remain explicit runs; the 
 
 Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1). Native scenarios run serially in the harness and also require REDEVEN_COMPUTER_NATIVE_E2E=1 and the release Swift helper; serialize native cases on the shared desktop. Browser-only cases may use -parallel 3. Scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks failure namespace reset, multi-page script batches, browser-to-task-file processing and installed native application entry. Reset diagnostics and completed waits are checked against canonical tool results. observation_capture verifies four PageDown inputs followed by one fresh screenshot; frame_refs verifies a retained parent ref after child navigation; option_field verifies exact unsupported-option diagnostics. strict_wait also checks the failed wait index and sanitized condition facts.
 
+Natural visual_natural, form_natural and table_natural cases vary canvas position,
+form labels and table size across repetitions. The visual case requires a returned
+screenshot before a later pointer input and verifies actual canvas events; it is
+not a prescribed coordinate replay. Native focus-change qualification uses an
+AppKit app that changes its own key window during a drag, requiring a factual pause,
+balanced release and explicit recovery without replay. REDEVEN_COMPUTER_NATIVE_TEST_HOST
+can select an absolute baseline helper for that isolated regression.
+The native_drag_focus_change model scenario exercises the same interruption
+through the production Service and requires a retained partial input receipt,
+one balanced press/release and no completed drag or automatic replay.
+
 Natural tasks use the production default tool surface. Only the legacy default-wait
 case explicitly retains its primitive. Read canonical tool results through
 ThreadToolResultReader, decoding Floret's error-status ERROR prefix before the
 host JSON envelope. Diagnostic assertions require data.script_error; echoed
 scripts, logs and final prose cannot satisfy them. Retain plain pre-dispatch
 runtime rejections separately; never infer script diagnostics from their text.
-Count fixture events separately.
+Count fixture events separately. A completed wait in the confirmed prefix remains
+completed even if later guest JavaScript fails; whole-script success is not a wait
+receipt. Reports retain safety and input-progress facts for failure classification.
 
 Diagnostic scenarios specify the required operations, while table and download
 tasks exercise autonomous planning. Verify returned tool payloads and counted

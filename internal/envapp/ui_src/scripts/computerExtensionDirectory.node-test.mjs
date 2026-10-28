@@ -159,3 +159,19 @@ test('native input does not override the current focus owner or activate the phy
   ]);
   assert.equal(f.tabs.get(7).active, true);
 });
+
+
+test('protocol rejections preserve only numeric codes without retry or message inference', async t => {
+  const f = await fixture(t, {attachSuccess:true});
+  const binding = await f.call('bind', {tab_id:'7',tab_url:'https://example.test/',tab_title:'Existing'});
+  let calls = 0;
+  for (const [message, expected] of [[JSON.stringify({code:-32000,message:'private fixture'}),-32000], [JSON.stringify({code:-32602,message:'changed wording'}),-32602], ['code -32000: private fixture',undefined], [JSON.stringify({code:'-32000'}),undefined], [JSON.stringify({code:2147483648}),undefined]]) {
+    f.chrome.debugger.sendCommand = async () => { calls++; throw new Error(message); };
+    const before = calls;
+    await f.call('cdp', {tab_id:'7',binding:binding.binding,method:'Page.captureScreenshot',params:{}}, 'EXTENSION_COMMAND_FAILED');
+    const reply = f.port.replies.at(-1);
+    assert.equal(reply.protocol_code,expected);
+    assert.equal(calls,before+1);
+    assert.equal(JSON.stringify(reply).includes('private'),false);
+  }
+});

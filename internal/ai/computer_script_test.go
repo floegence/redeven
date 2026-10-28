@@ -208,7 +208,7 @@ func TestComputerScriptUncertainResultRetainsCompletedPrefixAndProgress(t *testi
 			return TargetToolResult{Result: map[string]any{"action_executed": true}}, nil
 		}
 		return TargetToolResult{ExecutionLocation: "macos_desktop", Result: map[string]any{
-			"input_progress": map[string]any{"posted": 1, "observed": 0, "expected": 2},
+			"input_progress": map[string]any{"posted": 1, "observed": 0, "expected": 2, "private": "hidden"},
 			"stage":          "input_delivery", "reason": "receipt_timeout", "target_state": "available",
 			"observation": semanticFixtureText("current document"),
 		}}, errComputerEffectUnknown
@@ -224,7 +224,10 @@ func TestComputerScriptUncertainResultRetainsCompletedPrefixAndProgress(t *testi
 	}
 	progress, _ := payload["input_progress"].(map[string]any)
 	observation, _ := payload["observation"].(map[string]any)
-	if progress["posted"] != 1 || progress["observed"] != 0 || progress["expected"] != 2 || payload["stage"] != "input_delivery" || payload["reason"] != "receipt_timeout" || payload["target_state"] != "available" || observation["document_id"] != "current document" || result.ExecutionLocation != "macos_desktop" {
+	if progress["private"] != nil {
+		t.Fatal("unknown-effect receipt leaked unrecognized fields")
+	}
+	if progress["posted"] != int64(1) || progress["observed"] != int64(0) || progress["expected"] != int64(2) || payload["stage"] != "input_delivery" || payload["reason"] != "receipt_timeout" || payload["target_state"] != "available" || observation["document_id"] != "current document" || result.ExecutionLocation != "macos_desktop" {
 		t.Fatalf("uncertain facts lost: %+v", result)
 	}
 	if payload["effect_outcome_unknown"] != true || payload["failed_operation_index"] != 1 || payload["failed_action"] != "pointer_click" {
@@ -415,7 +418,7 @@ func TestComputerScriptReadFailurePreservesConfirmedPrefixWithoutContentOrReplay
 		if calls == 1 {
 			return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("previous page content")}}, nil
 		}
-		return computerObservationFailure(call, map[string]any{"action_executed": true, "observation_stage": "safety_scan"}, "fixture")
+		return computerObservationFailure(call, map[string]any{"action_executed": true, "observation_stage": "safety_scan", "diagnostic": map[string]any{"phase": "protocol", "method": "DOMSnapshot.captureSnapshot", "code": float64(-32000), "message": "private exception"}}, "fixture")
 	})
 	result, err := executeTestScript(t.Context(), host, call, `await ui.observe(); log('previous page content'); await ui.click(1,2); await ui.click(3,4);`)
 	var failure *computerScriptExecutionError
@@ -425,6 +428,10 @@ func TestComputerScriptReadFailurePreservesConfirmedPrefixWithoutContentOrReplay
 	payload := result.Result.(map[string]any)
 	if payload["action_executed"] != true || payload["observation"] != nil || payload["logs"] != nil || len(result.Attachments) != 0 {
 		t.Fatalf("lost progress or exposed stale content: %+v", payload)
+	}
+	diagnostic, _ := payload["diagnostic"].(map[string]any)
+	if diagnostic["phase"] != "protocol" || diagnostic["method"] != "DOMSnapshot.captureSnapshot" || diagnostic["code"] != float64(-32000) || diagnostic["message"] != nil {
+		t.Fatalf("diagnostic lost or leaked: %+v", payload)
 	}
 	actions := payload["completed_actions"].([]string)
 	if len(actions) != 2 || actions[1] != "pointer_click" {
@@ -669,5 +676,48 @@ func TestComputerNativeDragHelpDescribesTimingContract(t *testing.T) {
 				t.Errorf("native %s help omits %q", topic, contract)
 			}
 		}
+	}
+}
+
+func TestComputerCompletedWaitSurvivesLaterGuestError(t *testing.T) {
+	calls := 0
+	host, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		calls++
+		return TargetToolResult{Result: map[string]any{"state": "visible", "requested_state": "visible"}}, nil
+	})
+	result, err := executeTestScript(t.Context(), host, call, "await ui.ref('r').requireState({state:'visible',timeout_ms:0}); const missing=undefined; log(missing.value);")
+	if err == nil || calls != 1 {
+		t.Fatalf("expected one completed wait followed by guest error: %v %d", err, calls)
+	}
+	payload := result.Result.(map[string]any)
+	actions := payload["completed_actions"].([]string)
+	if len(actions) != 1 || actions[0] != "wait" || payload["completed"] != false || payload["script_error"] != "SCRIPT_TYPE_ERROR" {
+		t.Fatalf("completed wait was erased: %+v", payload)
+	}
+}
+
+func TestComputerPausedScriptRetainsPartialInputReceipt(t *testing.T) {
+	calls := 0
+	host, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		calls++
+		return TargetToolResult{Result: map[string]any{"action_executed": false, "input_progress": map[string]any{"stage": "input_delivery", "posted": float64(3), "observed": float64(3), "expected": float64(10), "private": "hidden"}}, Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"target_focus_changed"}}}, nil
+	})
+	result, err := executeTestScript(t.Context(), host, call, "await ui.drag(10,20,30,40,500); await ui.key('Enter');")
+	if err != nil || calls != 1 || result.Safety == nil {
+		t.Fatalf("pause contract: %+v %v", result, err)
+	}
+	payload := result.Result.(map[string]any)
+	progress, ok := payload["input_progress"].(map[string]any)
+	if !ok || progress["posted"] != int64(3) || progress["observed"] != int64(3) || progress["expected"] != int64(10) || progress["private"] != nil {
+		t.Fatalf("partial input lost or leaked: %+v", payload)
+	}
+	execution, _ := computerBlockedExecution(call, TargetDescriptor{ID: call.TargetID}, *result.Safety, result)
+	blocked := execution.Payload.(map[string]any)
+	blockedProgress, _ := blocked["input_progress"].(map[string]any)
+	if blockedProgress["posted"] != int64(3) || blockedProgress["observed"] != int64(3) || blockedProgress["expected"] != int64(10) || blockedProgress["private"] != nil {
+		t.Fatal("model output lost or leaked partial input receipt")
+	}
+	if len(payload["completed_actions"].([]string)) != 0 {
+		t.Fatal("partial input reported as completed drag")
 	}
 }

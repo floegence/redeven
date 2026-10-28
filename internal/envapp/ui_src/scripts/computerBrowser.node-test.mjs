@@ -351,6 +351,7 @@ test('sensitive DOM transitions during observation discard pixels even after the
     const result = await controller.execute({ tool_name: 'computer.screenshot' });
     assert.equal(result.safety.level, 'takeover');
     assert.ok(result.safety.reason_codes.includes('secret_input'));
+    assert.equal(result.safety.reason_codes.includes('login'), false, 'secret input does not establish a login workflow');
     assert.equal(result.screenshot, undefined); assert.equal(JSON.stringify(result).includes('private-fixture'), false);
     session.send = send;
     assert.equal((await controller.execute({ tool_name: 'computer.screenshot', recovery_observation: true })).safety.level, 'routine');
@@ -405,6 +406,7 @@ test('closed shadow inputs cannot expose passwords or verification codes to obse
       const result = await controller.execute({ tool_name: 'computer.observe', args: { screenshot: true } });
       assert.equal(result.safety.level, 'takeover', JSON.stringify(result));
       assert.ok(result.safety.reason_codes.includes('secret_input'));
+    assert.equal(result.safety.reason_codes.includes('login'), false, 'secret input does not establish a login workflow');
       assert.equal(result.screenshot, undefined);
       assert.equal(JSON.stringify(result).includes('never-export'), false);
       await page.close();
@@ -631,6 +633,7 @@ test('confirmed private input still requires takeover when a frame changes durin
     assert.equal(changed, true);
     assert.equal(result.safety.level, 'takeover', JSON.stringify(result));
     assert.ok(result.safety.reason_codes.includes('secret_input'));
+    assert.equal(result.safety.reason_codes.includes('login'), false, 'secret input does not establish a login workflow');
     assert.equal(result.result.action_executed, false);
     assert.equal(result.screenshot, undefined);
     assert.equal(JSON.stringify(result).includes('private-value'), false);

@@ -6355,7 +6355,7 @@
       "untrustedTitle": "请检查页面中的异常指令",
       "untrustedHint": "页面中出现了针对 Agent 的指令。请打开页面，离开或关闭该内容后再继续。",
       "pausedTitle": "操作已暂停",
-      "pausedHint": "完成你在页面或应用中的操作后，点击“继续检查”。Flower 会在执行后续操作前检查当前状态。",
+      "pausedHint": "检查页面或应用及其权限，然后点击“继续检查”。Flower 会在执行后续操作前检查当前状态。",
       "automatic": "由 Flower 按任务选择页面",
       "automaticHint": "在对话中描述需求即可，也可以手动指定页面。",
       "switchTarget": "手动选择页面或应用",

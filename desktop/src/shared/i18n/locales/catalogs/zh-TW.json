@@ -1498,7 +1498,7 @@
       "untrustedTitle": "請檢查頁面中的異常指令",
       "untrustedHint": "頁面中出現了針對 Agent 的指令。請開啟頁面，離開或關閉該內容後再繼續。",
       "pausedTitle": "操作已暫停",
-      "pausedHint": "完成你在頁面或應用程式中的操作後，按「繼續檢查」。Flower 會在執行後續操作前檢查目前狀態。",
+      "pausedHint": "檢查頁面或應用程式及其權限，然後按「繼續檢查」。Flower 會在執行後續操作前檢查目前狀態。",
       "automatic": "由 Flower 依任務選擇頁面",
       "automaticHint": "在對話中描述需求即可，也可以手動指定頁面。",
       "switchTarget": "手動選擇頁面或應用程式",

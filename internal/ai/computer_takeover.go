@@ -18,6 +18,9 @@ func computerBlockedExecution(call TargetToolCall, target TargetDescriptor, safe
 		Result: map[string]any{"action_executed": false, "code": "TAKEOVER_REQUIRED"}}
 	if len(observed) == 1 {
 		if payload, ok := observed[0].Result.(map[string]any); ok {
+			if progress := computerInputProgress(payload["input_progress"]); len(progress) > 0 {
+				result.Result.(map[string]any)["input_progress"] = progress
+			}
 			for _, key := range []string{"action_executed", "completed_actions", "operations", "observation_stage"} {
 				if value, exists := payload[key]; exists {
 					result.Result.(map[string]any)[key] = value
@@ -46,7 +49,7 @@ func computerAssistanceKind(safety InteractionSafetyDecision) string {
 		return "private_input"
 	case slices.Contains(safety.ReasonCodes, "prompt_injection"):
 		return "untrusted_content"
-	case slices.Contains(safety.ReasonCodes, "user_control"):
+	case slices.Contains(safety.ReasonCodes, "user_control"), slices.Contains(safety.ReasonCodes, "target_focus_changed"), slices.Contains(safety.ReasonCodes, "input_monitor_unavailable"):
 		return "paused"
 	default:
 		return "inspection"

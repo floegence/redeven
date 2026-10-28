@@ -1,10 +1,13 @@
 package ai
 
 import (
+	"math"
 	"regexp"
 	"slices"
 	"strings"
 )
+
+var computerProtocolMethod = regexp.MustCompile("^(Page|Runtime|DOM|DOMSnapshot|CSS|Network|Fetch|Input|Emulation|Accessibility|IO|Target)[.][A-Za-z]{1,64}$")
 
 var computerScriptSymbol = regexp.MustCompile("^[A-Za-z_$][A-Za-z0-9_$]{0,79}$")
 
@@ -49,6 +52,14 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 // Closed product-authored diagnostics. Never retain raw page errors or arguments.
 func computerOperationDiagnostic(value any) map[string]any {
 	raw, _ := value.(map[string]any)
+	if raw["phase"] == "protocol" {
+		method := anyToString(raw["method"])
+		code, ok := raw["code"].(float64)
+		if computerProtocolMethod.MatchString(method) && ok && code >= math.MinInt32 && code <= math.MaxInt32 && math.Trunc(code) == code {
+			return map[string]any{"phase": "protocol", "method": method, "code": code}
+		}
+		return nil
+	}
 	if raw["phase"] == "read" && raw["recovery"] == "choose_supported_read" {
 		method, expected := anyToString(raw["method"]), anyToString(raw["expected"])
 		if method == "locator.attribute" && expected == "attribute_max_2000" || method == "locator.text" && expected == "html_element" {

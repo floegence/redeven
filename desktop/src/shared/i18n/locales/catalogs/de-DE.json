@@ -1498,7 +1498,7 @@
       "untrustedTitle": "Unerwartete Seitenanweisungen prüfen",
       "untrustedHint": "Die Seite enthält Anweisungen an den Agenten. Öffnen Sie die Seite und verlassen oder schließen Sie diesen Inhalt, bevor Sie fortfahren.",
       "pausedTitle": "Aktionen pausiert",
-      "pausedHint": "Beenden Sie Ihre Änderungen auf der Seite oder in der Anwendung. Wählen Sie „Prüfung fortsetzen“; Flower prüft den aktuellen Zustand, bevor es weiterarbeitet.",
+      "pausedHint": "Prüfen Sie die Seite oder Anwendung und ihre Berechtigungen. Wählen Sie dann „Prüfung fortsetzen“. Flower prüft den aktuellen Zustand, bevor es weiterarbeitet.",
       "automatic": "Flower wählt Seiten für Ihre Aufgabe",
       "automaticHint": "Beschreiben Sie Ihr Anliegen im Chat. Die manuelle Seitenauswahl ist optional.",
       "switchTarget": "Seite oder App manuell wählen",

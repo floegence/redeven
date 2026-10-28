@@ -2,7 +2,10 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"math"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -63,5 +66,58 @@ func TestComputerFailurePreservesLayerAndReadiness(t *testing.T) {
 				t.Fatalf("readiness changed across error layers: %+v %v", target, err)
 			}
 		})
+	}
+}
+
+func TestComputerProtocolDiagnosticRetainsOnlyCorrelatedFacts(t *testing.T) {
+	for _, code := range []float64{-32000, -32601, 0, math.MinInt32, math.MaxInt32} {
+		want := map[string]any{"phase": "protocol", "method": "Page.captureScreenshot", "code": code}
+		raw := map[string]any{"phase": "protocol", "method": "Page.captureScreenshot", "code": code, "message": "private content", "url": "https://private.test/secret"}
+		result, err := computerObservationFailure(TargetToolCall{ToolName: "computer.screenshot"}, map[string]any{"action_executed": false, "observation_stage": "capture", "diagnostic": raw}, "fixture")
+		if err == nil || !reflect.DeepEqual(result.Result.(map[string]any)["diagnostic"], want) {
+			t.Fatalf("lost facts: %+v %v", result, err)
+		}
+		body, _ := json.Marshal(result)
+		if strings.Contains(string(body), "private") {
+			t.Fatal("raw exception leaked")
+		}
+	}
+	for _, raw := range []map[string]any{
+		{"phase": "protocol", "method": "Page.captureScreenshot", "code": "-32000"},
+		{"phase": "protocol", "method": "Page.captureScreenshot", "code": 1.5},
+		{"phase": "protocol", "method": "Page.captureScreenshot", "code": math.Inf(1)},
+		{"phase": "protocol", "method": "Page.captureScreenshot", "code": float64(math.MaxInt32) + 1},
+		{"phase": "protocol", "method": "https://private.test/secret", "code": float64(-32000)},
+		{"phase": "protocol", "method": "Page.captureScreenshot", "message": "code -32000"},
+	} {
+		if got := computerOperationDiagnostic(raw); got != nil {
+			t.Fatalf("invented or unbounded diagnostic: %+v", got)
+		}
+	}
+}
+
+func TestComputerPauseFactsKeepExistingAssistancePath(t *testing.T) {
+	for reason, want := range map[string]string{"user_control": "paused", "target_focus_changed": "paused", "input_monitor_unavailable": "paused", "secret_input": "private_input", "foreground_permission": "access", "app_permission": "inspection"} {
+		if got := computerAssistanceKind(InteractionSafetyDecision{ReasonCodes: []string{reason}}); got != want {
+			t.Fatalf("%s: %s != %s", reason, got, want)
+		}
+	}
+}
+
+func TestComputerProtocolFailureIsNotArgumentValidation(t *testing.T) {
+	payload := map[string]any{"diagnostic": map[string]any{"phase": "protocol", "method": "Page.captureScreenshot", "code": float64(-32000)}}
+	if computerActivityFailurePhase(payload) == "validation" {
+		t.Fatal("protocol failure attributed to model arguments")
+	}
+	rows := computerActivityResultRows("computer.screenshot", payload)
+	encoded, _ := json.Marshal(rows)
+	if !strings.Contains(string(encoded), "-32000") || !strings.Contains(string(encoded), "Page.captureScreenshot") {
+		t.Fatal("visible diagnostic dropped protocol facts")
+	}
+	for _, reason := range []string{"target_focus_changed", "input_monitor_unavailable"} {
+		err := &targetToolPolicyError{code: "interaction_takeover_required", safety: &InteractionSafetyDecision{ReasonCodes: []string{reason}}}
+		if strings.Contains(err.Error(), "user takeover") {
+			t.Fatal("technical stop attributed to user intent")
+		}
 	}
 }

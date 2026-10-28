@@ -1498,7 +1498,7 @@
       "untrustedTitle": "Confira as instruções inesperadas",
       "untrustedHint": "A página contém instruções direcionadas ao agente. Abra a página e saia desse conteúdo ou feche-o antes de continuar.",
       "pausedTitle": "Ações pausadas",
-      "pausedHint": "Conclua suas alterações na página ou no aplicativo e escolha “Continuar verificação”. O Flower verificará o estado atual antes de agir.",
+      "pausedHint": "Confira a página ou o aplicativo e suas permissões, depois escolha “Continuar verificação”. O Flower verificará o estado atual antes de agir.",
       "automatic": "O Flower escolhe páginas para sua tarefa",
       "automaticHint": "Descreva o que precisa na conversa. A escolha manual de páginas é opcional.",
       "switchTarget": "Escolher página ou aplicativo manualmente",

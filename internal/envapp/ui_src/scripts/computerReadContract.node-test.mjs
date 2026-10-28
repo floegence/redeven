@@ -60,3 +60,15 @@ test('the read boundary never retries a mutating action', async () => {
   assert.equal((await f.run('click')).error, 'TARGET_ACTION_FAILED');
   assert.equal(f.facts().calls, 1);
 });
+
+
+test('protocol facts survive observation failure without exception contents or retry', async () => {
+  const f = fixture(() => { throw Object.assign(new Error('private exception text'), {
+    protocolDiagnostic: {phase:'protocol',method:'Accessibility.getFullAXTree',code:-32000},
+  }); });
+  const result = await f.run('read');
+  assert.deepEqual(result.result.diagnostic, {phase:'protocol',method:'Accessibility.getFullAXTree',code:-32000});
+  assert.equal(result.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+  assert.equal(f.facts().calls, 1);
+  assert.equal(JSON.stringify(result).includes('private exception'), false);
+});

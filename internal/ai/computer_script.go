@@ -194,6 +194,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var lastObservation any
 	var observationScope string
 	var argumentDiagnostic map[string]any
+	var failedInputProgress map[string]any
 	var ambiguousDownloads []any
 	var lastFrameGeometry any
 	var fullObservation bool
@@ -241,6 +242,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if argumentDiagnostic != nil {
 				payload["diagnostic"] = argumentDiagnostic
+			}
+			if len(failedInputProgress) > 0 {
+				payload["input_progress"] = failedInputProgress
 			}
 			if lastFrameGeometry != nil && pause == nil && targetChange == nil && !observationInvalidated && observationFailureStage == "" {
 				payload["frame_geometry"] = lastFrameGeometry
@@ -323,6 +327,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					observed, err = r.executeComputerToolLocked(ctx, inner, control)
 					release()
 				}
+				if err != nil || takeoverResult(observed, err) {
+					facts, _ := observed.Result.(map[string]any)
+					failedInputProgress = computerInputProgress(facts["input_progress"])
+				}
 				if errors.Is(err, errComputerEffectUnknown) {
 					if takeoverResult(observed, err) {
 						safety := computerPauseSafety(observed, err)
@@ -333,7 +341,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					facts, _ := observed.Result.(map[string]any)
 					result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
 					payload := result.Result.(map[string]any)
-					for _, key := range []string{"input_progress", "stage", "reason", "target_state", "observation"} {
+					for _, key := range []string{"stage", "reason", "target_state", "observation"} {
 						if value, found := facts[key]; found {
 							payload[key] = value
 						}

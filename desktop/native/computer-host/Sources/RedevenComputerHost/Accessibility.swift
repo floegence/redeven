@@ -58,7 +58,10 @@ final class NativeWindow {
     var observer: AXObserver?
     var revision = 0
     var references: [String: Reference] = [:]
-    var userInControl = false
+    private(set) var pauseReasons: Set<String> = []
+    var isPaused: Bool { !pauseReasons.isEmpty }
+    func pause(_ reasons: Set<String>) { pauseReasons.formUnion(reasons); invalidate() }
+    func resumeObservation() { pauseReasons.removeAll(); invalidate() }
     var changed = false
 
     init(app: NSRunningApplication, application: AXUIElement, element: AXUIElement, windowID: CGWindowID, identity: String? = nil) {
@@ -130,7 +133,7 @@ final class NativeWindow {
         try validate()
         var reasons: Set<String> = []
         if !privateInput {
-            if userInControl { reasons.insert("user_control") }
+            reasons.formUnion(pauseReasons)
             if !fullAccess && !allowedApps.contains(app.bundleIdentifier ?? "") { reasons.insert("app_permission") }
             // Inspect roles before reading any values. Secure fields never
             // contribute their labels, values or pixels to model observations.
@@ -285,7 +288,7 @@ final class NativeWindow {
     }
 
     func action(_ args: [String: Any], willMutate: () throws -> Void = {}) throws -> [String: Any] {
-        guard !userInControl else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Return control before continuing.") }
+        guard !isPaused else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Return control before continuing.") }
         let selector = args["selector"] as? [String: Any] ?? [:]
         let action = args["action"] as? String ?? ""
         if action == "wait" { return try wait(selector, args) }
@@ -324,7 +327,7 @@ final class NativeWindow {
         let deadline = Date().addingTimeInterval(Double(timeout) / 1000)
         while true {
             try execution.check()
-            guard !userInControl else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "User input paused automation.") }
+            guard !isPaused else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused.") }
             changed = false
             var found = false, enabled = false
             do { let node = try resolve(selector); found = true; enabled = (axValue(node, kAXEnabledAttribute) as? NSNumber)?.boolValue == true }

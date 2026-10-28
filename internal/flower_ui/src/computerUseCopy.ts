@@ -246,7 +246,7 @@ export const computerUseEnUS = {
   untrustedTitle: 'Review unexpected page instructions',
   untrustedHint: 'The page contains instructions aimed at the agent. Open the page and leave or dismiss that content before continuing.',
   pausedTitle: 'Actions are paused',
-  pausedHint: 'Finish your changes on the page or application, then choose Continue check. Flower will inspect the current state before acting again.',
+  pausedHint: 'Check the page or application and its permissions, then choose Continue check. Flower will inspect the current state before acting again.',
 };
 export type FlowerComputerCopy = { readonly [Key in keyof typeof computerUseEnUS]: string };
 export function localizedComputerCopy(t: (key: string) => string): FlowerComputerCopy {

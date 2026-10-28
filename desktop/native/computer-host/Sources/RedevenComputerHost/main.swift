@@ -99,13 +99,13 @@ func handle(_ line: String) {
         requestAllowedApps = allowedApps; requestFullAccess = fullAccess
         if returning {
             guard ["computer.observe", "computer.screenshot"].contains(tool) else { throw NativeInput.invalid("Recovery requires a fresh observation.") }
-            selected.userInControl = false; selected.invalidate()
+            selected.resumeObservation()
         }
         if privateInput {
             guard ["computer.screenshot", "computer.click", "computer.key", "computer.type", "computer.scroll"].contains(tool) else { throw NativeInput.invalid("Unsupported private input.") }
         }
         func pause(_ safety: [String: Any]) {
-            selected.userInControl = true; selected.invalidate()
+            selected.pause(Set(safety["reason_codes"] as? [String] ?? []))
             emit(["type": "result", "request_id": id, "target_id": target, "safety": safety,
                   "payload": ["code": "TAKEOVER_REQUIRED", "action_executed": inputConfirmed && effectStarted, "input_progress": foreground.inputProgress]])
         }
@@ -176,7 +176,7 @@ func handle(_ line: String) {
             let milliseconds = try number("milliseconds", default: 0)
             guard (0...30000).contains(milliseconds) else { throw NativeInput.invalid("Wait exceeds its limit.") }
             let until = Date().addingTimeInterval(milliseconds / 1000)
-            while Date() < until && !selected.userInControl { try execution.check(); CFRunLoopRunInMode(.defaultMode, until.timeIntervalSinceNow, true) }
+            while Date() < until && !selected.isPaused { try execution.check(); CFRunLoopRunInMode(.defaultMode, until.timeIntervalSinceNow, true) }
         case "computer.click", "computer.double_click": input = NativeInputSequence(events: try NativeInput.click(at: point("x", "y"), count: tool == "computer.double_click" ? 2 : 1))
         case "computer.drag": input = try NativeInput.dragSequence(from: point("from_x", "from_y"), to: point("to_x", "to_y"), durationMilliseconds: nativeDragDuration(number("duration_ms", default: 0)))
         case "computer.type": input = NativeInputSequence(events: try NativeInput.text(text("text")))
@@ -203,7 +203,7 @@ func handle(_ line: String) {
         effectStarted = effectStarted || payload["action_executed"] as? Bool == true
         try execution.check()
         if privateInput {
-            selected.userInControl = true
+            selected.pause(["user_control"])
             let privatePayload: [String: Any] = tool == "computer.screenshot" ? try screenshot(selected) : ["acknowledged": true]
             emit(["type": "result", "request_id": id, "target_id": target,
                   "payload": privatePayload])
@@ -234,9 +234,9 @@ func handle(_ line: String) {
         let receiptFailure = error as? NativeInputDeliveryFailure
         let failure = error as? HostFailure ?? HostFailure(code: receiptFailure == nil ? "INVALID_REQUEST" : "INPUT_UNCONFIRMED", message: receiptFailure == nil ? "Unable to process the computer host request." : "macOS input delivery was not confirmed.")
         if ["TAKEOVER_REQUIRED", "FOREGROUND_PERMISSION_REQUIRED"].contains(failure.code) {
-            window?.userInControl = true; window?.invalidate()
+            if failure.code == "FOREGROUND_PERMISSION_REQUIRED" { window?.pause(["foreground_permission"]) }
             envelope["type"] = "result"
-            envelope["safety"] = ["level": "takeover", "reason_codes": [failure.code == "FOREGROUND_PERMISSION_REQUIRED" ? "foreground_permission" : "user_control"], "safe_to_capture": false, "safe_to_send_to_model": false]
+            envelope["safety"] = ["level": "takeover", "reason_codes": window?.pauseReasons.sorted() ?? [], "safe_to_capture": false, "safe_to_send_to_model": false]
             envelope["payload"] = ["code": "TAKEOVER_REQUIRED", "action_executed": inputConfirmed && effectStarted, "input_progress": foreground.inputProgress]
         } else if nativeFailureCode(failure.code, observing: observing, effectStarted: effectStarted, inputConfirmed: inputConfirmed) == "TARGET_OBSERVATION_UNAVAILABLE" {
             envelope["error_code"] = "TARGET_OBSERVATION_UNAVAILABLE"
@@ -250,12 +250,12 @@ func handle(_ line: String) {
                 "reason": receiptFailure?.reason.rawValue ?? nativeFailureReason(failure.code)]
             // Recovery is one bounded, same-target semantic read. Recheck safety
             // after reading, so takeover/cancellation never releases captured text.
-            if uncertain && !privateRequest && (try? execution.check()) != nil, let window, !window.userInControl {
+            if uncertain && !privateRequest && (try? execution.check()) != nil, let window, !window.isPaused {
                 facts["target_state"] = "unknown"
                 let deadline = ProcessInfo.processInfo.systemUptime + 1
                 let check = {
                     try execution.check()
-                    guard !window.userInControl, ProcessInfo.processInfo.systemUptime < deadline else {
+                    guard !window.isPaused, ProcessInfo.processInfo.systemUptime < deadline else {
                         throw NativeInput.unavailable()
                     }
                 }

@@ -41,6 +41,14 @@ discard content. Batch known steps across pages within the runtime budget; retur
 screenshots for model judgment when the next action depends on pixels. Argument
 diagnostics identify the method when known, field, expected form and fixed repair
 examples; raw errors remain private.
+Observation diagnostics retain a validated CDP method and signed integer protocol
+code when the connected-browser source supplies them. They reuse the existing
+diagnostic field and invocation trace; raw exceptions never become model content.
+Missing codes remain unknown, and no diagnostic authorizes retry or input replay.
+
+Only snapshot/observe and locator.snapshot accept emit. Collection reads return
+data for explicit logging; screenshots and help always emit.
+
 Known unsupported option names are returned exactly; arbitrary keys and values
 are never echoed. locator.snapshot still accepts only limit and emit.
 
@@ -129,6 +137,9 @@ not the presence of a title. A title alone never establishes freshness.
 The Runtime revalidates target policy, grants, cancellation and current control before each host operation. The target remains owned by the same canonical turn across the batch; independent live sampling may run between operations.
 
 No second history or recovery ledger exists.
+Paused and uncertain operations retain their sanitized input_progress receipt
+through both script and assistance results. Posted/observed event counts describe
+the interrupted operation, not a completed action or evidence to replay it.
 
 # Evidence
 

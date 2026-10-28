@@ -58,7 +58,7 @@ export class BrowserComputerController {
           if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
           continue;
         }
-        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage });
+        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage, protocolDiagnostic: error.protocolDiagnostic });
       }
     }
   }
@@ -200,7 +200,7 @@ export class BrowserComputerController {
         result: { action_executed: dispatched(), needs_observation: true, observation_stage: 'semantic_read' } };
       if (error.message === 'TARGET_OBSERVATION_UNAVAILABLE') return {
         error: 'TARGET_OBSERVATION_UNAVAILABLE',
-        result: { action_executed: dispatched(), needs_observation: true, observation_stage: error.observationStage, ...(error.observationReason === 'viewport_unstable' ? {reason:'viewport_unstable'} : {}) },
+        result: { action_executed: dispatched(), needs_observation: true, observation_stage: error.observationStage, ...(error.protocolDiagnostic ? {diagnostic:error.protocolDiagnostic} : {}), ...(error.observationReason === 'viewport_unstable' ? {reason:'viewport_unstable'} : {}) },
       };
       if (page.openedPages.length) return await this.targetChange(dispatched());
       if (error.message === 'OBSERVATION_INVALIDATED') return {

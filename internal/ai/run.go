@@ -3279,7 +3279,7 @@ func (e *targetToolPolicyError) Error() string {
 	case "target_action_failed":
 		return "The computer action failed."
 	case "interaction_takeover_required":
-		return "user takeover is required before this interaction"
+		return "computer interaction is paused; inspect the reported safety reasons before continuing"
 	default:
 		return "target tool policy denied the tool call"
 	}

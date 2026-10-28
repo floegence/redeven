@@ -7,11 +7,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
-import { once, EventEmitter } from 'node:events';
+import { once } from 'node:events';
+import net from 'node:net';
+import { ExtensionTransport } from './computerExtensionTransport.mjs';
 import { BrowserProjection } from '@floegence/floebrowser';
 import { createExtensionBrowserSource } from './computerBrowserSource.mjs';
 import { spawn } from 'node:child_process';
 import { stageBrowserExtension } from '../../../../scripts/stage_browser_extension.mjs';
+
+function framed(value) {
+  const body=Buffer.from(JSON.stringify(value)); const header=Buffer.alloc(4); header.writeUInt32LE(body.length);
+  return Buffer.concat([header,body]);
+}
 
 // Native framing and Runtime authorization have independent Go coverage. This
 // fixture substitutes only the native port and uses real extension/debugger
@@ -135,7 +142,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         if (response.sequence) fixtureDeliver({ type: 'cdp_ack', sequence: response.sequence });
         return response;
       }, id);
-      if (response.error) throw new Error(response.error); return response.result;
+      if (response.error) throw Object.assign(new Error(response.error), {protocol_code:response.protocol_code}); return response.result;
     };
     const owners = new Map();
     const transports = new Map();
@@ -151,7 +158,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         for (const message of events) {
           const root = transports.get(message.tab_id);
           if (message.type === 'target_unavailable') root?.close();
-          else if (root?.binding === message.binding) (message.session ? root.children.get(message.session) : root)?.emit(message.method, message.params);
+          else if (root?.binding === message.binding) root.fixturePeer.write(framed(message));
           if (message.sequence && message.binding !== withheldCredits) await worker.evaluate(sequence => fixtureDeliver({ type: 'cdp_ack', sequence }), message.sequence);
         }
       }
@@ -173,23 +180,26 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       const result = await nativeCall(command, args);
       if (command === 'bind') {
         if (owners.has(result.tab_id)) return result;
-        const root = new EventEmitter();
-        root.tabId = result.tab_id; root.binding = result.binding; root.children = new Map();
-        root.send = (method, params, session = '') => nativeCall('cdp', { tab_id: result.tab_id, binding: result.binding, session, method, params });
-        root.child = session => {
-          if (!root.children.has(session)) {
-            const child = new EventEmitter(); child.send = (method, params) => root.send(method, params, session);
-            root.children.set(session, child);
+        const server = net.createServer();
+        server.listen(0, '127.0.0.1'); await once(server, 'listening');
+        const connected = once(server, 'connection');
+        const peer = net.connect(server.address().port, '127.0.0.1');
+        const [socket] = await connected;
+        const root = new ExtensionTransport(socket, result.tab_id);
+        root.binding = result.binding; root.fixturePeer = peer;
+        let buffered = Buffer.alloc(0);
+        peer.on('data', chunk => {
+          buffered = Buffer.concat([buffered,chunk]);
+          while (buffered.length >= 4 && buffered.length >= buffered.readUInt32LE()+4) {
+            const size = buffered.readUInt32LE();
+            const message = JSON.parse(buffered.subarray(4,size+4));
+            buffered = buffered.subarray(size+4);
+            if (message.ack) continue;
+            void nativeCall('cdp', {tab_id:result.tab_id,binding:result.binding,session:message.session,method:message.method,params:message.params})
+              .then(value => peer.write(framed({id:message.id,result:value})), error => peer.write(framed({id:message.id,error:error.message,protocol_code:error.protocol_code})));
           }
-          return root.children.get(session);
-        };
-        root.removeChild = session => root.children.delete(session);
-        root.close = () => {
-          if (root.closed) return;
-          root.closed = true; root.emit('close');
-          for (const child of root.children.values()) child.emit('close');
-          root.children.clear(); transports.delete(result.tab_id);
-        };
+        });
+        root.on('close', () => {peer.destroy();server.close();transports.delete(result.tab_id);});
         transports.set(result.tab_id, root);
         owners.set(result.tab_id, await createExtensionBrowserSource(root, 'extension-' + result.tab_id));
       }
@@ -245,7 +255,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       await worker.evaluate(() => {
         globalThis.fixtureSendCommand = chrome.debugger.sendCommand.bind(chrome.debugger);
         chrome.debugger.sendCommand = async (target, method, args) => {
-          if (method === 'DOMSnapshot.captureSnapshot') throw new Error('private inspection failure');
+          if (method === 'DOMSnapshot.captureSnapshot') throw new Error(JSON.stringify({code:-32000,message:'private inspection failure'}));
           return globalThis.fixtureSendCommand(target, method, args);
         };
       });
@@ -254,6 +264,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         assert.equal(failed.error, 'TARGET_OBSERVATION_UNAVAILABLE');
         assert.equal(failed.result.action_executed, false);
         assert.equal(failed.result.observation_stage, 'safety_scan');
+        assert.deepEqual(failed.result.diagnostic, {phase:'protocol',method:'DOMSnapshot.captureSnapshot',code:-32000});
         assert.equal(failed.screenshot, undefined);
         assert.equal(failed.safety, undefined);
         assert.equal(JSON.stringify(failed).includes('private inspection failure'), false);

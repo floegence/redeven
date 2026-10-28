@@ -22,8 +22,7 @@ final class NativeForegroundInput {
             let guardState = Unmanaged<NativeForegroundInput>.fromOpaque(pointer).takeUnretainedValue()
             if event.getIntegerValueField(.eventSourceUnixProcessID) != Int64(getpid()) { guardState.inputCount += 1 }
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                guardState.target?.userInControl = true
-                guardState.target?.invalidate()
+                guardState.target?.pause(["input_monitor_unavailable"])
                 return Unmanaged.passUnretained(event)
             }
             return Unmanaged.passUnretained(event)
@@ -57,7 +56,7 @@ final class NativeForegroundInput {
         guard available && delivery.available else { throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow input monitoring before foreground control.") }
         guard allowed || privateInput else { throw HostFailure(code: "FOREGROUND_PERMISSION_REQUIRED", message: "Allow temporary foreground use for this task.") }
         try window.validate()
-        guard !window.userInControl || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
+        guard !window.isPaused || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
         let original = NSWorkspace.shared.frontmostApplication
         let originalWindow = original.flatMap { axValue(AXUIElementCreateApplication($0.processIdentifier), kAXFocusedWindowAttribute) }
         let originalPointer = CGEvent(source: nil)?.location
@@ -72,7 +71,7 @@ final class NativeForegroundInput {
             }
             // Focus restoration is conditional. Never override an intervening
             // user action or a window that disappeared during the operation.
-            if inputCount == initialInputCount && !window.userInControl && !privateInput,
+            if inputCount == initialInputCount && !window.isPaused && !privateInput,
                NSWorkspace.shared.frontmostApplication?.processIdentifier == window.app.processIdentifier,
                let original, !original.isTerminated,
                let originalWindow, CFGetTypeID(originalWindow) == AXUIElementGetTypeID() {
@@ -92,37 +91,37 @@ final class NativeForegroundInput {
         let activationDeadline = Date().addingTimeInterval(2)
         let activation = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in CFRunLoopWakeUp(CFRunLoopGetMain()) }
         defer { NSWorkspace.shared.notificationCenter.removeObserver(activation) }
-        while NSWorkspace.shared.frontmostApplication?.processIdentifier != window.app.processIdentifier && Date() < activationDeadline && !window.userInControl {
+        while NSWorkspace.shared.frontmostApplication?.processIdentifier != window.app.processIdentifier && Date() < activationDeadline && !window.isPaused {
             try execution.check()
             CFRunLoopRunInMode(.defaultMode, activationDeadline.timeIntervalSinceNow, true)
         }
         }
         try execution.check()
         CFRunLoopRunInMode(.defaultMode, 0, true)
-        guard (!window.userInControl || privateInput) else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
+        guard (!window.isPaused || privateInput) else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
         try execution.check()
         try prepare()
         try sequence.deliver(check: {
             try execution.check()
-            guard !window.userInControl || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "The user took control.") }
+            guard !window.isPaused || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused.") }
         }, post: { event in
             // Drain queued input notifications before every injection.
             CFRunLoopRunInMode(.defaultMode, 0, true)
             try execution.check()
-            guard (!window.userInControl || privateInput) else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
+            guard (!window.isPaused || privateInput) else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
             try window.validate()
             guard NSWorkspace.shared.frontmostApplication?.processIdentifier == window.app.processIdentifier else {
-                window.userInControl = true; window.invalidate()
-                throw HostFailure(code: "TAKEOVER_REQUIRED", message: "The user changed the active application.")
+                window.pause(["target_focus_changed"])
+                throw HostFailure(code: "TAKEOVER_REQUIRED", message: "The target application is no longer foreground.")
             }
             guard let focused = axValue(window.application, kAXFocusedWindowAttribute), CFGetTypeID(focused) == AXUIElementGetTypeID(), CFEqual(focused, window.element) else {
-                window.userInControl = true; window.invalidate()
+                window.pause(["target_focus_changed"])
                 throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Select the active application window before continuing.")
             }
             inputProgress["stage"] = "input_delivery"
             try delivery.post(event, check: {
                 try execution.check()
-                guard !window.userInControl || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "The user took control.") }
+                guard !window.isPaused || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused.") }
             }, didPost: {
                 self.pending.posted(event)
                 didPost()

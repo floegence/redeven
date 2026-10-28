@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -393,5 +394,94 @@ func TestComputerNativeDragQualification(t *testing.T) {
 			}
 			t.Logf("actual AppKit hold %.2f ms; system event hold %.2f ms; events %d", held, eventHeld, len(events))
 		})
+	}
+}
+
+// The app changes focus itself. The helper must stop without attributing intent
+// to the user, release held input, and retain the pause until explicit recovery.
+func TestComputerNativeFocusChangeQualification(t *testing.T) {
+	if runtime.GOOS != "darwin" || os.Getenv("REDEVEN_COMPUTER_NATIVE_E2E") != "1" {
+		t.Skip("explicit native fixture required")
+	}
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, read := prepareComputerEntryFixture(t, "focus_change")
+	host, _, _, _ := computerBindingFixture(t)
+	helper := filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host")
+	if override := os.Getenv("REDEVEN_COMPUTER_NATIVE_TEST_HOST"); override != "" {
+		if !filepath.IsAbs(override) {
+			t.Fatal("absolute qualification helper required")
+		}
+		helper = override
+	}
+	native := NewNativeDesktopTargetExecutor(helper)
+	host.executors["desktop-main"] = native
+	t.Cleanup(func() { _ = native.Close() })
+	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolName: "computer.targets"}
+	call.Arguments, _ = json.Marshal(map[string]any{"application": name})
+	ctx := computerPermissionContext(t, "full_access")
+	inventory, err := host.ComputerTargets(ctx, call, ToolTargetPolicy{})
+	if err != nil || len(inventory.Candidates) != 1 {
+		t.Fatalf("discovery: %+v %v", inventory, err)
+	}
+	call.ToolName = "computer.select_target"
+	target, err := host.SelectComputerCandidate(ctx, call, inventory.Candidates[0].CandidateRef, ToolTargetPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call.TargetID, call.ToolName, call.fullAccess, call.allowForeground, call.scriptOperation = target.ID, "computer.drag", true, true, true
+	call.Arguments, _ = json.Marshal(map[string]any{"from_x": 50, "from_y": 100, "to_x": 300, "to_y": 150, "duration_ms": 5000})
+	result, err := native.ExecuteTargetTool(ctx, call)
+	if result.Safety == nil || !slices.Contains(result.Safety.ReasonCodes, "target_focus_changed") || slices.Contains(result.Safety.ReasonCodes, "user_control") {
+		t.Fatalf("programmatic focus change misattributed: %+v %v", result, err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	var events []any
+	for time.Now().Before(deadline) {
+		events, _ = read()["drag_events"].([]any)
+		if len(events) > 0 && events[len(events)-1].(map[string]any)["type"] == "up" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	downs, ups := 0, 0
+	for _, item := range events {
+		event := item.(map[string]any)
+		if event["type"] == "down" {
+			downs++
+		}
+		if event["type"] == "up" {
+			ups++
+			if event["x"].(float64) >= 300 {
+				t.Fatal("input continued to final endpoint")
+			}
+		}
+	}
+	if downs != 1 || ups != 1 {
+		t.Fatalf("unbalanced stopped input: %+v", events)
+	}
+	call.ToolName, call.Arguments = "computer.observe", json.RawMessage("{}")
+	blocked, err := native.ExecuteTargetTool(ctx, call)
+	if err != nil || blocked.Safety == nil || !slices.Contains(blocked.Safety.ReasonCodes, "target_focus_changed") {
+		t.Fatalf("pause did not survive next observation: %+v %v", blocked, err)
+	}
+	call.recoveryObservation = true
+	fresh, err := native.ExecuteTargetTool(ctx, call)
+	if err != nil || fresh.Safety == nil || fresh.Safety.Level != "routine" {
+		t.Fatalf("explicit fresh observation did not recover: %+v %v", fresh, err)
+	}
+	if len(events) != len(read()["drag_events"].([]any)) {
+		t.Fatal("recovery replayed input")
+	}
+	if output := os.Getenv("REDEVEN_COMPUTER_EVIDENCE_DIR"); filepath.IsAbs(output) {
+		if err := os.MkdirAll(output, 0700); err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.MarshalIndent(map[string]any{"safety": result.Safety, "payload": result.Result, "events": events, "recovery_safety": fresh.Safety}, "", "  ")
+		if err := os.WriteFile(filepath.Join(output, "native-focus-change.json"), body, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

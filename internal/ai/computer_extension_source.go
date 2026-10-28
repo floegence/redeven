@@ -165,7 +165,11 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 		go func() {
 			defer func() { <-pipe.slots }()
 			started := time.Now()
-			fields := []any{"stage", "cdp_method", "target_id", pipe.target, "binding", pipe.binding, "request", pipe.request, "command", message.ID, "method", message.Method, "child_frame", message.Session != ""}
+			method := message.Method
+			if !computerProtocolMethod.MatchString(method) {
+				method = "unknown"
+			}
+			fields := []any{"stage", "cdp_method", "target_id", pipe.target, "binding", pipe.binding, "request", pipe.request, "command", message.ID, "method", method, "child_frame", message.Session != ""}
 			slog.Debug("browser source trace", append(fields, "phase", "started")...)
 			result, err := pipe.client.call(pipe.ctx, "cdp", map[string]any{"binding": pipe.binding, "tab_id": pipe.tab, "session": message.Session, "method": message.Method, "params": message.Params})
 			var reply map[string]any
@@ -175,6 +179,12 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 			outcome := "completed"
 			if err != nil || reply["error"] != nil {
 				outcome = "failed"
+				if code, ok := reply["protocol_code"].(float64); ok {
+					if diagnostic := computerOperationDiagnostic(map[string]any{"phase": "protocol", "method": message.Method, "code": code}); diagnostic != nil {
+						fields = append(fields, "protocol_code", diagnostic["code"])
+					}
+				}
+				slog.Warn("browser source command failed", fields...)
 			}
 			slog.Debug("browser source trace", append(fields, "phase", outcome, "duration_ms", time.Since(started).Milliseconds())...)
 			if reply == nil {

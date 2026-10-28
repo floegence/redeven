@@ -1498,7 +1498,7 @@
       "untrustedTitle": "Revisa las instrucciones inesperadas",
       "untrustedHint": "La página contiene instrucciones dirigidas al agente. Ábrela y sal de ese contenido o ciérralo antes de continuar.",
       "pausedTitle": "Acciones en pausa",
-      "pausedHint": "Termina tus cambios en la página o aplicación y elige «Continuar comprobación». Flower revisará el estado actual antes de actuar.",
+      "pausedHint": "Revisa la página o aplicación y sus permisos, y elige «Continuar comprobación». Flower comprobará el estado actual antes de actuar.",
       "automatic": "Flower elige páginas para tu tarea",
       "automaticHint": "Describe lo que necesitas en el chat. Elegir una página manualmente es opcional.",
       "switchTarget": "Elegir página o aplicación manualmente",

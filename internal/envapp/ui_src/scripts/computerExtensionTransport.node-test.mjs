@@ -96,3 +96,19 @@ test('Runtime EOF retires an upgraded half-open source socket immediately', asyn
   assert.equal(transport.closed, true);
   assert.equal(transport.pending.size, 0);
 });
+
+
+test('protocol numeric rejection stays correlated with its submitted method', async t => {
+  const { peer, transport, incoming } = await fixture(t);
+  const response = transport.send('Page.captureScreenshot');
+  const rejected = assert.rejects(response, error => {
+    assert.deepEqual(error.protocolDiagnostic, {phase:'protocol',method:'Page.captureScreenshot',code:-32000});
+    assert.equal(error.message, 'BROWSER_EXTENSION_COMMAND_FAILED');
+    assert.equal(JSON.stringify(error).includes('secret'), false);
+    return true;
+  });
+  const {value: request} = await incoming.next();
+  peer.write(frame({id:request.id,error:'EXTENSION_COMMAND_FAILED',protocol_code:-32000,message:'secret'}));
+  await rejected;
+  assert.equal(transport.closed,false);
+});

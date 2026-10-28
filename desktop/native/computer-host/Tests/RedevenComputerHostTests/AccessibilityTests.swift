@@ -1,8 +1,29 @@
 import XCTest
 import ApplicationServices
+import AppKit
 @testable import RedevenComputerHost
 
 final class AccessibilityTests: XCTestCase {
+    func testPausePreservesObservedReasonsWithoutInventingUserIntent() {
+        let app = NSRunningApplication.current
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        let window = NativeWindow(app: app, application: element, element: element, windowID: 42)
+        for reason in ["target_focus_changed", "input_monitor_unavailable", "secret_input", "foreground_permission", "user_control"] {
+            let revision = window.revision
+            window.pause([reason])
+            XCTAssertTrue(window.isPaused)
+            XCTAssertEqual(window.pauseReasons, [reason])
+            XCTAssertGreaterThan(window.revision, revision)
+            window.resumeObservation()
+            XCTAssertFalse(window.isPaused)
+            XCTAssertTrue(window.pauseReasons.isEmpty)
+        }
+        window.pause(["target_focus_changed"])
+        window.pause(["input_monitor_unavailable"])
+        XCTAssertEqual(window.pauseReasons, ["target_focus_changed", "input_monitor_unavailable"])
+        XCTAssertFalse(window.pauseReasons.contains("user_control"))
+    }
+
     func testUnavailableChildReadDoesNotBecomeAnEmptyLeaf() {
         XCTAssertThrowsError(try axChildren(AXUIElementCreateApplication(-1))) { error in
             XCTAssertEqual((error as? HostFailure)?.code, "TARGET_OBSERVATION_UNAVAILABLE")

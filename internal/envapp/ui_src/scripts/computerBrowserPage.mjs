@@ -297,7 +297,7 @@ export class BrowserComputerPage {
     const reasons = new Set();
     const checkedSessions = new Set();
     let requiredOrigin = this.requiredOrigin;
-    let scanFailed = false;
+    let scanFailure;
     if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (requiredOrigin) reasons.add('site_permission');
     if (this.stopped) reasons.add('user_control');
@@ -317,7 +317,7 @@ export class BrowserComputerPage {
           if (new URL(url).origin === 'null') { this.requiredURL = redactedNavigationURL(url); throw new Error('TARGET_PERMISSION_REQUIRED'); }
           reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin;
         } }
-        catch (error) { if (error.message === 'TARGET_PERMISSION_REQUIRED') throw error; scanFailed = true; }
+        catch (error) { if (error.message === 'TARGET_PERMISSION_REQUIRED') throw error; scanFailure ||= error; }
       }
       try {
         if (!checkedSessions.has(frame.session)) {
@@ -332,7 +332,7 @@ export class BrowserComputerPage {
               const raw = document.nodes.attributes[index] || [];
               const attributes = new Map();
               for (let i = 0; i < raw.length; i += 2) attributes.set(snapshot.strings[raw[i]], snapshot.strings[raw[i + 1]]);
-              if ((attributes.get('type') || '').toLowerCase() === 'password') { reasons.add('login'); reasons.add('secret_input'); }
+              if ((attributes.get('type') || '').toLowerCase() === 'password') { reasons.add('secret_input'); }
               if ((attributes.get('autocomplete') || '').toLowerCase().split(/\s+/u).includes('one-time-code')) { reasons.add('otp'); reasons.add('secret_input'); }
             }
           }
@@ -343,23 +343,23 @@ export class BrowserComputerPage {
           const inputs = roots.flatMap(root => [...root.querySelectorAll('input')]).filter(x => x.getClientRects().length);
           const reasons = [];
           if (globalThis.__flowerPrivacyObserver.secretChanged()) reasons.push('secret_input');
-          if (inputs.some(x => x.type === 'password')) reasons.push('login', 'secret_input');
+          if (inputs.some(x => x.type === 'password')) reasons.push('secret_input');
           if (inputs.some(x => (x.autocomplete || '').split(/\\s+/u).includes('one-time-code'))) reasons.push('otp', 'secret_input');
           return reasons;
         })()`);
         for (const reason of found) reasons.add(reason);
-      } catch {
+      } catch (error) {
         // A destroyed document makes its privacy scan obsolete. The caller
         // must discard all observations; it must not turn navigation into a
         // secret-input handoff or retry the action that already completed.
-        scanFailed = true;
+        scanFailure ||= error;
       }
     }
     if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (this.requiredOrigin) { reasons.add('site_permission'); requiredOrigin = this.requiredOrigin; }
     if (this.stopped) reasons.add('user_control');
     if (!reasons.size && revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
-    if (!reasons.size && scanFailed) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+    if (!reasons.size && scanFailure) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), {protocolDiagnostic:scanFailure.protocolDiagnostic});
     return { level: reasons.size ? 'takeover' : 'routine', reason_codes: [...reasons], safe_to_capture: !reasons.size, safe_to_send_to_model: !reasons.size, ...(requiredOrigin ? { required_origin: requiredOrigin } : {}) };
   }
 
