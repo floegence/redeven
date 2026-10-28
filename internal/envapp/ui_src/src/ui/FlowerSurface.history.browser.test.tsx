@@ -144,6 +144,33 @@ describe('bounded Flower history', () => {
     } finally { observer.disconnect(); held.resolve(); last.resolve(); }
   });
 
+  it('waits for canonical source handoff without appending bytes at the retired live offset', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const text = 'Preview text confirmed source.';
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => {
+      if (input.run_id) { await pending; return { ...input, thread_id: 'history', bytes: 0, text: '', source_changed: true }; }
+      return { ...input, thread_id: 'history', bytes: text.length, text: text.slice(input.offset_bytes) };
+    });
+    const { root, push, history, body } = await mount(false, false, { live: true, text, loadHistoryBody: incremental });
+    await waitFor(() => incremental.mock.calls.length === 1);
+    release();
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(root.querySelector('.flower-history-body-control button')).toBeNull();
+    expect(root.textContent).toContain('Preview text');
+    const canonical = { ...fixture('latest', true), canonical_ordinal: 4, body: { field: 'content', source_id: 'latest', bytes: text.length, preview_bytes: 12 } };
+    const readingRevision = history.mock.calls.at(-1)![1].reading_revision;
+    push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision,
+      update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8,
+        facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+        items: [{ kind: 'replace', item_id: 'latest', item: canonical }] } });
+    await waitFor(() => root.textContent?.includes(text) === true);
+    expect(incremental.mock.calls.at(-1)![1]).toMatchObject({ offset_bytes: 12, source_id: 'latest' });
+    expect(incremental.mock.calls.at(-1)![1].run_id).toBeUndefined();
+    expect(body).not.toHaveBeenCalled();
+    expect(root.querySelector('.flower-history-body-control button')).toBeNull();
+  });
+
   it('reveals newly visited historical Markdown once, fully formatted and without height motion', async () => {
     const prefix = 'Preview text';
     const middle = [' table follows.', '', '| Item | Value |', '| --- | --- |', '| A | 1 |', '', '```ts', 'const ready = true;', ''].join(String.fromCharCode(10));

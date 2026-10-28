@@ -31,6 +31,7 @@ Recent changes only. Concepts own current contracts and evidence; Git retains ol
 - Honor browser drag timing through the shared controller, stop on interruption and release at the last confirmed position. Clarify strict lookups and caught host failures in [script contracts](ai/computer-use-scripts.md); qualify independent pointer telemetry and conditional scripts through [real-provider acceptance](ai/computer-use-qualification.md).
 
 - Align [tool sequences](ui/flower-tool-sequences.md) with prose using preserved tool icons and a fixed trailing group action. Match full/companion status geometry through the [existing viewport owner](ui/flower-activity-interaction.md), keep individual details independent, retain fold-before-prose motion, and qualify narrow/touch layouts, localization and streaming performance.
+- Isolate [live timeline](ui/flower-live-timeline.md) mounted subscriptions and content-boundary invalidation, use linear membership checks, bound active-turn offscreen layout and explicitly wait for canonical body-source handoff. Extend the mandatory [long-thread gate](operations/flower-long-thread-gate.md) with focused stability and reading regressions.
 
 - Keep final answers visible through [automatic folding](ui/flower-turn-process-disclosure.md): follow the real content edge, remove obsolete offset retention, animate existing-answer settlement, and exclude temporary reading room from return-to-latest distance. Browser checks cover frame geometry, narrow layouts, reduced motion and reading ownership.
 

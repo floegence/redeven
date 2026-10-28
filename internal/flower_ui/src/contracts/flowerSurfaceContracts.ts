@@ -945,7 +945,7 @@ export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: 
 
 export type FlowerHistoryWindow = Readonly<{ leaf_id?: string; first_item_id?: string; last_item_id?: string; has_before: boolean; has_after: boolean }>;
 export type FlowerHistoryBodyRequest = Readonly<{ item_id: string; run_id?: string; source_id?: string; entry_id?: string; field: string; through_bytes: number; offset_bytes: number }>;
-export type FlowerHistoryBodyChunk = FlowerHistoryBodyRequest & Readonly<{ thread_id: string; bytes: number; text: string }>;
+export type FlowerHistoryBodyChunk = FlowerHistoryBodyRequest & Readonly<{ thread_id: string; bytes: number; text: string; source_changed?: boolean }>;
 export type FlowerHistoryRequest = Readonly<{ anchor_offset?: number; item_ids?: readonly string[]; anchor_id?: string; direction?: 'before' | 'after' | 'around'; limit?: number; observer_id?: string; reading_revision?: number }>;
 // Field sources freeze decoded UTF-8 independently of subsequent live growth.
 export type FlowerActivityField = Readonly<{

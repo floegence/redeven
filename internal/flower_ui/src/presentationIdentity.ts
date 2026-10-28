@@ -1,3 +1,4 @@
+import { $RAW } from 'solid-js/store';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 
 /** Share equal JSON presentation values without ignoring any received fields. */
@@ -65,4 +66,12 @@ export function retainThreadPresentation<T extends ThreadPresentation>(previous:
   }
   return Object.keys(previous).length === keys.length && keys.every((key) => Object.hasOwn(previous, key) && Object.is(previous[key], aligned[key]))
     ? previous : aligned;
+}
+
+/** Read immutable structural facts without allocating per-property store subscriptions.
+ * Callers must track the owning replaced collection and any in-place mutable fields.
+ * Unlike deep unwrap, this never traverses or mutates ordinary contract objects.
+ */
+export function readPresentationValue<T extends object>(value: T): T {
+  return (value as T & { [$RAW]?: T })[$RAW] ?? value;
 }

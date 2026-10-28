@@ -1,18 +1,33 @@
 import '../index.css';
 import './flower-feature.css';
 import { page, userEvent } from 'vitest/browser';
-import { expect, it, onTestFinished, vi } from 'vitest';
+import { beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { createEffect, onCleanup, createSignal, type ComponentProps } from 'solid-js';
 import { render } from 'solid-js/web';
 import { ParentEventRow as ControlledParentEventRow, createParentEventReading } from '../../../../flower_ui/src/parentEvents';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerParentEventPage, FlowerRuntimeCurrentItem } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps as mountSurface, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import type { EnvAppTranslationKey } from './i18n';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
+
+// The product shell constrains the transcript's flex height. Match that
+// contract so reading-space compensation cannot grow an auto-height host.
+function renderSurfaceWithAdapterProps(...args: Parameters<typeof mountSurface>) {
+  const surface = mountSurface(...args);
+  surface.style.height = '800px';
+  return surface;
+}
+
+beforeEach(() => {
+  const layoutErrors: string[] = [];
+  const recordLayoutError = (event: ErrorEvent) => { if (event.message.includes('ResizeObserver')) layoutErrors.push(event.message); };
+  window.addEventListener('error', recordLayoutError);
+  onTestFinished(() => { window.removeEventListener('error', recordLayoutError); expect(layoutErrors).toEqual([]); });
+});
 
 function ParentEventRow(props: Omit<ComponentProps<typeof ControlledParentEventRow>, 'expanded' | 'onExpandedChange'>) {
   const [expanded, setExpanded] = createSignal(false);
@@ -21,6 +36,21 @@ function ParentEventRow(props: Omit<ComponentProps<typeof ControlledParentEventR
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY.subagents!;
 const event = (id: string, kind: FlowerParentEvent['kind'] = 'report'): FlowerParentEvent => ({ id, parent_thread_id: 'parent', source_thread_id: 'child', source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-' + id, kind, received_at: '2026-10-16T00:00:00Z', admitted: false });
+
+it('keeps empty receipt coverage stable through live source updates', () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const [source, setSource] = createSignal<FlowerParentEventPage>({ thread_id: 'parent', leaf_id: 'leaf-0', events: [] });
+  let coverageRuns = 0; let eventRuns = 0;
+  const dispose = render(() => {
+    const reading = createParentEventReading({ threadID: 'parent', get page() { return source(); } });
+    createEffect(() => { reading.missingIntervals(); coverageRuns++; });
+    createEffect(() => { reading.events(); eventRuns++; });
+    return null;
+  }, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  for (let index = 1; index <= 100; index++) setSource({ ...source(), leaf_id: 'leaf-' + index });
+  expect({ coverageRuns, eventRuns }).toEqual({ coverageRuns: 1, eventRuns: 1 });
+});
 
 it('aligns receipt reads to the displayed canonical interval instead of the default first page', async () => {
   const host = document.createElement('div'); document.body.append(host);

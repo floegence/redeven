@@ -1,4 +1,5 @@
 import { createContext, createMemo, createEffect, createSignal, onCleanup, onMount, useContext, type Accessor } from 'solid-js';
+import { readPresentationValue } from './presentationIdentity';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import { flowerActivityIdentity } from './flowerActivityIdentity';
@@ -48,16 +49,22 @@ export function createFlowerActivityTitleReveal(options: {
     const now = performance.now();
     const next = new Map<string, { deadline: number; entryKey: string }>();
     for (const entry of entries) {
-      if (entry.type !== 'message' || !execution || entry.message.thread_id !== thread?.thread_id
-        || entry.message.turn_id !== execution.turn_id || entry.message.run_id !== execution.run_id) continue;
+      if (entry.type !== 'message' || !execution) continue;
+      const message = readPresentationValue(entry.message);
+      if (message.thread_id !== thread?.thread_id || message.turn_id !== execution.turn_id || message.run_id !== execution.run_id) continue;
       const fresh = !restored && sameThread && wasLive && live && !document.hidden && (thread?.status === 'running' || wasRunning);
-      const add = (key: string) => next.set(key, { entryKey: entry.key, deadline:
-        !options.isVisible(key) ? 0 : sameThread && live && known.has(key) ? known.get(key)!.deadline : fresh ? now + FRESH_WINDOW_MS : 0 });
+      const add = (key: string) => {
+        const deadline = sameThread && live && known.has(key) ? known.get(key)!.deadline : fresh ? now + FRESH_WINDOW_MS : 0;
+        // Expired arrivals never reveal again. Their disclosure state cannot
+        // affect this decision and must not fan out through every old title.
+        next.set(key, { entryKey: entry.key, deadline: deadline > now && options.isVisible(key) ? deadline : 0 });
+      };
       for (const block of entry.blocks) {
         if (block.type === 'content' && block.block_type === 'thinking') add(block.key);
         else if (block.type === 'tool_preview') add(flowerToolCallPreviewIdentity(block.block.call));
-        else if (block.type === 'activity') for (const item of block.block.items) {
-          add(flowerActivityIdentity({ threadID: block.block.thread_id, turnID: block.block.turn_id, runID: block.block.run_id,
+        else if (block.type === 'activity') for (const item of readPresentationValue(block.block).items) {
+          const activity = readPresentationValue(block.block);
+          add(flowerActivityIdentity({ threadID: activity.thread_id, turnID: activity.turn_id, runID: activity.run_id,
             itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }));
         }
       }

@@ -38,7 +38,8 @@ required; unavailable desktop/display prerequisites are failures, not skips.
 ## Correctness
 
 Fast suites protect indexed record stability, ordered live queue semantics,
-retention/reading windows, turn/disclosure identity and incremental Markdown.
+retention/reading windows, turn/disclosure identity, per-block content-boundary invalidation, keyed subscription disposal, local thinking
+updates, structural versus mutable field dependencies, sealed-body handoff and incremental Markdown.
 Browser suites additionally exercise history navigation, reconnect, selection,
 disclosure ownership, input/approval and terminal states. The sustained scenario
 creates 500 real canonical turns through the product Service and the published
@@ -92,8 +93,10 @@ Historical seeding verifies the full canonical result once instead of rescanning
 the complete prefix after each admission; this changes setup cost, not coverage.
 
 Optimization must reduce the synchronous work per envelope: stable per-turn and
-per-row inputs, targeted projection invalidation, and bounded mounted live content
-with reading/selection/focus pins. Preserve canonical order and semantic boundaries,
+per-row inputs, keyed mounted subscriptions, linear membership checks, and bounded
+offscreen layout with reading/selection/focus pins. Layout sections retain their
+DOM and disclosure owners; this is layout containment, not DOM virtualization.
+Skipping offscreen layout must also cover a growing active turn. Preserve canonical order and semantic boundaries,
 full history access, drafts and disclosure state. Throttling, suppressed output,
 a second lifecycle, or shortened fixtures cannot substitute for those invariants.
 Shared floating-window mechanics belong to Floe; product projection belongs here.

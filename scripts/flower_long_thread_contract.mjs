@@ -3,15 +3,18 @@ import assert from 'node:assert/strict';
 // Fixed acceptance policy. The runner exposes no workload/threshold overrides.
 export const workload = Object.freeze({ historyTurns: 500, hz: 80, toolEvery: 60, initialBytes: 32768, warmupSeconds: 120, sampleSeconds: 12 });
 export const fastTests = Object.freeze([
-  'runtimeThreadRecord.test.ts', 'runtimeCurrentView.stability.test.ts', 'flowerLiveFrameQueue.test.ts', 'threadCache.test.ts',
-  'historyWindowRetention.test.ts', 'historyReadingWindow.test.ts', 'flowerTurnDisclosure.test.ts',
-  'flowerTurnPresentation.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
+  'runtimeThreadRecord.test.ts', 'runtimeThreadRecord.client.test.ts', 'runtimeCurrentView.stability.test.ts', 'flowerTimelineProjection.test.ts', 'flowerLiveFrameQueue.test.ts', 'threadCache.test.ts',
+  'historyBodyLoader.test.ts', 'historyWindowRetention.test.ts', 'historyReadingWindow.test.ts', 'flowerTurnDisclosure.test.ts',
+  'flowerTurnPresentation.test.ts', 'flowerToolSequences.test.ts', 'flowerToolSequences.client.test.ts', 'flowerPresentationSubscriptions.client.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
 ]);
 export const browserTests = Object.freeze([
   'FlowerSurface.continuousHistory.browser.test.tsx', 'FlowerSurface.streamingStability.browser.test.tsx',
   'FlowerSurface.reasoningSelection.browser.test.tsx', 'FlowerSurface.disclosureInteraction.browser.test.tsx',
   'FlowerSurface.liveRecovery.browser.test.tsx', 'FlowerSurface.inputResponse.browser.test.tsx',
   'FlowerSurface.decisionSurface.browser.test.tsx', 'FlowerSurface.terminalActivity.browser.test.tsx',
+  'FlowerSurface.history.browser.test.tsx', 'FlowerSurface.threadPresentation.browser.test.tsx',
+  'FlowerSurface.turnProcess.browser.test.tsx', 'FlowerSurface.toolSequences.browser.test.tsx',
+  'FlowerSurface.parentEvents.browser.test.tsx',
 ]);
 export function longThreadAffected(file) {
   return /^(?:internal\/(?:flower_ui|flower_host_ui|envapp|ai|codeapp|agent)\/|desktop\/|go\.(?:mod|sum)$|\.node-version$|\.githooks\/|scripts\/(?:.*flower.*|local_gate.*|check_final_integration.*|check_quick_ci.*|quick_ci_policy.*|ui_package.*|desktop_test_session.*)|\.github\/workflows\/.*flower.*)/u.test(file);

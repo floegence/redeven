@@ -302,7 +302,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           return;
         }
         const message = messages.get(item.id)!;
-        if (item.kind === 'thinking') message.set('blocks', [{ type: 'thinking', content: item.text }]);
+        if (item.kind === 'thinking') message.set('blocks', 0, { content: item.text ?? '' });
         else { message.set('content', item.text); message.appendText(chunk.text); }
         message.set('body_pending', item.body ? { kind: 'text', bytes: body.bytes, retained: true } : undefined);
       });
@@ -460,7 +460,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           if (!message) messages.delete(id);
           else if (previous && bodyOnly.has(id)) previous.set('body_pending', message.body_pending);
           else if (previous && appendOnly.has(id)) {
-            if (read(id)!.item.kind === 'thinking') previous.set('blocks', message.blocks);
+            if (read(id)!.item.kind === 'thinking') previous.set('blocks', 0, { content: read(id)!.item.text ?? '' });
             else {
               previous.set('content', read(id)!.item.text ?? '');
               for (const change of update.items ?? []) if (change.item_id === id && change.kind === 'append') previous.appendText(change.append!.text);

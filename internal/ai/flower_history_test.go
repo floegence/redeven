@@ -105,8 +105,20 @@ func TestFlowerHistoryBodyBoundedAuthorizedResume(t *testing.T) {
 		t.Fatal("canceled read accepted")
 	}
 	runtime.body.RunID = ""
-	if _, err := svc.GetFlowerHistoryBody(t.Context(), meta, thread.ThreadID, input); err == nil {
-		t.Fatal("expired live locator accepted")
+	if chunk, err := svc.GetFlowerHistoryBody(t.Context(), meta, thread.ThreadID, input); err != nil || !chunk.SourceChanged || chunk.Text != "" {
+		t.Fatalf("sealed source must report an explicit handoff without bytes: %+v %v", chunk, err)
+	}
+	for _, invalid := range []FlowerHistoryBodyRequest{
+		{ItemID: "output", RunID: "run", SourceID: "different", Field: flruntime.ThreadBodyContent},
+		{ItemID: "output", RunID: "run", SourceID: "output", Field: flruntime.ThreadBodyReasoning},
+		{ItemID: "output", SourceID: "output", Field: flruntime.ThreadBodyContent, ThroughBytes: 100001},
+	} {
+		if _, err := svc.GetFlowerHistoryBody(t.Context(), meta, thread.ThreadID, invalid); err == nil {
+			t.Fatal("invalid canonical locator concealed as a source handoff")
+		}
+	}
+	if _, err := svc.GetFlowerHistoryBody(t.Context(), &other, thread.ThreadID, input); err == nil {
+		t.Fatal("source handoff bypassed authorization")
 	}
 	if len(runtime.reads) != 1 {
 		t.Fatal("invalid requests read body bytes")

@@ -8,7 +8,7 @@ export const HISTORY_BODY_VIEWPORT_MARGIN_PX = 160;
 type BodyRead = {
   identity: object | string;
   signal: AbortSignal;
-  read: (signal: AbortSignal) => Promise<void | boolean>;
+  read: (signal: AbortSignal) => Promise<void | boolean | 'source_changed'>;
   state: 'queued' | 'loading' | 'waiting' | 'failed';
   failures: number;
   priority: ActivityReadPriority;
@@ -46,7 +46,11 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       void withFlowerReadDeadline(signal => queue.run('body:' + ++sequence, signal, entry.read, entry.priority), timeoutMessage(), entry.signal).then(
         more => {
           entry.failures = 0;
-          if (more && !entry.signal.aborted && reads.get(key) === entry) {
+          if (more === 'source_changed' && !entry.signal.aborted && reads.get(key) === entry) {
+            // A confirmed sealed source waits for its canonical observation.
+            // Byte notifications for the retired identity cannot poll it.
+            entry.state = 'waiting';
+          } else if (more && !entry.signal.aborted && reads.get(key) === entry) {
             // A chunk yields its slot to queued visible items. New extent
             // notifications coalesce into the same read owner.
             entry.state = 'queued'; entry.queuedAt = dispatches; reads.delete(key); reads.set(key, entry);

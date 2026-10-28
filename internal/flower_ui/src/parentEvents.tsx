@@ -131,7 +131,7 @@ export function createParentEventReading(props: Readonly<{
   };
   const preserve = (change: () => void) => {
     const scroll = props.scroll;
-    const bounds = scroll?.viewport()?.getBoundingClientRect();
+    const bounds = scroll && !scroll.followingLatest() ? scroll.viewport()?.getBoundingClientRect() : undefined;
     const anchor = bounds && [...(scroll?.viewport()?.querySelectorAll<HTMLElement>('[data-parent-event], [data-flower-message-id]') ?? [])].find(row => {
       const rect = row.getBoundingClientRect();
       return rect.height > 0 && rect.bottom > bounds.top && rect.top < bounds.bottom;
@@ -163,6 +163,14 @@ export function createParentEventReading(props: Readonly<{
   };
   const install = (page: FlowerParentEventPage, query: FlowerParentEventQuery, reset = false, remember = true) => {
     const previous = retained();
+    // Empty receipt pages still advance their source leaf; they do not own
+    // transcript geometry and must not scan every message on each update.
+    if (!previous.length && !page.events.length) {
+      if (remember) rememberNeighbors(page, query);
+      if (gaps().length) setGaps([]);
+      setBeforeCursor(''); setCursor('');
+      return;
+    }
     const direction = query.before_event_id || query.latest ? 'before' : 'after';
     const combined = new Map(previous.map(event => [event.id, event]));
     for (const event of page.events) combined.set(event.id, event);
@@ -431,7 +439,10 @@ export function createParentEventReading(props: Readonly<{
         if (threadID !== previousThread || page?.first_event_id !== previousFirst) setInitialReady(!align);
         cancelRefresh();
         neighbors.clear(); direction = undefined;
-        setBodies({}); setRetained([]); setGaps([]); setBeforeCursor(''); setCursor('');
+        if (Object.keys(bodies()).length) setBodies({});
+        if (retained().length) setRetained([]);
+        if (gaps().length) setGaps([]);
+        setBeforeCursor(''); setCursor('');
         if (page) install({ ...page, events: interval ? page.events.filter(event => event.canonical_ordinal !== undefined
           && spans.some((span, index) => event.canonical_ordinal! >= span.first
             && (index === spans.length - 1 && !interval.hasAfter || event.canonical_ordinal! <= span.last))) : page.events }, { action: 'list' }, true);
@@ -469,7 +480,7 @@ export function createParentEventReading(props: Readonly<{
   });
   // Missing receipts can interrupt any tool sequence crossing their interval.
   // They never authorize more reads just to make a group count available.
-  const missingIntervals = createMemo(() => {
+  const missingIntervals = createMemo<readonly Readonly<{ after: number; before: number }>[]>((previous = []) => {
     const rows = events();
     const positions = new Map(rows.map(event => [event.id, event.canonical_ordinal]));
     const leaf = props.page?.leaf_id;
@@ -477,11 +488,15 @@ export function createParentEventReading(props: Readonly<{
       const value = id ? neighbors.get(id) : undefined;
       return value?.leaf === leaf ? value?.[side] : undefined;
     };
-    return [
+    const next = [
       ...(beforeCursor() ? [{ after: -Infinity, before: boundary(rows[0]?.id, 'beforeOrdinal') ?? rows[0]?.canonical_ordinal ?? Infinity }] : []),
       ...gaps().map(gap => ({ after: boundary(gap.beforeID, 'afterOrdinal') ?? positions.get(gap.beforeID) ?? -Infinity, before: boundary(gap.afterID, 'beforeOrdinal') ?? positions.get(gap.afterID) ?? Infinity })),
       ...(cursor() ? [{ after: boundary(rows.at(-1)?.id, 'afterOrdinal') ?? rows.at(-1)?.canonical_ordinal ?? -Infinity, before: Infinity }] : []),
     ];
+    // A leaf revision does not change coverage by itself. Keep equal coverage
+    // stable so live source notifications cannot invalidate every timeline row.
+    return previous.length === next.length && next.every((gap, index) =>
+      gap.after === previous[index].after && gap.before === previous[index].before) ? previous : next;
   });
   return { events, cursor, beforeCursor, gaps, schedule, initialReady, missingIntervals,
     retainBody: (id: string) => {

@@ -6,6 +6,27 @@ afterEach(() => vi.useRealTimers());
 const settle = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); };
 
 describe('history body request ownership', () => {
+  it('waits for a new source without polling or blocking other visible reads', async () => {
+    vi.useFakeTimers();
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const controller = new AbortController();
+    const retired = vi.fn(async () => 'source_changed' as const);
+    loader.request('item', 'live-source', controller.signal, retired);
+    await settle();
+    await vi.advanceTimersByTimeAsync(10000);
+    for (let i = 0; i < 100; i++) loader.request('item', 'live-source', controller.signal, retired);
+    expect(retired).toHaveBeenCalledOnce();
+    expect(loader.state('item')).toBe('loading');
+    const other = vi.fn(async () => undefined);
+    loader.request('other', 'other-source', controller.signal, other);
+    await settle(); expect(other).toHaveBeenCalledOnce();
+    const canonical = vi.fn(async () => undefined);
+    loader.request('item', 'canonical-source', controller.signal, canonical);
+    await settle(); expect(canonical).toHaveBeenCalledOnce();
+    expect(loader.state('item')).toBeUndefined();
+    controller.abort(); loader.dispose();
+  });
+
   it('coalesces growth during slow reads and yields chunks to other visible items', async () => {
     const loader = createHistoryBodyLoader(() => 'timeout');
     const controller = new AbortController();

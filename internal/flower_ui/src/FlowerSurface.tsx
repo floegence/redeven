@@ -1,3 +1,4 @@
+import { createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions } from './flowerPresentationSubscriptions';
 import { FlowerTaskFiles } from './FlowerTaskFiles';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 import { createActivityFieldReader } from './activityFieldReader';
@@ -4196,6 +4197,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const offset = threadCache().bodyOffset(threadID, itemID);
       const incremental = Boolean(body && offset !== undefined && props.adapter.loadHistoryBody);
       const chunk = incremental ? await props.adapter.loadHistoryBody!(threadID, { item_id: itemID, run_id: body!.run_id, source_id: body!.source_id, entry_id: body!.entry_id, field: body!.field, through_bytes: body!.bytes, offset_bytes: offset! }, readSignal) : undefined;
+      if (chunk?.source_changed) {
+        // The source owner sealed this live body. Wait for its authoritative
+        // observation; never append canonical bytes at a live-source offset.
+        return 'source_changed' as const;
+      }
       const item = chunk ? undefined : await props.adapter.loadHistoryItem!(threadID, itemID, readSignal);
       readSignal.throwIfAborted();
       if (epoch !== liveTransport.connectionEpoch()) throw new DOMException('Read was superseded.', 'AbortError');
@@ -7040,9 +7046,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedTimelineDocument = createMemo<{ threadID: string; thread: FlowerThreadSnapshot | null | undefined; entries: readonly FlowerTimelineEntry[] }>(previous => {
     const thread = selectedThread();
     if (!parentEventReading.initialReady() && previous && previous.threadID === thread?.thread_id) return previous;
-    return { threadID: thread?.thread_id ?? '', thread, entries: projectSelectedTimeline(thread, parentEventReading.events()) };
+    const entries = projectSelectedTimeline(thread, parentEventReading.events());
+    return previous?.thread === thread && previous.entries === entries ? previous : { threadID: thread?.thread_id ?? '', thread, entries };
   });
-  const selectedTimelineEntries = () => selectedTimelineDocument().entries;
+  const selectedTimelineEntries = createMemo(() => selectedTimelineDocument().entries);
+  const selectedTimelineThread = createMemo(() => selectedTimelineDocument().thread);
   const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | null>(null);
   createEffect(on([activeThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
@@ -7422,7 +7430,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return { type: 'message', key, blocks, message: { id, role: 'user', content, status: 'sending',
         created_at_ms: entry.createdAtMs, context_action: entry.input.context_action } } satisfies FlowerTimelineEntry;
     });
-    return [...canonical, ...pending];
+    const next = [...canonical, ...pending];
+    return next.length === previous.length && next.every((entry, index) => entry === previous[index]) ? previous : next;
   });
 
 
@@ -11900,6 +11909,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const selectedTurnEnds = createFlowerTurnEndSubscriptions(selectedThread);
+  const childTurnEnds = createFlowerTurnEndSubscriptions(subagentDetailThread);
   const messageContentBubble = (
     message: Accessor<FlowerChatMessage>,
     block: Accessor<Extract<FlowerRenderableMessageBlock, { type: 'content' }>>,
@@ -11922,11 +11933,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const elapsed = Math.max(0, endedAt - timing.started_at_ms);
       return elapsed < 1 ? '<1ms' : formatActivityDuration(elapsed);
     });
-    const answerTime = () => {
-      const turn = thread()?.turns?.find(value => value.turn_id === message().turn_id);
-      const ended = turn?.ended_at ? Date.parse(turn.ended_at) : NaN;
+    const turnEnd = createMemo(() => (viewportScope === transcriptScroll ? selectedTurnEnds : childTurnEnds)(thread()?.thread_id, message().turn_id));
+    const answerTime = createMemo(() => {
+      const timestamp = turnEnd()();
+      const ended = timestamp ? Date.parse(timestamp) : NaN;
       return Number.isFinite(ended) ? ended : message().created_at_ms;
-    };
+    });
     const AnswerFooter: Component = () => <Show when={showCopyAction()}>
       <FlowerAnswerActions
         copyButton={<MessageCopyButton message={message()} text={copyText()} placement="assistant" />}
@@ -12306,6 +12318,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const selectedFinalItems = createFlowerFinalItemSubscriptions(selectedThread);
+  const childFinalItems = createFlowerFinalItemSubscriptions(subagentDetailThread);
   const messageEntry = (
     entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>,
     viewportScope: FlowerScrollTailController,
@@ -12334,12 +12348,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
     const pendingDelivery = createMemo(() => message().role === 'user' && !message().turn_id
       ? visibleTransportOutbox().find(value => `user:${value.requestId}` === message().id) : undefined);
-    const assistantCopyBlockKey = createMemo(() => {
-      const currentMessage = message();
-      const turn = thread()?.turns?.find(value => value.turn_id === currentMessage.turn_id && value.run_id === currentMessage.run_id);
-      return currentMessage.role === 'assistant' && turn?.final_boundary_complete && turn.final_item_ids.includes(currentMessage.id)
-        ? lastCopyableContentBlockKey(blocks()) : '';
+    const finalItem = createMemo(() => {
+      const current = message();
+      return (viewportScope === transcriptScroll ? selectedFinalItems : childFinalItems)(thread()?.thread_id, current.turn_id, current.run_id, current.id);
     });
+    const assistantCopyBlockKey = createMemo(() => message().role === 'assistant' && finalItem()()
+      ? lastCopyableContentBlockKey(blocks()) : '');
     const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
       const action = chip.action;
       if (!action) return false;
@@ -12924,9 +12938,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentTimelineDocument = createMemo<{ threadID: string; thread: FlowerThreadSnapshot | null | undefined; entries: readonly FlowerTimelineEntry[] }>(previous => {
     const thread = subagentDetailThread();
     if (!subagentParentEventReading.initialReady() && previous && previous.threadID === thread?.thread_id) return previous;
-    return { threadID: thread?.thread_id ?? '', thread, entries: projectSubagentTimeline(thread, subagentParentEventReading.events()).filter(entry => entry.type !== 'queued_turn') };
+    const next = projectSubagentTimeline(thread, subagentParentEventReading.events()).filter(entry => entry.type !== 'queued_turn');
+    const entries = previous && next.length === previous.entries.length && next.every((entry, index) => entry === previous.entries[index]) ? previous.entries : next;
+    return previous?.thread === thread && previous.entries === entries ? previous : { threadID: thread?.thread_id ?? '', thread, entries };
   });
-  const subagentDetailTimelineEntries = () => subagentTimelineDocument().entries;
+  const subagentDetailTimelineEntries = createMemo(() => subagentTimelineDocument().entries);
+  const subagentTimelineThread = createMemo(() => subagentTimelineDocument().thread);
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
     Boolean(subagentDetailThread())
@@ -13014,7 +13031,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show></>}
 
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
-      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineDocument().thread} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
+      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
@@ -14848,7 +14865,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
               fallback={selectedThreadFallbackState()}
             >
-              <FlowerTurnTimeline thread={selectedTimelineDocument().thread} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
+              <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}

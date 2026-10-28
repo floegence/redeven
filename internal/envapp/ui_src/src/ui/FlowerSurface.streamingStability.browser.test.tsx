@@ -26,6 +26,32 @@ function liveStream(summary: ReturnType<typeof thread>) {
 }
 
 describe('Flower streaming presentation stability', () => {
+  it('bounds offscreen layout inside one long active turn and retains reading identity', async () => {
+    const fixture = streamingFixture(160, 0);
+    const root = await mountFixture(fixture);
+    const sections = [...root.querySelectorAll<HTMLElement>('[data-flower-history-section]')];
+    expect(sections.length).toBeGreaterThan(4);
+    expect(sections.every(section => section.querySelectorAll('.flower-turn-row').length <= 24)).toBe(true);
+    await expect.poll(() => sections[0].dataset.flowerHistoryMounted).toBe('false');
+    expect(sections.at(-1)!.dataset.flowerHistoryMounted).toBe('true');
+    const row = root.querySelector<HTMLElement>('[data-flower-message-id="message-0"]')!;
+    const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    viewport.focus(); await userEvent.keyboard('{PageUp}');
+    sections[0].scrollIntoView({ block: 'start' });
+    await expect.poll(() => sections[0].dataset.flowerHistoryMounted).toBe('true');
+    const text = document.createTreeWalker(row.querySelector('p')!, NodeFilter.SHOW_TEXT).nextNode()!;
+    const selection = document.getSelection()!;
+    const range = document.createRange(); range.setStart(text, 0); range.setEnd(text, 7);
+    selection.removeAllRanges(); selection.addRange(range);
+    const before = row.getBoundingClientRect().top;
+    for (let i = 0; i < 30; i++) { fixture.append(' More live output.'); await new Promise(resolve => setTimeout(resolve, 17)); }
+    expect(root.querySelector('[data-flower-message-id="message-0"]')).toBe(row);
+    expect(selection.toString()).toBe('Message');
+    expect(Math.abs(row.getBoundingClientRect().top - before)).toBeLessThanOrEqual(1);
+    expect(sections[0].dataset.flowerHistoryMounted).toBe('true');
+    selection.removeAllRanges();
+  });
+
   it.each(['no-preference', 'reduce'] as const)('follows long prose continuously and respects reading ownership (%s)', async reducedMotion => {
     const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
     onTestFinished(() => media.emulateMediaPreferences({ reducedMotion: 'no-preference' }));

@@ -61,8 +61,15 @@ type FlowerHistoryBodyRequest struct {
 	OffsetBytes  int                       `json:"offset_bytes"`
 }
 
-func (s *Service) GetFlowerHistoryBody(ctx context.Context, meta *session.Meta, threadID string, input FlowerHistoryBodyRequest) (flruntime.ThreadItemTextChunk, error) {
-	var empty flruntime.ThreadItemTextChunk
+// FlowerHistoryBodyChunk keeps source retirement explicit. A sealed source is
+// read only after the canonical observation supplies its new identity/offset.
+type FlowerHistoryBodyChunk struct {
+	flruntime.ThreadItemTextChunk
+	SourceChanged bool `json:"source_changed,omitempty"`
+}
+
+func (s *Service) GetFlowerHistoryBody(ctx context.Context, meta *session.Meta, threadID string, input FlowerHistoryBodyRequest) (FlowerHistoryBodyChunk, error) {
+	var empty FlowerHistoryBodyChunk
 	scope, err := s.flowerHistoryScope(ctx, meta, threadID)
 	if err != nil {
 		return empty, err
@@ -74,7 +81,19 @@ func (s *Service) GetFlowerHistoryBody(ctx context.Context, meta *session.Meta, 
 	if !ok {
 		return empty, errors.New("published Floret item text contract is unavailable")
 	}
-	return reader.ReadItemText(ctx, scope, flruntime.ThreadItemTextInput{ThreadID: identity.ThreadID(threadID), ItemID: input.ItemID, RunID: input.RunID, SourceID: input.SourceID, EntryID: input.EntryID, Field: input.Field, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, LimitBytes: 16 << 10})
+	chunk, err := reader.ReadItemText(ctx, scope, flruntime.ThreadItemTextInput{ThreadID: identity.ThreadID(threadID), ItemID: input.ItemID, RunID: input.RunID, SourceID: input.SourceID, EntryID: input.EntryID, Field: input.Field, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, LimitBytes: 16 << 10})
+	if errors.Is(err, threadquery.ErrRecordUnavailable) && input.RunID != "" && input.SourceID == input.ItemID && input.EntryID == "" {
+		// Floret owns the transition and rejects the retired live locator. Only
+		// its authorized current locator can confirm this expected handoff;
+		// unavailable or unchanged sources retain their original error.
+		if locator, ok := s.threadRuntime.(flruntime.ThreadItemBodyReader); ok {
+			body, locateErr := locator.ItemBody(ctx, scope, flruntime.ThreadItemBodyInput{ThreadID: identity.ThreadID(threadID), ItemID: input.ItemID})
+			if locateErr == nil && body.RunID == "" && body.SourceID == input.ItemID && body.EntryID == "" && body.Field == input.Field {
+				return FlowerHistoryBodyChunk{ThreadItemTextChunk: flruntime.ThreadItemTextChunk{ThreadID: identity.ThreadID(threadID), ItemID: input.ItemID}, SourceChanged: true}, nil
+			}
+		}
+	}
+	return FlowerHistoryBodyChunk{ThreadItemTextChunk: chunk}, err
 }
 
 func (s *Service) flowerHistoryScope(ctx context.Context, meta *session.Meta, threadID string) (threadquery.Scope, error) {

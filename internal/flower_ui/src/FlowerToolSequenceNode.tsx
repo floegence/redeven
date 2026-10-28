@@ -1,13 +1,16 @@
 import { Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, useContext, type Accessor, type JSX } from 'solid-js';
 import { ChevronRight, Layers } from '@floegence/floe-webapp-core/icons';
 import type { FlowerTurnProcessCopy } from './copy';
-import type { FlowerToolSequence, FlowerToolSequenceProjection } from './flowerToolSequences';
+import type { FlowerToolSequence, FlowerToolSequenceMember } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 import type { FlowerToolSequenceElement } from './flowerToolSequenceLayout';
 import { createFlowerScrollTailController } from './flowerScrollTail';
+import type { createFlowerProcessSubscriptions } from './flowerPresentationSubscriptions';
 
 export const FlowerToolSequenceContext = createContext<Readonly<{
-  projection: Accessor<FlowerToolSequenceProjection>;
+  subscribeHeader: (key: string) => Accessor<true | undefined>;
+  subscribeProcess: ReturnType<typeof createFlowerProcessSubscriptions>;
+  subscribe: (key: string) => Accessor<FlowerToolSequenceMember | undefined>;
   manuallyExpanded: (group: FlowerToolSequence) => boolean;
   expanded: (group: FlowerToolSequence) => boolean;
   toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => void;
@@ -16,7 +19,7 @@ export const FlowerToolSequenceContext = createContext<Readonly<{
   onLayoutFrame: (key: string, moving: boolean) => void;
   onMotionEnd: (key: string) => void;
   contentPending: (key: string) => boolean;
-  parentCollapsed: (group: FlowerToolSequence) => boolean;
+  processExpanded: (turnID: string, disclosure: FlowerToolSequence['disclosure']) => boolean;
   parentFolding: (group: FlowerToolSequence) => boolean;
   reducedMotion: Accessor<boolean>;
   motionEnabled: (group: FlowerToolSequence) => boolean;
@@ -26,12 +29,19 @@ export const FlowerToolSequenceContext = createContext<Readonly<{
 
 export function useFlowerToolSequenceMember(key: Accessor<string>) {
   const context = useContext(FlowerToolSequenceContext);
-  return createMemo(() => context?.projection().members.get(key()));
+  const subscription = createMemo(() => context?.subscribe(key()));
+  return () => subscription()?.();
 }
 
 export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; children: JSX.Element }>) {
   const context = useContext(FlowerToolSequenceContext);
   const member = useFlowerToolSequenceMember(() => props.nodeKey);
+  const header = createMemo(() => context?.subscribeHeader(props.nodeKey));
+  const parent = createMemo(() => { const key = member()?.group.entryKeys[0]; return key ? context?.subscribeProcess(key) : undefined; });
+  const parentCollapsed = createMemo(() => {
+    const value = parent()?.();
+    return Boolean(value && !context?.processExpanded(value.turnID, value.disclosure));
+  });
   const first = createMemo(() => member()?.first);
   const last = createMemo(() => member()?.last);
   const expanded = createMemo(() => !member() || !context || context.expanded(member()!.group));
@@ -56,7 +66,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const scrollToLatest = () => scroll.flushLayout(false);
   const prepareArrival = () => scroll.prepareArrival();
   const prepareDestination = () => {
-    if (!first() || !expanded() || context?.parentCollapsed(member()!.group)) return true;
+    if (!first() || !expanded() || parentCollapsed()) return true;
     if (!body.isConnected || body.clientHeight <= 0) return false;
     scroll.scrollToBottom();
     return motion.state() === 'open';
@@ -68,7 +78,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const bodyExpanded = createMemo(() => member() && (!first() || context?.parentFolding(member()!.group)) ? true : expanded());
   const reducedMotion = createMemo(() => Boolean(context?.preparing() || context?.reducedMotion()
     || member() && context && !context.motionEnabled(member()!.group)
-    || first() && context?.parentCollapsed(member()!.group)));
+    || first() && parentCollapsed()));
   const motion = createFlowerActivityDisclosureMotion(bodyExpanded, {
     initialOpen: untrack(bodyExpanded), closeDurationMs: 260,
     closeEasing: 'cubic-bezier(0.32, 0, 0.2, 1)',
@@ -176,7 +186,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     data-flower-sequence={member()?.group.key}
     data-flower-sequence-start={first() === undefined ? undefined : String(first())}
     data-flower-sequence-end={last() === undefined ? undefined : String(last())} data-state={motion.state()}>
-    <Show when={context?.projection().headerKeys.has(props.nodeKey)}>
+    <Show when={header()?.()}>
       <div class="flower-tool-sequence-header" aria-hidden={!member()?.first ? 'true' : undefined}>
         <Show when={member()?.first && context}><Toggle /></Show>
       </div>

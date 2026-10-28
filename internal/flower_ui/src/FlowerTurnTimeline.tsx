@@ -1,4 +1,6 @@
+import { createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerSequenceSubscriptions, createFlowerProcessSubscriptions } from './flowerPresentationSubscriptions';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
+import { readPresentationValue } from './presentationIdentity';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTurnProcessCopy } from './copy';
@@ -6,7 +8,7 @@ import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolSequenceNode';
-import { projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
+import { createFlowerSequenceContent, projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion, type FlowerActivityDisclosurePresentation } from './activityDisclosure';
 import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
@@ -95,28 +97,40 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   const sections = createMemo<{ key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[]>((previous = []) => {
     const threadID = props.thread?.thread_id;
     const prior = new Map(previous.filter(section => section.threadID === threadID).map(section => [section.key, section]));
-    const id = (entry: FlowerTimelineEntry) => entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event'
+    const id = (entry: FlowerTimelineEntry) => entry.type === 'message' ? readPresentationValue(entry.message).turn_id : entry.type === 'parent_event'
       ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
-    const priorByTurn = new Map<string, string>();
     const priorByEntry = new Map<string, string>();
-    for (const section of prior.values()) for (const entry of section.entries) {
-      const turn = id(entry);
-      if (turn) priorByTurn.set(turn, section.key);
-      priorByEntry.set(entry.key, section.key);
-    }
+    for (const section of prior.values()) for (const entry of section.entries) priorByEntry.set(entry.key, section.key);
+    const used = new Set<string>();
     const last = new Map<string, number>();
     props.entries.forEach((entry, index) => { const turn = id(entry); if (turn) last.set(turn, index); });
     const result: { key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[] = [];
     for (let first = 0; first < props.entries.length;) {
       let end = first;
       for (let i = first; i <= end; i++) end = Math.max(end, last.get(id(props.entries[i]) ?? '') ?? i);
+      // Keep every mounted partition through prepend, sealing and navigation.
+      // Only the growing active turn introduces new layout boundaries; historical
+      // pages retain their established reading owners.
+      const current = props.thread;
+      const active = current?.current_execution?.turn_id === id(props.entries[first])
+        && current && ['running', 'waiting_user', 'waiting_approval'].includes(current.status);
+      for (let i = first; i < end; i++) {
+        const candidate = props.entries[i];
+        const owner = priorByEntry.get(candidate.key);
+        const nextOwner = priorByEntry.get(props.entries[i + 1].key);
+        if (owner && nextOwner && owner !== nextOwner) { end = i; break; }
+        if (!active || i - first < 23 || owner && owner === nextOwner) continue;
+        const lastBlock = candidate.type === 'message' ? candidate.blocks.at(-1) : undefined;
+        if (lastBlock?.type === 'content' && lastBlock.block_type !== 'thinking'
+          && untrack(() => Boolean(lastBlock.content.trim()))) { end = i; break; }
+      }
       const entry = props.entries[first];
-      // Retain the mounted section when a pending request gains its turn,
-      // and when history prepends earlier rows into an existing turn.
-      const turn = id(entry);
-      const key = (turn ? priorByTurn.get(turn) : undefined) ?? priorByEntry.get(entry.key)
-        ?? JSON.stringify([threadID, turn ?? entry.key]);
+      // Keep the first mounted section through admission and history prepend;
+      // subsequent chunks retain their own first-row identity as the turn grows.
       const entries = props.entries.slice(first, end + 1);
+      const priorKey = entries.map(value => priorByEntry.get(value.key)).find(key => key && !used.has(key));
+      const key = priorKey ?? JSON.stringify([threadID, entry.key]);
+      used.add(key);
       const retained = prior.get(key);
       result.push(retained && retained.entries.length === entries.length && entries.every((value, index) => value === retained.entries[index])
         ? retained : { key, threadID, entries });
@@ -125,8 +139,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     return result;
   });
   const sectionKeys = createMemo(() => sections().map(section => section.key));
-  const bySection = createMemo(() => new Map(sections().map(section => [section.key, section.entries])));
-  const entries = createMemo(() => new Map(props.entries.map((entry) => [entry.key, entry])));
+  const subscribeSection = createFlowerKeyedSubscriptions(() => new Map(sections().map(section => [section.key, section.entries])), Object.is, true);
+  const subscribeEntry = createFlowerEntrySubscriptions(() => props.entries);
   const failureTurnID = createMemo(() => props.failureNoticeVisible
     ? props.thread?.turns?.at(-1)?.turn_id : undefined);
   const nodes = new Map<string, HTMLElement>();
@@ -146,8 +160,9 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   let gestureTarget: Element | undefined;
   let gestureFrame: number | undefined;
   let menuOwner: string | undefined;
-  const identity = (turnID: string) => JSON.stringify([props.runtimeID, props.thread?.thread_id, turnID]);
-  const contentID = (key: string) => `flower-process-${encodeURIComponent(`${props.scope}:${props.thread?.thread_id}:${key}`)}`;
+  const threadID = createMemo(() => props.thread?.thread_id);
+  const identity = (turnID: string) => JSON.stringify([props.runtimeID, threadID(), turnID]);
+  const contentID = (key: string) => `flower-process-${encodeURIComponent(`${props.scope}:${threadID()}:${key}`)}`;
   const duration = (ms: number) => {
     const parts = flowerDurationParts(ms);
     return parts.length ? parts.map((part) => props.copy[part.unit](part.count)).join(' ') : props.copy.lessThanSecond;
@@ -217,10 +232,11 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   };
   let previousProjection: { threadID?: string; value: FlowerTurnProcessProjection } | undefined;
   const processes = createMemo(() => {
-    const threadID = props.thread?.thread_id;
-    const value = projectFlowerTurnProcess(props.entries, props.thread?.turns,
-      props.thread?.current_execution && ['running', 'waiting_user', 'waiting_approval'].includes(props.thread.status)
-        ? [props.thread.current_execution.turn_id] : [], previousProjection && previousProjection.threadID === threadID ? previousProjection.value : undefined, {
+    const current = props.thread;
+    const threadID = current?.thread_id;
+    const value = projectFlowerTurnProcess(props.entries, current?.turns,
+      current?.current_execution && ['running', 'waiting_user', 'waiting_approval'].includes(current.status)
+        ? [current.current_execution.turn_id] : [], previousProjection && previousProjection.threadID === threadID ? previousProjection.value : undefined, {
         hasBefore: props.thread?.history_window?.has_before ?? false,
         hasAfter: props.thread?.history_window?.has_after ?? false,
         readingBreaks: props.readingBreaks, missingEvents: props.missingEvents,
@@ -230,6 +246,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     if (previous && previous.threadID === threadID) untrack(() => {
       for (const group of value.groups.values()) {
         const prior = previous.value.groups.get(group.turnID);
+        if (prior === group) continue;
         if (prior?.summaryKey && prior.summaryKey !== group.summaryKey) {
           const button = nodes.get(prior.summaryKey)?.closest('.flower-turn-row')?.querySelector<HTMLButtonElement>('.flower-turn-summary-button');
           if (button && document.activeElement === button) {
@@ -245,8 +262,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         if (group.interleavedInputs && !previous.value.groups.get(group.turnID)?.interleavedInputs) {
           preserveReadingAnchor(group.processKeys);
         }
-        const newlyFoldable = group.processKeys.filter((key) => previous.value.rows.has(key)
-          && !previous.value.rows.get(key)!.processKeys.includes(key));
+        const priorProcess = new Set(prior?.processKeys);
+        const newlyFoldable = group.processKeys.filter((key) => previous.value.rows.has(key) && !priorProcess.has(key));
         if (newlyFoldable.length && inspectionProtected(group.turnID, newlyFoldable)) {
           // A newly classified row may already contain the user's selection.
           // Keep that row visible without reopening the rest of a folded turn.
@@ -265,6 +282,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     if (![...previous.values()].some(owner => owner.motionKey === motionKey)) return previous;
     return new Map([...previous].filter(([, owner]) => owner.motionKey !== motionKey));
   });
+  const hasSequenceContent = createFlowerSequenceContent(() => props.entries);
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
     const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
@@ -272,7 +290,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       hasBefore: props.thread?.history_window?.has_before ?? false,
       hasAfter: props.thread?.history_window?.has_after ?? false,
       missingEvents: props.missingEvents,
-    });
+    }, hasSequenceContent);
     // The canonical first node may change on prepend. Share its choice so a
     // later navigation remount resolves the same manually controlled state.
     for (const group of next.groups.values()) props.choices.alias(sequenceIdentity(group.nodeKeys[0]), sequenceIdentity(group.key));
@@ -355,7 +373,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
             const owners = new Map<string, PendingSequenceContent>();
             if (pending.size) for (const sequence of sequences().groups.values()) {
               const nodeKey = sequence.nodeKeys[0];
-              if (!group.processKeys.includes(sequence.entryKeys[0])) continue;
+              if (!group.processMembers.has(sequence.entryKeys[0])) continue;
               const viewport = sequenceLayout.element(nodeKey)?.querySelector<HTMLElement>(':scope > .flower-tool-sequence-viewport');
               // If completion interrupts an existing fold, carry its painted
               // opacity/transform into the outer owner before settling it.
@@ -411,9 +429,13 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     props.scroll.measureAfterLayout();
   };
   onMount(() => { onCleanup(props.scroll.registerDestination(sequenceLayout.prepareDestination)); });
+  const subscribeProcess = createFlowerProcessSubscriptions(processes);
+  const subscribeContinuation = createFlowerMembershipSubscriptions(() => sequences().continuingEntries);
   const sequenceContext = {
     ...sequenceLayout,
-    projection: sequences,
+    subscribeHeader: createFlowerMembershipSubscriptions(() => sequences().headerKeys),
+    subscribeProcess,
+    subscribe: createFlowerSequenceSubscriptions(sequences),
     preparing: props.scroll.isPreparing,
     motionEnabled: (group: FlowerToolSequence) => props.choices.motionEnabled(sequenceIdentity(group.key)),
     expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
@@ -424,7 +446,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       props.scroll.activateDisclosure(button);
       props.choices.toggle(sequenceIdentity(group.key), group.disclosure);
     },
-    contentID: (key: string) => `flower-tool-sequence-${encodeURIComponent(`${props.scope}:${props.thread?.thread_id}:${key}`)}`,
+    contentID: (key: string) => `flower-tool-sequence-${encodeURIComponent(`${props.scope}:${threadID()}:${key}`)}`,
     onLayoutFrame: (key: string, moving: boolean) => {
       if (moving) motions.add(key);
       props.scroll.measureAfterLayout();
@@ -438,10 +460,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       const owner = pendingSequenceContent().get(key);
       return Boolean(owner && owner.motionKey !== 'tools:' + owner.nodeKey);
     }),
-    parentCollapsed: (group: FlowerToolSequence) => {
-      const turn = processes().rows.get(group.entryKeys[0]);
-      return Boolean(turn && !props.choices.expanded(identity(turn.turnID), turn.disclosure));
-    },
+    processExpanded: (turnID: string, disclosure: Parameters<typeof props.choices.expanded>[1]) => props.choices.expanded(identity(turnID), disclosure),
     copy: () => props.copy,
     reducedMotion: props.reducedMotion,
   };
@@ -456,26 +475,29 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     },
   });
   const row = (key: string, entry: Accessor<FlowerTimelineEntry>) => {
-    const group = createMemo(() => processes().rows.get(key));
-    const process = createMemo(() => group()?.processKeys.includes(key) ?? false);
-    const turnExpanded = createMemo(() => !group() || props.choices.expanded(identity(group()!.turnID), group()!.disclosure));
+    const state = subscribeProcess(key);
+    const continuation = subscribeContinuation(key);
+    const sequenceMember = sequenceContext.subscribe(key);
+    const group = () => processes().rows.get(key);
+    const process = () => state()?.process ?? false;
+    const turnExpanded = createMemo(() => !state() || props.choices.expanded(identity(state()!.turnID), state()!.disclosure));
     const expanded = createMemo(() => !process() || retainedRows().has(key) || turnExpanded());
     const ended = createMemo(() => {
-      const current = group();
-      const outcome = current?.turn?.outcome;
+      const current = state();
+      const outcome = current?.outcome;
       if (current?.turnID === failureTurnID() && (outcome === 'failed' || outcome === 'interrupted')) return '';
-      return current?.terminalKey === key && outcome && outcome !== 'completed' ? props.copy[outcome] : '';
+      return outcome && outcome !== 'completed' ? props.copy[outcome] : '';
     });
     // Historical rows can skip offscreen layout immediately. A row that was
     // live keeps its measured layout until the next transcript mount, so
     // completion cannot move the reading anchor before disclosure settles.
-    const historical = untrack(() => Boolean(group()?.turn?.ended_at));
+    const historical = untrack(() => state()?.historical ?? false);
     const settled = createMemo(() => historical && !process());
     // Decide protection and capture the anchor before inserting summary height.
-    const summary = createMemo(() => group()?.summaryKey === key && group()?.disclosure !== 'none'
-      && props.choices.settled(identity(group()!.turnID)));
+    const summary = createMemo(() => Boolean(state()?.summary) && state()?.disclosure !== 'none'
+      && props.choices.settled(identity(state()!.turnID)));
     const summaryLabel = () => {
-      const current = group()!;
+      const current = state()!.summary!;
       const worked = props.copy.worked(duration(current.turn!.work_duration_ms));
       const details = !current.countsComplete ? [] : current.interleavedInputs ? [
         current.toolCallCount ? props.copy.toolCalls(current.toolCallCount) : '',
@@ -487,11 +509,11 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     };
     const interactionCheckpoint = createMemo(() => {
       const current = entry();
-      return group()?.interleavedInputs === true && current.type === 'message'
+      return state()?.interleavedInputs === true && current.type === 'message'
         && current.blocks.some((block) => block.type === 'input_response');
     });
     const rowReducedMotion = createMemo(() => props.reducedMotion() || props.scroll.isPreparing()
-      || Boolean(group() && !props.choices.motionEnabled(identity(group()!.turnID))));
+      || Boolean(state() && !props.choices.motionEnabled(identity(state()!.turnID))));
     const motion = createFlowerActivityDisclosureMotion(expanded, {
       initialOpen: untrack(expanded),
       reducedMotion: rowReducedMotion,
@@ -529,7 +551,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       layoutAnchor = button;
       props.scroll.activateDisclosure(button);
       props.choices.toggle(identity(current.turnID), current.disclosure);
-      setRetainedRows(previous => new Set([...previous].filter(key => !current.processKeys.includes(key))));
+      setRetainedRows(previous => new Set([...previous].filter(key => !current.processMembers.has(key))));
     };
     onCleanup(() => { nodes.delete(key); motions.delete(key); releaseMotionContent(key); });
     // Retain inspected content while folded: reopening must preserve nested
@@ -538,23 +560,23 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     createEffect(() => { if (expanded()) setContentMounted(true); });
     const Content = () => {
       const content = untrack(() => props.renderEntry(entry, expanded));
-      return <Show when={entry().type === 'parent_event' && sequences().members.has(key)} fallback={content}>
+      return <Show when={entry().type === 'parent_event' && sequenceMember()} fallback={content}>
         <FlowerToolSequenceNode nodeKey={key}>{content}</FlowerToolSequenceNode>
       </Show>;
     };
     return (
-      <div class="flower-turn-row" data-flower-turn-id={group()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}
+      <div class="flower-turn-row" data-flower-turn-id={state()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}
         data-flower-input-checkpoint={interactionCheckpoint() ? 'true' : undefined}
         data-flower-row-message-id={entry().type === 'message' ? (entry() as Extract<FlowerTimelineEntry, { type: 'message' }>).message.id : undefined}
         data-flower-row-event-id={entry().type === 'parent_event' ? (entry() as Extract<FlowerTimelineEntry, { type: 'parent_event' }>).event.id : undefined}
         data-flower-row-decoration-id={entry().type === 'context_compaction' ? (entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>).decoration.decoration_id : undefined}
-        data-flower-sequence-continues={sequences().continuingEntries.has(key) ? 'true' : undefined}
+        data-flower-sequence-continues={continuation() ? 'true' : undefined}
         data-flower-turn-settled={settled() ? 'true' : undefined}>
-        <Show when={group()?.summaryKey === key && group()?.turn?.kind !== 'context_compaction'}>
+        <Show when={Boolean(state()?.summary)}>
           <div class="flower-turn-summary" data-reserved={!summary() ? 'true' : undefined} aria-hidden={!summary() ? 'true' : undefined}>
             <Show when={summary()}>
             <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
-              aria-expanded={turnExpanded()} aria-controls={group()!.processKeys.map(contentID).join(' ')}
+              aria-expanded={turnExpanded()} aria-controls={state()!.summary!.processKeys.map(contentID).join(' ')}
               aria-label={`${turnExpanded() ? props.copy.collapse : props.copy.expand}: ${summaryLabel()}`}
               onClick={(event) => toggle(event.currentTarget)}>
               <span>{summaryLabel()}</span>
@@ -569,7 +591,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
           <div class="flower-turn-row-content" ref={(node) => { motion.bindContent(node); nodes.set(key, node); }}
             onPointerDown={(event) => startGesture(event.target as Element)}
             onKeyDown={(event) => startGesture(event.target as Element)}
-            onContextMenu={() => { menuOwner = group()?.turnID; }}>
+            onContextMenu={() => { menuOwner = state()?.turnID; }}>
             <Show when={contentMounted()}><Content /></Show>
           </div>
         </div>
@@ -579,10 +601,11 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   };
   return <FlowerActivityTitleRevealContext.Provider value={titleReveal}><FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline" ref={timeline}>
     <For each={sectionKeys()}>{sectionKey => {
-      const section = createMemo(() => bySection().get(sectionKey) ?? []);
-      const keys = createMemo(() => section().map(entry => entry.key));
-      return <HistorySection sectionKey={sectionKey} entries={section()} scroll={props.scroll}><For each={keys()}>{key => {
-        const entry = createMemo(() => entries().get(key)!);
+      const section = subscribeSection(sectionKey);
+      const keys = createMemo(() => section()!.map(entry => entry.key));
+      return <HistorySection sectionKey={sectionKey} entries={section()!} scroll={props.scroll}><For each={keys()}>{key => {
+        const subscribed = subscribeEntry(key);
+        const entry = () => subscribed()!;
         return <>{props.renderBefore?.(entry)}{row(key, entry)}</>;
       }}</For></HistorySection>;
     }}</For>

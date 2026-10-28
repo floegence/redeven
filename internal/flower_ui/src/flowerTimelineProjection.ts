@@ -489,7 +489,7 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
       && prior.decorations.every((value, index) => value === localDecorations[index])) {
       entries = prior.entries;
     } else {
-      const projectedMessage = activeCursor === message.active_cursor
+      const projectedMessage = activeCursor === (message.active_cursor === true)
         ? message
         // Cursor decoration must not snapshot reactive text/body fields.
         // This view lives as long as the cached message projection.

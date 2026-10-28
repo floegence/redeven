@@ -1,5 +1,7 @@
+import { createMemo, mapArray, type Accessor } from 'solid-js';
+import { readPresentationValue } from './presentationIdentity';
 import type { FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
-import type { FlowerTimelineEntry } from './flowerTimelineProjection';
+import type { FlowerRenderableMessageBlock, FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerTurnDisclosurePolicy } from './flowerTurnPresentation';
 import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
@@ -70,9 +72,10 @@ export function projectFlowerToolSequences(
   previous?: FlowerToolSequenceProjection,
   breakBefore: ReadonlySet<string> = new Set(),
   coverage: Readonly<{ hasBefore: boolean; hasAfter: boolean; missingEvents?: readonly Readonly<{ after: number; before: number }>[] }> = { hasBefore: false, hasAfter: false },
+  hasContent: (block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>) => boolean = block => Boolean(block.content.trim()),
 ): FlowerToolSequenceProjection {
   const tokens: (SequenceNode | { outputScope: string; contentKey: string } | { gap: true } | null)[] = [];
-  const turnsByID = uniqueTurnsByID(turns);
+  const turnsByID = uniqueTurnsByID(readPresentationValue(turns));
   const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
   const sequenceScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
     ownerThreadID && turnID && runID ? JSON.stringify([ownerThreadID, turnID, runID]) : '';
@@ -92,28 +95,31 @@ export function projectFlowerToolSequences(
       tokens.push(parentEventNode(entry));
       continue;
     }
-    if (entry.type !== 'message' || entry.message.role !== 'assistant' || entry.message.goal) {
+    const message = entry.type === 'message' ? readPresentationValue(entry.message) : undefined;
+    if (entry.type !== 'message' || message!.role !== 'assistant' || message!.goal) {
       tokens.push(null);
       continue;
     }
-    const scope = sequenceScope(entry.message.thread_id, entry.message.turn_id, entry.message.run_id);
+    const scope = sequenceScope(message!.thread_id, message!.turn_id, message!.run_id);
     const sameScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
       Boolean(scope) && scope === sequenceScope(ownerThreadID, turnID, runID);
     for (const block of entry.blocks) {
       if (block.type === 'content') {
         if (block.block_type === 'thinking') {
-          tokens.push({ key: block.key, entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'thinking', active: entry.message.live === true, failed: false });
-        } else if (block.content.trim()) {
+          tokens.push({ key: block.key, entryKey: entry.key, scope, turnID: message!.turn_id, kind: 'thinking', active: message!.live === true, failed: false });
+        } else if (hasContent(block)) {
           tokens.push({ outputScope: scope, contentKey: block.key });
         } else if (entry.message.body_pending?.kind === 'text') {
           tokens.push({ gap: true });
         }
       } else if (block.type === 'tool_preview') {
-        const call = block.block.call;
+        // Preview calls advance in place; retain that narrow subscription.
+        const call = readPresentationValue(block.block.call);
         tokens.push(sameScope(call.thread_id, call.turn_id, call.run_id) && isSequenceTool(call.name)
-          ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'tool', label: call.preview?.display_name || call.name, active: true, failed: false } : null);
+          ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, turnID: message!.turn_id, kind: 'tool', label: call.preview?.display_name || call.name, active: true, failed: false } : null);
       } else if (block.type === 'activity') {
-        for (const item of block.block.items) {
+        const activity = readPresentationValue(block.block);
+        for (const item of activity.items) {
           const failed = item.status === 'error';
           const uncertain = Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
           const attentionReasons = item.attention_reasons ?? [];
@@ -125,7 +131,7 @@ export function projectFlowerToolSequences(
             && attentionReasons.every(reason => reason === 'waiting' || reason === 'running');
           const attentionAllowed = failed || runningAttention || waitingAttention || !item.needs_attention && attentionReasons.length === 0;
           const statusAllowed = ['success', 'pending', 'running'].includes(item.status) || failed || subagentWait;
-          const foldable = sameScope(block.block.thread_id, block.block.turn_id, block.block.run_id)
+          const foldable = sameScope(activity.thread_id, activity.turn_id, activity.run_id)
             && (item.kind === 'tool' || item.kind === 'hosted_tool')
             && isSequenceTool(item.tool_name)
             && statusAllowed
@@ -135,9 +141,9 @@ export function projectFlowerToolSequences(
             && (!['warning', 'error', 'blocking'].includes(item.severity) || failed || waitingAttention)
             && (!uncertain || failed);
           tokens.push(foldable ? {
-            key: flowerActivityIdentity({ threadID: block.block.thread_id, runID: block.block.run_id, turnID: block.block.turn_id,
+            key: flowerActivityIdentity({ threadID: activity.thread_id, runID: activity.run_id, turnID: activity.turn_id,
               itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
-            entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'tool', label: item.label || item.tool_name,
+            entryKey: entry.key, scope, turnID: message!.turn_id, kind: 'tool', label: item.label || item.tool_name,
             active: item.status === 'pending' || item.status === 'running' || subagentWait,
             failed,
             uncertain,
@@ -197,7 +203,7 @@ export function projectFlowerToolSequences(
     const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
     const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
     const entryKeys = entries.slice(firstEntry, lastEntry + 1).map(entry => entry.key);
-    const ordinal = (entry: FlowerTimelineEntry | undefined) => entry?.type === 'message' ? entry.message.canonical_ordinal
+    const ordinal = (entry: FlowerTimelineEntry | undefined) => entry?.type === 'message' ? readPresentationValue(entry.message).canonical_ordinal
       : entry?.type === 'parent_event' ? entry.event.canonical_ordinal
         : entry?.type === 'context_compaction' ? entry.decoration.compaction.canonical_ordinal : undefined;
     const lower = firstEntry > 0 ? ordinal(entries[firstEntry - 1]) : -Infinity;
@@ -245,4 +251,15 @@ export function projectFlowerToolSequences(
     && continuingEntries.size === previous.continuingEntries.size
     && [...continuingEntries].every(key => previous.continuingEntries.has(key))) return previous;
   return { groups, members, continuingEntries, headerKeys };
+}
+
+// Per-entry ownership keeps content updates local while preserving the first
+// non-whitespace output boundary which settles a preceding tool sequence.
+export function createFlowerSequenceContent(entries: Accessor<readonly FlowerTimelineEntry[]>) {
+  const records = mapArray(entries, entry => {
+    const blocks = entry.type === 'message' ? entry.blocks.filter((block): block is Extract<FlowerRenderableMessageBlock, { type: 'content' }> => block.type === 'content') : [];
+    return blocks.map(block => ({ block, present: createMemo(() => Boolean(block.content.trim())) }));
+  });
+  const byBlock = createMemo(() => new Map(records().flat().map(value => [value.block, value.present])));
+  return (block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>) => byBlock().get(block)?.() ?? false;
 }

@@ -41,6 +41,28 @@ const withRun = (value: MessageEntry, runID: string): MessageEntry => ({
 });
 
 describe('canonical turn process presentation', () => {
+  it('reads canonical membership once when projecting a long turn', () => {
+    const rows = Array.from({ length: 600 }, (_, index) => entry('part-' + index));
+    let reads = 0;
+    const members = new Proxy(rows.map(row => row.message.id), { get(target, key, receiver) {
+      if (typeof key === 'string' && /^\d+$/.test(key)) reads++;
+      return Reflect.get(target, key, receiver);
+    } });
+    const projected = projectFlowerTurnProcess(rows, [turn({ intermediate_item_ids: members, final_item_ids: [] })]);
+    expect(projected.groups.get('turn')?.processKeys).toEqual(rows.map(row => row.key));
+    expect(reads).toBeLessThanOrEqual(rows.length);
+  });
+
+  it('retains the complete projection through content-only updates', () => {
+    const facts = [turn()];
+    const first = projectFlowerTurnProcess(entries, facts);
+    const changed = entries.map(row => ({ ...row, message: { ...row.message, content: 'Updated text' } }));
+    expect(projectFlowerTurnProcess(changed, facts, [], first)).toBe(first);
+    const next = projectFlowerTurnProcess([...changed, entry('new')], facts, [], first);
+    expect(next).not.toBe(first);
+    expect(next.rows.has('new')).toBe(true);
+  });
+
   it('treats goal continuation as business work with the existing disclosure owner', () => {
     expect(projectFlowerTurnProcess(entries, [turn({ kind: 'goal_continuation' })]).groups.get('turn')?.disclosure).toBe('automatic');
     expect(projectFlowerTurnProcess([thinking], [turn({ kind: 'goal_continuation', outcome: 'failed' })]).groups.get('turn')?.disclosure).toBe('none');
