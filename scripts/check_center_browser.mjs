@@ -914,13 +914,13 @@ try {
     if (!response.ok || !result.ok) throw new Error(endpoint+': '+JSON.stringify(result));
     return result.data;
   },{endpoint,body});
-  const openApp = async (kind,id,appPath='/') => {
-    const result=await applicationEnv.evaluate(async input => {
+  const openApp = async (kind,id,appPath='/',owner=applicationEnv,browserContext=context) => {
+    const result=await owner.evaluate(async input => {
       const response=await fetch('/__center/applications',{method:'POST',headers:{'Content-Type':'application/json','X-Redeven-Center':'1'},body:JSON.stringify({...input,request_id:crypto.randomUUID()})});
       return {status:response.status,...await response.json()};
     },{kind,id,path:appPath});
     if (!result.ok) throw new Error('Isolated application prepare rejected '+JSON.stringify(result));
-    const page=await context.newPage();
+    const page=await browserContext.newPage();
     page.on('response', async response => { const path=new URL(response.url()).pathname; if(path.includes('_redeven_window') || path.includes('flowersec')) console.log('CHILD_RESPONSE',path,response.status()); if(path.endsWith('/_redeven_window/connect')) { const result=await response.json().catch(()=>({})); console.log('CHILD_SCOPE',JSON.stringify({scope:result.spend_scope && {launcher:result.spend_scope.launcher_origin,runtime:result.spend_scope.runtime_origin,app:result.spend_scope.app_origin,target:result.spend_scope.target_binding},keys:Object.keys(result)})); } });
     page.on('websocket',socket=> { console.log('CHILD_SOCKET',new URL(socket.url()).pathname); socket.on('socketerror',error=>console.log('CHILD_SOCKET_ERROR',String(error))); });
     page.on('requestfailed', request => console.log('CHILD_REQUEST_FAILURE',new URL(request.url()).pathname,request.failure()?.errorText));
@@ -948,6 +948,34 @@ try {
   if(sameOrigin!==403) throw new Error('Untrusted app served on Env origin');
   report.cases.push('Independent Web Service origin, POST integrity, blocked Env APIs and no Runtime authentication cookie disclosure');
   await service.close();
+  if (process.env.REDEVEN_CENTER_CHILD_REOPEN === '1') {
+    // A separate device keeps this stress case within its own receipt budget.
+    const device = await browser.newContext({ locale: 'en-US' });
+    try {
+      const entry = await device.newPage();
+      await entry.goto(fixture.origin);
+      await authenticate(entry);
+      const index = fixture.applicationIndex ?? 0;
+      const owner = await openEnvironment(entry, device, index);
+      await runtimeLogin(owner, fixture.targets[index], true);
+      const first = await openApp('pf', forward.forward_id, '/', owner, device);
+      const original = (await device.cookies(first.url())).find(cookie => cookie.name === '__Host-redeven-access');
+      if (!original) throw new Error('Original child admission cookie missing');
+      await first.close();
+      for (let i = 0; i < 20; i++) {
+        const reopened = await openApp('pf', forward.forward_id, '/reopen/' + i, owner, device);
+        await until(async () => (await reopened.textContent('body')).includes('Center isolated service qualification'), 'Reopened service did not render');
+        const cookie = (await device.cookies(reopened.url())).find(cookie => cookie.name === '__Host-redeven-access');
+        if (cookie?.value !== original.value) throw new Error('Repeated service open allocated another authority');
+        if (await reopened.evaluate(async () => (await fetch('/api/local/runtime')).status) === 200) throw new Error('Reused child crossed Runtime authority');
+        await reopened.close();
+      }
+      await entry.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await until(async () => await runtimeStatus(owner) === 401, 'Reopen test device retained authority after logout');
+      if (await runtimeStatus(environments[1]) !== 200 || await runtimeStatus(applicationEnv) !== 200) throw new Error('Repeated child opens or device logout affected another device');
+      report.cases.push('Twenty real Chrome close/reopen cycles on an isolated device reuse one exact Web Service admission cookie, preserve isolated origin and Env API denial, and revoke without affecting another device');
+    } finally { await device.close(); }
+  }
   const graphical = await runtimeAPI('remote-desktop/sessions', {mode:'view',locale:'en-US'});
   const viewer = await openApp('pf', graphical.forward_id, '/_redeven_desktop/');
   await viewer.waitForFunction(() => Boolean(window.redevenWindowTransport), {timeout:15000});
@@ -1079,6 +1107,7 @@ try {
   const request = 'repeat-open-'+crypto.randomUUID();
   const firstOpen = await centerCall(portal,'open',{route:directoryBefore.routes[0].id,request});
   const repeatedOpen = await centerCall(portal,'open',{route:directoryBefore.routes[0].id,request});
+  if (!firstOpen.ok || !repeatedOpen.ok) throw new Error('Open retry rejected: ' + JSON.stringify({firstStatus:firstOpen.status,firstError:firstOpen.error,repeatStatus:repeatedOpen.status,repeatError:repeatedOpen.error}));
   if(firstOpen.data.id!==repeatedOpen.data.id) throw new Error('Open retry created a second operation');
   const canceledOpen=await centerCall(portal,'operations/cancel',{id:firstOpen.data.id});
   if(canceledOpen.data.status!=='canceled' || canceledOpen.data.sequence<=firstOpen.data.sequence || await runtimeStatus(applicationEnv)!==200) throw new Error('Cancel invalidated existing route or did not advance owner state');

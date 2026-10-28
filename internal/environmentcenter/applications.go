@@ -133,7 +133,17 @@ func (a *webAccess) application(w http.ResponseWriter, r *http.Request, parent *
 			return
 		}
 	}
-	if count >= 16 || receipts >= 32 {
+	// Reopening one resource is a new handoff, not a new authority. Preserve
+	// exact parent, resource, Runtime instance and authenticated login identity.
+	var existing *openOperation
+	for _, access := range a.access {
+		owner := access.operation
+		if access.ctx.Err() == nil && owner.parent == parent && owner.appKind == input.Kind && owner.appID == input.ID && owner.appInstance == instance && owner.runtimeCookie.Name == credentials[0].Name && owner.runtimeCookie.Value == credentials[0].Value {
+			existing = owner
+			break
+		}
+	}
+	if count >= 16 && existing == nil || receipts >= 32 {
 		a.mu.Unlock()
 		writeJSON(w, nil, ErrBusy)
 		return
@@ -147,6 +157,7 @@ func (a *webAccess) application(w http.ResponseWriter, r *http.Request, parent *
 	route := parent.route
 	route.Origin = origin
 	op := &openOperation{Sequence: 1, ID: randomID(), RequestID: input.RequestID, RouteID: parent.RouteID, Status: "ready", route: route, session: parent.session, device: parent.device, ctx: ctx, cancel: cancel, expires: time.Now().Add(5 * time.Minute), connection: parent.connection, parent: parent, appInstance: instance, appKind: input.Kind, appID: input.ID, appPath: input.Path, runtimeCookie: *credentials[0]}
+	op.accessOwner = existing
 	op.Destination = origin + "/__center/start?operation=" + url.QueryEscape(op.ID)
 	a.operations[op.ID] = op
 	context.AfterFunc(ctx, func() { a.mu.Lock(); defer a.mu.Unlock(); a.releaseLocked(op) })

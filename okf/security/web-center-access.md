@@ -37,6 +37,8 @@ Gateway catalog/pairing requests inherit their authenticated device context: log
 
 Current limits: 16 Gateways, 128 routes, 128 operation receipts with at most 32 per device, 16 live root/child operations per device, 16 concurrent proxy requests per access owner, 48 per device, 192 total. Repeated opens cannot let one device fill the global receipt budget. Revocation removes live admission immediately; five-minute tombstones retain retry outcomes. JSON/header sizes are bounded, file streams incremental, private egress restricted to signed approved endpoints.
 
+Reopening a child creates a fresh browser-bound handoff while reusing its live authority only for the exact parent, resource kind/ID, Runtime instance and Runtime login cookie name/value. Paths may differ within that resource. Canceling or expiring a repeated handoff preserves the existing owner; revoking that owner invalidates pending reuse. Reuse still consumes bounded handoff receipts and cannot bypass another resource's admission limit.
+
 Runtime accessgate remains target authentication/channel authority. Binding+revision+device scopes prevent cross-route/device replay; children add resource scope. Binding revocation fences new admission and channels without changing unrelated paths. Children cannot invoke Env APIs, spend sibling artifacts or set parent cookies. Changed proofs fail closed without downgrade. Portal framing stays denied; child framing follows Runtime policy.
 
 # Boundaries
@@ -48,6 +50,7 @@ The host administrator controls the trusted entry server. Center authentication 
 - `internal/environmentcenter/auth_test.go`, `setup_retry_test.go`, `server_test.go`: factors, scoped retries, owner identity and recovery.
 - `internal/webbinding/store_test.go`: durable pinning and concurrent admission/revocation.
 - `internal/accessgate/scope_test.go`, `internal/localui/web_application_test.go`: credential and artifact separation.
+- `internal/environmentcenter/applications_test.go`: repeated child handoff reuse, receipt expiry and exact authority boundaries.
 - `scripts/check_center_browser.mjs`: actual setup/MFA, logout, stale-cookie denial and key/binding/Gateway revocation.
 
 Tests certify their explicit scenarios, not every race or deployment variant by inference.
