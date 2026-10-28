@@ -29,8 +29,15 @@ it.each(['release', 'cancel', 'blur'] as const)('defers terminal output layout d
   runtime.querySelector<HTMLButtonElement>(`[data-thread-id="${fixture.thread.thread_id}"] button`)!.click();
   await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-0"]')));
   const row = runtime.querySelector('[data-flower-activity-item-id="tool-0"]')!;
+  // Reading a retained terminal requires entering its visible history section.
+  const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
+  viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+  const section = row.closest<HTMLElement>('[data-flower-history-section]')!;
+  section.scrollIntoView({ block: 'center' });
+  await waitFor(() => section.dataset.flowerHistoryMounted === 'true');
+  row.scrollIntoView({ block: 'center' });
   const toggle = row.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
-  if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+  if (toggle.getAttribute('aria-expanded') !== 'true') await page.elementLocator(toggle).click();
   await waitFor(() => Boolean(row.querySelector('pre')?.textContent?.includes('Build batch 1')));
   const pre = row.querySelector('pre')!;
   const textNode = pre.firstChild;
@@ -44,7 +51,9 @@ it.each(['release', 'cancel', 'blur'] as const)('defers terminal output layout d
   onTestFinished(dispose);
   await waitFor(() => Boolean(document.querySelector('[aria-label="Build preview draft"]')));
   const editor = document.querySelector<HTMLTextAreaElement>('[aria-label="Build preview draft"]')!;
-  editor.value = 'Preserved build edit'; editor.setSelectionRange(2, 8);
+  await page.elementLocator(editor).fill('Preserved build edit');
+  expect(editor.value).toBe('Preserved build edit');
+  editor.setSelectionRange(2, 8);
   let outputPaints = 0;
   const observer = new MutationObserver(records => {
     if (document.documentElement.getAttribute('data-floe-hot-interaction') === 'drag') outputPaints += records.length;
@@ -92,6 +101,8 @@ it.each(['release', 'cancel', 'blur'] as const)('keeps streaming progress live w
   </LayoutProvider></FloeConfigProvider>, host);
   onTestFinished(() => { dispose(); host.remove(); });
   const editor = document.querySelector<HTMLTextAreaElement>('[aria-label="Live progress draft"]')!;
+  await page.elementLocator(editor).fill('Keep this edit');
+  expect(editor.value).toBe('Keep this edit');
   editor.setSelectionRange(2, 6);
   let additions = 0;
   const update = setInterval(() => { fixture.append(' live' + (++additions)); }, 16);
