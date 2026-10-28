@@ -230,7 +230,7 @@ describe('completed turn process disclosure', () => {
     trigger.focus();
     const tooltip = () => document.getElementById(trigger.getAttribute('aria-describedby') ?? '');
     await waitFor(() => tooltip()?.getAttribute('role') === 'tooltip');
-    expect(tooltip()?.textContent).toBe('≈ 150k → 20k tokens');
+    expect(tooltip()?.textContent).toBe('Message text estimate: ≈ 150k → 20k tokens');
     summary(root)!.click();
     await waitFor(() => collapsed('third'));
     expect(tooltip()).toBeNull();
