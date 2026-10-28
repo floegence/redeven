@@ -44,7 +44,7 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
-  it('reserves candidate headers before grouping and preserves projection identity', () => {
+  it('reserves candidate controls before grouping and preserves projection identity', () => {
     const first = projectFlowerToolSequences([tool('a')]);
     expect([...first.headerKeys]).toEqual([JSON.stringify(['thread', 'run', 'turn', 'a'])]);
     expect(first.groups.size).toBe(0);

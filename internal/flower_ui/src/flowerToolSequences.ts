@@ -153,8 +153,8 @@ export function projectFlowerToolSequences(
   let pending: SequenceNode[] = [];
   let startComplete = !coverage.hasBefore;
   const flush = (endComplete: boolean, completedScope = '') => {
-    // Reserve one header from the first candidate, including leading thinking.
-    // Its geometry cannot depend on a later tool proving this is a sequence.
+    // Reserve the first candidate's disclosure column, including leading
+    // thinking. The shared first row cannot depend on later group membership.
     if (pending.length) headerKeys.add(pending[0].key);
     if (pending.some(node => node.kind !== 'thinking')) runs.push({ nodes: pending,
       countsComplete: startComplete && endComplete,

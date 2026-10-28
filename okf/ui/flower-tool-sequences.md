@@ -33,13 +33,13 @@ Thinking hydration observes its displayed movable node, not the vacated shell. S
 
 ## Geometry and input
 
-Reserve header and native scrollbar gutter from the first candidate, including leading thinking; later calls reveal controls without moving/narrowing content. Header/singleton/group rows: 2rem desktop, 2.75rem coarse pointer. Sequence viewport: ten rows, ≤65% transcript height; details share it, short content keeps natural height. Thinking: 20rem, ≤45% window and transcript limit. Both have thin scrollbars, keyboard focus, localized names and reachable controls.
+The group control shares the first activity line; singletons and leading thinking never reserve a blank title row. Reserve only a 1.5rem disclosure column (2.75rem on coarse pointers) and the native scrollbar gutter from the first candidate. Later calls reveal the control without moving or narrowing existing content. Expanded groups show the arrow beside activity titles and their independent detail controls; the localized summary remains accessible. Folded groups show that summary across the same first line. The control stays reachable while the shared body scrolls. Rows remain 2rem desktop, 2.75rem coarse pointer. Sequence viewport: ten rows, ≤65% transcript height; details share it, short content keeps natural height. Thinking: 20rem, ≤45% window and transcript limit. Both have thin scrollbars, keyboard focus, localized names and reachable controls.
 
 Thinking, sequences and read-only terminal/file/diff/excerpt/code regions chain native scrolling; consume only locally scrollable input, forwarding short/edge input to ancestors. Transcript wheel/touch/keyboard upward intent pauses following; actual bottom return resumes. Explicit containment, cancelled events and zoom stay local; interactive terminals/editors keep ownership.
 
 Inner content/transcript use the same input-aware controller; wheel/touch/keyboard/scrollbar reading pauses following, while programmatic events, geometry, images and row placement create no intent. Each open sequence observes mounted children through that owner, retaining nested input and anchors. Explicit opening positions latest tool before paint, including calls received while folded. Navigation waits for row placement and both destinations. Restored details have no preparation-time opening motion. Manual folds stay closed; complete counts may include the canonical latest-tool label without body reads. Collapse focuses its button. Thinking retains completion state and saved offset. [Activity motion](flower-activity-interaction.md#visual-motion) coordinates placement/arrival scrolling.
 
-Controls expose viewport IDs/localized counts; closed members leave no gaps and reserved headers remain inaccessible until eligible. Auto-fold uses [turn disclosure](flower-turn-process-disclosure.md) offset policy; manual toggles retain trigger anchors. Both catalogs share narrow/touch/focus/reduced-motion/forced-color behavior.
+Controls expose viewport IDs/localized counts; closed members leave no gaps and candidate control slots remain inaccessible until eligible. Auto-fold uses [turn disclosure](flower-turn-process-disclosure.md) offset policy; manual toggles retain trigger anchors. Both catalogs share narrow/touch/focus/reduced-motion/forced-color behavior.
 
 # Boundaries
 
@@ -52,3 +52,4 @@ and [whole-turn disclosure](flower-turn-process-disclosure.md).
 
 - `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Classification, counts, boundaries, collapse and stable identity.
 - `redeven:internal/flower_ui/src/flowerToolSequenceLayout.ts` - Stable row placement inside a shared bounded viewport.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - First-line geometry, native disclosure, retained reading state and bounded scrolling.
