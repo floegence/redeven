@@ -1,6 +1,9 @@
 import '../../index.css';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
+import { DirectoryFavoritesSection } from './DirectoryFavoritesSection';
+import { filesystemPickerEnUS } from '../../../../../flower_ui/src/i18n/filesystemPickerMessages';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
@@ -108,4 +111,26 @@ describe('favorite directory locations', () => {
     await userEvent.fill(section.querySelector<HTMLInputElement>('input')!, 'Disk-19');
     expect(section.querySelectorAll('[data-directory-favorite-path]')).toHaveLength(1);
   });
+});
+
+
+it('keeps the following tree anchored through initial load, refresh and filtering', async () => {
+  await page.viewport(1100, 650);
+  const [state, setState] = createSignal({ paths: [] as string[], loading: true });
+  const host = document.createElement('div'); document.body.append(host); host.style.width = '240px';
+  cleanups.push(render(() => <FloeConfigProvider><DirectoryFavoritesSection favorites={state()} copy={{ ...filesystemPickerEnUS, selectedCount: count => String(count) }} onNavigate={() => {}} onContextMenu={() => {}} /><div data-following-tree>Directory tree</div></FloeConfigProvider>, host));
+  await settle();
+  const tree = host.querySelector<HTMLElement>('[data-following-tree]')!;
+  const top = tree.getBoundingClientRect().top;
+  const paths = Array.from({ length: 20 }, (_, index) => '/Volumes/Disk-' + index);
+  setState({ paths, loading: false }); await settle();
+  expect(tree.getBoundingClientRect().top).toBeCloseTo(top, 1);
+  const first = host.querySelector<HTMLButtonElement>('[aria-label="/Volumes/Disk-0"]')!;
+  first.focus(); setState({ paths, loading: true }); await settle();
+  expect(document.activeElement).toBe(first);
+  expect(tree.getBoundingClientRect().top).toBeCloseTo(top, 1);
+  await userEvent.fill(host.querySelector<HTMLInputElement>('input')!, 'Disk-19');
+  expect(tree.getBoundingClientRect().top).toBeCloseTo(top, 1);
+  setState({ paths: [], loading: false }); await settle();
+  expect(tree.getBoundingClientRect().top).toBeCloseTo(top, 1);
 });

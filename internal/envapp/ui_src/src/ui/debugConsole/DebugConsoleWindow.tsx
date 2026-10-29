@@ -817,7 +817,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
             </div>
 
             <main class="relative min-h-0 flex-1">
-                <Show when={!props.controller.loading()} fallback={<EmptyState title={i18n.t('debugConsole.empty.loadingTitle')} message={i18n.t('debugConsole.empty.loadingMessage')} />}>
+                <Show when={!props.controller.loading() || Boolean(props.controller.lastSnapshotAt())} fallback={<EmptyState title={i18n.t('debugConsole.empty.loadingTitle')} message={i18n.t('debugConsole.empty.loadingMessage')} />}>
                   <UIFirstKeepAlivePanel active={tab() === 'requests'} class="absolute inset-0" testId="debug-console-panel-requests" render={() => (
                     <div class="flex h-full min-h-0 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-1">
                       <section class="min-h-0 flex-1">

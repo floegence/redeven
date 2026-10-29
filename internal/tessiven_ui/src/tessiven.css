@@ -1889,7 +1889,7 @@
 .tessiven-runtimes-dialog { width: min(760px, calc(100vw - 32px)); }
 .tessiven-runtimes-controls { display: flex; gap: 12px; margin-bottom: 16px; }
 .tessiven-runtimes-controls input { min-width: 0; flex: 1; }
-.tessiven-runtime-list { max-height: min(58vh, 600px); overflow: auto; display: grid; gap: 12px; }
+.tessiven-runtime-list { height: min(58dvh, 600px); overflow: auto; display: grid; gap: 12px; }
 .tessiven-runtime-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: grid; gap: 8px; }
 .tessiven-runtime-card[data-selected="true"] { border-color: var(--primary); }
 .tessiven-runtime-card-title { display: grid; gap: 4px; text-align: left; cursor: pointer; }
@@ -1924,3 +1924,6 @@
   .tessiven-canvas[data-connection-focus] .floe-graph__edge { stroke: Highlight; }
   .tessiven-canvas[data-connection-focus] .floe-graph__edge-label { fill: Highlight; }
 }
+
+.tessiven-resource-content { height: min(28rem, 60dvh); overflow: auto; scrollbar-gutter: stable; }
+.tessiven-runtime-list { align-content: start; }

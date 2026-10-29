@@ -961,6 +961,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   const [filePath, setFilePath] = createSignal('/');
   const [fileEntries, setFileEntries] = createSignal<ContainerResourceFileEntry[]>([]);
   const [filesLoading, setFilesLoading] = createSignal(false);
+  let fileListingOwner = '';
+  let imageBuildHistoryOwner = '';
   const [filePreview, setFilePreview] = createSignal('');
   const [filePreviewName, setFilePreviewName] = createSignal('');
   const [execSession, setExecSession] = createSignal<ContainerExecSessionState>({
@@ -1908,7 +1910,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     if (!ready || !entry || detailTab() !== 'layers' || ready.target.view !== 'images') return;
     const identity = resourceIdentity('images', entry.item);
     let active = true;
-    setImageBuildHistory([]);
+    const owner = JSON.stringify([identity, entry.target.engine, entry.target.endpoint_id]);
+    if (owner !== imageBuildHistoryOwner) { imageBuildHistoryOwner = owner; setImageBuildHistory([]); }
     setImageBuildHistoryLoading(true);
     setImageBuildHistoryError('');
     void getContainerImageBuildHistory(identity, entry.target.engine, entry.target.endpoint_id)
@@ -1930,6 +1933,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
     if (!entry.target.capabilities?.volume_files) return;
     const identity = resourceIdentity('volumes', entry.item);
     let active = true;
+    const owner = JSON.stringify([identity, filePath(), entry.target.engine, entry.target.endpoint_id]);
+    if (owner !== fileListingOwner) { fileListingOwner = owner; setFileEntries([]); }
     setFilesLoading(true);
     void listContainerResourceFiles('volumes', identity, filePath(), entry.target.engine, entry.target.endpoint_id)
       .then((listing) => active && setFileEntries([...listing.entries]))
@@ -3413,7 +3418,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
         </div>
       );
       if (state.phase !== 'ready' || state.key !== selectedResourceKey()) return (
-        <div class="container-empty-inline" role="status" aria-busy="true" data-container-detail-loading>{i18n.t('containers.loading')}</div>
+        <div class="container-detail-loading-fields" role="status" aria-busy="true" aria-label={i18n.t('containers.loading')} data-container-detail-loading><span /><span /><span /><span /></div>
       );
     }
     const record = selectedDetailRecord();
@@ -3449,8 +3454,8 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
       <div class="container-files-view">
         <div class="container-file-path"><Button size="sm" variant="ghost" class="container-icon-action" disabled={filePath() === '/'} aria-label={i18n.t('containers.detail.parentFolder')} onClick={() => setFilePath(filePath().split('/').slice(0, -1).join('/') || '/')}><ArrowLeft class="h-4 w-4" /></Button><span class="font-mono">{filePath()}</span></div>
         <Show when={canAdmin()} fallback={<div class="container-empty-inline">{i18n.t('containers.permissions.adminFiles')}</div>}>
-          <Show when={!filesLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
-            <div class="container-file-list"><For each={fileEntries()}>{(entry) => <div class="container-file-row"><button type="button" onClick={() => void openResourceFile(entry)}>{entry.kind === 'directory' ? <Folder class="h-4 w-4" /> : <FileText class="h-4 w-4" />}<span>{entry.name}</span></button><span>{formatBytes(entry.size_bytes)}</span><Show when={entry.kind === 'file'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.downloadFile')} onClick={() => void openResourceFile(entry, true)}><Download class="h-3.5 w-3.5" /></Button></Show></div>}</For></div>
+          <Show when={!filesLoading() || fileEntries().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
+            <div class="container-file-list" aria-busy={filesLoading()}><For each={fileEntries()}>{(entry) => <div class="container-file-row"><button type="button" onClick={() => void openResourceFile(entry)}>{entry.kind === 'directory' ? <Folder class="h-4 w-4" /> : <FileText class="h-4 w-4" />}<span>{entry.name}</span></button><span>{formatBytes(entry.size_bytes)}</span><Show when={entry.kind === 'file'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.downloadFile')} onClick={() => void openResourceFile(entry, true)}><Download class="h-3.5 w-3.5" /></Button></Show></div>}</For></div>
           </Show>
         </Show>
         <Show when={filePreviewName()}><div class="container-file-preview"><div>{filePreviewName()}</div><pre>{filePreview() || i18n.t('containers.detail.binaryFile')}</pre></div></Show>
@@ -3490,7 +3495,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
               <span>{i18n.t('containers.detail.created')}</span>
               <span>{i18n.t('containers.detail.result')}</span>
             </div>
-            <Show when={!imageBuildHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
+            <Show when={!imageBuildHistoryLoading() || imageBuildHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
               <Show when={!imageBuildHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.buildHistoryUnavailable')}</strong></div>}>
                 <Show when={imageBuildHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyBuildHistory')}</div>}>
                   <For each={imageBuildHistory()}>{(entry) => (
@@ -3957,7 +3962,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
                 <Show when={operation().resource_kind === 'container_service' && operationActive(operation())}><div class="container-operation-live" role="status"><span class="container-operation-live__icon" aria-hidden="true"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" /></span><div><strong>{serviceOperationTitle(operation())}</strong><p>{i18n.t('containers.services.lifecycle.waiting')}</p></div><Button size="sm" variant="ghost" onClick={() => void cancelContainerOperation(operation().operation_id).then(loadOperations)} disabled={!canExecute() || operation().state === 'canceling'}>{i18n.t('containers.actions.cancel')}</Button></div></Show>
                 <dl class="container-operation-facts"><div><dt>{i18n.t('containers.operations.duration')}</dt><dd>{operationDuration(operation())}</dd></div><Show when={operation().resource_kind === 'container_service' && servicesByID().get(operation().resource_identity)}>{(service) => <div><dt>{i18n.t('containers.services.currentStatus')}</dt><dd>{serviceStateLabel(service().state)}</dd></div>}</Show><div class="container-operation-facts__started"><dt>{i18n.t('containers.operations.started')}</dt><dd>{formatDate(operation().started_at_unix_ms || operation().created_at_unix_ms)}</dd></div></dl>
                 <Show when={operation().error_code || operation().error_message}><div class="container-operation-error" role="alert"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.operations.errorTitle')}</strong><p>{operationErrorMessage(operation())}</p></div></div></Show>
-                <Show when={operationEventsLoading() || events().length > 0}><div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading()} fallback={<div class="container-operation-timeline__loading">{i18n.t('containers.operations.loadingProgress')}</div>}><ol><For each={events()}>{(event, index) => {
+                <Show when={operationEventsLoading() || events().length > 0}><div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading() || events().length > 0} fallback={<div class="container-operation-loading-steps" role="status" aria-label={i18n.t('containers.operations.loadingProgress')}><span /><span /><span /></div>}><ol><For each={events()}>{(event, index) => {
                   const item = progressFromEvent(event);
                   const current = () => operationActive(operation()) && index() === events().length - 1;
                   return <li class="container-operation-step" data-state={event.state} data-current={current() ? 'true' : 'false'}><span aria-hidden="true"><Show when={current()} fallback={TERMINAL_OPERATION_STATES.has(event.state) && event.state !== 'succeeded' ? <X class="h-3 w-3" /> : <Check class="h-3 w-3" />}><Refresh class="h-3 w-3 animate-spin motion-reduce:animate-none" /></Show></span><div><strong>{operation().resource_kind === 'container_service' ? operationStateLabel(event.state) : operationPhaseLabel(item.phase)}</strong><Show when={item.total > 0}><small>{item.summary}</small></Show></div><time>{i18n.formatRelativeTime(event.created_at_unix_ms)}</time></li>;
@@ -3973,7 +3978,7 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
         open={serviceConfigurationOpen()}
         onOpenChange={(open) => { if (!open && !serviceConfigurationLoading()) setServiceConfigurationOpen(false); }}
         title={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })}
-        class="container-service-configuration-dialog"
+        class="container-service-configuration-dialog" contentClass="container-service-config-content"
         footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setServiceConfigurationOpen(false)}>{i18n.t('containers.actions.close')}</Button><Show when={serviceConfigurationTarget()?.configuration.mode === 'local'}><Button size="sm" variant="outline" onClick={() => submitServiceConfiguration('save')} disabled={!serviceConfigurationSourceEditable() || serviceConfigurationLoading() || !canRWX() || !canAdmin()}>{i18n.t('containers.services.save')}</Button><Show when={serviceConfigurationSource()?.apply_modes.includes('save_and_restart')}><Button size="sm" onClick={() => submitServiceConfiguration('save_and_restart')} disabled={!serviceConfigurationSourceEditable() || serviceConfigurationLoading() || !serviceConfigurationTarget()?.capabilities.restart || !canRWX() || !canAdmin()}>{i18n.t('containers.services.saveRestart')}</Button></Show></Show></div>}
       >
         <Show when={serviceConfigurationTarget()?.configuration.mode === 'local'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.services.configurationUnavailable')}</strong><p>{serviceConfigurationTarget() ? serviceGuidance(serviceConfigurationTarget()!) : ''}</p></div>}>

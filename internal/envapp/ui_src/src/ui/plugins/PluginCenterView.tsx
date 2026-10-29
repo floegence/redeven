@@ -1128,7 +1128,7 @@ function OfficialPluginInstallDialog(props: {
         : props.installed
           ? undefined
           : i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
-      class="w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
+      class="h-[min(42rem,90dvh)] w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
       footer={(
         <div class="flex w-full flex-wrap justify-end gap-2">
           <Show when={props.previewError}>
@@ -1450,7 +1450,7 @@ export function PluginCenterShell(props: {
     disabled: !props.canManage || props.loading,
   }];
   return (
-    <section ref={(element) => { props.rootRef?.(element); }} data-plugin-center-view onKeyDown={props.onKeyDown} tabIndex={-1} class="redeven-plugin-motion flex h-full min-h-0 min-w-0 flex-col text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
+    <section ref={(element) => { props.rootRef?.(element); }} data-plugin-center-view onKeyDown={props.onKeyDown} tabIndex={-1} class="redeven-plugin-motion relative flex h-full min-h-0 min-w-0 flex-col text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
         <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
           <Show when={props.showTitle !== false}><div class="flex min-w-0 shrink-0 items-center gap-2">
@@ -1553,7 +1553,7 @@ export function PluginCenterShell(props: {
               class={cn(
                 'flex flex-wrap items-center gap-3 border-b px-4 py-3 text-[length:var(--floe-type-body)]',
                 recovery().state === 'recovering'
-                  ? 'border-primary/30 bg-primary/5 text-foreground'
+                  ? 'absolute inset-x-4 bottom-4 z-10 rounded-md border border-primary/30 bg-background text-foreground shadow-md'
                   : 'border-destructive bg-background text-destructive',
                 PLUGIN_ENTER_MOTION_CLASS,
               )}

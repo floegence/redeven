@@ -157,6 +157,12 @@ describe('ServiceTemplateCatalog', () => {
     expect(host.textContent).toContain('Container templates 1');
   });
 
+  it('retains available templates and their details during a refresh', () => {
+    mount({ loading: true });
+    expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(2);
+    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Example Service');
+  });
+
   it('keeps primary and secondary actions in the selected template detail pane', () => {
     const actions = mount();
     const builtInCard = host.querySelector<HTMLElement>('[data-template-id="example-host"]')!;
@@ -318,7 +324,8 @@ describe('ServiceTemplateCatalog', () => {
 
   it('distinguishes loading from an empty category', () => {
     mount({ templates: [], loading: true });
-    expect(host.textContent).toContain('Loading');
+    expect(host.querySelector('[role=status]')?.getAttribute('aria-label')).toContain('Loading');
+    expect(host.querySelectorAll('.service-template-loading-list > span')).toHaveLength(3);
     expect(host.textContent).not.toContain('No templates match this view.');
   });
 

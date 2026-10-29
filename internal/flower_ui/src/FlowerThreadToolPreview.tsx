@@ -21,7 +21,7 @@ export const FlowerThreadToolPreview: Component<{
     ? content === 'all' ? words().previewScopeAll : words().previewScopeSelected.replace('{count}', content)
     : title === 'object' ? value(content) : content;
   return <div class="flower-thread-tool-preview" aria-live="polite">
-    <Show when={props.loading}><p class="flower-activity-detail-notice">{words().previewLoading}</p></Show>
+    <Show when={props.loading}><p role="status" class={props.preview ? "flower-visually-hidden" : "flower-activity-detail-notice"}>{words().previewLoading}</p></Show>
     <Show when={props.failed}>
       <p class="flower-activity-detail-notice">{words().previewFailed}</p>
       <button type="button" class="flower-activity-detail-expand" onClick={props.retry}>{words().previewRetry}</button>

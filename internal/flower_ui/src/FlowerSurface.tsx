@@ -143,6 +143,7 @@ import type {
   FlowerSurfaceAdapter,
   FlowerTerminalProcessSnapshot,
   FlowerToolPreviewRequest,
+  FlowerToolPreview,
   FlowerTurnLaunchFailure,
   FlowerTurnLaunchInput,
   FlowerGoalInput,
@@ -11755,7 +11756,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const threadPreviewTool = () => item().status === 'success' && ['threads.query', 'threads.read', 'threads.aggregate'].includes(item().tool_name ?? '') && Boolean(props.adapter.loadToolPreview);
     const [previewRequest, setPreviewRequest] = createSignal<FlowerToolPreviewRequest>();
-    const [toolPreview, { refetch: reloadToolPreview }] = createResource(previewRequest, (request) => props.adapter.loadToolPreview!(request));
+    const [retainedToolPreview, setRetainedToolPreview] = createSignal<{ request: FlowerToolPreviewRequest; value: FlowerToolPreview }>();
+    let previewLoad = 0;
+    const [toolPreview, { refetch: reloadToolPreview }] = createResource(previewRequest, async request => {
+      const attempt = ++previewLoad;
+      const value = await props.adapter.loadToolPreview!(request);
+      if (attempt === previewLoad && request === untrack(previewRequest)) setRetainedToolPreview({ request, value });
+      return value;
+    });
     createEffect(on(disclosureKey, () => setPreviewRequest(undefined)));
     createEffect(() => {
       if (!visible() || !open() || !threadPreviewTool()) return;
@@ -11924,7 +11932,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </div>
                 </Show>
                 <Show when={threadPreviewTool() && previewRequest()} fallback={null}>
-                  <FlowerThreadToolPreview preview={toolPreview.loading || toolPreview.error ? undefined : toolPreview()} loading={toolPreview.loading}
+                  <FlowerThreadToolPreview preview={retainedToolPreview()?.request === previewRequest() ? retainedToolPreview()?.value : undefined} loading={toolPreview.loading}
                     failed={Boolean(toolPreview.error)} retry={() => { void reloadToolPreview(); }} copy={copy().chat} />
                 </Show>
                 <Show when={!threadPreviewTool() || !previewRequest()}>
@@ -13454,7 +13462,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const modelSourceStatusRow = (placement: 'footer' | 'menu') => (
-    <Show when={unavailableModelSource()} keyed>
+    <Show when={unavailableModelSource()?.state !== 'connecting' && unavailableModelSource()} keyed>
       {(status) => {
         const recoveryActions = modelSourceRecoveryAction(status);
         return (
@@ -13544,12 +13552,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <Button class="flower-model-menu-expand" size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
         </Show>
         <Show when={modelAvailabilityChecking() || modelDirectory()?.error || selectedModelNeedsAttention()}>
-          <p class="flower-model-menu-status" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking
+          <p class={modelAvailabilityChecking() ? "flower-visually-hidden" : "flower-model-menu-status"} role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking
             : modelDirectory()?.error === 'directory_timeout' ? copy().chat.modelsCheckTimedOut
             : modelDirectory()?.error ? copy().chat.modelsCheckFailed : selectedModelAvailabilityMessage()}</p>
         </Show>
         <div class="flower-model-menu-footer">
-          <Button class="flower-model-menu-action" size="xs" variant="ghost" icon={Refresh} loading={modelSourceRefreshing()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
+          <Button class="flower-model-menu-action" size="xs" variant="ghost" icon={Refresh} loading={modelAvailabilityChecking()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
           <Button class="flower-model-menu-action flower-model-menu-manage" size="xs" variant="ghost" icon={Settings} onClick={() => { closeModelMenu(false); openSettings(); }}>{copy().settings.dialog.catalog.manage}</Button>
         </div>
         {modelSourceStatusRow('menu')}
@@ -13562,7 +13570,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerNotices = () => (
     <Show when={bottomActionMode() === 'chat' && !companionCollapsed()}>
       <div class="flower-composer-notices">
-        <Show when={(needsSetup() || selectedModelNeedsAttention()) && !composerModelLoading() && (presentation() !== 'companion' || !unavailableModelSource())}>
+        <Show when={(needsSetup() || selectedModelNeedsAttention()) && !composerModelLoading() && !modelAvailabilityChecking() && (presentation() !== 'companion' || !unavailableModelSource())}>
           <div class="flower-setup-inline" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking : selectedModelNeedsAttention() ? selectedModelAvailabilityMessage() : unavailablePlatformCatalog() ? copy().chat.modelsCheckFailed : selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
         </Show>
         <Show when={!anyModelReady() || selectedComposerModelID().startsWith('desktop:')}>{modelSourceStatusRow('footer')}</Show>
@@ -14087,7 +14095,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <button type="button" aria-label={copy().computer.close} title={copy().computer.close} onClick={() => closeGoalEditor()}><X class="h-3.5 w-3.5" /></button>
               </div>
             </div>
-            <Show when={goalEditor() && goalPopupLoad() !== 'loading'}>
+            <Show when={goalEditor()}>
               <div class="flower-goal-tabs" role="tablist" aria-label={copy().chat.goalTitle}>
                 <For each={['current', 'draft'] as const}>{view => (
                   <button type="button" role="tab" id={goalPopupID + '-' + view} data-goal-view={view} aria-controls={goalPopupID}
@@ -14107,12 +14115,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 )}</For>
               </div>
             </Show>
-            <div id={goalPopupID} role={goalEditor() && goalPopupLoad() !== 'loading' ? 'tabpanel' : undefined} aria-labelledby={goalEditor() && goalPopupLoad() !== 'loading' ? goalPopupID + '-' + goalPopupView() : undefined} class="flower-goal-body" aria-busy={goalPopupLoad() === 'loading'}>
+            <div id={goalPopupID} role={goalEditor() ? 'tabpanel' : undefined} aria-labelledby={goalEditor() ? goalPopupID + '-' + goalPopupView() : undefined} class="flower-goal-body" aria-busy={goalPopupLoad() === 'loading'}>
               <Show when={goalPopupLoad() === 'loading'}>
                 <p class="flower-goal-loading" role="status"><StableText reserve={[copy().chat.goalConfirming]}>{copy().chat.goalConfirming}</StableText></p>
               </Show>
               <Show when={goalPopupLoad() === 'error'}><p class="flower-goal-notice" role="alert">{copy().chat.goalConfirmFailed}</p></Show>
-              <Show when={goalPopupLoad() === 'ready' || goalPopupLoad() === 'error' && goalPopupView() === 'draft' && goalEditor()}>
+              <Show when={goalPopupLoad() === 'ready' || goalPopupView() === 'draft' && goalEditor()}>
                 <Show when={goalPopupLoad() === 'ready' && (goalDraftStale() || goalDeleteConflict())}>
                   <p class="flower-goal-notice" role="status">{copy().chat.goalUpdated}</p>
                 </Show>
@@ -14140,8 +14148,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </Show>
               </Show>
             </div>
-            <Show when={goalPopupLoad() === 'error' || goalEditor() && goalPopupLoad() === 'ready'}>
-              <div class="flower-goal-actions">
+            <Show when={goalPopupLoad() === 'error' || goalEditor()}>
+              <div class="flower-goal-actions" inert={goalPopupLoad() === 'loading'} aria-busy={goalPopupLoad() === 'loading'}>
                 <Show when={goalEditor()}><Button size="xs" class="flower-goal-discard" variant="ghost" disabled={goalComposing()} onClick={discardGoalDraft}>{copy().chat.goalDiscardDraft}</Button></Show>
                 <Show when={goalPopupLoad() === 'error'} fallback={
                   <Show when={goalPopupView() === 'current' || !goalEditing() && !goalDraftStale()} fallback={
@@ -15096,7 +15104,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const settingsReadNotice = (floating = false) => (
     <Show when={!settingsReady() && (!floating || settingsError() || !props.adapter.connectLiveStream
       || liveSyncState().status !== 'connecting' && liveSyncState().status !== 'reconnecting')}>
-      <div class={cn('flower-settings-read-status', floating && 'flower-chat-notice')} role={settingsError() ? 'alert' : 'status'} aria-busy={settingsLoading()}>
+      <div class={cn('flower-settings-read-status', floating && 'flower-chat-notice', !floating && !settingsError() && 'flower-visually-hidden')} role={settingsError() ? 'alert' : 'status'} aria-busy={settingsLoading()}>
         <Show when={floating}><Show when={settingsError()} fallback={<FlowerThreadWave />}><AlertCircle class="size-3.5 shrink-0" aria-hidden="true" /></Show></Show>
         <span>{settingsError() || (floating ? copy().chat.history.loading : copy().chat.loadingSettings)}</span>
         <Show when={settingsError()}>
@@ -15107,11 +15115,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const SettingsContent = createRetainedContent(() => (
-    <div class="min-h-0" data-flower-panel="settings" hidden={!settingsDialogPresent() && sidePanel() !== 'settings'}
+    <div class="flower-settings-content min-h-0" data-flower-panel="settings" hidden={!settingsDialogPresent() && sidePanel() !== 'settings'}
       inert={!settingsDialogPresent()} aria-hidden={!settingsDialogPresent()}>
       <Show when={settingsOpened()}>
         {settingsReadNotice()}
-        <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
+        <Suspense fallback={<div class="flower-settings-skeleton flower-loading-rows" aria-hidden="true"><span /><span /><span /><span /></div>}>
           <div inert={!settingsReady() || surfaceReadOnly()} aria-busy={settingsLoading()}>
           <FlowerSettingsSurface
             onDiscoverModels={props.adapter.discoverProviderModels}
@@ -15227,7 +15235,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             });
           }}
           presentation="dialog"
-          title={copy().settings.title}
+          title={<span class="inline-flex items-center gap-2">{copy().settings.title}<span class="inline-flex size-4 items-center" aria-hidden="true"><Show when={settingsLoading()}><Refresh class="size-3.5 animate-spin motion-reduce:animate-none" /></Show></span></span>}
           closeLabel={copy().computer.close}
           escapeKeyPhase="bubble"
           onKeyDown={event => {

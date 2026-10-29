@@ -10,6 +10,8 @@ import {
   createMemo,
   createSignal,
   lazy,
+  on,
+  onCleanup,
 } from "solid-js";
 import type { CodeEditorProps } from "@floegence/floe-webapp-core/editor";
 import { cn, useNotification } from "@floegence/floe-webapp-core";
@@ -263,6 +265,7 @@ export function ManagedServiceSettingsDrawer(props: {
   const [section, setSection] = createSignal<SectionID>("general");
   const [composeService, setComposeService] = createSignal("");
   const [loading, setLoading] = createSignal(false);
+  const [readConfirmed, setReadConfirmed] = createSignal(false);
   const [savingMetadata, setSavingMetadata] = createSignal(false);
   const [applying, setApplying] = createSignal(false);
   const [error, setError] = createSignal("");
@@ -281,15 +284,30 @@ export function ManagedServiceSettingsDrawer(props: {
   const picker = useEnvFilesystemPicker();
   createEffect(() => { if (!props.open) setPickerOpen(false); });
 
+  let readGeneration = 0;
+  let ownerService: string | undefined;
+  onCleanup(() => { readGeneration++; });
   const load = async () => {
     if (!props.open || !props.serviceID) return;
+    const generation = ++readGeneration;
+    const serviceID = props.serviceID;
     setLoading(true);
+    setReadConfirmed(false);
     setError("");
     try {
       const value = await fetchLocalApiJSON<SettingsView>(
         `/_redeven_proxy/api/managed-web-services/${encodeURIComponent(props.serviceID)}/settings`,
         { method: "GET" },
       );
+      if (generation !== readGeneration || serviceID !== props.serviceID || !props.open) return;
+      setReadConfirmed(true);
+      setPlan(null); setAcceptedRisks({});
+      if (metadataDirty() || runtimeDirty()) {
+        const authority = { management_state: value.management_state, observed_state: value.observed_state, locked: value.locked };
+        setLoaded(current => current ? { ...current, ...authority } : current);
+        setDraft(current => current ? { ...current, ...authority } : current);
+        return;
+      }
       setLoaded(clone(value));
       setDraft(clone(value));
       setComposeService(
@@ -298,16 +316,23 @@ export function ManagedServiceSettingsDrawer(props: {
       setPlan(null);
       setAcceptedRisks({});
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setLoading(false);
+      if (generation === readGeneration) setLoading(false);
     }
   };
 
-  createEffect(() => {
-    if (!props.open) return;
-    void load();
-  });
+  createEffect(on(() => [props.open, props.serviceID] as const, ([open, serviceID]) => {
+    readGeneration++;
+    setLoading(false);
+    setReadConfirmed(false);
+    setSavingMetadata(false); setApplying(false);
+    if (serviceID !== ownerService) {
+      ownerService = serviceID;
+      setLoaded(null); setDraft(null); setPlan(null); setAcceptedRisks({}); setError("");
+    }
+    if (open) void load();
+  }));
 
   const runtimeDraft = createMemo<ManagedServiceReconfigureDraft | null>(() => {
     const value = draft();
@@ -401,7 +426,8 @@ export function ManagedServiceSettingsDrawer(props: {
 
   const saveMetadata = async () => {
     const value = draft();
-    if (!value || !value.name.trim() || !metadataDirty()) return;
+    if (!value || !value.name.trim() || !metadataDirty() || !readConfirmed() || !props.canManage || !props.open) return;
+    const generation = readGeneration;
     setSavingMetadata(true);
     setError("");
     try {
@@ -416,6 +442,7 @@ export function ManagedServiceSettingsDrawer(props: {
           }),
         },
       );
+      if (generation !== readGeneration) return;
       setLoaded((current) =>
         current
           ? {
@@ -439,15 +466,16 @@ export function ManagedServiceSettingsDrawer(props: {
       props.onChanged();
       notify.success(settingText("savedTitle"), settingText("detailsSaved"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setSavingMetadata(false);
+      if (generation === readGeneration) setSavingMetadata(false);
     }
   };
 
   const preflight = async () => {
     const value = runtimeDraft();
-    if (!value || !runtimeDirty()) return;
+    if (!value || !runtimeDirty() || !readConfirmed() || !props.canManage || !props.open) return;
+    const generation = readGeneration;
     setApplying(true);
     setError("");
     try {
@@ -455,20 +483,22 @@ export function ManagedServiceSettingsDrawer(props: {
         `/_redeven_proxy/api/managed-web-services/${encodeURIComponent(props.serviceID)}/reconfigure/preflight`,
         { method: "POST", body: JSON.stringify(value) },
       );
+      if (generation !== readGeneration) return;
       setPlan(next);
       setAcceptedRisks({});
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setApplying(false);
+      if (generation === readGeneration) setApplying(false);
     }
   };
 
   const apply = async () => {
     const value = runtimeDraft();
     const checked = plan();
-    if (!value || !checked) return;
+    if (!value || !checked || !readConfirmed() || !props.canManage || !props.open) return;
     if ((checked.risks ?? []).some((risk) => !acceptedRisks()[risk.id])) return;
+    const generation = readGeneration;
     setApplying(true);
     setError("");
     try {
@@ -477,12 +507,13 @@ export function ManagedServiceSettingsDrawer(props: {
         plan_digest: checked.plan_digest,
         accepted_risk_ids: (checked.risks ?? []).map((risk) => risk.id),
       });
+      if (generation !== readGeneration) return;
       props.onChanged();
       props.onOpenChange(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (generation === readGeneration) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setApplying(false);
+      if (generation === readGeneration) setApplying(false);
     }
   };
 
@@ -557,7 +588,7 @@ export function ManagedServiceSettingsDrawer(props: {
           size="sm"
           variant="outline"
           onClick={() => void saveMetadata()}
-          disabled={!props.canManage || savingMetadata() || ["detached","uninstalled"].includes(draft()?.management_state ?? "")}
+          disabled={!readConfirmed() || !props.canManage || savingMetadata() || ["detached","uninstalled"].includes(draft()?.management_state ?? "")}
         >
           {settingText("saveDetails")}
         </Button>
@@ -580,7 +611,7 @@ export function ManagedServiceSettingsDrawer(props: {
             size="sm"
             variant="outline"
             onClick={() => void preflight()}
-            disabled={!props.canManage || applying()}
+            disabled={!readConfirmed() || !props.canManage || applying()}
           >
             {settingText("preflight")}
           </Button>
@@ -589,7 +620,7 @@ export function ManagedServiceSettingsDrawer(props: {
             variant="default"
             onClick={() => void apply()}
             disabled={
-              !props.canManage ||
+              !readConfirmed() || !props.canManage ||
               applying() ||
               !plan() ||
               (plan()?.risks ?? []).some((risk) => !acceptedRisks()[risk.id])
@@ -617,18 +648,20 @@ export function ManagedServiceSettingsDrawer(props: {
         footer={footer()}
       >
         <Show
-          when={!loading() && draft()}
+          when={draft()}
           fallback={
             <div class="flex min-h-[20rem] items-center justify-center gap-2 text-[length:var(--floe-type-body)] text-muted-foreground">
-              <ManagedServiceShapingOrb />
-              <span>{settingText("loading")}</span>
+              <Show when={!error()} fallback={<div class="space-y-3 text-center"><p role="alert">{error()}</p><Button size="sm" variant="outline" onClick={() => void load()}>{i18n.t('common.actions.retry')}</Button></div>}>
+                <ManagedServiceShapingOrb />
+                <span role="status">{settingText("loading")}</span>
+              </Show>
             </div>
           }
         >
           {(resolved) => (
             <div
               class="managed-settings-layout flex min-h-0 flex-1 overflow-hidden"
-              data-testid="managed-service-settings"
+              data-testid="managed-service-settings" aria-busy={loading()}
             >
               <nav
                 class="managed-settings-navigation"
@@ -688,6 +721,7 @@ export function ManagedServiceSettingsDrawer(props: {
                     role="alert"
                   >
                     {error()}
+                    <Show when={!readConfirmed()}><Button size="sm" variant="outline" disabled={loading()} onClick={() => void load()}>{i18n.t('common.actions.retry')}</Button></Show>
                   </div>
                   <Show when={props.onEditTemplate && props.canManage}><Button size="sm" variant="outline" onClick={() => props.onEditTemplate?.()}>{i18n.t("webServices.managed.editTemplate")}</Button></Show>
                 </Show>

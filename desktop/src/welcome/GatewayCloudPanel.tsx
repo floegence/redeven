@@ -73,15 +73,15 @@ export function GatewayCloudPanel(props: Readonly<{ embedded?: boolean; gatewayI
       <div class="redeven-gateway-cloud-layout"><Show when={unavailable()}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={props.available === false || busy()} onClick={revalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
         <div class="redeven-gateway-cloud-state">
           <p class="redeven-gateway-cloud-state__name">{sessionName()}</p>
-          <Show when={status()}>{value => <div role="status" class="redeven-gateway-cloud-state__status"><span>{props.i18n.t(`gatewayCloud.${value().state}`)}</span></div>}</Show>
-          <Show when={needsConfiguration()}><p class="redeven-gateway-help">{props.i18n.t('gatewayCloud.nextStep')}</p></Show>
+          <div role="status" class="redeven-gateway-cloud-state__status"><span>{status() ? props.i18n.t(('gatewayCloud.' + status()!.state) as Parameters<typeof props.i18n.t>[0]) : props.i18n.t('gatewayCloud.working')}</span></div>
+          <p class="redeven-gateway-help" classList={{ invisible: !status() || !needsConfiguration() }} aria-hidden={!status() || !needsConfiguration()}>{props.i18n.t('gatewayCloud.nextStep')}</p>
         </div>
         <Show when={error()}><p role="alert" class="redeven-gateway-content-enter rounded-md bg-destructive/10 px-3 py-2 text-sm text-error">{error()}</p></Show>
-        <Show when={busy()}><p role="status" aria-live="polite" class="text-sm text-muted-foreground">{props.i18n.t('gatewayCloud.working')}</p></Show>
+        <Show when={busy()}><p role="status" aria-live="polite" class="sr-only">{props.i18n.t('gatewayCloud.working')}</p></Show>
         <div class="redeven-gateway-dialog-actions">
           <Show when={!props.embedded}><Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t(busy() ? 'common.cancel' : 'common.close')}</Button></Show>
-          <Button class="cursor-pointer" variant="outline" disabled={busy() || unavailable()} onClick={() => void load()}>{props.i18n.t('common.refresh')}</Button>
-          <Show when={!needsConfiguration()} fallback={<Button class="cursor-pointer" disabled={busy() || unavailable()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
+          <Button class="cursor-pointer" variant="outline" loading={busy()} disabled={busy() || unavailable()} onClick={() => void load()}>{props.i18n.t('common.refresh')}</Button>
+          <Show when={!needsConfiguration()} fallback={<Button class="cursor-pointer" disabled={!status() || busy() || unavailable()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
             <Button class="cursor-pointer" disabled={busy() || unavailable()} onClick={() => void manage()}>{props.i18n.t('gatewayCloud.manage')}</Button>
           </Show>
         </div>

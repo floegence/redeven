@@ -804,8 +804,8 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
             data-transition-active={presentation.active}
           >
             <Show
-              when={!props.loading}
-              fallback={<div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('common.status.loading')}</div>}
+              when={!props.loading || props.templates.length > 0}
+              fallback={<div class="service-template-catalog__layout service-template-catalog__layout--with-details" role="status" aria-label={i18n.t('common.status.loading')}><div class="service-template-loading-list" aria-hidden="true"><span /><span /><span /></div><div class="service-template-loading-detail" aria-hidden="true" /></div>}
             >
               <Show
                 when={props.templates.length > 0}

@@ -166,7 +166,7 @@ export function FlowerComputerConnections(props: {
   return <Dialog open={props.open} onOpenChange={props.onOpenChange}
     title={<span class="flower-computer-title"><MonitorPointer aria-hidden="true" />{title()}</span>}
     closeLabel={props.copy.close} class={props.connectionOnly ? 'flower-computer-dialog w-[min(30rem,94vw)] max-w-[30rem]' : `flower-computer-dialog w-[min(48rem,94vw)] max-w-[48rem]${page() === 'targets' ? ' flower-computer-picker-dialog' : ''}`}
-    contentClass={`flower-computer-content${page() === 'targets' ? ' flower-computer-picker-content' : ''}`}
+    contentClass={`flower-computer-content${page() === 'targets' ? ' flower-computer-picker-content' : page() === 'managed' ? ' flower-computer-managed-content' : ''}`}
     footer={props.connectionOnly ? undefined : <Show when={page() === 'targets'} fallback={<div class="flower-computer-footer">
       <Show when={page() === 'overview'} fallback={<Button variant="outline" disabled={busy()} onClick={() => go('overview')}><ChevronLeft class="size-3.5" />{props.copy.back}</Button>}>
         <Show when={props.threadID}><Button variant="outline" disabled={!readable()} onClick={openAccess}><Shield class="size-3.5" />{props.permissionLabel || (props.fullAccess ? props.copy.fullAccessTitle : props.copy.permissions)}<ChevronRight class="size-3.5" /></Button></Show>

@@ -83,6 +83,7 @@ export function TessivenPage(props: {
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [loading, setLoading] = createSignal(true);
+  const [openingCanvas, setOpeningCanvas] = createSignal(false);
   const [streamError, setStreamError] = createSignal(false);
   props.registerPageContext?.(() => ({ canvas_id: canvas()?.id, version: version()?.number, query: query(), archived: archived() }));
   let libraryGeneration = 0,
@@ -268,7 +269,7 @@ export function TessivenPage(props: {
   async function openCanvas(id: string, number?: number) {
     const generation = ++viewGeneration;
     setError('');
-    setLoading(true);
+    setOpeningCanvas(true);
     try {
       const [nextCanvas, nextVersion] = await Promise.all([
         request<Canvas>('GET', `/canvases/${encodeURIComponent(id)}`),
@@ -287,7 +288,7 @@ export function TessivenPage(props: {
     } catch (cause) {
       if (!disposed && generation === viewGeneration) setError(message(cause));
     } finally {
-      if (!disposed && generation === viewGeneration) setLoading(false);
+      if (!disposed && generation === viewGeneration) setOpeningCanvas(false);
     }
   }
   async function refresh() {
@@ -356,6 +357,7 @@ export function TessivenPage(props: {
   });
   function back() {
     viewGeneration++;
+    setOpeningCanvas(false);
     setCanvas(undefined);
     setVersion(undefined);
     setError('');
@@ -368,6 +370,7 @@ export function TessivenPage(props: {
       creation = undefined;
       if (disposed) return;
       viewGeneration++;
+      setOpeningCanvas(false);
       setCanvas(result.canvas);
       setVersion(result.version);
       setBrowseHistory(false);
@@ -661,7 +664,8 @@ export function TessivenPage(props: {
               </div>
             }
           >
-            <div class="tessiven-library">
+            <div class="tessiven-library" aria-busy={loading() || openingCanvas()}>
+              <Show when={openingCanvas()}><span class="sr-only" role="status">{props.t('loading')}</span></Show>
               <Show
                 when={!loading()}
                 fallback={

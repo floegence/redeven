@@ -466,10 +466,12 @@
 @media (max-width: 759px) {
   .flower-provider-workspace {
     grid-template-columns: minmax(0, 1fr);
-    height: auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: min(38rem, 72dvh);
   }
 
   .flower-provider-picker {
+    max-height: min(10rem, 20dvh);
     padding: 0.875rem;
     border-right: 0;
     border-bottom: 1px solid var(--flower-provider-divider);
@@ -499,8 +501,8 @@
 
   .flower-provider-editor {
     padding: 1rem;
-    height: auto;
-    overflow: visible;
+    min-height: 0;
+    overflow: auto;
   }
 
   .flower-provider-account { padding: 1rem; }
@@ -9740,15 +9742,15 @@ button.flower-attachment-preview-trigger:disabled {
 
 /* The settings dialog is a compact sheet, not a second application window: it
  * sits in the same reading column as a chat thread instead of filling the
- * viewport edge to edge. Height follows the content; the overlay's own padding
- * keeps the panel off the viewport edges. */
+ * viewport edge to edge. The content viewport stays stable through loading
+ * and section changes; the overlay keeps the panel off the viewport edges. */
 .flower-settings-dialog {
   width: min(720px, 100%);
   max-width: 720px;
   height: auto;
 }
 
-.flower-settings-dialog-content { padding: 0; }
+.flower-settings-dialog-content { padding: 0; height: min(40rem, 72dvh); scrollbar-gutter: stable; }
 .flower-settings-dialog .flower-settings-frame { position: relative; padding: 0.75rem 1rem 1rem; }
 .flower-settings-dialog .flower-settings-surface { height: auto; overflow: visible; }
 
@@ -12676,7 +12678,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-history-text-skeleton span:last-child { width: 62%; }
 
 /* Thread files use published controls in a quiet, flat list. */
-.flower-task-files-content { display: flex; flex-direction: column; gap: .875rem; max-height: min(72dvh, 46rem); overflow-y: auto; padding: .75rem 1.25rem 1.25rem; scrollbar-gutter: stable; }
+.flower-task-files-content { display: flex; flex-direction: column; gap: .875rem; height: min(72dvh, 46rem); overflow-y: auto; padding: .75rem 1.25rem 1.25rem; scrollbar-gutter: stable; }
 .flower-task-files-content > * { flex-shrink: 0; }
 .flower-task-files-content > .flower-task-section-heading { margin-bottom: -.625rem; }
 .flower-task-files-section { display: flex; flex-direction: column; gap: .375rem; min-width: 0; }
@@ -12733,3 +12735,21 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 @media (prefers-reduced-motion: reduce) {
   .flower-task-disclosure-chevron { transition: none; }
 }
+
+/* Pending reads never insert a row above retained controls. */
+.flower-settings-content { position: relative; }
+.flower-settings-content > .flower-settings-read-status:not(.flower-visually-hidden) {
+  position: absolute; inset-block-start: .5rem; inset-inline: 1rem; z-index: 2;
+  margin: 0; background: var(--popover, var(--background));
+  box-shadow: 0 4px 12px -4px var(--redeven-shadow-color);
+}
+.flower-loading-rows { display: grid; gap: .75rem; padding: .75rem 0; }
+.flower-loading-rows > span { display: block; height: 2.5rem; border-radius: .375rem; background: var(--muted); }
+.flower-loading-rows > span:last-child { width: 65%; }
+.flower-settings-skeleton { min-height: min(30rem, 65dvh); padding: 1rem; }
+
+.flower-skill-files-content { height: min(34rem, 65dvh); overflow: auto; scrollbar-gutter: stable; }
+.flower-goal-body { position: relative; }
+.flower-goal-body:has(.flower-goal-input) > .flower-goal-loading { position: absolute; inset: 0; background: var(--popover, var(--background)); }
+
+.flower-computer-managed-content { height: min(38rem, 65dvh); overflow-y: auto; scrollbar-gutter: stable; }

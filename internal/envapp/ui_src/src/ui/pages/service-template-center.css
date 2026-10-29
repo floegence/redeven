@@ -437,3 +437,7 @@
     background: Highlight;
   }
 }
+
+.service-template-loading-list { display: grid; gap: 12px; padding-top: 40px; }
+.service-template-loading-list > span { height: 76px; border-radius: var(--radius); background: var(--redeven-surface-control-muted); }
+.service-template-loading-detail { height: 320px; border-radius: var(--radius); background: var(--redeven-surface-control-muted); }

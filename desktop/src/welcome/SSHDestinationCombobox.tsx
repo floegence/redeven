@@ -181,7 +181,7 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
           }}
         >
           <Show when={props.loading && props.hosts.length === 0}>
-            <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2 text-[11px] text-muted-foreground" role="status">
+            <div class="sr-only" role="status">
               <Refresh class="h-3.5 w-3.5 shrink-0 animate-spin" />
               <span>{props.i18n.t('connectionDialog.sshConfigLoading')}</span>
             </div>

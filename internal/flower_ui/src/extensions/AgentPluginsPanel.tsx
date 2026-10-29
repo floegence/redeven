@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from
 import { Button, ConfirmDialog, Dialog, Input, Select, Switch } from '@floegence/floe-webapp-core/ui';
 import { Plus, Refresh, Trash, Search, Package, Settings } from '@floegence/floe-webapp-core/icons';
 import { useFlowerExtensions } from './context';
+import { retainEqualValue } from '../presentationIdentity';
 import { SettingsSection } from './primitives';
 import { AgentPluginCatalogView, AgentPluginSourcesDialog } from './AgentPluginCatalog';
 import { AgentPluginCard, AgentPluginDetails, pluginComponentKeys, pluginComponentName } from './AgentPluginDetails';
@@ -38,7 +39,7 @@ export function AgentPluginsPanel() {
     const known = ['configuration_changed', 'plugin_in_use', 'package_changed', 'source_already_installed', 'process_permission_required', 'connection_failed', 'source_path_denied', 'component_unavailable'];
     return known.includes(code) ? t('plugins.error.' + code) : t('plugins.failed');
   };
-  async function load() { const result = await api.list(); if (!disposed) setListing(result); }
+  async function load() { const result = await api.list(); if (!disposed) setListing(previous => retainEqualValue(previous, result)); }
   async function run(key: string, action: () => Promise<unknown>) {
     if (busy() || !ctx.canInteract()) return;
     setBusy(key); setError(''); setNotice('');
@@ -86,9 +87,10 @@ export function AgentPluginsPanel() {
   const closeInstall = () => { if (!busy()) { previewGeneration++; clearTimeout(polling); setInstalling(false); } };
   return <>
     <SettingsSection title={t('plugins')} filters={<><Show when={hasSources()}><div class="flower-plugin-segments" role="group" aria-label={t('plugins.view')}><For each={['installed', 'discover'] as const}>{value => <button type="button" aria-pressed={view() === value} onClick={() => setView(value)}>{t('plugins.' + value)}<Show when={value === 'installed' && listing()?.items.length}><span>{listing()?.items.length}</span></Show></button>}</For></div></Show><Show when={view() === 'discover' || !!listing()?.items.length}><label class="flower-extension-search"><Search class="h-4 w-4" aria-hidden="true" /><Input type="search" aria-label={t('plugins.search')} placeholder={t('plugins.search')} value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label></Show></>} actions={<><Button size="icon" variant="ghost" icon={Refresh} aria-label={t('skillsSettings.reload')} title={t('skillsSettings.reload')} loading={busy() === 'load'} disabled={!ctx.canInteract() || !!busy()} onClick={() => void run('load', async () => { await load(); setCatalogRefresh(value => value + 1); })} /><Show when={ctx.canAdmin() || hasSources()}><Button size="icon" variant="ghost" icon={Settings} aria-label={t('plugins.manageSources')} title={t('plugins.manageSources')} disabled={!ctx.canInteract() || !!busy()} onClick={() => setSourcesOpen(true)} /></Show><Show when={view() === 'discover' || !!listing()?.items.length}><Button size="sm" icon={Plus} disabled={!canManage()} onClick={() => newInstall()}>{t('plugins.install')}</Button></Show></>}>
+      <Show when={!listing() && busy() === 'load'}><div class="flower-extension-skeleton" role="status" aria-label={t('loading')}><span /><span /><span /></div></Show>
       <Show when={error()}><p role="alert" class="flower-extension-error">{error()}</p></Show>
       <Show when={notice()}><p role="status" class="flower-extension-notice">{notice()}</p></Show>
-      <Show when={busy()}><p role="status" class="flower-extension-notice">{t(busy() === 'prepare' ? 'plugins.preparing' : 'loading')}</p></Show>
+      <Show when={busy()}><p role="status" class="sr-only">{t(busy() === 'prepare' ? 'plugins.preparing' : 'loading')}</p></Show>
 
       <Show when={view() === 'installed'} fallback={<>
         <AgentPluginCatalogView sources={listing()?.sources ?? []} selectedSource={selectedSource()} onSelectSource={setSelectedSource} query={query()} refresh={catalogRefresh()} canManage={!!canManage()} onInstall={newInstall} onClear={() => setQuery('')} />
@@ -103,9 +105,9 @@ export function AgentPluginsPanel() {
       <Show when={error()}><p role="alert" class="flower-extension-error">{error()}</p></Show><Show when={notice()}><p role="status" class="flower-extension-notice">{notice()}</p></Show>
       <Show when={detailItem()}>{item => <AgentPluginDetails item={item()} canManage={!!canManage()} busy={!!busy()} onChange={(enabled, key) => change(item(), enabled, key)} onAutoCheck={auto_check => { if (canManage()) void run(item().id, () => api.change({ id: item().id, revision: item().revision, auto_check })); }} onCheck={key => { if (canManage()) void run(key, async () => { await api.check({ id: item().id, revision: item().revision, component: key }); setNotice(t('checkSuccess')); }); }} onCredentials={key => { setCredential({ install: item(), key }); setCredentialFields([{ name: '', value: '' }]); setFormError(''); }} onUpdate={() => void prepare(item())} onRemove={() => { setDeleteData(false); setDeleting(item()); }} />}</Show>
     </Dialog>
-    <Dialog open={installing()} onOpenChange={value => { if (!value) closeInstall(); }} title={t(operation()?.kind === 'update' ? 'plugins.update' : 'plugins.install')} bodyDescription={t('plugins.previewHint')} class="flower-extension-dialog w-[min(42rem,94vw)]" footer={<><Button variant="outline" disabled={!!busy()} onClick={closeInstall}>{t('common.actions.cancel')}</Button><Show when={operation()?.status === 'ready'} fallback={<Button disabled={!canManage() || operation()?.status === 'preparing'} loading={busy() === 'prepare'} onClick={() => void prepare()}>{t('plugins.preview')}</Button>}><Button disabled={!canManage()} loading={busy() === 'commit'} onClick={() => void commit()}>{t(operation()?.kind === 'update' ? 'plugins.applyUpdate' : 'plugins.install')}</Button></Show></>}>
+    <Dialog open={installing()} onOpenChange={value => { if (!value) closeInstall(); }} title={t(operation()?.kind === 'update' ? 'plugins.update' : 'plugins.install')} bodyDescription={t('plugins.previewHint')} class="flower-extension-dialog w-[min(42rem,94vw)]" contentClass="flower-plugin-install-content" footer={<><Button variant="outline" disabled={!!busy()} onClick={closeInstall}>{t('common.actions.cancel')}</Button><Show when={operation()?.status === 'ready'} fallback={<Button disabled={!canManage() || operation()?.status === 'preparing'} loading={busy() === 'prepare'} onClick={() => void prepare()}>{t('plugins.preview')}</Button>}><Button disabled={!canManage()} loading={busy() === 'commit'} onClick={() => void commit()}>{t(operation()?.kind === 'update' ? 'plugins.applyUpdate' : 'plugins.install')}</Button></Show></>}>
       <Show when={formError()}><p role="alert" class="flower-extension-error">{formError()}</p></Show>
-      <Show when={operation()?.status === 'preparing' || busy() === 'prepare'}><p role="status">{t('plugins.preparing')}</p></Show>
+      <Show when={operation()?.status === 'preparing' || busy() === 'prepare'}><p role="status" class="sr-only">{t('plugins.preparing')}</p></Show>
       <Show when={operation()?.package} fallback={<fieldset class="flower-extension-form" disabled={!!busy()}>
         <label><span>{t('plugins.source')}</span><Select value={source().type} options={[{ value: 'github', label: 'GitHub' }, { value: 'local', label: t('plugins.local') }]} onChange={value => setSource(value === 'local' ? { type: 'local', directory: '' } : { type: 'github', repository: '', path: '.' })} /></label>
         <Show when={source().type === 'github'} fallback={<label><span>{t('plugins.directory')}</span><Input value={source().directory ?? ''} onInput={event => field('directory', event.currentTarget.value)} /></label>}>

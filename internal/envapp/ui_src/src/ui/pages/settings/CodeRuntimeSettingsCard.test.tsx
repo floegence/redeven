@@ -212,6 +212,11 @@ describe('CodeRuntimeSettingsCard', () => {
     host.remove();
   });
 
+  it('does not present an unknown runtime as an installation requirement while reading inventory', () => {
+    renderCard(host, { status: null, loading: true });
+    expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
+  });
+
   it('renders Browser Editor inventory sections with update wording', () => {
     renderCard(host);
 

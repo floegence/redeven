@@ -208,6 +208,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const setupActivity = createMemo(() => {
     const activity = buildBrowserEditorSetupActivity({
       status: props.status,
+      loading: props.loading,
       localPending: localPending(),
       localFailure: props.localPrepareFailure,
       localCancelled: props.localPrepareCancelled,
@@ -236,7 +237,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     dismissedSetupActivityKey() !== setupActivityKey()
     && (
       platformUnsupported()
-      || !runtimeReady()
+      || (Boolean(props.status) && !runtimeReady())
       || Boolean(props.localPrepareFailure)
       || Boolean(props.localPrepareCancelled)
       || props.actionLoading

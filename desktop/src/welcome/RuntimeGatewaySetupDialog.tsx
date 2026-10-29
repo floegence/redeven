@@ -144,12 +144,12 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
           <Show when={technicalDetail()}><details class="mt-2 text-sm text-muted-foreground"><summary class="cursor-pointer">{props.i18n.t('windowStatus.technicalDetails')}</summary><p class="mt-2 whitespace-pre-wrap break-words">{technicalDetail()}</p></details></Show>
           <Show when={recovery() === 'restart' || recovery() === 'update'}><p class="text-sm text-muted-foreground">{props.i18n.t('gatewayJoin.recoveryImpact')}</p></Show>
         </section></Show>
-          <Show when={busy() || props.operationBusy}><div class="redeven-gateway-connect-progress" role="status">
+          <div class="redeven-gateway-connect-progress" classList={{ invisible: !busy() && !props.operationBusy }} role="status" aria-hidden={!busy() && !props.operationBusy}>
             <span class="redeven-gateway-connect-progress-dot" aria-hidden="true" />
             <span>{progressText() || props.i18n.t(pending() === 'start' ? 'progress.startingRuntime'
               : pending() === 'restart' ? 'progress.restartingRuntime' : pending() === 'update' ? 'progress.updatingRuntime'
                 : pending() === 'refresh' ? 'environmentAction.refreshRuntimeStatus' : 'gatewayJoin.operationInProgress')}</span>
-          </div></Show>
+          </div>
           <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
         </>}
         settingsAction={<Show when={props.environment?.can_edit}><Button class="cursor-pointer whitespace-nowrap" variant="outline"

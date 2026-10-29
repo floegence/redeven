@@ -1684,7 +1684,7 @@ describe('plugin management browser geometry and interaction', () => {
     const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
     const icon = card.querySelector<HTMLElement>('.redeven-plugin-directory-card-icon')!;
     expect(getComputedStyle(root).animationName).toBe('animate-in');
-    expect(getComputedStyle(root).animationDuration).toBe('0.2s');
+    expect(getComputedStyle(root).animationDuration).toBe('0.22s');
     expect(getComputedStyle(card).getPropertyValue('--tw-enter-translate-y').trim()).toBe('0.25rem');
     expect(getComputedStyle(card).transitionProperty).toContain('transform');
     expect(getComputedStyle(card).transitionDuration).toBe('0.18s');
@@ -1707,7 +1707,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(getComputedStyle(card).boxShadow).not.toBe('none');
     const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     expect(getComputedStyle(details).animationName).toBe('animate-in');
-    expect(getComputedStyle(details).animationDuration).toBe('0.2s');
+    expect(getComputedStyle(details).animationDuration).toBe('0.22s');
   });
 
   it('keeps the external review report operable with reduced motion and forced colors', async () => {

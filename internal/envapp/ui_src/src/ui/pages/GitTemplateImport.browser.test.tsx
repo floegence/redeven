@@ -296,4 +296,32 @@ describe('GitHub source review in the browser', () => {
       expect(api.request.mock.calls.filter(([url]) => String(url).endsWith('source-confirmations'))).toHaveLength(1);
     });
   }
+  it('keeps file preview geometry through deferred reads, failure and retry without showing the previous file', async () => {
+    await page.viewport(390, 800);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <GitTemplateImport open template={template} onClose={() => {}} onImported={() => {}} serviceName={() => 'Existing service'} />, host);
+    await userEvent.click(page.getByRole('button', { name: 'Check updates', exact: true }));
+    await userEvent.click(page.getByText('Changed files (20)', { exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Modified scripts/helper-0.sh', exact: true }));
+    await expect.element(page.getByText('echo previous', { exact: true })).toBeVisible();
+    const viewport = document.querySelector<HTMLElement>('[aria-busy="false"][class*="50dvh"]')!;
+    const height = viewport.getBoundingClientRect().height;
+    let reject!: (reason: Error) => void;
+    api.request.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+    await userEvent.click(page.getByText('Changed files (20)', { exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Modified scripts/helper-1.sh', exact: true }));
+    expect(viewport.getBoundingClientRect().height).toBeCloseTo(height, 1);
+    expect(viewport.getAttribute('aria-busy')).toBe('true');
+    expect(viewport.querySelector('[inert]')).not.toBeNull();
+    reject(new Error('offline'));
+    await expect.element(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    expect(viewport.textContent).not.toContain('echo previous');
+    expect(viewport.textContent).toContain('scripts/helper-1.sh');
+    expect(viewport.getBoundingClientRect().height).toBeCloseTo(height, 1);
+    api.request.mockResolvedValueOnce({ path: 'scripts/helper-1.sh', after: { mode: '100644', sha256: 'a'.repeat(64), binary: false, text: 'echo retried' } });
+    await userEvent.click(page.getByRole('button', { name: 'Retry', exact: true }));
+    await expect.element(page.getByText('echo retried', { exact: true })).toBeVisible();
+    expect(viewport.getBoundingClientRect().height).toBeCloseTo(height, 1);
+  });
+
 });

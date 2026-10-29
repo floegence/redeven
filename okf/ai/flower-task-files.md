@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Flower working files and deliverables
 tags: [flower, files, tools, storage, permissions]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -37,11 +37,11 @@ file.present verifies a regular file outside application state, hashes cancellab
 
 Files queries successful canonical results through authorized Floret APIs: 50 records/page, at most 32 KiB/record, retaining Fork/restart provenance. No startup crawl/second ledger. Recheck read authority. Available means accessible with unchanged size/mtime, not rehashed historical identity. Changed/missing/unavailable are observations; hashes describe delivery-time bytes. Files remain user-mutable, without hidden versions.
 
-Desktop/mobile shows finals, inputs, collapsed conversation images and expandable working files. Inputs/images reuse authorized preview/download and source navigation. Discovery reads one 50-item canonical window per request with 128-byte previews, no full-history View/retention scan. Empty windows retain next cursor; refresh resets changed leaves. Keep host preview/directory routing/HTML isolation; absent callbacks use shared image/PDF/text previews and read-only listing. Reauthorize each 256 KiB download chunk and abort on version/offset drift. Desktop permits only exact thread endpoints/query keys. Downloads neither publish nor relocate originals; Blob fallback retains its memory behavior.
+Desktop/mobile shows finals, inputs, collapsed conversation images and expandable working files. Inputs/images reuse authorized preview/download and source navigation. Discovery reads one 50-item canonical window per request with 128-byte previews, no full-history View/retention scan. Empty windows retain next cursor; same-runtime/thread refresh preserves successful rows and equal item identities. Runtime/thread changes invalidate retained content and fence late responses. Keep host preview/directory routing/HTML isolation; absent callbacks use shared image/PDF/text previews and read-only listing. Reauthorize each 256 KiB download chunk and abort on version/offset drift. Desktop permits only exact thread endpoints/query keys. Downloads neither publish nor relocate originals; Blob fallback retains its memory behavior.
 
 ## File panel presentation
 
-Use published Dialog, file-type icons and Button loading. Counted deliverable/material headings; keyboard-operable images/working-files disclosures start closed. Flat rows emphasize clickable titles, compact type/size and exceptional availability; no success badge, MIME parameters or endpoint IDs. Do not render absolute/working paths, even tooltips; retain canonical paths as action inputs. Long localized names wrap beside always-visible accessible download/folder/source icons at phone widths. Filename previews; counts are plain text and icons have no tile. One header close, refresh beside first heading, separate confirmed cleanup. Only the body scrolls; header/close remain reachable. FlowerTaskFiles.browser.test.tsx covers geometry/disclosures/source routing/stale responses/protected cleanup.
+Use published Dialog, file-type icons and Button loading. Counted deliverable/material headings; keyboard-operable images/working-files disclosures start closed. Flat rows emphasize clickable titles, compact type/size and exceptional availability; no success badge, MIME parameters or endpoint IDs. Do not render absolute/working paths, even tooltips; retain canonical paths as action inputs. Long localized names wrap beside always-visible accessible download/folder/source icons at phone widths. Filename previews; counts are plain text and icons have no tile. One header close, refresh beside first heading, separate confirmed cleanup. The responsive body viewport remains stable through loading; only the body scrolls and header/close remain reachable. Follow [loading continuity](../ui/page-loading-continuity.md). FlowerTaskFiles.browser.test.tsx covers geometry/disclosures/source routing/stale responses/protected cleanup.
 
 ## Cleanup
 

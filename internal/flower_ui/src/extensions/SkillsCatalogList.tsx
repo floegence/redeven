@@ -72,7 +72,7 @@ export function SkillsCatalogList(props: {
           </SettingRow>
         );
       }}</For>
-      <Show when={props.skills.length === 0}><p role="status" class="px-6 py-12 text-center text-[length:var(--floe-type-body)] text-muted-foreground">{props.loading ? i18n.t('skillsSettings.loadingCatalog') : i18n.t('skillsSettings.noSkillsForFilters')}</p></Show>
+      <Show when={props.skills.length === 0}><Show when={props.loading} fallback={<p role="status" class="px-6 py-12 text-center text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('skillsSettings.noSkillsForFilters')}</p>}><div class="flower-extension-skeleton" role="status" aria-label={i18n.t('skillsSettings.loadingCatalog')}><span /><span /><span /></div></Show></Show>
     </SettingsList>
   );
 }

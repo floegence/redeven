@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js'
 import { Button, ConfirmDialog, Dialog, Input, Select, Switch } from '@floegence/floe-webapp-core/ui';
 import { Pencil, Plus, Refresh, Search, Trash, Workflow } from '@floegence/floe-webapp-core/icons';
 import { useFlowerExtensions } from './context';
+import { retainEqualValue } from '../presentationIdentity';
 import { SettingsPill, SettingsSection, SettingsList, SettingRow, RowMenu } from './primitives';
 import { ExtensionIcon } from './ExtensionIcon';
 import type { MCPCatalog, MCPServer } from './types';
@@ -26,7 +27,7 @@ export function MCPPanel() {
   async function reload() {
     if (!ctx.canInteract() || busy()) return;
     setBusy('load'); setError('');
-    try { setCatalog(await ctx.listMCP()); } catch (error) { setError(failure(error)); } finally { setBusy(''); }
+    try { const next = await ctx.listMCP(); setCatalog(previous => retainEqualValue(previous, next)); } catch (error) { setError(failure(error)); } finally { setBusy(''); }
   }
   createEffect(on(ctx.canInteract, available => { if (available && !catalog()) void reload(); }));
   createEffect(on(() => [ctx.catalogRevision?.() ?? 0, busy(), ctx.canInteract()] as const, ([revision, loading, available]) => {
@@ -72,7 +73,7 @@ export function MCPPanel() {
     <SettingsSection title={t('mcp')} filters={<Show when={!!catalog()?.servers.length}><label class="flower-extension-search"><Search class="h-4 w-4" /><Input type="search" aria-label={t('search')} placeholder={t('search')} value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label><Select aria-label={t('skillsSettings.enabled')} value={enabledOnly() ? 'enabled' : 'all'} onChange={value => setEnabledOnly(value === 'enabled')} options={[{ value: 'all', label: t('all') }, { value: 'enabled', label: t('enabledOnly') }]} /></Show>} actions={<><Button size="icon" variant="ghost" icon={Refresh} aria-label={t('skillsSettings.reload')} title={t('skillsSettings.reload')} loading={busy() === 'load'} disabled={!ctx.canInteract() || Boolean(busy())} onClick={() => void reload()} /><Show when={!!catalog()?.servers.length}><Button size="sm" icon={Plus} disabled={!canManage()} onClick={() => open(null)}>{t('add')}</Button></Show></>}>
       <Show when={error()}><div class="flower-extension-error" role="alert">{error()}<Button size="sm" variant="outline" disabled={Boolean(busy())} onClick={() => void reload()}>{t('common.actions.retry')}</Button></div></Show>
       <Show when={notice()}><p class="flower-extension-notice" role="status">{notice()}</p></Show>
-      <Show when={!catalog() && busy()}><p role="status" class="flower-extension-empty">{t('loading')}</p></Show>
+      <Show when={!catalog() && busy()}><div class="flower-extension-skeleton" role="status" aria-label={t('loading')}><span /><span /><span /></div></Show>
       <Show when={catalog()?.servers.length} fallback={<Show when={catalog()}><div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Workflow class="h-6 w-6" aria-hidden="true" /></span><h3>{t('emptyMcp')}</h3><Button size="sm" variant="outline" icon={Plus} disabled={!canManage()} onClick={() => open(null)}>{t('add')}</Button></div></Show>}>
         <SettingsList><For each={filtered()}>{server => <SettingRow title={server.name} description={server.transport === 'http' ? server.url ?? '' : server.command ?? ''}
           icon={<ExtensionIcon identity={`mcp:${server.id}`} name={server.name} icons={server.icons} />}
@@ -85,7 +86,7 @@ export function MCPPanel() {
             ]} onSelect={id => { if (id === 'check') void mutate(server, 'check'); else if (id === 'delete') { setDeleteError(''); setDeleting(server); } }} />
             <Switch checked={server.enabled} aria-label={`${server.name}: ${t('enabled')}`} disabled={!canManage()} onChange={enabled => void mutate(server, 'toggle', enabled)} />
           </></Show>}>
-          <Show when={busy() === server.id}><p role="status">{t('loading')}</p></Show>
+          <Show when={busy() === server.id}><p role="status" class="sr-only">{t('loading')}</p></Show>
           <Show when={server.checked_at}><p class="flower-extension-updated">{t('checked', { time: ctx.i18n.dateTime(server.checked_at) })}</p></Show>
           <Show when={server.tools.length}><div class="flower-extension-tools"><For each={server.tools}>{tool => <div><code>{tool.name}</code><p>{tool.description}</p></div>}</For></div></Show>
         </SettingRow>}</For></SettingsList>

@@ -1,7 +1,7 @@
 import '../index.css';
 import './flower-feature.css';
 import { FloeProvider, builtInShellThemePresets, useTheme } from '@floegence/floe-webapp-core';
-import { onMount } from 'solid-js';
+import { createSignal, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
@@ -20,10 +20,12 @@ function mount(dark: boolean) {
     }] },
     provider_secrets: [{ provider_id: 'openai', provider_api_key_configured: true, web_search_api_key_configured: false }],
   });
+  const [revision, setRevision] = createSignal(0);
+  const loadSettings = vi.fn(async () => snapshot);
   const unused = async (): Promise<never> => { throw new Error('Unexpected conversation mutation'); };
   const adapter: FlowerSurfaceAdapter = {
     runtime: { runtime_id: 'settings-dialog', runtime_kind: 'env_local', carrier_kind: 'runtime', display_name: 'Local Environment', subtitle: '' },
-    loadSettings: async () => snapshot, loadModelDirectory: async () => snapshot.model_directory!,
+    loadSettings, loadModelDirectory: async () => snapshot.model_directory!,
     saveDefaultPermission: async permission => (snapshot = { ...snapshot, defaults: { ...snapshot.defaults, permission_type: permission } }),
     saveModelProfile: async draft => (snapshot = { ...snapshot, model_profile: draft.model_profile }),
     listThreads: async () => [], loadThread: unused, loadSubagentDetail: unused,
@@ -43,9 +45,9 @@ function mount(dark: boolean) {
     onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light'));
     return null;
   }
-  const dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSurface adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} notify={vi.fn()} /></FloeProvider>, host);
+  const dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSurface adapter={adapter} settingsRevision={revision} draftCoordinator={createFlowerComposerDraftCoordinator()} notify={vi.fn()} /></FloeProvider>, host);
   onTestFinished(() => { dispose(); host.remove(); });
-  return host;
+  return { host, setRevision, loadSettings, snapshot: () => snapshot };
 }
 
 it.each([{ width: 1280, dark: false }, { width: 390, dark: true }])(
@@ -88,5 +90,39 @@ it.each([{ width: 1280, dark: false }, { width: 390, dark: true }])(
     const backdrop = document.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!;
     await userEvent.click(backdrop, { position: { x: 2, y: 2 } });
     await expect.element(dialog).not.toBeInTheDocument();
+  },
+);
+
+
+it.each([{ width: 1280, dark: false }, { width: 390, dark: true }])(
+  'keeps settings controls stationary through a slow refresh, failure and retry at $width px', async ({ width, dark }) => {
+    await page.viewport(width, 850);
+    const fixture = mount(dark);
+    await userEvent.click(page.getByRole('button', { name: copy.chat.settingsLabel, exact: true }));
+    const dialog = page.getByRole('dialog', { name: copy.settings.title, exact: true });
+    const change = page.getByRole('button', { name: copy.settings.changeModel, exact: true });
+    await expect.element(change).toBeVisible();
+    await expect.poll(() => dialog.element().getAttribute('data-floating-presence')).toBe('open');
+    await expect.poll(() => Number(getComputedStyle(dialog.element()).opacity)).toBe(1);
+    const node = change.element();
+    const original = node.getBoundingClientRect();
+    const dialogRect = dialog.element().getBoundingClientRect();
+    let reject!: (error: Error) => void;
+    fixture.loadSettings.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    fixture.setRevision(1);
+    await expect.poll(() => document.querySelector('.flower-settings-content [aria-busy="true"]')).not.toBeNull();
+    const assertStable = () => {
+      expect(change.element()).toBe(node);
+      expect(Math.abs(node.getBoundingClientRect().top - original.top)).toBeLessThanOrEqual(1);
+      expect(Math.abs(dialog.element().getBoundingClientRect().height - dialogRect.height)).toBeLessThanOrEqual(1);
+    };
+    assertStable();
+    await page.screenshot({ path: '__screenshots__/flower-settings-refresh-' + width + '.png' });
+    reject(new Error('Settings temporarily unavailable'));
+    await expect.poll(() => document.querySelector('.flower-settings-content [role="alert"]')).not.toBeNull();
+    assertStable();
+    await userEvent.click(dialog.getByRole('button', { name: copy.chat.handlerRetry, exact: true }));
+    await expect.poll(() => document.querySelector('.flower-settings-content .flower-settings-read-status')).toBeNull();
+    assertStable();
   },
 );

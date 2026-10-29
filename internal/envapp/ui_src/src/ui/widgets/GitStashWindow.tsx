@@ -750,7 +750,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                   {/* Left: stash list */}
                   <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto w-full @[640px]:shrink-0 @[640px]:border-r @[640px]:w-[var(--stash-left-panel-width)]" style={{ "--stash-left-panel-width": `${leftPanelWidth()}px` } as JSX.CSSProperties}>
 
-                    <Show when={!props.stashesLoading} fallback={<GitStatePane loading loadingVariant="stash-list" loadingRows={6} message={i18n.t('uiCopy.git.loadingStashes')} surface class="min-h-[12rem]" />}>
+                    <Show when={!props.stashesLoading || props.stashes.length > 0} fallback={<GitStatePane loading loadingVariant="stash-list" loadingRows={6} message={i18n.t('uiCopy.git.loadingStashes')} surface class="min-h-[12rem]" />}>
                       <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? i18n.t('uiCopy.git.failedToLoadStashes')} surface class="min-h-[12rem]" />}>
                         <Show
                           when={props.stashes.length > 0}

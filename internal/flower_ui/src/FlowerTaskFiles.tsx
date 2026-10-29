@@ -1,5 +1,6 @@
 import { FlowerTaskFileIdentity, taskFileSize as size } from './FlowerTaskFileIdentity';
 import { FlowerTaskMaterials } from './FlowerTaskMaterials';
+import { retainKeyedItems } from './presentationIdentity';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, Download, Folder, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
@@ -24,6 +25,8 @@ export function FlowerTaskFiles(props: {
   const [downloading, setDownloading] = createSignal<string>();
   let downloadController: AbortController | undefined;
   let generation = 0;
+  let ownerThread: string | undefined;
+  let ownerRuntime: string | undefined;
   onCleanup(() => {
     generation++;
     downloadController?.abort();
@@ -37,7 +40,7 @@ export function FlowerTaskFiles(props: {
     try {
       const value = await props.adapter.loadTaskFiles!(id, more ? data()?.next_cursor : undefined);
       if (epoch !== generation || id !== props.threadID) return;
-      setData((previous) => ({ ...value, files: more ? [...(previous?.files ?? []), ...value.files] : value.files }));
+      setData((previous) => ({ ...value, files: retainKeyedItems(previous?.files ?? [], more ? [...(previous?.files ?? []), ...value.files] : value.files, file => file.file_path) }));
     } catch {
       if (epoch === generation) setError(props.copy.failed);
     } finally {
@@ -50,7 +53,9 @@ export function FlowerTaskFiles(props: {
     downloadController?.abort();
     setDownloading(undefined);
     generation++;
-    setData(undefined);
+    if (id !== ownerThread || props.adapter.runtime?.runtime_id !== ownerRuntime) {
+      ownerThread = id; ownerRuntime = props.adapter.runtime?.runtime_id; setData(undefined);
+    }
     setConfirm(false);
     setError('');
     setLoading(false);
@@ -131,7 +136,7 @@ export function FlowerTaskFiles(props: {
         </p>
       </Show>
       <Show when={loading() && !data()}>
-        <p class="flower-task-files-empty" role="status">{props.copy.loading}</p>
+        <div class="flower-loading-rows" role="status" aria-label={props.copy.loading}><span /><span /><span /></div>
       </Show>
       <Show when={data()}>
         {(value) => (

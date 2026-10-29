@@ -36,7 +36,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Env App session event transport](architecture/env-event-transport.md)
 - [Activity navigation restoration](ui/activity-navigation-restoration.md)
 - [Env App resource snapshots](ui/env-resource-cache.md)
-- [Env App page loading continuity](ui/page-loading-continuity.md)
+- [Redeven loading and layout continuity](ui/page-loading-continuity.md)
 - [Env App document reload presentation](ui/document-reload-presentation.md)
 - [Web Services interface](architecture/web-services-interface.md)
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md)

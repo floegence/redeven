@@ -6,7 +6,8 @@ import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FlowerExtensionsSurface } from '../../../../../flower_ui/src/extensions/FlowerExtensionsSurface';
-import { extensionI18n } from '../../../../../flower_ui/src/extensions/context';
+import { AgentPluginCatalogView } from '../../../../../flower_ui/src/extensions/AgentPluginCatalog';
+import { FlowerExtensionsContext, extensionI18n } from '../../../../../flower_ui/src/extensions/context';
 import type { FlowerExtensionsAdapter, MCPServer, MCPServerInput, SkillCatalogEntry } from '../../../../../flower_ui/src/extensions/types';
 import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 
@@ -678,4 +679,30 @@ it('opens the same plugin owner repeatedly from its skill projection', async () 
     await page.getByRole('button', { name: 'Manage', exact: true }).click();
     await expect.element(page.getByRole('dialog').getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
   }
+});
+
+
+it('retains catalog cards on refresh but clears them on source and authority changes', async () => {
+  await page.viewport(390, 850);
+  const state = fixture(); const [refresh, setRefresh] = createSignal(0);
+  const [source, setSource] = createSignal('one'); const [available, setAvailable] = createSignal(true);
+  const sources = [{ id: 'one', name: 'One', url: 'https://example.com/one' }, { id: 'two', name: 'Two', url: 'https://example.com/two' }];
+  const catalog = { id: 'one', plugins: [{ id: 'review', display: { name: 'Code review' }, source: { type: 'github' as const, repository: 'example/tools' } }] };
+  vi.mocked(state.adapter.plugins.catalog).mockResolvedValue(catalog);
+  host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeProvider><FlowerExtensionsContext.Provider value={{ ...state.adapter, canInteract: available, i18n: extensionI18n('en-US') }}><AgentPluginCatalogView sources={sources} selectedSource={source()} onSelectSource={setSource} query="" refresh={refresh()} canManage onInstall={() => {}} onClear={() => {}} /></FlowerExtensionsContext.Provider></FloeProvider>, host);
+  await expect.element(page.getByRole('heading', { name: 'Code review' })).toBeVisible();
+  const card = host.querySelector<HTMLElement>('article')!;
+  const top = card.getBoundingClientRect().top;
+  let finish!: (value: typeof catalog) => void;
+  vi.mocked(state.adapter.plugins.catalog).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  setRefresh(1); await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  expect(host.querySelector('article')).toBe(card);
+  expect(card.getBoundingClientRect().top).toBeCloseTo(top, 1);
+  finish(structuredClone(catalog)); await vi.waitFor(() => expect(host.querySelector('.sr-only[role=status]')).toBeNull());
+  expect(host.querySelector('article')).toBe(card);
+  vi.mocked(state.adapter.plugins.catalog).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  setSource('two'); await vi.waitFor(() => expect(host.querySelector('article')).toBeNull());
+  setAvailable(false); finish(catalog); await Promise.resolve();
+  expect(host.querySelector('article')).toBeNull();
 });

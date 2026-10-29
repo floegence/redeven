@@ -93,6 +93,8 @@ export function GitTemplateImport(props: {
   const [error, setError] = createSignal('');
   const [filePreview, setFilePreview] = createSignal<SourceFilePreview>();
   const [fileLoading, setFileLoading] = createSignal(false);
+  const [filePath, setFilePath] = createSignal('');
+  const [fileError, setFileError] = createSignal(false);
   let fileController: AbortController | undefined;
   let fileListDetails: HTMLDetailsElement | undefined;
   let filePreviewPanel: HTMLDivElement | undefined;
@@ -103,6 +105,8 @@ export function GitTemplateImport(props: {
   const discard = () => {
     fileController?.abort();
     setFilePreview(undefined);
+    setFilePath('');
+    setFileError(false);
     setFileLoading(false);
     const item = preview();
     if (item)
@@ -249,9 +253,12 @@ export function GitTemplateImport(props: {
     fileController?.abort();
     fileController = new AbortController();
     const signal = fileController.signal;
+    setFilePath(path);
+    setFileError(false);
     setFileLoading(true);
     setError('');
-    setFilePreview(undefined);
+    if (fileListDetails) fileListDetails.open = false;
+    filePreviewPanel?.scrollIntoView?.({ block: 'nearest' });
     try {
       const file = await fetchLocalApiJSON<SourceFilePreview>(
         `${base}/source-previews/${encodeURIComponent(item.candidate_id)}/file`,
@@ -259,11 +266,9 @@ export function GitTemplateImport(props: {
       );
       if (!signal.aborted && preview()?.candidate_id === item.candidate_id) {
         setFilePreview(file);
-        if (fileListDetails) fileListDetails.open = false;
-        filePreviewPanel?.scrollIntoView?.({ block: 'nearest' });
       }
-    } catch (failure) {
-      if (!signal.aborted) setError(failure instanceof LocalApiError ? failure.code : 'TEMPLATE_SOURCE_UNAVAILABLE');
+    } catch {
+      if (!signal.aborted) { setFilePreview(undefined); setFileError(true); }
     } finally {
       if (!signal.aborted) setFileLoading(false);
     }
@@ -749,14 +754,17 @@ export function GitTemplateImport(props: {
                 </div>
               </details>
               <Show when={fileLoading()}>
-                <p role="status" class="flex items-center gap-2 text-xs text-muted-foreground">
+                <p role="status" class="sr-only">
                   <Loader2 class="size-3 animate-spin" />
                   {i18n.t('webServices.sources.loadingFile')}
                 </p>
               </Show>
+              <div ref={filePreviewPanel} class="relative h-[min(28rem,50dvh)] overflow-auto rounded-lg border p-3" aria-busy={fileLoading()} hidden={!filePath()}>
+              <Show when={fileLoading()}><div class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background text-xs text-muted-foreground"><Loader2 class="size-3 animate-spin" />{i18n.t('webServices.sources.loadingFile')}</div></Show>
+              <Show when={fileError()}><div role="alert" class="space-y-3 text-xs"><p class="break-all font-mono">{filePath()}</p><p>{i18n.t('webServices.sources.failed')}</p><Button size="sm" variant="outline" onClick={() => void inspectFile(filePath())}>{i18n.t('common.actions.retry')}</Button></div></Show>
               <Show when={filePreview()} keyed>
                 {(file) => (
-                  <div ref={filePreviewPanel} class="space-y-3 rounded-lg border p-3">
+                  <div class="space-y-3" inert={fileLoading()} aria-hidden={fileLoading()}>
                     <p class="break-all font-mono text-xs font-medium">{file.path}</p>
                     <For each={['before', 'after'] as const}>
                       {(side) => (
@@ -792,6 +800,7 @@ export function GitTemplateImport(props: {
                   </div>
                 )}
               </Show>
+              </div>
               <details class="group rounded-lg border">
                 <summary class="flex cursor-pointer list-none items-center gap-2 p-3 text-xs font-medium marker:content-none [&::-webkit-details-marker]:hidden">
                   {i18n.t('webServices.sources.executionChanges')}
@@ -813,12 +822,10 @@ export function GitTemplateImport(props: {
             </div>
           )}
         </Show>
-        <Show when={busy()}>
-          <div role="status" class="flex items-center gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+        <div role="status" aria-hidden={!busy()} class="flex min-h-10 items-center gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground" classList={{ invisible: !busy() }}>
             <Loader2 class="size-4 shrink-0 animate-spin" />
             {i18n.t(`webServices.sources.${phase()}`)}
           </div>
-        </Show>
         <Show when={error()}>
           <div
             role="alert"

@@ -243,3 +243,9 @@
   .container-operation-card[aria-pressed="true"] { border-color: Highlight; }
   .container-operation-live, .container-operation-step > span { outline: 1px solid CanvasText; }
 }
+
+.container-service-config-content { height: min(42rem, 72dvh); overflow: auto; scrollbar-gutter: stable; }
+
+.container-detail-loading-fields, .container-operation-loading-steps { display: grid; gap: 16px; padding-block: 16px; }
+.container-detail-loading-fields > span, .container-operation-loading-steps > span { height: 48px; border-radius: var(--radius); background: var(--muted); }
+.container-detail-loading-fields > span:last-child { width: 65%; }

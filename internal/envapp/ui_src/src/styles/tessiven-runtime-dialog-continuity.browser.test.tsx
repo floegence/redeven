@@ -119,3 +119,28 @@ it.each(['activity', 'standalone'] as const)(
     expect(request.mock.calls.filter(([, path]) => path === '/runtimes')).toHaveLength(2);
   },
 );
+
+
+it('retains library cards and focus while opening a slow canvas', async () => {
+  await page.viewport(1280, 900);
+  host = document.createElement('div'); host.style.height = '800px'; document.body.append(host);
+  let reject!: (error: Error) => void;
+  const request = vi.fn(async (_method: string, path: string) => {
+    if (path.startsWith('/canvases?')) return { canvases: [canvas] };
+    if (path.endsWith('/versions/latest')) return version;
+    if (path === '/canvases/' + canvas.id) return new Promise((_, fail) => { reject = fail; });
+    throw new Error('Unexpected request: ' + path);
+  });
+  dispose = render(() => <TessivenPage t={tessivenText('en-US')} transport={{ request: request as TessivenTransport['request'], subscribe: () => () => {} }} canWrite renderFlower={() => null} onOpenFlower={() => {}} onOpenService={() => {}} />, host);
+  await expect.poll(() => host.querySelector('.tessiven-library-card')).not.toBeNull();
+  const card = host.querySelector<HTMLElement>('.tessiven-library-card')!;
+  const button = card.querySelector<HTMLButtonElement>('button')!;
+  button.focus(); button.click();
+  await expect.poll(() => host.querySelector('.tessiven-library')?.getAttribute('aria-busy')).toBe('true');
+  expect(host.querySelector('.tessiven-library-card')).toBe(card);
+  expect(document.activeElement).toBe(button);
+  reject(new Error('Canvas unavailable'));
+  await expect.poll(() => host.querySelector('.tessiven-library')?.getAttribute('aria-busy')).toBe('false');
+  expect(host.querySelector('.tessiven-library-card')).toBe(card);
+  expect(document.activeElement).toBe(button);
+});

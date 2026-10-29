@@ -314,3 +314,50 @@ for (const theme of ['light', 'dark'] as const) {
     }
   });
 }
+
+it('keeps material rows stationary during pagination and same-thread refresh', async () => {
+  await page.viewport(1280, 900);
+  const host = document.createElement('div'); document.body.append(host);
+  const item = { id: 'source', locator: 'attachment://v1/upl_one/source.csv', name: 'source.csv', mime: 'text/plain', size: 16, kind: 'input' as const,
+    url: '', item_id: 'user:one', turn_id: 'turn', created_at: '2026-10-28T12:00:00Z' };
+  type MaterialPage = { items: typeof item[]; next_cursor?: string };
+  let resolve!: (value: MaterialPage) => void;
+  const load = vi.fn(() => Promise.resolve<MaterialPage>({ items: [item], next_cursor: 'older' }));
+  const [refresh, setRefresh] = createSignal(0);
+  const dispose = render(() => <FlowerTaskMaterials threadID="one" refresh={refresh()} adapter={{ ...adapter(), loadTaskMaterials: load }} copy={taskFilesEnUS} />, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => Boolean(host.querySelector('.flower-task-material-row')));
+  const row = host.querySelector<HTMLElement>('.flower-task-material-row')!;
+  const top = row.getBoundingClientRect().top;
+  load.mockImplementation(() => new Promise<MaterialPage>(done => { resolve = done; }));
+  host.querySelector<HTMLButtonElement>('.flower-task-load-more')!.click();
+  await Promise.resolve();
+  expect(Math.abs(row.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+  resolve({ items: [item], next_cursor: 'older' });
+  await waitFor(() => !host.querySelector<HTMLButtonElement>('.flower-task-load-more')!.disabled);
+  setRefresh(1);
+  await Promise.resolve();
+  expect(host.querySelector('.flower-task-material-row')).toBe(row);
+  expect(Math.abs(row.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+  resolve({ items: [item], next_cursor: 'older' });
+});
+
+
+it('keeps a loaded empty material state while refreshing and clears it across runtimes', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const [refresh, setRefresh] = createSignal(0);
+  const load = vi.fn().mockResolvedValue({ items: [] });
+  const initial = { ...adapter(), loadTaskMaterials: load };
+  const [current, setCurrent] = createSignal(initial);
+  const dispose = render(() => <FlowerTaskMaterials threadID="same-id" refresh={refresh()} adapter={current()} copy={taskFilesEnUS} />, host);
+  try {
+    await waitFor(() => host.textContent?.includes(taskFilesEnUS.materialsEmpty) === true);
+    load.mockImplementationOnce(() => new Promise(() => {})); setRefresh(1);
+    await waitFor(() => load.mock.calls.length === 2);
+    expect(host.textContent).toContain(taskFilesEnUS.materialsEmpty);
+    expect(host.querySelector('.flower-loading-rows')).toBeNull();
+    setCurrent({ ...initial, runtime: { ...initial.runtime!, runtime_id: 'another-runtime' }, loadTaskMaterials: vi.fn(() => new Promise(() => {})) });
+    await waitFor(() => !!host.querySelector('.flower-loading-rows'));
+    expect(host.textContent).not.toContain(taskFilesEnUS.materialsEmpty);
+  } finally { dispose(); host.remove(); }
+});

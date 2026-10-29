@@ -202,3 +202,8 @@
 .flower-plugin-source-row p { font-size: .8125rem; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: .25rem; }
 .flower-plugin-source-row small { color: var(--muted-foreground); font-size: .75rem; }
 .flower-extension-dialog .flower-plugin-source-form { border: 0; padding: 0; margin: 1rem 0 0; background: transparent; }
+
+/* Reserve list density and dialog geometry before the first authoritative result. */
+.flower-extension-skeleton { display: grid; gap: .75rem; padding-block: .75rem; }
+.flower-extension-skeleton > span { height: 4rem; border-radius: var(--radius); background: var(--muted); }
+.flower-plugin-install-content { height: min(38rem, 65dvh); overflow-y: auto; scrollbar-gutter: stable; }

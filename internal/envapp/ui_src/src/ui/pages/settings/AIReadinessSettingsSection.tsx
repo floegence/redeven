@@ -204,7 +204,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
               aria-busy={props.controller.loading() || undefined} onClick={() => void props.controller.refresh()} />
           </div>}
         >
-          <Show when={presentation().mode !== 'ready'}>
+          <Show when={presentation().mode !== 'ready' && presentation().mode !== 'busy'}>
             <p class="mt-3 text-xs leading-relaxed text-muted-foreground">{presentation().description}</p>
           </Show>
         </SettingRow>

@@ -58,6 +58,15 @@ describe('GitHub template import review', () => {
     api.request.mockReset();
   });
 
+  it('keeps repository preview failures actionable outside the file-preview region', async () => {
+    api.request.mockRejectedValueOnce(new Error('offline'));
+    mount(template);
+    click('Check updates');
+    await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('TEMPLATE_SOURCE_UNAVAILABLE'));
+    expect(host.querySelector('[class*="50dvh"]')).toBeNull();
+    expect([...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Check updates')?.disabled).toBe(false);
+  });
+
   it('explains the complete transfer route and keeps optional source fields collapsed', () => {
     window.redevenDesktopTemplateSources = {
       acquire: vi.fn(),

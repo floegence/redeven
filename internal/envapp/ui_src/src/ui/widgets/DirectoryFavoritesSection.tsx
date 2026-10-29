@@ -22,9 +22,9 @@ export function DirectoryFavoritesSection(props: DirectoryFavoritesSectionProps)
   createEffect(on(() => props.favorites, () => setFilter('')));
   const paths = () => props.favorites.paths.filter(path => path.toLocaleLowerCase().includes(filter().trim().toLocaleLowerCase()));
   const rows: HTMLButtonElement[] = [];
-  return <section class="flex min-h-0 shrink-0 flex-col" aria-label={props.copy.favorites}>
+  return <section class="flex h-[min(9rem,24dvh)] min-h-0 shrink-0 flex-col" aria-label={props.copy.favorites}>
     <Show when={props.favorites.paths.length > 5 || filter().length > 0}><Input size="sm" aria-label={props.copy.favoritesFilter} placeholder={props.copy.favoritesFilter} value={filter()} onInput={event => setFilter(event.currentTarget.value)} /></Show>
-    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="max-h-44 overflow-x-hidden overflow-y-auto overscroll-contain" aria-busy={props.favorites.loading}>
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain" aria-busy={props.favorites.loading}>
       <Show when={paths().length} fallback={<p class="px-1 py-2 text-[11px] text-muted-foreground" role="status">{props.favorites.loading ? props.copy.loading : props.favorites.error || (filter() ? props.copy.favoritesNoMatches : props.copy.favoritesEmpty)}</p>}>
         <For each={paths()}>{(path, index) => <div
           {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}

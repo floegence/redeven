@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, Download, MessageSquare } from '@floegence/floe-webapp-core/icons';
+import { retainKeyedItems } from './presentationIdentity';
 import { FlowerTaskFileIdentity } from './FlowerTaskFileIdentity';
 import type { FlowerSurfaceAdapter, FlowerTaskMaterial } from './contracts/flowerSurfaceContracts';
 import type { TaskFilesCopy } from './taskFilesCopy';
@@ -13,10 +14,13 @@ export function FlowerTaskMaterials(props: {
   const [items, setItems] = createSignal<readonly FlowerTaskMaterial[]>([]);
   const [cursor, setCursor] = createSignal<string>();
   const [loading, setLoading] = createSignal(false);
+  const [loaded, setLoaded] = createSignal(false);
   const [error, setError] = createSignal('');
   const [preview, setPreview] = createSignal<FlowerAttachmentPreviewSource | null>(null);
   const [downloading, setDownloading] = createSignal(false);
   let epoch = 0, downloadController: AbortController | undefined;
+  let ownerThread: string | undefined;
+  let ownerRuntime: string | undefined;
   const load = async (more = false) => {
     const thread = props.threadID, current = ++epoch;
     setLoading(true); setError('');
@@ -26,16 +30,21 @@ export function FlowerTaskMaterials(props: {
       setItems(previous => {
         const distinct = new Map((more ? previous : []).map(item => [item.id, item]));
         for (const item of page.items) if (!distinct.has(item.id)) distinct.set(item.id, item);
-        return [...distinct.values()];
+        return retainKeyedItems(previous, [...distinct.values()], item => item.id);
       });
       setCursor(page.next_cursor);
+      setLoaded(true);
     } catch { if (current === epoch) setError(props.copy.failed); }
     finally { if (current === epoch) setLoading(false); }
   };
   createEffect(() => {
     const thread = props.threadID;
     void props.refresh;
-    ++epoch; downloadController?.abort(); setDownloading(false); setPreview(null); setItems([]); setCursor(undefined);
+    ++epoch;
+    if (thread !== ownerThread || props.adapter.runtime?.runtime_id !== ownerRuntime) {
+      ownerThread = thread; ownerRuntime = props.adapter.runtime?.runtime_id; setLoaded(false);
+      downloadController?.abort(); setDownloading(false); setPreview(null); setItems([]); setCursor(undefined);
+    }
     if (thread && props.adapter.loadTaskMaterials) void load();
   });
   onCleanup(() => { ++epoch; downloadController?.abort(); });
@@ -67,11 +76,12 @@ export function FlowerTaskMaterials(props: {
       </div>
     </article>
   )}</For>;
-  return <section class="flower-task-materials flower-task-files-section" aria-label={props.copy.materials}>
+  return <section class="flower-task-materials flower-task-files-section" aria-label={props.copy.materials} aria-busy={loading()}>
     <div class="flower-task-section-heading"><h3>{props.copy.materials}</h3><span class="flower-task-count">{items().length}{cursor() ? '+' : ''}</span></div>
-    <Show when={loading()}><p class="flower-task-files-empty" role="status">{props.copy.loading}</p></Show>
+    <Show when={loading()}><span class="flower-visually-hidden" role="status">{props.copy.loading}</span></Show>
+    <Show when={loading() && !loaded()}><div class="flower-loading-rows" aria-hidden="true"><span /><span /><span /></div></Show>
     <Show when={error()}><p role="alert" class="text-destructive">{error()}</p><Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
-    <Show when={!loading() && !error() && items().length === 0}><p class="flower-task-files-empty">{cursor() ? props.copy.materialsEarlier : props.copy.materialsEmpty}</p></Show>
+    <Show when={loaded() && !error() && items().length === 0}><p class="flower-task-files-empty">{cursor() ? props.copy.materialsEarlier : props.copy.materialsEmpty}</p></Show>
     <Show when={items().some(item => item.kind === 'input')}><div class="flower-task-files-list">{rows('input')}</div></Show>
     <Show when={items().some(item => item.kind === 'media')}><details class="flower-task-media"><summary><span class="flower-task-disclosure-title">{props.copy.media}</span><span class="flower-task-count">{items().filter(item => item.kind === 'media').length}</span><ChevronRight class="flower-task-disclosure-chevron size-4" aria-hidden="true" /></summary><div class="flower-task-files-list">{rows('media')}</div></details></Show>
     <Show when={cursor()}><Button size="sm" variant="ghost" class="flower-task-load-more" loading={loading()} onClick={() => void load(true)}>{props.copy.more}</Button></Show>

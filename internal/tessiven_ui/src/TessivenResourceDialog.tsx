@@ -181,7 +181,7 @@ export function TessivenResourceDialog(props: {
   });
   return (
     <Dialog
-      class="tessiven-resource-dialog"
+      class="tessiven-resource-dialog" contentClass="tessiven-resource-content"
       closeLabel={props.t('close')}
       open
       onOpenChange={(open) => {
@@ -194,7 +194,7 @@ export function TessivenResourceDialog(props: {
           : props.t('serviceDescription')
       }
     >
-      <div class="tessiven-resource-detail">
+      <div class="tessiven-resource-detail" aria-busy={busy()}>
         <strong>
           {result()?.inspection?.name ??
             props.instance.name ??
@@ -229,6 +229,7 @@ export function TessivenResourceDialog(props: {
                     <Button
                       size="sm"
                       variant="outline"
+                      loading={busy()}
                       disabled={
                         busy() ||
                         ((props.historical || uncertain()) &&
@@ -267,7 +268,7 @@ export function TessivenResourceDialog(props: {
           <p role="alert">{props.t('outcomeUnknown')}</p>
         </Show>
         <Show when={busy()}>
-          <p role="status">{props.t('working')}</p>
+          <p role="status" class="sr-only">{props.t('working')}</p>
         </Show>
         <Show when={operation()} keyed>
           {(value) => (
