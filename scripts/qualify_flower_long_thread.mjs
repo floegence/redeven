@@ -97,6 +97,8 @@ await session.run(async () => {
   await page.locator('.flower-composer textarea').fill('Keep the Flower draft');
   await page.locator('#open-output').click(); await page.locator('#open-preview').click();
   await page.locator('[aria-label="Preview draft"]').fill('Keep the preview draft');
+  assert.equal(await page.locator('.flower-composer textarea').inputValue(), 'Keep the Flower draft', 'Flower draft initialized before sampling');
+  assert.equal(await page.locator('[aria-label="Preview draft"]').inputValue(), 'Keep the preview draft', 'Preview draft initialized before sampling');
   const cdp = await application.context().newCDPSession(page);
   const samples = [];
   const report = { setup, configured, samples, errors, source: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),

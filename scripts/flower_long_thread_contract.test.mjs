@@ -1,9 +1,36 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import vm from 'node:vm';
 import { readFileSync, existsSync } from 'node:fs';
 import { evaluateLongThread, distribution, presentedMouseLatency, longThreadAffected, fastTests, browserTests } from './flower_long_thread_contract.mjs';
 import { affected, runGate } from './check_flower_long_thread.mjs';
 const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+test('only the long-thread host isolates native input before showing its visible window', async () => {
+  for (const isolated of [false, true]) {
+    const calls = [], listeners = new Map();
+    let options, ready;
+    const app = { setPath() {}, on() {}, quit() {}, whenReady: () => ({ then: callback => { ready = callback; } }) };
+    class BrowserWindow {
+      constructor(value) { options = value; this.webContents = { on: (name, listener) => listeners.set(name, listener) }; }
+      setIgnoreMouseEvents(value) { calls.push(['ignoreMouse', value]); }
+      showInactive() { calls.push(['showInactive']); }
+      async loadURL(value) { calls.push(['load', value]); }
+    }
+    vm.runInNewContext(read('internal/flower_ui/testing/performance/desktop.cjs'), {
+      require: name => { assert.equal(name, 'electron'); return { app, BrowserWindow }; },
+      process: { argv: isolated ? ['--redeven-smoke-run=long-thread-gate'] : ['--redeven-smoke-run=flower-cpu'],
+        env: { FLOWER_PERF_PROFILE: '/test-profile', FLOWER_PERF_URL: 'http://127.0.0.1:12345' } },
+    });
+    await ready();
+    assert.equal(options.show, !isolated);
+    assert.equal(options.focusable, isolated ? false : undefined);
+    assert.deepEqual(calls, isolated ? [['ignoreMouse', true], ['showInactive'], ['load', 'http://127.0.0.1:12345']] : [['load', 'http://127.0.0.1:12345']]);
+    assert.equal(listeners.has('before-mouse-event'), false, 'Do not filter injected pointer events or hide interruptions');
+    let prevented = false;
+    listeners.get('before-input-event')?.({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, isolated);
+  }
+});
 function valid() {
   return { setup: { history_verified: true, history_turns: 500, history_messages: 1000, history_completed_activities: 1000 },
     canonical: { exact_text: true, exact_reasoning: true, tools: 190, exact_tools: true, renderedIDs: Array.from({ length: 380 }, (_, i) => String(i)) }, rendered: Array.from({ length: 380 }, (_, i) => ({ id: String(i), exact: true })), errors: [],

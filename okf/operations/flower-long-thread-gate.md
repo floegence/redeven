@@ -35,7 +35,7 @@ After stopping, compare every generated prose/reasoning item and exact code bloc
 
 ## Responsiveness
 
-Sample idle, early, late and repeat on one visible production UI with two PersistentFloatingWindows, at least twelve monotonic seconds each. Cancellation/released buttons/blur/hidden document invalidates samples. Test-only Electron ignores physical pointer events so they cannot cancel injected CDP drag; handlers/compositor/interruption checks stay active.
+Sample idle, early, late and repeat on one visible production UI with two PersistentFloatingWindows, at least twelve monotonic seconds each. Cancellation/released buttons/blur/hidden document invalidates samples. The long-thread-only Electron host installs pointer isolation before showing its nonfocusable window and prevents native keyboard events; it remains visibly composited, and CDP input, DOM focus, handlers and interruption checks stay active. Assert both drafts before sampling and retain continuity checks throughout.
 
 Read runtime counter before press; one CDP session presses/moves/releases without intervening backend requests. Use Chromium monotonic input timestamps, never Node wall time. Independent 60 Hz scheduling must offer at least 55 events/s; producer cannot await each dispatch. Require at least 45 actual position commits/s and 80% idle cadence.
 
