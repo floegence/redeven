@@ -189,6 +189,29 @@ describe('flower context presentation', () => {
  });
 
 describe('request source attribution', () => {
+  it('groups the Floret goal with system tools while preserving unknown sources', () => {
+    const confirmed: FlowerContextSample = {
+      available: true, measured: true, characters_available: true,
+      phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 400,
+      characters: {
+        source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: 1159,
+        categories: [{ category: 'tool_definition', characters: 1159, details: [
+          { key: 'goal', source: 'floret', characters: 859 },
+          { key: 'terminal.exec', source: 'builtin', characters: 200 },
+          { key: 'unrecorded', characters: 100 },
+        ] }],
+      },
+    };
+    const result = buildFlowerContextComposition({ confirmed })!;
+    const system = result.rows.find(row => row.key === 'system_tools')!;
+    expect(system.characters).toBe(1059);
+    expect(system.items).toEqual(expect.arrayContaining([expect.objectContaining({ label: 'goal', characters: 859 })]));
+    const unknown = result.rows.find(row => row.key === 'unattributed_tools')!;
+    expect(unknown).toMatchObject({ characters: 100, items: [{ label: 'unrecorded', characters: 100 }] });
+    expect(result.rows.reduce((sum, row) => sum + row.characters, 0)).toBe(1159);
+    expect(result.rows.reduce((sum, row) => sum + row.share, 0)).toBeCloseTo(100);
+  });
+
   it('groups released category values without scaling parents or children', () => {
     const confirmed: FlowerContextSample = { available:true, measured:true, characters_available:true,
       phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:1100,

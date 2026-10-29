@@ -161,6 +161,34 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 	if err != nil || current.Goal == nil || current.Goal.Status != "completed" {
 		t.Fatalf("goal=%+v err=%v", current.Goal, err)
 	}
+	contextProjection, err := flowerCurrentContextProjection(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contextProjection.Usage == nil || contextProjection.Usage.Confirmed == nil {
+		t.Fatal("missing confirmed request context")
+	}
+	sample := contextProjection.Usage.Confirmed
+	if !sample.Available || !sample.Measured || !sample.CharactersAvailable || sample.Characters == nil {
+		t.Fatalf("missing measured character attribution: %+v", sample)
+	}
+	foundGoalSource := false
+	for _, category := range sample.Characters.Categories {
+		if category.Category != "tool_definition" {
+			continue
+		}
+		for _, detail := range category.Details {
+			if detail.Key == "goal" {
+				if detail.Source != "floret" || detail.Characters <= 0 {
+					t.Fatalf("Goal must retain its published system tool source: %+v", detail)
+				}
+				foundGoalSource = true
+			}
+		}
+	}
+	if !foundGoalSource {
+		t.Fatal("Goal missing from confirmed tool character attribution")
+	}
 	publicJSON, err := MarshalFlowerCurrentView(current)
 	if err != nil {
 		t.Fatal(err)
