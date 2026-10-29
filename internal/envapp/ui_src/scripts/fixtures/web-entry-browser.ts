@@ -59,7 +59,9 @@ async function recoveryFlowerCall(path: string, body?: unknown, method = body ==
 
 export async function inspectFlowerRecoveryProbe(threadID: string, cleanup = false) {
   if (cleanup) {
-    await recoveryFlowerCall('threads/' + encodeURIComponent(threadID) + '?force=true', undefined, 'DELETE');
+    // Recovery qualification observes terminal completion before cleanup.
+    // An ordinary delete must reject still-active work, never cancel it.
+    await recoveryFlowerCall('threads/' + encodeURIComponent(threadID), undefined, 'DELETE');
     const threads = await recoveryFlowerCall('threads');
     if (threads.threads?.some((thread: { thread_id: string }) => thread.thread_id === threadID)) throw new Error('Recovery thread survived deletion');
     return { deleted: true };

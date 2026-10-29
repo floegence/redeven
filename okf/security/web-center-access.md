@@ -3,7 +3,7 @@ type: Security Contract
 title: Single-administrator Web Center access
 tags: [security, web, authentication, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -27,7 +27,7 @@ Password creates a five-minute browser/action/session/revision-bound challenge, 
 
 Sessions allow one hour idle, twelve hours absolute and 16 devices. Only trusted visible input renews idle activity. Frozen pages, output, polling and heartbeat do not. Device revocation preserves other devices; restart invalidates all sessions, preserving credentials, directory and audit.
 
-Sensitive mutations require fresh password/factor verification and ten-minute action/target/payload/revision grants. Bounded same-session/request retry receipts prevent repeated effects. Valid sessions need no extra MFA for viewing/opening.
+Sensitive mutations require fresh password/factor verification and ten-minute action/target/payload/revision grants. Password-change action bindings use PBKDF2-HMAC-SHA256 (600,000 iterations, 32 bytes) with a domain-separated random login-device ID salt, mirrored by browser Web Crypto; raw password SHA-256 fingerprints are forbidden. Expiry/revision/session checks run again after derivation. Bounded same-session/request retry receipts prevent repeated effects. Valid sessions need no extra MFA for viewing/opening.
 
 ## Admission and resource limits
 

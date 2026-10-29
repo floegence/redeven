@@ -205,7 +205,7 @@ func TestRevocationRacesCannotLeaveLiveAdmissions(t *testing.T) {
 			c.mu.Unlock()
 			password, grant := "replacement test password phrase", ""
 			if mode == "password" {
-				action := "password:" + digest(password)
+				action := passwordAction(password, first.Device.ID)
 				challenge, err := c.Authenticate("first", first.Token, "source", "Test", Authentication{Password: testPassword, Action: action})
 				if err != nil {
 					t.Fatal(err)

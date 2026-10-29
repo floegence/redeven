@@ -804,6 +804,9 @@ func (m *Manager) BindCredential(id string, revision int64, key, ref string, key
 func (m *Manager) Remove(id string, revision int64, deleteData bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if !validID(id) || !filepath.IsLocal(id) {
+		return ErrUnavailable
+	}
 	next := cloneState(m.state)
 	for i, in := range next.Installs {
 		if in.ID != id {
@@ -815,13 +818,26 @@ func (m *Manager) Remove(id string, revision int64, deleteData bool) error {
 		if m.active[id] > 0 {
 			return ErrBusy
 		}
+		var data *os.Root
+		if deleteData {
+			boundary, err := os.OpenRoot(m.root)
+			if err != nil {
+				return err
+			}
+			data, err = boundary.OpenRoot("data")
+			boundary.Close()
+			if err != nil {
+				return err
+			}
+			defer data.Close()
+		}
 		next.Installs = append(next.Installs[:i], next.Installs[i+1:]...)
 		if e := m.saveLocked(next); e != nil {
 			return e
 		}
 		m.cleanupLocked()
 		if deleteData {
-			return os.RemoveAll(m.Data(id))
+			return data.RemoveAll(id)
 		}
 		return nil
 	}

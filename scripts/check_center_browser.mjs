@@ -1,4 +1,5 @@
 import { readFile, mkdtemp, rm, mkdir, writeFile, realpath, readdir, chmod } from 'node:fs/promises';
+import { qualificationCounter, qualificationResources } from './qualification_protocol.mjs';
 import { createHash, createHmac } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -32,7 +33,7 @@ const engine = process.env.REDEVEN_CENTER_BROWSER_ENGINE ?? 'chromium';
 const browserType = { chromium, firefox, webkit }[engine];
 if (!browserType) throw new Error('Unsupported browser engine');
 const report = { scope: 'Actual Center UI, real Gateway pairing and ' + fixture.targets.length + ' independent Runtime applications', engine, status: 'running', cases: [] };
-const password = 'center-browser-acceptance-password';
+let password = 'center-browser-acceptance-password';
 let browser;
 let recoveryCodes = [];
 let recoveryIndex = 0;
@@ -66,7 +67,8 @@ async function authenticate(page, sensitive = false) {
   await scope.getByRole('button', { name: 'Sign in', exact: true }).click();
   const next = recoveryCodes[recoveryIndex++];
   if (next) {
-    await scope.getByRole('button', { name: 'Recovery code', exact: true }).click();
+    await scope.locator('input[autocomplete="one-time-code"]').waitFor();
+    if (await scope.getByRole('button', { name: 'Recovery code', exact: true }).count()) await scope.getByRole('button', { name: 'Recovery code', exact: true }).click();
     await scope.getByLabel('Recovery code', { exact: true }).fill(next);
   } else {
     while (Math.floor(Date.now()/30000) <= lastCenterTOTPStep) await new Promise(resolve=>setTimeout(resolve,250));
@@ -75,7 +77,11 @@ async function authenticate(page, sensitive = false) {
   }
   await scope.getByRole('button', { name: 'Verify', exact: true }).click();
   if (sensitive) await scope.waitFor({ state: 'hidden' });
-  else await page.getByRole('heading', { name: 'Environments', exact: true }).first().waitFor();
+  else {
+    await page.getByRole('navigation', { name: 'Redeven', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Environments', exact: true }).click();
+    await page.getByRole('heading', { name: 'Environments', exact: true }).first().waitFor();
+  }
 }
 async function openEnvironment(page, context, index) {
   const [environment] = await Promise.all([context.waitForEvent('page', {timeout:15000}),
@@ -412,8 +418,9 @@ async function verifyFlowerRecovery(page, context, portal, other, bundle) {
   const provider = async (method = 'GET') => {
     const response = await fetch(controlOrigin + '/flower-recovery', { method });
     if (!response.ok) throw new Error('Recovery provider control rejected');
-    const status = await response.json();
-    if (status.requests > 1 || status.canceled !== 0) throw new Error('Browser lifecycle canceled or duplicated inference: ' + JSON.stringify(status));
+    const value = await response.json();
+    const status = { requests: qualificationCounter(value.requests), titles: qualificationCounter(value.titles), chunks: qualificationCounter(value.chunks), canceled: qualificationCounter(value.canceled) };
+    if (status.requests > 1 || status.canceled !== 0) throw new Error('Browser lifecycle canceled or duplicated inference');
     return status;
   };
   const inspect = target => target.evaluate(id => GatewayAcceptance.inspectFlowerRecoveryProbe(id), probe.threadID);
@@ -619,6 +626,17 @@ try {
   await authenticate(portal);
   report.cases.push('Three-stage owner-authorized setup and password plus recovery-code login through actual UI');
   report.cases.push('Lost start, verify and commit responses recover one setup; visibility refresh preserves the pending wizard');
+  if (process.env.REDEVEN_CENTER_PASSWORD_CHANGE === '1') {
+    await portal.getByRole('button', { name: 'Entry security', exact: true }).click();
+    await portal.getByLabel('New entry password', { exact: true }).fill('center-browser-replacement-password');
+    await portal.getByRole('button', { name: 'Change entry password', exact: true }).click();
+    await authenticate(portal, true);
+    await portal.getByLabel('Entry password', { exact: true }).waitFor();
+    if ((await centerCall(portal, 'directory')).status === 200) throw new Error('Password change left the old device session authorized');
+    password = 'center-browser-replacement-password';
+    await authenticate(portal);
+    report.cases.push('Chrome Web Crypto password binding, current-password plus MFA approval, session revocation, and new-password login');
+  }
   if (process.env.REDEVEN_CENTER_ACCESSIBILITY === '1') {
     await checkAccessibility(portal);
     await portal.setViewportSize({ width: 390, height: 844 });
@@ -705,7 +723,7 @@ try {
       } finally { await context.clearPermissions(); await cdp.detach(); }
     }
     const applied = await fetch(controlOrigin + '/binding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(descriptor) });
-    if (applied.status !== 204) throw new Error('Runtime owner rejected binding: ' + await applied.text());
+    if (applied.status !== 204) throw new Error('Runtime owner rejected binding: HTTP ' + qualificationCounter(applied.status));
     await portal.locator('#binding-title').locator('..').getByRole('button', { name: 'Continue', exact: true }).click();
   }
   report.cases.push('Real signed Gateway pairing, explicit trust confirmation, ' + fixture.targets.length + ' independently owner-approved Runtime bindings');
@@ -842,7 +860,7 @@ try {
         await environments[0].bringToFront();
         await environments[0].mouse.click(5,5);
         const tabs=await Promise.all(environments.map(page=>page.evaluate(()=>window.controlledWorkload.tick())));
-        const server=await(await fetch(controlOrigin+'/resources')).json();
+        const server=qualificationResources(await(await fetch(controlOrigin+'/resources')).json());
         evidence.samples.push({elapsedMs:Date.now()-started,tabs,server});
         if(reportDir)await writeFile(path.join(reportDir,engine+'-soak.json'),JSON.stringify(evidence,null,2),{mode:0o600});
         const remaining=seconds*1000-(Date.now()-started);
@@ -902,7 +920,7 @@ try {
     await applicationEnv.addScriptTag({path:bundled});
     const samples=[];
     let sampling=false;
-    const sample=async()=>{if(sampling)return;sampling=true;try{samples.push({at:Date.now(),...await (await fetch(controlOrigin+'/resources')).json()});}finally{sampling=false;}};
+    const sample=async()=>{if(sampling)return;sampling=true;try{samples.push({at:Date.now(),...qualificationResources(await (await fetch(controlOrigin+'/resources')).json())});}finally{sampling=false;}};
     await sample();
     const timer=setInterval(()=>{void sample().catch(()=>{});},500);
     try {
@@ -1191,7 +1209,7 @@ try {
   await runtimeLogin(other, fixture.targets[1], true);
   await secondEnvironment.addScriptTag({path:bundled});
   await secondEnvironment.evaluate(async()=>{window.entryRevocation=await GatewayAcceptance.observeEntryRevocation();});
-  const revoked = await fetch(controlOrigin+'/revoke-binding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({RuntimeID:fixture.targets[0].runtimeID})});
+  const revoked = await fetch(controlOrigin+'/revoke-binding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({Target:0})});
   if(revoked.status!==204)throw new Error('Fixture binding revoke failed');
   await until(async()=>await secondEnvironment.evaluate(()=>window.entryRevocation.ended()),'Runtime binding revoke left live session');
   if(await runtimeStatus(other)!==200)throw new Error('Binding revoke affected unrelated Runtime');

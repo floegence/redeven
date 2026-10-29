@@ -16,6 +16,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -112,9 +113,18 @@ func DistributionHTTP() *http.Client {
 	}}
 }
 func get(ctx context.Context, client *http.Client, raw string, limit int64) ([]byte, error) {
+	if !distributionURL.MatchString(raw) {
+		return nil, errors.New("invalid distribution URL")
+	}
 	u, e := url.Parse(raw)
-	if e != nil || u.Scheme != "https" || u.User != nil || u.Host == "" || u.Fragment != "" {
+	if e != nil || u.Scheme != "https" || u.User != nil || u.Host == "" || u.Fragment != "" || u.Opaque != "" || u.String() != raw {
 		return nil, errors.New("distribution requires a public HTTPS URL")
+	}
+	if port := u.Port(); port != "" {
+		n, err := strconv.Atoi(port)
+		if err != nil || n < 1 || n > 65535 {
+			return nil, errors.New("invalid distribution port")
+		}
 	}
 	req, e := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if e != nil {
@@ -135,6 +145,11 @@ func get(ctx context.Context, client *http.Client, raw string, limit int64) ([]b
 	}
 	return b, e
 }
+
+// Only an unambiguous ASCII HTTPS authority and escaped URL path/query reach
+// the transport. Its DNS-pinned dialer separately enforces public addresses.
+var distributionURL = regexp.MustCompile(`^https://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|[[][0-9a-fA-F:]+[]])(?::[1-9][0-9]{0,4})?(?:/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*)?(?:[?][A-Za-z0-9._~!$&'()*+,;=:@%/?-]*)?$`)
+
 func Fetch(ctx context.Context, client *http.Client, s Source, dest string) (Source, error) {
 	s, e := s.Normalize()
 	if e != nil {
@@ -221,6 +236,9 @@ func Fetch(ctx context.Context, client *http.Client, s Source, dest string) (Sou
 			return s, errors.New("unsupported archive entry")
 		}
 		target := filepath.FromSlash(name)
+		if !filepath.IsLocal(target) {
+			return s, errors.New("unsafe archive path")
+		}
 		if f.FileInfo().IsDir() {
 			if e = extraction.MkdirAll(target, 0700); e != nil {
 				return s, e
@@ -325,7 +343,11 @@ func Snapshot(ctx context.Context, root, dest string) error {
 			if e != nil {
 				return e
 			}
-			st, e := os.Stat(resolved)
+			relative, e := filepath.Rel(root, resolved)
+			if e != nil || !filepath.IsLocal(relative) {
+				return errors.New("package path escapes its root")
+			}
+			st, e := boundary.Stat(relative)
 			if e != nil {
 				return e
 			}
@@ -348,10 +370,6 @@ func Snapshot(ctx context.Context, root, dest string) error {
 			total += st.Size()
 			if total > MaxPackageBytes {
 				return errors.New("package size exceeds limit")
-			}
-			relative, e := filepath.Rel(root, resolved)
-			if e != nil {
-				return e
 			}
 			in, e := boundary.Open(relative)
 			if e != nil {

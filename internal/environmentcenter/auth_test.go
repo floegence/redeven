@@ -205,7 +205,7 @@ func TestDeviceRevocationAndExpiry(t *testing.T) {
 func TestActionGrantsBindExactPayloadAndRevokeOnChange(t *testing.T) {
 	c, _, _, codes := configuredCenter(t)
 	a := loginRecovery(t, c, "a", codes[0])
-	action := "password:" + digest("new strong password")
+	action := passwordAction("new strong password", a.Device.ID)
 	challenge, err := c.Authenticate("a", a.Token, "source", "", Authentication{Password: testPassword, Action: action})
 	if err != nil {
 		t.Fatal(err)
@@ -222,6 +222,16 @@ func TestActionGrantsBindExactPayloadAndRevokeOnChange(t *testing.T) {
 	}
 	if _, err = c.Session(a.Token); !errors.Is(err, ErrDenied) {
 		t.Fatal("security change did not revoke")
+	}
+}
+
+func TestPasswordActionUsesSessionSaltAndBrowserVector(t *testing.T) {
+	const want = "password:pbkdf2-sha256-v1:dr2wlfG3PcgTBo8JHTGESAVPzOqf6zvo8V602BaraJY"
+	if got := passwordAction("new strong password", "device-one"); got != want {
+		t.Fatalf("browser derivation mismatch: %s", got)
+	}
+	if passwordAction("new strong password", "device-two") == want {
+		t.Fatal("password identity crossed login sessions")
 	}
 }
 func TestMissingCommittedStateFailsClosed(t *testing.T) {

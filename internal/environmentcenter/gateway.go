@@ -43,7 +43,8 @@ func (g *gatewayClient) request(ctx context.Context, route string, body, out any
 	default:
 		return ErrDenied
 	}
-	if webbinding.ValidateOrigin(g.record.URL) != nil {
+	origin, err := webbinding.CanonicalOrigin(g.record.URL)
+	if err != nil {
 		return ErrDenied
 	}
 	raw, err := json.Marshal(body)
@@ -54,7 +55,7 @@ func (g *gatewayClient) request(ctx context.Context, route string, body, out any
 		return ErrDenied
 	}
 	path := "/gateway/v6/" + route
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.record.URL+path, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, origin+path, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}

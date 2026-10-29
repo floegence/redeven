@@ -91,6 +91,34 @@ func TestRemoveRejectsUnregisteredPathsWithoutChangingState(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveCannotFollowReplacedDataDirectory(t *testing.T) {
+	m, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	in := install(t, m, fixture(t))
+	outside := t.TempDir()
+	put(t, outside, filepath.Join(in.ID, "keep"), "outside data")
+	data := filepath.Join(m.root, "data")
+	if err = os.RemoveAll(data); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Symlink(outside, data); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.Remove(in.ID, in.Revision, true); err == nil {
+		t.Fatal("escaped data removal accepted")
+	}
+	if items, _ := m.List(); len(items) != 1 || items[0].ID != in.ID {
+		t.Fatal("rejected removal changed installation state")
+	}
+	got, err := os.ReadFile(filepath.Join(outside, in.ID, "keep"))
+	if err != nil || string(got) != "outside data" {
+		t.Fatalf("outside data changed: %v", err)
+	}
+}
 func TestPrepareBindsBytesAndUpdatePreservesData(t *testing.T) {
 	m, e := Open(t.TempDir())
 	if e != nil {

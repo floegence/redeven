@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -169,7 +170,7 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 			if !computerProtocolMethod.MatchString(method) {
 				method = "unknown"
 			}
-			fields := []any{"stage", "cdp_method", "target_id", pipe.target, "binding", pipe.binding, "request", pipe.request, "command", message.ID, "method", method, "child_frame", message.Session != ""}
+			fields := []any{"stage", "cdp_method", "target_id", browserTraceID(pipe.target), "binding", browserTraceID(pipe.binding), "request", browserTraceID(pipe.request), "command", browserTraceID(message.ID), "method", method, "child_frame", message.Session != ""}
 			slog.Debug("browser source trace", append(fields, "phase", "started")...)
 			result, err := pipe.client.call(pipe.ctx, "cdp", map[string]any{"binding": pipe.binding, "tab_id": pipe.tab, "session": message.Session, "method": message.Method, "params": message.Params})
 			var reply map[string]any
@@ -200,6 +201,14 @@ func (pipe *extensionSourcePipe) read(reader *bufio.Reader) {
 	}
 }
 func (pipe *extensionSourcePipe) close() { pipe.retire("") }
+
+// Correlation identifiers remain safe with any slog handler and in terminals.
+func browserTraceID(value string) string {
+	if len(value) > 256 {
+		value = value[:256]
+	}
+	return fmt.Sprintf("%q", value)
+}
 
 func (pipe *extensionSourcePipe) retire(reason string) {
 	if pipe == nil {

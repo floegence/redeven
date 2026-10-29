@@ -2,13 +2,16 @@ package environmentcenter
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"strings"
 	"time"
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 const SessionIdle = time.Hour
@@ -518,9 +521,15 @@ func (c *Center) ChangePassword(session, grant, password string) error {
 	defer c.endAuth()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Bind the one-use step-up grant to the browser's exact requested action.
-	// The credential verifier below is independently salted by bcrypt.
-	if err := c.grantLocked(session, grant, "password:"+digest(password)); err != nil {
+	d, err := c.sessionLocked(session)
+	if err != nil {
+		return err
+	}
+	device := d.ID
+	c.mu.Unlock()
+	action := passwordAction(password, device)
+	c.mu.Lock()
+	if err := c.grantLocked(session, grant, action); err != nil {
 		return err
 	}
 	revision := c.state.Revision
@@ -542,6 +551,14 @@ func (c *Center) ChangePassword(session, grant, password string) error {
 	}
 	c.revokeAllLocked()
 	return nil
+}
+
+// Step-up binds the exact password without exposing a fast reusable fingerprint.
+// Device IDs are random per login. The persisted verifier remains salted bcrypt.
+// The browser derives the same value with Web Crypto.
+func passwordAction(password, device string) string {
+	key := pbkdf2.Key([]byte(password), []byte("redeven:center:password:"+device), 600000, 32, sha256.New)
+	return "password:pbkdf2-sha256-v1:" + base64.RawURLEncoding.EncodeToString(key)
 }
 func (c *Center) ReplaceFactor(browser, session, grant string) (SetupResult, error) {
 	c.mu.Lock()

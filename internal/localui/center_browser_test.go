@@ -426,13 +426,13 @@ func TestCenterBrowserQualification(t *testing.T) {
 			return
 		}
 		if r.Method == "POST" && r.URL.Path == "/revoke-binding" {
-			var request struct{ RuntimeID string }
+			var request struct{ Target int }
 			if json.NewDecoder(r.Body).Decode(&request) != nil {
 				http.Error(w, "invalid", 400)
 				return
 			}
-			for _, target := range targets {
-				if targetID(target) == request.RuntimeID {
+			for index, target := range targets {
+				if index == request.Target {
 					if target == nil {
 						var bindings []webbinding.Binding
 						if json.Unmarshal(remote("", "web-binding list"), &bindings) != nil {

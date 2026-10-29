@@ -126,11 +126,11 @@ func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) 
 				t.Fatalf("unreviewed diagnostic field: %s", field)
 			}
 		}
-		if record["stage"] != "cdp_method" || record["target_id"] != pipe.target || record["binding"] != pipe.binding || record["request"] != pipe.request || record["method"] != "Runtime.evaluate" {
+		if record["stage"] != "cdp_method" || record["target_id"] != fmt.Sprintf("%q", pipe.target) || record["binding"] != fmt.Sprintf("%q", pipe.binding) || record["request"] != fmt.Sprintf("%q", pipe.request) || record["method"] != "Runtime.evaluate" {
 			t.Fatalf("command trace lost correlation: %v", record)
 		}
 		command := record["command"].(string)
-		if record["child_frame"] != (command == failedCommand) {
+		if record["child_frame"] != (command == fmt.Sprintf("%q", failedCommand)) {
 			t.Fatal("trace lost the root/child distinction")
 		}
 		phase := record["phase"].(string)
@@ -141,7 +141,7 @@ func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) 
 			}
 		}
 	}
-	if strings.Join(stages["0"], ",") != "started,completed" || strings.Join(stages[failedCommand], ",") != "started,failed" || len(stages) != 2 {
+	if strings.Join(stages[fmt.Sprintf("%q", "0")], ",") != "started,completed" || strings.Join(stages[fmt.Sprintf("%q", failedCommand)], ",") != "started,failed" || len(stages) != 2 {
 		t.Fatalf("command outcomes are ambiguous: %v", stages)
 	}
 }

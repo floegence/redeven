@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT_DIR"
 [[ "$(node --version)" == "v$(cat .node-version)" ]] || { echo "Use the repository Node version." >&2; exit 2; }
-node --test scripts/check_center_source_contract.test.mjs
+node --test scripts/check_center_source_contract.test.mjs scripts/qualification_protocol.test.mjs
 GOWORK=off go run ./cmd/center-contracts --check
 GOWORK=off go test ./cmd/redeven-center ./internal/environmentcenter ./internal/webbinding ./internal/webconnector ./internal/accessgate -count=1
 corepack pnpm --dir desktop exec tsc -p tsconfig.center.json --noEmit

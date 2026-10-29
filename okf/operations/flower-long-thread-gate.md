@@ -3,7 +3,7 @@ type: Validation Contract
 title: Flower explicit long-thread qualification
 tags: [flower, performance, correctness, gates]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -45,7 +45,7 @@ Trace pairs nested async slices by process/identity/scope. Only complete MOUSE_D
 
 # Boundaries
 
-Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Metrics/traces stay outside Git; reports identify source/locks/host. Dirty development samples cannot certify committed tips. Seeding verifies complete canonical results once instead of rescanning every prefix; coverage is unchanged.
+Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Metrics/traces stay outside Git; reports identify source/locks/host. The local Go fixture exports private, exclusive-create setup/configuration/canonical evidence through an owner-selected directory handle. HTTP counters are projected to finite nonnegative safe integers; network response bodies and unknown fields cannot become evidence files. Dirty development samples cannot certify committed tips. Seeding verifies complete canonical results once instead of rescanning every prefix; coverage is unchanged.
 
 Reduce synchronous envelope work through stable turn/row inputs, keyed subscriptions, linear membership and bounded offscreen layout with reading/selection/focus pins. Retain DOM/disclosure owners, including growing active turns; this is layout containment, not virtualization. Partition construction visits each retained entry once per structural change; never rescan the remaining active-turn suffix for each section. Preserve mounted partition keys through prepend, growth and completion. Preserve order/boundaries/full history/drafts/disclosure. Throttling, suppressed output, extra lifecycle or shortened fixtures cannot substitute.
 

@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -207,49 +208,61 @@ func Open(dir, runtimeID string) (*Store, error) {
 	return &Store{db: db, runtimeID: runtimeID, active: map[string]map[*Lease]struct{}{}}, nil
 }
 
-func ValidateOrigin(origin string) error {
+// Closed ASCII authority grammar avoids parser disagreements before URL parsing.
+// IP semantics, canonical ports and DNS label rules are checked below.
+var canonicalOrigin = regexp.MustCompile(`^https://(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|[[][0-9a-f:]+[]])(?::[1-9][0-9]{0,4})?$`)
+
+// CanonicalOrigin returns only the exact origin admitted by the shared grammar.
+func CanonicalOrigin(origin string) (string, error) {
+	if !canonicalOrigin.MatchString(origin) {
+		return "", ErrDenied
+	}
 	u, err := url.Parse(origin)
 	if len(origin) > 512 || err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawFragment != "" || u.Opaque != "" || strings.ToLower(u.Host) != u.Host || strings.ContainsAny(u.Host, "*%\\ \t\r\n") || u.String() != origin {
-		return ErrDenied
+		return "", ErrDenied
 	}
 	if strings.Contains(origin, "#") || strings.HasSuffix(u.Host, ":") {
-		return ErrDenied
+		return "", ErrDenied
 	}
 	if port := u.Port(); port != "" {
 		n, err := strconv.Atoi(port)
 		if err != nil || n < 1 || n > 65535 || n == 443 || strconv.Itoa(n) != port {
-			return ErrDenied
+			return "", ErrDenied
 		}
 	}
 	host := u.Hostname()
 	if ip, err := netip.ParseAddr(host); err == nil {
 		if ip.String() != host || ip.Zone() != "" || ip.Is4In6() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() {
-			return ErrDenied
+			return "", ErrDenied
 		}
 		if ip.Is6() != strings.HasPrefix(u.Host, "[") {
-			return ErrDenied
+			return "", ErrDenied
 		}
 	} else {
 		if len(host) == 0 || len(host) > 253 || strings.ContainsAny(u.Host, "[]") {
-			return ErrDenied
+			return "", ErrDenied
 		}
 		for _, label := range strings.Split(host, ".") {
 			if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-				return ErrDenied
+				return "", ErrDenied
 			}
 			for _, c := range label {
 				if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
-					return ErrDenied
+					return "", ErrDenied
 				}
 			}
 		}
 		// Browser URL parsers interpret numeric terminal labels as IPv4.
 		last := host[strings.LastIndexByte(host, '.')+1:]
 		if last[0] >= '0' && last[0] <= '9' {
-			return ErrDenied
+			return "", ErrDenied
 		}
 	}
-	return nil
+	return origin, nil
+}
+func ValidateOrigin(origin string) error {
+	_, err := CanonicalOrigin(origin)
+	return err
 }
 func PublicKeyFingerprint(cert *x509.Certificate) string {
 	if cert == nil {

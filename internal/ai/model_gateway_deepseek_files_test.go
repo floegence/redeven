@@ -69,6 +69,18 @@ func TestDeepSeekFilesOwnersScopeAndRouting(t *testing.T) {
 	}
 }
 
+func TestDeepSeekCredentialIdentityIsPrivateToOwner(t *testing.T) {
+	first, second := &deepSeekImageFileOwners{}, &deepSeekImageFileOwners{}
+	for _, owner := range []*deepSeekImageFileOwners{first, second} {
+		if err := owner.configure(&deepSeekProvider{apiKey: "same-api-key"}, "provider"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if first.owners["provider"].scope == second.owners["provider"].scope {
+		t.Fatal("credential fingerprints must not be comparable across owners")
+	}
+}
+
 func TestDeepSeekFilesAdapterPreservesImagesAcrossPreparations(t *testing.T) {
 	uploads, requests := 0, 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

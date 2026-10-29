@@ -35,4 +35,10 @@ export async function digest(value: string): Promise<string> {
   return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 export async function actionDigest(kind: string, value: unknown): Promise<string> { return kind + ':' + await digest(JSON.stringify(value)); }
+export async function passwordAction(password: string, device: string): Promise<string> {
+  if (!device) throw new CenterError('CENTER_AUTH_REQUIRED', 401);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', iterations: 600000, salt: new TextEncoder().encode('redeven:center:password:' + device) }, key, 256);
+  return 'password:pbkdf2-sha256-v1:' + btoa(String.fromCharCode(...new Uint8Array(bits))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
 export type { AuditEvent, Device, Status, Source, Route, Directory, Member, Catalog, Operation, Setup } from './contracts.generated';

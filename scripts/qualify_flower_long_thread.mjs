@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { qualificationCounter } from './qualification_protocol.mjs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
@@ -33,7 +34,7 @@ await session.run(async () => {
   await session.wait(build, 120000);
   assert.equal(build.exitCode, 0, 'Build current production UI');
   const fixture = await session.spawn('go', ['test', './internal/ai', '-run', '^TestFlowerCPUQualification$', '-count=1', '-v', '-timeout=25m'], {
-    cwd: root, env: { ...process.env, GOWORK: 'off', REDEVEN_CPU_QUALIFICATION: '1', REDEVEN_CPU_STATE: state, REDEVEN_CPU_DIST: dist,
+    cwd: root, env: { ...process.env, GOWORK: 'off', REDEVEN_CPU_QUALIFICATION: '1', REDEVEN_CPU_EVIDENCE_DIR: output, REDEVEN_CPU_STATE: state, REDEVEN_CPU_DIST: dist,
       REDEVEN_CPU_RETAIN_SEED_SCOPE: '0', REDEVEN_CPU_CHILD_DETAIL: '0', REDEVEN_CPU_SEED_ONLY: '0', REDEVEN_CPU_SYSTEM_PROMPT_BYTES: '', REDEVEN_CPU_HISTORY_TURNS: String(workload.historyTurns), REDEVEN_CPU_TOOL_EVERY: String(workload.toolEvery) }, stdio: ['ignore', 'pipe', 'pipe'],
   }, { kind: 'synthetic-flower-runtime', allowCleanExit: true });
   fixture.stdout.pipe(log, { end: false }); fixture.stderr.pipe(log, { end: false });
@@ -62,12 +63,18 @@ await session.run(async () => {
   await session.port(Number(fixtureURL.port));
   const api = async (op, extra = '') => {
     const response = await fetch(fixtureOrigin + '/fixture?op=' + op + extra, { signal: AbortSignal.timeout(60000) });
-    assert.ok(response.ok, op + ': ' + (response.ok ? '' : await response.text()));
-    return response.json();
+    assert.ok(response.ok, op + ': HTTP ' + qualificationCounter(response.status));
+    if (op === 'stats') {
+      const value = await response.json();
+      return { produced: qualificationCounter(value.produced) };
+    }
+    await response.body?.cancel();
   };
   await session.setGracefulClose(fixture, async () => { await api('quit'); await session.wait(fixture, 20000); });
-  const setup = await api('setup');
-  const configured = await api('configure', '&threads=1&hz=' + workload.hz + '&mode=mixed&initial_bytes=' + workload.initialBytes);
+  await api('setup');
+  const setup = JSON.parse(await readFile(path.join(output, 'setup.json'), 'utf8'));
+  await api('configure', '&threads=1&hz=' + workload.hz + '&mode=mixed&initial_bytes=' + workload.initialBytes);
+  const configured = JSON.parse(await readFile(path.join(output, 'configured.json'), 'utf8'));
   console.log('Canonical history verified: ' + JSON.stringify(setup));
   const application = await session.launchElectron(electron, {
     executablePath: desktopRequire('electron'), args: [path.join(root, 'internal/flower_ui/testing/performance/desktop.cjs'), '--redeven-smoke-run=long-thread-gate'],
@@ -164,7 +171,8 @@ await session.run(async () => {
     // Backend completion can precede consumption of the queued final snapshot.
     // Wait for the observed terminal state before navigating folded content.
     await page.locator('main[data-flower-selected-thread-status="success"]').waitFor({ timeout: 60000 });
-    const canonical = await api('evidence', '&id=' + configured.threads[0]);
+    await api('evidence');
+    const canonical = JSON.parse(await readFile(path.join(output, 'canonical.json'), 'utf8'));
     for (const measured of samples.filter(item => item.name !== 'idle')) {
       const expected = [...canonical.text.matchAll(/word(\d{6})/g)].map(match => Number(match[1])).filter(index => canonical.timings[index] >= measured.startedAt && canonical.timings[index] <= measured.startedAt + measured.seconds * 1000 - 250);
       const observed = new Map(measured.outputs.map(item => [item.index,item.at]));
@@ -173,7 +181,6 @@ await session.run(async () => {
     }
     const tools = canonical.items.filter(item => item.kind === 'tool');
     report.canonical = { exact_text: canonical.exact_text, exact_reasoning: canonical.exact_reasoning, updates: canonical.updates, tools: tools.length, exact_tools: tools.length === Math.floor(canonical.updates / workload.toolEvery) && tools.every((item, index) => item.activity?.status === 'success' && item.activity.tool_id === 'live-' + ((index + 1) * workload.toolEvery)), renderedIDs: canonical.items.filter(item => ['assistant', 'thinking'].includes(item.kind)).map(item => item.id) };
-    await writeFile(path.join(output, 'canonical.json'), JSON.stringify(canonical));
     await writeFile(path.join(output, 'metrics.json'), JSON.stringify(report, null, 2));
     console.log('Checking complete rendered content: ' + report.canonical.renderedIDs.length + ' items');
     // Close unrelated overlays before inspecting all canonical generated rows.

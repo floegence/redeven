@@ -84,6 +84,11 @@ func Within(root, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	boundary, err := os.OpenRoot(root)
+	if err != nil {
+		return "", err
+	}
+	defer boundary.Close()
 	tail := []string{}
 	resolved := path
 	for {
@@ -95,7 +100,11 @@ func Within(root, path string) (string, error) {
 		if !os.IsNotExist(e) {
 			return "", e
 		}
-		if _, e = os.Lstat(resolved); e == nil {
+		relative, relErr := filepath.Rel(root, resolved)
+		if relErr != nil || !filepath.IsLocal(relative) {
+			return "", errors.New("package path escapes its root")
+		}
+		if _, e = boundary.Lstat(relative); e == nil {
 			return "", errors.New("unresolved package link")
 		}
 		parent := filepath.Dir(resolved)

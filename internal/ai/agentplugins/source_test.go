@@ -104,6 +104,18 @@ func TestDistributionRejectsPrivateTargetsAndUnsafeRedirects(t *testing.T) {
 		t.Fatal("loopback distribution download accepted")
 	}
 }
+
+func TestDistributionRejectsAmbiguousURLsBeforeTransport(t *testing.T) {
+	client := &http.Client{Transport: updateTransport(func(*http.Request) (*http.Response, error) {
+		t.Error("invalid URL reached transport")
+		return nil, io.ErrUnexpectedEOF
+	})}
+	for _, raw := range []string{"http://example.com/file", "https://user@example.com/file", "https://example.com:0/file", "https://example.com:65536/file", "https://example.com:0443/file", "https://example.com/file#fragment", "https://example.com/white space", "https://example.com/%zz", "https://[fe80::1%25en0]/file"} {
+		if _, err := get(t.Context(), client, raw, MaxConfigBytes); err == nil {
+			t.Fatalf("unsafe distribution URL accepted: %q", raw)
+		}
+	}
+}
 func TestGitHubFetchCountsDirectoryEntries(t *testing.T) {
 	files := make(map[string]string, MaxFiles+1)
 	for i := 0; i <= MaxFiles; i++ {

@@ -1,4 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { passwordAction } from '../../internal/envcenter_web/src/api';
+
+it('binds passwords to the login session using the server PBKDF2 vector', async () => {
+  const expected = 'password:pbkdf2-sha256-v1:dr2wlfG3PcgTBo8JHTGESAVPzOqf6zvo8V602BaraJY';
+  expect(await passwordAction('new strong password', 'device-one')).toBe(expected);
+  expect(await passwordAction('new strong password', 'device-two')).not.toBe(expected);
+  await expect(passwordAction('new strong password', '')).rejects.toThrow('CENTER_AUTH_REQUIRED');
+});
 import { createEnvironmentOpenController, requestEnvironmentOpen, environmentOpenRunning, createEnvironmentOperationObserver, createEnvironmentHandoffGuard } from '../src/envcenter/controller';
 import { filterEnvironmentFacts, reduceEnvironmentOperation, classifyEnvironmentFailure, projectEnvironment, environmentRecovery } from '../src/envcenter/core';
 import type { EnvironmentCenterHost, EnvironmentEntry } from '../src/envcenter/contracts';

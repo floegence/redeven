@@ -14,7 +14,7 @@ import (
 func TestSensitiveAuthenticationAuditDoesNotPersistActionPayload(t *testing.T) {
 	c, _, _, codes := configuredCenter(t)
 	login := loginRecovery(t, c, "audit-browser", codes[0])
-	action := "password:" + digest("replacement horse battery staple")
+	action := passwordAction("replacement horse battery staple", login.Device.ID)
 	challenge, err := c.Authenticate("audit-browser", login.Token, "source", "Browser", Authentication{Password: testPassword, Action: action})
 	if err != nil {
 		t.Fatal(err)

@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model provider surface and history
 tags: [ai, models, providers, history]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -46,7 +46,7 @@ explicit official HTTPS API root (including /v1), with one-hour expiry and the
 48 MiB official request limit. Custom endpoints retain the existing inline
 transport and 32 MiB host policy. Runtime Service and Desktop executor each keep
 bounded provider-identity owners; credential or endpoint changes select a new
-owner. Original attachments remain canonical and authorized on every new
+owner. Credential rotation identity uses HMAC-SHA256 with a random owner-local key, preventing reusable plain credential fingerprints. Original attachments remain canonical and authorized on every new
 preparation. Neither host persists temporary file IDs or migrates Floret data.
 Explicit missing/expired reference errors allow one upstream re-preparation;
 quota, upload and invalid media failures cannot trigger summary loops.

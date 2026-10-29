@@ -35,7 +35,7 @@ Flower's distribution format is deliberately outside the Agent Plugins standard:
 }
 ```
 
-Catalogs recommend GitHub sources only. They cannot install local paths, enable components, supply credentials or execute commands. No default marketplace, official directory address or automatic GitHub search is shipped. [Catalog integration](flower-plugin-catalogs.md) defines opt-in runtime sources and display metadata. Distribution rejects private resolved network addresses, unsafe redirects, archive links/duplicate paths and Windows drive/stream paths. Archive admission counts files and directories before extraction, limits paths to 32 separators, and writes through a pinned `os.Root` handle. Local contained symlinks are materialized; escapes fail preparation. These restrictions precede component loading. Limits: 4,096 entries, 16 MiB per file, 128 MiB per package/archive, 1 MiB per manifest/catalog configuration.
+Catalogs recommend GitHub sources only. They cannot install local paths, enable components, supply credentials or execute commands. No default marketplace, official directory address or automatic GitHub search is shipped. [Catalog integration](flower-plugin-catalogs.md) defines opt-in runtime sources and display metadata. Distribution admits explicit ASCII HTTPS URL grammar and valid ports, then rejects private DNS-resolved addresses, unsafe redirects, archive links/duplicate paths and Windows drive/stream paths. Archive admission counts files and directories before extraction, limits paths to 32 separators, and writes through a pinned `os.Root` handle. Local contained symlinks are materialized; escapes fail preparation. These restrictions precede component loading. Limits: 4,096 entries, 16 MiB per file, 128 MiB per package/archive, 1 MiB per manifest/catalog configuration.
 
 ## Review, persistence and recovery
 
@@ -47,7 +47,7 @@ Operations are private to namespace, endpoint and user identity. Request identit
 
 Conversation snapshots do not include environment extension configuration, package data or credentials. Restore staging does not create a plugin manager; the live registry, snapshots and data remain unchanged, matching standalone MCP/Skills configuration ownership.
 
-Credentials use immutable references in the existing locked SecretsStore, schema 4. Values are write-only and never included in plugin listing, operation views or audit records. Replacing/clearing credentials invalidates discovery. Empty objects clear; omission preserves. Uninstall defaults to retaining data; permanent deletion is an explicit option.
+Credentials use immutable references in the existing locked SecretsStore, schema 4. Values are write-only and never included in plugin listing, operation views or audit records. Replacing/clearing credentials invalidates discovery. Empty objects clear; omission preserves. Uninstall defaults to retaining data; permanent deletion is an explicit option. Deletion validates the installation UUID and uses a pinned package-state root, so replacing the data directory with an escaping symlink cannot remove external files. Snapshot stat/read and unresolved-link inspection also use root-relative handles.
 
 GitHub installations offer an explicit automatic-check preference, initially enabled. A service worker checks eligible refs no more often than every six hours; it only records update availability. It never downloads, applies, enables or runs updates. Applying an update always returns through preparation and review.
 

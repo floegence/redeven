@@ -46,6 +46,34 @@ func TestFlowerCPUQualification(t *testing.T) {
 	} else if len(entries) != 0 {
 		t.Fatal("qualification requires a fresh empty state directory; preserve earlier evidence and choose a new directory")
 	}
+	var evidenceRoot *os.Root
+	if directory := os.Getenv("REDEVEN_CPU_EVIDENCE_DIR"); directory != "" {
+		var err error
+		evidenceRoot, err = os.OpenRoot(directory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = evidenceRoot.Close() })
+	}
+	// Evidence is exported by the local fixture that owns the canonical store.
+	// The runner reads these private snapshots instead of persisting HTTP bodies.
+	exportEvidence := func(w http.ResponseWriter, name string, value any) bool {
+		if evidenceRoot == nil {
+			return true
+		}
+		f, err := evidenceRoot.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err == nil {
+			err = json.NewEncoder(f).Encode(value)
+			if closeErr := f.Close(); err == nil {
+				err = closeErr
+			}
+		}
+		if err != nil {
+			http.Error(w, "evidence export failed", 500)
+			return false
+		}
+		return true
+	}
 	// A fork has a fresh prompt scope. Reusing the seed is necessary when
 	// qualifying historical provider-request reads, and each sample must use
 	// a fresh fixture so earlier measured work cannot alter its history.
@@ -322,7 +350,15 @@ func TestFlowerCPUQualification(t *testing.T) {
 	mux.HandleFunc("/fixture", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("op") {
 		case "setup":
-			encode(w, map[string]any{"threads": ids, "pid": os.Getpid(), "state": state, "ready": ready.Load(), "generation": generations.Load(), "history_turns": historyTurns, "history_messages": 2 * historyTurns, "history_completed_activities": 2 * historyTurns, "history_verified": true, "retained_seed_scope": retainSeedScope, "system_prompt_bytes": len(systemPrompt), "tool_every": toolEvery})
+			value := map[string]any{"threads": ids, "pid": os.Getpid(), "state": state, "ready": ready.Load(), "generation": generations.Load(), "history_turns": historyTurns, "history_messages": 2 * historyTurns, "history_completed_activities": 2 * historyTurns, "history_verified": true, "retained_seed_scope": retainSeedScope, "system_prompt_bytes": len(systemPrompt), "tool_every": toolEvery}
+			if !exportEvidence(w, "setup.json", value) {
+				return
+			}
+			if evidenceRoot != nil {
+				encode(w, true)
+			} else {
+				encode(w, value)
+			}
 		case "list":
 			value, e := service.ListThreads(r.Context(), meta, 200, "")
 			if e != nil {
@@ -461,7 +497,15 @@ func TestFlowerCPUQualification(t *testing.T) {
 				}
 				ids = append(ids, childID)
 			}
-			encode(w, map[string]any{"threads": ids[1 : count+1], "hz": rate, "mode": pattern, "initial_bytes": size, "parent_thread": rootID, "visited_roots": visitedRoots, "child_detail": childDetail})
+			value := map[string]any{"threads": ids[1 : count+1], "hz": rate, "mode": pattern, "initial_bytes": size, "parent_thread": rootID, "visited_roots": visitedRoots, "child_detail": childDetail}
+			if !exportEvidence(w, "configured.json", value) {
+				return
+			}
+			if evidenceRoot != nil {
+				encode(w, true)
+			} else {
+				encode(w, value)
+			}
 		case "subagent_detail":
 			var value *FlowerSubagentDetailResponse
 			var e error
@@ -553,7 +597,11 @@ func TestFlowerCPUQualification(t *testing.T) {
 			historyTurns = count
 			encode(w, true)
 		case "evidence":
-			current, e := service.threadRuntime.View(r.Context(), identity.ThreadID(r.URL.Query().Get("id")))
+			id := r.URL.Query().Get("id")
+			if id == "" && evidenceRoot != nil && len(ids) == 2 {
+				id = ids[1]
+			}
+			current, e := service.threadRuntime.View(r.Context(), identity.ThreadID(id))
 			if e != nil {
 				http.Error(w, e.Error(), 500)
 				return
@@ -580,7 +628,15 @@ func TestFlowerCPUQualification(t *testing.T) {
 					reasoning.WriteString(item.Text)
 				}
 			}
-			encode(w, map[string]any{"items": values, "run_id": runID, "text": output.text.String(), "reasoning": output.reasoning.String(), "exact_text": prose.String() == output.text.String(), "exact_reasoning": reasoning.String() == output.reasoning.String(), "updates": output.index, "timings": output.timings})
+			value := map[string]any{"items": values, "run_id": runID, "text": output.text.String(), "reasoning": output.reasoning.String(), "exact_text": prose.String() == output.text.String(), "exact_reasoning": reasoning.String() == output.reasoning.String(), "updates": output.index, "timings": output.timings}
+			if !exportEvidence(w, "canonical.json", value) {
+				return
+			}
+			if evidenceRoot != nil {
+				encode(w, true)
+			} else {
+				encode(w, value)
+			}
 		case "quit":
 			running.Store(false)
 			encode(w, true)

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Flower browser source ownership
 tags: [architecture, browser, flower, privacy]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -11,7 +11,7 @@ ComputerUseRuntime authorizes targets; its source Host owns CDP/extension adapte
 
 # Contract
 
-Runtime discovers supported Chrome and Chromium installations by opaque installation ID.
+Runtime discovers supported Chrome and Chromium installations by opaque installation ID. Source trace identifiers are bounded and consistently quoted so control characters cannot create records or terminal escapes with any log handler. Page contents and CDP payloads remain excluded.
 
 Existing files remain on disk unchanged.
 

@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"net/url"
@@ -14,8 +16,9 @@ import (
 // A product owner scopes upstream upload caches to configured provider identity.
 // It stores no attachment bytes, canonical history, or upload lifecycle.
 type deepSeekImageFileOwners struct {
-	mu     sync.Mutex
-	owners map[string]deepSeekImageFileOwner
+	mu          sync.Mutex
+	owners      map[string]deepSeekImageFileOwner
+	identityKey []byte
 }
 type deepSeekImageFileOwner struct {
 	scope string
@@ -38,11 +41,20 @@ func (o *deepSeekImageFileOwners) configure(adapter ModelGateway, providerID str
 	if baseURL == "" {
 		baseURL = "https://api.deepseek.com"
 	}
-	// This ephemeral cache identity detects API-key rotation, not password
-	// authentication or persisted credential verification.
-	scope := fmt.Sprintf("%s:%x", baseURL, sha256.Sum256([]byte(p.apiKey)))
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	// A random owner-local key prevents a leaked cache identity from becoming
+	// an offline credential oracle or a fingerprint shared across runtimes.
+	if o.identityKey == nil {
+		o.identityKey = make([]byte, 32)
+		if _, err := rand.Read(o.identityKey); err != nil {
+			o.identityKey = nil
+			return err
+		}
+	}
+	identity := hmac.New(sha256.New, o.identityKey)
+	_, _ = identity.Write([]byte(p.apiKey))
+	scope := fmt.Sprintf("%s:%x", baseURL, identity.Sum(nil))
 	if o.owners == nil {
 		o.owners = map[string]deepSeekImageFileOwner{}
 	}
