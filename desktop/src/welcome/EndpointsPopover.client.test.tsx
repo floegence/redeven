@@ -70,6 +70,8 @@ describe('Environment connection popover', () => {
     expect(group.querySelectorAll('[data-endpoint-kind="address"]')).toHaveLength(2);
     expect(group.querySelectorAll('button')).toHaveLength(0);
     expect(group.textContent?.match(/Choose “Open window”/g)).toHaveLength(1);
+    expect(group.querySelector('.redeven-address-heading .redeven-address-count')).toBeNull();
+    expect(group.querySelector('summary .redeven-address-count')?.textContent?.trim()).toBe('2');
   });
 
   it('groups and filters many addresses while preserving sharing and input state across refresh', async () => {
@@ -106,6 +108,21 @@ describe('Environment connection popover', () => {
     filter.focus(); test.setURLs([urls[0]!]); await settle();
     expect(document.querySelector('[aria-label="Filter addresses"]')).toBe(filter);
     expect(document.activeElement).toBe(filter);
+  });
+
+  it('keeps the internal-listener count beside its disclosure while filtering', async () => {
+    const test = await mount();
+    test.setURLs(Array.from({ length: 8 }, (_, index) => `http://localhost:${23998 + index}/`));
+    await settle();
+    const group = document.querySelector('[data-address-scope="environment_only"]')!;
+    const count = group.querySelector('summary .redeven-address-count')!;
+    expect(count.textContent?.trim()).toBe('8');
+    const filter = group.querySelector<HTMLInputElement>('[aria-label="Filter addresses"]')!;
+    filter.value = '23998';
+    filter.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    expect(count.textContent?.trim()).toBe('1 / 8');
+    expect(group.querySelector('.redeven-address-heading .redeven-address-count')).toBeNull();
   });
 
   it('presents remote loopback as internal listener details and preserves the disclosure on refresh', async () => {

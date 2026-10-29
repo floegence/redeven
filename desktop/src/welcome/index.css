@@ -2801,10 +2801,15 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__action-stack button {
   width: 100%;
+  min-width: 0;
   min-height: 1.75rem;
   height: auto;
   padding-block: 0.25rem;
+  white-space: normal;
+  line-height: var(--floe-line-control);
 }
+
+.redeven-action-popover__action-stack button > span { min-width: 0; overflow-wrap: anywhere; }
 
 .redeven-action-popover__action-stack svg {
   flex-shrink: 0;
@@ -4556,7 +4561,6 @@ pre,
   height: 2rem;
 }
 .redeven-new-environment-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .375rem; width: 100%; }
-.redeven-new-environment-options > :last-child { grid-column: 1 / -1; }
 .redeven-new-environment-options .redeven-console-chip-button { display: flex; justify-content: center; min-width: 0; height: 1.75rem; padding: .25rem .375rem; white-space: nowrap; }
 
 
@@ -4581,6 +4585,21 @@ pre,
 .redeven-endpoints-popover .redeven-address-heading .redeven-card-endpoint-label { font-size: var(--floe-type-caption); }
 .redeven-endpoints-popover .redeven-address-help { width: 1.25rem; height: 1.25rem; }
 .redeven-endpoints-popover .redeven-address-count { font-size: var(--floe-type-caption); }
+.redeven-endpoints-popover .redeven-address-group[data-address-scope='environment_only'] {
+  display: grid;
+  grid-template-columns: 6.25rem minmax(0, 1fr);
+  align-items: start;
+  column-gap: .5rem;
+  margin-block: .5rem;
+  padding-top: .5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+.redeven-endpoints-popover [data-address-scope='environment_only'] .redeven-address-heading { min-height: 0; }
+.redeven-endpoints-popover [data-address-scope='environment_only'] .redeven-address-title > .redeven-card-endpoint-label { color: var(--muted-foreground); font-weight: 400; line-height: 1.35; }
+.redeven-endpoints-popover .redeven-address-restricted { min-width: 0; padding-top: 0; }
+.redeven-endpoints-popover .redeven-endpoint-scope-title { font-size: var(--floe-type-supporting); line-height: 1.35; }
+.redeven-endpoints-popover .redeven-address-restricted > .redeven-card-endpoint-detail { margin-top: .25rem; font-size: var(--floe-type-caption); line-height: 1.5; }
+.redeven-endpoints-popover .redeven-endpoint-listener > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
 .redeven-endpoints-popover .redeven-card-endpoint-row + .redeven-card-endpoint-row { margin-top: 0; }
 .redeven-endpoints-popover .redeven-endpoint-listener { margin-top: .375rem; font-size: var(--floe-type-caption); line-height: 1.45; }
 .redeven-endpoints-popover .redeven-endpoint-listener-content { margin-top: .375rem; padding-inline-start: .5rem; }
@@ -4592,6 +4611,7 @@ pre,
   .redeven-endpoints-popover .redeven-card-endpoint-label { grid-column: 1 / -1; grid-row: 1; }
   .redeven-endpoints-popover .redeven-card-endpoint-content { grid-column: 1; grid-row: 2; }
   .redeven-endpoints-popover .redeven-endpoint-actions { grid-column: 2; grid-row: 2; }
+  .redeven-endpoints-popover .redeven-address-group[data-address-scope='environment_only'] { grid-template-columns: minmax(0, 1fr); row-gap: .25rem; }
 }
 
 .redeven-card-endpoint-row:not([data-endpoint-kind='address']) > .redeven-endpoint-action-cell { display: contents; }

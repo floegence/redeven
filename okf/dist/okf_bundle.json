@@ -18455,15 +18455,15 @@
         "title": "Environment card presentation",
         "type": "Interaction Contract"
       },
-      "body_length": 2678,
+      "body_length": 3199,
       "summary": "Environment cards preserve geometry across perspectives, snapshots, narrow layouts and long translations. Each perspective selects an explicit route without granting authority or falling back. Snapshots retain nodes, selection and focus; owner removal invalidates submission but retains open sessions.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "[Interaction continuity](desktop-interaction-continuity.md) owns authority, drafts, visibility and stale completions. Controls stay single-line.\n\n## Window actions\nAll perspectives use **Open window** for unopened environments and **Show window** to focus an existing session. Labels preserve readiness, authority, lifecycle and session ownership.\n\nSettings, progress, recovery and titles use Environment, environment window or Redeven. Env App is internal, never a label or brand. All shipped catalogs explicitly translate this copy.\n\n## Alignment\nCenter visible content within the primary button, excluding the menu toggle. Idle text reserves no icon space. Submission shows a loader/shimmer, exposes busy state and blocks repeat clicks; completion restores centered text. Keep geometry fixed and meaningful icons grouped with labels.\n\nBatch health refresh owns only the header refresh control until the batch settles. Each card's refresh icon follows its own health observation or explicit refresh request, so completed and failed probes stop independently. Observation never turns every card's primary action into a pending submission. Starting a card action cannot release the batch refresh control, and batch completion cannot clear that card's pending action.\n\n## Perspectives and platform\nLinked cards place Runtime, Redeven Cloud and paired Gateway tabs in the standalone badge slot. Cloud authorization or sync failure never disables Runtime actions. [Center navigation](desktop-welcome-navigation.md) transitions preserve card layout and do not restart on snapshots.\n\nA bundled original-color OS mark beside the Runtime name reflects trusted platform data. Unknown platforms use a device mark; recognized Linux distributions use brand marks, otherwise Tux. Keep the slot fixed.",
-          "char_count": 1788
+          "body": "[Interaction continuity](desktop-interaction-continuity.md) owns authority, drafts, visibility and stale completions. Card controls stay single-line; long progress-panel action labels wrap within their buttons.\n\n## Window actions\nAll perspectives use **Open window** for unopened environments and **Show window** to focus an existing session. Labels preserve readiness, authority, lifecycle and session ownership.\n\nSettings, progress, recovery and titles use Environment, environment window or Redeven. Env App is internal, never a label or brand. All shipped catalogs explicitly translate this copy.\n\n## Alignment\nThe four new-environment entries form a complete equal-column 2x2 grid, without a spanning last entry or vacant cell. Progress-panel Copy log and Close use the same Floe outline treatment, equal widths and row height; longer translations remain readable without overflowing.\n\nCenter visible content within the primary button, excluding the menu toggle. Idle text reserves no icon space. Submission shows a loader/shimmer, exposes busy state and blocks repeat clicks; completion restores centered text. Keep geometry fixed and meaningful icons grouped with labels.\n\nBatch health refresh owns only the header refresh control until the batch settles. Each card's refresh icon follows its own health observation or explicit refresh request, so completed and failed probes stop independently. Observation never turns every card's primary action into a pending submission. Starting a card action cannot release the batch refresh control, and batch completion cannot clear that card's pending action.\n\n## Perspectives and platform\nLinked cards place Runtime, Redeven Cloud and paired Gateway tabs in the standalone badge slot. Cloud authorization or sync failure never disables Runtime actions. [Center navigation](desktop-welcome-navigation.md) transitions preserve card layout and do not restart on snapshots.\n\nA bundled original-color OS mark beside the Runtime name reflects trusted platform data. Unknown platforms use a device mark; recognized Linux distributions use brand marks, otherwise Tux. Keep the slot fixed.",
+          "char_count": 2130
         },
         {
           "id": "boundaries",
@@ -18478,6 +18478,11 @@
           "id": "redeven:desktop/scripts/check-environment-card-tabs.mjs:0:ten locales, themes, text scaling, tabs, alignment, focus and busy states.",
           "source": "redeven:desktop/scripts/check-environment-card-tabs.mjs",
           "description": "Ten locales, themes, text scaling, tabs, alignment, focus and busy states."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-welcome-compact-layout.mjs:0:creation-grid completeness, connection-summary alignment, matched diagnostic/footer controls and preserved actions.",
+          "source": "redeven:desktop/scripts/check-welcome-compact-layout.mjs",
+          "description": "Creation-grid completeness, connection-summary alignment, matched diagnostic/footer controls and preserved actions."
         },
         {
           "id": "redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx:0:independent card refresh completion and overlapping batch/card requests.",
@@ -18538,7 +18543,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "connection",
           "desktop",
@@ -18548,15 +18553,15 @@
         "title": "Desktop Environment connections",
         "type": "Desktop Contract"
       },
-      "body_length": 1785,
+      "body_length": 2260,
       "summary": "Welcome and settings share a pure connection model derived from host access, placement, Runtime public addresses and health. Presentation never selects transport. Addresses retain their host/container namespace; missing or failed observations remain unconfirmed rather than proving process exit. Private bridge credentials never become browser, clipboard or QR targets. Explicit Stop clears addresses even when a prior window remains open.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Identify the selected Environment before listing addresses. Never replace a URL host with an SSH alias or rely on WSL localhost forwarding. Address count cannot resize settings or move its footer.\n- Gateway source cards retain explicit URL/local/SSH/container transport and never gain Runtime lifecycle authority. Tokens and private loopback credentials remain absent from displayed facts, clipboard and QR data.\n- Public addresses remain independent of private management. Saved bind/protocol/port/password/certificate changes apply next start; drafts cannot synthesize current URLs. Failed writes preserve the password verifier and report failure.",
-          "char_count": 651
+          "body": "- Identify the selected Environment before listing addresses. Never replace a URL host with an SSH alias or rely on WSL localhost forwarding. Address count cannot resize settings or move its footer.\n- Internal browser access aligns its label and scope with the connection facts, stacking at narrow widths. The internal-listener disclosure owns the address count and filtered count; it preserves expansion on refresh and offers no browser, copy or share actions for environment-only addresses.\n- Gateway source cards retain explicit URL/local/SSH/container transport and never gain Runtime lifecycle authority. Tokens and private loopback credentials remain absent from displayed facts, clipboard and QR data.\n- Public addresses remain independent of private management. Saved bind/protocol/port/password/certificate changes apply next start; drafts cannot synthesize current URLs. Failed writes preserve the password verifier and report failure.",
+          "char_count": 945
         },
         {
           "id": "boundaries",
@@ -18576,6 +18581,11 @@
           "id": "redeven:desktop/src/shared/desktopEnvironmentConnection.ts:0:one typed connection, address, and status model for welcome and settings.",
           "source": "redeven:desktop/src/shared/desktopEnvironmentConnection.ts",
           "description": "One typed connection, address, and status model for Welcome and settings."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-welcome-compact-layout.mjs:0:real welcome geometry, keyboard disclosure, refresh continuity and actions across shipped locales, themes and widths.",
+          "source": "redeven:desktop/scripts/check-welcome-compact-layout.mjs",
+          "description": "Real Welcome geometry, keyboard disclosure, refresh continuity and actions across shipped locales, themes and widths."
         }
       ],
       "snippet": "Welcome and settings share a pure connection model derived from host access, placement, Runtime public addresses and health. Presentation never selects transport. Addresses retain their host/container namespace; missing or failed observatio",
@@ -31656,5 +31666,5 @@
       ]
     }
   ],
-  "source_sha256": "1b88e86e193bea1a55429086236bfc19b45e4ffd972e092c73db2a72331799fc"
+  "source_sha256": "e1e76b62783994a3ba0bfe936e19e58a55c0909bdf5d0e580ea0ad7c34b2db80"
 }

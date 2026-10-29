@@ -11,7 +11,7 @@ Environment cards preserve geometry across perspectives, snapshots, narrow layou
 
 # Contract
 
-[Interaction continuity](desktop-interaction-continuity.md) owns authority, drafts, visibility and stale completions. Controls stay single-line.
+[Interaction continuity](desktop-interaction-continuity.md) owns authority, drafts, visibility and stale completions. Card controls stay single-line; long progress-panel action labels wrap within their buttons.
 
 ## Window actions
 All perspectives use **Open window** for unopened environments and **Show window** to focus an existing session. Labels preserve readiness, authority, lifecycle and session ownership.
@@ -19,6 +19,8 @@ All perspectives use **Open window** for unopened environments and **Show window
 Settings, progress, recovery and titles use Environment, environment window or Redeven. Env App is internal, never a label or brand. All shipped catalogs explicitly translate this copy.
 
 ## Alignment
+The four new-environment entries form a complete equal-column 2x2 grid, without a spanning last entry or vacant cell. Progress-panel Copy log and Close use the same Floe outline treatment, equal widths and row height; longer translations remain readable without overflowing.
+
 Center visible content within the primary button, excluding the menu toggle. Idle text reserves no icon space. Submission shows a loader/shimmer, exposes busy state and blocks repeat clicks; completion restores centered text. Keep geometry fixed and meaningful icons grouped with labels.
 
 Batch health refresh owns only the header refresh control until the batch settles. Each card's refresh icon follows its own health observation or explicit refresh request, so completed and failed probes stop independently. Observation never turns every card's primary action into a pending submission. Starting a card action cannot release the batch refresh control, and batch completion cannot clear that card's pending action.
@@ -35,5 +37,6 @@ A bundled original-color OS mark beside the Runtime name reflects trusted platfo
 # Evidence
 
 - `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Ten locales, themes, text scaling, tabs, alignment, focus and busy states.
+- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Creation-grid completeness, connection-summary alignment, matched diagnostic/footer controls and preserved actions.
 - `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Independent card refresh completion and overlapping batch/card requests.
 - `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Per-target success and failure snapshots before the slowest probe settles.

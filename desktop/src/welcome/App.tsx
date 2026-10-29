@@ -9099,8 +9099,8 @@ export function EnvironmentProgressPanel(props: Readonly<{
                 {(action) => (
                   <Button
                     size="sm"
-                    variant={action().kind === 'copy_diagnostics' ? 'ghost' : 'outline'}
-                    class={action().kind === 'copy_diagnostics' ? 'redeven-copy-action' : 'justify-center gap-1.5'}
+                    variant="outline"
+                    class="justify-center gap-1.5"
                     disabled={props.authorityRevoked && action().kind !== 'copy_diagnostics' && action().kind !== 'dismiss'}
                     onClick={() => {
                       if (!props.authorityRevoked || action().kind === 'copy_diagnostics' || action().kind === 'dismiss') {
@@ -9120,7 +9120,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
                     >
                       <Refresh class="h-3.5 w-3.5" />
                     </Show>
-                    {localizedNextActionLabel(props.i18n, action())}
+                    <span>{localizedNextActionLabel(props.i18n, action())}</span>
                   </Button>
                 )}
               </KeyedFor>

@@ -125,7 +125,7 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{
   ) : (<section class="redeven-address-group" data-address-scope={first().access_scope}>
     <div class="redeven-address-heading">
       {title()}
-      <Show when={props.rows.length > 1 || term()}><span class="redeven-address-count" aria-label={countLabel()} title={countLabel()}>
+      <Show when={first().access_scope !== 'environment_only' && (props.rows.length > 1 || term())}><span class="redeven-address-count" aria-label={countLabel()} title={countLabel()}>
         {term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}
       </span></Show>
     </div>
@@ -134,7 +134,13 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{
         <span class="redeven-endpoint-scope-title">{props.i18n.t(first().detail_key, first().detail_params)}</span>
         <p class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</p>
         <details class="redeven-endpoint-listener">
-          <summary><ChevronRight class="h-3 w-3" aria-hidden="true" />{props.i18n.t('environmentConnection.listenerDetails')}</summary>
+          <summary>
+            <ChevronRight class="h-3 w-3" aria-hidden="true" />
+            <span>{props.i18n.t('environmentConnection.listenerDetails')}</span>
+            <span class="redeven-address-count" aria-label={countLabel()}>
+              {term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}
+            </span>
+          </summary>
           <div class="redeven-endpoint-listener-content">
             {list}
             <p>{props.i18n.t('environmentConnection.loopbackHelp', first().detail_params)}</p>
