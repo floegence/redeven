@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower personal conversation preferences
-description: Remember explicit model, directory, and model-owned reasoning choices without importing thread settings into future defaults.
 tags: [ai, flower, preferences, composer, persistence]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

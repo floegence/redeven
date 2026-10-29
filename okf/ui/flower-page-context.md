@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower Activity origin page references
-description: Freeze only the visible Activity page facts for a new companion conversation.
 tags: [ui, flower, activity, references, draft]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower reasoning selection ownership
-description: Preserve explicit reasoning choices across cold loads, shared drafts, submission, and restart.
 tags: [ai, flower, reasoning, composer]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

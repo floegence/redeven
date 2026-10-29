@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop transport recovery
-description: Bridge registry, recovery snapshots, generation fencing, and session disposal.
 tags: [desktop, runtime, transport, recovery]
-timestamp: 2026-09-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

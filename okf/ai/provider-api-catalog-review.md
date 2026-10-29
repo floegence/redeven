@@ -1,9 +1,7 @@
 ---
 type: Provider Compatibility Review
 title: Provider API and catalog review
-description: Match the shipped model catalog to official APIs, regional endpoints, and released adapter capabilities.
 tags: [ai, models, providers, compatibility]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-24"
 ---

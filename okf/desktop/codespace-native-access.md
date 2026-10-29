@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Native Desktop CodeSpace access
-description: Bind a Desktop editor origin to one authorized CodeSpace through the current environment transport.
 tags: [desktop, codespace, security, transport]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

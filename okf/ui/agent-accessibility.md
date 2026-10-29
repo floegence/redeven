@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Product accessibility for AI agents
-description: Audit core product semantics while preserving visual presentation and existing input ownership.
 tags: [ui, accessibility, computer-use, workbench]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

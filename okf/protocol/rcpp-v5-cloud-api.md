@@ -1,9 +1,7 @@
 ---
 type: Protocol Contract
 title: RCPP v5 Cloud API
-description: Single Cloud input, authoritative Access Point assignment, native OAuth and access authorization.
 tags: [protocol, cloud, openapi, desktop, runtime, access]
-timestamp: 2026-08-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

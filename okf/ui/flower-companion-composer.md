@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower companion composer and motion
-description: Preserve one native editor while placing tools below text and dissolving detail into the compact companion entry.
 tags: [ui, flower, companion, composer, motion]
-timestamp: 2026-10-16T08:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

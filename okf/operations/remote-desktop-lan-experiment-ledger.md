@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: LAN desktop experiment decision ledger
-description: Consult historical winners, rejected hypotheses and retry conditions before another LAN performance experiment.
 tags: [desktop, performance, experiments]
-timestamp: 2026-10-15T02:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

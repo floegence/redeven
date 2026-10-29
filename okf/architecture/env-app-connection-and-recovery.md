@@ -1,9 +1,7 @@
 ---
 type: Frontend Transport Contract
 title: Env App connection and recovery
-description: Compose published Floe and Flowersec artifact sources, Service Worker control, and reconnect recovery without a product retry loop.
 tags: [architecture, env-app, transport, recovery]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

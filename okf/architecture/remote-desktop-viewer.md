@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Remote desktop viewer interaction
-description: Operate the remote desktop toolbar, input modes and ended-session recovery consistently in browsers and Desktop.
 tags: [desktop, viewer, interaction, input]
-timestamp: 2026-10-13T21:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

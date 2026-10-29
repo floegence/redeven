@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Computer use safety pauses and user control
-description: Separate operation facts from independent Agent questions and require fresh observation before further input.
 tags: [ai, computer-use, safety, takeover]
-timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

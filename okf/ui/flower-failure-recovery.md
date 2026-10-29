@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower failure recovery
-description: One turn-level failure owner and bounded manual recovery without replaying uncertain effects.
 tags: [ai, flower, recovery, interaction]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

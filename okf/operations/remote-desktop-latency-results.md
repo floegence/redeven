@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Remote desktop latency and NVIDIA encoding
-description: Assess the controlled RTX 4090 D desktop latency comparison and the remaining capture and transport limits.
 tags: [desktop, media, latency, qualification]
-timestamp: 2026-10-04T13:20:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Security Contract
 title: Permission policy and filesystem scope
-description: Runtime permissions are clamped by local policy and file features are scoped by directory root policy.
 tags: [security, permissions, filesystem, runtime]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

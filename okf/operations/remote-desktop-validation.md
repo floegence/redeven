@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Current-desktop acceptance method
-description: Qualify remote desktop contracts, office interaction and actual painted performance without substituting synthetic checks.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-02T15:36:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

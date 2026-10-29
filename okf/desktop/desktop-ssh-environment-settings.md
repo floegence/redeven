@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop SSH environment settings
-description: Edit SSH registrations in a compact modal with explicit saving, visible custom configuration, and direct dismissal.
 tags: [desktop, environments, ssh, settings, interaction]
-timestamp: 2026-09-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Security Contract
 title: Runtime two-factor authentication
-description: Configure independent environment TOTP, sign in, recover access, and revoke ordinary sessions without changing SSH authentication.
 tags: [security, authentication, runtime, desktop, totp]
-timestamp: 2026-09-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

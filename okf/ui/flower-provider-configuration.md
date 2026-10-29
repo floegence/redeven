@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower provider configuration
-description: Configure provider access before choosing models, with stable navigation and explicit authentication states.
 tags: [ai, flower, settings, authentication]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

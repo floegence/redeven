@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower received output progress
-description: Request-scoped output estimates, model waiting time, and safe streamed edit statistics.
 tags: [flower, streaming, progress, tools]
-timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

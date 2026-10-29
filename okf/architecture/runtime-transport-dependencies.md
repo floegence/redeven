@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Runtime transport dependencies
-description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
-timestamp: 2026-10-08T00:00:00Z
 quality_exception: Published Flowersec transport and Floeterm boundary covering session ownership, protocol profiles, and shared admission.
 lifecycle: contract
 reviewed_at: "2026-10-22"

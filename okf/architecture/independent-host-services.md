@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Independent Host service lifecycle
-description: Preserve running applications across management restarts and recover only verified process ownership.
 tags: [architecture, managed-services, host, recovery, security]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: AI Tool Contract
 title: AI terminal tool runtime
-description: Redeven PTY resources with Floret v7 canonical effect and Activity ownership.
 tags: [ai, terminal, tools, runtime]
-timestamp: 2026-08-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

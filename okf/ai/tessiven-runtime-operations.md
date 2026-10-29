@@ -1,9 +1,7 @@
 ---
 type: AI Product Contract
 title: Tessiven Runtime discovery and operations
-description: Discover scoped Runtime paths and delegate explicit connection, business access, and native process operations to their existing owners.
 tags: [tessiven, runtime, desktop, gateway, security]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

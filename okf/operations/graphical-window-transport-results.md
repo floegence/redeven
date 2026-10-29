@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Graphical window native transport qualification
-description: Assess published Flowersec direct and tunnel coverage, Linux application and desktop behavior, and the remaining unlocked macOS qualification.
 tags: [desktop, applications, transport, validation]
-timestamp: 2026-10-02T19:13:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

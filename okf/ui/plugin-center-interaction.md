@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Plugin Center interaction
-description: Browse and manage plugins in an Activity page or an input-isolated Workbench bottom drawer with retained navigation and responsive details.
 tags: [ui, plugins, plugin-center, workbench, accessibility]
-timestamp: 2026-09-11T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

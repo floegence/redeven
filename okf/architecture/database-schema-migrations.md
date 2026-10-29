@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Database schema migration ownership
-description: Redeven automatically migrates product databases at startup while upstream-owned stores remain opaque.
 tags: [architecture, storage, sqlite, migrations, upgrades]
-timestamp: 2026-09-04T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

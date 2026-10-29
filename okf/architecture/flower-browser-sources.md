@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Flower browser source ownership
-description: Admit browser targets for Flower while preserving native identity and private control boundaries.
 tags: [architecture, browser, flower, privacy]
-timestamp: 2026-09-30T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

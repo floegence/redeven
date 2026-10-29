@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower streaming stability
-description: Incremental Markdown and local record updates preserve interactive identity.
 tags: [flower, streaming, performance, interaction]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

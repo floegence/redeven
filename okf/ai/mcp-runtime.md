@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Flower MCP runtime
-description: Configure external MCP servers and execute their tools through Flower's existing Floret authorization boundary.
 tags: [ai, flower, mcp, permissions]
-timestamp: 2026-09-29T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

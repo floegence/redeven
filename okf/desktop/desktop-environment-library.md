@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop Environment library
-description: Browse one Runtime card through its original Runtime, Cloud and Gateway access tabs.
 tags: [desktop, environment, cloud, welcome]
-timestamp: 2026-10-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

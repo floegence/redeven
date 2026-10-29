@@ -1,9 +1,7 @@
 ---
 type: Operations Guide
 title: Prepare Linux hosts for native applications
-description: Prepare the default combined backend and identify the explicit system Xpra installation boundary.
 tags: [runtime, applications, linux, installation]
-timestamp: 2026-09-20T10:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

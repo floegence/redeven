@@ -1,9 +1,7 @@
 ---
 type: Architecture Boundary
 title: ReDevPlugin Redeven adapters
-description: Keep Redeven-specific host modules, external package policy, and surface projection separate from ReDevPlugin platform mechanics.
 tags: [architecture, plugins, adapters, ui]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

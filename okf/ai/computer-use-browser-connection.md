@@ -1,9 +1,7 @@
 ---
 type: Product Interaction Contract
 title: Guided personal browser connection
-description: Prepare, install and confirm a same-host browser connection without exposing native-host configuration.
 tags: [ai, browser-use, chrome, onboarding]
-timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

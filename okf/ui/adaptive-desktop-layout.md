@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Adaptive desktop layout
-description: Preserve desktop workflows in narrow windows while allocating temporary navigation drawers from local space.
 tags: [ui, desktop, layout, navigation, accessibility]
-timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

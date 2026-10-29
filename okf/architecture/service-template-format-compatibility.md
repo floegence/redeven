@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Redeven Service Template format compatibility
-description: Read branded and historical template documents through the released upstream data adapter without rewriting source files.
 tags: [architecture, templates, compatibility, localization]
-timestamp: 2026-09-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Host application lifecycle acceptance
-description: Scenario-based evidence for native application sharing and explicit recovery boundaries.
 tags: [applications, macos, linux, validation]
-timestamp: 2026-09-21T07:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

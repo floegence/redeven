@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower Skills and MCP
-description: Manage Flower instructions and external tools from one retained two-tab surface in both product carriers.
 tags: [ui, flower, skills, mcp]
-timestamp: 2026-09-29T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

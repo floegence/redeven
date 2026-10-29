@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Wayland capture pool optimization evidence
-description: Verify bounded pixel reuse and measure the released capture implementation on the udesk24 VM.
 tags: [desktop, linux, wayland, validation, latency]
-timestamp: 2026-10-05T14:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

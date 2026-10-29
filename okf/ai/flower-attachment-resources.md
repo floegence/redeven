@@ -1,9 +1,7 @@
 ---
 type: AI Resource Contract
 title: Flower attachment resources
-description: Owner-scoped uploads, canonical membership, provider reads, quotas, and last-reference cleanup.
 tags: [ai, flower, attachments, storage, security]
-timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

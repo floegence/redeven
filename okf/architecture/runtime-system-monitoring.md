@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Runtime system monitoring
-description: Sample environment resources once and report network totals and rates from non-loopback interfaces.
 tags: [architecture, runtime, monitoring]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

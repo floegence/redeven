@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Linux desktop and package compatibility validation
-description: Assess released native backend evidence separately from Redeven viewer, package, recovery and deployment acceptance.
 tags: [operations, host-applications, validation, linux, packages]
-timestamp: 2026-09-29T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

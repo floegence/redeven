@@ -1,9 +1,7 @@
 ---
 type: Qualification Contract
 title: Flower Ollama task qualification
-description: Run real selected-model tasks through production Flower commands and verify effects, interruption, recovery, and subagent handoffs.
 tags: [flower, ollama, tasks, qualification]
-timestamp: 2026-10-05T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

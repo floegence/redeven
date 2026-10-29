@@ -1,9 +1,7 @@
 ---
 type: Runtime and Product Contract
 title: Chrome connection diagnostics and recovery
-description: Identify Chrome prerequisites, preserve connection failures, and guide recovery on the actual environment host.
 tags: [ai, browser-use, chrome, diagnostics]
-timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

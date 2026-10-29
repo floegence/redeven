@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop WSL runtime operations
-description: Windows-only WSL 2 discovery, registration, Linux Runtime lifecycle, private Bridge, and packaging boundaries.
 tags: [desktop, windows, wsl, runtime, bridge, packaging]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

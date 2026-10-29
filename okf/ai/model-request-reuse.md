@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Model request reuse
-description: Execute Engine-owned prompt-cache and continuation decisions without creating another history or retry owner.
 tags: [ai, providers, cache, usage]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-23"
 ---

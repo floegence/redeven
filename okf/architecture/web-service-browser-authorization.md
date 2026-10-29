@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Web Service system-browser authorization
-description: Hand Desktop-private Web Services to a system browser without exposing the bridge credential or creating a public fallback.
 tags: [architecture, desktop, local-ui, port-forward, security]
-timestamp: 2026-08-30T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

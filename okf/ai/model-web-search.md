@@ -1,9 +1,7 @@
 ---
 type: AI Capability Contract
 title: Model web search
-description: Resolve provider and model search intent once for settings, admission, and provider transport.
 tags: [ai, models, search, providers]
-timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

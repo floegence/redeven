@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Model reasoning capabilities and transport
-description: Discover verified reasoning controls, preserve explicit intent, and map thinking output and history to provider protocols.
 tags: [ai, models, reasoning, providers]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Host application distribution validation
-description: Installed-stack evidence, architecture limits and repeatable native application acceptance.
 tags: [runtime, applications, linux, validation]
-timestamp: 2026-09-24T19:25:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

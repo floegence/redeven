@@ -1,9 +1,7 @@
 ---
 type: Frontend Contract
 title: Env App page asset recovery
-description: Recover stale or interrupted page modules after Runtime connectivity returns.
 tags: [ui, recovery, assets, dependencies]
-timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

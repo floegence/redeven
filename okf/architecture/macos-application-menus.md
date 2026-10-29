@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: macOS application menu scope
-description: Export native application commands without the system Apple menu and validate every executable handle against the live menu.
 tags: [applications, macos, menus, interaction]
-timestamp: 2026-09-22T09:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

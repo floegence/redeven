@@ -1,9 +1,7 @@
 ---
 type: Execution Contract
 title: Computer script execution and semantic observations
-description: Execute bounded JavaScript against one authorized target without exposing host capabilities or replaying partial effects.
 tags: [ai, computer-use, scripts, accessibility]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---
@@ -20,126 +18,45 @@ interaction boundary.
 
 # Contract
 
-Rendered text reads require an explicitly selected HTML element. Document, text
-and SVG nodes return TARGET_CAPABILITY_UNAVAILABLE before reading; no parent/body
-substitution or scope expansion occurs. Unknown observation failures stop the
-operation; explicit fresh reads remain possible without input replay.
+## Authority and default surface
 
-Floret owns batch exclusion through tools.Definition.BatchExclusiveGroup. Redeven
-declares one computer-control group for selected-target calls. Conflicting
-prepared calls are rejected before authorization; independent tools and inventory
-can run alongside one computer call. Target gates still protect cross-batch use.
+One computer.exec is one Floret invocation/effect attempt. QuickJS exposes only ui/browser/log; ComputerUseRuntime revalidates target policy, grant, cancellation and control before every operation. One canonical turn retains the target; independent live sampling may interleave. New targets/permissions stop with confirmed prefix. Private input and approvals use the existing Floret interaction boundary; temporary approval binds current target/URL and expires with its lease.
 
-## Guest API and limits
-`computer.exec` requires a target, code and a user-readable description.
+New unrestricted turns discover computer.targets/select_target/exec after current permissions/allowlists. This grants no authority and removes no primitive executors. Explicit/saved primitive consumers retain discovery, including read-only consumers without exec. Canonical Retry queries only primitive names used by its source Turn through public canonical APIs/current permissions; missing released metadata is prepared once by Floret Host, then queried again. No unrelated expansion or second history store.
 
-Each call allows 30 seconds and 50 operations. ui.budget() and returned budget
-metadata expose remaining time and operations. Explicit logs stream before later
-operations under a 64 KiB UTF-8 budget, retaining safe findings on timeout or
-uncertain effects. Private pauses, failed safety reads and navigation failures
-discard content. Batch known steps across pages within the runtime budget; return
-screenshots for model judgment when the next action depends on pixels. Argument
-diagnostics identify the method when known, field, expected form and fixed repair
-examples; raw errors remain private.
-Observation diagnostics retain a validated CDP method and signed integer protocol
-code when the connected-browser source supplies them. They reuse the existing
-diagnostic field and invocation trace; raw exceptions never become model content.
-Missing codes remain unknown, and no diagnostic authorizes retry or input replay.
+Floret tools.Definition.BatchExclusiveGroup owns selected-target computer batch exclusion. Conflicting prepared calls reject before authorization/input; inventory and unrelated tools may coexist. Target gates also fence cross-batch calls. No vocabulary-based safety, alias, input replay or target rebinding follows rejection.
 
-Only snapshot/observe and locator.snapshot accept emit. Collection reads return
-data for explicit logging; screenshots and help always emit.
+## Guest lifetime and output
 
-Known unsupported option names are returned exactly; arbitrary keys and values
-are never echoed. locator.snapshot still accepts only limit and emit.
+Required arguments: target, code, user-readable description. Limits:30seconds/50operations per call, eight active namespaces. ui.budget and results expose remaining resources. Sequential awaits, loops/conditions and same-target page navigation may compose; pixel-dependent decisions require returned screenshot and model judgment. No timers. const/let are invocation-local; explicit globalThis survives only in a healthy turn/target namespace.
 
-Native ui.scroll uses the window center; ui.scrollAt(x,y,delta_y,delta_x=0)
-targets a region without clicking first. Selector scroll remains semantic.
-Browser drag accepts integer duration_ms from 0 through 5000. The shared managed
-and connected-browser implementation holds the button while following a straight
-path over the requested duration; zero adds no delay. A monotonic schedule avoids
-accumulating one extra delay per transport call. Dispatch overhead can extend the
-duration. Cancellation, takeover and document invalidation stop remaining moves;
-cleanup releases at the last confirmed pointer position. A lost input reply keeps
-its unknown-effect classification and is never replayed. Native delivery uses the published FloeNativeDesktop NativeInputSequence, with
-one monotonic schedule after acknowledged mouse-down. It accepts the same
-integer 0..5000 ms contract. The host checks authorization/target/cancellation,
-retains exact per-event receipts, and releases only its outstanding input on
-interruption. No application-specific timing heuristic or automatic retry is
-added. Native qualification measures separate-process AppKit events; browser
-tests do not certify native timing.
-Browser locator.text() reads rendered innerText from one unique observed element
-through a fixed isolated-world function, bounded to 12,000 Unicode characters
-with explicit truncation and rendered_element scope. Hidden and unloaded content
-is excluded. No arbitrary DOM execution is exposed.
+Any failed host operation seals the invocation even if guest code catches it. Failure retires the namespace/context_reset and dormant Promises, retaining confirmed earlier effects. Unique lookup missing/ambiguous is failure; optional count/query return zero and waitFor timeout is data. Closed diagnostics identify phase, known method/field, expected form, safe repair example and available source line/column/symbol. Raw interpreter stacks/exceptions stay private. Known unsupported option names may echo exactly; arbitrary keys/values cannot.
 
-Approval Required uses the current target and URL in the existing tool approval; temporary authorization expires with the target lease and never becomes a persistent origin grant.
+Budgets: canonical snapshot256KiB, response512KiB including metadata, explicit logs64KiB UTF-8. Logs stream before later operations and retain safe prefixes on timeout/uncertainty; private pause, failed safety read and navigation failure discard content. Snapshot/observe/locator.snapshot alone accept emit; collection results require explicit log, screenshots/help always emit. emit:false retains the same identity and canonical budget. Default ui.snapshot automatic presentation is32KiB with short opaque refs/parent links; omitted nodes/children are unknown and marked truncated. full:true/node details retain2,000-code-point name/description/value limits and flags; detail-mode changes reset diff baseline. Failed output uses the same bounded projection.
 
-The Runtime admits at most eight active script namespaces. The short tool definition teaches the entry point; selection returns the core guide and ui.help(topic) discloses read, visual, downloads or legacy signatures. Both selection and runtime help share one authored source. Exact signatures include: string names (no RegExp selectors), numeric scroll deltas, condition waits, and sequential awaited operations. Unsupported guest arguments fail before dispatch. Closed diagnostic codes distinguish reference/type/syntax/argument errors, operation concurrency and bounded output; raw interpreter exceptions remain private. A failed invocation retires its namespace while confirmed earlier actions survive.
+Selection/core guide and ui.help(read/visual/downloads/legacy) share authored help. Signatures require string names (no RegExp), numeric deltas and supported condition waits; validation precedes dispatch. Reference/type/syntax/argument/concurrency/output errors use closed codes, never arbitrary host text. Browser CDP observation diagnostics retain validated method/signed integer code when supplied, otherwise unknown; no diagnostic authorizes retry or effects.
 
-Semantic snapshots retain their 256 KiB output budget. The script response allows a bounded 512 KiB envelope so metadata cannot make a valid snapshot fail at the transport boundary. Logs have a separate 64 KiB total budget. Local `emit:false` reads receive the same URL/title identity as emitted observations.
+## Input and waits
 
-`context_reset` explicitly reports namespace retirement after failure. Safe diagnostics include phase and submitted-source line/column/symbol when available; raw exception text and stacks stay private. Failed namespaces cannot retain dormant Promise callbacks. Any failed host operation seals further operations, even when caught by guest JavaScript. Unique node/action lookups fail on missing or ambiguous matches; optional browser checks use count/query (zero is data) or waitFor (timeout is data). `const`/`let` are invocation-local; explicit `globalThis` values last only within a healthy turn/target namespace. Timers are unavailable.
+ui.type inserts at focus; fill replaces. doubleClick/scroll expose native parity. Native scroll uses window center; scrollAt(x,y,delta_y,delta_x=0) selects a region without clicking. Semantic selector scroll remains independent.
 
-Default `ui.snapshot` automatic output uses a compact 32 KiB presentation budget, short opaque browser references and parent links. Truncation marks omitted nodes and children; omitted content is unknown. Guest reads retain the canonical 256 KiB budget. `full:true` and `locator.node()` provide details with the same 2,000-code-point field budgets and explicit name/description/value truncation flags. Changing detail mode resets the diff baseline; failures use the same bounded output projection.
+Browser drag duration_ms is integer0..5000, straight path while pressed; zero adds no delay. One monotonic schedule avoids extra per-call waits, though transport overhead can lengthen delivery. Cancel/takeover/document invalidation stop moves and release only owned input at last confirmed position. Lost reply remains unknown effect with no replay. Native input uses published FloeNativeDesktop NativeInputSequence scheduled after acknowledged down, checks authorization/target/cancellation and retains per-event receipts. No application-specific heuristic. Separate-process AppKit tests qualify native timing; browser tests cannot.
 
-Browser waits additionally accept `{state:'text'|'value',equals:string,timeout_ms?}` for exact visible-element textContent/value matching. They only sample state and never resend input. Native targets reject these conditions. Download cursors always include a `downloads` array, including when empty.
+Browser waits accept state:text|value,equals:string,optional timeout_ms, matching visible-element textContent/value without resending input. Native rejects these conditions. Completed waits remain confirmed even if later JavaScript fails.
 
-## Small default surface
-New unrestricted turns discover only computer.targets, computer.select_target and
-computer.exec. Filtering occurs after current permission and explicit allowlist
-selection, never grants authority, and does not remove primitive executors.
-Explicit primitive consumers and saved provider surfaces retain legacy discovery.
-Canonical Retry queries only primitive names actually used in its source Turn,
-through authorized public canonical queries, then applies current permissions.
-Missing released query metadata is prepared once through Floret Host before the
-query is retried. It does not expand unrelated retries or create a second history store. Without exec permission,
-primitive read-only consumers keep their existing tools.
+## Reads, observations and references
 
-Only one selected-target computer call may occupy a prepared batch. Independent
-tools may share that batch; Floret owns conflict admission. Rejection never replays
-input or changes target binding.
+[Semantic snapshots](computer-use-semantics.md) own schema v2, normalized roles/tree/states/relationships/privacy. ui.getByRole(role,{name?,exact?,root_ref?}) uses canonical roles; snapshot is the direct flat schema, node/subtree reads are direct. Legacy observe/read wrappers remain. [Read validation](computer-script-read-contract.md) owns success shapes, strict arguments, branchable absence and bounded collections.
 
-Scalar attribute reads preserve string|null: an attribute over 2,000 Unicode
-code points returns TARGET_CAPABILITY_UNAVAILABLE, never a silent prefix. Closed
-read diagnostics retain method, expected capability and choose_supported_read
-through the browser, Runtime and script result. They do not infer a replacement
-element, widen scope or repeat input. The model chooses another explicit read.
+locator.text reads rendered innerText of one explicitly selected unique HTML element through a fixed isolated-world function:≤12,000Unicode characters, explicit truncation/rendered_element scope, no hidden/unloaded content or arbitrary DOM code. Document/text/SVG targets reject TARGET_CAPABILITY_UNAVAILABLE before reading; never substitute parent/body or widen scope. Scalar attributes remain string|null; >2,000code points reject rather than return a prefix. Closed method/capability/choose_supported_read diagnostics survive browser→Runtime→guest. Unknown reads stop without invalidating valid refs or replaying input; the model may choose an explicit fresh supported read.
 
-## Read and validation contracts
+Screenshot input handles bind immutable image/frame/document identity; changing returned metadata cannot retarget them. Download cursors always contain downloads (even empty) plus immutable cursor-bound wait. Recovery inspects an existing ID after confirmed export and never repeats the click. Screenshots accompany results automatically, not as paths/PNG buffers.
 
-See [script reads and validation](computer-script-read-contract.md) for success
-shapes, strict argument boundaries, branchable absence/timeout and bounded
-collections. Failed operations seal the invocation; they never replay input.
-
-## Observation and references
-The [semantic snapshot contract](computer-use-semantics.md) owns schema v2, role normalization, tree validation, states, relationships and privacy projection. `ui.getByRole(role, {name?, exact?, root_ref?})` uses a canonical role.
-
-ui.snapshot returns the canonical flat snapshot directly, with one role per node;
-locator.node and locator.snapshot provide direct node/subtree reads. Legacy
-observe/read wrappers remain unchanged. ui.type inserts at current focus; fill
-replaces contents. ui.doubleClick and ui.scroll provide native input parity.
-browser.downloadCursor returns its existing fields plus an immutable wait method
-bound to that cursor. Download recovery inspects existing IDs after a confirmed
-click; it never repeats the export. Browser screenshots return immutable image-bound input methods with captured
-frame/document identity; mutating returned metadata cannot retarget the handle.
-
-Private takeover keeps observations and pixels out of model history.
-
-needs_observation has one script-owned value for both execution facts and the
-model result. A safe snapshot (including emit:false) or screenshot clears it;
-later input, stale refs, observation failure or unknown effects require a fresh
-read. observation_status describes a safe current observation in this call,
-not the presence of a title. A title alone never establishes freshness.
+needs_observation has one script-owned value for execution and model output. Safe snapshot (including emit:false) or screenshot clears it; later input/staleness/read failure/unknown effect requires a fresh observation. observation_status means a safe current observation in this call; title alone is insufficient. Private takeover excludes observations/pixels from model history.
 
 # Boundaries
 
-## Partial effects and continuation
-The Runtime revalidates target policy, grants, cancellation and current control before each host operation. The target remains owned by the same canonical turn across the batch; independent live sampling may run between operations.
-
-No second history or recovery ledger exists.
-Paused and uncertain operations retain their sanitized input_progress receipt
-through both script and assistance results. Posted/observed event counts describe
-the interrupted operation, not a completed action or evidence to replay it.
+No second history/recovery ledger. Paused/uncertain operations retain sanitized input_progress through script and assistance results. Posted/observed counts describe partial operation progress, never completed business action or replay authority. New target/permission needs explicit continuation under the existing owner.
 
 # Evidence
 

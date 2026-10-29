@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Runtime settings
-description: Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.
 tags: [ui, runtime, settings]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

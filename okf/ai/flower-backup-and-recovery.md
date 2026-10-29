@@ -1,9 +1,7 @@
 ---
 type: Recovery Contract
 title: Flower backup and recovery
-description: Restore preserved Flower collections without replaying old work or backing up every upgrade.
 tags: [ai, storage, recovery, backups]
-timestamp: 2026-09-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

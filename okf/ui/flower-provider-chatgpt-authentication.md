@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower ChatGPT authentication
-description: Select, reauthorize, sign out and remove local ChatGPT accounts with stable interaction and explicit intent.
 tags: [ai, flower, settings, authentication]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

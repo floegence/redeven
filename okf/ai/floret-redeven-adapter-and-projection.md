@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Floret Redeven adapter and projection
-description: Map authorized Redeven requests and Floret typed views without creating a second thread lifecycle.
 tags: [ai, floret, adapter, projection]
-timestamp: 2026-10-20T00:00:00Z
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 lifecycle: contract
 reviewed_at: "2026-10-23"

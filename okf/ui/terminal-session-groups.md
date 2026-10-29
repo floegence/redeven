@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Terminal session groups
-description: Persist one environment-wide terminal group catalog while Activity and Workbench render placement-specific trees.
 tags: [ui, terminal, groups, activity, workbench, sqlite]
-timestamp: 2026-09-24T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Flower subagent parent events
-description: Canonical parent reports, passive lifecycle events, and bounded waiting.
 tags: [ai, floret, subagents, events]
-timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

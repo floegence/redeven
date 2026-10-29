@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower command and composer flow
-description: Immediate delivery feedback, ordered transport recovery, canonical confirmation, and always-available navigation.
 tags: [ui, flower, composer, commands]
-timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

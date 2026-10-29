@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: UI presentation transactions
-description: Heavy selection changes present visual intent first, commit content after paint, and defer layout effects until content presentation.
 tags: [ui, interaction, performance, keep-alive]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

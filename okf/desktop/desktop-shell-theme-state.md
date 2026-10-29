@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop shell theme state
-description: Select global appearance, synchronize Desktop windows, and recover a failed theme change without losing workspace state.
 tags: [desktop, themes, ui, electron]
-timestamp: 2026-09-22T03:20:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

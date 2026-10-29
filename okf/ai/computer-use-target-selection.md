@@ -1,9 +1,7 @@
 ---
 type: AI Tool Contract
 title: Computer target selection across threads
-description: Resolve logical targets without side effects and preserve each authorized thread selection across turns and restart.
 tags: [ai, computer-use, targets, permissions]
-timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

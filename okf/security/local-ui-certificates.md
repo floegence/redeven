@@ -1,9 +1,7 @@
 ---
 type: Security Contract
 title: Local UI certificates
-description: Manage saved HTTPS identities, explicit file imports and replacements, and independent client trust without interrupting a running Runtime.
 tags: [security, local-ui, desktop, certificates]
-timestamp: 2026-09-30T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

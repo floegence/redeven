@@ -1,9 +1,7 @@
 ---
 type: Build Contract
 title: Portable native Runtime binaries
-description: GNU static Runtime builds, native Floeterm, musl execution and LGPL source/relink distribution.
 tags: [runtime, build, release, linux]
-timestamp: 2026-09-20T10:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

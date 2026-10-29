@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower input history
-description: Recall canonical user text into an empty Flower draft with terminal-style arrow keys while preserving ordinary editor ownership.
 tags: [ui, flower, composer, keyboard, drafts]
-timestamp: 2026-09-26T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

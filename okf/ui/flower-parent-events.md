@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower parent event timeline
-description: Important child reports and automatic events in the parent conversation with canonical avatars and compact source navigation.
 tags: [ai, flower, subagents, ui]
-timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

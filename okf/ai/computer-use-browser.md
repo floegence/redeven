@@ -1,102 +1,50 @@
 ---
 type: Browser Integration Contract
 title: Managed browsers and authorized Chrome tabs
-description: Bind an explicit profile and tab to the Runtime while preserving login state and unrelated user browsing.
 tags: [ai, browser-use, chrome, profiles]
-timestamp: 2026-09-26T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---
 # Summary
 
-`ComputerUseRuntime` owns browser connections, authorization and target control.
-Managed Chromium, explicit CDP and Chrome extension bindings share the same
-restricted page executor. A selected tab never implies authority over sibling
-tabs or a different device. Disconnect, revocation, closed tabs and uncertain
-effects stop subsequent work without automatically selecting a replacement.
+ComputerUseRuntime owns connections/authorization/control. Managed Chromium, explicit CDP and Chrome extension share one restricted executor. Selected-tab authority excludes siblings/other devices. Disconnect/revocation/closed tabs/uncertain effects stop work without automatic replacement.
 
 # Contract
 
-Connecting an explicitly chosen tab or creating a new tab in Browser and desktop also selects that target for the current conversation. Approval Required uses the current target and URL through tool approval; temporary URL authorization never becomes a saved origin grant.
-
-It is not a model tool or a second browser-opening path.
+Explicit connection/tab creation in Browser and desktop selects the conversation target. Approval Required uses current target/URL through approval; temporary URL authority never becomes saved origin permission. This is not a model tool/second browser-opening path.
 
 ## Managed profiles
-Both Flower carriers use the shared browser installation controller at `/_redeven_proxy/api/browser/installation`.
 
-The default profile creates its first page lazily; later loss of a selected page fails explicitly.
+Both Flower carriers share /_redeven_proxy/api/browser/installation. Default profile lazily creates its first page; later selected-page loss fails explicitly.
 
-Semantic clicks check visible/enabled state, stable bounds and the actual input-session hit target before input, including parent-frame overlays. Preparatory scrolling is not a completed click; a blocked click reports `action_executed:false` and requires fresh observation when preparation changed the viewport. Condition waits inspect rendered state and use bounded sampling for CSS changes. Browser result labels use the current safe observation title when available; they do not treat a discovery label as current account identity.
+Semantic clicks verify visible/enabled/stable geometry and actual session hit target, including parent overlays. Preparation is not completed input: blocked clicks report action_executed:false and fresh-observation demand after viewport changes. Bounded condition waits sample rendered CSS state. Labels use current safe observed titles, not discovery as account identity.
 
-Screenshot geometry changes within the same document receive up to one second
-of read-only settling inside the invocation budget. Each attempt checks geometry
-before and after capture; persistent movement returns capture/viewport_unstable
-without pixels. Cancellation, document changes and the latched privacy guard
-remain authoritative. Input is never repeated to repair an observation.
+Same-document screenshot geometry may settle read-only for at most1s within invocation budget; check before/after every capture. Persistent movement returns capture/viewport_unstable without pixels. Cancellation/document changes/latched privacy guard remain authoritative. Never replay input to repair observation.
 
-The existing frame observation inventory owns reference document identity. Child
-navigation or removal revokes that frame and its descendants; unchanged parent
-refs remain valid. Root replacement, cancellation and handback still invalidate
-all refs. Snapshot/image revisions remain page-wide, and ref resolution verifies
-the owning document again after its DOM/AX read.
+Frame inventory owns document identity. Child navigation/removal revokes its subtree, preserving unchanged parent refs. Root replacement/cancel/handback invalidates all. Snapshot/image revisions stay page-wide; ref resolution rechecks document after DOM/AX reads.
 
-Locator key presses require a focusable DOM element. AX document roots are not elements; use `ui.key('PageDown')` for page-level keys. Document validation and exact confirmed DOM.focus rejections return ELEMENT_NOT_ACTIONABLE with focus/not_focusable diagnostics, without dispatching a key or retiring the connection. Generic command failures, lost focus/input acknowledgements and failed key release remain uncertain; no action is replayed. Returned uncertainty retains a safe stage/reason, requests fresh observation, and keeps both the warning and completed-prefix facts in model-visible output.
+Locator keys require focusable elements; AX document roots use ui.key('PageDown'). Exact DOM.focus/document rejection returns ELEMENT_NOT_ACTIONABLE with focus/not_focusable, no key/connection retirement. Generic failures/lost focus or input acknowledgment/failed release remain uncertain, without replay. Expose safe stage/reason/fresh-observation demand plus warning and completed prefix.
 
-Download association uses `browser.downloadCursor()` before the triggering input, followed sequentially by `browser.waitForDownload({after:cursor})`; an exact known `id` is also accepted. A cursor is bounded in-memory state owned by the page. Old files never satisfy it and multiple new files fail as ambiguous. No automatic input replay, latest-file inference or durable download ledger exists.
+Downloads use browser.downloadCursor() before input, sequential waitForDownload({after:cursor}), or exact known ID. Bounded page-local memory excludes old files; multiple new files are ambiguous. No replay/latest-file inference/durable ledger. Published SourceDownload is sole identity writer; raw CDP creates no duplicates. Same-named exports stay distinct; AMBIGUOUS_DOWNLOAD exposes bounded exact candidates.
 
-Captured downloads use the published SourceDownload identity as their sole writer;
-raw CDP notifications do not create duplicate semantic records. Distinct same-named
-exports remain distinct. AMBIGUOUS_DOWNLOAD carries bounded exact candidates.
+readDownload(id,{offset,limit}) returns bounded base64/continuation from exact source; sequential chunks share a short-lived stream retired on cancel/idle/disposal. saveDownload(id) copies at most256MiB into task scratch with run-owned authorization/partial cleanup, validating offset/count/identity/available total each chunk. Guest cannot select destination/arbitrary paths; terminal/file tools process returned path and deliver finals.
 
-browser.readDownload(id,{offset,limit}) reads captured bytes by exact source ID,
-with bounded base64 output and explicit continuation. Sequential reads reuse one
-short-lived source stream; cancellation, idle expiry and disposal retire it.
-browser.saveDownload(id) copies up to 256 MiB into the current task scratch area;
-the run owns the destination, authorization and partial-file cleanup. Offset, byte
-count, identity and available total size are validated on every chunk. The guest
-cannot choose a destination or read arbitrary paths. Terminal/file tools process
-the returned path and deliver final artifacts to the user destination.
-
-Hit tests translate viewport CSS points into the owning CDP session document
-coordinates, including scrolled frames. Cross-process frame input checks every
-embedding document for overlays. An unavailable protocol hit test returns
-`TARGET_OBSERVATION_UNAVAILABLE` with `observation_stage:hit_test`, without
-claiming the element is covered. Screenshot capture uses the native viewport
-including non-overlay scrollbars and derives the immutable image transform from
-captured dimensions. Geometry must remain stable before/after capture. Scoped
-scroll uses the control center and verifies its hit target before dispatch.
+Hit tests convert viewport CSS to owning CDP document coordinates, including scrolled frames. Cross-process input checks all embedding overlays. Protocol unavailability reports TARGET_OBSERVATION_UNAVAILABLE/observation_stage:hit_test, never fabricated coverage. Capture includes non-overlay scrollbars and derives immutable transform from actual dimensions with before/after stability. Scoped scroll verifies control-center hit target first.
 
 ## Chrome extension and explicit CDP
-The MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact tab.
 
-Its webNavigation creation events retain bounded, in-memory popup source facts; Chrome tab-group opener metadata is not treated as the source of an action.
-
-A remote Linux task uses its remote managed browser or private desktop; it cannot silently drive local user Chrome.
+MV3 uses Native Messaging/chrome.debugger bound to exact tab. webNavigation creation events keep bounded popup-source facts; tab-group opener metadata is not action source. Remote Linux tasks use remote managed browser/private desktop, never silently local Chrome.
 
 # Boundaries
 
-Internal source cancellation drains the active operation before clearing its
-ephemeral cancellation flag. It never sets user_control, changes private mode,
-or clears permission/Stop barriers. Drained cancelled reads return observation
-failure and permit later authorized same-target reads; uncertain mutations stay
-terminal without replay. Routine invalidated screenshots with no bytes or
-attachments retain observation_invalidated and needs_observation. Inconsistent
-target, safety or frame payloads still fail.
+Internal cancellation drains active operation before clearing its ephemeral flag, without setting user_control/changing private mode/clearing permission or Stop barriers. Drained reads return observation failure and permit authorized same-target reads; uncertain writes remain terminal/no replay. Invalidated screenshots without bytes/attachments retain observation_invalidated/needs_observation; inconsistent target/safety/frame payloads fail.
 
-Private control recovery after Runtime restart uses the same initial managed profile preparation as ordinary tools. The private input helper cannot create a second owner of the default profile; passive sampling never launches resources.
+Restart recovery shares ordinary managed-profile preparation; private input cannot own a second default profile, and passive sampling never launches resources. [Design evidence](computer-use-design-evidence.md) covers public/installed-code comparison; no forced reload/CSP rewriting.
 
-See the [Codex design evidence](computer-use-design-evidence.md) for the public and installed-code comparison; no forced reload or CSP rewriting is used.
+Pre-identity capture failures cannot bind guessed downloads. Generic unavailable events neither latch globally nor infer filename/time; waits may time out until upstream supplies identity-bearing failure.
 
 # Evidence
 
-- `redeven:internal/ai/computer_managed_browser.go` - managed profile and process ownership.
-
-- `redeven:internal/ai/computer_managed_browser_test.go` - login isolation, saved downloads and profile validation.
-
-- `redeven:internal/ai/computer_extension.go` - connection authorization, framing and scoped cancellation.
-
-Capture failures that occur before the published SourceDownload API supplies an
-identity cannot be attached to a guessed record. The existing unavailable event
-is not download-specific; this adapter does not latch it globally or infer an
-identity from filename/time. Such waits may still time out. A richer upstream
-identity-bearing failure contract would be required to improve that diagnosis.
+- redeven:internal/ai/computer_managed_browser.go owns profiles/processes.
+- redeven:internal/ai/computer_managed_browser_test.go covers login isolation/downloads/validation.
+- redeven:internal/ai/computer_extension.go covers authorization/framing/cancellation.

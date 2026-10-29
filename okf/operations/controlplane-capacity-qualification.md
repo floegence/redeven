@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Control-plane capacity qualification
-description: Measure ten thousand enrolled Runtime control sessions with real authority, recovery, and signed Gateway requests.
 tags: [gateway, controlplane, validation, performance]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

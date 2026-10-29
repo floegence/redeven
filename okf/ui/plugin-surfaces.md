@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Plugin surfaces
-description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows and pinned pages, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
-timestamp: 2026-10-12T00:00:00Z
 quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 lifecycle: contract
 reviewed_at: "2026-10-25"

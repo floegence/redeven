@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Verified Environment access routes
-description: Associate Gateway routes with a known Runtime without combining Cloud ownership, management rights or login sessions.
 tags: [desktop, gateway, runtime, identity, access]
-timestamp: 2026-10-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

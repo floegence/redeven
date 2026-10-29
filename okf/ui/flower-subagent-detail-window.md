@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower subagent detail window
-description: Stable parent-scoped child current views, live replacement, and queued-input controls.
 tags: [ai, flower, subagents, ui]
-timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

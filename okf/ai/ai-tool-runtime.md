@@ -1,9 +1,7 @@
 ---
 type: AI Tool Contract
 title: AI tool runtime
-description: Canonical navigation and ownership boundary for Redeven AI tools and Floret runtime integration.
 tags: [ai, tools, runtime, floret]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

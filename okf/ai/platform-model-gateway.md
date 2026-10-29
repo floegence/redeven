@@ -1,9 +1,7 @@
 ---
 type: Architecture
 title: Authorized platform model gateway
-description: Session-scoped platform catalogs, credential boundaries, stable request identity, and background execution.
 tags: [ai, platform, gateway, security]
-timestamp: 2026-10-02T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Orange AFBC capture qualification
-description: Verify the bounded legacy Rockchip scanout import repair and distinguish native qualification from deployed Viewer acceptance.
 tags: [desktop, drm, rockchip, qualification]
-timestamp: 2026-10-11T14:10:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

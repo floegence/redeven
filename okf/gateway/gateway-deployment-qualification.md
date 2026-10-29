@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Gateway deployment qualification
-description: Qualify outbound membership, isolated TLS applications and Cloud access under real network restrictions.
 tags: [gateway, desktop, validation, networking, security]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

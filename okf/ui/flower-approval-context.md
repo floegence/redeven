@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower interactions and context state
-description: Typed pending interactions, automatic context compression, and unlocked composer behavior.
 tags: [ui, flower, approval, input, context]
-timestamp: 2026-09-25T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

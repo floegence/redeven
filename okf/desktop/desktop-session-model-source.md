@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop session and model source
-description: Session routing, Desktop model catalog, Flower attach, and lifecycle invalidation.
 tags: [desktop, sessions, models, flower]
-timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

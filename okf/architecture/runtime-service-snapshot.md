@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Runtime Service snapshot
-description: Runtime identity, independent compatibility, access readiness, workload inventory, and optional Gateway supervision.
 tags: [architecture, desktop, runtime-service, compatibility]
-timestamp: 2026-08-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

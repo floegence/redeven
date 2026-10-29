@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: AI readiness and service generation lifecycle
-description: Keep Code App available while a process-local controller serializes AI startup, retry, and request-scoped service generations.
 tags: [architecture, ai, readiness, lifecycle, floret]
-timestamp: 2026-09-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

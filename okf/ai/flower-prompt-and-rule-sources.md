@@ -1,9 +1,7 @@
 ---
 type: AI Prompt Contract
 title: Flower prompt and rule sources
-description: Keep shared Flower identity and output guidance separate from runtime facts, capabilities and native engine guidance.
 tags: [ai, flower, prompts, context]
-timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower approval surface
-description: Review bounded approval queues, inspect exact commands, and submit independent or atomic one-time decisions.
 tags: [ui, flower, approval, accessibility]
-timestamp: 2026-09-25T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

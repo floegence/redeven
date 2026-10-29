@@ -1,9 +1,7 @@
 ---
 type: Gateway Contract
 title: Gateway service
-description: Manage Runtime-initiated membership without acquiring Runtime lifecycle authority.
 tags: [gateway, desktop, access, identity]
-timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

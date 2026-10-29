@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Environment card presentation
-description: Preserve compact Env card tabs, facts, action footers, focus and geometry across snapshots.
 tags: [desktop, environment, interaction, accessibility]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-24"
 ---

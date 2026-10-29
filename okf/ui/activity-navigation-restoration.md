@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Activity navigation restoration
-description: Restore one locally saved Activity target before startup work and recover unavailable dynamic pages without stealing navigation.
 tags: [ui, desktop, navigation, persistence]
-timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

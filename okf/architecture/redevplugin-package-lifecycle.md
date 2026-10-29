@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Plugin package and runtime lifecycle
-description: Qualify released plugin package sources, installation, runtime admission, and cache ownership through ReDevPlugin.
 tags: [architecture, plugins, release, runtime]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

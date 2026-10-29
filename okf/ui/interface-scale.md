@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Shared interface scale
-description: Apply one measured desktop reading and control scale across Flower, Env App, and Desktop without shrinking content viewers or touch targets.
 tags: [ui, flower, desktop, accessibility, typography]
-timestamp: 2026-09-26T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

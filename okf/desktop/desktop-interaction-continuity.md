@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Desktop interaction continuity
-description: Preserve open Welcome sessions through background observations and isolate authority and completion boundaries.
 tags: [desktop, interaction, accessibility, testing]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

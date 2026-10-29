@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Managed Web Service Templates
-description: Consume one signed-off versioned service catalog whose release is a recommendation, not a user-version restriction.
 tags: [architecture, templates, managed-services, localization, supply-chain]
-timestamp: 2026-09-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

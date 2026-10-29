@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Plugin package review
-description: Review official updates and external packages against exact Host-verified source and permission evidence.
 tags: [ui, plugins, review, lifecycle]
-timestamp: 2026-09-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

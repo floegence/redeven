@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop runtime bridge
-description: Canonical navigation and security boundary for Desktop-integrated Runtime access and direct lifecycle.
 tags: [desktop, runtime, bridge, lifecycle]
-timestamp: 2026-08-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

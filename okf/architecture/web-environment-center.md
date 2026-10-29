@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Independent Web Environment Center
-description: Share entry behavior between independent Desktop and server hosts.
 tags: [architecture, desktop, gateway, web]
-timestamp: 2026-10-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

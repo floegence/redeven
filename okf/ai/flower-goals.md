@@ -1,9 +1,7 @@
 ---
 type: AI Interaction Contract
 title: Flower thread Goals
-description: Manage one concise objective and reflect in the same execution context before natural completion.
 tags: [ai, flower, goals, recovery]
-timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Plugin process sessions
-description: ReDevPlugin owns opaque external-process sessions, bounded binary streams, and cleanup; Redeven only supplies authenticated owner, secret, policy, audit, and diagnostic adapters.
 tags: [architecture, plugins, processes, redevplugin]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

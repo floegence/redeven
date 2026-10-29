@@ -1,9 +1,7 @@
 ---
 type: AI Product Contract
 title: Tessiven Flower and operations
-description: Generate canvas versions and route service actions through their original owners.
 tags: [ai, tessiven, flower]
-timestamp: 2026-10-11T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

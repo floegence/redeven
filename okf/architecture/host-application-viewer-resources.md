@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Host application viewer resources and layered upgrades
-description: Prepare current immutable viewer snapshots while retaining application and backend lifetimes, and authorize their content-addressed resources.
 tags: [applications, runtime, security, cache]
-timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: AI Tool Contract
 title: Computer and browser use runtime
-description: Keep target execution, authorization and observation under one Runtime owner while composing semantic actions in bounded scripts.
 tags: [ai, computer-use, browser-use, targets]
-timestamp: 2026-09-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

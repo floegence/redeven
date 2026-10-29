@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Native container console
-description: Present aggregated container resources with stable loading, exact-target navigation, and structured Compose input.
 tags: [architecture, containers, ui, workbench]
-timestamp: 2026-09-08T00:00:00Z
 quality_exception: Cross-surface native container contract spanning aggregated resources, target-scoped navigation, operations, and Compose workflows.
 lifecycle: contract
 reviewed_at: "2026-10-25"

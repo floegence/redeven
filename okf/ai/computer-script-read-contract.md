@@ -1,7 +1,6 @@
 ---
 type: Execution Contract
 title: Computer script read and validation boundaries
-description: Distinguish valid empty data, truncation, strict lookup failures and pre-dispatch rejection.
 tags: [ai, computer-use, scripts, validation]
 lifecycle: contract
 reviewed_at: "2026-10-28"

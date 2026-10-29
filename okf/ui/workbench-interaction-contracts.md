@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Workbench interaction contracts
-description: Canonical navigation for Workbench input and surface-lifecycle ownership.
 tags: [ui, workbench, interaction, accessibility]
-timestamp: 2026-07-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

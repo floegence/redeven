@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Env App resource snapshots
-description: Restore authorized local presentation snapshots while refreshing Host Applications, Containers, Web Services, and Codespaces.
 tags: [ui, desktop, caching, security]
-timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

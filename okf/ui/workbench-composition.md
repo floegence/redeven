@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Workbench composition surfaces and editing
-description: Edit notes, text, and optional region names through published Floe surfaces while preserving layout content and materials.
 tags: [ui, workbench, composition, editing, persistence]
-timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

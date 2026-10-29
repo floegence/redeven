@@ -1,9 +1,7 @@
 ---
 type: Gateway Contract
 title: Gateway client access
-description: Derive management from verified host access and enroll URL clients without administrator grants.
 tags: [gateway, desktop, access, identity]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

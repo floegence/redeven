@@ -1,9 +1,7 @@
 ---
 type: Media Contract
 title: Computer use media and visual requests
-description: Resolve authenticated keyframes and bounded live samples into decoded Flower pixels without persisting image bytes in model history.
 tags: [ai, computer-use, media, attachments]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

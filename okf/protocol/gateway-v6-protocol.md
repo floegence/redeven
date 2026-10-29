@@ -1,9 +1,7 @@
 ---
 type: Protocol Contract
 title: Gateway v6 protocol
-description: Define signed pairing, member invitations, policy, reverse access and versioned Cloud association.
 tags: [gateway, protocol, security, identity]
-timestamp: 2026-10-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

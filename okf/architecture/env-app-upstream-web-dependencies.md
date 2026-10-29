@@ -1,9 +1,7 @@
 ---
 type: Frontend Contract
 title: Env App upstream web dependencies
-description: Env App composes published floe-webapp, FloeBrowser, Floeterm, and Flowersec packages.
 tags: [architecture, dependencies, protocol, ui]
-timestamp: 2026-10-18T00:00:00Z
 quality_exception: Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.
 lifecycle: contract
 reviewed_at: "2026-10-28"

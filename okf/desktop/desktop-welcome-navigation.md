@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Desktop Welcome navigation
-description: Switch Welcome pages immediately, retain page state, and present explicitly selected Environment Center tabs.
 tags: [desktop, welcome, flower, navigation]
-timestamp: 2026-09-23T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

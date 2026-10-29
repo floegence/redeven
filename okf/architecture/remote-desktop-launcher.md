@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Remote desktop connection launcher
-description: Identify the target host, explain connection readiness and open its desktop through one concise, localized flow.
 tags: [desktop, applications, interaction, accessibility]
-timestamp: 2026-10-09T17:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

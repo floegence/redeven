@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Tessiven canvas navigation and rendering
-description: Browse compact service topology with shared layouts and bounded route painting.
 tags: [ui, tessiven, graph, performance]
-timestamp: 2026-10-11T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

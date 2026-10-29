@@ -1,9 +1,7 @@
 ---
 type: AI Persistence Contract
 title: Flower thread deletion coordination
-description: Synchronous, idempotent convergence across Floret canonical deletion and Redeven product cleanup.
 tags: [ai, threads, persistence, deletion, floret]
-timestamp: 2026-08-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

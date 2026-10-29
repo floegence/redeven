@@ -1,9 +1,7 @@
 ---
 type: AI Tool Contract
 title: Flower subagent runtime
-description: Canonical child threads, direct task instructions, scoped reads, and complete handoffs.
 tags: [ai, floret, subagents, permissions]
-timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Acceptance Contract
 title: Computer use product qualification
-description: Establish scope-specific evidence for decoded frames, real target input, control handback and isolated cleanup.
 tags: [ai, computer-use, desktop, testing]
-timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---
@@ -18,165 +16,58 @@ manufacture a passing result.
 
 # Contract
 
-## Result encoding recovery
-Run the explicit local browser qualification from the repository root:
+## Evidence and isolation
 
-It builds the production FlowerSurface with installed published UI packages, uses the production runtime adapter and canonical detail projection against a real task-owned Service, and injects one counted executor effect followed by an invalid optional result. It is opt-in and stays outside ordinary CI and exact-main gates.
+Qualify through the built product renderer, Runtime, decoder and target adapter. Preserve canonical tool results, actual fixture events, decoded frames, source/artifact hashes and owned cleanup. HTTP success, submitted code, model prose or Activity summaries alone prove neither execution nor pixels. Separate model mistakes, assertion defects and product failures; retain originals after fixes. Never replay uncertain input or repeat until declaring green. Fixture/foreground/native/provider runs remain explicit, outside ordinary CI and exact-main gates.
 
-## Semantic execution acceptance
-Browser and desktop belong to one delivery scope.
+Production FlowerSurface result-encoding recovery uses a real task-owned Service and installed published UI: one counted executor effect followed by an invalid optional result. Browser and desktop semantic delivery belong to the same scope; pre-click cancellation/revocation must prevent input and unknown acknowledgements remain terminal.
 
-Cancellation and revocation before the click prevent dispatch; unknown click acknowledgements remain terminal.
+## Paid DeepSeek lane
 
-Foreground macOS and credentialed model qualification remain explicit runs; the integration gate cannot substitute for their evidence.
+TestComputerReliabilityDeepSeek uses production Service/Floret, the configured deepseek-flash wire model (local catalog: V4.1 Flash 1017) and catalog-installed Chromium. It rejects substitutions. Required: REDEVEN_COMPUTER_RELIABILITY_E2E=1, absolute REDEVEN_COMPUTER_CONFIG_ROOT and REDEVEN_COMPUTER_EVIDENCE_DIR, plus REDEVEN_BROWSER_TEST_INSTALLATION. Run GOWORK=off go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m. Repetitions: REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5, default1. Browser-only scenarios may use -parallel3. Native scenarios require REDEVEN_COMPUTER_NATIVE_E2E=1/release Swift helper and serialize on the shared desktop; REDEVEN_COMPUTER_NATIVE_TEST_HOST may select an absolute baseline helper for isolated regressions. Hash source provider/secret files unchanged; never continue a user thread.
 
-## Real DeepSeek reliability acceptance
-`TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.
+Use the default tool surface except the explicit legacy default-wait case. Required scenarios cover bounded text/limit repair, budgets and confirmed prefixes, validation before focus, pagination, image/frame identity, delays/titles/stale frames, invalid options, scroll facts, conditional waits, natural tasks, strict timeouts, below-fold input, exact asynchronous content, navigation landmarks, namespace reset, multipage scripts, downloads and installed-app entry.
 
-Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1). Native scenarios run serially in the harness and also require REDEVEN_COMPUTER_NATIVE_E2E=1 and the release Swift helper; serialize native cases on the shared desktop. Browser-only cases may use -parallel 3. Scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks failure namespace reset, multi-page script batches, browser-to-task-file processing and installed native application entry. Reset diagnostics and completed waits are checked against canonical tool results. observation_capture verifies four PageDown inputs followed by one fresh screenshot; frame_refs verifies a retained parent ref after child navigation; option_field verifies exact unsupported-option diagnostics. strict_wait also checks the failed wait index and sanitized condition facts.
+Canonical assertions read ThreadToolResultReader, decode Floret ERROR status prefix then the host envelope. Script diagnostics require data.script_error; plain pre-dispatch rejections remain separate. Logs/final answers cannot satisfy execution assertions. A completed wait stays in the confirmed prefix even if later JavaScript fails. Retain safety, pause and input-progress facts.
 
-Natural visual_natural, form_natural and table_natural cases vary canvas position,
-form labels and table size across repetitions. The visual case requires a returned
-screenshot before a later pointer input and verifies actual canvas events; it is
-not a prescribed coordinate replay. Native focus-change qualification uses an
-AppKit app that changes its own key window during a drag, requiring a factual pause,
-balanced release and explicit recovery without replay. REDEVEN_COMPUTER_NATIVE_TEST_HOST
-can select an absolute baseline helper for that isolated regression.
-The native_drag_focus_change model scenario exercises the same interruption
-through the production Service and requires a retained partial input receipt,
-one balanced press/release and no completed drag or automatic replay.
+| Scenario | Required evidence |
+| --- | --- |
+| observation_capture | Four PageDown inputs, then one fresh screenshot |
+| frame_refs | Parent ref survives child navigation |
+| option_field / strict_wait | Exact unsupported option; failed wait index and safe condition facts |
+| stale-image / image-input | Returned STALE_REFERENCE with zero pointers / one counted pointer after image |
+| visual_natural | Vary canvas position; screenshot precedes actual canvas pointer, no prescribed replay |
+| form_natural / table_natural | Vary labels/size, observe complete values and totals |
+| batch | Three page visits/reads, ≥two navigations or clicks in one script, screenshot; logged/final totals separate |
+| download processing | One export, exact current download/save identity/content, terminal-created project file; never use anonymous reads after target acquisition |
+| native entry | Discovery, confirmed launch/selection, exact text, one click and screenshot |
+| optional_probe / caught_lookup | Zero-count and timeout may branch; caught failed unique lookup cannot resume input |
+| timed_drag / drag_validation | Independent press/release, endpoints/moves/held duration; invalid integer_0_5000 rejected before input |
 
-Semantic scroll qualification covers documents, oversized regions, clipped containers
-and covered targets. Independent wheel events require one dispatched wheel or zero
-when rejected; scroll events can also come from reported scroll-into-view preparation.
-Real extension tests inject DOM/AX protocol failures before reads and clicks, retain
-method/code, verify zero input and recover the same reference on an explicit read.
-Managed tests cover malformed responses, transformed clipping, shadow DOM, same-process
-and cross-process frames; geometry tests repeat document scroll under real zoom/DPR.
+Also exercise 2,800+ nodes, complete table totals, tab/account isolation, older same-name download, one save followed by diagnostic failure without replay. Reports keep wire IDs, tool errors, histories, answers and events. Scenario completion does not establish general model reliability or remote weights.
 
-Natural tasks use the production default tool surface. Only the legacy default-wait
-case explicitly retains its primitive. Read canonical tool results through
-ThreadToolResultReader, decoding Floret's error-status ERROR prefix before the
-host JSON envelope. Diagnostic assertions require data.script_error; echoed
-scripts, logs and final prose cannot satisfy them. Retain plain pre-dispatch
-runtime rejections separately; never infer script diagnostics from their text.
-Count fixture events separately. A completed wait in the confirmed prefix remains
-completed even if later guest JavaScript fails; whole-script success is not a wait
-receipt. Reports retain safety and input-progress facts for failure classification.
+## Browser and native boundaries
 
-Diagnostic scenarios specify the required operations, while table and download
-tasks exercise autonomous planning. Verify returned tool payloads and counted
-fixture events; submitted scripts and the model's final claims do not establish
-execution. Stale-image rejection requires an actual returned `STALE_REFERENCE`
-and zero pointer events. Image input requires one counted pointer event. Read
-download bytes from the isolated fixture's owned directory without issuing an
-anonymous runtime call after the model has acquired target control.
+Semantic scroll covers document, oversized/clipped/covered targets. Count wheels independently from scroll-into-view preparation: exactly one dispatched wheel on valid input, zero on rejection. Extension fixtures inject CDP/AX read/click failures, retain method/code, prove zero input and explicit same-ref recovery. Managed fixtures cover malformed reads, transformed clipping, shadows and same/cross-process frames; geometry repeats actual zoom/DPR.
 
-The batch case checks three fixture page visits, at least three completed reads,
-at least two navigations or clicks in one script, and a returned screenshot.
-Returned logged totals and final-answer totals are separate report fields; neither
-can substitute for execution facts. Mixed processing requires one export, a
-completed save_download and the terminal-produced project file. Native entry
-requires discovery, confirmed launch/selection, exact text, one counted click and
-a screenshot. Full source provider and secret files are hash-checked unchanged.
+TestComputerScriptExamplesQualification executes the exact maintained batch/download examples through QuickJS→Runtime→Chromium: byte-equal multichunk file, one export/ID and actual page values. TestComputerNativeApplicationEntryQualification covers single/no/multiple/minimized windows with the real helper. TestComputerNativeScriptQualification checks real QuickJS/Go/Swift scrolling, screenshots and focus/pointer restoration; external desktop input invalidates restoration.
 
-TestComputerScriptExamplesQualification executes the exact maintained download
-help and batch example through production QuickJS, Runtime and installed Chromium,
-checking byte equality for a multi-chunk file and the actual page values.
-TestComputerNativeApplicationEntryQualification separately exercises single, no,
-multiple and minimized windows with the real native helper.
+TestComputerNativeDragQualification uses a disposable AppKit receiver, requests0/1/500/5000ms and cancellation during5000ms. Require one press/release, early release before endpoint on cancellation, and independent AppKit/system timestamps. A fixture app changing its own key window must produce factual pause, balanced release and explicit recovery without replay. Model native_drag/native_drag_validation/native_drag_zero/native_drag_focus_change scenarios verify the same receipts through production registry. computerDrag.node-test.mjs covers both browser hosts, image coordinates, timing endpoints and interrupted/unknown-effect cleanup; it cannot certify native timing.
 
-TestComputerNativeDragQualification drives the published Swift helper against a
-disposable AppKit app, checking 0/1/500/5000 ms and cancellation during a 5000 ms
-drag. Each case requires exactly one press/release pair; cancellation must release
-before the endpoint. AppKit receive times and system event timestamps are retained.
-The native_drag, native_drag_validation and native_drag_zero model scenarios
-exercise discovery, screenshot-based inspection, one timed drag, invalid-duration
-rejection and zero-delay input through the production Service/tool registry.
-Configuration and credentials stay unchanged; model mistakes remain in evidence.
+## Product carriers and handback
 
-The timed_drag and drag_validation scenarios verify fixture-generated mouse
-events independently of model text: one press/release, endpoints, intermediate
-movement and actual held duration. The invalid request must retain the Runtime's
-INVALID_COMPUTER_ARGUMENTS duration_ms/integer_0_5000 diagnostic without input.
-optional_probe verifies conditional continuation after zero matches and a normal
-wait timeout; caught_lookup verifies that catching a failed unique lookup cannot
-resume input within that invocation. computerDrag.node-test.mjs qualifies the
-shared browser implementation through managed and connected hosts, image-bound
-input, duration endpoints and interruption/unknown-effect cleanup.
+Built Desktop uses an isolated exact-provider copy without altering the current user model. Missing identity or wire override fails. Desktop observes the preload workspace stream; Linux Webtop uses a passive CDP copy. Missing decoded native/browser frame fails that scope. Name all unqualified native/connected-Chrome/platform scopes.
 
-Retain failed batches and classify model instruction failures, test defects and
-product defects separately. Scenario completion is not a zero-tool-error claim,
-and repeated qualification does not establish a general success probability.
-Freeze implementation hashes before qualification and rerun affected checks
-after integration changes.
-
-Scenarios also verify a 2,800+ node page and complete table totals, task-tab isolation and account restrictions, current-download identity/content despite an older same-named file, and one counted save followed by a diagnostic failure with no replay. Reports retain provider wire IDs, tool error counts, canonical histories, final answers and fixture outcomes. Configuration hashes must stay unchanged. The native-entry case qualifies only its disposable AppKit app. This scope does not certify production accounts, arbitrary native applications or a universal model success rate.
-
-## Existing product fixtures
-
-The built Desktop computer lane selects configured exact deepseek-flash in its
-isolated provider copy without requiring or changing the current user model.
-Missing configured identity or an alternate wire override fails qualification.
-TestComputerNativeScriptQualification separately exercises QuickJS, Go and Swift
-scroll/screenshot against a disposable native fixture, checking counted effects
-and focus/pointer restoration. External desktop input invalidates that evidence.
-Desktop qualification observes the preload workspace stream; Linux Webtop uses CDP's passive HTTP workspace stream copy. A missing native or browser live-frame match fails that scope.
-
-The report names the native macOS, connected Chrome and other scopes it does not qualify.
-
-## Private preview and handback
-`checkDesktopSystemBrowser.mjs` runs a deterministic provider against the real built Desktop, Runtime, Chrome extension and Native Messaging. Both carriers must show canonical connection assistance with no target bound, then continue after a verified extension connection.
-
-Test threads and fixture servers are removed on exit; the owner of the isolated Desktop launch must stop its exact process tree and verify port release.
+checkDesktopSystemBrowser.mjs uses a deterministic provider with built Desktop, Runtime, Chrome extension and Native Messaging. Both carriers show canonical connection help without a bound target, then continue after verified extension connection. Private previews/handback use the existing media/takeover owners. Remove fixture threads/servers and exact owned process trees; verify port release. Late decoding, expired interactions, queued commands, selection and close remain separate deterministic boundaries.
 
 # Boundaries
 
-This acceptance contract does not grant target authority or replace the [media contract](computer-use-media.md) or [canonical takeover boundary](computer-use-takeover.md).
-
-Browser tests separately inject late decoding, expired interactions and queued commands to verify close, selection and connection boundaries deterministically.
+This contract grants no target authority and does not replace [media](computer-use-media.md) or [takeover](computer-use-takeover.md). Native disposable-app results do not qualify arbitrary applications/accounts. Freeze source hashes and rerun affected checks after integration; fixture scope never substitutes for the exact-main gate.
 
 # Evidence
 
-## October 2026 contract qualification scope
+October26 DeepSeek/12 scenarios×5:60/60 in173.114s,273 activities/31 errors (18 required,13 model mistakes). Each image clicks once; stale images reject with zero input; no save/export replay. Source hashes stay fixed through rebase. Retain pre-canonical60/60 (prose-based stale assertion), strict51/60 and59/60 (missing one-click prompt requirement) as distinct superseded/failed evidence.
 
-The final October 26 local run uses configured DeepSeek V4.1 Flash (1017), wire
-model `deepseek-flash`, with 12 scenarios repeated five times: 60/60 pass in
-173.114 seconds. Source hashes remain unchanged through the subsequent rebase.
-Its 273 tool activities include 31 error-status activities: 18 expected
-diagnostic rejections and 13 additional model-call errors in table/download
-tasks. All five image cases dispatch exactly one click; all five stale-image
-cases return the stale diagnostic with zero clicks. No export or counted save
-is replayed. This establishes the stated protocol outcomes, not flawless model
-planning.
+Operation contracts cover validation-before-focus,2,100-query refs,image mapping/scales/scrollbars,staleness/live frames,partial effects and target identity. Carrier91 passes/one optional Chrome picker skip;12 contracts/eight headed-extension checks pass. Extension uses real debugger transport with fixture native port. macOS background and Swift35 are separate. Linux-native,multimonitor and one combined Desktop/Native-Messaging/Service launch remain excluded. Emulated scale does not certify browser zoom; forced debugger detach does not prove focus loss with another CDP client. No paired performance claim.
 
-Retained earlier batches include a superseded 60/60 result whose stale-image
-assertion trusted final prose, a 51/60 stricter batch that exposed test and model
-failures, and a 59/60 batch whose image prompt omitted the assertion's explicit
-one-click requirement. Correcting those evidence defects precedes the final
-run; previous reports remain unchanged.
-
-The operation-contract qualification covers pure argument validation before
-focus, 2,100-result query reference retention, image mapping across device scales
-and emulated page scales, scrollbar exclusion, stale frames, live-view captures,
-partial effects and current target identity. The carrier run has 91 passing tests
-and one explicit Chrome installation/replacement file-picker opt-in skip; all
-12 contract tests and eight headed-extension tests pass. The extension lane
-uses real Chrome debugger transport with a fixture native port. macOS background
-capture/input and the 35-test Swift suite are separate evidence. Production
-FlowerSurface result recovery is verified against a task-owned Service.
-
-These lanes do not certify Linux native execution, native multi-monitor input,
-or a single built-Desktop/Native-Messaging/Service end-to-end launch. Emulated
-page scale is not browser-UI zoom certification. Forced Chrome debugger detach
-does not establish that `document.hasFocus()` becomes false with another CDP
-client attached. No paired baseline or measured performance improvement is
-claimed.
-
-- `redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs` - Built Desktop and Linux scenarios with actual provider and pixel evidence.
-
-- `redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` - Deterministic provider with real Desktop takeover, frames and handback.
-
-- `redeven:internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs` - Real Desktop/Env App connection guide, extension, task tab and Stage with a deterministic provider.
-
-See [browser drag qualification](computer-drag-qualification.md) for the October 28 timing repair, real-model failures and native boundary.
+Sources: [built carrier](../../internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs), [private takeover](../../internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs), [system browser](../../internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs). [Drag evidence](computer-drag-qualification.md) retains later timing repairs and failures; [qualification history](computer-use-qualification-evidence.md) retains other measured lanes.

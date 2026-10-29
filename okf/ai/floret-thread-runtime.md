@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Floret thread runtime integration
-description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-10-18T00:00:00Z
 quality_exception: Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.
 lifecycle: contract
 reviewed_at: "2026-10-25"

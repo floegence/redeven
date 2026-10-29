@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower terminal turn process disclosure
-description: Collapse terminal work while preserving valuable output, explicit choices and active reading.
 tags: [ui, flower, turns, disclosure, accessibility]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

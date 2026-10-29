@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop Environment registration ownership
-description: Single registration owners, versioned connection records, serialized persistence, and generation-safe removal.
 tags: [desktop, environments, persistence, ssh, wsl, runtime, launcher]
-timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

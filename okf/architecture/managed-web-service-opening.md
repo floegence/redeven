@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Managed Web Service opening
-description: Prepare the current verified launch entrance and recover authentication without implicit lifecycle changes.
 tags: [architecture, managed-services, security, desktop, recovery]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

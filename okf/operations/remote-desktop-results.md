@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Current-desktop qualification results
-description: Assess published macOS and X11 performance, functional-only Wayland validation and local delivery limits.
 tags: [desktop, linux, macos, validation, performance]
-timestamp: 2026-10-02T15:30:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

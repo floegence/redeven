@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower read state
-description: Keep unread indicators monotonic and acknowledge only rendered content through silent background recovery.
 tags: [ui, flower, threads, read-state]
-timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-23"
 ---

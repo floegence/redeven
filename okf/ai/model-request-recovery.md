@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Model request recovery
-description: Recover frozen provider requests through one Engine budget and expose sanitized attempt progress without adding a product lifecycle.
 tags: [ai, providers, recovery, diagnostics]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

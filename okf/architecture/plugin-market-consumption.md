@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Plugin market consumption
-description: Discover one verified latest release per plugin channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.
 tags: [architecture, plugins, market, release]
-timestamp: 2026-08-01T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: macOS application window lifecycle
-description: Preserve shared applications through uncertain window inventories and end viewers only on confirmed native closure.
 tags: [applications, macos, runtime, lifecycle]
-timestamp: 2026-09-24T14:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

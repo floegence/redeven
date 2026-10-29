@@ -1,9 +1,7 @@
 ---
 type: Release Contract
 title: CI and release gates
-description: Redeven binds published dependencies, generated assets, UI behavior, release payloads, tests, and OKF to the exact main tip being pushed.
 tags: [release, ci, quality, okf]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---
@@ -21,31 +19,31 @@ certification target and cannot enter the formal release inventory.
 
 ## Checks and provenance
 
-AGENTS.md owns Git workflow/100-line limit and links domain rules; quick_ci_policy.test.mjs enforces this. Development runs affected checks; pre-commit checks staged diff, localization, hygiene and affected notices/viewer assets. Ordinary push/PR runs one bounded source-only job. Main pre-push runs check_final_integration.sh once for the exact clean rebased base/tip. Long-thread browser/Electron acceptance is explicit and does not register a commit or full-profile group. Broad UI/Docker/native/stress qualifications also run explicitly. Releases additionally require target artifacts and same-commit historical-conversation Actions evidence.
+AGENTS.md owns Git workflow/100-line cap; quick_ci_policy.test.mjs enforces it. Development checks affected behavior; staged pre-commit checks localization/hygiene/notices/viewer assets. Ordinary push/PR has one bounded source job. Main check_final_integration.sh runs once for exact clean rebased base/tip, verifying pushed tip equals local main, fast-forward ancestry and no unpublished merges. Earlier evidence cannot certify changed tips. Fingerprints bind tools/inputs except variable macOS MANPATH; real-hook tests guard reuse. Formatting lists all offenders before expensive checks; generators leave no diff.
 
-Pre-push checks current local main equals pushed tip, handshake ancestry is fast-forward, and no unpublished merge commits. Earlier evidence cannot certify changed tips. Fingerprints include tools/inputs, excluding macOS-variable MANPATH; real-hook tests guard reuse. Generators leave no diff; formatting lists all offending paths before expensive checks.
+Long-thread/browser/Electron and broad UI/Docker/native/stress run explicitly, outside unified profiles. Releases additionally require authenticated target artifacts and same-commit historical-conversation Actions.
 
-Staged notices read a temporary index snapshot (including partial staging), installed metadata and cached exact Go with GOTOOLCHAIN=local, no proxy/SumDB/VCS downloads. Missing prerequisites/stale output blocks commit; cleanup cannot rewrite index/worktree. Viewer verification uses staged source/locked installed dependencies without install/generation; buildHostApplicationAppearance.mjs alone generates assets.
+Staged notices use an index snapshot (including partial staging), installed metadata and exact cached Go/GOTOOLCHAIN=local without network. Missing prerequisites/stale output blocks commit; cleanup never rewrites index/worktree. Viewer verification uses staged source/locked installed dependencies without install/generation; buildHostApplicationAppearance.mjs alone generates.
 
-Daily/manual CodeQL is separate: unchanged main since successful scheduled scan skips matrix; failed lookup scans. Review current source/all locks; dismissal needs specific authority/input evidence. Unavailable/nonzero scanning is not clean. Actions use reviewed commit pins; their Node24 runtime is independent of product Node.
+Daily/manual CodeQL is separate: unchanged main since successful schedule skips; failed lookup scans. Review source/all locks; dismissal requires specific authority/input evidence. Unavailable/nonzero scan is not clean. Reviewed Actions commit pins/Node24 are independent of product Node.
 
 ## Build ownership
 
-go.mod owns exact Go patch; .node-version owns first-party Node. Gates, engines and README prerequisites/badges match. Desktop pnpm allows electron/esbuild lifecycle only; electron-winstaller is ignored for internal NSIS. Dependency changes regenerate/check notices.
+go.mod owns exact Go patch/.node-version first-party Node; gates/engines/README agree. Desktop pnpm permits only electron/esbuild lifecycle; electron-winstaller ignored for internal NSIS. Dependency changes regenerate/check notices. README locales preserve structure/links/literals/terms/hashes, not reviewer counts. Commit all three OKF artifacts.
 
-README locales preserve structure/links/literals/terms/sync hashes, not reviewer counts. OKF bundle/manifest/checksum commit together. Build embedded UI before Go embed consumers. Env App flock spans cleanup/typecheck/Vite/budgets/compression and releases with build processes; same-checkout builds wait, worktrees do not. build_assets.sh cannot compress outside the lock or skip missing output.
+Build embedded UI before Go consumers. Env App flock spans cleanup/typecheck/Vite/budgets/compression and lasts through builds; same checkout waits, separate worktrees do not. build_assets.sh cannot compress outside lock/skip missing output.
 
-Shipped Runtime uses cgo/floeterm_native, native Linux/Darwin amd64/arm64 and released terminal-go. Untagged live attachment fails closed. Release/Desktop/SSH/carrier source contracts include macOS Bash3.2 strict arguments. Main checks build contracts; native execution is explicit qualification.
+Runtime ships cgo/floeterm_native on native Linux/Darwin amd64/arm64 with published terminal-go; untagged live attachment fails closed. Release/Desktop/SSH/carrier contracts cover macOS Bash3.2 strict arguments. Main verifies source contracts; native execution remains explicit.
 
 ## Qualification and security
 
-flower-history-qualification.yml continues copied immutable released-writer data through public product APIs and repeats after restart. Release-ref requires same-commit successful Actions; ordinary CI/main only verify fixture source. [Historical upgrades](../ai/flower-upgrade-compatibility.md) owns preservation/recovery.
+flower-history-qualification.yml continues copied immutable released-writer data through product APIs/restart. Release-ref requires same-commit successful Actions; ordinary gates verify fixture source only. [Upgrade contract](../ai/flower-upgrade-compatibility.md) owns preservation/recovery.
 
-UI acceptance uses canonical headless browser/carriers and fresh exact-source assets, not ignored dist/headed diagnostics. [Web dependencies](../architecture/env-app-upstream-web-dependencies.md) owns modes. Renderer-only Floe tests use client Vitest/browser resolution/DOM and keep real utilities except at tested boundaries. Fixtures retain scrollbars/space geometry and await after-paint focus restoration. PDF drag removes/restores runner preview scale only.
+Use canonical headless carriers/fresh exact-source assets, not ignored dist/headed diagnostics. [Web dependencies](../architecture/env-app-upstream-web-dependencies.md) owns modes. Floe renderer tests use client Vitest/browser DOM resolution and real utilities except tested boundaries. Preserve scrollbar/space geometry and wait for after-paint focus; PDF drag restores temporary runner-scale removal.
 
-[Desktop lifecycle](../desktop/desktop-test-lifecycle.md) owns process cleanup. Electron preload tests isolate work, utility and session paths; stop only owned POSIX groups/Windows trees and drain. External SIGKILL fails. Preflight executes pinned node_modules Electron; AMFI/signal rejection is environment failure, never grounds to sign/alter trust/dependencies. Windows certification uses exact origin/main, Linux amd64 Runtime and two isolated WSL2 distros; verify install/Start/Bridge/external-stop/Retry/Update/exact Stop before internal unsigned NSIS. Only fixture cleanup unregisters its distros.
+[Desktop lifecycle](../desktop/desktop-test-lifecycle.md) owns cleanup. Preload tests isolate work/utility/session paths; stop/drain owned POSIX groups or Windows trees only. External SIGKILL fails. Preflight runs pinned Electron; AMFI/signal rejection is environment failure, not permission to resign/change trust/dependencies. Windows qualification uses exact origin/main, Linux amd64 Runtime/two owned WSL2 distros, verifying install/Start/Bridge/external-stop/Retry/Update/exact Stop before unsigned internal NSIS. Only owned fixture cleanup unregisters distros.
 
-Security reads/hash/consumption share one no-follow descriptor for signed manifests, logs, source identity, installer pins, Sparkle keys and credentials; source capture verifies enumerated inode, with replacement tests. Computer proxy accepts fixed Responses POST only. Terminal TLS exceptions require isolated run CA. Diagnostics are bounded single-line. Reports/synthetic secrets/quoted SSH data grant no authority. Secret scans omit downloaded SwiftPM/npm caches, retaining product native/build files.
+Signed manifests/logs/source identity/installer pins/Sparkle keys/credentials use one no-follow descriptor for read/hash/consume; source captures verify enumerated inode with replacement regressions. Computer proxy allows fixed Responses POST only. Terminal TLS exceptions need isolated CA. Diagnostics are bounded single-line; reports/synthetic secrets/quoted SSH data confer no authority. Secret scanning excludes downloaded SwiftPM/npm caches but retains native/build product files.
 
 ## Release handoff
 

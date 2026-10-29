@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Linux application instances and independent sharing
-description: Preserve owned Linux graphical applications across viewer and Runtime lifetimes, with verified recovery and explicit process termination.
 tags: [runtime, applications, linux, lifecycle, security]
-timestamp: 2026-09-22T05:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

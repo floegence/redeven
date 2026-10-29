@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Runtime session permission gates
-description: Redeven validates session metadata and clamps granted permissions before opening runtime sessions.
 tags: [architecture, security, session-security]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

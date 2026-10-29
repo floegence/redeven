@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower model and navigation presentation
-description: Model-source controls, notifications, thread selection, and staged content ownership.
 tags: [ai, flower, models, navigation]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

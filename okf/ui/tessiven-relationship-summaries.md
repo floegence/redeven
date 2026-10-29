@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Tessiven relationship summaries
-description: Bound group relationship geometry while preserving complete exact relationships and evidence.
 tags: [ui, tessiven, graph, performance]
-timestamp: 2026-10-11T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

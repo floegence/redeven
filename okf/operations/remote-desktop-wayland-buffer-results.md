@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Wayland legacy MemFd capture compatibility
-description: Verify the fix for immediate post-authorization capture failure with older GNOME PipeWire producers.
 tags: [desktop, linux, wayland, validation, compatibility]
-timestamp: 2026-10-05T05:30:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Env App page loading continuity
-description: Apply one initial-loading and refresh policy across Activity pages and Workbench widgets.
 tags: [ui, startup, lifecycle, workbench]
-timestamp: 2026-09-23T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower citations
-description: Canonical assistant source ownership, safe links, and provider marker presentation.
 tags: [ai, flower, markdown, citations]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Native macOS host applications
-description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-23T08:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: AI Provider Contract
 title: DeepSeek Responses
-description: Flower consumes Floret stateless Responses transport with explicit web tool limits.
 tags: [ai, provider, deepseek]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Mobile shell navigation
-description: Reach shell tools and plugins above persistent mobile navigation without reducing the working area.
 tags: [ui, mobile, navigation, shell, accessibility]
-timestamp: 2026-09-25T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Runtime platform facts and icons
-description: Identify the actual Runtime OS from trusted observations and display local platform marks without changing card continuity.
 tags: [desktop, runtime, platform, accessibility]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Local UI surface
-description: Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.
 tags: [architecture, local-ui, runtime, security]
-timestamp: 2026-09-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

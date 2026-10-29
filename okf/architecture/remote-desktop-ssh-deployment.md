@@ -1,9 +1,7 @@
 ---
 type: Security Contract
 title: Administrator-authorized remote desktop deployment over SSH
-description: Install and manage the Linux physical-desktop service from Env App without target-side graphical consent.
 tags: [desktop, ssh, authorization, runtime, security]
-timestamp: 2026-10-16T17:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

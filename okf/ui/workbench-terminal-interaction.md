@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Workbench terminal interaction
-description: Activity and Workbench consume one actor-owned semantic terminal state through view-local surfaces.
 tags: [ui, terminal, workbench, activity, semantic]
-timestamp: 2026-09-21T00:00:00Z
 quality_exception: Cross-runtime terminal interaction contract spanning actor authority, semantic rendering, multi-view control, browser input, history, accessibility, and performance.
 lifecycle: contract
 reviewed_at: "2026-10-25"

@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Product RPC request encoding
-description: Redeven codecs construct JSON requests that preserve optional filesystem operation semantics before Flowersec dispatch.
 tags: [architecture, rpc, filesystem]
-timestamp: 2026-09-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Runtime startup presentation
-description: redeven run startup output is structured events rendered by rich, plain, or machine presentation modes.
 tags: [architecture, runtime, startup, desktop]
-timestamp: 2026-06-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

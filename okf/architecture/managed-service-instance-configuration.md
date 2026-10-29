@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Managed Service Instance Configuration
-description: Resolve the current template and instance overrides into one validated Runtime specification with journaled stopped-state reconfiguration.
 tags: [architecture, web-services, containers, configuration, security]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

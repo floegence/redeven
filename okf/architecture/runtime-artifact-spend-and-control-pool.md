@@ -1,9 +1,7 @@
 ---
 type: Runtime Security Contract
 title: Runtime artifact spend and control pool
-description: Persist, spend, replenish, and revoke opaque Flowersec control artifacts without replay or authority duplication.
 tags: [architecture, runtime, security, artifacts]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

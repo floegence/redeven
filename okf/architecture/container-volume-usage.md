@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Volume usage observation
-description: Observe volume references and disk usage without blocking inventory or treating unavailable data as zero.
 tags: [architecture, containers, docker, podman, volumes]
-timestamp: 2026-09-06T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

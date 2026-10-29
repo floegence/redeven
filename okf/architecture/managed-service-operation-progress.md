@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Managed Service operation progress
-description: Persist and stream bounded, redacted lifecycle command output while preserving stable, user-controlled progress presentation.
 tags: [architecture, managed-services, operations, observability, security, ui]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

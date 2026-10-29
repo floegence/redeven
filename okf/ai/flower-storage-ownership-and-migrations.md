@@ -1,9 +1,7 @@
 ---
 type: Storage Contract
 title: Flower storage ownership and migrations
-description: Keep canonical Floret storage opaque and preserve every supported product migration through deterministic imports.
 tags: [ai, storage, sqlite, migrations, floret]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

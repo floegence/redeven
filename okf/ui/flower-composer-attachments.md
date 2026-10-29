@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower composer attachments
-description: Connection-local attachment staging, long-text conversion, and canonical timeline presentation.
 tags: [ui, flower, attachments, composer, accessibility]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

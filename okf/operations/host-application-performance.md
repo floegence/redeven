@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Host application picture performance
-description: Measure native host application bandwidth, presented frames, input latency and bounded decoding with repeatable browser workloads.
 tags: [applications, performance, validation, display]
-timestamp: 2026-09-29T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

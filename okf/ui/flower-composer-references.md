@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower composer references
-description: Show Ask Flower context inside the input and admit exact ordered composer references to Floret.
 tags: [ui, flower, composer, references, floret]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

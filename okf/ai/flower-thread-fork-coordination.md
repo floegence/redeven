@@ -1,9 +1,7 @@
 ---
 type: AI Persistence Contract
 title: Flower thread fork coordination
-description: Redeven authorizes a source thread, selects a full-thread or answer-anchored Floret fork, and adopts settings for the canonical destination.
 tags: [ai, threads, persistence, floret]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-21"
 ---

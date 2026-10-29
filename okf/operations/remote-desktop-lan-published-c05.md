@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Published six-frame LAN qualification C05
-description: Verify the released optional frame window against RustDesk and retain preparation failures separately from performance evidence.
 tags: [desktop, performance, qualification]
-timestamp: 2026-10-15T10:45:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

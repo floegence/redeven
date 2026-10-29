@@ -1,9 +1,7 @@
 ---
 type: Validation Report
 title: Flower persistent-index startup acceptance
-description: Record isolated Floret v7.52.0 and complete product activation measurements on the 710 MB conversation fixture.
 tags: [flower, startup, performance, storage, validation]
-timestamp: 2026-10-17T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

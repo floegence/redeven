@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower mobile navigation
-description: Keep conversations, reading, and composition usable within the mobile visible area.
 tags: [ui, flower, mobile, navigation, composer]
-timestamp: 2026-09-24T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

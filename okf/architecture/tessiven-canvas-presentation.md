@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Tessiven stable canvas presentation
-description: Render validated canvas data through an independently frozen client display contract.
 tags: [architecture, tessiven, compatibility, native]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,10 +1,8 @@
 ---
 type: Frontend Contract
 title: Env App terminal and surface composition
-description: Compose published Floeterm semantic terminal APIs and Floe surface lifecycles without duplicating renderer or navigation state.
 tags: [architecture, env-app, terminal, ui]
 quality_exception: Cross-surface frontend composition contract spanning semantic terminal rendering, lazy boundaries, keep-alive navigation, recovery presentation, and renderer evidence.
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

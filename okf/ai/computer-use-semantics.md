@@ -1,9 +1,7 @@
 ---
 type: Protocol Contract
 title: Computer semantic snapshots
-description: Normalize browser, AX and AT-SPI facts into bounded, revision-scoped semantic trees at the Runtime boundary.
 tags: [ai, computer-use, accessibility, protocol]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

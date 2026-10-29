@@ -1,9 +1,7 @@
 ---
 type: Operations Contract
 title: Deploy and qualify standalone Web Center
-description: Operate independent entry services with private state and reproducible evidence.
 tags: [operations, deployment, web, qualification]
-timestamp: 2026-10-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---
@@ -15,25 +13,23 @@ Center binary/UI deploy separately from Desktop and Runtime. Evidence records so
 
 ## Versioned release artifacts
 
-Web Center is a third independently installable product alongside Runtime and Desktop. One repository release tag identifies all three; installing or upgrading Center never installs, restarts or upgrades Runtime or Desktop. The Center/Runtime binding protocol and explicit capability checks remain authoritative; a shared tag does not grant cross-version compatibility automatically.
+Center is independently installable alongside Runtime/Desktop under one repository tag. Center installation/upgrades never install/restart/upgrade either. Binding protocol/capability checks determine compatibility; shared tags alone do not.
 
-Every successful tagged release includes `redeven-center_linux_amd64.tar.gz` and `redeven-center_linux_arm64.tar.gz`, each with an external `.tar.gz.manifest.json` receipt. These files join the existing signed `SHA256SUMS` and upload/download byte verification. Center failures block the whole release. Native Linux runners build and execute their own architecture. macOS source builds remain available for development; no formal macOS/Windows Center service package or published container registry is promised.
+Tagged releases require redeven-center_linux_amd64.tar.gz and redeven-center_linux_arm64.tar.gz, each with .tar.gz.manifest.json receipt, signed SHA256SUMS and remote byte readback. Native runners build/execute their architecture; either failure blocks release. macOS source builds are for development; no formal macOS/Windows service or published registry image.
 
-Each archive contains `redeven-center`, `ui/`, both service units, environment examples, Docker/Compose files, `.env`, licenses, this guide as `DEPLOYMENT.md` and `manifest.json`. `redeven-center version` (or `--version`) reports the release tag, source commit and build time without opening state. The manifest hashes every payload file; packaging rejects dirty source, wrong commit/version/architecture, missing or unexpected files, symlinks and digest mismatches. Collection requires both architectures from the same release commit.
+Archives contain binary, ui/, two service units, environment examples, Docker/Compose/.env, licenses, DEPLOYMENT.md and manifest.json. version/--version reports tag/source/time without state. Manifests hash every file; reject dirty source, incorrect tag/source/architecture, missing/extra files, links/digest mismatch. Collector requires both architectures from one commit.
 
-Download the architecture matching the server from the chosen GitHub release, verify its signed checksum using the release instructions, and extract it into a new version directory. Use the systemd or Compose procedure below. No Node.js, Go, Electron or local Runtime is required on the deployment host. Compose builds a local image from the verified package and reads the exact version from the supplied `.env`; preserve that file and the state volume on upgrade. Never use the Runtime install command to install Center.
+Download chosen release/architecture, verify signed checksums using release instructions and extract into a new version directory. Deployment needs no Node/Go/Electron/local Runtime. Compose builds locally from verified package and exact .env version; preserve .env/state on upgrade. Runtime installer does not install Center.
 
 ## Install
 
-Use `.node-version`, Desktop package-manager declaration, `go.mod` and published dependencies. `scripts/build_center.sh <new-directory> [version]` produces binary/UI, version metadata and systemd/env/Docker templates. Production packages pass an explicit release tag; omitted versions are marked dev. Cross-compiled output needs target-host testing.
+Source builds use .node-version, Desktop package manager, go.mod and published dependencies. scripts/build_center.sh <new-directory> [version] emits complete package; production requires explicit tag, omitted version is dev. Cross-builds require target execution.
 
-Start `redeven-center serve` with required `--state-root`, `--origin`, `--tls-cert`, `--tls-key`, `--assets`, `--connector-socket`, `--connector-user`, and chosen `--listen`. Run the separate worker with `connector --connector-socket ... --center-user <Center OS user>`. Both sides verify the configured OS peer UID before exchanging route credentials. Origin is immutable identity. Valid TLS must cover portal, Env and derived child origins. Configure DNS and wildcard/SAN certificates. TLS terminates in Center; an edge may use TCP passthrough. Forwarded headers confer no authority.
+serve requires --state-root/--origin/--tls-cert/--tls-key/--assets/--connector-socket/--connector-user and chosen --listen. Independent worker: connector --connector-socket ... --center-user <Center OS user>. Both verify exact peer UID before route credentials. Origin is immutable identity. Configure DNS/TLS SANs or wildcard for portal/Env/children. Center terminates TLS; edge TCP passthrough is allowed, forwarded headers confer no authority.
 
-Linux service uses account `redeven-center`, state `/var/lib/redeven-center` mode 0700 and binaries/UI `/opt/redeven-center`. It has no Runtime dependency. Docker Center runs UID/GID 10001; mount ownership must match with private permissions.
+Linux: separate nonlogin redeven-center/redeven-connector accounts in redeven-center group; root-owned package at /opt/redeven-center. State /var/lib/redeven-center mode0700 and TLS keys readable only by Center. Install both units in /etc/systemd/system and example at /etc/redeven-center/center.env. Connector has no state, is denied Center state/config and owns /run/redeven-connector/connector.sock. Group traversal plus kernel peer UID authenticates Center. systemctl daemon-reload; systemctl enable --now redeven-center starts both without Runtime dependency. Connector restarts independently. Owner commands run as Center or root. Upgrades need stopped-state backup/explicit replacement, never recursive deletion.
 
-For a new Linux installation, create separate system accounts `redeven-center` and `redeven-connector` with no login shells, both in group `redeven-center`. Copy one matching package into root-owned `/opt/redeven-center`, install both supplied units into `/etc/systemd/system`, and create `/etc/redeven-center/center.env` from the example. Keep state and TLS keys readable only by Center. The Connector unit has no state directory, denies access to Center state/config and owns `/run/redeven-connector/connector.sock`; group access lets Center connect, and kernel peer credentials enforce its exact UID. `systemctl daemon-reload` and `systemctl enable --now redeven-center` start both units. Connector can restart independently. Run owner CLI commands with `sudo -u redeven-center` or root. Existing installations require a stopped-state backup and explicit artifact replacement, not blind recursive deletion.
-
-Build the Dockerfile from a Linux release directory. The supplied `compose.yaml` runs Center as UID 10001 and Connector as UID 10002, with a shared socket volume and dropped capabilities/read-only roots. Only Center mounts state and TLS. Put certificates at `tls/server.pem` and `tls/server-key.pem`, readable by UID 10001, set `CENTER_ORIGIN`, and run `docker compose up --build -d`. The manifest publishes port 8443; DNS and SANs must match that external origin. Run `docker compose exec center /opt/redeven-center/redeven-center setup --state-root /var/lib/redeven-center` for the temporary credential. Keep the named state volume on upgrades; `down -v` deletes persistent data. Public DNS and TLS provisioning remain operator responsibilities.
+Compose: build supplied Dockerfile from Linux package; Center UID10001/GID10001 and Connector UID10002 share socket volume, read-only roots/dropped capabilities. Only Center mounts state/TLS; ensure matching private ownership. Place tls/server.pem/server-key.pem readable by10001; set CENTER_ORIGIN and docker compose up --build -d. Exposed8443 must match DNS/SAN/external origin. Obtain setup credential with docker compose exec center /opt/redeven-center/redeven-center setup --state-root /var/lib/redeven-center. Preserve named volume; down -v deletes data. Operators provision public DNS/TLS.
 
 ## First use
 
@@ -64,20 +60,22 @@ The supported service templates require Linux and a trusted TLS identity. No ins
 
 # Evidence
 
-Optional test hooks are procedures, not completed-pass claims. The external Chinese task report tracks results and remaining gates. udesk26 Chrome acceptance on 2026-10-28 confirms display/input/disconnect; its published backend reports no clipboard/audio and supports manual text input. DPMS auto-wake and actual Safari remain unqualified; the user selected Chrome.
+Hooks are procedures, never completed-pass claims. The external Chinese task report owns exact results/source/artifact manifests and open gates. udesk26 Chrome/2026-10-28 qualifies physical display/input/disconnect; backend reports no clipboard/audio. Manual text works; DPMS auto-wake and Safari remain unqualified (user chose Chrome).
 
-`REDEVEN_CENTER_AUTH_BOUNDARIES=1` additionally exercises five incorrect Runtime passwords, the real cooldown, and five-minute challenge expiry through the browser UI. It waits on server wall time instead of replacing the browser clock. `REDEVEN_CENTER_PERMISSIONS=1` uses actual Chrome permission overrides to deny clipboard read/write, verifies the browser rejection, and types a terminal command using keyboard events. A separate Runtime read verifies the resulting file before task-owned terminal/file cleanup. These checks do not certify native file-picker cancellation, directory permission revocation, or every browser permission combination.
+Optional flags for scripts/check_center_browser.mjs:
 
-`REDEVEN_CENTER_PORTAL_PERMISSIONS=1` verifies binding-copy denial, explicit manual text selection, and exact clipboard contents after permission is granted and the user retries. `REDEVEN_CENTER_ASSETS` selects an isolated prebuilt portal asset directory for qualification. Never rebuild or replace assets served by a running long test; record source and artifact hashes, and qualify later UI changes separately.
+| REDEVEN_CENTER_ suffix | Required scope |
+| --- | --- |
+| AUTH_BOUNDARIES=1 | Five wrong Runtime passwords, real cooldown and five-minute challenge expiry using server wall time |
+| PERMISSIONS=1 | Actual Chrome clipboard denial; keyboard terminal command confirmed by independent Runtime file read, then cleanup |
+| PORTAL_PERMISSIONS=1 | Binding copy denied, manual selection, exact clipboard after permission and explicit Retry |
+| ASSETS=<directory> | Frozen prebuilt portal; never rebuild served long-test assets; record hashes and qualify later changes separately |
+| UPLOADS=1 | Local model profile receives zero inference; multipart bytes/idempotency/staging/cleanup plus actual Flower selection/removal |
+| NATIVE_PICKER=1 + HEADED=1 | Real OS chooser Cancel: one cancel/no change/no attachment, then successful selection; record Chrome distribution/version |
+| NATIVE_SAVE=1 | File Browser native Download Cancel leaves retryable canceled record; Retry is a new attempt with exact bytes |
+| NATIVE_SAVE_PERMISSIONS=1 | Pause selected real handle, remove owned-directory write permission, require visible createWritable failure; restore/Retry preserves outcomes and bytes; clean both hosts |
+| TERMINAL_RECOVERY=1 | One UI command survives offline/reload/close/reopen; independent catalog/file reads and recovered UI prove one session/submission; another Env/Center unaffected; clean probes |
+| FLOWER_RECOVERY=1 | Actual composer and bounded local model survive freeze/offline/reload/close/reopen; same thread/run/user/reply, separate title count, no duplicate inference/cancel; independent reads/UI and other Env/Center, then delete thread; no paid calls |
+| CHILD_REOPEN=1 | Twenty actual Chrome Web Service handoffs on separate device reuse exact child cookie/resource, deny Env APIs; logout revokes that owner only; no budget increase |
 
-`REDEVEN_CENTER_UPLOADS=1` enables an isolated model profile whose local endpoint must receive zero inference requests. It exercises the production browser multipart uploader, byte digests, idempotency, staging capabilities and cleanup, then Flower's actual file-selection and removal controls. Browser filechooser automation verifies the application's chosen-file flow; it does not certify operating-system picker cancellation or directory permission revocation.
-
-Adding `REDEVEN_CENTER_NATIVE_PICKER=1` with `REDEVEN_CENTER_HEADED=1` pauses at a visible Flower composer for a real operating-system chooser interaction. The operator opens Add attachments and cancels; the harness verifies one native cancel event, no change event, no attachment, and successful subsequent selection. Record the exact Chrome distribution/version. This does not certify persistent directory grants or other browser permissions.
-
-`REDEVEN_CENTER_NATIVE_SAVE=1` with a visible Chrome browser qualifies the File Browser's actual Download command and native save dialog: Cancel leaves a retryable canceled record, and Retry creates a new attempt with exact saved bytes. `REDEVEN_CENTER_NATIVE_SAVE_PERMISSIONS=1` additionally pauses the real selected handle while the task owner removes write access from its isolated destination directory. Production `createWritable` must fail visibly; restoring access and retrying must preserve prior outcomes and byte integrity. The fixture removes local and Runtime probe files. OS directory modes are distinct from browser permission revocation; this check does not certify persistent directory grants or all browser permission combinations.
-
-`REDEVEN_CENTER_TERMINAL_RECOVERY=1` types one bounded remote command through the real terminal UI. Chrome goes offline, reloads, closes the original tab and reopens the Env; fresh Runtime catalog and file reads verify progress, one session and one submission. The recovered UI must render that same terminal. Another Runtime and Center remain available. The probe cleans its session and files. This qualifies terminal recovery only; other workload lifecycle combinations require their own evidence.
-
-`REDEVEN_CENTER_FLOWER_RECOVERY=1` submits through the actual Flower composer, then freezes, disconnects, reloads, closes and reopens that Chrome tab. A bounded local model fixture streams while real Runtime/Floret owners execute the turn; independent reads and the recovered UI must retain one thread/run/user turn/reply. Automatic title generation is counted separately. The test rejects duplicate inference or cancellation, checks another Env and Center, and deletes its thread. It uses no external model configuration or paid requests. This qualifies Flower reply recovery, not every tool, approval, file transfer or browser permission lifecycle.
-
-`REDEVEN_CENTER_CHILD_REOPEN=1` opens and closes the same Web Service twenty times through actual Chrome handoffs on a separate authenticated device, preserving the other scenarios' receipt budgets. Each launch must preserve the exact child admission cookie, render the intended resource and deny Env APIs. Device logout must revoke that owner while the original device and a second Env remain available. This checks repeated admission ownership, not an eight-hour stability claim.
+Filechooser automation is distinct from OS cancellation. OS write modes are distinct from persistent browser grant revocation. Each lane covers only its named workload; none certifies every tool/approval/transfer/permission combination or eight-hour stability. Preserve failed long-test evidence and do not inherit qualification across changed source snapshots.

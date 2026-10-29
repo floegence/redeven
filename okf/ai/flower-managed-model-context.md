@@ -1,9 +1,7 @@
 ---
 type: AI Context Contract
 title: Flower managed runtime facts
-description: One snapshot collector supplies canonical facts through published Floret admission and request boundaries.
 tags: [ai, flower, context, recovery]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

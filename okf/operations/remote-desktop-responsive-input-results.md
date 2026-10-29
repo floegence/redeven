@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Physical desktop responsiveness and local input
-description: Assess physical-seat input and DRM capture on orange and udesk26, distinguishing host feedback from client presentation.
 tags: [desktop, input, drm, latency, qualification]
-timestamp: 2026-10-10T11:33:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

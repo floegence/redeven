@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: AI model and context runtime
-description: Model-source ownership, provider mapping, token limits, context usage, and compaction contracts.
 tags: [ai, models, context, providers]
-timestamp: 2026-10-15T00:00:00Z
 quality_exception: Unified model-context contract linking provider mapping, immutable provider checkpoints, usage accounting, compaction, and Desktop source compatibility.
 lifecycle: contract
 reviewed_at: "2026-10-22"

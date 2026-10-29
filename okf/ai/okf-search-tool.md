@@ -1,9 +1,7 @@
 ---
 type: AI Tool Contract
 title: OKF tool suite
-description: OKF tools expose read-only Redeven repository knowledge through index browsing, short search, and concept opening.
 tags: [ai, okf, ui]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

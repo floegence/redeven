@@ -1,9 +1,7 @@
 ---
 type: Performance Qualification
 title: Computer use paired model measurements
-description: Compare visual primitives and semantic scripts through the production Service and report incomplete or failed evidence explicitly.
 tags: [ai, computer-use, browser-use, performance]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

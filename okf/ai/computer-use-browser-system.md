@@ -1,9 +1,7 @@
 ---
 type: Runtime and Product Contract
 title: Built-in browser Linux system preparation
-description: Authorize exact versioned AppArmor preparation without weakening the browser sandbox.
 tags: [runtime, browser, installation, linux, security]
-timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

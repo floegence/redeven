@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Flower computer viewer presentation
-description: Present decoded computer frames with shared window geometry, accessible status and explicit recovery.
 tags: [ui, flower, computer-use, media]
-timestamp: 2026-09-24T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

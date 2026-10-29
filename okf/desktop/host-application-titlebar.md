@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Desktop host application titlebar
-description: Place host application controls alongside native window buttons without adding connection latency.
 tags: [desktop, host-applications, ui]
-timestamp: 2026-09-23T08:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

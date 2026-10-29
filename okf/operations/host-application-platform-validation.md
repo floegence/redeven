@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Host application platform validation
-description: Assess the tested Linux userspace and native macOS application matrix with explicit hardware and policy limits.
 tags: [operations, host-applications, validation, platforms]
-timestamp: 2026-09-24T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

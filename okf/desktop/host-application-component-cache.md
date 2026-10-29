@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Host application component cache
-description: Reuse verified graphical component archives across devices and present actual download and transfer progress.
 tags: [desktop, applications, cache, installation]
-timestamp: 2026-09-24T16:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

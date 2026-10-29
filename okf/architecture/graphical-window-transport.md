@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Flowersec transport for graphical windows
-description: Bind every remote desktop and host application data channel to one resource-scoped native Flowersec session in direct and tunnel modes.
 tags: [applications, desktop, transport, security]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

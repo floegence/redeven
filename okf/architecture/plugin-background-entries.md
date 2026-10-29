@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Plugin background entries
-description: ReDevPlugin starts and recovers one headless background entry per plugin instance and environment without creating a Redeven visual surface.
 tags: [architecture, plugins, background, redevplugin]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Official installation progress
-description: Observe durable official installation without coupling it to a management page or saved placement.
 tags: [ui, plugins, review, lifecycle]
-timestamp: 2026-09-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

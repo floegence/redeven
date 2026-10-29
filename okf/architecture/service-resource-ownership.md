@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Service resource ownership
-description: Allocate isolated instance resources and verify exact ownership before reuse or deletion without moving legacy application data.
 tags: [architecture, web-services, containers, storage, security]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

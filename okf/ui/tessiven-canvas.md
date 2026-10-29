@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Tessiven canvas
-description: Render progressively detailed service topology and exact object context.
 tags: [ui, tessiven, graph]
-timestamp: 2026-10-20T00:00:00Z
 quality_exception: Cross-surface canvas interaction contract for Activity, standalone windows, topology browsing, and exact object actions; document, Runtime, and Flower lifecycle remain separately owned.
 lifecycle: contract
 reviewed_at: "2026-10-22"

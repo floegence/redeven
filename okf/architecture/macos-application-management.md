@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: macOS application management and graceful quit
-description: Live OS application inventory, generation-bound quit and independent sharing detachment.
 tags: [runtime, applications, macos, lifecycle, security]
-timestamp: 2026-09-21T07:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: GitHub service template sources
-description: Import and manually review original GitHub template directories through Desktop transfer or direct Runtime acquisition.
 tags: [architecture, templates, desktop, credentials, persistence]
-timestamp: 2026-09-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

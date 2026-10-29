@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: macOS application picture quality and delivery
-description: Retina window pixels, live picture controls, hardware video and bounded authenticated frame delivery.
 tags: [runtime, desktop, applications, macos]
-timestamp: 2026-09-21T17:30:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

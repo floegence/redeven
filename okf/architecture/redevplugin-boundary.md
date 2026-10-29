@@ -1,9 +1,7 @@
 ---
 type: Architecture Boundary
 title: ReDevPlugin host integration boundary
-description: Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, source admission, localized presentation projection, and business adapters.
 tags: [architecture, dependencies, plugins, release]
-timestamp: 2026-10-08T00:00:00Z
 quality_exception: Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.
 lifecycle: contract
 reviewed_at: "2026-10-25"

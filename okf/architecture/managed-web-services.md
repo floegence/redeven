@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Managed Web Services
-description: Operate generic Host, Container, and Compose services from the current verified external template definitions.
 tags: [architecture, web-services, runtime, containers, security]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

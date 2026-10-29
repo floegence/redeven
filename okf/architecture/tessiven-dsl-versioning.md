@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Tessiven DSL versioning
-description: Select exact frozen DSL schemas and migrate supported documents without rewriting history.
 tags: [architecture, tessiven, compatibility]
-timestamp: 2026-10-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

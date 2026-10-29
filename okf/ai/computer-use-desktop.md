@@ -1,9 +1,7 @@
 ---
 type: Desktop Integration Contract
 title: Semantic desktop operations and explicit control
-description: Use macOS window Accessibility and private Linux AT-SPI before image input while preserving user control.
 tags: [ai, computer-use, accessibility, desktop]
-timestamp: 2026-09-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

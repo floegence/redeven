@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Human remote desktop sessions
-description: Share the host's current graphical desktop with an authenticated viewer, exclusive remote input, and bounded media.
 tags: [runtime, desktop, applications, security, media]
-timestamp: 2026-10-13T02:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

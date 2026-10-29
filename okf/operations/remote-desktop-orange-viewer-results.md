@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Orange remote desktop Viewer follow-up
-description: Record published native deployment, real Viewer recovery and the measured RustDesk acceptance boundary.
 tags: [desktop, ssh, deployment, qualification]
-timestamp: 2026-10-12T10:32:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

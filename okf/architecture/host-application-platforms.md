@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Host application platforms and initialization
-description: Capability-based Linux initialization, dependency diagnostics, distribution evidence, and native macOS requirements.
 tags: [runtime, applications, linux, desktop]
-timestamp: 2026-09-23T08:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

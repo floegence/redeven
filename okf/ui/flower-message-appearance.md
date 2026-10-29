@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower message appearance
-description: Keep assistant reading and sent user messages readable in every shell theme without changing content or interaction.
 tags: [flower, themes, accessibility, selection]
-timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

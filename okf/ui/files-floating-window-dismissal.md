@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Floating Files window dismissal
-description: Close the floating Files window without a blank exit frame while preserving responsive cleanup and reopen behavior.
 tags: [ui, files, floating-windows, lifecycle, motion]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

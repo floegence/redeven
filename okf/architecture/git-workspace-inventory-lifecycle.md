@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Git workspace inventory lifecycle
-description: Bound Git workspace capture, immutable revisions, resource admission, mutation coordination, and destructive linked-worktree removal.
 tags: [architecture, git, runtime, filesystem, transport]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

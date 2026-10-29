@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower Activity companion
-description: Activity presents one Flower surface as a dedicated page or a continuous floating companion without changing canonical ownership.
 tags: [ui, flower, activity, companion, read-state, floret]
-timestamp: 2026-10-13T03:06:33Z
 quality_exception: Cross-surface placement contract spanning Activity, Workbench residency, contextual launch handoff, and viewer read acknowledgement; composer presentation has its own owner.
 lifecycle: contract
 reviewed_at: "2026-10-25"

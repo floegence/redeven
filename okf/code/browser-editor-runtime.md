@@ -1,10 +1,8 @@
 ---
 type: Runtime Contract
 title: Browser Editor runtime
-description: Code App serves Browser Editor codespaces through the local app server and managed code workspace engine APIs.
 tags: [code-app, browser-editor, local-ui, desktop]
 quality_exception: Cross-surface Browser Editor contract spanning Code App runtime state, Desktop transfer, Env App orchestration, remote download validation, and codespace navigation security.
-timestamp: 2026-09-29T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

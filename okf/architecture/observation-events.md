@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Observation and target action events
-description: Publish computer and browser action progress through the canonical Flower workspace stream while keeping media ephemeral and target-scoped.
 tags: [architecture, observation, flower, computer-use]
-timestamp: 2026-09-11T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: AI tool approval and interaction runtime
-description: Floret v7 pending interactions, effect authorization, and Flower row-local outcomes.
 tags: [ai, tools, approvals, flower]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

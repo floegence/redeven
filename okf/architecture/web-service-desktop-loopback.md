@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Desktop loopback Web Service access
-description: Give one HTTP Web Service an isolated numeric-loopback browser Origin without bypassing its protected Runtime route.
 tags: [architecture, desktop, port-forward, proxy, security]
-timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Published LAN C05 outcomes and unresolved boundaries
-description: Inspect every retained v48 paired result, source-loss failure and resource/detail limit before another controlled experiment.
 tags: [desktop, performance, experiments]
-timestamp: 2026-10-15T13:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

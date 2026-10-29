@@ -1,9 +1,7 @@
 ---
 type: Release Contract
 title: Plugin integration gate
-description: Qualify released ReDevPlugin Host, market, runtime, and UI integration on the exact main tip.
 tags: [release, plugin, integration, ui]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

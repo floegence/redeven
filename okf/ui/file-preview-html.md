@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: HTML file preview
-description: Open HTML files as isolated interactive pages while retaining explicit source editing.
 tags: [ui, files, preview, html, security]
-timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

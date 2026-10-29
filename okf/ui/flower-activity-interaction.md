@@ -1,71 +1,61 @@
 ---
 type: UI Contract
 title: Flower activity disclosure interaction
-description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---
 # Summary
 
-Shared Flower UI uses canonical Floret facts and one transcript viewport owner.
-Live updates cannot move pressed triggers or add hit targets before clicks finish.
-Canceled gestures never activate tools; disposal releases transient ownership.
-Desktop and Env App share this contract.
+Desktop and Env App share canonical Floret facts and one transcript viewport owner. Live changes cannot move pressed triggers/add hit targets before click completion. Cancelled gestures never activate tools; disposal releases all transient gesture ownership.
 
 # Contract
 
 ## Stable disclosure and safe content
-The permanent left folding-rail gutter aligns prose, activity and progress before groups form. Goal history icons share the prose/tool leading edge; their expanded text aligns with the summary label. Individual tool and thinking metadata/disclosure controls follow the text tail with the same compact gap, retaining the full-row activation area. Tool disclosure chevrons point right when collapsed and down when expanded, including initially open screenshots; CSS reads the trigger’s existing `aria-expanded` state without a second state owner.
 
-Activity identity is thread, run, turn and canonical item ID. [Tool sequences](flower-tool-sequences.md) own grouping and bounded thinking; individual details remain available.
+Permanent folding-rail gutter aligns prose/activity/progress before grouping. Goal icons share that edge; expanded text aligns to summary. Tool/thinking metadata and disclosure follow text with a compact gap and full-row activation. Chevrons read existing aria-expanded: right closed/down open, including initially open screenshots; no second state owner.
 
-Field summaries preserve collapsed labels and result shape without transferring hidden payloads. Disclosure reads selected values; long text uses 16 KiB ranges and a 128 KiB reading window, with explicit selection pins. Closing, hiding or navigating cancels obsolete demand. Markdown reads exact UTF-8 chunks and yields between batches: whitespace cannot be sampled or silently removed because it affects parsing and copied code. A selected Markdown document remains a complete working set rather than a fixed-memory preview.
+Identity is thread/run/turn/canonical item ID. [Sequences](flower-tool-sequences.md) own grouping/bounded thinking; individual details remain available. Collapsed field summaries preserve intent/result shape without hidden payload. Disclosure reads selected values; long text uses 16 KiB ranges/128 KiB reading windows with explicit selection pins. Close/hide/navigation cancels demand. Markdown reads exact UTF-8 chunks and yields between batches, never sampling/removing meaningful whitespace. Selected Markdown remains a complete working set, not fixed-memory preview.
 
 ## Thread query and read details
-`Thread Query:` and `Thread Read:` are fixed technical labels; their suffix retains model-authored intent in the user's language. [Thread queries](../ai/flower-thread-queries.md) own lookup, privacy, bounds and failure behavior.
+
+Thread Query: and Thread Read: are fixed technical labels with model-authored intent in the user's language. [Queries](../ai/flower-thread-queries.md) owns privacy, lookup, limits and failures.
 
 ## Web search details
-Use one localized action title for visible and accessible labels. Expanded details show actual per-call results/errors, including URL-only sources, without repeating header query, URL, pattern or status.
+
+One localized visible/accessibility action title. Expanded details show real per-call results/errors, including URL-only sources, without repeating header query/URL/pattern/status.
 
 ## Semantic tool icons
-Shared Desktop/Env App rows retain compact geometry and explicit glyphs for registered tools, hosted web search, sources, MCP and unknown extensions.
 
-Tool/thinking icons, prose and the full/companion progress lane share one left edge. The composer/status column uses the transcript's native scrollbar gutter. Its existing resize observer reads gutter width only when viewport inline size changes; the existing scheduled layout phase publishes changed geometry. Row growth adds no width reads, observer or frame scheduler. Embedded hosts retain their own status/composer layout.
+Compact shared rows provide glyphs for registered tools, hosted search, sources, MCP and unknown extensions. Tool/thinking icons, prose and full/companion progress share the leading edge. Composer/status uses transcript's native scrollbar gutter. Existing resize observer reads gutter only on inline-size changes; existing layout scheduling publishes changed geometry. Row growth adds no width reads/observer/scheduler. Embedded hosts retain layout ownership.
 
 ## Intent, inputs and results
-Collapsed titles describe invocation intent, never substituted outcomes. Presentation cannot supply execution input or authorization. BrowserUse/ComputerUse rows omit absent-observation filler; typed failures, uncertain effects, blank pages and unavailable targets retain their meaningful status.
+
+Collapsed titles describe invocation intent, not outcomes; presentation cannot supply execution input/authority. BrowserUse/ComputerUse omit absent-observation filler but preserve typed failures, uncertain effects, blank pages and unavailable targets.
 
 ## Viewport and gesture ownership
-One viewport controller owns transcript position. Layout, focus, animation and growth cannot resume paused reading. [Sequence reading](flower-tool-sequences.md#disclosure-and-reading) owns native nested scrolling; hidden controls are neither focusable nor hit-testable. [SubAgent details](flower-subagent-detail.md) have an independent viewport.
 
-Transcript and SubAgent prose growth continuously approaches the current bottom;
-new chunks retarget without restarting the motion. A single line settles in about
-160 ms, with fractional position retained and no overshoot. Geometry changes
-share one scheduled frame; animation-only frames reuse measured geometry and
-skip history scans until the settled scroll event. No idle polling or delayed
-output delivery. Native scroll input and text selection immediately pause follow;
-clearing selection does not resume it. Initial positioning, navigation, viewport
-resize and shrinking ranges remain immediate. Explicit return keeps its 220 ms
-arrival motion; automatic folds follow real content geometry without trailing
-space or a competing scroll animation. Paused-reading room is excluded from
-distance to latest, keeping explicit return reachable. Reduced motion bypasses
-animation, and hiding, rebinding or disposal cancels obsolete motion.
+One transcript controller owns position; layout/focus/motion/growth cannot resume paused reading. [Sequences](flower-tool-sequences.md#geometry-and-input) own native nested scrolling; hidden controls are inert. [SubAgent details](flower-subagent-detail.md) own their viewport.
+
+Transcript/child prose continuously approaches current bottom; chunks retarget without restart. One line settles about 160 ms, retaining fractions without overshoot. Geometry shares one scheduled frame; animation-only frames reuse measurements and skip history scans until settled scroll. No idle polling/output delay. Native input/selection pauses follow immediately; clearing selection does not resume. Initial positioning/navigation/resize/shrinking are immediate. Explicit return uses 220 ms arrival; automatic folds follow actual content without trailing space/competing scroll. Exclude paused-reading room from distance to latest. Reduced motion skips animation; hide/rebind/disposal cancels obsolete motion.
 
 ## Thinking duration
-Floret's canonical first/last output-chunk receipt times survive hydration, reconnect, restart and Fork. They replace page observations; native continuation reopens the interval and completion ends at the last chunk. Tooltips distinguish received output from provider compute time. Show <1ms below one millisecond and localized Not recorded when absent; never infer timing from neighboring events or turn totals. Legacy page observations remain memory-only.
+
+Canonical first/last chunk receipt times survive hydration/reconnect/restart/Fork, replacing page observations. Native continuation reopens the interval; last chunk ends it. Tooltips distinguish receipt duration from provider compute. Show <1ms or localized Not recorded; never infer from neighbors/turn totals. Legacy observations stay memory-only.
 
 ## Visual motion
-Confirmed live thinking fills five petals clockwise, then its center, holds and fades over 2.4 seconds. Sealed, cancelled and disconnected rows are static. Theme tokens, reduced motion, high contrast and forced colors own accessible variants; CSS needs no separate lifecycle. Disclosure uses one reversible Web Animation (180 ms open, 140 ms default close); stale completions cannot change presence. Shared tool/turn handoffs use the [sequence motion contract](flower-tool-sequences.md#disclosure-and-bodies): one 260 ms geometry owner, composited summary crossfade and stationary prose arrival.
 
-Fresh tool, argument-preview and thinking titles reveal once over 168–360 ms, at most 32 width-adapted steps. Full text, geometry, accessible names and actions exist immediately. After sequence placement, viewport owners make room over 220 ms before reveal; growth retargets without extending the deadline. User scrolling interrupts; paused reading stays paused; reduced motion skips animation. Delivery, results and controls never wait. Concurrent arrivals remain independent; running glyph shimmer starts after reveal without typography changes.
+Live thinking fills five petals clockwise then center, holds/fades over 2.4 seconds. Sealed/cancelled/disconnected rows are static. Theme/reduced-motion/high-contrast/forced-color variants use CSS without another lifecycle. Disclosure uses one reversible Web Animation: 180 ms open/140 ms default close, ignoring stale completions. [Sequence handoff](flower-tool-sequences.md#disclosure-and-bodies) owns 260 ms geometry, composited summary crossfade and stationary prose arrival.
 
-Accepted receipt provenance and selection preparation gate execution-scoped arrivals. History/body restoration and queued reading handoff consume title claims and settle automatic folds statically; genuine post-ready live snapshots and deltas remain eligible. Two visible timeline receipts retain only an in-memory restore revision and live flag, with no transcript copy, extra frame scheduler, timer or per-row observer. Claims exclude navigation, reconnect baselines, hidden disclosures and mounts delayed beyond 450 ms. Claims observe sequence closure before lazy mount and survive preview promotion, disclosure remount, snapshot replacement and completion. A final snapshot may reveal new tools from the previously active execution. Automatic folding waits for admitted title animations and then applies reading protection; a newly arriving prose block waits for its [sequence's closing motion](flower-tool-sequences.md), while runtime delivery and manual actions remain immediate. The title node survives trigger changes; call identity transfers remaining animation time. Failure/approval actions are immediate. Navigation, disposal, hidden documents and reduced motion clear clipping. No character timers, per-frame reactive state or persisted animation facts.
+Fresh tool/argument-preview/thinking titles reveal once over 168–360 ms in at most 32 width-adapted steps. Full text/geometry/accessibility/actions exist immediately. After sequence placement, viewport makes room over 220 ms before reveal; growth retargets without extending deadline. User scroll interrupts; paused reading stays paused; reduced motion skips. Delivery/results/controls never wait. Arrivals are independent; glyph shimmer follows reveal without typography changes.
+
+Accepted receipt provenance/selection preparation gates execution-scoped arrivals. History/body restoration and queued reading consume claims and settle folds statically; post-ready live snapshots/deltas remain eligible. Two visible timeline receipts retain only an in-memory restore revision/live flag, no transcript copy/scheduler/timer/row observer. Claims exclude navigation/reconnect baselines/hidden disclosures/mounts delayed beyond 450 ms. They observe closure before lazy mount and survive preview promotion/remount/snapshot replacement/completion. Final snapshots may reveal new tools from the previously active execution.
+
+Auto-fold waits for admitted title motion then applies reading protection; new prose waits for sequence closure, while delivery/manual actions remain immediate. Title nodes survive trigger changes; call identity transfers remaining time. Failure/approval acts immediately. Navigation/disposal/hidden documents/reduced motion clear clipping; no character timers/per-frame reactive state/persisted animation facts.
 
 # Boundaries
 
-This is Flower presentation policy, not a Floret public API or another execution lifecycle. Host-rendered safe details cannot reconstruct tool input or authorize file, process, or approval actions. Live transport continues during interaction.
+This is presentation policy, not a Floret API/execution lifecycle. Safe details cannot reconstruct inputs or authorize files/processes/approvals. Transport continues during interaction.
 
 # Evidence
 

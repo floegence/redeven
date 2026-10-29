@@ -1,9 +1,7 @@
 ---
 type: Product Interaction Contract
 title: Browser and desktop settings
-description: Separate environment capability, Chrome pairing, conversation target selection, and grants in one shared settings surface.
 tags: [ai, computer-use, settings, desktop, envapp]
-timestamp: 2026-09-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

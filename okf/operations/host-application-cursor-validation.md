@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Host application cursor acceptance
-description: Distinguish published cursor geometry, native click receipts and physical pointer evidence.
 tags: [applications, cursor, linux, validation]
-timestamp: 2026-09-23T13:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

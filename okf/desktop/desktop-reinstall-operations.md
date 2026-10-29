@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop managed Environment reinstall
-description: Runtime-only direct-channel reinstall with minimal Desktop recovery journal.
 tags: [desktop, reinstall, runtime, ssh, containers]
-timestamp: 2026-08-26T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

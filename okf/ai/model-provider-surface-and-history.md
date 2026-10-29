@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Model provider surface and history
-description: Keep provider-visible model history, tool surface refresh, and render lineage under Floret ownership.
 tags: [ai, models, providers, history]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop runtime process lifecycle
-description: One Desktop-owned direct Runtime lifecycle for Local, WSL, SSH, and container targets.
 tags: [desktop, runtime, lifecycle, coordination, process, inventory, wsl]
-timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

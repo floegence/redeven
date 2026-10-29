@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Env App floating layer order
-description: One product-owned stacking contract orders movable windows, Flower, plugin surfaces, blocking modals, and command UI.
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
-timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

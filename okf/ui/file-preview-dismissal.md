@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: File preview dismissal
-description: Retire a file preview without replacing its document during exit or delaying user actions.
 tags: [ui, files, preview, lifecycle, motion]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

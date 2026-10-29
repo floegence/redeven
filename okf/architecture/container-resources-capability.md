@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Native container resources
-description: Aggregate the active Docker and Podman runtimes behind one Redeven-owned execution and operation boundary.
 tags: [architecture, containers, docker, podman]
-timestamp: 2026-09-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

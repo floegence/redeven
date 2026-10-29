@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop environment settings presentation
-description: Apply one theme-aware visual hierarchy, fixed window geometry and responsive controls across settings tasks.
 tags: [desktop, settings, interaction, themes]
-timestamp: 2026-10-12T06:30:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

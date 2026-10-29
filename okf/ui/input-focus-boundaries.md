@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Input focus boundaries
-description: Identify one stable input boundary and consume the released Floe focus rule across product surfaces.
 tags: [ui, desktop, flower, accessibility, focus]
-timestamp: 2026-09-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

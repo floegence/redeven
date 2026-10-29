@@ -1,9 +1,7 @@
 ---
 type: Runtime Protocol
 title: Native Runtime bridge
-description: SSH placement for native clients without Desktop management or Runtime startup authority.
 tags: [runtime, native, ssh, protocol, security]
-timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

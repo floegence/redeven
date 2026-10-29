@@ -1,9 +1,7 @@
 ---
 type: Release Contract
 title: Automated service-template catalog updates
-description: Follow verified upstream catalog tags through isolated source updates and the exact-main integration gate.
 tags: [release, automation, templates, supply-chain]
-timestamp: 2026-09-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

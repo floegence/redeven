@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Remote desktop media and input scheduling
-description: Preserve bounded pixel ownership, cursor presentation and ordered input/video while reducing capture and playback work.
 tags: [desktop, media, input, wayland, latency]
-timestamp: 2026-10-17T01:46:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

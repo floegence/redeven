@@ -1,9 +1,7 @@
 ---
 type: Product Contract
 title: Personal directory favorites
-description: Persist and share authorized directory shortcuts across Runtime clients without changing navigation or conversation defaults.
 tags: [filesystem, ui, storage, security, desktop, flower]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

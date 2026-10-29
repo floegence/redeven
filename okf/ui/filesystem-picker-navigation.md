@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Absolute filesystem directory selection
-description: Select authorized directories through one navigation core in Flower, Spaces, and other filesystem pickers.
 tags: [ui, filesystem, flower, spaces, workbench]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

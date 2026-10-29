@@ -1,9 +1,7 @@
 ---
 type: Security Contract
 title: Single-administrator Web Center access
-description: Bind host-authorized setup and independent password/MFA to derived entries.
 tags: [security, web, authentication, recovery]
-timestamp: 2026-10-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

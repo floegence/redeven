@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower conversation selection and detail reads
-description: Present navigation feedback before committing content and coordinate bounded canonical detail reads.
 tags: [flower, navigation, cancellation, recovery, detail]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

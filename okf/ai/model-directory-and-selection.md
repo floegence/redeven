@@ -1,9 +1,7 @@
 ---
 type: AI Configuration Contract
 title: Model directory and selection
-description: Runtime metadata and explicit selection.
 tags: [ai, models, providers, settings]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

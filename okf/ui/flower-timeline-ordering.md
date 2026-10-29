@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower timeline ordering
-description: Canonical typed views, separate submission feedback, and stable row identity.
 tags: [ui, flower, timeline, ordering]
-timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Development Contract
 title: Desktop qualification lifecycle
-description: Bound explicit Desktop acceptance and verify cleanup without changing product shutdown semantics.
 tags: [desktop, testing, lifecycle, qualification]
-timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

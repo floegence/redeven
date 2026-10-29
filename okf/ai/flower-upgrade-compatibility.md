@@ -1,9 +1,7 @@
 ---
 type: Compatibility Contract
 title: Flower historical writer acceptance
-description: Verify every immutable distributed-writer fixture through actual product upgrade and continuation.
 tags: [ai, compatibility, fixtures, release]
-timestamp: 2026-09-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

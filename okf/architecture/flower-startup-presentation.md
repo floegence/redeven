@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Flower startup and recovery presentation
-description: Keep navigation and drafts available while the single readiness owner prepares, stops or restores Flower.
 tags: [flower, startup, readiness, recovery, ui]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

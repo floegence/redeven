@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Native Linux host application picture streams
-description: Negotiate efficient native pictures and compose bounded regions without changing input authority, application geometry or process identity.
 tags: [applications, linux, display, performance]
-timestamp: 2026-09-29T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

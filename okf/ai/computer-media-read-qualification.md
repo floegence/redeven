@@ -1,9 +1,7 @@
 ---
 type: Verification Evidence
 title: Media contention and native read qualification
-description: Distinguish deterministic contract checks, real DeepSeek task outcomes and evidence-parser defects for media and tree reads.
 tags: [ai, computer-use, testing, media, accessibility]
-timestamp: 2026-10-28T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-28"
 ---

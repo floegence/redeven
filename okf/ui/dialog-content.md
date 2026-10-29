@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Dialog content placement
-description: Keep dialog titles distinct from visible body guidance across Env App, Desktop, drawers, and window-local confirmations.
 tags: [ui, dialogs, accessibility, desktop]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

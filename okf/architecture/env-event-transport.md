@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Env App session event transport
-description: Observe Env App events through the current authenticated session without consuming browser HTTP connection slots.
 tags: [architecture, env-app, transport, events]
-timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: File preview window actions
-description: Read files in Activity and Workbench with one set of product actions in the existing title bar.
 tags: [ui, files, preview, floating-windows, selection]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

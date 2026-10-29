@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Workbench surface lifecycle
-description: Selection presentation, recovery ownership, lazy widgets, and shared floating surfaces.
 tags: [ui, workbench, lifecycle, keep-alive]
-timestamp: 2026-09-21T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

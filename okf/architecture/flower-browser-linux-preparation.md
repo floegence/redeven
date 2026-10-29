@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Flower browser Linux preparation
-description: Prepare a separate persistent Linux browser application for Flower connection.
 tags: [architecture, browser, flower, applications]
-timestamp: 2026-09-30T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

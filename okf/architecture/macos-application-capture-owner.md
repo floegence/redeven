@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: macOS application capture process ownership
-description: Share one native capture process while preserving independent application channels, frame credit and lifecycle.
 tags: [runtime, applications, macos, capture, security]
-timestamp: 2026-09-22T01:30:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Container engine service management
-description: Detect and safely manage the active local Docker or Podman implementation without exposing engine endpoints or elevation flows.
 tags: [architecture, containers, docker, podman, host-control]
-timestamp: 2026-09-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

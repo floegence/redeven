@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop Environment connections
-description: Explain each Environment connection and apply one address namespace policy to Welcome and settings.
 tags: [desktop, environment, connection, settings]
-timestamp: 2026-09-30T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

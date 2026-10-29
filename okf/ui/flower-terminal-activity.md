@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower terminal activity presentation
-description: Terminal output, truthful result messages, safe input confirmation, and read-only controls.
 tags: [ai, flower, terminal, presentation]
-timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

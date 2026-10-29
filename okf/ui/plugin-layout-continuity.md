@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Plugin layout continuity
-description: Preserve saved plugin components across runtime lifecycle changes, and open independently in the current display mode.
 tags: [ui, plugins, workbench, persistence, recovery]
-timestamp: 2026-09-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

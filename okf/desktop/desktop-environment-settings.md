@@ -1,10 +1,8 @@
 ---
 type: Desktop Contract
 title: Desktop environment settings
-description: Open one target-bound settings session, preserve independent drafts, and save through the registered owner.
 tags: [desktop, environments, settings, interaction]
 quality_exception: One target-bound settings session joins connection drafts, access prerequisites, and restart recovery; keep their cross-domain authority and focus handoff together.
-timestamp: 2026-10-12T06:30:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Runtime Qualification
 title: Flower context compaction qualification
-description: Isolated deterministic, historical-copy, and real-provider compaction acceptance.
 tags: [ai, flower, context, compaction, qualification]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

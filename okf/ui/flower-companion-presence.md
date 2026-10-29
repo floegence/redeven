@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower companion presence
-description: Project canonical Flower work into the compact companion without displacing drafts, stealing focus, or creating another lifecycle owner.
 tags: [ui, flower, companion, presence, floret]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Managed host application preparation
-description: Compatible installed components, independent user-directed updates, incremental transfer and same-window first-use preparation.
 tags: [runtime, desktop, applications, linux, security]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

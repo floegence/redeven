@@ -1,9 +1,7 @@
 ---
 type: OKF Lifecycle
 title: OKF bundle lifecycle
-description: Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.
 tags: [okf, provenance, release]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

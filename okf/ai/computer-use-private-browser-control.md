@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Private browser observation and input
-description: Fence secret-surface observation, private frames, ordered input and recovery checks around a canonical interaction.
 tags: [ai, computer-use, browser, privacy]
-timestamp: 2026-09-24T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

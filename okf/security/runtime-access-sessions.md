@@ -1,9 +1,7 @@
 ---
 type: Security Contract
 title: Runtime access sessions
-description: Keep browser sign-in continuous across refresh while enforcing one absolute session lifetime and Runtime-owned Cookie scope.
 tags: [security, authentication, runtime, desktop, cookies]
-timestamp: 2026-09-23T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

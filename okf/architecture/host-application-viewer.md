@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Host application viewer state and recovery
-description: Present authoritative application state, first pixels, recovery without conflating viewer closure with application termination.
 tags: [applications, ui, desktop, runtime]
-timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

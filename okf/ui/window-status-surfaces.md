@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Whole-window status surfaces
-description: Present environment recovery, access gates, and standalone Desktop availability without applying glass to movable content.
 tags: [ui, desktop, accessibility, workbench]
-timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

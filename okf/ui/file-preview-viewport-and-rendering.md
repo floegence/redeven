@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: File preview viewport and rendering
-description: Preview fit, renderer ownership, and Markdown reading colors.
 tags: [ui, files, preview, viewport, rendering]
-timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop SSH runtime operations
-description: Direct SSH and SSH-container Runtime lifecycle execution owned by Desktop.
 tags: [desktop, ssh, runtime, process]
-timestamp: 2026-10-13T07:10:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

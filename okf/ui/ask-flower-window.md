@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Ask Flower window boundaries
-description: Keep contextual Ask Flower controls below host headers without maximizing the launcher.
 tags: [ui, flower, floating-windows, desktop]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

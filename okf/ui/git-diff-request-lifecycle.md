@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Git diff request lifecycle
-description: Preserve diff content across unrelated layout updates while keeping refresh, target changes, and transport recovery authoritative.
 tags: [ui, git, diff, workbench, lifecycle]
-timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

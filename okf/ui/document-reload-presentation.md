@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Env App document reload presentation
-description: Bridge document reload before modules execute and hand off once to the selected authorized inventory.
 tags: [ui, desktop, startup, caching]
-timestamp: 2026-09-23T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

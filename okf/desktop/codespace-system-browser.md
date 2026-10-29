@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: CodeSpace system-browser access
-description: Open a CodeSpace in an ordinary system browser through the selected Desktop environment route without exposing private bridge credentials.
 tags: [desktop, codespace, security, browser]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

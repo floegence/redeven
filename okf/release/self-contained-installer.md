@@ -1,9 +1,7 @@
 ---
 type: Release Contract
 title: Self-contained installer distribution
-description: Pin a prebuilt installer, authenticate detached release evidence in process, and activate a complete Runtime suite atomically.
 tags: [release, installer, security, runtime]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

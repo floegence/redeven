@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Host application display and window layout
-description: Keep Xpra layout, native window state, pixel density and cursor coordinates consistent across viewport and quality changes.
 tags: [applications, ui, desktop, display]
-timestamp: 2026-09-29T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop runtime readiness
-description: Direct Runtime health, access readiness, and Open recovery boundaries.
 tags: [desktop, runtime, startup, readiness]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

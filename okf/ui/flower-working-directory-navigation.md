@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower working directory navigation
-description: Select a new Flower draft directory and browse its files from the header, with shared conversation menu navigation.
 tags: [ui, flower, filesystem, terminal, workbench]
-timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

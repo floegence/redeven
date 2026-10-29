@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower file edit preparation
-description: Show candidate filenames while tool arguments stream without authorizing or executing edits.
 tags: [ui, flower, tools, streaming]
-timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Design Evidence
 title: Codex computer and browser use design evidence
-description: Separate official guidance and observed packaged behavior from Flower decisions and unresolved platform limits.
 tags: [ai, computer-use, browser-use, accessibility]
-timestamp: 2026-09-17T00:00:00Z
 lifecycle: retained_history
 retention_reason: "Retains official design evidence and unresolved platform limits that constrain current Computer Use contracts."
 reviewed_at: "2026-10-22"

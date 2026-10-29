@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Desktop Web Service browser window
-description: Present trusted browser chrome around an isolated authorized application view without exposing transport details.
 tags: [desktop, managed-services, security, ui]
-timestamp: 2026-09-22T02:30:00Z
 lifecycle: contract
 reviewed_at: "2026-10-23"
 ---

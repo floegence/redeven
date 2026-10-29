@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Wayland desktop qualification results
-description: Assess real GNOME Wayland office behavior and retained capture failures before and after authorized virtual graphics provisioning.
 tags: [desktop, linux, wayland, validation, performance]
-timestamp: 2026-10-03T03:35:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

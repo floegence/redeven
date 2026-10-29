@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Terminal fonts across client devices
-description: Resolve bundled and locally available terminal fonts without changing another client's shared preferences or terminal grid.
 tags: [ui, terminal, fonts, activity, workbench, desktop]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

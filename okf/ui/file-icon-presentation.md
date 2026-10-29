@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: File icon presentation
-description: Consume the released Floe file icon catalog consistently across Files, Git, Flower, and Ask Flower.
 tags: [ui, files, git, flower, upstream]
-timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

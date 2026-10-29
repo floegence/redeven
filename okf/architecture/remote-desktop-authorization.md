@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Persistent remote desktop sharing approval
-description: Restore approved desktop sharing without conflating saved OS authorization, active sessions, or Runtime startup.
 tags: [desktop, runtime, authorization, wayland]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

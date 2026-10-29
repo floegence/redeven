@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Git browser visual states
-description: Keep Git selection, repository facts, semantic status, hover, and focus visually independent across themes.
 tags: [ui, git, files, accessibility, themes]
-timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

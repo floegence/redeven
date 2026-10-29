@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Workbench input ownership
-description: Wheel, pointer, local-scroll, and text-selection ownership.
 tags: [ui, workbench, interaction, accessibility]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

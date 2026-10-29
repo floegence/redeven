@@ -1,7 +1,6 @@
 ---
 type: Verification Evidence
 title: Browser and native drag timing qualification
-description: Retain browser and macOS timing evidence and separate model deviations from tool contract failures.
 tags: [ai, computer-use, testing, evidence]
 lifecycle: active_evidence
 reviewed_at: "2026-10-28"
@@ -19,87 +18,26 @@ Measure drag duration between delivered press and release events. Keep
 deterministic adapter assertions separate from real-provider task outcomes,
 and retain original failures when correcting test expectations.
 
-# Evidence
-
-## Browser drag contract qualification — 2026-10-28
-
-The original six Chromium regressions failed before the repair. All six pass
-with duration 0/1/500/5000, image coordinates, managed/connected transports and
-cancel/takeover/document/unknown-effect interruption. At 5000 ms the recorded
-press-to-release times were 5007.3 ms managed and 5004.1 ms connected. Another
-145 focused Node assertions, full internal/ai tests, go vet and four host-safety
-fixtures passed. Published dependencies remain unchanged; this repair belongs
-to Redeven's shared CDP adapter, not Floret or the native event library.
-
-The configured real DeepSeek Flash 1017 provider ran 33 tasks across 11 scenarios
-(three repetitions each): 27 original assertions passed, five failed because of
-incorrect test expectations (three wrong error codes and two unrequested
-single-call requirements), and one failed because the model added a click.
-Correcting only those assertions produced four passes in six additional tasks;
-the remaining two were a model-supplied invalid wait condition and an omitted
-requested wait. Raw reports remain distinct. All six invalid-duration tasks
-rejected before input and then performed one timed drag. These results do not
-claim zero model errors or a general success probability.
-
 # Boundaries
 
-Native macOS event construction/delivery was reviewed but not changed or timed
-in that browser qualification. The subsequent native qualification below owns
-evidence for the separate native repair.
+Browser qualification neither changed nor timed native delivery. The subsequent native repair has separate evidence. Local event spans do not guarantee arbitrary application actions or general model reliability. Retain all original failures.
 
+# Evidence
 
-## Native drag contract qualification — 2026-10-28
+## Browser — October 28
 
-The Floegence-owned floe-native-apps implementation now schedules native
-input against one monotonic origin after acknowledged mouse-down. Redeven uses
-that public sequence through its existing authorization, event-receipt and held
-input cleanup path. No application-specific detection or recovery was added.
+Six Chromium regressions fail before repair/pass afterward: duration0/1/500/5000, image coordinates, managed/connected transports and cancellation/takeover/document/uncertain-effect interruption.5000ms delivered spans: managed5007.3ms, connected5004.1ms.145 focused Node assertions, full internal/ai, vet and four safety fixtures pass. Fix is shared Redeven CDP adapter; dependencies unchanged.
 
-A separate AppKit receiver reproduced the old implementation releasing a 500 ms
-drag in about 17 ms. The repaired upstream receiver measured system event spans
-of 1.11/2.76/501.79/5001.71 ms for requests of 0/1/500/5000 ms. Cancellation of a
-5000 ms drag released after 113.91 ms without reaching the endpoint. The
-production Redeven helper passed all five corresponding direct scenarios;
-500/5000 ms requests measured 503.42/5005.30 ms. These are local event-delivery
-measurements, not a guarantee that every application accepts a business action.
+DeepSeek Flash1017:11 scenarios×3=33 tasks;27 original passes, five assertion defects (three codes/two unrequested single-call requirements), one model-added click. Corrected assertions:4/6 additional pass; invalid wait/omitted requested wait remain model failures. All six invalid-duration tasks reject before input then perform one timed drag. Reports stay distinct; no zero-error/probability claim.
 
-The configured real DeepSeek V4.1 Flash (1017) provider ran five native scenarios
-three times: timed drag, invalid-duration rejection followed by a timed drag,
-zero-duration drag, accessibility tree inspection and exact text entry. Eleven
-original assertions passed. Three failures expected a browser-only diagnostic
-field on a valid native rejection; one log parser stopped at a brace in a text
-label before the complete JSON evidence. These are test defects, retained in
-separate raw reports. One tree task also contained four model JavaScript field
-errors before successful observation and a single confirmed input; those errors
-remain model failures, not tool defects. Corrected validation/tree assertions
-passed six additional real-model tasks. Intentional invalid durations were
-rejected before input in every corresponding task.
+## Native — October 28
 
-Upstream Swift scheduling tests cover boundaries, slow receipts, cancellation,
-unknown-effect failure and ordinary input. Downstream native protocol tests
-reject fractional, non-finite and out-of-range durations before integer
-conversion. The default three-tool surface and system prompt remain unchanged;
-native help states the duration range, straight-path meaning and timing limits.
+Published floe-native-apps schedules from one monotonic origin after acknowledged mouse-down. Redeven retains authorization/receipts/held-input cleanup, with no app-specific recovery. Independent AppKit receiver reproduces old500ms request releasing~17ms. Repaired upstream0/1/500/5000 requests deliver1.11/2.76/501.79/5001.71ms; cancelled5000ms releases113.91ms before endpoint. Production helper passes five direct cases,500/5000 measured503.42/5005.30ms.
 
+DeepSeek V4.1 Flash1017: five scenarios×3 (timed/invalid/zero drag, tree/text),11 original passes; three native rejection assertions wrongly expect browser fields and one parser stops at a label brace. Retain those test defects separately. One tree task has four model field errors before observation/one confirmed input. Six corrected validation/tree tasks pass; intentional invalid durations always reject before input.
 
-Nine additional real-model browser tasks (three repetitions of timed drag,
-invalid-duration rejection and multi-page script batching) passed. An initial
-command used an unanchored scenario selector, unintentionally admitted three
-native cases without their required opt-in, and failed before those model runs;
-its nine browser reports are retained separately. The precisely selected rerun
-passed all nine assertions. Some successful tasks still contained model syntax,
-argument or non-actionable-target errors before recovery; passing the final
-fixture contract does not mean every model call was valid.
+Upstream Swift covers boundaries/slow receipts/cancel/unknown effects/ordinary input. Go protocol rejects fractional/nonfinite/out-of-range before integer conversion. Three-tool surface/prompt unchanged; help states range/straight-path/timing limits.
 
-The final published v0.25.1 dependency passed all five direct native scenarios
-and the affected Go consumers, vet, 38 Swift tests and the normal commit gate.
-Its macOS implementation is byte-identical to the earlier qualified candidate.
-Five final model tasks passed four assertions: one valid drag was refused with
-TAKEOVER_REQUIRED before input. Three validation repeats passed two assertions;
-the other receiver recorded an extra intermediate release from an unidentified
-source. Neither failure is reclassified as a model mistake or silently passed.
-The disposable receiver now records event source PID and marker without filtering
-events or weakening assertions. Three subsequent validation tasks all passed,
-with one marked source per run and 1002.99–1003.62 ms system-event durations.
-That new evidence cannot retrospectively identify the earlier event source;
-the original failed reports remain retained. No production takeover rule changed.
+Nine more browser tasks (timed/invalid/batch,three each) pass. Earlier unanchored selector accidentally selects three native cases without opt-in and fails before their model runs; retain its nine browser reports separately. Precisely selected rerun9/9, sometimes with syntax/argument/nonactionable-target errors before recovery; final success does not certify every call.
+
+Final v0.25.1 passes five direct cases, affected Go/vet,38 Swift and normal commit gate; macOS bytes match earlier candidate. Five final model tasks4/5: valid drag rejected TAKEOVER_REQUIRED before input. Three validation repeats2/3: receiver sees extra release of unknown origin. Neither failure is silently passed/classified as model error. Receiver adds source PID/marker without filtering/weaker assertions. Three subsequent tasks pass with one marked source and1002.99–1003.62ms spans. This cannot identify the earlier source; originals remain. Production takeover policy unchanged.

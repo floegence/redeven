@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Client input for host applications
-description: Own composition once on the client, bind confirmed text and keys to painted application windows, and recover without replay.
 tags: [applications, input, linux, macos, desktop]
-timestamp: 2026-09-24T19:25:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower setup and settings
-description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

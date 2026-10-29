@@ -1,9 +1,7 @@
 ---
 type: Gateway Contract
 title: Gateway access sessions
-description: Open member applications over outbound Flowersec connections with isolated end-to-end TLS.
 tags: [gateway, desktop, access, security, sessions]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

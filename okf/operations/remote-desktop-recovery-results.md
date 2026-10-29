@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Desktop reconnect qualification results
-description: Verify published desktop transport, locked reconnect, physical Mac hotplug and Wayland display recovery with fresh-paint authority.
 tags: [desktop, validation, lifecycle, audio]
-timestamp: 2026-10-02T15:30:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

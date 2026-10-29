@@ -1,9 +1,7 @@
 ---
 type: Qualification Contract
 title: Flower Ollama context qualification
-description: Exercise the selected installed model through Flower and compare compaction, native token usage, live observations, and restart recovery.
 tags: [flower, ollama, context, qualification]
-timestamp: 2026-10-05T00:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

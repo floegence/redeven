@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower inline media
-description: Display assistant media through released Floe previews and authorized Runtime resources.
 tags: [flower, media, preview, security]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

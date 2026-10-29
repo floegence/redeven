@@ -1,9 +1,7 @@
 ---
 type: AI Tool Contract
 title: AI tool permissions and dispatch
-description: Tool registration, scheduling, permission, readonly, and target-routing contracts.
 tags: [ai, tools, permissions, dispatch]
-timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

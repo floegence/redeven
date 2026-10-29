@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Physical-device remote desktop Viewer qualification
-description: Assess deployed udesk26 Viewer behavior and bounded recovery timing while preserving IME, cursor and comparison limits.
 tags: [desktop, input, deployment, latency, qualification]
-timestamp: 2026-10-11T15:54:39Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

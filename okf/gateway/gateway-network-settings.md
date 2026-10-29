@@ -1,9 +1,7 @@
 ---
 type: Gateway Contract
 title: Gateway network settings
-description: Configure share endpoints, next-start listener bindings and request Host restrictions without changing member authority.
 tags: [gateway, network, security, desktop, migration]
-timestamp: 2026-10-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

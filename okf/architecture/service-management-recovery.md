@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Web Service management recovery
-description: Keep service facts, user goals, resource cleanup, and management archives actionable across failures and Runtime restarts.
 tags: [architecture, web-services, recovery, ui, persistence]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

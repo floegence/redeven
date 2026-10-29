@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower file activity presentation
-description: Typed file mutation statistics, diff disclosure, and action ownership.
 tags: [ai, flower, files, activity, presentation]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

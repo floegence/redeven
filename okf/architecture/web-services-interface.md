@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Web Services interface
-description: Read current service facts, open services, and resolve exceptions in compact Activity and Workbench surfaces.
 tags: [architecture, ui, desktop, accessibility]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

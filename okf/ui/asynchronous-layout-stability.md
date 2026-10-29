@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Asynchronous layout stability
-description: Keep controls and retained content stationary through pending work, feedback, and media decoding.
 tags: [ui, accessibility, layout]
-timestamp: 2026-09-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

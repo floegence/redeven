@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Remote desktop platform reacceptance
-description: Recheck actual GDM, GNOME lock, Portal and macOS behavior and trace the published Portal damage repair.
 tags: [desktop, linux, macos, wayland, validation]
-timestamp: 2026-10-17T01:46:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

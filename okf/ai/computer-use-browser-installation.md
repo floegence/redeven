@@ -1,9 +1,7 @@
 ---
 type: Runtime and Product Contract
 title: Optional built-in browser installation
-description: Confirm browser acquisition, persist the environment capability switch, and keep setup separate from canonical Flower questions.
 tags: [ai, computer-use, browser, installation, desktop]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

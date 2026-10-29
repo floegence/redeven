@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Cross-platform host application behavior
-description: Compare aligned user operations and operating-system limits for macOS and Linux host applications.
 tags: [applications, macos, linux, lifecycle]
-timestamp: 2026-10-07T05:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Tessiven Flower replies
-description: Read canonical Flower output in a quiet movable canvas window.
 tags: [ui, tessiven, flower]
-timestamp: 2026-10-11T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

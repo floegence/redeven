@@ -1,9 +1,7 @@
 ---
 type: Authentication Contract
 title: Local ChatGPT plan authentication
-description: Admit official ChatGPT sign-in only through verified local host access and preserve provider history, credentials and billing choice.
 tags: [ai, flower, authentication, openai, desktop, security]
-timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

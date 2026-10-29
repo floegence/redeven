@@ -1,9 +1,7 @@
 ---
 type: AI Operation Contract
 title: Redeven environment operations
-description: redeven env and redeven targets exec are the product boundaries for Flower and automation environment lifecycle and target diagnostic requests.
 tags: [ai, flower, cli, desktop, runtime]
-timestamp: 2026-07-10T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

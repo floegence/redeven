@@ -1,9 +1,7 @@
 ---
 type: Authentication Contract
 title: ChatGPT account lifecycle
-description: Persist verified local sign-ins, reuse issued registrations and complete renewal, cancellation and logout independently of connection editing.
 tags: [ai, flower, authentication, openai, runtime, security]
-timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

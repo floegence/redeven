@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Plugin surface recovery and permissions
-description: Keep Env App plugin inventory, installation observation, permission finalization, and reconnect recovery on one released client scope.
 tags: [architecture, plugins, ui, recovery]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Git workspace generation and Files decoration
-description: Keep Git views and Files decorations revision-consistent through capability gating, generation ownership, and monotonic invalidation.
 tags: [ui, git, files, state, interaction]
-timestamp: 2026-07-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

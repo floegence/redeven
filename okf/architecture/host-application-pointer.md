@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Pointer gestures for host applications
-description: Scroll, click and drag remote applications through one client gesture owner while retaining browser pinch zoom and local controls.
 tags: [applications, pointer, mobile, linux, macos]
-timestamp: 2026-09-24T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

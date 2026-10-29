@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Tessiven canvas contract
-description: Store immutable service canvases in one Runtime-owned library.
 tags: [architecture, tessiven, persistence]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Integration Contract
 title: Flower canonical thread queries
-description: Find readable conversations and browse their canonical content through a minimal tool contract.
 tags: [flower, floret, tools, authorization, queries]
-timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Verification Evidence
 title: Computer use qualification evidence
-description: Read measured browser and desktop outcomes without conflating adapter, model and final integration scopes.
 tags: [ai, computer-use, testing, evidence]
-timestamp: 2026-09-17T00:00:00Z
 lifecycle: retained_history
 retention_reason: "Retains platform qualification failures and scope boundaries that prevent unsupported claims about current Computer Use behavior."
 reviewed_at: "2026-10-27"
@@ -28,143 +26,36 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 
 # Evidence
 
-## Semantic scroll and reference validation (2026-10-28)
+All model runs below use the configured local DeepSeek V4.1 Flash (1017), wire alias deepseek-flash. The alias does not prove remote weights. Source configuration/secrets remain unchanged; task-owned profiles/apps/state never continue user threads. Raw reports, including failures and private histories, remain outside Git. Final task success does not imply zero model errors, general reliability or complete platform qualification.
 
-The initial 36 real DeepSeek Flash tasks produced 29 strict assertion passes.
-Three covered-scroll assertions incorrectly required zero viewport movement even
-though scroll-into-view preparation was already reported; four other failures
-were model argument mistakes. Preserve that batch unchanged. After correcting
-only the assertion/evidence capture, the final implementation produced 20/24
-passes across 12 tasks repeated twice. Four retained failures were an object
-argument to positional scroll, a bare undefined variable, and two multi-page
-script mistakes (old refs/unsupported screenshot options or undefined refs).
-No production input replay or API alias was added to make those tasks pass.
-All six valid final document/tall/clipped scroll tasks dispatched exactly one
-wheel and moved; the valid covered attempt dispatched zero wheels and retained
-preparation_executed. The second covered task never reached the adapter because
-its model arguments were invalid. Read-failure recovery, complete-name staleness,
-visual input, forms, tables and download processing passed both final repetitions.
-The configured provider used deepseek-flash on the wire (local catalog: V4.1 Flash
-1017); the alias does not independently certify the remote deployment snapshot.
-Detailed private histories remain outside the repository.
+## October 28
 
+Semantic scroll: original 29/36 strict assertions, with three incorrect zero-movement expectations despite reported scroll preparation and four model argument errors. Corrected evidence on the final implementation passes 20/24 (12 tasks twice). Failures remain positional-scroll object misuse, an undefined variable and two multi-page script errors. Six valid document/tall/clipped tasks dispatch one wheel and move; valid covered input dispatches none and retains preparation_executed. The other covered task fails before the adapter. Read recovery, full-name staleness, visual input, forms, tables and downloads pass both repetitions. No input replay or compatibility alias is added.
 
+[Media/read qualification](computer-media-read-qualification.md) retains its separate deterministic checks, original 36 and supplemental six tasks, model errors and parser defects. [Drag qualification](computer-drag-qualification.md) owns timing and native event evidence.
 
-See [media contention and native read qualification](computer-media-read-qualification.md)
-for the October 28 deterministic checks, 36 original and six supplemental real
-DeepSeek tasks, including retained model and evidence-parser failures.
+## October 27: field integrity and generic contracts
 
-## Field integrity qualification — 2026-10-27
+Field-level truncation remains within 2,000 code points; complete-name digests fence references/cursors. Oversized scalar attributes fail explicitly. Deterministic tests first fail missing flags, tail-only mutation and old-ref rebinding, then pass Chromium, Go guest/diff, Swift and isolated AT-SPI paths. Execution checks: 226 Node passes/one existing optional skip; ten browser/UI/package suites: 314 passes; Swift: 36. Native protocol/safety/staging and full ai/appserver/focused race pass.
 
-Browser, AX and AT-SPI report per-field truncation within the existing 2,000-code-
-point budget. Full-name digests bind references and query cursors; fresh reads
-cannot rebind an old token to a renamed element. Oversized scalar attributes fail
-explicitly, and closed read diagnostics survive Runtime and guest boundaries.
-No page-specific readiness, JSON repair, scope substitution or input replay exists.
-Default system prompt and three tool definitions are unchanged; shared core/read
-help explains field budgets and scalar rejection.
+Real-model batch: 45/46 assertions, 236 requests, 196 activities, 35 errors including requested negatives. Native exact fill/one click/screenshot pass after stopping a pending Promise, but text-output assertion fails. Supplemental field/Unicode/native tests: 8/9, 77 requests, 67 activities, six errors; all six text cases pass, native 2/3. Remaining model suppresses snapshots and filters absent platform_role, so input/screenshot pass without text observation. Earlier 11/15 and 14/15 reports retain UTF-8 fixture, model-log-key and formatted-number assertion defects. Missing assets/config are preflight failures.
 
-Deterministic regressions first failed on missing flags, tail-only mutations and
-fresh-observation reference rebinding. Final Chromium, Go normalization/guest/diff,
-Swift and isolated Linux AT-SPI tests pass. Full computer execution qualification
-passes 226 Node tests with one existing optional install skip; ten packaging/
-browser/UI suites pass 314 tests without skips. Swift passes 36 tests; native
-protocol, host safety, bundle staging, full ai/appserver packages and focused race
-checks pass. Linux qualification includes Unicode boundaries, selector matching,
-reference invalidation, private-display actions and object replacement.
+Generic contracts use published Floret v7.88.0 batch exclusion; unknown reads stop, HTML text reads never widen scope, platform permission facts still pause. First 40 model tasks pass; eleven cases ×3 give 32/33 original assertions. The remaining task completes after an invented visual.screenshot call but fails the overstrict zero-error assertion. Nine supplements retain three Activity-vs-canonical assertion failures, one omitted screenshot and five passes; final explicit mixed-batch checks pass 3/3. Browser/read checks 223/224 with one optional install skip; ten browser suites and Go/race/macOS/private-Linux checks pass. A combined helper timeout remains failed; independent and three repeated four-fixture runs pass. No model-specific recovery is added.
 
-Configured local DeepSeek V4.1 Flash (1017), wire deepseek-flash, completes the
-final 46-scenario batch with 45 strict assertion passes (236 requests, 196 tool
-activities, 35 errors including requested negatives). The native case fills the
-exact value, clicks once and captures a screenshot after a model-authored pending
-Promise is stopped. It fails the retained text-output assertion. Supplemental
-canonical assertions across field integrity, natural Unicode reads and native
-entry pass 8/9 (77 requests, 67 activities, six errors). All six field/text repeats
-pass; native passes 2/3. The remaining native model hides snapshots with emit:false
-and filters canonical nodes by an absent platform_role, yielding empty logs; exact
-input, one click and screenshot are confirmed, text observation is not. No
-production compatibility alias or special recovery is added for this model error.
+## October 27: scripts, downloads and native entry
 
-Earlier 11/15 and 14/15 batches remain failed evidence: missing UTF-8 fixture
-headers, dependence on model-authored log key names, and a numeric assertion that
-rejected the correct formatted count 2,111. Fixtures/assertions were corrected;
-original reports are retained. Missing build assets/catalog environment variables
-were preflight failures, not provider successes. Credential/config hashes are
-unchanged. These isolated tasks establish measured contracts, not universal model
-reliability or proof of remote weights. No real user thread was continued.
+Baseline 95fec361bdc2f23b7c27712cb0576f5dfa9f6f18; Floret v7.87.5, FloeBrowser 0.1.28, native 0.24.0, QuickJS 0.32.0, Playwright 1.63.0, Go 1.27.3/Node 26.7.0. Existing browser regression 22/22; native entry 5/5 (3 clean), export/file/CLI 5/5 (4 clean), multipage batch 4/5 (1 clean). Final-clarity 14/15 uses 112 requests/98 activities/11 errors; median native/mixed/batch 9,120/12,028/11,622 ms. Batch failure reads all pages and totals 42 but violates the unchanged two-transitions-in-one-call requirement. Prose cannot substitute for tool facts.
 
-## Generic contract qualification — 2026-10-27
+Retain final-core-v4 batch/mixed 5/5; final-delivery native/mixed 5/5 and batch 4/5 (DSML/final defect); final-tool-contract batch 3/5 (overstrict totals and stale-ref misuse). Pilot fixture ordering and NSWorkspace completion deadlock are repaired. Original reports are never overwritten or repeated until declared green.
 
-Published Floret v7.88.0 owns batch exclusion; Redeven only declares its shared
-computer-control group. Browser/native adapters no longer classify safety from
-ordinary vocabulary. Unknown reads stop once; rendered text requires an HTML
-element without fallback scope. Secure platform facts and permissions still pause.
+Exact maintained examples execute through QuickJS→Runtime→Chromium: 1,400,000-byte download matches, one export/identity; scores 7/14/21 total 42 in one batch with globals and screenshot. Source isolation 9/9; initial fixture window.URL shadowing is fixed. Final ai/appserver 104.178/18.744s, race 7.409s, Node 179/two optional skips, Swift 35, native window selection 4/4; restoration/six safety/JSONL/relocated-package checks pass. Earlier external-focus restoration failure remains. Failed download writes preserve ready target state, clean partial files and never invent saved paths; failures before upstream download ID may still time out without filename/time inference.
 
-Local DeepSeek V4.1 Flash (1017), wire deepseek-flash: the first 40 scenarios
-passed. Eleven key scenarios repeated three times yielded 32/33 original assertion
-passes; the remaining task recovered from an invented visual.screenshot call and
-completed, but the first assertion incorrectly required zero guest errors. Nine
-supplemental runs retain three Activity-vs-canonical assertion failures, one model
-snapshot-vs-screenshot omission, and five passes. The final explicit mixed-batch
-contract passed 3/3. Raw failures remain external; successful reruns do not erase
-them. No production aliases or task-specific recovery were added for model errors.
-Configuration and secret-file hashes remain unchanged. Tests use isolated browser
-profiles, native fixture apps, project directories and task state; no real user
-thread was continued. Provider responses prove the configured alias, not remote
-weights. Deterministic contracts and model task completion are reported separately.
-Browser/read contracts passed 223/224 with one existing opt-in extension-install
-skip; the ten browser qualification suites passed. Go package, focused race,
-macOS native and Linux private-display checks passed. One combined safety run
-timed out waiting for a helper; the independent rerun and three consecutive
-four-fixture runs passed. The original timeout remains in external evidence.
+## October 27: earlier lanes
 
-## Script batches, downloads and native entry — October 27
+- Recovery/native facade: 22 browser cases ×3 =66/66, 171.268s, 327 requests, median7,171.5ms; 210 successes/42 negative or recovered errors. Retain 19/22,65/66,64/66 failures. Browser313, execution142/one optional picker skip, Swift35. Real QuickJS/Go/Swift sees two wheels/offset200/screenshot and focus restoration; external input invalidates restoration. Built Desktop/Flash completes three native turns with clicks2→4, double-click, text/Enter, wheel240, decoded720×582 frames and canonical targets. No arbitrary AX/Linux/connected-Chrome model-chain claim. A later uncertainty/takeover regression clears residual media and passes ai98.411s; original restoration failure remains. Stage initially fails four checks; corrected finite-animation/preview waits yield11/11 with unchanged geometry/image assertions and retained ResizeObserver warnings.
+- Coordinates/scripts, Floret v7.87.4/Chromium153.0.8010.12/macOS arm64: 19×3=57/57, median6,916ms;244 activities/34 negative or recovered errors. Real zoom80/100/125/150/200/220%, scales1/2 and offsets0/1500 verify decoded images/events, frames, scrollers, shadows and overlays. Snapshot450 nodes=27,478 bytes. Initial18/19 fixes malformed fixture onclick. Rejected retained-VM experiment could keep callbacks; final failure retires the namespace. Native foreground/Linux and a single built Desktop model chain remain excluded.
+- Compact surface, source1140a827feb2d6acba7bc876337b93d4a698e99f/Floret v7.87.3:15×3=45/45 in153.609s, median8,115ms;210 activities/28 errors (15 required,13 recovered). Each image clicks once; each stale image rejects without input; one export/save and timeout guarantees hold. Retain earlier44/45, pre-canonical45/45, parser19/45 and interpretation39/45. Node64 and ai87.654s pass. Tool definition4212→975 characters is not measured token/latency gain; no paired baseline/native/arbitrary-site/full-Desktop claim.
 
-Source: task branch based on 95fec361bdc2f23b7c27712cb0576f5dfa9f6f18, Floret v7.87.5, FloeBrowser 0.1.28, native desktop 0.24.0, QuickJS 0.32.0, Playwright 1.63.0, Go 1.27.3/Node 26.7.0. Local DeepSeek V4.1 Flash (1017), wire deepseek-flash, uses read-only configured credentials; source config/secrets hashes remain unchanged. Isolated synthetic browser profiles and task-owned AppKit apps never continue real user conversations. Raw reports, failures and source hashes remain outside Git.
+## Earlier platform boundaries
 
-| Final qualification | Passed/attempted | Clean script calls by case |
-| --- | ---: | ---: |
-| Existing browser regression scenarios | 22/22 | Includes intentional rejection cases |
-| Native installed-app entry, five repeats | 5/5 | 3/5 without script error |
-| Browser export→file→CLI handoff, five repeats | 5/5 | 4/5 without script error |
-| Multi-page script batch, five repeats | **4/5** | 1/5 without script error |
-
-The final-clarity batch is **14/15**, 112 real provider requests, 98 tool activities and eleven error activities. Median durations: native 9,120 ms, mixed 12,028 ms, batch 11,622 ms. Batch repeat four reads all pages and computes 42 but model type misuse leads to separate per-page calls; it fails the unchanged requirement for ≥two page transitions in one invocation. Final prose does not substitute for tool evidence. This is limited acceptance, not universal reliability or a zero-error result. Existing regression uses 103 requests/81 activities/twelve errors.
-
-Retain earlier final-core-v4 (batch/mixed each 5/5), final-delivery (native/mixed 5/5, batch 4/5 with DSML/final-answer defect), and final-tool-contract (batch 3/5, including an overstrict log-total assertion and real stale-ref misuse). Later assertions separate page/read/batch/screenshot facts from logged/final totals; old reports remain unchanged. Pilot failures include pre-provider fixture argument ordering and a reproduced NSWorkspace completion deadlock, both repaired. No repeat-until-green claim. Core help now states snapshot shape, document-bound refs and automatic image output.
-
-Deterministic authored examples execute through real QuickJS→Runtime→browser/Chromium: 1,400,000-byte file matches byte-for-byte, one export/identity; three scores 7/14/21 sum to 42 in one batch with persistent globals/real screenshot. Source isolation passes 9/9 with same-name iframe/source downloads and cross-source rejection. First isolation failure was fixture URL shadowing, corrected to window.URL; no upstream workaround.
-
-Final checks: complete ai/appserver Go suites (104.178/18.744s); focused race (7.409s); Node 179 pass, two explicit optional skips, zero fail; Swift 35/35; native entry single/no-window/multiple/minimized 4/4; native restoration, six safety checks, split/short JSONL and two relocated-package checks pass. Earlier restoration interrupted by external focus remains failed evidence. The initial Node command omitted installation configuration; the configured rerun passes.
-
-A reproduced download-write regression now returns a failed save without marking the ready target stopped. Completion/content/source/cancel/revocation/local-IO cases validate per-chunk authorization, partial-file cleanup and no false path. App tests preserve launched facts through later authorization/selection failure. Runtime keeps existing permission/effect/interrupt owners; no Floret API/domain migration. Capture failures occurring before an upstream download ID remain uncorrelated and may timeout; do not guess identity from filename/time.
-
-## Recovery/native facade — October 27
-
-Local Flash: 22 managed-browser scenarios ×3 =66/66, 171.268s, 327 requests, median7,171.5ms; 210 successful/42 error activities include requested negatives/recovered misuse. Counters confirm no repeated save/click/export; config/secrets unchanged. Retain failed 19/22,65/66,64/66 with model/assertion defects distinguished.
-
-Independent checks: browser313; execution142 plus one optional picker skip; Swift35. Real QuickJS/Go/Swift verifies two wheel events, offset200, screenshot and restored focus/pointer (external input invalidates restoration). Built Desktop/real Flash passes three native turns: clicks2→4, canvas double-click, text/Enter, wheel240, decoded720×582 images, live frames, canonical targets and provider images. Owned app/state/credentials/ports clean up. Linux, arbitrary AX and connected-Chrome real-model chain are not covered.
-
-Exploratory runner fixes distinguish AX-only turns without saved preview, saved-image review from current subscription, and activity_summary target refs. Captures/current-run observation become explicit; failures stay failed. A later deterministic regression clears residual observation/attachments when uncertainty meets takeover; all script and ai tests pass (98.411s), final native run includes it. Base system/three entries unchanged; help clarifies scroll/read/budget/prefix, with no AXManualAccessibility or schema/API change.
-
-Computer Stage initially has four runner failures; waiting finite Floe animations/lazy-preview disclosure yields11/11 with original geometry/image checks. ResizeObserver warnings remain; no production UI change/filter.
-
-## Coordinates/explicit scripts — October 27
-
-Service/Floret v7.87.4/Flash/Chromium153.0.8010.12 macOS arm64:19×3=57/57, median6,916ms;244 activities/34 errors (negative/recovered). Waits, safe diagnostics/reset and one save/click are canonical; config hashes unchanged. Not a general zero-error claim.
-
-Real tabs.setZoom80/100/125/150/200/220%, scales1/2, offsets0/1500: decoded PNG/events cover semantic/image input, scrollbars, same/cross-process frames, nested scrollers, shadow roots and parent overlays. Snapshot450 nodes=27,478 bytes; full/detail retains data, truncation separately tested. Initial18/19 fixes malformed onclick fixture. Rejected retained-VM experiment could hold prior callback; final failed-namespace reset has isolation coverage.
-
-System base/three entries unchanged; wording/help adds local/global lifetime/reset, exact waits, roles/images/compact output. No schema/API change. Managed-browser lane plus separate extension/native-messaging fixtures is not one built Desktop real-model chain; native foreground/Linux excluded.
-
-## Compact surface — October 27
-
-Source1140a827feb2d6acba7bc876337b93d4a698e99f, Service/Floret v7.87.3/local Flash/Chromium153.0.8010.12 macOS:15×3=45/45 in153.609s, median8,115ms. Source/runner/config/secrets hashes unchanged; isolated profiles.210 activities/28 errors:15 required negatives and13 additional model errors, recovered within tasks. Three image cases click once; three stale cases return STALE_REFERENCE/no clicks. One export/save each; strict timeouts prevent save; input/read/table totals/tab isolation/download identity pass.
-
-Retain44/45 before immutable waiter,45/45 before canonical assertions,19/45 from ERROR-prefix parser and39/45 (four plain rejection parsing/two scroll interpretation failures). Final assertions separate plain pre-dispatch text from data.script_error and verify fixture effects; help demonstrates awaited node/scroll results. Source Node64/64 and ai87.654s pass. Exec definition4212→975 characters, not measured token/latency/success gain. No paired baseline; native, connected-Chrome, arbitrary sites and full Desktop UI excluded.
-
-## Earlier platform records
-
-2026-09-18: packaged extension installs in isolated real Chrome/macOS; Linux staging/reveal tests are deterministic, not GTK/Qt/portal picker acceptance. Iframe disappearance is reproduced between isolated-world creation and safety read without touching the user's Runtime. Built Desktop/Runtime, isolated headful Chromium, extension/Native Messaging and fake-model fixtures qualify repair only. Native receipts confirm clicks2→4, canvas double-click, text/Enter, scrolling, targets and screenshots; Linux runner checks owned container/port cleanup/config preservation. Background/foreground macOS passes after console unlock/explicit continuation; lock-screen use is unsupported.
-
-[Performance](computer-use-performance.md) owns paired measurements/limits; they do not certify native desktop or Chrome-extension performance. Every lane is separate from exact-main pre-push qualification.
+September18 packaged extension installs in isolated Chrome/macOS. Linux deterministic staging/reveal does not certify native pickers. Reproduced iframe loss uses task-owned Runtime; built Desktop/Runtime/Chromium/extension/Native Messaging fake-model lanes qualify repair separately. Native clicks/text/scroll/frames and Linux cleanup preserve configuration. macOS foreground/background tests require unlocked console; lock-screen use is unsupported. [Performance](computer-use-performance.md) owns paired measurements, separate from exact-main qualification.

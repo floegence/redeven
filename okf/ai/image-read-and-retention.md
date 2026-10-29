@@ -1,9 +1,7 @@
 ---
 type: AI Media Contract
 title: Direct image reading and tool media retention
-description: Authorized image reads produce immutable native model attachments with canonical retention and preview membership.
 tags: [ai, tools, images, media, security]
-timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

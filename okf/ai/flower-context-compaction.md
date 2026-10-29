@@ -1,9 +1,7 @@
 ---
 type: AI Interaction Contract
 title: Flower context compaction and Goal continuation
-description: Explicit compaction intent, one upstream execution owner, and recoverable interaction.
 tags: [ai, flower, goals, context, compaction, recovery]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

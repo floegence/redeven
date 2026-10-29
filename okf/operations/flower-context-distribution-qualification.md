@@ -1,9 +1,7 @@
 ---
 type: Qualification Evidence
 title: Flower context distribution qualification
-description: Historical token attribution evidence and current native-token plus visible-character qualification.
 tags: [flower, context, deepseek, qualification]
-timestamp: 2026-10-18T00:00:00Z
 quality_exception: Historical and current provider qualification evidence is retained together to distinguish measured results from superseded token-attribution claims.
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"

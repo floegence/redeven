@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Remote desktop drag latency
-description: Assess raw-pointer dispatch using repeated native drag and client-window observations over the production Desktop SSH placement bridge.
 tags: [desktop, input, latency, qualification]
-timestamp: 2026-10-04T15:40:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

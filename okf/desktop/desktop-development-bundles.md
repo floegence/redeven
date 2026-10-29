@@ -1,9 +1,7 @@
 ---
 type: Development Contract
 title: Desktop development sessions and bundles
-description: Own development services, credentials and bundle retention.
 tags: [desktop, development, storage, retention]
-timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

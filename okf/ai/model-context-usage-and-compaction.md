@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Model context usage and compaction
-description: Canonical compaction evidence, context usage, and timeline presentation.
 tags: [ai, models, context, compaction]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-28"
 ---

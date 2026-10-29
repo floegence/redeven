@@ -1,9 +1,7 @@
 ---
 type: Qualification Record
 title: Physical desktop RustDesk comparison
-description: Apply paired presentation, detail, compatibility and resource criteria before accepting RustDesk parity.
 tags: [desktop, performance, qualification]
-timestamp: 2026-10-15T13:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

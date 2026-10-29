@@ -1,9 +1,7 @@
 ---
 type: AI Context Contract
 title: Flower context action admission
-description: Ask Flower context actions become Floret-owned message references and durable model-context snapshots at admission.
 tags: [ai, flower, context]
-timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

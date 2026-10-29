@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Host application catalog and owned native sessions
-description: Browse Linux and macOS host applications and open owned, reconnectable graphical sessions through existing authorized windows.
 tags: [runtime, desktop, applications, security, ui]
-timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

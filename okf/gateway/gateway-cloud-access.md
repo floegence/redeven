@@ -1,9 +1,7 @@
 ---
 type: Gateway Contract
 title: Gateway Cloud access
-description: Separate restricted network routes from independent Runtime Cloud authorization and recovery.
 tags: [gateway, cloud, security, networking, identity]
-timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

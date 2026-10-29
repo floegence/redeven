@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Runtime terminal lifecycle
-description: Delegate PTY, native terminal state, live streams, semantic history, and warmup to the released Floeterm manager.
 tags: [architecture, runtime, terminal, floeterm]
-timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

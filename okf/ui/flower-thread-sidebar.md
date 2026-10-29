@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower conversation sidebar
-description: Select conversations clearly and reorder endpoint-owned pins without interrupting live interactions.
 tags: [flower, sidebar, navigation, pins, interaction]
-timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

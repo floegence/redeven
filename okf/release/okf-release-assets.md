@@ -1,9 +1,7 @@
 ---
 type: Release Contract
 title: OKF release assets
-description: Release workflow publishes OKF verification assets alongside CLI and desktop artifacts.
 tags: [release, security, supply-chain, okf]
-timestamp: 2026-06-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

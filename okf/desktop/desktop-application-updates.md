@@ -1,9 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop application updates
-description: Signed macOS and Linux application updates with an explicitly unsupported internal Windows channel.
 tags: [desktop, updates, sparkle, linux, windows, security, release]
-timestamp: 2026-08-25T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

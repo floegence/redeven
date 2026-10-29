@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Static PPTX file preview
-description: Read bounded presentations through the released Floe renderer without host tools or document uploads.
 tags: [ui, files, preview, pptx]
-timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-26"
 ---

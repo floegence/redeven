@@ -1,9 +1,7 @@
 ---
 type: Acceptance Record
 title: Wayland cursor and scheduling optimization evidence
-description: Assess separate cursor ownership, ordered nonblocking input and damage-aware capture without confusing synthetic results with desktop latency.
 tags: [desktop, linux, wayland, validation, latency]
-timestamp: 2026-10-04T18:10:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-25"
 ---

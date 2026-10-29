@@ -1,9 +1,7 @@
 ---
 type: AI Configuration Contract
 title: Provider configuration validation
-description: Apply provider-specific optional fields and reject incomplete model configurations before saving.
 tags: [ai, providers, credentials, settings]
-timestamp: 2026-10-05T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-24"
 ---

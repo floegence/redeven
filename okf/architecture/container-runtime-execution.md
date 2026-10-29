@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Container runtime execution
-description: Resolve active Docker and Podman endpoints and execute typed resource observations without changing host selection.
 tags: [architecture, containers, docker, podman]
-timestamp: 2026-09-24T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

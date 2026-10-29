@@ -1,9 +1,7 @@
 ---
 type: Runtime Contract
 title: Web Service browser sessions
-description: Address-first Web Service opening, ephemeral forward lifecycle, and isolated Desktop browsing.
 tags: [architecture, desktop, port-forward, security, ui]
-timestamp: 2026-09-09T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

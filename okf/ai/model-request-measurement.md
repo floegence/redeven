@@ -1,9 +1,7 @@
 ---
 type: AI Runtime Contract
 title: Model request measurement
-description: Map request-bound native measurement evidence while Floret owns compaction pressure and recovery.
 tags: [ai, providers, context, compaction, usage]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

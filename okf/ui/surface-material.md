@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Shared surface material
-description: Apply Floe's lightweight material to Redeven controls, product boundaries, and floating surfaces without duplicating decoration or input ownership.
 tags: [ui, desktop, flower, themes, performance]
-timestamp: 2026-09-15T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

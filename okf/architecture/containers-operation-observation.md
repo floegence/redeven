@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Native container operation observation
-description: Keep endpoint-bound native mutations locked until authoritative reconciliation proves a terminal outcome.
 tags: [architecture, containers, operations, reconciliation]
-timestamp: 2026-08-28T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
 ---

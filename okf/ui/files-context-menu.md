@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Files context menus
-description: Keep file operations reachable inside the complete Files workspace across Activity, floating windows, Workbench, and touch layouts.
 tags: [ui, files, menus, mobile, workbench]
-timestamp: 2026-09-23T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

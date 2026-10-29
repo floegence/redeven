@@ -1,9 +1,7 @@
 ---
 type: Validation Guide
 title: Host application input validation
-description: Verify actual toolkit text delivery, click focus and surviving application instances without substituting simulated IME evidence.
 tags: [applications, input, linux, macos, validation]
-timestamp: 2026-09-28T06:00:00Z
 lifecycle: active_evidence
 reviewed_at: "2026-10-22"
 ---

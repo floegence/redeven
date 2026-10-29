@@ -1,9 +1,7 @@
 ---
 type: UI Contract
 title: Flower code highlighting
-description: Color stable Markdown code without disturbing streaming, selection, copy or layout.
 tags: [flower, markdown, syntax, performance]
-timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

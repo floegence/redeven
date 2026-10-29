@@ -1,9 +1,7 @@
 ---
 type: AI Product Contract
 title: Flower plugin generation
-description: Flower-generated plugins are Redeven product orchestration through Floret and released ReDevPlugin lifecycle APIs.
 tags: [ai, flower, plugins, floret]
-timestamp: 2026-07-24T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

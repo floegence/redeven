@@ -1,9 +1,7 @@
 ---
 type: Security Contract
 title: Local UI network exposure
-description: Local UI separates network scope, password authentication, explicit HTTP or HTTPS, and private Desktop access.
 tags: [security, local-ui, desktop, env-app, flowersec]
-timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---

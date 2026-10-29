@@ -1,9 +1,7 @@
 ---
 type: Interaction Contract
 title: Managed Service version interaction
-description: Select and verify a version in one drawer, confirm only changed notices, and stop or submit without losing context.
 tags: [architecture, web-services, releases, updates, ui]
-timestamp: 2026-09-17T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-25"
 ---

@@ -1,9 +1,7 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts released ReDevPlugin v3 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
-timestamp: 2026-10-08T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 lifecycle: contract
 reviewed_at: "2026-10-25"
