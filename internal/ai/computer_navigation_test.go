@@ -42,7 +42,7 @@ func TestComputerScriptNavigationFailurePreservesPrefixAndTarget(t *testing.T) {
 			if !reflect.DeepEqual(calls, []string{"computer.action", "computer.observe", "browser.navigate"}) || !reflect.DeepEqual(payload["completed_actions"], []string{"pointer_click", "observe"}) {
 				t.Fatalf("incorrect prefix or replay: calls=%v result=%+v", calls, payload)
 			}
-			if payload["completed"] != false || payload["action_executed"] != true || payload["script_error"] != code || payload["observation"] != nil || payload["logs"] != nil || len(result.Attachments) != 0 {
+			if payload["completed"] != false || payload["action_executed"] != true || payload["script_error"] != code || payload["observation"] != nil || !reflect.DeepEqual(payload["logs"], []any{[]any{"old observation"}}) || len(result.Attachments) != 0 {
 				t.Fatalf("unsafe partial navigation: %+v", result)
 			}
 			target, _ = runtime.registry.ResolveTarget(t.Context(), call.TargetID)
@@ -175,7 +175,8 @@ func TestBrowserNavigationReplyMustMatchInvocation(t *testing.T) {
 					executor = playwright
 				}
 				result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "browser.navigate"})
-				if !errors.Is(err, errComputerEffectUnknown) || result.Result != nil {
+				want := map[string]any{"stage": "helper_exchange", "reason": "response_unavailable", "needs_observation": true}
+				if !errors.Is(err, errComputerEffectUnknown) || !reflect.DeepEqual(result.Result, want) {
 					t.Fatalf("invalid response claimed confirmed navigation: %+v %v", result, err)
 				}
 			})

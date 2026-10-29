@@ -4,6 +4,10 @@
 
 Recent pointers only; concepts own contracts/evidence and Git retains earlier entries.
 
+## 2026-10-29
+
+- Preserve confirmed [Computer script](ai/computer-use-scripts.md) output independently of later invalid observations; retain known protocol methods and helper-exchange uncertainty without replay.
+
 ## 2026-10-28
 
 - Patch JOSE/Seroval and signature-verification dependencies; pin authorized filesystem reads to handles and retain [dependency floors](architecture/env-app-upstream-web-dependencies.md), [filesystem scope](security/permission-policy-and-filesystem-scope.md) and explicit catalog recovery.

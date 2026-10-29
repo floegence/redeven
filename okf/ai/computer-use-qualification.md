@@ -3,7 +3,7 @@ type: Acceptance Contract
 title: Computer use product qualification
 tags: [ai, computer-use, desktop, testing]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -42,6 +42,7 @@ Canonical assertions read ThreadToolResultReader, decode Floret ERROR status pre
 | download processing | One export, exact current download/save identity/content, terminal-created project file; never use anonymous reads after target acquisition |
 | native entry | Discovery, confirmed launch/selection, exact text, one click and screenshot |
 | optional_probe / caught_lookup | Zero-count and timeout may branch; caught failed unique lookup cannot resume input |
+| read_output_prefix / navigation_output_prefix / protocol_without_code | Earlier explicit read output survives a later failed observation/navigation; one fault, zero later inputs/replays, correlated method without invented code |
 | timed_drag / drag_validation | Independent press/release, endpoints/moves/held duration; invalid integer_0_5000 rejected before input |
 
 Also exercise 2,800+ nodes, complete table totals, tab/account isolation, older same-name download, one save followed by diagnostic failure without replay. Reports keep wire IDs, tool errors, histories, answers and events. Scenario completion does not establish general model reliability or remote weights.
@@ -65,6 +66,8 @@ checkDesktopSystemBrowser.mjs uses a deterministic provider with built Desktop, 
 This contract grants no target authority and does not replace [media](computer-use-media.md) or [takeover](computer-use-takeover.md). Native disposable-app results do not qualify arbitrary applications/accounts. Freeze source hashes and rerun affected checks after integration; fixture scope never substitutes for the exact-main gate.
 
 # Evidence
+
+October29 confirmed-output/diagnostic qualification:12 scenarios×2,23/24 strict passes,142 real deepseek-flash requests. All six new fault-boundary tasks retained confirmed logs, stopped later input and preserved actual one-save/one-navigation counts; method-only failures kept Runtime.evaluate. One existing content_wait task used invalid requireState arity, then observed value2 without a valid wait; retain this model-contract failure, do not widen signatures. Other scopes covered visual clicks, forms, tables, cross-page scripts, downloads, strict waits and read recovery. Fault scenarios inject one host response after the real browser operation; transport and adapter tests independently qualify low-level diagnostics. Credentials/profile hashes unchanged; no personal thread continued. Full raw evidence stays outside the repository.
 
 October26 DeepSeek/12 scenarios×5:60/60 in173.114s,273 activities/31 errors (18 required,13 model mistakes). Each image clicks once; stale images reject with zero input; no save/export replay. Source hashes stay fixed through rebase. Retain pre-canonical60/60 (prose-based stale assertion), strict51/60 and59/60 (missing one-click prompt requirement) as distinct superseded/failed evidence.
 

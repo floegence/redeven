@@ -54,11 +54,18 @@ func computerOperationDiagnostic(value any) map[string]any {
 	raw, _ := value.(map[string]any)
 	if raw["phase"] == "protocol" {
 		method := anyToString(raw["method"])
-		code, ok := raw["code"].(float64)
-		if computerProtocolMethod.MatchString(method) && ok && code >= math.MinInt32 && code <= math.MaxInt32 && math.Trunc(code) == code {
-			return map[string]any{"phase": "protocol", "method": method, "code": code}
+		if !computerProtocolMethod.MatchString(method) {
+			return nil
 		}
-		return nil
+		out := map[string]any{"phase": "protocol", "method": method}
+		if value, supplied := raw["code"]; supplied {
+			code, ok := value.(float64)
+			if !ok || math.IsNaN(code) || math.IsInf(code, 0) || code < math.MinInt32 || code > math.MaxInt32 || math.Trunc(code) != code {
+				return nil
+			}
+			out["code"] = code
+		}
+		return out
 	}
 	if raw["phase"] == "read" && raw["recovery"] == "choose_supported_read" {
 		method, expected := anyToString(raw["method"]), anyToString(raw["expected"])

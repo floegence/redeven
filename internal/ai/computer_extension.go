@@ -866,7 +866,7 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 		return out, computerTargetFailure(call, "TARGET_CONNECTION_REQUIRED")
 	}
 	failedExchange := func(err error) (TargetToolResult, error) {
-		return TargetToolResult{}, computerBrowserExchangeFailure(call, private, err)
+		return computerBrowserExchangeFailure(call, private, err)
 	}
 	var raw json.RawMessage
 	err := e.sourceHost.call(ctx, "source.tool", map[string]any{"target": e.targetID, "request": map[string]any{"target_id": e.targetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_origins": call.allowedOrigins, "allowed_navigation_urls": call.allowedNavigationURLs, "script_operation": call.scriptOperation, "live_frame": call.liveFrame, "recovery_observation": call.recoveryObservation, "user_control": private}}, &raw)

@@ -179,7 +179,7 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
 	request := playwrightTargetRequest{LiveFrame: call.liveFrame, FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, AllowedNavigationURLs: call.allowedNavigationURLs, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, RecoveryObservation: call.recoveryObservation}
 	failedExchange := func(err error) (TargetToolResult, error) {
-		return TargetToolResult{}, computerBrowserExchangeFailure(call, userControl, err)
+		return computerBrowserExchangeFailure(call, userControl, err)
 	}
 	line, err := e.exchange(ctx, client, request)
 	if err != nil {

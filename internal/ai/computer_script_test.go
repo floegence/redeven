@@ -411,7 +411,7 @@ func TestComputerScriptCannotSupplyHostAuthorization(t *testing.T) {
 	}
 }
 
-func TestComputerScriptReadFailurePreservesConfirmedPrefixWithoutContentOrReplay(t *testing.T) {
+func TestComputerScriptReadFailurePreservesConfirmedOutputWithoutFailedContentOrReplay(t *testing.T) {
 	calls := 0
 	host, call := scriptRuntimeFixture(t, func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 		calls++
@@ -426,7 +426,7 @@ func TestComputerScriptReadFailurePreservesConfirmedPrefixWithoutContentOrReplay
 		t.Fatalf("unsafe read result: %+v %v calls=%d", result, err, calls)
 	}
 	payload := result.Result.(map[string]any)
-	if payload["action_executed"] != true || payload["observation"] != nil || payload["logs"] != nil || len(result.Attachments) != 0 {
+	if payload["action_executed"] != true || payload["observation"] != nil || fmt.Sprint(payload["logs"]) != "[[previous page content]]" || len(result.Attachments) != 0 {
 		t.Fatalf("lost progress or exposed stale content: %+v", payload)
 	}
 	diagnostic, _ := payload["diagnostic"].(map[string]any)

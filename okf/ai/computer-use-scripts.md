@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script execution and semantic observations
 tags: [ai, computer-use, scripts, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -32,9 +32,9 @@ Required arguments: target, code, user-readable description. Limits:30seconds/50
 
 Any failed host operation seals the invocation even if guest code catches it. Failure retires the namespace/context_reset and dormant Promises, retaining confirmed earlier effects. Unique lookup missing/ambiguous is failure; optional count/query return zero and waitFor timeout is data. Closed diagnostics identify phase, known method/field, expected form, safe repair example and available source line/column/symbol. Raw interpreter stacks/exceptions stay private. Known unsupported option names may echo exactly; arbitrary keys/values cannot.
 
-Budgets: canonical snapshot256KiB, response512KiB including metadata, explicit logs64KiB UTF-8. Logs stream before later operations and retain safe prefixes on timeout/uncertainty; private pause, failed safety read and navigation failure discard content. Snapshot/observe/locator.snapshot alone accept emit; collection results require explicit log, screenshots/help always emit. emit:false retains the same identity and canonical budget. Default ui.snapshot automatic presentation is32KiB with short opaque refs/parent links; omitted nodes/children are unknown and marked truncated. full:true/node details retain2,000-code-point name/description/value limits and flags; detail-mode changes reset diff baseline. Failed output uses the same bounded projection.
+Budgets: canonical snapshot256KiB, response512KiB including metadata, explicit logs64KiB UTF-8. Logs stream before later operations. Runtime retains confirmed explicit output across later read/navigation failures, timeout and uncertainty, separately from current observations; failed reads discard their data/pixels and stop later operations/logs. Private pause still discards invocation content. The existing bounded prefix buffer is the only output owner; no replay or additional ledger. Snapshot/observe/locator.snapshot alone accept emit; collection results require explicit log, screenshots/help always emit. emit:false retains the same identity and canonical budget. Default ui.snapshot automatic presentation is32KiB with short opaque refs/parent links; omitted nodes/children are unknown and marked truncated. full:true/node details retain2,000-code-point name/description/value limits and flags; detail-mode changes reset diff baseline. Failed output uses the same bounded projection.
 
-Selection/core guide and ui.help(read/visual/downloads/legacy) share authored help. Signatures require string names (no RegExp), numeric deltas and supported condition waits; validation precedes dispatch. Reference/type/syntax/argument/concurrency/output errors use closed codes, never arbitrary host text. Browser CDP observation diagnostics retain validated method/signed integer code when supplied, otherwise unknown; no diagnostic authorizes retry or effects.
+Selection/core guide and ui.help(read/visual/downloads/legacy) share authored help. Signatures require string names (no RegExp), numeric deltas and supported condition waits; validation precedes dispatch. Reference/type/syntax/argument/concurrency/output errors use closed codes, never arbitrary host text. Browser CDP diagnostics retain the correlated validated method, with a signed integer code only when supplied. Lost/malformed mutating helper exchanges report helper_exchange/response_unavailable and unknown effect; no diagnostic authorizes retry or effects.
 
 ## Input and waits
 

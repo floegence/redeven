@@ -55,7 +55,11 @@ test('loss and oversized native frames reject a pending command without replay',
   for (const kind of ['disconnect', 'oversized']) await t.test(kind, async t => {
     const { peer, transport, incoming } = await fixture(t);
     const request = transport.send('Input.dispatchMouseEvent', { type: 'mousePressed' });
-    const rejected = assert.rejects(request, /BROWSER_SOURCE_UNAVAILABLE/);
+    const rejected = assert.rejects(request, error => {
+      assert.equal(error.message, 'BROWSER_SOURCE_UNAVAILABLE');
+      assert.deepEqual(error.protocolDiagnostic, {phase:'protocol',method:'Input.dispatchMouseEvent'});
+      return true;
+    });
     const sent = (await incoming.next()).value;
     assert.equal(sent.id, '1');
     if (kind === 'disconnect') peer.destroy();
@@ -111,4 +115,19 @@ test('protocol numeric rejection stays correlated with its submitted method', as
   peer.write(frame({id:request.id,error:'EXTENSION_COMMAND_FAILED',protocol_code:-32000,message:'secret'}));
   await rejected;
   assert.equal(transport.closed,false);
+});
+
+test('missing protocol code preserves the known method without raw peer content', async t => {
+  const { peer, transport, incoming } = await fixture(t);
+  const response = transport.send('Runtime.evaluate');
+  const rejected = assert.rejects(response, error => {
+    assert.deepEqual(error.protocolDiagnostic, {phase:'protocol',method:'Runtime.evaluate'});
+    assert.equal(error.message, 'BROWSER_EXTENSION_COMMAND_FAILED');
+    assert.equal(JSON.stringify(error).includes('secret'), false);
+    return true;
+  });
+  const {value: request} = await incoming.next();
+  peer.write(frame({id:request.id,error:'EXTENSION_COMMAND_FAILED',message:'secret',method:'private-method'}));
+  await rejected;
+  assert.equal(transport.closed, false);
 });

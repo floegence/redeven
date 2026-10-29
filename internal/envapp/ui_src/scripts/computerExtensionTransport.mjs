@@ -83,8 +83,9 @@ export class ExtensionTransport extends EventEmitter {
       const error = Object.assign(new Error(['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(message.error) || request.method === 'DOM.focus' && message.error === 'ELEMENT_NOT_ACTIONABLE' ? message.error : 'BROWSER_EXTENSION_COMMAND_FAILED'), message.error === 'TARGET_PERMISSION_REQUIRED' ? { permissionReason: 'extension_file_access' } : {});
       // The method belongs to this pending request; peer text/arguments never
       // become a diagnosis. A numeric protocol code does not authorize retry.
+      error.protocolDiagnostic = {phase:'protocol',method:request.method};
       if (Number.isInteger(message.protocol_code) && message.protocol_code >= -2147483648 && message.protocol_code <= 2147483647) {
-        error.protocolDiagnostic = {phase:'protocol',method:request.method,code:message.protocol_code};
+        error.protocolDiagnostic.code = message.protocol_code;
       }
       request.reject(error);
     }
@@ -95,7 +96,10 @@ export class ExtensionTransport extends EventEmitter {
     if (this.closed) return;
     this.closed = true;
     this.socket.destroy();
-    for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('BROWSER_SOURCE_UNAVAILABLE')); }
+    for (const request of this.pending.values()) {
+      clearTimeout(request.timer);
+      request.reject(Object.assign(new Error('BROWSER_SOURCE_UNAVAILABLE'), {protocolDiagnostic:{phase:'protocol',method:request.method}}));
+    }
     this.pending.clear();
     for (const child of this.children.values()) { child.emit('close'); child.removeAllListeners(); }
     this.children.clear();

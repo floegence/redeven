@@ -44,18 +44,21 @@ func computerNavigationReason(reason string) bool {
 
 // Lost or malformed exchanges cannot establish the result of a mutating call.
 // Call this only after dispatch; validated browser failures use the mapper below.
-func computerBrowserExchangeFailure(call TargetToolCall, private bool, err error) error {
+func computerBrowserExchangeFailure(call TargetToolCall, private bool, err error) (TargetToolResult, error) {
 	if !private && computerCallMutates(call) {
-		return errComputerEffectUnknown
+		return TargetToolResult{TargetID: call.TargetID, Result: map[string]any{
+			"stage": "helper_exchange", "reason": "response_unavailable", "needs_observation": true,
+		}}, errComputerEffectUnknown
 	}
-	return err
+	return TargetToolResult{}, err
 }
 
 // One closed result classifier for managed/CDP and extension browser channels.
 // The bool says whether the response was valid, not whether navigation succeeded.
 func computerBrowserFailure(call TargetToolCall, private bool, code string, payload map[string]any, location string) (TargetToolResult, error, bool) {
 	invalid := func() (TargetToolResult, error, bool) {
-		return TargetToolResult{}, computerBrowserExchangeFailure(call, private, errors.New("invalid browser failure result")), false
+		result, err := computerBrowserExchangeFailure(call, private, errors.New("invalid browser failure result"))
+		return result, err, false
 	}
 	if code == "NAVIGATION_FAILED" || code == "NAVIGATION_TIMEOUT" {
 		if call.ToolName != "browser.navigate" && call.ToolName != "browser.back" && call.ToolName != "browser.reload" {
@@ -92,7 +95,8 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	_, confirmed := payload["action_executed"].(bool)
 	known := computerKnownRejection(err) || code == "TARGET_ACTION_FAILED" && confirmed || code == "TARGET_CONNECTION_REQUIRED" && confirmed
 	if !known {
-		err = computerBrowserExchangeFailure(call, private, err)
+		result, exchangeErr := computerBrowserExchangeFailure(call, private, err)
+		return result, exchangeErr, true
 	}
 	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location}
 	if known && payload != nil {

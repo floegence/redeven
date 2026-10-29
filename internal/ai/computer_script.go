@@ -225,7 +225,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				payload["downloads"] = ambiguousDownloads
 			}
 			payload["context_reset"] = !healthy
-			if pause == nil && observationFailureStage == "" && navigationFailure == nil {
+			// Explicit output belongs to the confirmed prefix, not the current
+			// observation. A later failed read/navigation cannot revoke it.
+			// Sensitive takeover remains an invocation-wide content boundary.
+			if pause == nil {
 				payload["logs"] = prefixLogs
 			} else {
 				delete(payload, "logs")
@@ -293,6 +296,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			var values []any
 			if msg.ID != call.ToolCallID || json.Unmarshal(msg.Values, &values) != nil || values == nil || logBytes+len(msg.Values) > 65536 {
 				return result, errors.New("invalid computer script output")
+			}
+			if stopped != nil || pause != nil || targetChange != nil {
+				continue
 			}
 			logBytes += len(msg.Values)
 			prefixLogs = append(prefixLogs, values)
@@ -500,7 +506,6 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			if observationFailureStage != "" {
 				result.Result.(map[string]any)["observation_stage"] = observationFailureStage
 				delete(result.Result.(map[string]any), "observation")
-				delete(result.Result.(map[string]any), "logs")
 			}
 			if navigationFailure != nil {
 				for key, value := range navigationFailure.facts() {
@@ -508,7 +513,6 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				}
 				result.Result.(map[string]any)["script_error"] = string(navigationFailure.code)
 				delete(result.Result.(map[string]any), "observation")
-				delete(result.Result.(map[string]any), "logs")
 				return result, navigationFailure
 			}
 			if lastObservation != nil && observationFailureStage == "" {

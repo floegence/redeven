@@ -11,8 +11,8 @@ ComputerUseRuntime owns the model-visible semantic schema, version 2. Browser,
 macOS AX and Linux AT-SPI collect native facts; Runtime validates and normalizes
 one bounded tree. Relationships never point outside that tree. Unsupported
 facts stay absent. Invalid protocol, protected fields or inconsistent graphs
-produce a closed observation failure, discard content and preserve confirmed
-input effects without replay. Existing target authority and privacy scans remain
+produce a closed observation failure, discard that observation and preserve
+confirmed input effects and earlier explicit script output without replay. Existing target authority and privacy scans remain
 mandatory; semantic metadata does not grant input or capture permission.
 
 # Contract

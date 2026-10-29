@@ -88,7 +88,7 @@ func TestComputerProtocolDiagnosticRetainsOnlyCorrelatedFacts(t *testing.T) {
 		{"phase": "protocol", "method": "Page.captureScreenshot", "code": math.Inf(1)},
 		{"phase": "protocol", "method": "Page.captureScreenshot", "code": float64(math.MaxInt32) + 1},
 		{"phase": "protocol", "method": "https://private.test/secret", "code": float64(-32000)},
-		{"phase": "protocol", "method": "Page.captureScreenshot", "message": "code -32000"},
+		{"phase": "protocol", "method": "Page.captureScreenshot", "code": math.NaN()},
 	} {
 		if got := computerOperationDiagnostic(raw); got != nil {
 			t.Fatalf("invented or unbounded diagnostic: %+v", got)

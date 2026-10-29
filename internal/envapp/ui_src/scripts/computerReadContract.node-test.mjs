@@ -72,3 +72,14 @@ test('protocol facts survive observation failure without exception contents or r
   assert.equal(f.facts().calls, 1);
   assert.equal(JSON.stringify(result).includes('private exception'), false);
 });
+
+test('known protocol method survives a failed read without an optional code', async () => {
+  const f = fixture(() => { throw Object.assign(new Error('private exception'), {
+    protocolDiagnostic: {phase:'protocol',method:'Runtime.evaluate'},
+  }); });
+  const result = await f.run('text');
+  assert.deepEqual(result.result.diagnostic, {phase:'protocol',method:'Runtime.evaluate'});
+  assert.equal(result.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+  assert.equal(f.facts().calls, 1);
+  assert.equal(JSON.stringify(result).includes('private exception'), false);
+});
