@@ -308,18 +308,29 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal(await task.evaluate(() => document.hasFocus()), false, 'detach must release virtual focus');
     await call('bind', { tab_id: selected.id, tab_title: selected.title, tab_url: selected.url });
     await execute('computer.observe');
-    await t.test('extension frames bind image coordinates and invalid keys cannot focus', async () => {
+    await t.test('extension frames retire after errors and input while invalid keys cannot focus', async () => {
       const shot=await execute('computer.screenshot');
       assert.ok(shot.result.frame_geometry,JSON.stringify(shot.result));
       const g=shot.result.frame_geometry;
       assert.equal(g.image.width/g.viewport.capture_width,2);
+      const inputsBefore=await task.evaluate(()=>window.probeInputs);
       const invalid=await execute('computer.key',{key:'Meta+Equal'});
       assert.equal(invalid.error,'INVALID_REQUEST');assert.equal(invalid.result.action_executed,false);assert.equal(invalid.result.diagnostic.field,'key');
       const point={x:0,y:0,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id};
-      const mismatch=await execute('computer.click',{...point,document_id:'old'});
+      const retired=await execute('computer.click',point);
+      assert.equal(retired.error,'STALE_REFERENCE');assert.equal(retired.result.action_executed,false);
+      const renewed=(await execute('computer.screenshot')).result.frame_geometry;
+      const mismatch=await execute('computer.click',{...point,frame:renewed.frame,document_id:'old'});
       assert.equal(mismatch.error,'STALE_REFERENCE');assert.equal(mismatch.result.action_executed,false);
-      const clicked=await execute('computer.click',point);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
+      assert.equal(await task.evaluate(()=>document.hasFocus()),false);
+      assert.equal(await task.evaluate(()=>window.probeInputs),inputsBefore);
+      const fresh=(await execute('computer.screenshot')).result.frame_geometry;
+      const freshPoint={...point,frame:fresh.frame,document_id:fresh.document_id};
+      const clicked=await execute('computer.click',freshPoint);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
       assert.equal(clicked.result.action_executed,true);
+      const reused=await execute('computer.click',freshPoint);
+      assert.equal(reused.error,'STALE_REFERENCE');assert.equal(reused.result.action_executed,false);
+      assert.equal(await task.evaluate(()=>window.probeInputs),inputsBefore+1);
     });
     await t.test('document and nonfocusable presses retain the real extension connection', async () => {
       const tree = (await execute('computer.observe')).result.observation;
