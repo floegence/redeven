@@ -63,7 +63,15 @@ export class BrowserComputerController {
     }
   }
   async execute(request) {
+    const beforeEffects = this.page.effectCount;
     const response = await this.executeOperation(request);
+    // A viewer-only sample never replaces the model anchor. Input retires the
+    // old anchor unless this operation returned a newly captured model frame.
+    if ((this.page.effectCount > beforeEffects && !response.result?.frame_geometry)
+      || response.error || response.safety?.level === 'takeover'
+      || response.result?.target_changed || response.result?.observation_invalidated) {
+      this.frameAnchor = undefined;
+    }
     try { await this.page.releaseInput(); }
     catch {
       this.page.close();

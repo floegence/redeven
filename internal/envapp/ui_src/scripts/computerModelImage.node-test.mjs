@@ -26,3 +26,22 @@ for (const browser of [true,false]) test('optimized screenshot handle dispatches
   assert.deepEqual(operations[1],{action:'pointer_click',x:100,y:120,coordinate_space:'model_pixels',frame:'original',document_id:'doc'});
  } finally {script.dispose();}
 });
+
+test('real high-resolution screenshots map model coordinates to the intended control', {timeout:30000}, async()=>{
+ const {chromium}=await import('playwright');
+ const {createComputerBrowserSource}=await import('./computerBrowserSource.mjs');
+ const browser=await chromium.launch({headless:true}); let owner;
+ try {
+  const page=await browser.newPage({viewport:{width:3000,height:1600},deviceScaleFactor:2});
+  await page.setContent('<button style="position:absolute;left:400px;top:300px;width:120px;height:80px" onclick="this.textContent=\'Clicked\'">Target</button>');
+  owner=await createComputerBrowserSource(page,'scaled');
+  const call=(tool_name,args={})=>owner.controller.execute({target_id:'scaled',tool_name,args,full_access:true,script_operation:true});
+  const shot=await call('computer.screenshot'); assert.equal(shot.error,undefined);
+  const g=shot.result.frame_geometry;
+  assert.equal(g.image.width,3000);assert.equal(g.model_image.width,2560);
+  const coordinates={x:460/3000*g.model_image.width,y:340/1600*g.model_image.height,coordinate_space:'model_pixels',frame:g.frame,document_id:g.document_id};
+  const clicked=await call('computer.click',coordinates);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
+  assert.equal(await page.getByRole('button').textContent(),'Clicked');
+  const stale=await call('computer.click',coordinates);assert.equal(stale.error,'STALE_REFERENCE');
+ } finally {await owner?.dispose();await browser.close();}
+});
