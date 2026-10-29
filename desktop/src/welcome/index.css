@@ -1235,7 +1235,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
 .redeven-endpoint-action:active { transform: scale(0.92); }
 
 .redeven-endpoint-listener {
-  margin-top: 0.5rem;
   min-width: 0;
   color: var(--muted-foreground);
   font-size: var(--floe-type-supporting);
@@ -1243,13 +1242,14 @@ html:not(.dark) .redeven-new-environment-card:hover {
 }
 
 .redeven-endpoint-listener > summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.375rem;
   width: fit-content;
   max-width: 100%;
   min-height: 32px;
-  padding: 6px 8px;
+  padding: 6px 0;
   border-radius: 0.25rem;
   cursor: pointer;
   list-style: none;
@@ -1275,8 +1275,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
   padding-inline-start: 0.75rem;
   overflow-wrap: anywhere;
 }
-
-.redeven-endpoint-listener-content > p { margin-top: 0.375rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .redeven-endpoint-action,
@@ -4588,7 +4586,7 @@ pre,
 .redeven-endpoints-popover .redeven-address-group[data-address-scope='environment_only'] {
   display: grid;
   grid-template-columns: 6.25rem minmax(0, 1fr);
-  align-items: start;
+  align-items: baseline;
   column-gap: .5rem;
   margin-block: .5rem;
   padding-top: .5rem;
@@ -4598,10 +4596,8 @@ pre,
 .redeven-endpoints-popover [data-address-scope='environment_only'] .redeven-address-title > .redeven-card-endpoint-label { color: var(--muted-foreground); font-weight: 400; line-height: 1.35; }
 .redeven-endpoints-popover .redeven-address-restricted { min-width: 0; padding-top: 0; }
 .redeven-endpoints-popover .redeven-endpoint-scope-title { font-size: var(--floe-type-supporting); line-height: 1.35; }
-.redeven-endpoints-popover .redeven-address-restricted > .redeven-card-endpoint-detail { margin-top: .25rem; font-size: var(--floe-type-caption); line-height: 1.5; }
-.redeven-endpoints-popover .redeven-endpoint-listener > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
 .redeven-endpoints-popover .redeven-card-endpoint-row + .redeven-card-endpoint-row { margin-top: 0; }
-.redeven-endpoints-popover .redeven-endpoint-listener { margin-top: .375rem; font-size: var(--floe-type-caption); line-height: 1.45; }
+.redeven-endpoints-popover .redeven-endpoint-listener { font-size: var(--floe-type-caption); line-height: 1.45; }
 .redeven-endpoints-popover .redeven-endpoint-listener-content { margin-top: .375rem; padding-inline-start: .5rem; }
 .redeven-endpoints-popover .redeven-address-viewport { max-block-size: min(14rem, 34dvh); }
 .redeven-endpoints-popover .redeven-endpoint-qr-panel { margin: .375rem 0 .25rem; padding: .625rem; gap: .75rem; }

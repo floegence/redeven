@@ -12,7 +12,7 @@ Welcome and settings share a pure connection model derived from host access, pla
 # Contract
 
 - Identify the selected Environment before listing addresses. Never replace a URL host with an SSH alias or rely on WSL localhost forwarding. Address count cannot resize settings or move its footer.
-- Internal browser access aligns its label and scope with the connection facts, stacking at narrow widths. The internal-listener disclosure owns the address count and filtered count; it preserves expansion on refresh and offers no browser, copy or share actions for environment-only addresses.
+- Internal browser access aligns its label with one expandable scope-and-count summary, stacking at narrow widths. Do not repeat the scope with explanatory paragraphs or a separate disclosure label. The disclosure owns the address count and filtered count, preserves expansion on refresh, and offers no browser, copy or share actions for environment-only addresses.
 - Gateway source cards retain explicit URL/local/SSH/container transport and never gain Runtime lifecycle authority. Tokens and private loopback credentials remain absent from displayed facts, clipboard and QR data.
 - Public addresses remain independent of private management. Saved bind/protocol/port/password/certificate changes apply next start; drafts cannot synthesize current URLs. Failed writes preserve the password verifier and report failure.
 

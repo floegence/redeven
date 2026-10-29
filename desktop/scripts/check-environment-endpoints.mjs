@@ -213,9 +213,9 @@ try {
       assert.equal(await page.locator('[data-copy-result]').innerText(), network ? 'https://192.0.2.20:23998/' : 'http://localhost:23998/');
     }
     if (name === 'gzcom' || name === 'gzlight') {
-      assert.ok((await popup.innerText()).includes(`仅限 ${name} 内部`));
+      assert.ok((await popup.locator('.redeven-endpoint-listener summary').innerText()).includes(`仅限 ${name} 内部`));
       assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), false);
-      assert.ok((await popup.innerText()).includes('通过 Desktop 的“打开窗口”进入此环境。'));
+      assert.equal(await popup.locator('.redeven-address-restricted p').count(), 0);
       await popup.getByRole('button', { name: /复制 SSH/ }).click();
       assert.equal(await page.locator('[data-copy-result]').innerText(), `${name}:22`);
     }
@@ -230,7 +230,7 @@ try {
       await popup.locator('.redeven-endpoint-listener summary').click();
       await settleDisclosure();
       assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').innerText(), 'http://localhost:23998/');
-      assert.ok((await popup.innerText()).includes('不同主机可以使用相同端口'));
+      assert.equal(await popup.locator('.redeven-endpoint-listener-content > p').count(), 0);
       assert.equal(await popup.locator('.redeven-endpoint-listener button').count(), 0);
       await stableScreenshot(`${output}/gzcom-listener-details.png`);
     }

@@ -69,7 +69,10 @@ describe('Environment connection popover', () => {
     expect(group.querySelectorAll('details')).toHaveLength(1);
     expect(group.querySelectorAll('[data-endpoint-kind="address"]')).toHaveLength(2);
     expect(group.querySelectorAll('button')).toHaveLength(0);
-    expect(group.textContent?.match(/Choose “Open window”/g)).toHaveLength(1);
+    expect(group.querySelector('.redeven-card-endpoint-detail')).toBeNull();
+    expect(group.querySelector('summary .redeven-endpoint-scope-title')?.textContent).toBe('Only inside gzcom');
+    expect(group.textContent).not.toContain('View internal listener');
+    expect(group.querySelector('.redeven-endpoint-listener-content > p')).toBeNull();
     expect(group.querySelector('.redeven-address-heading .redeven-address-count')).toBeNull();
     expect(group.querySelector('summary .redeven-address-count')?.textContent?.trim()).toBe('2');
   });
@@ -130,7 +133,7 @@ describe('Environment connection popover', () => {
     const details = document.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
     expect(details).not.toBeNull();
     expect(details.open).toBe(false);
-    expect(document.body.textContent).toContain('Choose “Open window” in Desktop to enter this environment.');
+    expect(details.querySelector('summary')?.textContent).toContain('Only inside gzcom');
     expect(document.querySelector('[data-endpoint-id="host"]')?.textContent).toContain('gzcom:22');
     details.open = true;
     const summary = details.querySelector('summary')!;

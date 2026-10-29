@@ -81,13 +81,18 @@ try {
         await popover.waitFor();
         const internal = popover.locator('[data-address-scope=environment_only]');
         const layout = await internal.evaluate(group => {
-          const heading = group.querySelector('.redeven-address-heading').getBoundingClientRect();
-          const scope = group.querySelector('.redeven-endpoint-scope-title').getBoundingClientRect();
+          const headingElement = group.querySelector('.redeven-card-endpoint-label');
+          const scopeElement = group.querySelector('.redeven-endpoint-scope-title');
+          const heading = headingElement.getBoundingClientRect();
+          const scope = scopeElement.getBoundingClientRect();
+          const firstLineCenter = element => element.getBoundingClientRect().top + parseFloat(getComputedStyle(element).lineHeight) / 2;
           const summary = group.querySelector('summary');
-          return { aligned: window.innerWidth <= 608 ? scope.top >= heading.bottom : Math.abs(heading.top - scope.top) <= 3, countInDisclosure: !!summary.querySelector('.redeven-address-count'),
+          return { aligned: window.innerWidth <= 608 ? scope.top >= heading.bottom : Math.abs(firstLineCenter(headingElement) - firstLineCenter(scopeElement)) <= 3,
+            concise: !!summary.querySelector('.redeven-endpoint-scope-title') && !group.querySelector('p') && !group.querySelector('.redeven-card-endpoint-detail'),
+            countInDisclosure: !!summary.querySelector('.redeven-address-count'),
             detachedCount: !!group.querySelector('.redeven-address-heading .redeven-address-count'), overflow: group.scrollWidth - group.clientWidth };
         });
-        check(layout.aligned && layout.countInDisclosure && !layout.detachedCount && layout.overflow <= 1, `${label}: aligned internal access summary and adjacent listener count`);
+        check(layout.concise && layout.aligned && layout.countInDisclosure && !layout.detachedCount && layout.overflow <= 1, `${label}: one concise access disclosure without explanatory paragraphs`);
         const disclosure = internal.locator('summary');
         await disclosure.click();
         assert.equal(await internal.locator('tbody tr').count(), 3);

@@ -131,19 +131,16 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{
     </div>
     <Show when={first().access_scope === 'environment_only'} fallback={list}>
       <div class="redeven-address-restricted">
-        <span class="redeven-endpoint-scope-title">{props.i18n.t(first().detail_key, first().detail_params)}</span>
-        <p class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</p>
         <details class="redeven-endpoint-listener">
           <summary>
-            <ChevronRight class="h-3 w-3" aria-hidden="true" />
-            <span>{props.i18n.t('environmentConnection.listenerDetails')}</span>
+            <span class="redeven-endpoint-scope-title">{props.i18n.t(first().detail_key, first().detail_params)}</span>
             <span class="redeven-address-count" aria-label={countLabel()}>
               {term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}
             </span>
+            <ChevronRight class="h-3 w-3" aria-hidden="true" />
           </summary>
           <div class="redeven-endpoint-listener-content">
             {list}
-            <p>{props.i18n.t('environmentConnection.loopbackHelp', first().detail_params)}</p>
           </div>
         </details>
       </div>
