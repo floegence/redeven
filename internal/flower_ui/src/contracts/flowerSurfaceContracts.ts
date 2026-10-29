@@ -1806,7 +1806,10 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadTaskFiles?: (threadID: string, cursor?: string, signal?: AbortSignal) => Promise<FlowerTaskFiles>;
   cleanTaskFiles?: (threadID: string) => Promise<void>;
   loadTaskFile?: (threadID: string, path: string, working: boolean, signal: AbortSignal) => Promise<Blob>;
-  downloadTaskFile?: (threadID: string, path: string, working: boolean, signal: AbortSignal) => Promise<void>;
+  /** Downloads are host-owned and continue after the file dialog closes. */
+  downloadTaskFile?: (threadID: string, path: string, working: boolean) => Promise<void>;
+  downloadTaskMaterial?: (threadID: string, item: FlowerTaskMaterial) => Promise<void>;
+  hasActiveTaskFileDownloads?: (threadID: string) => boolean;
   loadToolPreview?: (input: FlowerToolPreviewRequest) => Promise<FlowerToolPreview>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest, signal?: AbortSignal) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;

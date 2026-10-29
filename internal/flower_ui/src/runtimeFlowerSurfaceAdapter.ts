@@ -1,4 +1,4 @@
-import type { FlowerTaskFiles, FlowerTaskMaterials } from "./contracts/flowerSurfaceContracts";
+import type { FlowerTaskFiles, FlowerTaskMaterials, FlowerTaskMaterial } from "./contracts/flowerSurfaceContracts";
 import { flowerTurnAdmissionError } from './flowerTurnAdmission';
 import { isComputerSafetyAssistanceKind } from './computerAssistance';
 import type { FlowerModelCatalogDiscovery } from './contracts/flowerSurfaceContracts';
@@ -134,7 +134,9 @@ export type FlowerRuntimeTransport = Readonly<{
   loadTaskMaterials?(threadID: string, cursor?: string, signal?: AbortSignal): Promise<FlowerTaskMaterials>;
   cleanTaskFiles?(threadID: string): Promise<void>;
   loadTaskFile?(threadID: string, path: string, working: boolean, signal: AbortSignal): Promise<Blob>;
-  downloadTaskFile?(threadID: string, path: string, working: boolean, signal: AbortSignal): Promise<void>;
+  downloadTaskFile?(threadID: string, path: string, working: boolean): Promise<void>;
+  downloadTaskMaterial?(threadID: string, item: FlowerTaskMaterial): Promise<void>;
+  hasActiveTaskFileDownloads?(threadID: string): boolean;
   loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }, signal?: AbortSignal): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
@@ -763,6 +765,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.transport.cleanTaskFiles ? { cleanTaskFiles: (id: string) => options.transport.cleanTaskFiles!(id) } : {}),
     ...(options.transport.loadTaskFile ? { loadTaskFile: options.transport.loadTaskFile } : {}),
     ...(options.transport.downloadTaskFile ? { downloadTaskFile: options.transport.downloadTaskFile } : {}),
+    ...(options.transport.downloadTaskMaterial ? { downloadTaskMaterial: options.transport.downloadTaskMaterial } : {}),
+    ...(options.transport.hasActiveTaskFileDownloads ? { hasActiveTaskFileDownloads: options.transport.hasActiveTaskFileDownloads } : {}),
     ...(options.transport.loadToolPreview ? {
       loadToolPreview: (input) => options.transport.loadToolPreview!(input),
     } : {}),

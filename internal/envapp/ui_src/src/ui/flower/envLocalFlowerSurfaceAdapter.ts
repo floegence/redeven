@@ -1,4 +1,6 @@
-import { loadFlowerTaskFile, downloadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../downloads/flowerTaskFileDownload';
+import { createFlowerDownloads } from '../downloads/flowerDownloads';
+import type { DownloadManager } from '../downloads/types';
+import { loadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../downloads/flowerTaskFileDownload';
 import { withFlowerReadDeadline } from '../../../../../flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient } from '../../../../../flower_ui/src/conversationPreferences';
 import type { FlowerConversationPreferences } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -81,6 +83,7 @@ import {
 } from '../../../../../flower_host_ui/src/flowerAttachmentStaging';
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
+  downloadManager?: DownloadManager;
   signal?: AbortSignal;
   revealHostApplication?: (applicationID: string) => void;
   envLabel: string;
@@ -614,7 +617,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-materials' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), { method: 'GET', signal }),
       cleanTaskFiles: async (threadID) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', { method: 'DELETE' }); },
       loadTaskFile: (threadID, path, working, signal) => loadFlowerTaskFile(path, offset => fetchLocalApiJSON<FlowerTaskFileChunk>(flowerTaskFilePath(threadID,path,working,offset), {method:'GET',signal}),signal),
-      downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => fetchLocalApiJSON<FlowerTaskFileChunk>(flowerTaskFilePath(threadID,path,working,offset), {method:'GET',signal}),signal),
+      ...(options.downloadManager ? createFlowerDownloads(options.downloadManager, {
+        readTaskFile: (threadID, path, working, offset, signal) => fetchLocalApiJSON<FlowerTaskFileChunk>(
+          flowerTaskFilePath(threadID, path, working, offset), { method: 'GET', signal }),
+        loadAttachment: loadEnvMessageAttachment,
+      }) : {}),
       loadToolPreview: (input) => fetchLocalApiJSON<FlowerToolPreview>(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
         { method: 'POST', body: JSON.stringify({ turn_id: input.turn_id, run_id: input.run_id, tool_call_id: input.tool_call_id }) },

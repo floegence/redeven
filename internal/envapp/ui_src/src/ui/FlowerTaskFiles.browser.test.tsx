@@ -98,7 +98,7 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
     expect(folder).toHaveBeenCalledWith(expect.objectContaining({ path: '/project' }));
     button('Download').click();
     await waitFor(() => download.mock.calls.length === 1);
-    expect(download).toHaveBeenCalledWith('one', '/project/report.html', false, expect.any(AbortSignal));
+    expect(download).toHaveBeenCalledWith('one', '/project/report.html', false);
     button(taskFilesEnUS.process).click();
     button(taskFilesEnUS.working).click();
     const working = document.querySelector<HTMLElement>('.flower-task-working')!;
@@ -106,7 +106,7 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
     expect([...working.querySelectorAll('[title]')].some(el => el.getAttribute('title')?.includes(fixture().working_path))).toBe(false);
     [...working.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === 'Download')!.click();
     await waitFor(() => download.mock.calls.length === 2);
-    expect(download).toHaveBeenLastCalledWith('one', '/state/task-files/one/scratch/helper.py', true, expect.any(AbortSignal));
+    expect(download).toHaveBeenLastCalledWith('one', '/state/task-files/one/scratch/helper.py', true);
     for (const width of [1280, 390]) {
       await page.viewport(width, 900);
       const dialog = document.querySelector<HTMLElement>('.flower-task-files-dialog')!;
@@ -367,7 +367,8 @@ it('automatically passes empty pages, deduplicates identities, previews original
   const load = vi.fn(async (_thread: string, cursor?: string) => cursor === 'last' ? { items: [item, image] }
     : cursor === 'older' ? { items: [item], next_cursor: 'last' } : { items: [], next_cursor: 'older' });
   const bytes = vi.fn(async () => new Blob(['amount\n4\n8\n15'], { type: 'text/plain' }));
-  const { source } = renderFiles({ loadTaskMaterials: load, loadMessageAttachment: bytes });
+  const download = vi.fn(async () => {});
+  const { source } = renderFiles({ loadTaskMaterials: load, loadMessageAttachment: bytes, downloadTaskMaterial: download });
   await waitFor(() => load.mock.calls.length === 3);
   await waitFor(() => fileDialog()?.querySelectorAll('.flower-task-material-row').length === 1);
   expect(load).toHaveBeenCalledTimes(3);
@@ -377,13 +378,9 @@ it('automatically passes empty pages, deduplicates identities, previews original
   expect(bytes).toHaveBeenCalledWith(expect.objectContaining({ url: item.url }));
   await userEvent.keyboard('{Escape}');
   await waitFor(() => !document.querySelector('.flower-task-file-preview-dialog'));
-  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-  try {
-    dialogButton(taskFilesEnUS.download).click();
-    await waitFor(() => click.mock.calls.length === 1);
-    const downloaded = click.mock.instances[0] as HTMLAnchorElement;
-    expect(downloaded.download).toBe('source.txt'); expect(downloaded.href).toMatch(/^blob:/u);
-  } finally { click.mockRestore(); }
+  dialogButton(taskFilesEnUS.download).click();
+  await waitFor(() => download.mock.calls.length === 1);
+  expect(download).toHaveBeenCalledWith('one', item);
   dialogButton(taskFilesEnUS.source).click(); expect(source).toHaveBeenCalledWith('user:source');
 });
 

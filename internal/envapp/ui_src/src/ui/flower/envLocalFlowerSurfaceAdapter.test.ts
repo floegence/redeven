@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { createDownloadManager } from '../downloads/createDownloadManager';
+import { createRuntimeDownloadSource } from '../downloads/runtimeDownloadSource';
+
 import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
@@ -2463,4 +2466,21 @@ it('previews temporary files through the existing authorized chunk endpoint', as
   expect(url.searchParams.get('kind')).toBe('working');
   expect(url.searchParams.get('path')).toBe('/state/scratch/helper.py');
   expect(fetchMock.mock.calls[0][1]?.signal).toBe(controller.signal);
+});
+
+
+it('records conversation downloads in the shell manager with the authorized source', async () => {
+  const destination = { label: 'report.txt', canReveal: false, canOpen: false };
+  const write = vi.fn(async () => {}), complete = vi.fn(async () => destination);
+  const manager = createDownloadManager({ source: createRuntimeDownloadSource(() => null),
+    sink: { kind: 'web_file_system', prepare: async () => ({ destination, write, complete, abort: async () => {} }) } });
+  fetchMock.mockResolvedValue(jsonResponse({ bytes: btoa('report'), size: 6, next_offset: 6, version: 'v1' }));
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never,
+    downloadManager: manager });
+  const pending = adapter.downloadTaskFile!('thread/one', '/project/report.txt', false);
+  expect(manager.tasks()).toHaveLength(1);
+  await pending;
+  expect(manager.tasks()[0]).toMatchObject({ status: 'completed', bytesRead: 6, command: { source: { name: 'report.txt' } } });
+  expect(write).toHaveBeenCalledOnce(); expect(complete).toHaveBeenCalledOnce();
+  expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/threads/thread%2Fone/task-file-content?'), expect.objectContaining({ signal: expect.any(AbortSignal) }));
 });

@@ -1,4 +1,6 @@
-import { loadFlowerTaskFile, downloadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../../../../internal/envapp/ui_src/src/ui/downloads/flowerTaskFileDownload';
+import type { DownloadManager } from '../../../../internal/envapp/ui_src/src/ui/downloads/types';
+import { createFlowerDownloads } from '../../../../internal/envapp/ui_src/src/ui/downloads/flowerDownloads';
+import { loadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../../../../internal/envapp/ui_src/src/ui/downloads/flowerTaskFileDownload';
 import { createDirectoryFavoritesClient } from '../../../../internal/flower_ui/src/filePicker/directoryFavorites';
 import { withFlowerReadDeadline } from '../../../../internal/flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient, prepareFlowerNewConversationInput } from '../../../../internal/flower_ui/src/conversationPreferences';
@@ -120,6 +122,7 @@ export type DesktopSettingsBridge = Readonly<{
 }>;
 
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
+  downloadManager?: DownloadManager;
   signal?: AbortSignal;
   openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   runtimeEnvironmentID?: string;
@@ -775,6 +778,13 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   bridge: DesktopSettingsBridge,
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
 ): FlowerSurfaceAdapter {
+  const loadAttachment = async (url: string, signal: AbortSignal): Promise<Blob> => {
+    signal.throwIfAborted();
+    const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID, signal);
+    signal.throwIfAborted();
+    if (!(media.bytes instanceof Uint8Array)) throw new Error('Attachment preview is unavailable.');
+    return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
+  };
   const resource = options.modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => options.runtimeEnvironmentID ?? 'default', options.runtimeEnvironmentID);
   const preferences = createFlowerConversationPreferenceClient({
     load: signal => runtimeJSON<FlowerConversationPreferences>(bridge, 'GET', '/_redeven_proxy/api/ai/conversation_preferences', undefined, undefined, options.runtimeEnvironmentID, signal),
@@ -847,7 +857,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       loadTaskFiles: (threadID, cursor, signal) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID, signal),
       loadTaskMaterials: (threadID, cursor, signal) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-materials' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID, signal),
       loadTaskFile: (threadID, path, working, signal) => loadFlowerTaskFile(path, offset => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET', flowerTaskFilePath(threadID,path,working,offset), undefined, undefined, options.runtimeEnvironmentID, signal),signal),
-      downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET', flowerTaskFilePath(threadID,path,working,offset), undefined, undefined, options.runtimeEnvironmentID, signal),signal),
+      ...(options.downloadManager ? createFlowerDownloads(options.downloadManager, {
+        readTaskFile: (threadID, path, working, offset, signal) => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET',
+          flowerTaskFilePath(threadID, path, working, offset), undefined, undefined, options.runtimeEnvironmentID, signal),
+        loadAttachment,
+      }) : {}),
       cleanTaskFiles: async (threadID) => { await runtimeJSON(bridge, 'DELETE', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', undefined, undefined, options.runtimeEnvironmentID); },
       loadToolPreview: (input) => runtimeJSON<FlowerToolPreview>(bridge, 'POST',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
@@ -991,13 +1005,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       if (!target || (target.kind !== 'file' && target.kind !== 'directory') || !target.path || typeof target.label !== 'string') throw new Error('Invalid Flower reference preview target.');
       return target;
     },
-    loadMessageAttachment: async ({ url, signal }) => {
-      signal.throwIfAborted();
-      const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID, signal);
-      signal.throwIfAborted();
-      if (!(media.bytes instanceof Uint8Array)) throw new Error('Attachment preview is unavailable.');
-      return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
-    },
+    loadMessageAttachment: ({ url, signal }) => loadAttachment(url, signal),
     computerFrameRate: {
       read: () => computerFrameRate(window.redevenDesktopStateStorage?.getItem(COMPUTER_FRAME_RATE_KEY)),
       write: (fps) => { window.redevenDesktopStateStorage?.setItem(COMPUTER_FRAME_RATE_KEY, String(fps)); },

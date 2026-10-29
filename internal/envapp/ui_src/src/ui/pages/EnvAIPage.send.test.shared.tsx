@@ -1,3 +1,5 @@
+import { DownloadContext } from '../downloads/DownloadContext';
+import { createDownloadManager } from '../downloads/createDownloadManager';
 import { render } from 'solid-js/web';
 import { Show, createEffect, createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -550,10 +552,10 @@ async function renderPage(waitForSurface = true, props: Partial<EnvAIPageProps> 
     },
   });
   const disposeSurface = render(() => (
-    <EnvAIPage
+    <DownloadContext.Provider value={createDownloadManager({})}><EnvAIPage
       {...props}
       draftCoordinator={draftCoordinator}
-    />
+    /></DownloadContext.Provider>
   ), host);
   const dispose = () => { disposeSurface(); unbindSession(); };
   if (waitForSurface) {

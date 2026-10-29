@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview window actions
 tags: [ui, files, preview, floating-windows, selection]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -21,7 +21,7 @@ Workbench exposes the full path through tooltip/Copy and begins content beneath 
 `FilePreviewActions` owns availability/feedback. Header actions preserve reading selection; the product download builder keeps current file/draft mapping.
 
 ## PDF drafts and persistence
-Writable PDFs expose Edit file. PDF.js saves full Unicode values; unsupported original fonts use `NeedAppearances` instead of embedded replacement fonts. Downloads always use the product manager.
+Writable PDFs expose Edit file. PDF.js saves full Unicode values; unsupported original fonts use `NeedAppearances` instead of embedded replacement fonts. Downloads always use the product manager, including conversation-file child previews; [conversation file ownership](../ai/flower-task-files.md#download-ownership) defines background lifetime and toolbar history.
 
 ## Unavailable targets and recovery
 Navigation opens current filesystem objects; historical tool/diff/image snapshots retain original content. Failed targets offer Retry/Open parent. [Dismissal](file-preview-dismissal.md) owns resource lifetime and close semantics.

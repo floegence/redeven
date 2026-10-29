@@ -2723,6 +2723,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
     const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
     const adapter = createEnvLocalFlowerSurfaceAdapter({
+      downloadManager,
       modelReadResource: flowerModelReadResource,
       envPublicID: trimString(envId()),
       envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',

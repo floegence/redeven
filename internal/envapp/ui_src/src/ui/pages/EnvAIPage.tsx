@@ -1,3 +1,4 @@
+import { useDownloadManager } from '../downloads/DownloadContext';
 import { FlowerTaskFilePreviewContent } from '../flower/FlowerTaskFilePreviewContent';
 import { Show, createMemo, onCleanup, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
@@ -87,6 +88,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   const filesystemPicker = useEnvFilesystemPicker();
   const i18n = useI18n();
   const notification = useNotification();
+  const downloadManager = useDownloadManager();
   const desktopSessionTargetRoute = readDesktopSessionContextSnapshot()?.target_route;
   const modelReadRevision = () => JSON.stringify([env.settingsSeq?.() ?? 0, env.resourceCacheAccess?.().generation ?? 0]);
   const scopeKey = () => env.flowerScopeKey?.() ?? trim(env.env_id());
@@ -100,6 +102,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   ));
   const createAdapter = (signal: AbortSignal) => createEnvLocalFlowerSurfaceAdapter({
     signal,
+    downloadManager,
     envPublicID: trim(env.env_id()),
     get envLabel() { return trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'); },
     desktopSessionTargetRoute,

@@ -27,11 +27,23 @@ export type PdfDraftDownloadSourceSpec = Readonly<{
   mime: 'application/pdf';
 }>;
 
-export type DownloadSourceSpec = RuntimeFileDownloadSourceSpec | DraftTextDownloadSourceSpec | PdfDraftDownloadSourceSpec;
+/** Host-authorized conversation sources retain their reader for explicit retries. */
+export type FlowerFileDownloadSourceSpec = Readonly<{
+  kind: 'flower_file';
+  threadID: string;
+  path: string;
+  name: string;
+  size?: number;
+  mime?: string;
+  open: (signal: AbortSignal) => ReturnType<RuntimeDownloadSource['open']>;
+}>;
+
+export type DownloadSourceSpec = RuntimeFileDownloadSourceSpec | DraftTextDownloadSourceSpec | PdfDraftDownloadSourceSpec | FlowerFileDownloadSourceSpec;
 
 export type DownloadCommandOrigin =
   | 'file_browser_context_menu'
   | 'file_browser_toolbar'
+  | 'flower_task_files'
   | 'file_preview'
   | 'workbench_preview';
 

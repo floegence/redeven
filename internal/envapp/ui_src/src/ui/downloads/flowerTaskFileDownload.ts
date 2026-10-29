@@ -1,6 +1,5 @@
 import { describeFilePreview, getExtDot, isTextFilePreview, mimeFromExtDot } from '../utils/filePreview';
-import { resolveDownloadSink } from './downloadSinks';
-import type { PreparedDownloadSink } from './types';
+import type { RuntimeDownloadSource } from './types';
 
 export type FlowerTaskFileChunk = Readonly<{ bytes: string; next_offset: number; size: number; version: string }>;
 export function flowerTaskFilePath(threadID: string, path: string, working: boolean, offset: number): string {
@@ -11,47 +10,14 @@ export function flowerTaskFilePath(threadID: string, path: string, working: bool
     new URLSearchParams({ path, kind: working ? 'working' : 'delivered', offset: String(offset) })
   );
 }
-/** Reuses native/browser destinations; transfers bounded chunks without buffering the source. */
-export async function downloadFlowerTaskFile(
-  path: string,
-  read: (offset: number) => Promise<FlowerTaskFileChunk>,
-  signal: AbortSignal,
-): Promise<void> {
-  const name = path.split(/[\\/]/).pop() || 'download';
-  const sink = resolveDownloadSink();
-  let destination: PreparedDownloadSink | undefined;
-  try {
-    destination = await sink.prepare(
-      {
-        id: crypto.randomUUID(),
-        command: { source: { kind: 'runtime_file', path, name }, entryKind: 'file', origin: 'file_preview' },
-        platform: sink.kind,
-        status: 'choosing_destination',
-        createdAt: Date.now(),
-        bytesRead: 0,
-        cancelable: true,
-      },
-      signal,
-    );
-    await readFlowerTaskFileChunks(read, signal, bytes => destination!.write(bytes));
-    signal.throwIfAborted();
-    await destination.complete();
-  } catch (error) {
-    await destination?.abort(
-      signal.aborted || (error instanceof DOMException && error.name === 'AbortError') ? 'canceled' : 'failed',
-    );
-    throw error;
-  }
-}
-
 /** One validated, cancellable read path for downloads and in-dialog previews. */
-async function readFlowerTaskFileChunks(
+async function* readFlowerTaskFileChunks(
   read: (offset: number) => Promise<FlowerTaskFileChunk>,
   signal: AbortSignal,
-  receive: (bytes: Uint8Array<ArrayBuffer>, size: number) => void | Promise<void>,
-): Promise<void> {
+): AsyncGenerator<{ bytes: Uint8Array<ArrayBuffer>; size: number }> {
   let offset = 0,
-    version: string | undefined;
+    version: string | undefined,
+    size: number | undefined;
   for (;;) {
     signal.throwIfAborted();
     const chunk = await read(offset);
@@ -65,14 +31,34 @@ async function readFlowerTaskFileChunks(
       bytes.length > 256 * 1024 ||
       (bytes.length === 0 && offset !== chunk.size) ||
       !chunk.version ||
-      (version !== undefined && chunk.version !== version)
+      (version !== undefined && chunk.version !== version) ||
+      (size !== undefined && chunk.size !== size)
     )
       throw new Error('File changed during download.');
     version = chunk.version;
-    await receive(bytes, chunk.size);
+    size = chunk.size;
+    yield { bytes, size };
     offset = chunk.next_offset;
     if (offset === chunk.size) break;
   }
+}
+
+/** Discover the size from the first authorized chunk without buffering the file. */
+export async function openFlowerTaskFile(
+  read: (offset: number) => Promise<FlowerTaskFileChunk>,
+  signal: AbortSignal,
+): ReturnType<RuntimeDownloadSource['open']> {
+  const iterator = readFlowerTaskFileChunks(read, signal);
+  const first = await iterator.next();
+  return {
+    totalBytes: first.value?.size,
+    chunks: (async function* () {
+      try {
+        if (!first.done) yield first.value.bytes;
+        for await (const chunk of iterator) yield chunk.bytes;
+      } finally { await iterator.return(undefined); }
+    })(),
+  };
 }
 
 /** Preview buffers are bounded; downloading retains the streaming path. */
@@ -82,10 +68,10 @@ export async function loadFlowerTaskFile(
   signal: AbortSignal,
 ): Promise<Blob> {
   const chunks: Uint8Array<ArrayBuffer>[] = [];
-  await readFlowerTaskFileChunks(read, signal, (bytes, size) => {
+  for await (const { bytes, size } of readFlowerTaskFileChunks(read, signal)) {
     if (size > 20 * 1024 * 1024) throw new Error('File exceeds the preview size limit.');
     chunks.push(bytes);
-  });
+  }
   signal.throwIfAborted();
   const mime = mimeFromExtDot(getExtDot(path)) || (describeFilePreview(path).mode === 'markdown' ? 'text/markdown'
     : isTextFilePreview(describeFilePreview(path)) ? 'text/plain' : 'application/octet-stream');

@@ -28,7 +28,6 @@ export function FlowerTaskFiles(props: {
   const [viewport, setViewport] = createSignal<HTMLDivElement>();
   const [sentinel, setSentinel] = createSignal<HTMLDivElement>();
   const listing = createTaskFileListing(props, query, filter, nearEnd, () => !working() && !preview(), process);
-  let operation: AbortController | undefined;
   let epoch = 0;
   let searchInput: HTMLInputElement | undefined;
   let workingTrigger: HTMLButtonElement | undefined;
@@ -37,11 +36,11 @@ export function FlowerTaskFiles(props: {
   createEffect(() => {
     void props.open; void listing.owner();
     untrack(() => {
-      epoch++; operation?.abort(); setDownloading(undefined); setError(''); setPreview(null); setCleaning(false);
+      epoch++; setDownloading(undefined); setError(''); setPreview(null); setCleaning(false);
       setConfirm(false); setWorking(false); setProcess(false); filesScrollTop = 0; processScrollTop = 0; setQuery(''); setFilter('all'); setNearEnd(true);
     });
   });
-  onCleanup(() => { epoch++; operation?.abort(); });
+  onCleanup(() => { epoch++; });
   createEffect(() => {
     const root = viewport(), target = sentinel();
     if (!props.open || !root || !target) return;
@@ -69,29 +68,25 @@ export function FlowerTaskFiles(props: {
       if (generation === epoch) props.onOpenChange(false);
     } catch { if (generation === epoch) setError(props.copy.unavailable); }
   };
-  const download = async (key: string, read: (signal: AbortSignal) => Promise<void>) => {
-    const controller = new AbortController(), generation = epoch;
-    operation?.abort(); operation = controller; setDownloading(key); setError('');
-    try { await read(controller.signal); }
-    catch { if (!controller.signal.aborted && generation === epoch) setError(props.copy.unavailable); }
-    finally { if (operation === controller) { setDownloading(undefined); operation = undefined; } }
+  const downloadsActive = () => Boolean(downloading()) || Boolean(props.adapter.hasActiveTaskFileDownloads?.(props.threadID));
+  const download = async (key: string, read: () => Promise<void>) => {
+    const generation = epoch;
+    setDownloading(key); setError('');
+    try { await read(); }
+    catch { if (generation === epoch) setError(props.copy.unavailable); }
+    finally { if (generation === epoch) setDownloading(undefined); }
   };
-  const downloadMaterial = (item: FlowerTaskMaterial) => download(item.id, async signal => {
-    const blob = await props.adapter.loadMessageAttachment!({ url: item.url, signal });
-    signal.throwIfAborted();
-    const url = URL.createObjectURL(blob), anchor = document.createElement('a');
-    try { anchor.href = url; anchor.download = item.name; document.body.append(anchor); anchor.click(); }
-    finally { anchor.remove(); URL.revokeObjectURL(url); }
-  });
+  const downloadMaterial = (item: FlowerTaskMaterial) => download(item.id,
+    () => props.adapter.downloadTaskMaterial!(props.threadID, item));
   const openMaterial = (item: FlowerTaskMaterial) => setPreview({ id: props.threadID + ':' + item.id,
     name: item.name, mimeType: item.mime, load: signal => props.adapter.loadMessageAttachment!({ url: item.url, signal }),
-    download: () => void downloadMaterial(item) });
+    download: props.adapter.downloadTaskMaterial ? () => void downloadMaterial(item) : undefined });
   const openFile = (path: string, name: string, mime: string, temporary: boolean) => {
     const threadID = props.threadID;
     setPreview({ id: threadID + ':' + path, path, name, mimeType: mime,
       load: signal => props.adapter.loadTaskFile ? props.adapter.loadTaskFile(threadID, path, temporary, signal)
         : props.adapter.loadMessageFile!({ path, signal }),
-      download: props.adapter.downloadTaskFile ? () => void download(path, signal => props.adapter.downloadTaskFile!(threadID, path, temporary, signal)) : undefined });
+      download: props.adapter.downloadTaskFile ? () => void download(path, () => props.adapter.downloadTaskFile!(threadID, path, temporary)) : undefined });
   };
   const materialTime = (value: string) => {
     const date = new Date(value);
@@ -151,17 +146,17 @@ export function FlowerTaskFiles(props: {
             <FlowerTaskFileIdentity name={file.name} mime="" size={file.size} previewLabel={props.copy.preview}
               onPreview={props.adapter.loadTaskFile ? () => openFile(file.path, file.name, '', true) : undefined} />
             <Show when={props.adapter.downloadTaskFile}><Button size="icon" variant="ghost" icon={Download} aria-label={props.copy.download} title={props.copy.download}
-              loading={downloading() === file.path} disabled={Boolean(downloading())} onClick={() => void download(file.path, signal => props.adapter.downloadTaskFile!(props.threadID, file.path, true, signal))} /></Show>
+              loading={downloading() === file.path} disabled={downloadsActive()} onClick={() => void download(file.path, () => props.adapter.downloadTaskFile!(props.threadID, file.path, true))} /></Show>
           </article>}</For>
           <Show when={listing.data()?.working_truncated}><p class="flower-task-files-notice">{props.copy.truncated}</p></Show>
           <Show when={!listing.data()?.can_clean}><p class="flower-task-working-description">{props.copy.busy}</p></Show>
           <Show when={!listing.data()?.working_files}><p class="flower-task-files-empty">{props.copy.workingEmpty}</p></Show>
           <Show when={error()}><p role="alert" class="flower-task-files-notice text-destructive">{error()}</p></Show>
           <Show when={props.adapter.cleanTaskFiles && props.adapter.canMutate !== false && listing.data()?.working_files}>
-            <Show when={confirm()} fallback={<Button size="sm" variant="ghost-destructive" icon={Trash} disabled={cleaning() || listing.loading() || Boolean(downloading()) || !listing.data()?.can_clean}
+            <Show when={confirm()} fallback={<Button size="sm" variant="ghost-destructive" icon={Trash} disabled={cleaning() || listing.loading() || downloadsActive() || !listing.data()?.can_clean}
               onClick={() => setConfirm(true)}>{props.copy.clean}</Button>}>
               <div role="alert" class="flower-task-files-notice"><p>{props.copy.confirm}</p><div class="flower-task-file-actions">
-                <Button size="sm" variant="destructive" icon={Trash} loading={cleaning()} disabled={listing.loading() || Boolean(downloading()) || !listing.data()?.can_clean} onClick={() => void clean()}>{props.copy.clean}</Button>
+                <Button size="sm" variant="destructive" icon={Trash} loading={cleaning()} disabled={listing.loading() || downloadsActive() || !listing.data()?.can_clean} onClick={() => void clean()}>{props.copy.clean}</Button>
                 <Button size="sm" variant="ghost" disabled={cleaning()} onClick={() => setConfirm(false)}>{props.copy.cancel}</Button>
               </div></div>
             </Show>
@@ -177,8 +172,8 @@ export function FlowerTaskFiles(props: {
                 <Show when={canFolder()}><Button size="icon" variant="ghost" icon={Folder} aria-label={props.copy.folder} title={props.copy.folder}
                   onClick={() => void openFolder(file.file_path.replace(/[/\\][^/\\]+$/, ''))} /></Show>
                 <Show when={props.adapter.downloadTaskFile}><Button size="icon" variant="ghost" icon={Download} aria-label={props.copy.download} title={props.copy.download}
-                  loading={downloading() === file.file_path} disabled={Boolean(downloading()) || file.status === 'missing' || file.status === 'unavailable'}
-                  onClick={() => void download(file.file_path, signal => props.adapter.downloadTaskFile!(props.threadID, file.file_path, false, signal))} /></Show>
+                  loading={downloading() === file.file_path} disabled={downloadsActive() || file.status === 'missing' || file.status === 'unavailable'}
+                  onClick={() => void download(file.file_path, () => props.adapter.downloadTaskFile!(props.threadID, file.file_path, false))} /></Show>
               </div>
             </article>}</For>
             <For each={listing.visibleMaterials()}>{item => <article class="flower-task-file-row flower-task-material-row">
@@ -189,8 +184,8 @@ export function FlowerTaskFiles(props: {
                     load={(url, signal) => props.adapter.loadMessageAttachment!({ url, signal })} onOpen={() => openMaterial(item)} /> : undefined} />
               <div class="flower-task-file-actions">
                 <Show when={props.onSource}><Button size="icon" variant="ghost" icon={MessageSquare} aria-label={props.copy.source} title={props.copy.source} onClick={() => props.onSource?.(item.item_id)} /></Show>
-                <Show when={props.adapter.loadMessageAttachment && item.url}><Button size="icon" variant="ghost" icon={Download} aria-label={props.copy.download} title={props.copy.download}
-                  loading={downloading() === item.id} disabled={Boolean(downloading())} onClick={() => void downloadMaterial(item)} /></Show>
+                <Show when={props.adapter.downloadTaskMaterial && item.url}><Button size="icon" variant="ghost" icon={Download} aria-label={props.copy.download} title={props.copy.download}
+                  loading={downloading() === item.id} disabled={downloadsActive()} onClick={() => void downloadMaterial(item)} /></Show>
               </div>
             </article>}</For>
           </div>
@@ -210,6 +205,6 @@ export function FlowerTaskFiles(props: {
       <Show when={working() && listing.data()?.working_files}><div class="flower-task-files-footer"><span>{taskFileSize(listing.data()!.working_bytes)}{listing.data()?.working_truncated ? '+' : ''}</span></div></Show>
       <span class="flower-visually-hidden" role="status"><StableText reserve={[props.copy.loading]}>{listing.loading() ? props.copy.loading : ''}</StableText></span>
     </Dialog>
-    <Show when={preview()} keyed>{source => <FlowerTaskFilePreview source={source} copy={props.copy} downloading={Boolean(downloading())} actionError={error()} onClose={() => setPreview(null)} renderContent={props.renderPreviewContent} />}</Show>
+    <Show when={preview()} keyed>{source => <FlowerTaskFilePreview source={source} copy={props.copy} downloading={downloadsActive()} actionError={error()} onClose={() => setPreview(null)} renderContent={props.renderPreviewContent} />}</Show>
   </>;
 }

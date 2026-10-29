@@ -26,7 +26,7 @@ type DownloadOperation = {
 };
 
 export type DownloadManagerOptions = Readonly<{
-  source: RuntimeDownloadSource;
+  source?: RuntimeDownloadSource;
   sink?: DownloadSink;
   sinkResolver?: () => DownloadSink;
   store?: DownloadTaskStore;
@@ -140,22 +140,28 @@ export function createDownloadManager(options: DownloadManagerOptions): Download
         cancelable: true,
       });
 
-      operation.prepared = await operation.sink.prepare({
+      const prepared = await operation.sink.prepare({
         ...task,
         totalBytes,
         status: 'choosing_destination',
         cancelable: true,
       }, operation.controller.signal);
+      operation.prepared = prepared;
+      operation.controller.signal.throwIfAborted();
 
       store.patchTask(taskId, {
-        destination: operation.prepared.destination,
+        destination: prepared.destination,
         status: 'streaming',
         startedAt,
         cancelable: true,
       });
 
       stage = 'source';
-      const source = await options.source.open(task.command, operation.controller.signal);
+      operation.controller.signal.throwIfAborted();
+      if (task.command.source.kind !== 'flower_file' && !options.source) throw new Error('Download source is unavailable.');
+      const source = task.command.source.kind === 'flower_file'
+        ? await task.command.source.open(operation.controller.signal)
+        : await options.source!.open(task.command, operation.controller.signal);
       totalBytes = positiveInteger(source.totalBytes) ?? totalBytes;
       if (typeof totalBytes === 'number') {
         store.patchTask(taskId, {
@@ -169,11 +175,13 @@ export function createDownloadManager(options: DownloadManagerOptions): Download
         if (operation.controller.signal.aborted) {
           throw new DOMException('Download canceled.', 'AbortError');
         }
-        await operation.prepared.write(chunk);
+        await prepared.write(chunk);
+        operation.controller.signal.throwIfAborted();
         bytesRead += chunk.byteLength;
         store.patchTask(taskId, patchProgress(bytesRead, totalBytes, now(), startedAt));
       }
 
+      operation.controller.signal.throwIfAborted();
       stage = 'finalize';
       store.patchTask(taskId, {
         status: 'finalizing',
@@ -182,7 +190,7 @@ export function createDownloadManager(options: DownloadManagerOptions): Download
         progressRatio: progressRatio(bytesRead, totalBytes ?? bytesRead),
         cancelable: false,
       });
-      const destination = await operation.prepared.complete();
+      const destination = await prepared.complete();
       const completedAt = now();
       store.patchTask(taskId, {
         status: 'completed',
@@ -195,10 +203,10 @@ export function createDownloadManager(options: DownloadManagerOptions): Download
       });
     } catch (error) {
       if (operation.prepared) {
-        await operation.prepared.abort(isAbortError(error) ? 'canceled' : 'failed').catch(() => undefined);
+        await operation.prepared.abort(operation.controller.signal.aborted || isAbortError(error) ? 'canceled' : 'failed').catch(() => undefined);
       }
       const completedAt = now();
-      if (isAbortError(error)) {
+      if (operation.controller.signal.aborted || isAbortError(error)) {
         store.patchTask(taskId, {
           status: 'canceled',
           completedAt,
@@ -249,6 +257,7 @@ export function createDownloadManager(options: DownloadManagerOptions): Download
       return taskId;
     },
     cancel(taskId) {
+      if (!store.getTask(taskId)?.cancelable) return;
       const operation = operations.get(taskId);
       if (operation) {
         operation.controller.abort();

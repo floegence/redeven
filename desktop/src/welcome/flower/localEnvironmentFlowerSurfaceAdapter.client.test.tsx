@@ -1,3 +1,5 @@
+import { createDownloadManager } from '../../../../internal/envapp/ui_src/src/ui/downloads/createDownloadManager';
+import type { DesktopDownloadWriteRequest } from '../../shared/desktopDownloadIPC';
 import { modelDirectoryWireFixture } from '../../../../internal/envapp/ui_src/src/test/modelDirectoryWireFixture';
 import { resolveFlowerProviderModels } from '../../../../internal/flower_ui/src/settings/modelSelection';
 import { flowerLiveWireFixture } from '../../../../internal/flower_ui/src/test/flowerLiveWireFixture';
@@ -1974,4 +1976,42 @@ describe('Desktop directory favorite transport', () => {
       await expect(second.onSetFavorite!('/work/old',true)).rejects.toMatchObject({name:'AbortError'});
     } finally {client.dispose();}
   });
+});
+
+it('tracks native conversation downloads without losing the selected runtime or thread scope', async () => {
+  const destination = { token: 'download-token', file_name: 'report.txt', display_path: '/Downloads/report.txt' };
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const native = {
+    prepare: vi.fn(async () => ({ ok: true, destination })),
+    write: vi.fn(async (_request: DesktopDownloadWriteRequest) => { await gate; return { ok: true }; }),
+    complete: vi.fn(async () => ({ ok: true, destination })),
+    abort: vi.fn(async () => ({ ok: true })),
+  };
+  const previous = window.redevenDesktopDownloads;
+  window.redevenDesktopDownloads = native;
+  const bridge = bridgeFor(() => ({ bytes: btoa('report'), size: 6, next_offset: 6, version: 'v1' }));
+  const manager = createDownloadManager({});
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: 'files-runtime', downloadManager: manager });
+  const companion = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: 'files-runtime', downloadManager: manager });
+  try {
+    const pending = adapter.downloadTaskFile!('thread/one', '/scratch/report.txt', true);
+    expect(adapter.hasActiveTaskFileDownloads!('thread/one')).toBe(true);
+    expect(companion.hasActiveTaskFileDownloads!('thread/one')).toBe(true);
+    expect(manager.tasks()).toHaveLength(1);
+    await vi.waitFor(() => expect(native.write).toHaveBeenCalledOnce());
+    const request = vi.mocked(bridge.requestRuntimeFlower).mock.calls[0][0];
+    const url = new URL(request.path, 'http://local');
+    expect(request.environment_id).toBe('files-runtime');
+    expect(url.pathname).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/task-file-content');
+    expect(url.searchParams.get('kind')).toBe('working');
+    expect(url.searchParams.get('path')).toBe('/scratch/report.txt');
+    expect(native.prepare).toHaveBeenCalledWith(expect.objectContaining({ task_id: expect.stringMatching(/^download-/u), suggested_name: 'report.txt' }));
+    expect(native.write.mock.calls[0][0].token).toBe(destination.token);
+    expect(Array.from(native.write.mock.calls[0][0].chunk as Uint8Array)).toEqual([114, 101, 112, 111, 114, 116]);
+    finish(); await pending;
+    expect(adapter.hasActiveTaskFileDownloads!('thread/one')).toBe(false);
+    expect(manager.tasks()[0]).toMatchObject({ status: 'completed', bytesRead: 6 });
+    expect(native.complete).toHaveBeenCalledOnce(); expect(native.abort).not.toHaveBeenCalled();
+  } finally { finish(); window.redevenDesktopDownloads = previous; }
 });

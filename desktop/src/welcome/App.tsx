@@ -1,3 +1,4 @@
+import { createDownloadManager } from '../../../internal/envapp/ui_src/src/ui/downloads/createDownloadManager';
 import { createDesktopCenterHost, createDesktopCenterProgressAdapter } from './envCenterAdapter';
 import { createEnvironmentOpenController } from '../envcenter/controller';
 import { DevelopmentCredentialRecovery } from './DevelopmentCredentialRecovery';
@@ -2544,6 +2545,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const shellTheme = desktopThemeBridge();
   const shellLanguage = desktopLanguageBridge();
   const updateBridge = desktopUpdateBridge();
+  const flowerDownloadManager = createDownloadManager({});
   const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();
   onCleanup(() => flowerDraftCoordinator.dispose());
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
@@ -6687,6 +6689,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   const lifetime = new AbortController();
                   onCleanup(() => lifetime.abort());
                   const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                    downloadManager: flowerDownloadManager,
                     get directoryFavoritesClient() { return flowerDirectoryFavorites(); },
                     signal: lifetime.signal,
                     runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,
@@ -6724,6 +6727,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                       const lifetime = new AbortController();
                       onCleanup(() => lifetime.abort());
                       const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                        downloadManager: flowerDownloadManager,
                         get directoryFavoritesClient() { return flowerDirectoryFavorites(); },
                         signal: lifetime.signal,
                         openMessageURL: openFlowerMessageURL,
