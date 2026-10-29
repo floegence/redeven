@@ -37,6 +37,107 @@ func flowerBackpressureEnvelope(t *testing.T, sub *FlowerLiveStreamSubscription)
 	return envelope
 }
 
+func TestFlowerLiveBackpressureKeepsReadingRevisionBaselines(t *testing.T) {
+	for _, child := range []bool{false, true} {
+		for _, sameVersion := range []bool{false, true} {
+			t.Run(fmt.Sprintf("child=%t/same_version=%t", child, sameVersion), func(t *testing.T) {
+				svc, sub := subscribeFlowerFragmentTest(t)
+				for revision := uint64(1); revision <= 3; revision++ {
+					version := revision
+					if sameVersion {
+						version = 1
+					}
+					current := flowerBackpressureCurrent(version, fmt.Sprint(revision))
+					envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread", ReadingRevision: revision, Current: &current}
+					if child {
+						envelope.ThreadID, envelope.SubagentCurrent, envelope.Current = "parent", envelope.Current, nil
+					}
+					enqueueFlowerFragmentTest(t, svc, sub, newFlowerLiveEncodedBatch(envelope))
+				}
+				if len(sub.subscriber.queue) != 3 {
+					t.Fatalf("reading baselines were deduplicated or converged: %d", len(sub.subscriber.queue))
+				}
+				for revision := uint64(1); revision <= 3; revision++ {
+					envelope := flowerBackpressureEnvelope(t, sub)
+					current := envelope.Current
+					if child {
+						current = envelope.SubagentCurrent
+					}
+					if envelope.ReadingRevision != revision || current == nil || !flowerTestHasText(*current, fmt.Sprint(revision)) {
+						t.Fatalf("reading baseline %d was lost: %+v", revision, envelope)
+					}
+				}
+				if svc.flowerLiveQueuedBytes != 0 {
+					t.Fatal("reading baseline bytes were retained")
+				}
+			})
+		}
+	}
+}
+
+func TestFlowerLiveBackpressureReadingBaselineIgnoresOtherInterestWatermark(t *testing.T) {
+	svc, sub := subscribeFlowerFragmentTest(t)
+	route := flowerLiveRoute{"thread", "thread", false}
+	sub.subscriber.covered = map[flowerLiveRoute]uint64{route: 5}
+	sub.subscriber.queuedBytes += route.bytes()
+	svc.flowerLiveQueuedBytes += route.bytes()
+	current := flowerBackpressureCurrent(5, "selected page")
+	enqueueFlowerFragmentTest(t, svc, sub, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread", ReadingRevision: 1, Current: &current}))
+	if len(sub.subscriber.queue) != 1 {
+		t.Fatal("reading baseline was suppressed by the full-view watermark")
+	}
+	if got := flowerBackpressureEnvelope(t, sub); got.ReadingRevision != 1 || got.Current == nil {
+		t.Fatal("reading baseline was not delivered")
+	}
+	sub.Close()
+	if svc.flowerLiveQueuedBytes != 0 {
+		t.Fatal("watermark accounting leaked")
+	}
+}
+
+func TestFlowerLiveBackpressureRetiresSupersededReadingRefresh(t *testing.T) {
+	for _, child := range []bool{false, true} {
+		t.Run(fmt.Sprint(child), func(t *testing.T) {
+			svc, sub := subscribeFlowerFragmentTest(t)
+			interest := &sub.subscriber.history
+			if child {
+				interest = &sub.subscriber.subagentHistory
+			}
+			interest.revision = 2
+			marker := &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, route: flowerLiveRoute{"thread", "thread", child}, version: 1, refresh: true, readingRevision: 1}
+			enqueueFlowerFragmentTest(t, svc, sub, marker)
+			if err := sub.resolveFlowerLiveRefresh(t.Context(), marker); err != nil {
+				t.Fatal(err)
+			}
+			if len(sub.subscriber.queue) != 0 || svc.flowerLiveQueuedBytes != 0 || interest.revision != 2 || sub.subscriber.closed {
+				t.Fatal("obsolete refresh stranded the queue or invalidated the new reading interest")
+			}
+		})
+	}
+}
+
+func TestFlowerLiveBackpressureConvergesOnlyMatchingReadingRevision(t *testing.T) {
+	svc, sub := subscribeFlowerFragmentTest(t)
+	for revision := uint64(1); revision <= 2; revision++ {
+		current := flowerBackpressureCurrent(revision, fmt.Sprint(revision))
+		enqueueFlowerFragmentTest(t, svc, sub, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread", ReadingRevision: revision, Current: &current}))
+	}
+	current := flowerBackpressureCurrent(3, "replacement")
+	enqueueFlowerFragmentTest(t, svc, sub, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread", ReadingRevision: 2, Current: &current}))
+	if len(sub.subscriber.queue) != 2 {
+		t.Fatal("convergence retired another reading baseline")
+	}
+	if got := flowerBackpressureEnvelope(t, sub); got.ReadingRevision != 1 || got.Current == nil || got.Current.ViewVersion != 1 {
+		t.Fatal("preceding reading baseline was lost")
+	}
+	if got := flowerBackpressureEnvelope(t, sub); got.ReadingRevision != 2 || got.Current == nil || got.Current.ViewVersion != 3 {
+		t.Fatal("matching reading replacement was lost")
+	}
+	if svc.flowerLiveQueuedBytes != 0 {
+		t.Fatal("convergence accounting leaked")
+	}
+}
+
 func TestFlowerLiveBackpressureInitializationConvergesWithoutProducerQuiet(t *testing.T) {
 	svc, sub := subscribeFlowerFragmentTest(t)
 	sub.subscriber.initializing = true

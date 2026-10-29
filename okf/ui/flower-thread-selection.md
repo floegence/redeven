@@ -45,7 +45,12 @@ retained trailing room at arrival. Otherwise it cancels obsolete reading demand,
 installs one bounded tail interest and reveals the prepared latest destination;
 it never walks intervening pages. Main and child views share these semantics.
 The accepted history baseline belongs to the live observer and reading revision;
-superseded navigation cannot replace a newer selection. Collapsed turn/tool ranges
+superseded navigation cannot replace a newer selection. Transport deduplication
+and convergence are scoped to that reading revision: distinct committed baselines
+remain ordered even at the same canonical version. Full-view watermarks cannot
+suppress a reading baseline, and obsolete refresh markers retire without
+invalidating a newer interest. Existing queue byte/count limits still apply.
+Collapsed turn/tool ranges
 use one canonical skip-and-retain installation to reach preceding dialogue. Opening
 a skipped disclosure reveals a bounded missing-content control; scrolling or that
 action fills the interval without changing the user's disclosure choice. Changing

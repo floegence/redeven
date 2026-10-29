@@ -826,7 +826,7 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 		return false
 	}
 	if route := batch.route; route.threadID != "" {
-		if version := subscriber.covered[route]; version != 0 {
+		if version := subscriber.covered[route]; version != 0 && batch.readingRevision == 0 {
 			if batch.version >= version {
 				delete(subscriber.covered, route)
 				subscriber.queuedBytes -= route.bytes()
@@ -845,7 +845,9 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 		}
 		for index := len(subscriber.queue) - 1; index >= 0; index-- {
 			previous := subscriber.queue[index]
-			if previous.route != route {
+			// A new reading selection can have the same canonical version. Its
+			// baseline is an independent ordering boundary, not duplicate output.
+			if previous.route != route || previous.readingRevision != batch.readingRevision {
 				continue
 			}
 			if batch.version <= previous.version {
@@ -899,7 +901,7 @@ func flowerLiveRefreshBatch(batch *flowerLiveEncodedBatch) *flowerLiveEncodedBat
 func convergeFlowerLiveRouteLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
 	first, kept := -1, 0
 	for _, queued := range subscriber.queue {
-		if queued.route == batch.route {
+		if queued.route == batch.route && queued.readingRevision == batch.readingRevision {
 			if first >= 0 {
 				releaseFlowerLiveBatchLocked(service, subscriber, queued)
 				continue
@@ -1033,9 +1035,6 @@ func replaceFlowerLiveQueuedBatchLocked(service *Service, subscriber *flowerLive
 // publications update that same slot. The snapshot covers old deltas; any newer
 // publication leaves one marker behind, without waiting for a quiet producer.
 func (s *FlowerLiveStreamSubscription) resolveFlowerLiveRefresh(ctx context.Context, marker *flowerLiveEncodedBatch) error {
-	if s.service.threadRuntime == nil {
-		return ErrFlowerLiveSync
-	}
 	if marker.readingRevision != 0 {
 		s.service.mu.Lock()
 		defer s.service.mu.Unlock()
@@ -1047,8 +1046,24 @@ func (s *FlowerLiveStreamSubscription) resolveFlowerLiveRefresh(ctx context.Cont
 		}
 		if !subscriber.closed && interest.revision == marker.readingRevision {
 			invalidateFlowerHistoryInterestLocked(s.service, subscriber, interest, marker.route.threadID, parentID)
+		} else {
+			// A newer baseline supersedes this refresh. Retire only the obsolete
+			// marker so Next cannot spin on it or invalidate the current interest.
+			for index, queued := range subscriber.queue {
+				if queued != marker {
+					continue
+				}
+				releaseFlowerLiveBatchLocked(s.service, subscriber, queued)
+				copy(subscriber.queue[index:], subscriber.queue[index+1:])
+				subscriber.queue[len(subscriber.queue)-1] = nil
+				subscriber.queue = subscriber.queue[:len(subscriber.queue)-1]
+				break
+			}
 		}
 		return nil
+	}
+	if s.service.threadRuntime == nil {
+		return ErrFlowerLiveSync
 	}
 	current, err := s.service.threadRuntime.View(ctx, identity.ThreadID(marker.route.threadID))
 	if err != nil {
