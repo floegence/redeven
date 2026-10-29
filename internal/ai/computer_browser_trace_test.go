@@ -44,7 +44,7 @@ func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) 
 	ctx, cancel := context.WithCancel(t.Context())
 	pipe := &extensionSourcePipe{
 		client: client, conn: local, ctx: ctx, cancel: cancel,
-		target: "fixture-target", request: "fixture-request", tab: "7", binding: "fixture-binding",
+		target: "fixture-target\r\nforged=target", request: "fixture-request\nforged=request", tab: "7", binding: "fixture-binding\rforged=binding",
 		queue: make(chan json.RawMessage, 8), slots: make(chan struct{}, 2),
 	}
 	t.Cleanup(pipe.close)
@@ -81,9 +81,14 @@ func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) 
 	if err := helper.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
 		t.Fatal(err)
 	}
+	failedCommand := "1\r\nforged=command\x1b[31m"
 	for index, session := range []string{"", "private-child-session"} {
+		id := fmt.Sprint(index)
+		if index == 1 {
+			id = failedCommand
+		}
 		command := map[string]any{
-			"id": fmt.Sprint(index), "method": "Runtime.evaluate", "session": session,
+			"id": id, "method": "Runtime.evaluate", "session": session,
 			"params": map[string]string{"expression": "private-source-expression", "url": "https://private.example/secret"},
 		}
 		if err := browserbridge.WriteMessage(helper, command, 1<<20); err != nil {
@@ -125,7 +130,7 @@ func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) 
 			t.Fatalf("command trace lost correlation: %v", record)
 		}
 		command := record["command"].(string)
-		if record["child_frame"] != (command == "1") {
+		if record["child_frame"] != (command == failedCommand) {
 			t.Fatal("trace lost the root/child distinction")
 		}
 		phase := record["phase"].(string)
@@ -136,7 +141,7 @@ func TestExtensionSourceTraceCorrelatesCommandsWithoutPageContent(t *testing.T) 
 			}
 		}
 	}
-	if strings.Join(stages["0"], ",") != "started,completed" || strings.Join(stages["1"], ",") != "started,failed" || len(stages) != 2 {
+	if strings.Join(stages["0"], ",") != "started,completed" || strings.Join(stages[failedCommand], ",") != "started,failed" || len(stages) != 2 {
 		t.Fatalf("command outcomes are ambiguous: %v", stages)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -94,6 +95,35 @@ func TestPasswordOnlyAndCrossBrowserChallengesHaveNoAuthority(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("complete login missing cookie")
+	}
+}
+
+func TestGatewayPairingRejectsUnapprovedDestinationBeforeNetwork(t *testing.T) {
+	var requests atomic.Int32
+	target := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests.Add(1) }))
+	defer target.Close()
+	c, _, _, codes := configuredCenter(t)
+	s := NewServer(c, nil)
+	defer s.Close()
+	login := loginRecovery(t, c, "gateway-browser", codes[0])
+	grant := randomID()
+	action := actionDigest("gateway:add", struct {
+		URL      string `json:"url"`
+		Name     string `json:"name"`
+		CodeHash string `json:"code_hash"`
+	}{"https://approved.example.test", "Gateway", digest("pairing-code")})
+	c.mu.Lock()
+	c.grants[digest(grant)] = &actionGrant{Session: login.Token, Action: action, Revision: c.state.Revision, Expires: c.now().Add(GrantLifetime)}
+	c.mu.Unlock()
+	body, _ := json.Marshal(BeginPairRequest{URL: target.URL, Name: "Gateway", AccessCode: "pairing-code", Grant: grant})
+	for _, cookies := range [][]*http.Cookie{nil, {{Name: sessionCookie, Value: login.Token}}} {
+		response := requestCenter(t, s, "POST", "/api/center/v1/gateways/begin", c.key.Origin, string(body), cookies...)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("unapproved gateway accepted: %d", response.Code)
+		}
+	}
+	if requests.Load() != 0 {
+		t.Fatal("unauthorized pairing contacted a network destination")
 	}
 }
 func TestOwnerSocketRequiresActualUnixPeer(t *testing.T) {

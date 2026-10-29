@@ -7,31 +7,33 @@ reviewed_at: "2026-10-28"
 ---
 # Summary
 
-Center has one administrator and multiple device sessions. Center, Gateway and Runtime authorization remain independent. Center login permits directory/open actions, without bypassing Runtime login or creating management authority. Server-owned cancellation scopes fence every derived admission when its device loses authority.
+Center has one administrator and multiple devices. Center, Gateway and Runtime retain independent authorization: Center permits directory/open actions, never Runtime login bypass or management authority. Device revocation cancels every derived admission.
 
 # Contract
 
 ## Setup and storage
 
-The owner invokes `redeven-center setup --state-root ...` for a 15-minute credential. Network visitors cannot initialize without it. Password, verified TOTP and saved-recovery-code confirmation commit together. Partial setup grants no business. Passwords use 12–72 UTF-8 bytes; recovery codes replace only the factor.
+Owner command `redeven-center setup --state-root ...` issues the mandatory 15-minute setup credential. Password, verified TOTP and recovery-code confirmation commit together; partial setup grants nothing. Passwords use 12–72 UTF-8 bytes; recovery codes replace only the factor.
 
 Unix owner socket authorization checks actual service UID or root. SSH accounts/tunnels, loopback and headers grant nothing. `recover` fences business and creates owner-authorized setup; `recover --offline --origin ...` requires exclusive stopped-state access. Unsupported peer verification fails closed.
 
-State uses an exclusive lock, private files and AES-GCM encrypted SQLite. `center.key` pins instance/origin/initialization. Missing/corrupt committed key/database fails closed. Back up both together. Browser DTOs omit auth secrets and private route keys; only an explicit owner command prints its temporary credential.
+An exclusive lock protects private AES-GCM SQLite state. `center.key` pins instance/origin/initialization; missing or corrupt committed state fails closed. Back up key and database together. Browser DTOs omit secrets/private keys; only owner commands print temporary credentials.
+
+Audit records retain a closed sensitive-action category, never the request payload or its credential-derived digest. Exact action bindings remain only in expiring challenges/grants; password verifiers use bcrypt. Database version 2 atomically redacts version-1 audit references before readiness, preserves event facts and unrelated state, and rejects damaged or future stores unchanged.
 
 ## Authentication and devices
 
 Password creates a five-minute browser/action/session/revision-bound challenge, with at most five factor failures. Password alone grants no business. Atomic TOTP-step/recovery consumption persists across restart. Login rotates device/browser sessions. Security changes revoke sessions, challenges, grants and derived connections.
 
-Limits are one hour idle, twelve hours absolute and 16 devices. Trusted visible input reports activity; output/polling/heartbeat does not renew it. Frozen pages cannot extend authority. One-device revocation preserves other devices. Restart invalidates all devices but preserves credentials, directory and audit facts.
+Sessions allow one hour idle, twelve hours absolute and 16 devices. Only trusted visible input renews idle activity. Frozen pages, output, polling and heartbeat do not. Device revocation preserves other devices; restart invalidates all sessions, preserving credentials, directory and audit.
 
-Sensitive mutations require fresh password/factor verification and a ten-minute grant for exact action/target/payload/revision. Bounded retry receipts belong to the same session/request and cannot repeat side effects. Normal viewing/opening requires no extra Center MFA while the session remains valid.
+Sensitive mutations require fresh password/factor verification and ten-minute action/target/payload/revision grants. Bounded same-session/request retry receipts prevent repeated effects. Valid sessions need no extra MFA for viewing/opening.
 
 ## Admission and resource limits
 
 Bounded authentication concurrency and persistent administrator/direct-peer budgets survive restart. Failures back off and expire instead of locking permanently. Forwarded headers cannot choose source identity.
 
-Gateway catalog/pairing requests inherit their authenticated device context: logout, recovery and security changes cancel pending network activity. Separate request budgets permit two per device/source, eight per device and 32 globally, preserving logout and another source's capacity.
+Device revocation/recovery cancels catalog/pairing requests. Budgets allow two per device/source, eight per device and 32 globally, preserving logout and other sources.
 
 Current limits: 16 Gateways, 128 routes, 128 operation receipts with at most 32 per device, 16 live root/child operations per device, 16 concurrent proxy requests per access owner, 48 per device, 192 total. Repeated opens cannot let one device fill the global receipt budget. Revocation removes live admission immediately; five-minute tombstones retain retry outcomes. JSON/header sizes are bounded, file streams incremental, private egress restricted to signed approved endpoints.
 
@@ -41,14 +43,15 @@ Runtime accessgate remains target authentication/channel authority. Binding+revi
 
 # Boundaries
 
-The host administrator controls the trusted entry server. Center authentication does not protect plaintext against that host. SSH webpage login and remote OS administration are not implemented. Browser activity reports preserve ordinary idle behavior; they cannot extend the absolute server deadline.
+The host administrator controls entry-server plaintext. SSH webpage login and remote OS administration are absent. Browser activity cannot extend the absolute server deadline.
 
 # Evidence
 
 - `internal/environmentcenter/auth_test.go`, `setup_retry_test.go`, `server_test.go`: factors, scoped retries, owner identity and recovery.
+- `internal/environmentcenter/audit_security_test.go`: payload non-retention, version-1 redaction, stable reopen, credential preservation and failed-migration rollback.
 - `internal/webbinding/store_test.go`: durable pinning and concurrent admission/revocation.
 - `internal/accessgate/scope_test.go`, `internal/localui/web_application_test.go`: credential and artifact separation.
 - `internal/environmentcenter/applications_test.go`: repeated child handoff reuse, receipt expiry and exact authority boundaries.
 - `scripts/check_center_browser.mjs`: actual setup/MFA, logout, stale-cookie denial and key/binding/Gateway revocation.
 
-Tests certify their explicit scenarios, not every race or deployment variant by inference.
+Tests certify only their explicit scenarios.

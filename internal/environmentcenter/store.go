@@ -234,7 +234,7 @@ func Open(dir, origin string) (*Center, error) {
 	if err = file.Close(); err != nil {
 		return nil, err
 	}
-	c.db, err = sqliteutil.Open(dbPath, sqliteutil.Spec{Kind: "environment-center-v1", CurrentVersion: 1, MinimumVersion: 1, Initialize: func(tx *sql.Tx) error {
+	c.db, err = sqliteutil.Open(dbPath, sqliteutil.Spec{Kind: "environment-center-v1", CurrentVersion: 2, MinimumVersion: 1, Migrations: []sqliteutil.Migration{{FromVersion: 1, ToVersion: 2, Apply: c.migratePrivateAudit}}, Initialize: func(tx *sql.Tx) error {
 		if key.Initialized {
 			return errors.New("Center authentication authority is missing")
 		}
@@ -243,7 +243,12 @@ func Open(dir, origin string) (*Center, error) {
 		}
 		_, e := tx.Exec("INSERT INTO center_state VALUES(1,1,?)", initial)
 		return e
-	}, ValidateExisting: verify, Verify: verify, Pragmas: []string{"PRAGMA synchronous=FULL", "PRAGMA journal_mode=DELETE"}})
+	}, ValidateExisting: verify, Verify: func(tx *sql.Tx) error {
+		if err := verify(tx); err != nil {
+			return err
+		}
+		return c.verifyPrivateAudit(tx)
+	}, Pragmas: []string{"PRAGMA synchronous=FULL", "PRAGMA journal_mode=DELETE"}})
 	if err != nil {
 		return nil, err
 	}
@@ -331,6 +336,9 @@ func (c *Center) saveLocked(next persistentState) error {
 	return nil
 }
 func (c *Center) auditLocked(next *persistentState, action, result, reference string) {
+	if action == "sensitive_authentication" {
+		reference = auditActionKind(reference)
+	}
 	events := append([]auditEvent(nil), next.Audit...)
 	events = append(events, auditEvent{Time: c.now().UnixMilli(), Action: action, Result: result, Reference: reference, Revision: next.Revision})
 	if len(events) > 1000 {
