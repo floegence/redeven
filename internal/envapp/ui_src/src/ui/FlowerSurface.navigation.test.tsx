@@ -84,7 +84,7 @@ describe('FlowerSurface navigation', () => {
     textarea.value = 'Keep this unsent thought';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     const entry = runtime.querySelector<HTMLButtonElement>('.flower-sidebar-extensions-button')!;
-    expect(entry.textContent).toBe('Skills·MCP');
+    expect(entry.textContent).toBe('Extensions');
     expect(entry.previousElementSibling?.textContent).toContain('New chat');
     entry.click();
     await waitFor(() => Boolean(runtime.querySelector('[data-testid="flower-extensions"]')));

@@ -22,6 +22,7 @@ export function SkillsSection() {
   const [skillToggleSaving, setSkillToggleSaving] = createSignal<Record<string, boolean>>({});
   const [skillReinstalling, setSkillReinstalling] = createSignal<Record<string, boolean>>({});
   const skillsCatalog = skillsData;
+  let catalogRevision = ctx.catalogRevision?.() ?? 0;
   const skillSources = sourcesData;
   const canManage = () => ctx.canInteract() && ctx.canAdmin();
   const catalogBusy = () => skillsLoading() || skillsReloading() || actionSaving() || skillCreateSaving() || skillInstallSaving() || Object.values(skillToggleSaving()).some(Boolean);
@@ -56,6 +57,10 @@ export function SkillsSection() {
   };
   createEffect(on(ctx.canInteract, (available) => {
     if (available && !skillsData()) void refreshSkillsCatalog();
+  }));
+
+  createEffect(on(() => [ctx.catalogRevision?.() ?? 0, catalogBusy(), ctx.canInteract()] as const, ([revision, busy, available]) => {
+    if (available && !busy && revision !== catalogRevision) { catalogRevision = revision; void refreshSkillsCatalog(); }
   }));
 
   const toggleSkill = async (entry: SkillCatalogEntry, enabled: boolean) => {

@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { extensionI18n } from '../../../../../flower_ui/src/extensions/context';
 import { extensionMessages } from '../../../../../flower_ui/src/extensions/messages';
+import { agentPluginMessages } from '../../../../../flower_ui/src/extensions/agentPluginMessages';
 import { skillsMessages } from '../../../../../flower_ui/src/extensions/skillsMessages';
 
 const locales = ['en-US', 'zh-CN', 'zh-TW', 'de-DE', 'es-ES', 'fr-FR', 'ja-JP', 'ko-KR', 'pt-BR', 'ru-RU'];
 type Message = string | Readonly<Partial<Record<Intl.LDMLPluralRule, string>> & { other: string }>;
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/gu)].map(match => match[1]).sort();
 describe('Flower extensions localized copy', () => {
-  for (const [name, catalog] of [['center', extensionMessages], ['skills', skillsMessages]] as const) {
+  for (const [name, catalog] of [['center', extensionMessages], ['skills', skillsMessages], ['plugins', agentPluginMessages]] as const) {
     it(`${name} defines explicit complete messages and aligned placeholders for every locale`, () => {
       expect(Object.keys(catalog)).toEqual(locales);
       const source = catalog['en-US'] as Record<string, Message>;

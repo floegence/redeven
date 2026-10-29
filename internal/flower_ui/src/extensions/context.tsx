@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'solid-js';
 import type { FlowerExtensionsAdapter } from './types';
 import { skillsMessages } from './skillsMessages';
+import { agentPluginMessages } from './agentPluginMessages';
 import { extensionMessages } from './messages';
 
 export type ExtensionI18n = Readonly<{
@@ -13,6 +14,7 @@ export function extensionI18n(locale = 'en-US'): ExtensionI18n {
   const messages: Record<string, string | Readonly<Partial<Record<Intl.LDMLPluralRule, string>> & { other: string }>> = {
     ...(skillsMessages[key] ?? skillsMessages['en-US']),
     ...(extensionMessages[key] ?? extensionMessages['en-US']),
+    ...(agentPluginMessages[key] ?? agentPluginMessages['en-US']),
   };
   const format = (value: string, params: Readonly<Record<string, string | number>> = {}) => value.replace(/\{(\w+)\}/gu, (match, name: string) => String(params[name] ?? match));
   return {
@@ -21,7 +23,7 @@ export function extensionI18n(locale = 'en-US'): ExtensionI18n {
     tn: (name, count) => { const value = messages[name]; return format(typeof value === 'string' ? value : value?.[new Intl.PluralRules(locale).select(count)] ?? value?.other ?? name, { count }); },
   };
 }
-export const FlowerExtensionsContext = createContext<FlowerExtensionsAdapter & { i18n: ExtensionI18n }>();
+export const FlowerExtensionsContext = createContext<FlowerExtensionsAdapter & { i18n: ExtensionI18n; openPlugin?: (id: string) => void; selectedPlugin?: () => { id: string }; catalogRevision?: () => number; catalogChanged?: () => void }>();
 export function useFlowerExtensions() {
   const context = useContext(FlowerExtensionsContext);
   if (!context) throw new Error('Flower extensions context is unavailable');

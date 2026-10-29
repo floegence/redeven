@@ -13,6 +13,7 @@ const serverID = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/gu, '-
 export function MCPPanel() {
   const ctx = useFlowerExtensions(); const t = (key: string, params?: Record<string, string | number>) => ctx.i18n.t(key, params);
   const [catalog, setCatalog] = createSignal<MCPCatalog>();
+  let catalogRevision = ctx.catalogRevision?.() ?? 0;
   const [error, setError] = createSignal(''); const [busy, setBusy] = createSignal('');
   const [query, setQuery] = createSignal(''); const [enabledOnly, setEnabledOnly] = createSignal(false);
   const [editing, setEditing] = createSignal<MCPServer | null | undefined>();
@@ -28,6 +29,9 @@ export function MCPPanel() {
     try { setCatalog(await ctx.listMCP()); } catch (error) { setError(failure(error)); } finally { setBusy(''); }
   }
   createEffect(on(ctx.canInteract, available => { if (available && !catalog()) void reload(); }));
+  createEffect(on(() => [ctx.catalogRevision?.() ?? 0, busy(), ctx.canInteract()] as const, ([revision, loading, available]) => {
+    if (available && !loading && revision !== catalogRevision) { catalogRevision = revision; void reload(); }
+  }));
   async function mutate(server: MCPServer, action: 'check' | 'toggle', enabled = server.enabled) {
     if (!canManage()) return;
     setBusy(server.id); setError(''); setNotice('');
@@ -74,14 +78,14 @@ export function MCPPanel() {
         <SettingsList><For each={filtered()}>{server => <SettingRow title={server.name} description={server.transport === 'http' ? server.url ?? '' : server.command ?? ''}
           icon={<ExtensionIcon identity={`mcp:${server.id}`} name={server.name} icons={server.icons} />}
           metadata={<><span class="flower-extension-source">{t(server.transport === 'http' ? 'remote' : 'local')}<span class="flower-extension-tool-count">{ctx.i18n.tn('tools', server.tools.length)}</span></span><SettingsPill tone={server.enabled ? 'success' : 'default'}>{t(server.enabled ? 'enabled' : 'disabled')}</SettingsPill></>}
-          control={<>
+          control={<Show when={!server.plugin_id} fallback={<Button size="sm" variant="outline" onClick={() => ctx.openPlugin?.(server.plugin_id!)}>{t('plugins.manage')}</Button>}><>
             <Button size="icon" variant="ghost" icon={Pencil} aria-label={`${t('edit')}: ${server.name}`} title={t('edit')} disabled={!canManage()} onClick={() => open(server)} />
             <RowMenu name={server.name} busy={busy() === server.id} items={[
               { id: 'check', label: t('check'), icon: () => <Refresh class="h-4 w-4" />, disabled: !canManage() || !server.enabled },
               { id: 'delete', label: t('common.actions.delete'), icon: () => <Trash class="h-4 w-4" />, tone: 'danger', disabled: !canManage() },
             ]} onSelect={id => { if (id === 'check') void mutate(server, 'check'); else if (id === 'delete') { setDeleteError(''); setDeleting(server); } }} />
             <Switch checked={server.enabled} aria-label={`${server.name}: ${t('enabled')}`} disabled={!canManage()} onChange={enabled => void mutate(server, 'toggle', enabled)} />
-          </>}>
+          </></Show>}>
           <Show when={busy() === server.id}><p role="status">{t('loading')}</p></Show>
           <Show when={server.checked_at}><p class="flower-extension-updated">{t('checked', { time: ctx.i18n.dateTime(server.checked_at) })}</p></Show>
           <Show when={server.tools.length}><div class="flower-extension-tools"><For each={server.tools}>{tool => <div><code>{tool.name}</code><p>{tool.description}</p></div>}</For></div></Show>

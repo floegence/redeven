@@ -1,6 +1,6 @@
 export const extensionMessages = {
   "en-US": {
-    "title": "Skills·MCP",
+    "title": "Extensions",
     "description": "Give Flower the instructions and tools it needs.",
     "back": "Back to chat",
     "skills": "Skills",
@@ -51,7 +51,7 @@ export const extensionMessages = {
     "actions": "More actions: {name}"
   },
   "zh-CN": {
-    "title": "Skills·MCP",
+    "title": "扩展",
     "description": "为 Flower 配置你的工作方法与工具。",
     "back": "返回对话",
     "skills": "技能",
@@ -99,7 +99,7 @@ export const extensionMessages = {
     "actions": "{name}：更多操作"
   },
   "zh-TW": {
-    "title": "Skills·MCP",
+    "title": "擴充功能",
     "description": "為 Flower 設定你的工作方式與工具。",
     "back": "返回對話",
     "skills": "技能",
@@ -147,7 +147,7 @@ export const extensionMessages = {
     "actions": "{name}：更多操作"
   },
   "de-DE": {
-    "title": "Skills·MCP",
+    "title": "Erweiterungen",
     "description": "Anleitungen und Werkzeuge für Flower.",
     "back": "Zurück zum Chat",
     "skills": "Skills",
@@ -198,7 +198,7 @@ export const extensionMessages = {
     "actions": "Weitere Aktionen: {name}"
   },
   "es-ES": {
-    "title": "Skills·MCP",
+    "title": "Extensiones",
     "description": "Instrucciones y herramientas para Flower.",
     "back": "Volver al chat",
     "skills": "Habilidades",
@@ -250,7 +250,7 @@ export const extensionMessages = {
     "actions": "Más acciones: {name}"
   },
   "fr-FR": {
-    "title": "Skills·MCP",
+    "title": "Extensions",
     "description": "Des instructions et des outils pour Flower.",
     "back": "Retour au chat",
     "skills": "Compétences",
@@ -302,7 +302,7 @@ export const extensionMessages = {
     "actions": "Autres actions : {name}"
   },
   "ja-JP": {
-    "title": "Skills·MCP",
+    "title": "拡張機能",
     "description": "Flower に作業手順とツールを追加。",
     "back": "チャットに戻る",
     "skills": "スキル",
@@ -350,7 +350,7 @@ export const extensionMessages = {
     "actions": "{name} のその他の操作"
   },
   "ko-KR": {
-    "title": "Skills·MCP",
+    "title": "확장 기능",
     "description": "Flower에 작업 지침과 도구를 추가하세요.",
     "back": "대화로 돌아가기",
     "skills": "스킬",
@@ -398,7 +398,7 @@ export const extensionMessages = {
     "actions": "{name} 추가 작업"
   },
   "pt-BR": {
-    "title": "Skills·MCP",
+    "title": "Extensões",
     "description": "Instruções e ferramentas para o Flower.",
     "back": "Voltar à conversa",
     "skills": "Habilidades",
@@ -450,7 +450,7 @@ export const extensionMessages = {
     "actions": "Mais ações: {name}"
   },
   "ru-RU": {
-    "title": "Skills·MCP",
+    "title": "Расширения",
     "description": "Инструкции и инструменты для Flower.",
     "back": "Вернуться в чат",
     "skills": "Навыки",

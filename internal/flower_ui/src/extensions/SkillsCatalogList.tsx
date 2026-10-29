@@ -8,6 +8,7 @@ import { ExtensionIcon } from './ExtensionIcon';
 
 function skillScopeLabel(scope: string, i18n: I18nHelpers): string {
   const value = String(scope ?? '').trim().toLowerCase();
+  if (value === 'agent_plugin') return i18n.t('plugins');
   if (value === 'system') return i18n.t('skillsSettings.source.systemBundle');
   if (value === 'user') return i18n.t('skillsSettings.scopeUserRedeven');
   if (value === 'user_agents') return i18n.t('skillsSettings.scopeUserAgents');
@@ -43,7 +44,7 @@ export function SkillsCatalogList(props: {
       <For each={props.skills}>{(item) => {
         const source = () => props.sources[String(item.path ?? '').trim()];
         return (
-          <SettingRow title={item.name} description={item.description || i18n.t('skillsSettings.noDescription')}
+          <SettingRow title={item.plugin_id ? item.name.split('/').at(-1) ?? item.name : item.name} description={item.description || i18n.t('skillsSettings.noDescription')}
             icon={<ExtensionIcon identity={`skill:${item.id}`} name={item.name} icons={item.icons} />}
             metadata={<>
               <span class="flower-extension-source" title={skillScopeLabel(item.scope, i18n)}>{skillScopeLabel(item.scope, i18n)}</span>
@@ -54,7 +55,7 @@ export function SkillsCatalogList(props: {
               <Show when={item.shadowed_by}><SettingsPill tone="warning">{i18n.t('skillsSettings.status.shadowed')}</SettingsPill></Show>
               </div>
             </>}
-            control={<>
+            control={<Show when={!item.plugin_id} fallback={<Button size="sm" variant="outline" onClick={() => ctx.openPlugin?.(item.plugin_id!)}>{i18n.t('plugins.manage')}</Button>}><>
               <Button size="icon" variant="ghost" icon={Folder} aria-label={`${i18n.t('skillsSettings.browse')}: ${item.name}`} title={i18n.t('skillsSettings.browse')} onClick={() => props.onBrowse(item)} disabled={!props.canInteract} />
               <RowMenu name={item.name} busy={!!props.reinstalling[item.path] || !!props.toggleSaving[item.path]} items={[
                 ...(source()?.source_type === 'github_import' ? [{ id: 'reinstall', label: i18n.t('skillsSettings.reinstall'), icon: () => <Refresh class="h-4 w-4" />, disabled: !props.canInteract || !props.canAdmin || !!props.reinstalling[item.path] }] : []),
@@ -63,7 +64,7 @@ export function SkillsCatalogList(props: {
               <Switch checked={!!item.enabled} onChange={(value) => props.onToggle(item, value)}
                 disabled={!props.canInteract || !props.canAdmin || !!props.toggleSaving[item.path]}
                 aria-label={`${item.name}: ${i18n.t('skillsSettings.enabled')}`} />
-            </>}>
+            </></Show>}>
             <Show when={source()}><p class="flower-extension-detail-source">{skillSourceLabel(source()?.source_type ?? '', i18n)}</p></Show>
             <code class="mt-2 block break-all text-[11px] text-muted-foreground">{item.path}</code>
             <Show when={source()?.source_id}><code class="mt-1 block break-all text-[11px] text-muted-foreground">{source()?.source_id}</code></Show>

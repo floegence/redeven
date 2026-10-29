@@ -16,18 +16,23 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/ai/agentplugins"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/settings"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // MCP credentials are write-only through the management API. A nil secret map
 // preserves existing values; an explicitly empty map clears them.
 type MCPServerInput struct {
+	cwd string
+
 	ID        string            `json:"id"`
 	Revision  int64             `json:"revision"`
 	Name      string            `json:"name"`
@@ -41,6 +46,11 @@ type MCPServerInput struct {
 }
 
 type mcpServerRecord struct {
+	pluginID      string
+	componentKey  string
+	pluginDigest  string
+	credentialRef string
+
 	MCPServerInput
 	Icons     []ExtensionIcon `json:"icons,omitempty"`
 	Tools     []mcpToolRecord `json:"tools"`
@@ -52,6 +62,8 @@ type mcpToolRecord struct {
 	Schema      json.RawMessage `json:"schema"`
 }
 type MCPServerView struct {
+	PluginID string `json:"plugin_id,omitempty"`
+
 	Icons      []ExtensionIcon `json:"icons,omitempty"`
 	ID         string          `json:"id"`
 	Revision   int64           `json:"revision"`
@@ -75,6 +87,9 @@ type mcpStore struct {
 	Servers       []mcpServerRecord `json:"servers"`
 }
 type mcpManager struct {
+	plugins       *agentplugins.Manager
+	pluginSecrets *settings.SecretsStore
+
 	mu       sync.RWMutex
 	path     string
 	servers  []mcpServerRecord
@@ -217,7 +232,7 @@ func (m *mcpManager) List() MCPCatalog {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	out := MCPCatalog{Servers: make([]MCPServerView, 0, len(m.servers))}
-	for _, entry := range m.servers {
+	for _, entry := range m.allServersLocked() {
 		headers, env := []string{}, []string{}
 		for key := range entry.Headers {
 			headers = append(headers, key)
@@ -227,7 +242,7 @@ func (m *mcpManager) List() MCPCatalog {
 			env = append(env, key)
 		}
 		sort.Strings(env)
-		out.Servers = append(out.Servers, MCPServerView{ID: entry.ID, Revision: entry.Revision, Name: entry.Name, Transport: entry.Transport, URL: entry.URL, Command: entry.Command, Args: append([]string{}, entry.Args...), HeaderKeys: headers, EnvKeys: env, Enabled: entry.Enabled, Tools: append([]mcpToolRecord{}, entry.Tools...), CheckedAt: entry.CheckedAt, Icons: append([]ExtensionIcon(nil), entry.Icons...)})
+		out.Servers = append(out.Servers, MCPServerView{PluginID: entry.pluginID, ID: entry.ID, Revision: entry.Revision, Name: entry.Name, Transport: entry.Transport, URL: entry.URL, Command: entry.Command, Args: append([]string{}, entry.Args...), HeaderKeys: headers, EnvKeys: env, Enabled: entry.Enabled, Tools: append([]mcpToolRecord{}, entry.Tools...), CheckedAt: entry.CheckedAt, Icons: append([]ExtensionIcon(nil), entry.Icons...)})
 	}
 	return out
 }
@@ -240,7 +255,7 @@ func (m *mcpManager) HasDependency(dependency SkillMCPDependency) bool {
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	for _, server := range m.servers {
+	for _, server := range m.allServersLocked() {
 		if server.ID == dependency.Name && server.Enabled && server.CheckedAt > 0 {
 			return (dependency.Transport == "" || dependency.Transport == server.Transport) &&
 				(dependency.Command == "" || dependency.Command == server.Command) &&
@@ -251,6 +266,9 @@ func (m *mcpManager) HasDependency(dependency SkillMCPDependency) bool {
 }
 
 func (m *mcpManager) Save(ctx context.Context, input MCPServerInput) (MCPCatalog, error) {
+	if strings.HasPrefix(input.ID, "ap_") {
+		return MCPCatalog{}, errors.New("plugin_component_managed")
+	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.Headers = maps.Clone(input.Headers)
 	input.Env = maps.Clone(input.Env)
@@ -441,7 +459,13 @@ func (t mcpHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	copy := req.Clone(req.Context())
 	copy.Header = req.Header.Clone()
 	for key, value := range t.headers {
-		copy.Header.Set(key, value)
+		fold := strings.ToLower(key)
+		if fold == "host" || fold == "connection" || fold == "content-length" || fold == "transfer-encoding" || strings.HasPrefix(fold, "mcp-") {
+			continue
+		}
+		if _, generated := copy.Header[http.CanonicalHeaderKey(key)]; !generated {
+			copy.Header.Set(key, value)
+		}
 	}
 	return http.DefaultTransport.RoundTrip(copy)
 }
@@ -450,14 +474,30 @@ func connectMCP(ctx context.Context, input MCPServerInput) (*mcp.ClientSession, 
 	if input.Transport == "stdio" {
 		command := exec.CommandContext(ctx, input.Command, input.Args...)
 		// Credentials from the parent process are not inherited by external tools.
-		command.Env = []string{}
+		command.Dir = input.cwd
+		environment := map[string]string{}
+		keyFor := func(key string) string {
+			if runtime.GOOS == "windows" {
+				return strings.ToUpper(key)
+			}
+			return key
+		}
 		for _, key := range []string{"PATH", "HOME", "USERPROFILE", "SystemRoot", "TMPDIR", "TEMP", "LANG"} {
 			if value, ok := os.LookupEnv(key); ok {
-				command.Env = append(command.Env, key+"="+value)
+				environment[keyFor(key)] = value
 			}
 		}
 		for key, value := range input.Env {
-			command.Env = append(command.Env, key+"="+value)
+			environment[keyFor(key)] = value
+		}
+		keys := make([]string, 0, len(environment))
+		for key := range environment {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		command.Env = []string{}
+		for _, key := range keys {
+			command.Env = append(command.Env, key+"="+environment[key])
 		}
 		transport = &mcp.CommandTransport{Command: command, TerminateDuration: time.Second}
 	} else {
@@ -467,6 +507,9 @@ func connectMCP(ctx context.Context, input MCPServerInput) (*mcp.ClientSession, 
 }
 
 func mcpToolName(server mcpServerRecord, tool mcpToolRecord) string {
+	if server.pluginID != "" {
+		return pluginMCPToolName(server, tool)
+	}
 	server.Revision = 0
 	data, _ := json.Marshal(struct {
 		Server MCPServerInput
@@ -487,7 +530,7 @@ func (m *mcpManager) Tools() []ToolDef {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	out := []ToolDef{}
-	for _, server := range m.servers {
+	for _, server := range m.allServersLocked() {
 		if server.Enabled {
 			for _, tool := range server.Tools {
 				label := server.Name + " / " + tool.Name
@@ -509,12 +552,14 @@ func (m *mcpManager) Call(ctx context.Context, name string, args map[string]any)
 	m.mu.RLock()
 	var config *MCPServerInput
 	var toolName string
-	for _, server := range m.servers {
+	var selected mcpServerRecord
+	for _, server := range m.allServersLocked() {
 		if server.Enabled {
 			for _, tool := range server.Tools {
 				if mcpToolName(server, tool) == name {
 					input := server.MCPServerInput
 					config = &input
+					selected = server
 					toolName = tool.Name
 				}
 			}
@@ -523,6 +568,18 @@ func (m *mcpManager) Call(ctx context.Context, name string, args map[string]any)
 	m.mu.RUnlock()
 	if config == nil {
 		return nil, errors.New("MCP tool configuration changed or is disabled")
+	}
+	if selected.pluginID != "" {
+		in, release, err := m.plugins.Acquire(selected.pluginID, selected.Revision, selected.componentKey)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+		resolved, err := m.pluginMCPInput(in, selected.componentKey)
+		if err != nil {
+			return nil, err
+		}
+		config = &resolved
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -535,9 +592,14 @@ func (m *mcpManager) Call(ctx context.Context, name string, args map[string]any)
 	// revision before dispatch; an already dispatched call retains its outcome.
 	m.mu.RLock()
 	available := false
-	for _, server := range m.servers {
+	for _, server := range m.allServersLocked() {
 		if server.ID == config.ID && server.Enabled && server.Revision == config.Revision {
-			available = true
+			for _, tool := range server.Tools {
+				if mcpToolName(server, tool) == name {
+					available = true
+					break
+				}
+			}
 			break
 		}
 	}

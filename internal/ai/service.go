@@ -17,6 +17,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/ai/agentplugins"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -198,6 +199,7 @@ type Service struct {
 	orphanCanonicalRootIDs     map[string]struct{}
 
 	capabilityResolver *contextadapter.Resolver
+	agentPlugins       *agentplugins.Manager
 	skillManager       *skillManager
 	mcpManager         *mcpManager
 	terminalProcesses  *terminalProcessManager
@@ -504,6 +506,14 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		svc.serviceWorkers.Add(1)
 		go func() { defer svc.serviceWorkers.Done(); svc.runPlatformModelCatalogs(lifecycleCtx) }()
 	}
+	// Restore staging owns conversation storage only. Environment extension
+	// configuration and credentials stay in the live runtime state directory.
+	if !opts.skipStorageMaintenance {
+		if err := svc.initializeAgentPlugins(); err != nil {
+			_ = svc.Close()
+			return nil, err
+		}
+	}
 	svc.skillManager.mcpManager = mcpManager
 	if computer, ok := opts.TargetToolExecutor.(*ComputerUseRuntime); ok {
 		svc.toolMedia = computer.media
@@ -630,7 +640,11 @@ func (s *Service) closeService() error {
 	if s.readState != nil {
 		readCloseErr = s.readState.Close()
 	}
-	return flowerGenerationCloseError(errors.Join(terminalCloseErr, targetCloseErr, floretCloseErr, threadCloseErr, readCloseErr))
+	var pluginCloseErr error
+	if s.agentPlugins != nil {
+		pluginCloseErr = s.agentPlugins.Close()
+	}
+	return flowerGenerationCloseError(errors.Join(pluginCloseErr, terminalCloseErr, targetCloseErr, floretCloseErr, threadCloseErr, readCloseErr))
 }
 
 func (s *Service) snapshotThreadStore() *threadstore.Store {

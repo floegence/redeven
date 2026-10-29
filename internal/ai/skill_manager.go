@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/ai/agentplugins"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,6 +27,12 @@ type SkillMCPDependency struct {
 }
 
 type SkillMeta struct {
+	PluginID       string `json:"plugin_id,omitempty"`
+	PluginName     string `json:"plugin_name,omitempty"`
+	ComponentKey   string `json:"-"`
+	PluginRevision int64  `json:"-"`
+	PluginEnabled  bool   `json:"-"`
+
 	Name                    string               `json:"name"`
 	Description             string               `json:"description"`
 	Path                    string               `json:"path"`
@@ -63,6 +70,9 @@ type SkillCatalog struct {
 }
 
 type SkillCatalogEntry struct {
+	PluginID   string `json:"plugin_id,omitempty"`
+	PluginName string `json:"plugin_name,omitempty"`
+
 	ID                      string               `json:"id"`
 	Icons                   []ExtensionIcon      `json:"icons,omitempty"`
 	Name                    string               `json:"name"`
@@ -115,6 +125,8 @@ type skillStateFile struct {
 }
 
 type skillManager struct {
+	plugins *agentplugins.Manager
+
 	mu               sync.RWMutex
 	workspace        string
 	userHome         string
@@ -243,6 +255,13 @@ func (m *skillManager) PatchToggles(patches []SkillTogglePatch) (SkillCatalog, e
 	defer m.mu.Unlock()
 	_ = m.discoverLocked(context.Background())
 
+	for _, patch := range patches {
+		for _, entry := range m.catalogEntries {
+			if entry.Path == patch.Path && entry.PluginID != "" {
+				return SkillCatalog{}, fmt.Errorf("plugin_component_managed")
+			}
+		}
+	}
 	for i := range patches {
 		path := filepath.Clean(strings.TrimSpace(patches[i].Path))
 		if path == "" {
@@ -419,6 +438,7 @@ func (m *skillManager) discoverLocked(ctx context.Context) error {
 		grouped[meta.Name] = append(grouped[meta.Name], meta)
 	}
 
+	m.discoverPluginSkillsLocked(grouped)
 	effectiveByName := make(map[string]SkillMeta)
 	entries := make([]SkillCatalogEntry, 0, len(grouped))
 	conflicts := make([]SkillCatalogNotice, 0)
@@ -432,7 +452,7 @@ func (m *skillManager) discoverLocked(ctx context.Context) error {
 		}
 		effectiveIndex := -1
 		for i := range items {
-			if !m.isDisabledLocked(items[i].Path) {
+			if m.skillEnabledLocked(items[i]) {
 				effectiveIndex = i
 				break
 			}
@@ -457,7 +477,7 @@ func (m *skillManager) discoverLocked(ctx context.Context) error {
 		}
 		for i := range items {
 			item := items[i]
-			enabled := !m.isDisabledLocked(item.Path)
+			enabled := m.skillEnabledLocked(item)
 			effective := i == effectiveIndex
 			shadowedBy := ""
 			if i != effectiveIndex && winnerPath != "" {
@@ -468,7 +488,8 @@ func (m *skillManager) discoverLocked(ctx context.Context) error {
 				dependencyState = "degraded"
 			}
 			entries = append(entries, SkillCatalogEntry{
-				ID:                      skillID(item.Scope, item.Path),
+				ID:       skillID(item.Scope, item.Path),
+				PluginID: item.PluginID, PluginName: item.PluginName,
 				Icons:                   skillCatalogIcons(item.Path),
 				Name:                    item.Name,
 				Description:             item.Description,
@@ -769,6 +790,9 @@ func (m *skillManager) Activate(ctx context.Context, name string, mode string, i
 }
 
 func (m *skillManager) skillContentLocked(meta SkillMeta) (SkillMeta, string, error) {
+	if meta.PluginID != "" {
+		return m.pluginSkillContentLocked(meta)
+	}
 	p := filepath.Clean(strings.TrimSpace(meta.Path))
 	if content := strings.TrimSpace(m.embedded[p]); content != "" {
 		return parseSkillContent(p, meta.Scope, content)
@@ -927,7 +951,7 @@ func (m *skillManager) resolveCandidateLocked(name string, mode string, implicit
 	items := m.candidatesByName[strings.TrimSpace(name)]
 	for i := range items {
 		item := items[i]
-		if m.isDisabledLocked(item.Path) {
+		if !m.skillEnabledLocked(item) {
 			continue
 		}
 		if !skillMatchesPermission(item.PermissionHints, mode) {

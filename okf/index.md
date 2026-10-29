@@ -190,6 +190,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Browser Editor runtime](code/browser-editor-runtime.md)
 
 - [Flower MCP runtime](ai/mcp-runtime.md)
+- [Flower Agent Plugins](ai/flower-agent-plugins.md)
 ## UI
 
 - [Tessiven canvas](ui/tessiven-canvas.md)
@@ -198,7 +199,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Tessiven Flower replies](ui/tessiven-flower-replies.md)
 
 - [Runtime settings](ui/runtime-settings.md)
-- [Flower Skills and MCP](ui/flower-extensions.md)
+- [Flower extensions](ui/flower-extensions.md)
 
 - [UI presentation transactions](ui/ui-presentation-transactions.md)
 - [Env App floating layer order](ui/env-app-floating-layer-order.md)

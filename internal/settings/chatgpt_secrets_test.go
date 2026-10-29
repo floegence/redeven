@@ -70,7 +70,7 @@ func TestRemoveSignedOutChatGPTAccountPreservesOtherSecrets(t *testing.T) {
 }
 
 func TestChatGPTSecretsMigrationAndAtomicFailure(t *testing.T) {
-	for _, version := range []int{0, 1, 2, 3, 4} {
+	for _, version := range []int{0, 1, 2, 3, 4, 5} {
 		t.Run(string(rune('0'+version)), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "secrets.json")
 			raw, _ := json.Marshal(map[string]any{"schema_version": version, "ai": map[string]any{"provider_api_keys": map[string]string{"provider": "kept"}}})
@@ -79,7 +79,7 @@ func TestChatGPTSecretsMigrationAndAtomicFailure(t *testing.T) {
 			}
 			store := NewSecretsStore(path)
 			key, ok, err := store.GetAIProviderAPIKey("provider")
-			if version == 4 {
+			if version == 5 {
 				if err == nil {
 					t.Fatal("future schema accepted")
 				}
@@ -193,8 +193,8 @@ func TestChatGPTSchemaTwoMigrationPreservesRegistrationAndIsIdempotent(t *testin
 	}
 	before, _ := os.ReadFile(path)
 	var sf secretsFile
-	if json.Unmarshal(before, &sf) != nil || sf.SchemaVersion != 3 {
-		t.Fatal("schema two did not migrate to three")
+	if json.Unmarshal(before, &sf) != nil || sf.SchemaVersion != 4 {
+		t.Fatal("schema two did not migrate to current")
 	}
 	if _, _, err := NewSecretsStore(path).ChatGPTAccount(a.ID()); err != nil {
 		t.Fatal(err)

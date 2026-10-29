@@ -3,7 +3,7 @@ type: Storage Contract
 title: Flower storage ownership and migrations
 tags: [ai, storage, sqlite, migrations, floret]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -24,6 +24,8 @@ Published Floret v7.87.0 removes hidden Activity field preparation from ordinary
 Cancellation, shutdown and execution-context settlement resolve canonical control records through Floret. The host keeps the original Stop request and does not read or reconstruct upstream conversation bodies to settle it.
 
 A read-state failure cannot become a core Runtime constructor failure or a synthetic read record.
+
+Redeven also owns the [Agent Plugins registry](flower-agent-plugins.md), snapshots and installation data. Its schema-1 SQLite store is separate from canonical conversation history; credential references resolve through SecretsStore schema 4. Neither owner decodes Floret records.
 
 ## Readonly checks and owner transactions
 `sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.

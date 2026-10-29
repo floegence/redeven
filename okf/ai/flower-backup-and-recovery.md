@@ -3,7 +3,7 @@ type: Recovery Contract
 title: Flower backup and recovery
 tags: [ai, storage, recovery, backups]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -25,7 +25,7 @@ Diagnostics use the existing sanitized export and do not include conversations, 
 
 # Boundaries
 
-Only Flower-owned databases and uploaded resources participate in a restore. Core Runtime services remain available.
+Only conversation-owned databases and uploaded resources participate in a restore. Environment extension configuration, including the [Agent Plugins registry and data](flower-agent-plugins.md), remains outside conversation snapshots and is preserved unchanged. Restore staging never initializes its plugin manager. Core Runtime services remain available.
 
 # Evidence
 

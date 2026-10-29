@@ -1,3 +1,4 @@
+import type { AgentPluginsAdapter } from './agentPluginTypes';
 export type ExtensionIconSource = Readonly<{ src: string; theme?: 'light' | 'dark' }>;
 
 export type SkillCatalogNotice = Readonly<{
@@ -8,6 +9,7 @@ export type SkillCatalogNotice = Readonly<{
 }>;
 
 export type SkillCatalogEntry = Readonly<{
+  plugin_id?: string; plugin_name?: string;
   id: string;
   icons?: readonly ExtensionIconSource[];
   name: string;
@@ -120,6 +122,7 @@ export type SkillBrowseFileResponse = Readonly<{
   content: string;
 }>;
 export type FlowerExtensionsAdapter = Readonly<{
+  plugins: AgentPluginsAdapter;
   canInteract: () => boolean;
   canAdmin: () => boolean;
   listSkills: (reload?: boolean) => Promise<SkillsCatalogResponse>;
@@ -145,6 +148,7 @@ export type MCPServerInput = MCPServerIdentity & Readonly<{
   headers?: Record<string, string>; env?: Record<string, string>;
 }>;
 export type MCPServer = Readonly<{
+  plugin_id?: string;
   icons?: readonly ExtensionIconSource[];
   id: string; revision: number; name: string; transport: 'stdio' | 'http';
   url?: string; command?: string; args?: string[];

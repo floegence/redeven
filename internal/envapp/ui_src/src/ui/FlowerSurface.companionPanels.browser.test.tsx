@@ -1,3 +1,4 @@
+import { agentPluginsFixture } from './flower/agentPluginsFixture';
 import '../index.css';
 import './flower-feature.css';
 import './activity-flower-shell.css';
@@ -293,6 +294,7 @@ function extensionsAdapter(): FlowerExtensionsAdapter {
   const catalog = { skills: [{ id: 'review', name: 'Review', description: 'Review changes.', path: '/skills/review/SKILL.md',
     scope: 'user', enabled: true, effective: true }], catalog_version: 1 };
   return {
+    plugins: agentPluginsFixture(),
     canInteract: () => true, canAdmin: () => false,
     listSkills: vi.fn(async () => catalog), listSkillSources: vi.fn(async () => ({ items: [] })),
     toggleSkill: vi.fn(async () => catalog), createSkill: vi.fn(async () => catalog), deleteSkill: vi.fn(async () => catalog),

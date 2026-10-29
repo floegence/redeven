@@ -3,7 +3,7 @@ type: AI Prompt Contract
 title: Flower prompt and rule sources
 tags: [ai, flower, prompts, context]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -30,6 +30,8 @@ and code examples may remain code. Existing authorized file previews own opening
 this prompt rule does not change historical messages or file authorization.
 
 Discovery checks symlinks and Git boundaries; incomplete discovery and context overflow fail admission rather than silently clipping facts.
+
+[Agent Plugin skills](flower-agent-plugins.md) join the existing skill catalog with installation-qualified selectors and current-authority checks. Packages do not rewrite the base system prompt or install a separate rule loader.
 
 There is no separate social or creative prompt path.
 

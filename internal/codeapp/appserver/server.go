@@ -4366,6 +4366,17 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"web_search_provider_api_key_set": set}})
 		return
 
+	case r.URL.Path == "/_redeven_proxy/api/ai/agent-plugins" || strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/agent-plugins/"):
+		permission := requiredPermissionAdmin
+		if r.Method == http.MethodGet && r.URL.Path != "/_redeven_proxy/api/ai/agent-plugins/operation" {
+			permission = requiredPermissionRead
+		}
+		meta, ok := g.requirePermission(w, r, permission)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		g.handleAgentPlugins(w, r, aiSvc, meta)
+		return
 	case r.URL.Path == "/_redeven_proxy/api/ai/mcp" || r.URL.Path == "/_redeven_proxy/api/ai/mcp/check":
 		permission := requiredPermissionAdmin
 		if r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/mcp" {

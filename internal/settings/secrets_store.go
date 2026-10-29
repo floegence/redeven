@@ -39,10 +39,11 @@ func (s *SecretsStore) Path() string {
 }
 
 type secretsFile struct {
-	SchemaVersion int               `json:"schema_version"`
-	AI            *aiSecrets        `json:"ai,omitempty"`
-	WebSearch     *webSearchSecrets `json:"web_search,omitempty"`
-	ChatGPT       *chatGPTSecrets   `json:"chatgpt,omitempty"`
+	AgentPlugins  map[string]map[string]string `json:"agent_plugins,omitempty"`
+	SchemaVersion int                          `json:"schema_version"`
+	AI            *aiSecrets                   `json:"ai,omitempty"`
+	WebSearch     *webSearchSecrets            `json:"web_search,omitempty"`
+	ChatGPT       *chatGPTSecrets              `json:"chatgpt,omitempty"`
 }
 
 type aiSecrets struct {
@@ -258,7 +259,7 @@ func (s *SecretsStore) ApplyAIProviderAPIKeyPatches(patches []AIProviderAPIKeyPa
 		return err
 	}
 	if sf == nil {
-		sf = &secretsFile{SchemaVersion: 3}
+		sf = &secretsFile{SchemaVersion: 4}
 	}
 	if sf.SchemaVersion == 0 {
 		sf.SchemaVersion = 1
@@ -312,7 +313,7 @@ func (s *SecretsStore) ApplyWebSearchProviderAPIKeyPatches(patches []WebSearchPr
 		return err
 	}
 	if sf == nil {
-		sf = &secretsFile{SchemaVersion: 3}
+		sf = &secretsFile{SchemaVersion: 4}
 	}
 	if sf.SchemaVersion == 0 {
 		sf.SchemaVersion = 1
@@ -417,7 +418,7 @@ func (s *SecretsStore) loadLocked() (*secretsFile, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &secretsFile{SchemaVersion: 3}, nil
+			return &secretsFile{SchemaVersion: 4}, nil
 		}
 		return nil, err
 	}
@@ -425,10 +426,10 @@ func (s *SecretsStore) loadLocked() (*secretsFile, error) {
 	if err := json.Unmarshal(b, &sf); err != nil {
 		return nil, err
 	}
-	if sf.SchemaVersion < 0 || sf.SchemaVersion > 3 {
+	if sf.SchemaVersion < 0 || sf.SchemaVersion > 4 {
 		return nil, errors.New("unsupported secrets schema")
 	}
-	migrated := sf.SchemaVersion < 3
+	migrated := sf.SchemaVersion < 4
 	// Keep every contiguous migration edge; existing API keys remain intact.
 	if sf.SchemaVersion == 0 {
 		sf.SchemaVersion = 1
@@ -440,6 +441,9 @@ func (s *SecretsStore) loadLocked() (*secretsFile, error) {
 		// The registration and token bytes remain unchanged; lifecycle fields are
 		// initially absent. Future writes record explicit logout and terminal facts.
 		sf.SchemaVersion = 3
+	}
+	if sf.SchemaVersion == 3 {
+		sf.SchemaVersion = 4
 	}
 	if migrated {
 		if err := s.saveLocked(&sf); err != nil {

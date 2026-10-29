@@ -6,9 +6,23 @@ export function flowerExtensionsAdapter(
   access: Pick<FlowerExtensionsAdapter, 'canInteract' | 'canAdmin'>,
 ): FlowerExtensionsAdapter {
   const skills = '/_redeven_proxy/api/ai/skills';
+  const plugins = '/_redeven_proxy/api/ai/agent-plugins';
   const mcp = '/_redeven_proxy/api/ai/mcp';
   return {
     ...access,
+    plugins: {
+      list: () => request('GET', plugins),
+      prepare: input => request('POST', plugins + '/prepare', input),
+      operation: id => request('GET', plugins + '/operation?' + new URLSearchParams({ id })),
+      commit: input => request('POST', plugins + '/commit', input),
+      change: input => request('PUT', plugins, input),
+      remove: input => request('DELETE', plugins, input),
+      check: input => request('POST', plugins + '/check', input),
+      credentials: input => request('PUT', plugins + '/credentials', input),
+      addSource: input => request('POST', plugins + '/sources', input),
+      removeSource: input => request('DELETE', plugins + '/sources', input),
+      catalog: id => request('GET', plugins + '/catalog?' + new URLSearchParams({ id })),
+    },
     listSkills: reload => request(reload ? 'POST' : 'GET', reload ? `${skills}/reload` : skills),
     listSkillSources: () => request('GET', `${skills}/sources`),
     toggleSkill: (path, enabled) => request('PUT', `${skills}/toggles`, { patches: [{ path, enabled }] }),

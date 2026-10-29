@@ -52,6 +52,14 @@ export function isRuntimeFlowerReadinessPath(path: string): boolean {
 
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   ...TESSIVEN_RUNTIME_ROUTES,
+  { path: '/_redeven_proxy/api/ai/agent-plugins', methods: ['GET', 'PUT', 'DELETE'] },
+  { path: '/_redeven_proxy/api/ai/agent-plugins/prepare', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/agent-plugins/commit', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/agent-plugins/check', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/agent-plugins/credentials', methods: ['PUT'] },
+  { path: '/_redeven_proxy/api/ai/agent-plugins/sources', methods: ['POST', 'DELETE'] },
+  { path: '/_redeven_proxy/api/ai/agent-plugins/operation', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('id') },
+  { path: '/_redeven_proxy/api/ai/agent-plugins/catalog', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('id') },
   { path: '/_redeven_proxy/api/flower/source-icon', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('origin') },
   { path: '/_redeven_proxy/api/ai/mcp', methods: ['GET', 'PUT', 'DELETE'] },
   { path: '/_redeven_proxy/api/ai/mcp/check', methods: ['POST'] },

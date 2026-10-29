@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Flower MCP runtime
 tags: [ai, flower, mcp, permissions]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -12,9 +12,11 @@ Redeven configures MCP and adapts the released official Go SDK, which owns stdio
 # Contract
 
 ## Configuration and protocol
-Configuration lives at `<stateDir>/ai/mcp.json`, with schema version 2, one monotonic configuration revision, and server revisions for optimistic edits. Persistence failure leaves the in-memory catalog unchanged.
+Standalone configuration lives at `<stateDir>/ai/mcp.json`, with schema version 2, one monotonic configuration revision, and server revisions for optimistic edits. Persistence failure leaves the in-memory catalog unchanged.
 
 Catalog limits are 32 servers, 128 tools per server, 32 KiB per schema, and 4 MiB total persisted configuration.
+
+Package-owned connections project from the [Agent Plugins registry](flower-agent-plugins.md). They use the same SDK/session and Floret invocation paths, with separate credentials and explicit discovery. They cannot be edited through standalone MCP writes.
 
 ## Presentation icons
 Save and explicit Check read `serverInfo.icons` from the existing SDK initialize result. Connection-preserving disabled edits retain icons; changed connection settings clear stale discovery.

@@ -1,3 +1,4 @@
+import { agentPluginsFixture } from './agentPluginsFixture';
 import '../../index.css';
 import { FloeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { createSignal } from 'solid-js';
@@ -32,6 +33,7 @@ function fixture(empty = false, count = 0) {
   });
   const deleteMCP = vi.fn(async ({ id }: { id: string }) => { servers = servers.filter(item => item.id !== id); return { servers }; });
   const adapter: FlowerExtensionsAdapter = {
+    plugins: agentPluginsFixture(),
     canInteract: () => true, canAdmin: admin,
     listSkills: vi.fn(async () => ({ skills: empty ? [] : catalogSkills, catalog_version: 1 })),
     listSkillSources: vi.fn(async () => ({ items: [{ skill_path: skills[0].path, source_type: 'github_import', source_id: 'example/skills#code-review' }, { skill_path: skills[1].path, source_type: 'system_bundle', source_id: 'redeven' }] })),
@@ -301,4 +303,142 @@ it.each([320, 390])('keeps compact rows usable with touch input at %ipx', async 
     scroller.scrollTop = 0;
     await page.screenshot({ path: `__screenshots__/flower-extensions/dense-touch-${width}.png` });
   } finally { await touch.emulateTouchInput(false); }
+});
+
+it('previews packages without execution, installs disabled, and retains filters across tabs', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await page.getByRole('textbox', { name: 'GitHub repository', exact: true }).fill('example/tools');
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect.element(page.getByText('review-tools 1.0', { exact: true })).toBeVisible();
+  expect(state.adapter.plugins.check).not.toHaveBeenCalled();
+  const previousSkillReads = vi.mocked(state.adapter.listSkills).mock.calls.length;
+  await page.getByRole('checkbox', { name: 'mcp:workspace', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await expect.poll(() => state.adapter.plugins.commit).toHaveBeenCalledWith({ operation_id: 'op-1', digest: 'a'.repeat(64), enabled: false, components: ['skill:review'] });
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await expect.poll(() => vi.mocked(state.adapter.listSkills).mock.calls.length).toBeGreaterThan(previousSkillReads);
+  await userEvent.keyboard('{Escape}');
+  await expect.element(page.getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search plugins' }).fill('review');
+  await page.getByRole('tab', { name: 'Skills', exact: true }).click();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await expect.element(page.getByRole('searchbox', { name: 'Search plugins' })).toHaveValue('review');
+  await page.getByRole('button', { name: 'Manage: review-tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Uninstall', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Uninstall', exact: true }).click();
+  await expect.poll(() => state.adapter.plugins.remove).toHaveBeenCalledWith({ id: 'install-1', revision: 1, delete_data: false });
+});
+
+it('retains an installation draft after failure and blocks writes after admin revocation', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await page.getByRole('textbox', { name: 'GitHub repository', exact: true }).fill('example/tools');
+  vi.mocked(state.adapter.plugins.prepare).mockRejectedValueOnce(new Error('offline'));
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect.element(page.getByRole('dialog').getByRole('alert')).toBeVisible();
+  await expect.element(page.getByRole('textbox', { name: 'GitHub repository', exact: true })).toHaveValue('example/tools');
+  state.setAdmin(false);
+  await expect.element(page.getByRole('button', { name: 'Preview', exact: true })).toBeDisabled();
+});
+
+it.each([[390, false, 'zh-CN'], [390, true, 'de-DE'], [1280, false, 'en-US']] as const)('renders plugin management at %ipx (dark=%s, locale=%s)', async (width, dark, locale) => {
+  await mount(width, dark, locale); const i18n = extensionI18n(locale);
+  await page.getByRole('tab', { name: i18n.t('plugins'), exact: true }).click();
+  await expect.element(page.getByText(i18n.t('plugins.target', { target: 'Development' }), { exact: true })).toBeVisible();
+  noOverflow();
+  await page.screenshot({ path: '__screenshots__/flower-plugins/plugins-' + width + '-' + locale + '-' + dark + '.png' });
+});
+
+it.each([[1280, false], [1280, true], [390, false], [390, true]] as const)('presents a focused plugin gallery and detail dialog at %ipx (dark=%s)', async (width, dark) => {
+  await mount(width, dark, 'en-US', false, 0, adapter => {
+    vi.mocked(adapter.plugins.list).mockResolvedValue({ revision: 1, target: 'Development', can_launch: true, sources: [], operations: [], items: [
+      { id: 'design', revision: 1, enabled: true, source: { type: 'github', repository: 'studio/design-tools' }, digest: 'a'.repeat(64), package: { manifest: { name: 'design-tools', version: '1.2.0', description: 'Create consistent interfaces with your team’s design system.' }, skills: [{ key: 'skill:review', name: 'review', description: 'Review interface consistency.', path: 'skills/review/SKILL.md' }], mcp: { workspace: { type: 'streamable-http', url: 'https://tools.example.com/mcp' } }, diagnostics: [] }, components: { 'skill:review': { enabled: true }, 'mcp:workspace': { enabled: true } }, health: { 'skill:review': { status: 'ready', checked_at: 0, tools: 0 }, 'mcp:workspace': { status: 'ready', checked_at: 1, tools: 4 } } },
+      { id: 'research', revision: 1, enabled: false, source: { type: 'github', repository: 'studio/research' }, digest: 'b'.repeat(64), package: { manifest: { name: 'research-companion', version: '2.0', description: 'Gather sources and turn findings into clear, cited research.' }, skills: [], mcp: {}, diagnostics: [] }, components: {} },
+    ] });
+  });
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'design-tools', exact: true })).toBeVisible();
+  noOverflow();
+  await page.screenshot({ path: '__screenshots__/flower-plugins/gallery-' + width + '-' + dark + '.png' });
+  await page.getByRole('button', { name: 'Manage: design-tools', exact: true }).click();
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await expect.element(page.getByText('Components', { exact: true })).toBeVisible();
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => undefined)));
+  await page.screenshot({ path: '__screenshots__/flower-plugins/detail-' + width + '-' + dark + '.png' });
+});
+
+it('edits plugin credentials through named secret fields and clears them explicitly', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await page.getByRole('textbox', { name: 'GitHub repository', exact: true }).fill('example/tools');
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await page.getByRole('button', { name: 'Credentials', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('API_KEY');
+  const secret = page.getByLabelText('Secret value', { exact: true });
+  await expect.element(secret).toHaveAttribute('type', 'password');
+  await secret.fill('fixture-secret');
+  await page.getByRole('button', { name: 'Replace credentials', exact: true }).click();
+  await expect.poll(() => state.adapter.plugins.credentials).toHaveBeenCalledWith({ id: 'install-1', revision: 1, component: 'mcp:workspace', values: { API_KEY: 'fixture-secret' } });
+  await page.getByRole('button', { name: 'Credentials', exact: true }).click();
+  await expect.element(page.getByLabelText('Secret value', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: 'Clear saved credentials', exact: true }).click();
+  await expect.poll(() => state.adapter.plugins.credentials).toHaveBeenLastCalledWith({ id: 'install-1', revision: 1, component: 'mcp:workspace', values: {} });
+});
+
+it('keeps a dismissed preparation closed when a poll finishes and allows resuming it', async () => {
+  let finish: ((operation: Awaited<ReturnType<FlowerExtensionsAdapter['plugins']['operation']>>) => void) | undefined;
+  const op = { id: 'pending-operation', kind: 'install', status: 'preparing', install_id: 'pending-install', expected_revision: 0, source: { type: 'github' as const, repository: 'example/tools' }, expires_at: Date.now() + 60000 };
+  const state = await mount(1280, false, 'en-US', false, 0, adapter => {
+    vi.mocked(adapter.plugins.prepare).mockResolvedValue(op);
+    vi.mocked(adapter.plugins.operation).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    vi.mocked(adapter.plugins.list).mockResolvedValue({ items: [], operations: [op], sources: [], revision: 1, target: 'Development', can_launch: true });
+  });
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await expect.poll(() => state.adapter.plugins.operation, { timeout: 4000 }).toHaveBeenCalled();
+  await userEvent.keyboard('{Escape}');
+  await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+  finish?.({ ...op, status: 'failed' });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await expect.element(page.getByRole('textbox', { name: 'GitHub repository', exact: true })).toHaveValue('example/tools');
+});
+
+it('discovers packages through an explicit catalog and reviews their source', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Catalog URL', exact: true }).fill('https://catalog.example.com/plugins.json');
+  await page.getByRole('button', { name: 'Add catalog', exact: true }).click();
+  await page.getByRole('button', { name: 'Browse', exact: true }).click();
+  await expect.element(page.getByText('review-tools', { exact: true })).toBeVisible();
+  expect(state.adapter.plugins.prepare).not.toHaveBeenCalled();
+  await page.getByRole('button', { name: 'Install plugin', exact: true }).last().click();
+  await expect.element(page.getByRole('textbox', { name: 'GitHub repository', exact: true })).toHaveValue('example/tools');
+  expect(state.adapter.plugins.commit).not.toHaveBeenCalled();
+});
+
+it('opens the same plugin owner repeatedly from its skill projection', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await page.getByRole('textbox', { name: 'GitHub repository', exact: true }).fill('example/tools');
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  vi.mocked(state.adapter.listSkills).mockResolvedValue({ catalog_version: 2, skills: [{ ...skills[0], name: 'review-tools@install-1/review', scope: 'agent_plugin', plugin_id: 'install-1', plugin_name: 'review-tools' }] });
+  await page.getByRole('dialog').getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await expect.element(page.getByRole('dialog').getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await userEvent.keyboard('{Escape}');
+    await page.getByRole('tab', { name: 'Skills', exact: true }).click();
+    await page.getByRole('button', { name: 'Manage', exact: true }).click();
+    await expect.element(page.getByRole('dialog').getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
+  }
 });
