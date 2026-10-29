@@ -2147,6 +2147,9 @@ html:not(.dark) .redeven-header-separator {
   border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
   border-left-width: 2px;
   border-left-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  /* Plain fill first so a browser without color-mix never collapses the
+   * fill onto the label colour. */
+  background: var(--card);
   background: color-mix(in srgb, var(--primary) 5%, var(--card));
   color: var(--primary);
   box-shadow: none;
@@ -2156,6 +2159,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-split-action-trigger--blocked:hover {
   border-color: color-mix(in srgb, var(--primary) 36%, var(--border));
   border-left-color: color-mix(in srgb, var(--primary) 72%, transparent);
+  background: var(--card);
   background: color-mix(in srgb, var(--primary) 10%, var(--card));
   color: var(--primary);
   box-shadow: none;
@@ -2165,6 +2169,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-split-action-trigger--blocked[aria-expanded='true'] {
   border-color: color-mix(in srgb, var(--primary) 36%, var(--border));
   border-left-color: color-mix(in srgb, var(--primary) 72%, transparent);
+  background: var(--card);
   background: color-mix(in srgb, var(--primary) 11%, var(--card));
   color: var(--primary);
   box-shadow: none;
@@ -2179,7 +2184,9 @@ html:not(.dark) .redeven-header-separator {
 .redeven-split-action-trigger--attention {
   cursor: pointer;
   border-left: 2px solid color-mix(in srgb, var(--error) 68%, transparent);
+  background: var(--card);
   background: color-mix(in srgb, var(--error) 10%, var(--card));
+  color: var(--error);
   color: color-mix(in srgb, var(--error) 78%, var(--foreground));
 }
 
@@ -2231,7 +2238,14 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-split-action-toggle:hover {
+  background: var(--secondary);
   background: color-mix(in srgb, var(--foreground) 7%, var(--secondary));
+  color: var(--foreground);
+}
+
+.redeven-split-action-toggle:active {
+  background: var(--secondary);
+  background: color-mix(in srgb, var(--foreground) 12%, var(--secondary));
   color: var(--foreground);
 }
 
@@ -4450,7 +4464,38 @@ pre,
 }
 
 .redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention):hover {
+  background: var(--secondary);
   background: color-mix(in srgb, var(--foreground) 7%, var(--secondary));
+}
+
+.redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention):active {
+  background: var(--secondary);
+  background: color-mix(in srgb, var(--foreground) 12%, var(--secondary));
+}
+
+/* The loading shimmer paints a full-bleed sweep behind the label. Upstream
+ * sizes that sweep from --floe-progress-surface-base, which follows the theme's
+ * accent primary: #dddcd7 in the dark theme and #202a37 in the light one. A
+ * card action's fill is --secondary with --secondary-foreground ink, so the
+ * opaque sweep replaced the surface with the label's own colour — 1.10:1 in
+ * dark, 1.00:1 in light — and the label vanished. Paint a translucent sheen
+ * over the button's own fill instead: it reads on the secondary card action,
+ * the filled progress trigger and the gateway action alike, in both themes,
+ * and never alters the surface colour under the label. */
+.redeven-environment-card .redeven-split-action-primary button[data-floe-progress-shimmer='surface']::before,
+.redeven-gateway-card button[data-floe-progress-shimmer='surface']::before {
+  background-image: linear-gradient(
+    100deg in srgb,
+    transparent 46%,
+    rgb(128 128 128 / 0.28) 50%,
+    transparent 54%
+  );
+  background-image: linear-gradient(
+    100deg in srgb,
+    transparent 46%,
+    color-mix(in srgb, var(--muted-foreground) 28%, transparent) 50%,
+    transparent 54%
+  );
 }
 .redeven-environment-card .redeven-split-action-primary button > svg { flex-shrink: 0; }
 .redeven-environment-kind-tag { max-width: 100%; }
