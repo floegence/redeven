@@ -12,6 +12,14 @@ Canonical repository rules. Keep this file within 100 lines, including headings 
 - Preserve existing functionality and user data. Changing or bypassing an `IMPORTANT:` invariant requires explicit user confirmation; never hide a workaround.
 - Communicate decisions, acceptance evidence, and remaining limitations concisely and plainly.
 
+## Tool Design
+
+- Tools stay general-purpose; results are clear and factual — observed facts, confirmed effects, explicit uncertainty.
+- The LLM decides task-specific handling inside runtime-enforced permissions and safety limits. No hardcoded task decisions, no accumulating special-case rules.
+- Recovery must not blindly replay uncertain effects, silently substitute targets, or widen the requested scope without authorization. Never infer retry safety from error wording alone.
+- Human interaction only at a real authorization boundary, for user-only input, or on explicit instruction.
+- Verify at the final model-visible and user-visible boundary.
+
 ## Git Workflow
 
 - Develop in one task-owned worktree and named feature branch. Never develop on `main`; keep its worktree clean and use it only for fast-forward synchronization and final integration.

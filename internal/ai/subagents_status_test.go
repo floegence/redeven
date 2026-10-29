@@ -45,7 +45,7 @@ func TestSubagentStatusReturnsOnlyBoundedMetadataWithoutView(t *testing.T) {
 		if items[i]["thread_id"] != want {
 			t.Fatalf("order = %#v", items)
 		}
-		keys := []string{"thread_id", "task_name", "status", "latest_turn_id", "closed", "queued_inputs", "updated_at_ms"}
+		keys := []string{"thread_id", "task_name", "status", "attention", "latest_turn_id", "closed", "queued_inputs", "updated_at_ms"}
 		expected := len(keys)
 		if want == "failed" {
 			expected++

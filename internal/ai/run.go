@@ -1289,7 +1289,6 @@ type toolCallOutcome struct {
 	Result                any
 	Pending               *PendingToolResult
 	ToolError             *aitools.ToolError
-	RecoveryAction        string
 	Attachments           []ToolAttachment
 }
 
@@ -1427,11 +1426,10 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.recordRuntimeToolCall()
 
 	outcome := &toolCallOutcome{
-		Success:        false,
-		ToolName:       toolName,
-		Args:           cloneAnyMap(args),
-		ToolError:      nil,
-		RecoveryAction: "",
+		Success:   false,
+		ToolName:  toolName,
+		Args:      cloneAnyMap(args),
+		ToolError: nil,
 	}
 	mutating := strings.HasPrefix(toolName, "mcp_") || isMutatingInvocation(toolName, args)
 
@@ -1441,7 +1439,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 
-	setToolError := func(toolErr *aitools.ToolError, recoveryAction string, partialResult any) {
+	setToolError := func(toolErr *aitools.ToolError, partialResult any) {
 		if toolErr == nil {
 			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Tool failed"}
 		}
@@ -1449,7 +1447,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		outcome.Success = false
 		outcome.Result = partialResult
 		outcome.ToolError = toolErr
-		outcome.RecoveryAction = strings.TrimSpace(recoveryAction)
 		r.debug("ai.run.tool.result",
 			"tool_id", toolID,
 			"tool_name", toolName,
@@ -1476,14 +1473,14 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	// Detached runs are hard-canceled (e.g. replaced by a new user turn). Prevent them from
 	// mutating the workspace even if some tool calls were already queued.
 	if r.isDetached() && mutating {
-		setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Run was canceled", Retryable: false}, "", nil)
+		setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Run was canceled", Retryable: false}, nil)
 		return outcome, nil
 	}
 
 	meta, err := r.sessionMetaForTool()
 	if err != nil {
-		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
-		setToolError(toolErr, "", nil)
+		toolErr := aitools.ClassifyError(err)
+		setToolError(toolErr, nil)
 		return outcome, nil
 	}
 
@@ -1516,7 +1513,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, activityUpdater)
 		outcome = terminalOutcome
 		if terminalErr != nil {
-			setToolError(terminalErr, "", terminalOutcome.Result)
+			setToolError(terminalErr, terminalOutcome.Result)
 			return outcome, nil
 		}
 		return terminalOutcome, nil
@@ -1524,7 +1521,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
-	outcome.executionFacts = toolExecutionFacts{callID: toolID, toolName: toolName, potentialMutation: mutating,
+	outcome.executionFacts = toolExecutionFacts{callID: toolID, toolName: toolName,
 		completed: !errors.Is(toolErrRaw, context.Canceled) && !errors.Is(toolErrRaw, context.DeadlineExceeded) && !errors.Is(toolErrRaw, errComputerEffectUnknown) && !errors.Is(toolErrRaw, errMCPEffectUnknown) && !errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown)}
 	if target, ok := result.(toolExecutionOutput); ok {
 		outcome.executionFacts.targetID = target.TargetID
@@ -1537,7 +1534,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if errors.As(toolErrRaw, &patchFailure) {
 			outcome.effectUncertain = patchFailure.attempted
 			outcome.executionFacts.completed = !patchFailure.attempted
-			setToolError(patchToolError(patchFailure), "", result)
+			setToolError(patchToolError(patchFailure), result)
 			return outcome, nil
 		}
 		var partial any
@@ -1554,43 +1551,39 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) || errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown) {
 			outcome.effectUncertain = true
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "The external effect is unconfirmed. Inspect current state and completed facts before deciding the next action; do not blindly repeat this operation.", Retryable: false}, "", partial)
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "The external effect is unconfirmed. Inspect current state and completed facts before deciding the next action; do not blindly repeat this operation.", Retryable: false}, partial)
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.Canceled) {
 			// A returned local read only observed bytes; canceling it has no
 			// uncertain process effect. Command execution still requires exit proof.
 			outcome.cancellationConfirmed = toolName == "terminal.read" && !r.shouldRouteTargetTool(toolName)
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "", partial)
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, partial)
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.DeadlineExceeded) {
-			toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
-			setToolError(toolErr, "", partial)
+			toolErr := aitools.ClassifyError(toolErrRaw)
+			setToolError(toolErr, partial)
 			return outcome, nil
 		}
 		var navigationErr *computerNavigationError
 		if errors.As(toolErrRaw, &navigationErr) {
-			setToolError(&aitools.ToolError{Code: navigationErr.code, Message: navigationErr.Error(), Retryable: false}, "", partial)
+			setToolError(&aitools.ToolError{Code: navigationErr.code, Message: navigationErr.Error(), Retryable: false}, partial)
 			return outcome, nil
 		}
 		var scriptErr *computerScriptExecutionError
 		if errors.As(toolErrRaw, &scriptErr) {
-			setToolError(&aitools.ToolError{Code: computerScriptErrorCode(scriptErr.code), Message: scriptErr.Error(), Retryable: false}, "", partial)
+			setToolError(&aitools.ToolError{Code: computerScriptErrorCode(scriptErr.code), Message: scriptErr.Error(), Retryable: false}, partial)
 			return outcome, nil
 		}
-		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
+		toolErr := aitools.ClassifyError(toolErrRaw)
 		if isComputerUseTool(toolName) && toolErr.Code == aitools.ErrorCodeUnknown {
 			toolErr.Code = aitools.ErrorCodeTargetActionFailed
 			if toolName == "computer.exec" {
 				toolErr.Code = aitools.ErrorCodeScriptFailed
 			}
 		}
-		recoveryAction := ""
-		if aitools.ShouldRetryWithNormalizedArgs(toolErr) {
-			recoveryAction = "retry_with_normalized_args"
-		}
-		setToolError(toolErr, recoveryAction, partial)
+		setToolError(toolErr, partial)
 		return outcome, nil
 	}
 	if target, ok := result.(toolExecutionOutput); ok {
@@ -1616,7 +1609,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	outcome.Success = true
 	outcome.Result = result
 	outcome.ToolError = nil
-	outcome.RecoveryAction = ""
 	return outcome, nil
 }
 
@@ -1877,7 +1869,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolAttachmentMaterialize(ctx, meta, anyToString(args["locator"]))
 	case "attachment.read":
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p attachmentReadArgs
 		b, _ := json.Marshal(args)
@@ -1891,7 +1883,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p struct {
 			Path   string `json:"path"`
@@ -1909,7 +1901,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p struct {
 			Paths []string `json:"paths"`
@@ -1926,7 +1918,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p struct {
 			Root          string `json:"root"`
@@ -1947,7 +1939,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p struct {
 			Query         string   `json:"query"`
@@ -1966,7 +1958,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "file.edit":
 		if meta == nil || !meta.CanWrite {
-			return nil, errors.New("write permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "write permission denied"}
 		}
 		var p FileEditArgs
 		b, _ := json.Marshal(args)
@@ -1983,7 +1975,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "file.write":
 		if meta == nil || !meta.CanWrite {
-			return nil, errors.New("write permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "write permission denied"}
 		}
 		var p FileWriteArgs
 		b, _ := json.Marshal(args)
@@ -1994,7 +1986,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "apply_patch":
 		if meta == nil || !meta.CanWrite {
-			return nil, errors.New("write permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "write permission denied"}
 		}
 		var p struct {
 			Input string `json:"input"`
@@ -2010,7 +2002,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "terminal.read":
 		if !session.AllowsProcessLaunch(meta) {
-			return nil, errors.New("process permission denied: write and execute permissions required")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required"}
 		}
 		var p struct {
 			ProcessID   string `json:"process_id"`
@@ -2032,7 +2024,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "terminal.write":
 		if !session.AllowsProcessLaunch(meta) {
-			return nil, errors.New("process permission denied: write and execute permissions required")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required"}
 		}
 		var p struct {
 			ProcessID   string `json:"process_id"`
@@ -2050,7 +2042,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "terminal.terminate":
 		if !session.AllowsProcessLaunch(meta) {
-			return nil, errors.New("process permission denied: write and execute permissions required")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required"}
 		}
 		var p struct {
 			ProcessID   string `json:"process_id"`
@@ -2071,7 +2063,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "okf.index":
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p struct {
 			Section string `json:"section"`
@@ -2084,7 +2076,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "okf.search":
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p struct {
 			Query      string   `json:"query"`
@@ -2109,7 +2101,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "okf.open":
 		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 		}
 		var p struct {
 			ConceptID       string `json:"concept_id"`
@@ -2134,7 +2126,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 	case "use_skill":
 		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "execute permission denied"}
 		}
 		var p struct {
 			Name   string `json:"name"`
@@ -2184,7 +2176,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.readSubagentEvents(ctx, args)
 	case "subagents":
 		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
+			return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "execute permission denied"}
 		}
 		return r.manageSubagentsForTool(ctx, toolID, cloneAnyMap(args))
 
@@ -2204,14 +2196,14 @@ func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID str
 	}
 	authorization, ok := floretToolExecutionAuthorizationFromContext(ctx, toolID, toolName)
 	if !ok || strings.TrimSpace(authorization.effectAttemptID) == "" || strings.TrimSpace(authorization.snapshotID) == "" || strings.TrimSpace(authorization.epoch) == "" || authorization.decision == "" {
-		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: Floret tool authorization proof is unavailable")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "permission denied: Floret tool authorization proof is unavailable"}
 	}
 	authorizationSnapshot, _ := toolAuthorizationSnapshotFromContext(ctx)
 	if !permissionSnapshotActive(authorizationSnapshot) {
 		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission snapshot is unavailable")
 	}
 	if strings.TrimSpace(authorizationSnapshot.SnapshotID) != authorization.snapshotID || permissionSurfaceEpoch(authorizationSnapshot) != authorization.epoch {
-		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: Floret effect authorization snapshot mismatch")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "permission denied: Floret effect authorization snapshot mismatch"}
 	}
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {
@@ -2219,21 +2211,21 @@ func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID str
 	}
 	policy, ok := authorizationSnapshot.ToolPolicies[toolName]
 	if !ok || !stringSliceContains(authorizationSnapshot.FloretToolNames, toolName) {
-		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: tool unavailable for current permission snapshot")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "permission denied: tool unavailable for current permission snapshot"}
 	}
 	if policy.ApprovalDecision != authorization.decision {
-		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: Floret effect authorization decision mismatch")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "permission denied: Floret effect authorization decision mismatch"}
 	}
 	switch policy.ApprovalDecision {
 	case ApprovalDecisionDeny:
-		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: tool denied by current permission snapshot")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "permission denied: tool denied by current permission snapshot"}
 	case ApprovalDecisionAsk:
 		if !authorization.approvalSatisfied {
-			return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: tool approval required before execution")
+			return PermissionSnapshot{}, floretToolExecutionAuthorization{}, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "permission denied: tool approval required before execution"}
 		}
 	case ApprovalDecisionAllow:
 	default:
-		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, fmt.Errorf("permission denied: unsupported approval decision %q", policy.ApprovalDecision)
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: fmt.Sprintf("permission denied: unsupported approval decision %q", policy.ApprovalDecision)}
 	}
 	return authorizationSnapshot, authorization, nil
 }
@@ -3314,8 +3306,8 @@ func (e *targetToolPolicyError) InvalidArgumentsMeta() map[string]any {
 var (
 	errEmptyWorkingDir      = errors.New("empty working_dir")
 	errInvalidWorkingDir    = errors.New("invalid working_dir")
-	errInvalidToolPath      = errors.New("invalid path")
-	errToolPathMustAbsolute = errors.New("path must be absolute")
+	errInvalidToolPath      = &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid path"}
+	errToolPathMustAbsolute = &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "path must be absolute"}
 )
 
 func (r *run) workingDirAbs() (string, error) {
@@ -3424,9 +3416,9 @@ func mapToolCwdError(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, errToolPathMustAbsolute):
-		return errors.New("cwd must be absolute")
+		return &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "cwd must be absolute"}
 	default:
-		return errors.New("invalid cwd")
+		return &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid cwd"}
 	}
 }
 
@@ -3484,14 +3476,14 @@ func (r *run) normalizeTerminalExecCwd(cwd string, workdir string) (string, erro
 	}
 	resolvedCwd, err := r.resolveToolPath(cwd, workingDirAbs)
 	if err != nil {
-		return "", errors.New("invalid cwd")
+		return "", &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid cwd"}
 	}
 	resolvedWorkdir, err := r.resolveToolPath(workdir, workingDirAbs)
 	if err != nil {
-		return "", errors.New("invalid cwd")
+		return "", &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid cwd"}
 	}
 	if filepath.Clean(resolvedCwd) != filepath.Clean(resolvedWorkdir) {
-		return "", errors.New("invalid cwd")
+		return "", &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid cwd"}
 	}
 	return resolvedCwd, nil
 }
@@ -3529,7 +3521,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	}
 	_, _, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec")
 	if err != nil {
-		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+		return outcome, aitools.ClassifyError(err)
 	}
 	if !session.AllowsProcessLaunch(meta) {
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required", Retryable: false}
@@ -3547,18 +3539,18 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	}
 	cwd, err := r.normalizeTerminalExecCwd(parsed.Cwd, parsed.Workdir)
 	if err != nil {
-		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+		return outcome, aitools.ClassifyError(err)
 	}
 	workingDirAbs, err := r.workingDirAbs()
 	if err != nil {
-		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, mapToolCwdError(err))
+		return outcome, aitools.ClassifyError(mapToolCwdError(err))
 	}
 	if strings.TrimSpace(cwd) == "" {
 		cwd = workingDirAbs
 	}
 	cwdAbs, err := r.resolveToolPath(cwd, workingDirAbs)
 	if err != nil {
-		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, mapToolCwdError(err))
+		return outcome, aitools.ClassifyError(mapToolCwdError(err))
 	}
 	terminalHost := r.host.terminal
 	if terminalHost == nil {

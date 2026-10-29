@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	fltools "github.com/floegence/floret/v7/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/logsafe"
 )
 
 const (
@@ -17,20 +17,18 @@ const (
 // Execution owns these facts. Arbitrary result data and presentation cannot
 // establish effect completion or authorize a target.
 type toolExecutionFacts struct {
-	callID            string
-	toolName          string
-	targetID          string
-	completed         bool
-	potentialMutation bool
-	completedActions  []string
-	needsObservation  bool
+	callID           string
+	toolName         string
+	targetID         string
+	completed        bool
+	completedActions []string
+	needsObservation bool
 }
 
 type encodedModelToolResult struct {
-	result        ToolResult
-	text          []byte
-	structured    map[string]any
-	inputRequired *fltools.InputRequest
+	result     ToolResult
+	text       []byte
+	structured map[string]any
 }
 
 var errComputerResultTooLarge = errors.New("computer result exceeds final JSON envelope limit")
@@ -86,31 +84,26 @@ func encodeModelToolResult(result ToolResult) (encodedModelToolResult, error) {
 	if errors.Is(err, errComputerResultTooLarge) {
 		code = aitools.ErrorCodeToolResultTooLarge
 	}
-	safe, input := safeToolResultAfterEncodingFailure(result, code)
+	safe := safeToolResultAfterEncodingFailure(result, code)
 	raw, snapshot, err = encodeToolResultEnvelope(safe)
 	if err != nil {
 		return encodedModelToolResult{}, fmt.Errorf("encode safe tool result: %w", err)
 	}
-	return encodedModelToolResult{result: safe, text: raw, structured: snapshot, inputRequired: input}, nil
+	return encodedModelToolResult{result: safe, text: raw, structured: snapshot}, nil
 }
 
-func safeToolResultAfterEncodingFailure(source ToolResult, code aitools.ErrorCode) (ToolResult, *fltools.InputRequest) {
-	guidance := "The tool result could not be encoded. Inspect current state before deciding the next step."
-	if isComputerUseTool(source.ToolName) {
-		guidance = "The tool result could not be encoded."
-	}
+func safeToolResultAfterEncodingFailure(source ToolResult, code aitools.ErrorCode) ToolResult {
+	guidance := "The tool result could not be encoded."
 	if code == aitools.ErrorCodeToolResultTooLarge {
 		guidance = "The final Computer JSON result exceeds 1 MiB."
 	}
-	if isComputerUseTool(source.ToolName) {
-		guidance += " An unavailable result does not establish that an action did not execute. Completed actions must not be replayed."
-	}
+	guidance += " Unavailable output does not establish that an action did not execute. Use confirmed effects and current observations to decide the next step. Completed actions must not be replayed; uncertain effects must not be blindly repeated."
 	facts := source.executionFacts
-	data := map[string]any{"result_unavailable": true}
-	confirmed := facts.completed && facts.callID == source.ToolID && facts.toolName == source.ToolName
-	if confirmed {
+	data := map[string]any{"result_unavailable": true, "result_error_code": string(code)}
+	identified := facts.callID != "" && facts.callID == source.ToolID && facts.toolName == source.ToolName
+	if identified {
 		data["tool_call_id"] = facts.callID
-		data["invocation_completed"] = true
+		data["invocation_completed"] = facts.completed
 		data["completed_actions"] = append([]string{}, facts.completedActions...)
 		data["needs_observation"] = facts.needsObservation
 		if facts.targetID != "" {
@@ -118,28 +111,22 @@ func safeToolResultAfterEncodingFailure(source ToolResult, code aitools.ErrorCod
 		}
 	}
 	safe := ToolResult{ToolID: source.ToolID, ToolName: source.ToolName, Status: toolResultStatusError, Summary: "Tool result unavailable", Details: guidance, Data: data, Error: &aitools.ToolError{Code: code, Message: guidance}, dispatchErr: source.dispatchErr, effectUncertain: source.effectUncertain, executionFacts: facts}
+	// Content loss cannot replace the execution owner's failure classification.
+	// Retain bounded scalar diagnostics without reusing unencodable metadata.
+	if source.Error != nil {
+		safe.Error = &aitools.ToolError{Code: source.Error.Code, Message: logsafe.Text(source.Error.Message, 4096) + " " + guidance}
+	}
 	// Terminal dispatch/cancellation authority always wins over optional content.
 	if source.dispatchErr != nil || source.Status == toolResultStatusAborted {
 		safe.Status = source.Status
 		safe.cancellationConfirmed = source.cancellationConfirmed
-		if source.Error != nil {
-			safe.Error = &aitools.ToolError{Code: source.Error.Code, Message: "Tool execution did not complete normally; result content is unavailable."}
-		}
-		return safe, nil
+		return safe
 	}
 	if source.Pending != nil {
 		safe.Pending = source.Pending
-		return safe, nil
+		return safe
 	}
-	if source.effectUncertain || !confirmed || !facts.potentialMutation || (source.Error != nil && source.Error.Code == aitools.ErrorCodePermissionDenied) {
-		return safe, nil
-	}
-	safe.Details += " The operation returned a confirmed result, but its output is unavailable. The action may already be complete. Check the current interface before continuing. After your response, the Agent must first inspect current state without changing it; completed actions must not be replayed. You can also stop this task."
-	safe.Error.Message = safe.Details
-	input := &fltools.InputRequest{Summary: safe.Details, Questions: []fltools.InputQuestion{{ID: "tool_result_checked", Prompt: "Continue after checking the current interface?", Kind: "select", Options: []string{"Checked, continue"}}}}
-	// Input is a generic completed-tool interaction, not a fabricated takeover.
-	safe.activityInput = nil
-	return safe, input
+	return safe
 }
 
 // Source-side semantic pruning is independent of the Activity display budget.

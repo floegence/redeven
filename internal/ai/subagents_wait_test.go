@@ -57,7 +57,7 @@ func TestSubagentWaitMetadataAndAttention(t *testing.T) {
 		{name: "empty timeout", reason: "wait_timeout"},
 		{name: "missing", reason: "missing", count: 1, missing: 1},
 		{name: "completed", reason: "completed", count: 1},
-		{name: "attention", reason: "attention_required", count: 1, input: true},
+		{name: "attention", reason: "attention_required", count: 1, input: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "wait", ToolName: "subagents", Status: toolResultStatusSuccess, Data: map[string]any{"action": "wait", "reason": tc.reason, "found_count": tc.count, "missing_count": tc.missing, "timed_out": tc.reason == "wait_timeout", "effective_timeout_ms": 10000}})
@@ -196,5 +196,62 @@ func TestSubagentRetryPreservesFourCompletedReportsWithoutRedispatch(t *testing.
 		if !strings.Contains(toolText, report) {
 			t.Fatal("canonical retry discarded or truncated a completed child report")
 		}
+	}
+}
+
+func TestChildAttentionLeavesParentDecisionWithModel(t *testing.T) {
+	for _, needsInput := range []bool{false, true} {
+		t.Run(fmt.Sprint(needsInput), func(t *testing.T) {
+			child := completedSubagentTestSummary("waiting-child", "Needs input", "", time.Now())
+			child.Attention.InputCount = 1
+			child.LastOutcome = nil
+			adapter, children := newSubagentHandoffTestAdapter(t, []flruntime.ThreadSummary{child}, nil)
+			var independent atomic.Int32
+			wait := fltools.Define[map[string]any](fltools.Definition{Name: "subagents", InputSchema: fltools.StrictObject(map[string]any{"action": fltools.String("action")}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
+				data, err := adapter.wait(ctx, map[string]any{"ids": []any{child.ID.String()}, "timeout_ms": 1})
+				if err != nil {
+					return fltools.Result{}, err
+				}
+				result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: inv.CallID, ToolName: "subagents", Status: toolResultStatusSuccess, Data: data})
+				if result.InputRequired != nil || result.BoundedWait != nil || result.Metadata[fltools.ResultMetadataProgressToken] != nil {
+					t.Error("attention manufactured parent control or progress")
+				}
+				return result, err
+			})
+			inspect := fltools.Define[struct{}](fltools.Definition{Name: "independent", ReadOnly: true, InputSchema: fltools.StrictObject(nil, nil), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[struct{}]) (fltools.Result, error) {
+				independent.Add(1)
+				return fltools.Result{Text: "Independent evidence"}, nil
+			})
+			last := delegationContextDone()
+			if needsInput {
+				last = goalInteractionCall("question", "ask_user", "{\"reason_code\":\"missing_external_input\",\"required_from_user\":[\"Choose the required destination.\"],\"evidence_refs\":[],\"questions\":[{\"id\":\"destination\",\"header\":\"Destination\",\"question\":\"Which destination should I use?\",\"response_mode\":\"write\",\"is_secret\":false}]}")
+			}
+			gateway := delegationContextGateway(delegationContextCall("wait", "{\"action\":\"wait\"}"), goalInteractionCall("independent", "independent", "{}"), last, delegationContextDone())
+			service := delegationContextThread(t, gateway, func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+				return flruntime.ToolSurface{Tools: fltools.NewRegistry(wait, inspect)}, nil
+			})
+			created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if needsInput {
+				if _, err := service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "start", Input: flruntime.UserInput{Text: "Continue available work"}}); err != nil {
+					t.Fatal(err)
+				}
+				waiting := waitToolDesignAttention(t, service, created.ThreadID)
+				if len(waiting.Interactions) != 1 || waiting.Interactions[0].ID != "question" || independent.Load() != 1 {
+					t.Fatalf("parent did not choose the real request: %+v", waiting)
+				}
+				if _, err := service.Respond(t.Context(), flruntime.RespondInput{ThreadID: created.ThreadID, InteractionID: waiting.Interactions[0].ID, RequestKey: "answer", Answers: []flruntime.InteractionAnswer{{Input: map[string]string{"destination": "chosen"}}}}); err != nil {
+					t.Fatal(err)
+				}
+				waitDesktopContinuation(t, service, created.ThreadID)
+			} else {
+				delegationContextSend(t, service, created.ThreadID, "start", nil)
+			}
+			if independent.Load() != 1 || children.summaries[0].Attention.InputCount != 1 {
+				t.Fatal("independent work or child barrier changed")
+			}
+		})
 	}
 }

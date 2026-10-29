@@ -11,6 +11,7 @@ import (
 
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 type floretEffectAuthorizationKey struct {
@@ -133,7 +134,7 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 		return errors.New("floret effect permission authority is missing")
 	}
 	if req.Permission.Mode == fltools.PermissionDeny {
-		return errors.New("permission denied: tool unavailable for invocation permission policy")
+		return &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "permission denied: tool unavailable for invocation permission policy"}
 	}
 	// Floret settles the canonical approval. This snapshot belongs to the
 	// pending invocation; preference changes apply at the next authorization boundary.

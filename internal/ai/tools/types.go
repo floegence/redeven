@@ -59,8 +59,11 @@ type ToolError struct {
 	Message        string         `json:"message"`
 	Retryable      bool           `json:"retryable,omitempty"`
 	SuggestedFixes []string       `json:"suggested_fixes,omitempty"`
-	NormalizedArgs map[string]any `json:"normalized_args,omitempty"`
 	Meta           map[string]any `json:"meta,omitempty"`
+}
+
+func (e *ToolError) Error() string {
+	return e.Message
 }
 
 func (e *ToolError) Normalize() {
@@ -89,9 +92,6 @@ func (e *ToolError) Normalize() {
 			out = append(out, v)
 		}
 		e.SuggestedFixes = out
-	}
-	if len(e.NormalizedArgs) == 0 {
-		e.NormalizedArgs = nil
 	}
 	if len(e.Meta) == 0 {
 		e.Meta = nil

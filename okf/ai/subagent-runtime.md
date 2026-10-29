@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Flower subagent runtime
 tags: [ai, floret, subagents, permissions]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -15,9 +15,17 @@ The `subagents` tool supports spawn, send input, wait, list, status, inspect, cl
 
 The model-facing result keeps child identity, task name, status, current turn, queue count, failure and interaction facts. Display timestamps, duplicated IDs and counts, and UI action flags remain outside that projection. Spawn and wait do not repeat task descriptions; list and explicit inspect retain them. A preview is omitted only when the same result carries the complete handoff.
 
-Complete handoff bodies bypass generic output caps. Explicit event reads retain their full page contract. Bounded-wait and input-request metadata derive from the original execution result, never its compact model projection. Wait returns on child events and includes available complete reports; inspect explicitly reads reports. Tool descriptions state input and output semantics without prescribing a coordination workflow.
+Complete handoff bodies bypass generic output caps. Explicit event reads retain their full page contract. Bounded-wait metadata derives from the original execution result, never its compact model projection. Wait returns on child events and includes available complete reports; inspect explicitly reads reports. Tool descriptions state input and output semantics without prescribing a coordination workflow.
 
 Parent reports, lifecycle events, bounded waiting, and the compact event panel are described in [Subagent parent events](subagent-parent-events.md).
+
+Wait attention_required reports canonical child input/approval counts in each
+item without creating a second parent confirmation. Child requests remain
+blocked at their own authority boundary. The parent model can use completed
+handoffs, perform independent work or explicitly ask for a dependency decision.
+Unchanged attention is neither a timeout nor new progress. Parent UI activity
+continues to derive solely from its canonical lifecycle; child badges retain the
+real requests. Existing persisted parent requests remain operable after restart.
 
 ## Child ownership and historical references
 Forks copy conversation facts, never child ownership.

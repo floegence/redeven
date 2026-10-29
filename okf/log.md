@@ -6,6 +6,8 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-10-29
 
+- Keep [tool diagnostics](ai/tool-permission-runtime.md) source-owned and factual; preserve patch matching/context semantics, let [result-loss continuation](ai/floret-redeven-adapter-and-projection.md) and [child attention](ai/subagent-runtime.md) return decisions to the model, and retain real/historical user requests. No domain migration, automatic replay or scenario-specific recovery rules.
+
 - Separate [delivered/uploaded files from process images](ai/flower-task-files.md), add authorized temporary previews, and keep preview focus/stacking inside the file dialog without changing backend history or cleanup.
 
 - Simplify [conversation files](ai/flower-task-files.md) into a searchable direct list with automatic bounded discovery, cancellable host reads and a secondary temporary-files view; remove misleading counts and manual paging.

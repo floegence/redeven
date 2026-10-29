@@ -24,6 +24,9 @@ func TestComputerResultFlowerUI(t *testing.T) {
 		t.Skip("explicit browser qualification only")
 	}
 	var requests atomic.Int32
+	var requireInput atomic.Bool
+	var offline atomic.Bool
+	var registry *TargetRegistry
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body map[string]any
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
@@ -35,10 +38,14 @@ func TestComputerResultFlowerUI(t *testing.T) {
 			requests.Add(1)
 			output := false
 			observed := false
+			answered := false
 			for _, raw := range body["input"].([]any) {
 				item, _ := raw.(map[string]any)
 				if item["type"] == "function_call_output" {
 					output = true
+					if item["call_id"] == "choose-target" {
+						answered = true
+					}
 					if item["call_id"] == "observe" {
 						observed = true
 					}
@@ -49,15 +56,28 @@ func TestComputerResultFlowerUI(t *testing.T) {
 				return
 			}
 			if !observed {
+				if offline.Load() {
+					registry.remove("browser-main")
+				}
 				writeEncodingIntegrationCall(w, "computer_observe", "observe", "{\"description\":\"Inspect current state before proceeding\"}")
 				return
 			}
+			if requireInput.Load() && !answered {
+				args := "{\"reason_code\":\"missing_external_input\",\"required_from_user\":[\"Choose a destination.\"],\"evidence_refs\":[],\"questions\":[{\"id\":\"destination\",\"header\":\"Destination\",\"question\":\"Which destination should I use?\",\"response_mode\":\"select_or_write\",\"is_secret\":false,\"choices_exhaustive\":false,\"choices\":[{\"choice_id\":\"fixture\",\"label\":\"Fixture destination\",\"kind\":\"select\"}]}]}"
+				writeEncodingIntegrationCall(w, "ask_user", "choose-target", args)
+				return
+			}
 		}
-		writeAskUserIntegrationTextResponse(w, w.(http.Flusher), "done", "Current state checked; completed action was not replayed.")
+		message := "Current state checked; completed action was not replayed."
+		if offline.Load() {
+			message = "Observation unavailable; completed action was not replayed."
+		}
+		writeAskUserIntegrationTextResponse(w, w.(http.Flusher), "done", message)
 	}))
 	defer provider.Close()
 	executor := &encodingComputerExecutor{}
 	options := encodingIntegrationOptions(t, provider.URL, executor)
+	registry = options.TargetResolver.(*TargetRegistry)
 	svc, err := NewService(options)
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +94,9 @@ func TestComputerResultFlowerUI(t *testing.T) {
 		fail := func(err error) { http.Error(w, err.Error(), 500) }
 		switch req.URL.Query().Get("op") {
 		case "start":
+			mode := req.URL.Query().Get("mode")
+			requireInput.Store(mode == "user" || mode == "stop")
+			offline.Store(mode == "offline")
 			thread, err := svc.CreateThread(req.Context(), meta, "Computer result recovery", "openai/gpt-5-mini", "", "")
 			if err != nil {
 				fail(err)
@@ -83,7 +106,7 @@ func TestComputerResultFlowerUI(t *testing.T) {
 				fail(err)
 				return
 			}
-			_, err = svc.SendUserTurn(req.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "ui-effect-" + thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Update fixture once."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}})
+			_, err = svc.SendUserTurn(req.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "ui-effect-" + thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Update fixture once."}, Options: RunOptions{ToolAllowlist: legacyComputerFixtureTools(), PermissionType: config.AIPermissionFullAccess}})
 			if err != nil {
 				fail(err)
 				return

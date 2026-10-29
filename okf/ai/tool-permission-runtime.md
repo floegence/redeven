@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: AI tool permissions and dispatch
 tags: [ai, tools, permissions, dispatch]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -17,6 +17,16 @@ Default Flower tools omit write_todos; historical Todo results remain readable. 
 The registry includes readonly file/search helpers, standard mutation, patch, terminal, web search, OKF, interaction, skill, subagent, MCP, and Floret-native tools. Structured detail uses Floret's bounded typed rows; operation, status, repeated names, and raw tool fields never create an expand affordance.
 
 The resolver validates MIME, size, and digest through the target-owned media store; it never stores image bytes in durable tool state.
+
+## Diagnostic ownership
+
+Error classification uses owner-typed errors and standard cancellation, deadline
+and filesystem causes. Unknown wording remains UNKNOWN with its source message;
+keywords never infer a resource, authorization, retry safety or replacement
+arguments. Filesystem and terminal owners still resolve authorized relative and
+home-relative paths before dispatch. Owner-generated patch diagnostics remain
+available. Ordinary final error payloads never included generic suggested fixes;
+removing that unused inference is not evidence of improved model decisions.
 
 ## File editing
 
@@ -47,7 +57,10 @@ unique context. The provider still requests source order.
 
 Pure additions append. Untouched lines retain their endings; insertions use the
 first ending (LF for empty files), and nonempty updates retain a final newline.
-Exact matching precedes whitespace and punctuation normalization. Explicit Add
+Matching tries exact lines, then trailing-whitespace, surrounding-whitespace and
+selected Unicode punctuation/space normalization, returning the first match in
+each permitted search pass. Context copies original source text; inserted text
+is literal, with no automatic indentation. Explicit Add
 and Move may replace regular files. Use one operation per canonical path.
 
 Diagnostics distinguish order, overlap, anchor, EOF, repeated/missing context and
@@ -58,7 +71,9 @@ Plans validate before writing and recheck source/destination snapshots per commi
 Validation errors confirm no writes; commit errors report completed operations
 and uncertain effects, never permission to replay. completed_files retains whole
 operation completion semantics. Partial result data and canonical Activity carry
-only confirmed mutations, paths, counts and actual before/after diffs. If a Move
+only confirmed mutations, paths, counts and actual before/after diffs. The full
+diff is retained in Activity and omitted from the model payload; the model can
+inspect affected content when verification requires it. If a Move
 writes its destination but cannot delete its source, report the destination's
 create/update diff against its own prior contents, not a completed rename.
 Replacement is atomic per file, not per patch or Move. The existing published

@@ -312,3 +312,18 @@ for (const [owner,methods] of Object.entries(computerScriptMethods)) {
     });
   }
 }
+
+test('unresolved guest promises report no progress without inventing host work', async () => {
+  const script = await createComputerScript();
+  const actions = [];
+  try {
+    await assert.rejects(script.execute("await ui.click(1,2); await new Promise(() => {}); await ui.click(3,4);", async operation => {
+      actions.push(operation.action); return {};
+    }), error => {
+      assert.equal(error.result.diagnostic.code, 'SCRIPT_NO_PROGRESS');
+      assert.equal(error.result.operations, 1);
+      return true;
+    });
+    assert.deepEqual(actions, ['pointer_click']);
+  } finally { script.dispose(); }
+});

@@ -3,12 +3,13 @@ package ai
 import (
 	"errors"
 
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
 var (
-	errReadPermissionDenied = errors.New("read permission denied")
-	errRWXPermissionDenied  = errors.New("read/write/execute permission denied")
+	errReadPermissionDenied = &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
+	errRWXPermissionDenied  = &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read/write/execute permission denied"}
 )
 
 func requireRead(meta *session.Meta) error {

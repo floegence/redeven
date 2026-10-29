@@ -143,7 +143,7 @@ done
 	executor := NewNativeDesktopTargetExecutor(helper)
 	t.Cleanup(func() { _ = executor.Close() })
 	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.screenshot"})
-	classified := aitools.ClassifyError(aitools.Invocation{ToolName: "computer.screenshot"}, err)
+	classified := aitools.ClassifyError(err)
 	if classified == nil || classified.Code != "FRAME_UNAVAILABLE" || strings.Contains(classified.Message, "private-fixture-secret") || classified.Retryable {
 		t.Fatalf("unsafe or untyped failure: %+v", classified)
 	}
@@ -163,7 +163,7 @@ done
 	executor := NewNativeDesktopTargetExecutor(helper)
 	t.Cleanup(func() { _ = executor.Close() })
 	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.click"})
-	classified := aitools.ClassifyError(aitools.Invocation{ToolName: "computer.click"}, err)
+	classified := aitools.ClassifyError(err)
 	payload, _ := result.Result.(map[string]any)
 	if classified == nil || classified.Code != "TARGET_OBSERVATION_UNAVAILABLE" || takeoverResult(result, err) || payload["action_executed"] != true || payload["observation_stage"] != "safety_scan" || payload["needs_observation"] != true || len(payload) != 3 {
 		t.Fatalf("lost confirmed observation failure: %+v %+v", result, classified)

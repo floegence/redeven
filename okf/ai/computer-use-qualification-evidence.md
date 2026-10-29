@@ -4,7 +4,7 @@ title: Computer use qualification evidence
 tags: [ai, computer-use, testing, evidence]
 lifecycle: retained_history
 retention_reason: "Retains platform qualification failures and scope boundaries that prevent unsupported claims about current Computer Use behavior."
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -26,7 +26,23 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 
 # Evidence
 
-All model runs below use the configured local DeepSeek V4.1 Flash (1017), wire alias deepseek-flash. The alias does not prove remote weights. Source configuration/secrets remain unchanged; task-owned profiles/apps/state never continue user threads. Raw reports, including failures and private histories, remain outside Git. Final task success does not imply zero model errors, general reliability or complete platform qualification.
+The live-model runs below use the configured local DeepSeek V4.1 Flash (1017), wire alias deepseek-flash. The alias does not prove remote weights. Source configuration/secrets remain unchanged; task-owned profiles/apps/state never continue user threads. Raw reports, including failures and private histories, remain outside Git. Final task success does not imply zero model errors, general reliability or complete platform qualification.
+
+## October 29: tool result and interaction boundaries
+
+Deterministic provider and executor fixtures pass four isolated Chromium workflows
+through the real Service, canonical persistence and production FlowerSurface:
+autonomous continuation after output loss, explicit model-selected input with
+submission retry, cancellation of that input, and unavailable observation after
+target disconnection. Each counts one effect and verifies no replay after reload
+and restart. Offline completion reports unavailable observation, not verified state.
+The Computer script runner passes 67 cases, including an unresolved Promise after
+a confirmed click with no later click. These tests establish adapter behavior,
+not the decision quality of a real model. Existing historical confirmations remain
+answerable or cancellable after restart; the new policy does not auto-answer them.
+See [browser fixture](../../internal/ai/computer_result_ui_test.go),
+[model contracts](../../internal/ai/tool_design_contract_test.go) and
+[historical input fixture](../../internal/ai/tool_design_history_test.go).
 
 ## October 28
 

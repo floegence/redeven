@@ -437,57 +437,10 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			if action == subagentActionWait {
-				if _, err := service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "read-results", Input: flruntime.UserInput{Text: "read-results"}}); err != nil {
-					t.Fatal(err)
-				}
-				updates, err := service.Subscribe(t.Context())
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer updates.Close()
-				for {
-					current, err := service.View(t.Context(), created.ThreadID)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if current.Attention.InputCount > 0 {
-						var interaction string
-						for _, value := range current.Interactions {
-							if !value.Resolved && value.Kind == flruntime.ThreadInteractionInput {
-								interaction = value.ID
-								break
-							}
-						}
-						if interaction == "" {
-							t.Fatal("wait attention did not create canonical input")
-						}
-						if _, err := service.Respond(t.Context(), flruntime.RespondInput{ThreadID: created.ThreadID, InteractionID: interaction, Answers: []flruntime.InteractionAnswer{{Input: map[string]string{"subagent_attention": "Continue using available results"}}}, RequestKey: "continue-wait"}); err != nil {
-							t.Fatal(err)
-						}
-						break
-					}
-					if _, err := updates.Next(t.Context()); err != nil {
-						t.Fatal(err)
-					}
-				}
-				for {
-					current, err := service.View(t.Context(), created.ThreadID)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if current.Activity == flruntime.ThreadActivityIdle {
-						if current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted {
-							t.Fatalf("outcome=%v failure=%v", current.LastOutcome, current.Failure)
-						}
-						break
-					}
-					if _, err := updates.Next(t.Context()); err != nil {
-						t.Fatal(err)
-					}
-				}
-			} else {
-				delegationContextSend(t, service, created.ThreadID, "read-results", nil)
+			delegationContextSend(t, service, created.ThreadID, "read-results", nil)
+			parent, err := service.View(t.Context(), created.ThreadID)
+			if err != nil || parent.Attention.InputCount != 0 || parent.Attention.ApprovalCount != 0 {
+				t.Fatalf("child attention paused parent: %+v %v", parent.Attention, err)
 			}
 			requests := gateway.Requests()
 			if len(requests) != 2 {
@@ -511,10 +464,11 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			}
 			var data struct {
 				Items []struct {
-					ThreadID           string                       `json:"thread_id"`
-					Status             string                       `json:"status"`
-					TaskDescription    string                       `json:"task_description"`
-					LastMessagePreview string                       `json:"last_message_preview"`
+					ThreadID           string `json:"thread_id"`
+					Status             string `json:"status"`
+					TaskDescription    string `json:"task_description"`
+					LastMessagePreview string `json:"last_message_preview"`
+					Attention          flruntime.AttentionSummary
 					WaitingPrompt      string                       `json:"waiting_prompt"`
 					Failure            *flruntime.ThreadTurnFailure `json:"failure"`
 				} `json:"items"`
@@ -535,6 +489,9 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			byID := map[string]int{}
 			for index, item := range data.Items {
 				byID[item.ThreadID] = index
+			}
+			if data.Items[byID[waiting.ID.String()]].Attention.InputCount != 1 || data.Items[byID[approval.ID.String()]].Attention.ApprovalCount != 1 {
+				t.Fatalf("canonical attention facts lost: %s", resultText)
 			}
 			if action == subagentActionStatus {
 				if len(data.Handoffs) != 0 || strings.Contains(resultText, final) || strings.Contains(resultText, "FINAL_PREVIEW_ONLY") || strings.Contains(resultText, "EFFECT_OUTCOME_UNKNOWN_DO_NOT_REPLAY") || strings.Contains(resultText, "INPUT_REQUIRED_FROM_USER") {

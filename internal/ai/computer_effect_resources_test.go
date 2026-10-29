@@ -51,7 +51,7 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 			inv := fltools.Invocation[map[string]any]{Name: toolName, ThreadID: "thread-first", Args: args}
 			resources, resolveErr := floretComputerResources(r, inv)
 			if wantCode != "" {
-				classified := aitools.ClassifyError(aitools.Invocation{ToolName: toolName}, resolveErr)
+				classified := aitools.ClassifyError(resolveErr)
 				if classified == nil || string(classified.Code) != wantCode {
 					t.Fatalf("resource failure lost classification: %+v (%v)", classified, resolveErr)
 				}
@@ -102,7 +102,7 @@ func TestComputerResourceFailuresStopBeforeDispatch(t *testing.T) {
 
 func TestComputerModelErrorKeepsFactsAndActivityKeepsAssistance(t *testing.T) {
 	failure := &targetToolPolicyError{code: "target_connection_required", tool: "browser.reload", target: "closed", targetKind: "browser.connected", targetState: "connection_required", repairAction: "connect_current_browser", safety: &InteractionSafetyDecision{Level: "takeover"}}
-	source := ToolResult{ToolID: "reload", ToolName: "browser.reload", Status: toolResultStatusError, Error: aitools.ClassifyError(aitools.Invocation{}, failure), Data: map[string]any{"target_id": "closed", "action_executed": false}}
+	source := ToolResult{ToolID: "reload", ToolName: "browser.reload", Status: toolResultStatusError, Error: aitools.ClassifyError(failure), Data: map[string]any{"target_id": "closed", "action_executed": false}}
 	result, err := floretToolResultFromFlower(nil, source)
 	if err != nil {
 		t.Fatal(err)

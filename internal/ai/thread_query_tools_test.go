@@ -98,7 +98,7 @@ func TestThreadBrowseRejectsAdvancedAndUnscopedInputs(t *testing.T) {
 		if err == nil {
 			t.Fatalf("accepted invalid browse: %v", args)
 		}
-		classified := aitools.ClassifyError(aitools.Invocation{ToolName: "threads.query", Args: args}, err)
+		classified := aitools.ClassifyError(err)
 		if classified.Code != aitools.ErrorCodeInvalidArguments || classified.Retryable {
 			t.Fatalf("invalid classification: %+v", classified)
 		}
@@ -186,7 +186,7 @@ func TestThreadQueryToolPreservesRuntimeFailures(t *testing.T) {
 			if err != failure {
 				t.Errorf("%s changed runtime failure: %v, want %v", tool, err, failure)
 			}
-			if toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: tool, Args: args}, err); toolErr.Code == aitools.ErrorCodeInvalidArguments {
+			if toolErr := aitools.ClassifyError(err); toolErr.Code == aitools.ErrorCodeInvalidArguments {
 				t.Errorf("%s runtime failure classified as invalid input: %+v", tool, toolErr)
 			}
 		}
@@ -208,7 +208,7 @@ func TestThreadQueryIndexNotReadyIsRetryableAndNeverLooksPartial(t *testing.T) {
 		if !errors.Is(err, threadquery.ErrThreadQueryIndexNotReady) {
 			t.Fatalf("%s lost index readiness classification: %v", tool, err)
 		}
-		classified := aitools.ClassifyError(aitools.Invocation{ToolName: tool, Args: args}, err)
+		classified := aitools.ClassifyError(err)
 		if classified.Code != aitools.ErrorCodeThreadQueryIndexNotReady || !classified.Retryable {
 			t.Fatalf("%s index readiness error = %+v", tool, classified)
 		}

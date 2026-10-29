@@ -151,7 +151,7 @@ func TestTessivenToolsRejectUnplacedServicesWithoutCreatingVersions(t *testing.T
 	if err == nil {
 		t.Fatal("Flower saved an unplaced service")
 	}
-	toolError := aitools.ClassifyError(aitools.Invocation{ToolName: "tessiven.save"}, err)
+	toolError := aitools.ClassifyError(err)
 	if toolError.Code != aitools.ErrorCodeInvalidArguments || toolError.Retryable || !strings.Contains(toolError.Message, "/services/0/id") {
 		t.Fatalf("save failure must identify a repairable document error: %+v", toolError)
 	}

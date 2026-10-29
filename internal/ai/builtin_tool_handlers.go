@@ -626,7 +626,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.edit",
-			Description:      "Prefer for small exact edits; unique match unless replace_all.",
+			Description:      "Replace exact literal text. Include unique context for one occurrence; use replace_all only when all occurrences are intended.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Working-directory-relative or authorized absolute path."}, "old_string": map[string]any{"type": "string", "minLength": 1}, "new_string": map[string]any{"type": "string", "description": "Must differ from old_string."}, "replace_all": map[string]any{"type": "boolean"}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
@@ -656,8 +656,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Apply a Begin/End Patch to writable filesystem-scope paths; relative paths resolve from cwd.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"input": map[string]any{"type": "string", "description": "*** Begin Patch ... *** End Patch. Operations: *** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. One file header per canonical path; non-overlapping chunks in original file order."}}), "required": []string{"input"}, "additionalProperties": false}),
+			Description:      "Apply a Begin/End Patch to writable filesystem-scope paths; relative paths resolve from cwd. Matching tries exact lines, then ignores trailing whitespace, surrounding whitespace, and selected Unicode punctuation/space differences, taking the first match in each permitted search pass. Context lines retain original source text; added lines are literal, without automatic indentation.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"input": map[string]any{"type": "string", "description": "*** Begin Patch ... *** End Patch. Operations: *** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. One file header per canonical path; non-overlapping chunks in original file order. Exact, uniquely located disjoint chunks may be reordered. Anchors and EOF constrain the search. Unchanged lines retain their endings; insertions use the first existing ending (LF for new files), and nonempty updates end with a newline. The full change diff is in Activity; inspect affected content when needed."}}), "required": []string{"input"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,

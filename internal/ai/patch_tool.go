@@ -81,7 +81,7 @@ func patchToolError(failure *patchApplyError) *aitools.ToolError {
 			Meta:           map[string]any{"effect": "uncertain", "completed_files": failure.completed, "file": failure.path},
 			SuggestedFixes: []string{"Inspect the affected files and confirmed completed operations before preparing a new edit. Do not replay this patch."}}
 	}
-	classified := aitools.ClassifyError(aitools.Invocation{ToolName: "apply_patch"}, failure.cause)
+	classified := aitools.ClassifyError(failure.cause)
 	if classified.Code == aitools.ErrorCodeUnknown || classified.Code == aitools.ErrorCodeNotFound {
 		classified.Code = aitools.ErrorCodePatchValidationFailed
 	}

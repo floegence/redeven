@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	flprovider "github.com/floegence/floret/v7/provider"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 	_ "golang.org/x/image/webp"
 )
@@ -135,7 +136,7 @@ func imageSnapshot(body []byte, name string) (TargetToolAttachment, imageReadRes
 
 func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID string, args map[string]any) (any, error) {
 	if meta == nil || !meta.CanRead {
-		return nil, errors.New("read permission denied")
+		return nil, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "read permission denied"}
 	}
 	if !r.supportsImageInput {
 		return nil, errors.New("this model does not support image input; select an image-capable model to inspect the image")

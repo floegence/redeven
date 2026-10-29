@@ -42,7 +42,7 @@ func TestToolFailureUsesClassifierAndPreservesPartialExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := aitools.ClassifyError(aitools.Invocation{ToolName: name, Args: args}, failure)
+			want := aitools.ClassifyError(failure)
 			if !reflect.DeepEqual(outcome.ToolError, want) {
 				t.Errorf("execution error=%+v; classifier=%+v", outcome.ToolError, want)
 			}

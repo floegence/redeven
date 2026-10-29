@@ -57,7 +57,7 @@ func TestComputerFailurePreservesLayerAndReadiness(t *testing.T) {
 			runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": failingComputerExecutor{code: test.wire}}, t.TempDir())
 			t.Cleanup(func() { _ = runtime.Close() })
 			_, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.screenshot"})
-			failure := aitools.ClassifyError(aitools.Invocation{ToolName: "computer.screenshot"}, err)
+			failure := aitools.ClassifyError(err)
 			if failure == nil || string(failure.Code) != test.code || failure.Retryable || strings.Contains(failure.Message, "private-fixture-secret") {
 				t.Fatalf("failure boundary: %+v", failure)
 			}

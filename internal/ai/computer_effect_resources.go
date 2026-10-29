@@ -22,7 +22,7 @@ func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) (re
 	// the stable classification and execution boundary in that text.
 	defer func() {
 		if resourceErr != nil {
-			failure := aitools.ClassifyError(aitools.Invocation{ToolName: inv.Name}, resourceErr)
+			failure := aitools.ClassifyError(resourceErr)
 			resourceErr = fmt.Errorf("%s: %w Tool execution has not started; no action was executed.", failure.Code, resourceErr)
 		}
 	}()

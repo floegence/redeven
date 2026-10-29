@@ -189,8 +189,8 @@ func TestComputerProviderPreservesTypesAcrossHistoryRetryAndRestart(t *testing.T
 	}
 }
 
-func TestComputerCompletedEncodingFailureWaitsAndNeverReplays(t *testing.T) {
-	for _, mode := range []string{"continue", "stop", "oversize", "unknown"} {
+func TestComputerCompletedEncodingFailureContinuesAndNeverReplays(t *testing.T) {
+	for _, mode := range []string{"invalid", "oversize", "unknown"} {
 		t.Run(mode, func(t *testing.T) {
 			var requests atomic.Int32
 			var mu sync.Mutex
@@ -241,28 +241,19 @@ func TestComputerCompletedEncodingFailureWaitsAndNeverReplays(t *testing.T) {
 			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "effect", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Update fixture once."}, Options: RunOptions{ToolAllowlist: legacyComputerFixtureTools(), PermissionType: config.AIPermissionFullAccess}}); err != nil {
 				t.Fatal(err)
 			}
-			if mode == "unknown" {
-				final := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" })
-				if final.WaitingPrompt != nil || executor.effects.Load() != 1 || requests.Load() != 3 {
-					t.Fatalf("uncertainty did not continue once: %+v requests=%d effects=%d", final, requests.Load(), executor.effects.Load())
-				}
-				return
-			}
-			waiting := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "waiting_user" || v.RunStatus == "failed" })
-			if waiting.WaitingPrompt == nil {
-				t.Fatalf("no pause: %+v", waiting)
+			final := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool {
+				return v.RunStatus == "success" || v.RunStatus == "waiting_user" || v.RunStatus == "failed"
+			})
+			if final.RunStatus != "success" || final.WaitingPrompt != nil || executor.effects.Load() != 1 || executor.observations.Load() != 1 || requests.Load() != 3 {
+				t.Fatalf("result loss interrupted continuation: status=%s prompt=%+v effects=%d observations=%d requests=%d", final.RunStatus, final.WaitingPrompt, executor.effects.Load(), executor.observations.Load(), requests.Load())
 			}
 			current, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
 			if err != nil {
 				t.Fatal(err)
 			}
 			canonical, found, err := svc.threadRuntime.(flruntime.ThreadToolResultReader).LookupToolResult(t.Context(), flruntime.LookupToolResultInput{ThreadID: current.ThreadID, TurnID: current.TurnID, RunID: current.RunID, ToolCallID: "effect"})
-			if err != nil || !found || canonical.Status != "error" || strings.Contains(canonical.Content, "must never leak") {
-				t.Fatalf("canonical error changed: %+v %v", canonical, err)
-			}
-
-			if requests.Load() != 1 || executor.effects.Load() != 1 {
-				t.Fatal("provider continued before response")
+			if err != nil || !found || canonical.Status != "error" || strings.Contains(canonical.Content, "must never leak") || !strings.Contains(canonical.Content, "result_unavailable") {
+				t.Fatalf("lost canonical facts: %+v %v", canonical, err)
 			}
 			if err := svc.Close(); err != nil {
 				t.Fatal(err)
@@ -272,37 +263,8 @@ func TestComputerCompletedEncodingFailureWaitsAndNeverReplays(t *testing.T) {
 				t.Fatal(err)
 			}
 			restored, err := svc.GetThread(t.Context(), meta, thread.ThreadID)
-			if err != nil || restored.WaitingPrompt == nil {
-				t.Fatalf("restart lost pause: %+v %v", restored, err)
-			}
-			if requests.Load() != 1 || executor.effects.Load() != 1 {
-				t.Fatal("restart replayed")
-			}
-			if mode == "stop" {
-				current, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err := svc.threadRuntime.Cancel(t.Context(), flruntime.CancelInput{ThreadID: current.ThreadID, RequestKey: "stop-encoding"}); err != nil {
-					t.Fatal(err)
-				}
-				waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus != "waiting_user" && v.RunStatus != "running" })
-				if requests.Load() != 1 {
-					t.Fatal("Stop requested provider")
-				}
-				return
-			}
-			prompt := restored.WaitingPrompt
-			response := SubmitRequestUserInputResponseRequest{ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: prompt.PromptID, Answers: map[string]RequestUserInputAnswer{"tool_result_checked": {Text: "Checked, continue"}}}}
-			if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, response); err != nil {
-				t.Fatal(err)
-			}
-			waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" })
-			if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, response); err != nil {
-				t.Fatal(err)
-			}
-			if executor.effects.Load() != 1 || executor.observations.Load() != 1 || requests.Load() != 3 {
-				t.Fatalf("effect=%d observe=%d requests=%d", executor.effects.Load(), executor.observations.Load(), requests.Load())
+			if err != nil || restored.WaitingPrompt != nil || executor.effects.Load() != 1 || requests.Load() != 3 {
+				t.Fatalf("restart changed settlement: %+v %v", restored, err)
 			}
 			mu.Lock()
 			defer mu.Unlock()

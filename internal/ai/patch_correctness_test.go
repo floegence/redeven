@@ -10,6 +10,11 @@ import (
 func TestApplyPatchCanonicalChunkSemantics(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, before, body, after string }{
+		{"normalized_context", "  header  \r\n\told\r\n  tail\r\n", "@@\n header\n-old\n+literal\n tail", "  header  \r\nliteral\r\n  tail\r\n"},
+		{"punctuation_context", "“header”\nold\n", "@@\n \"header\"\n-old\n+  literal", "“header”\n  literal\n"},
+		{"exact_before_normalized", " old \nold\n", "@@\n-old\n+new", " old \nnew\n"},
+		{"first_exact", "old\nold\n", "@@\n-old\n+new", "new\nold\n"},
+		{"first_normalized", " old \n\told\n", "@@\n-old\n+new", "new\n\told\n"},
 		{"anchor", "alpha:\nsame\nbeta:\nsame\n", "@@ beta:\n-same\n+changed", "alpha:\nsame\nbeta:\nchanged\n"},
 		{"eof", "same\nmiddle\nsame\n", "@@\n-same\n+changed\n*** End of File", "same\nmiddle\nchanged\n"},
 		{"append", "a\nb\n", "@@\n+c", "a\nb\nc\n"},

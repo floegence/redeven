@@ -43,43 +43,51 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(String(error)));
-  for (const [index, mode] of ['continue', 'stop', 'offline'].entries()) {
-    const thread = await api('start');
+  for (const [index, mode] of ['autonomous', 'user', 'stop', 'offline'].entries()) {
+    const initial = await api('counts');
+    const thread = await api('start&mode=' + mode);
     await page.goto(url + '/?thread=' + thread.thread_id);
     const prompt = page.locator('[data-flower-input-request-prompt]');
-    await prompt.waitFor({ timeout: 15000 });
-    assert.match(await prompt.innerText(), /action may already be complete/);
-    const before = await api('counts');
-    assert.equal(before.effects, index + 1);
-    await api('restart');
-    await page.reload();
-    await prompt.waitFor();
-    assert.deepEqual(await api('counts'), before);
-    if (mode === 'offline') await api('offline');
-    if (mode === 'stop') {
-      await page.getByRole('button', { name: /^Stop/ }).first().click();
-    } else {
-      await prompt.getByText('Checked, continue', { exact: true }).click();
-      if (mode === 'continue') {
+    if (mode === 'user' || mode === 'stop') {
+      await prompt.waitFor({ timeout: 15000 });
+      assert.match(await prompt.innerText(), /Which destination should I use/);
+      assert.doesNotMatch(await prompt.innerText(), /Checked, continue/);
+      const before = await api('counts');
+      assert.equal(before.effects, index + 1);
+      assert.equal(before.observations, initial.observations + 1);
+      await api('restart');
+      await page.reload();
+      await prompt.waitFor();
+      assert.deepEqual(await api('counts'), before);
+      if (mode === 'stop') {
+        await page.getByRole('button', { name: /^Stop/ }).first().click();
+      } else {
+        await prompt.getByText('Fixture destination', { exact: true }).click();
         await api('fail-response');
         await page.getByRole('button', { name: 'Continue', exact: true }).click();
         await page.getByText('Injected pre-admission submission failure', { exact: false }).first().waitFor();
         assert.equal(await prompt.count(), 1);
         assert.deepEqual(await api('counts'), before);
+        await page.getByRole('button', { name: 'Continue', exact: true }).click();
       }
-      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await prompt.waitFor({ state: 'hidden', timeout: 15000 });
     }
-    await prompt.waitFor({ state: 'hidden', timeout: 15000 });
-    await page.waitForTimeout(500);
+    if (mode !== 'stop') {
+      const completion = mode === 'offline'
+        ? 'Observation unavailable; completed action was not replayed.'
+        : 'Current state checked; completed action was not replayed.';
+      await page.getByText(completion, { exact: false }).first().waitFor({ timeout: 15000 });
+    }
+    assert.equal(await prompt.count(), 0);
     const after = await api('counts');
-    assert.equal(after.effects, before.effects);
-    if (mode === 'stop') assert.equal(after.requests, before.requests);
-    else assert.ok(after.requests > before.requests);
-    if (mode === 'continue') assert.equal(after.observations, before.observations + 1);
+    assert.equal(after.effects, initial.effects + 1);
+    assert.equal(after.observations, initial.observations + (mode === 'offline' ? 0 : 1));
+    await api('restart');
     await page.reload();
     await page.waitForTimeout(500);
     assert.equal(await prompt.count(), 0);
-    console.log(JSON.stringify({ mode, before, after, refreshRecovered: true, submissionRetry: mode === 'continue' }));
+    assert.deepEqual(await api('counts'), after);
+    console.log(JSON.stringify({ mode, initial, after, refreshRecovered: true, submissionRetry: mode === 'user' }));
   }
   assert.deepEqual(pageErrors, []);
 } finally {

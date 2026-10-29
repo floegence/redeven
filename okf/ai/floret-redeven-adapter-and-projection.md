@@ -4,7 +4,7 @@ title: Floret Redeven adapter and projection
 tags: [ai, floret, adapter, projection]
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -25,6 +25,21 @@ No database schema or migration changes are part of this optimization.
 
 ## Model output and presentation
 [tool_result_encoding.go](../../internal/ai/tool_result_encoding.go) owns the single final result encoder: execution facts, tool content policy, final JSON, then Text and an independent Decoder.UseNumber Structured snapshot. Activity independently projects valid source data; its display truncation never changes model output. Floret applies the engine-owned uncertain-effect warning outside the tool payload budget, preserving complete JSON diagnostics in the next provider request and through restart/retry.
+
+Optional result encoding loss returns a small factual error and continues the
+normal provider loop. It never creates a human confirmation solely because a
+mutation may have completed. The safe result retains result_unavailable and
+result_error_code independently of the execution owner's original error code
+and bounded message; malformed metadata cannot replace that classification.
+It also retains
+correlated invocation identity, completed_actions, needs_observation and target
+facts, including a confirmed prefix before an uncertain remainder. Invocation
+completion is not task success; an empty prefix does not establish no effect.
+The model chooses observation or other authorized work; no tool is replayed.
+Actual pending interactions, cancellation, dispatch errors and canonical effect
+uncertainty keep their authority. Failure to encode even the safe result remains
+an infrastructure failure. Previously persisted input requests retain their
+canonical response path through restart; no host migration or auto-answer occurs.
 
 Its `request_key` remains the send idempotency identity used only to settle the short-lived browser outbox; the two values are not interchangeable.
 

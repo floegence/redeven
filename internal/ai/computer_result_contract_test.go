@@ -157,10 +157,11 @@ func TestComputerFinalEnvelopeBoundaryAndIndependentArchive(t *testing.T) {
 func TestComputerEncodingFailureRespectsExecutionAuthority(t *testing.T) {
 	for _, name := range []string{"readonly", "completed_action", "unknown", "unconfirmed_cancel", "confirmed_cancel", "declined", "pending"} {
 		t.Run(name, func(t *testing.T) {
-			source := ToolResult{ToolID: "call", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: map[string]any{"bad": math.NaN(), "code": "private script"}, executionFacts: toolExecutionFacts{callID: "call", toolName: "computer.exec", targetID: "authorized", completed: true, potentialMutation: true, completedActions: []string{"click"}, needsObservation: true}}
+			source := ToolResult{ToolID: "call", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: map[string]any{"bad": math.NaN(), "code": "private script"}, executionFacts: toolExecutionFacts{callID: "call", toolName: "computer.exec", targetID: "authorized", completed: true, completedActions: []string{"click"}, needsObservation: true}}
 			switch name {
 			case "readonly":
-				source.executionFacts.potentialMutation = false
+				source.ToolName = "computer.observe"
+				source.executionFacts.toolName = source.ToolName
 			case "unknown":
 				source.Status = toolResultStatusError
 				source.dispatchErr = errComputerEffectUnknown
@@ -177,7 +178,7 @@ func TestComputerEncodingFailureRespectsExecutionAuthority(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (result.InputRequired != nil) != (name == "completed_action") {
+			if result.InputRequired != nil {
 				t.Fatalf("wrong pause for %s", name)
 			}
 			if strings.Contains(result.Text, "private script") || strings.Contains(result.Text, "NaN") {

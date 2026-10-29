@@ -66,6 +66,7 @@ type subagentSnapshot struct {
 	LatestTurnID       string
 	LastMessagePreview string
 	WaitingPrompt      string
+	Attention          flruntime.AttentionSummary
 	QueuedInputs       int
 	CreatedAtMS        int64
 	UpdatedAtMS        int64
@@ -601,7 +602,7 @@ func (runtime *floretSubagentRuntime) status(ctx context.Context, args map[strin
 		taskName, _ := truncateByRunes(snapshot.TaskName, 140)
 		item := map[string]any{
 			"thread_id": snapshot.ThreadID, "task_name": taskName,
-			"status":         snapshot.Status,
+			"status": snapshot.Status, "attention": snapshot.Attention,
 			"latest_turn_id": snapshot.LatestTurnID, "closed": snapshot.Closed,
 			"queued_inputs": snapshot.QueuedInputs, "updated_at_ms": snapshot.UpdatedAtMS,
 		}
@@ -791,6 +792,7 @@ func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.
 		ParentThreadID: summary.ParentThreadID.String(), ParentTurnID: summary.ParentTurnID.String(),
 		HostProfileRef: summary.HostProfileRef,
 		ContextMode:    normalizeSubagentContextMode(summary.ForkMode),
+		Attention:      view.Attention,
 		Status:         status, Failure: view.Failure, LatestTurnID: view.TurnID.String(), LastMessagePreview: truncateRunes(lastMessage, 160), WaitingPrompt: waitingPrompt,
 		QueuedInputs: len(view.Queue), CreatedAtMS: timeUnixMS(summary.CreatedAt), UpdatedAtMS: timeUnixMS(summary.UpdatedAt),
 		Closed: closed, CanSendInput: !closed, CanInterrupt: view.Activity == flruntime.ThreadActivityActive,
@@ -1038,7 +1040,7 @@ func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
 	payload := map[string]any{
 		"id": snapshot.ThreadID, "thread_id": snapshot.ThreadID,
 		"context_mode": snapshot.ContextMode, "task_name": snapshot.TaskName,
-		"task_description": snapshot.TaskDescription, "status": snapshot.Status,
+		"task_description": snapshot.TaskDescription, "status": snapshot.Status, "attention": snapshot.Attention,
 		"last_message_preview": snapshot.LastMessagePreview, "waiting_prompt": snapshot.WaitingPrompt,
 		"queued_inputs": snapshot.QueuedInputs, "parent_thread_id": snapshot.ParentThreadID,
 		"parent_turn_id": snapshot.ParentTurnID, "latest_turn_id": snapshot.LatestTurnID,
@@ -1060,7 +1062,7 @@ func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 	item := map[string]any{
 		"thread_id": payload["thread_id"], "task_name": payload["task_name"],
 		"task_description": payload["task_description"],
-		"context_mode":     payload["context_mode"], "status": payload["status"],
+		"context_mode":     payload["context_mode"], "status": payload["status"], "attention": payload["attention"],
 		"updated_at_ms": payload["updated_at_ms"], "last_message_preview": payload["last_message_preview"],
 		"can_send_input": payload["can_send_input"], "can_interrupt": payload["can_interrupt"],
 		"can_close": payload["can_close"],

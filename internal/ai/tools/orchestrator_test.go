@@ -3,8 +3,8 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -23,159 +23,33 @@ func (orchestratorInvalidArgsError) InvalidArgumentsMeta() map[string]any {
 	return map[string]any{"action": "inspect"}
 }
 
-func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	workspace := filepath.Join(home, "workspace")
-	if err := os.MkdirAll(filepath.Join(workspace, "reference"), 0o755); err != nil {
-		t.Fatalf("MkdirAll reference: %v", err)
-	}
-
-	inv := Invocation{
-		ToolName:     "terminal.exec",
-		WorkingDir:   workspace,
-		AgentHomeDir: home,
-		Args: map[string]any{
-			"cwd": filepath.Join(workspace, "..", "workspace", "reference") + string(os.PathSeparator),
-		},
-	}
-	toolErr := ClassifyError(inv, errors.New("invalid path"))
-	if toolErr == nil {
-		t.Fatalf("expected tool error")
-	}
-	if toolErr.Code != ErrorCodeInvalidPath {
-		t.Fatalf("code=%q, want=%q", toolErr.Code, ErrorCodeInvalidPath)
-	}
-	if !toolErr.Retryable {
-		t.Fatalf("retryable=false, want true")
-	}
-	wantDir, err := filepath.EvalSymlinks(filepath.Join(workspace, "reference"))
-	if err != nil {
-		t.Fatalf("EvalSymlinks(reference): %v", err)
-	}
-	if got := toolErr.NormalizedArgs["cwd"]; got != wantDir {
-		t.Fatalf("normalized cwd=%v, want=%v", got, wantDir)
+func TestClassifyErrorUnknownWordingDoesNotInventAuthority(t *testing.T) {
+	for _, message := range []string{"process not found", "old text not found", "attachment not found", "permission denied by quoted document", "invalid cwd", "path must be absolute", "command timed out", "missing web search api key", "new unexpected condition"} {
+		t.Run(message, func(t *testing.T) {
+			failure := ClassifyError(errors.New(message))
+			if failure.Code != ErrorCodeUnknown || failure.Message != message || failure.Retryable || len(failure.SuggestedFixes) != 0 || len(failure.Meta) != 0 {
+				t.Fatalf("invented facts: %+v", failure)
+			}
+		})
 	}
 }
 
-func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	inv := Invocation{
-		ToolName:     "terminal.exec",
-		WorkingDir:   root,
-		AgentHomeDir: root,
-		Args: map[string]any{
-			"workdir": "reference/readme.md",
-		},
-	}
-	toolErr := ClassifyError(inv, errors.New("path must be absolute"))
-	if toolErr == nil {
-		t.Fatalf("expected tool error")
-	}
-	if toolErr.Code != ErrorCodeInvalidPath {
-		t.Fatalf("code=%q, want=%q", toolErr.Code, ErrorCodeInvalidPath)
-	}
-	resolvedRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		t.Fatalf("EvalSymlinks(root): %v", err)
-	}
-	want := filepath.Join(resolvedRoot, "reference", "readme.md")
-	if got := toolErr.NormalizedArgs["workdir"]; got != want {
-		t.Fatalf("normalized workdir=%v, want=%v", got, want)
-	}
-}
-
-func TestClassifyError_InvalidPathNormalizesAbsolutePathOutsideWorkingDir(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	project := filepath.Join(home, "workspace")
-	other := filepath.Join(home, "other")
-	if err := os.MkdirAll(project, 0o755); err != nil {
-		t.Fatalf("MkdirAll project: %v", err)
-	}
-	if err := os.MkdirAll(other, 0o755); err != nil {
-		t.Fatalf("MkdirAll other: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(other, "reference"), 0o755); err != nil {
-		t.Fatalf("MkdirAll other/reference: %v", err)
-	}
-
-	inv := Invocation{
-		ToolName:     "terminal.exec",
-		WorkingDir:   project,
-		AgentHomeDir: home,
-		Args: map[string]any{
-			"cwd": filepath.Join(other, "..", "other", "reference") + string(os.PathSeparator),
-		},
-	}
-	toolErr := ClassifyError(inv, errors.New("invalid cwd"))
-	if toolErr == nil {
-		t.Fatalf("expected tool error")
-	}
-	want, err := filepath.EvalSymlinks(filepath.Join(other, "reference"))
-	if err != nil {
-		t.Fatalf("EvalSymlinks(other/reference): %v", err)
-	}
-	if got := toolErr.NormalizedArgs["cwd"]; got != want {
-		t.Fatalf("normalized cwd=%v, want=%v", got, want)
-	}
-}
-
-func TestClassifyError_NotFound(t *testing.T) {
-	t.Parallel()
-
-	toolErr := ClassifyError(Invocation{ToolName: "apply_patch"}, errors.New("not found"))
-	if toolErr == nil {
-		t.Fatalf("expected tool error")
-	}
-	if toolErr.Code != ErrorCodeNotFound {
-		t.Fatalf("code=%q, want=%q", toolErr.Code, ErrorCodeNotFound)
-	}
-	if toolErr.Retryable {
-		t.Fatalf("retryable=true, want false")
-	}
-}
-
-func TestShouldRetryWithNormalizedArgs(t *testing.T) {
-	t.Parallel()
-
-	toolErr := &ToolError{
-		Code:      ErrorCodeInvalidPath,
-		Message:   "path must be absolute",
-		Retryable: true,
-		NormalizedArgs: map[string]any{
-			"path": "/tmp/workspace",
-		},
-	}
-	if !ShouldRetryWithNormalizedArgs(toolErr) {
-		t.Fatalf("expected retry with normalized args")
-	}
-}
-
-func TestShouldRetryWithNormalizedArgs_NotFound(t *testing.T) {
-	t.Parallel()
-
-	toolErr := &ToolError{
-		Code:      ErrorCodeNotFound,
-		Message:   "not found",
-		Retryable: true,
-		NormalizedArgs: map[string]any{
-			"path": "/tmp/workspace",
-		},
-	}
-	if ShouldRetryWithNormalizedArgs(toolErr) {
-		t.Fatalf("did not expect normalized retry for not found")
+func TestClassifyErrorWrappedSourceFacts(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		code ErrorCode
+	}{{os.ErrNotExist, ErrorCodeNotFound}, {os.ErrPermission, ErrorCodePermissionDenied}, {context.Canceled, ErrorCodeCanceled}, {context.DeadlineExceeded, ErrorCodeTimeout}} {
+		failure := ClassifyError(fmt.Errorf("source: %w", tc.err))
+		if failure.Code != tc.code || failure.Retryable {
+			t.Fatalf("lost source classification: %+v", failure)
+		}
 	}
 }
 
 func TestClassifyError_InvalidArguments(t *testing.T) {
 	t.Parallel()
 
-	toolErr := ClassifyError(Invocation{ToolName: "subagents"}, orchestratorInvalidArgsError{})
+	toolErr := ClassifyError(orchestratorInvalidArgsError{})
 	if toolErr == nil {
 		t.Fatalf("expected tool error")
 	}
@@ -192,7 +66,7 @@ func TestClassifyError_InvalidArguments(t *testing.T) {
 
 func TestClassifyErrorDoesNotAuthorizeUnknownEffectReplay(t *testing.T) {
 	for _, err := range []error{context.DeadlineExceeded, errors.New("command timed out"), errors.New("permission denied")} {
-		classified := ClassifyError(Invocation{ToolName: "terminal.exec"}, err)
+		classified := ClassifyError(err)
 		if classified.Retryable {
 			t.Fatalf("%v must not imply that dispatch is safe to replay", err)
 		}
@@ -200,5 +74,17 @@ func TestClassifyErrorDoesNotAuthorizeUnknownEffectReplay(t *testing.T) {
 		if strings.Contains(advice, "switch to") || strings.Contains(advice, "Increase timeout") {
 			t.Fatalf("unsafe recovery advice for %v: %s", err, advice)
 		}
+	}
+}
+
+func TestClassifyErrorPreservesTypedOwnerMetadataAndBoundsUnknownText(t *testing.T) {
+	source := &ToolError{Code: ErrorCodeInvalidPath, Message: "owner validation", Meta: map[string]any{"field": "cwd"}}
+	got := ClassifyError(fmt.Errorf("wrapped: %w", source))
+	if got.Code != source.Code || got.Message != source.Message || got.Meta["field"] != "cwd" || got.Retryable {
+		t.Fatalf("lost owner facts: %+v", got)
+	}
+	unknown := ClassifyError(errors.New(strings.Repeat("x", 5000) + "\x00\n"))
+	if len(unknown.Message) > 4099 || strings.ContainsAny(unknown.Message, "\x00\n") || !strings.HasSuffix(unknown.Message, "...") {
+		t.Fatalf("unbounded diagnostic: %d", len(unknown.Message))
 	}
 }

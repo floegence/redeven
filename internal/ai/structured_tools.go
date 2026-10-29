@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
@@ -77,11 +78,11 @@ func mapToolFilePathError(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, os.ErrNotExist):
-		return errors.New("file not found")
+		return &aitools.ToolError{Code: aitools.ErrorCodeNotFound, Message: "file not found"}
 	case errors.Is(err, errToolPathMustAbsolute):
-		return errors.New("file_path must be absolute")
+		return &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "file_path must be absolute"}
 	default:
-		return errors.New("invalid file_path")
+		return &aitools.ToolError{Code: aitools.ErrorCodeInvalidPath, Message: "invalid file_path"}
 	}
 }
 
@@ -498,7 +499,7 @@ func (r *run) toolFileEdit(ctx context.Context, args FileEditArgs) (FileMutation
 		return FileMutationResult{}, errors.New("old_string was not found")
 	}
 	if !args.ReplaceAll && matchCount > 1 {
-		return FileMutationResult{}, fmt.Errorf("old_string matched %d times; set replace_all=true to replace every occurrence", matchCount)
+		return FileMutationResult{}, fmt.Errorf("old_string matched %d times; include unique surrounding text to select one occurrence, or set replace_all=true only when every occurrence is intended", matchCount)
 	}
 	var updated string
 	if args.ReplaceAll {

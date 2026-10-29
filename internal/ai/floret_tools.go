@@ -826,11 +826,9 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 			boundedWait = &fltools.BoundedWait{Timeout: time.Duration(readInt64Field(data, "wait_ms")) * time.Millisecond, TimedOut: true}
 		}
 	}
-	inputRequired := encoded.inputRequired
 	var effectOutcome fltools.EffectOutcome
 	if result.effectUncertain && dispatchErr == nil && status != toolResultStatusAborted {
 		effectOutcome = fltools.EffectOutcomeUncertain
-		inputRequired = nil
 	}
 	if result.ToolName == "subagents" && !isError {
 		// Engine control metadata comes from the executed result, never its
@@ -839,9 +837,6 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		if anyToString(data["action"]) == subagentActionWait {
 			if readBoolField(data, "timed_out") && readInt64Field(data, "found_count") > 0 && readInt64Field(data, "missing_count") == 0 {
 				boundedWait = &fltools.BoundedWait{Timeout: time.Duration(readInt64Field(data, "effective_timeout_ms")) * time.Millisecond, TimedOut: true}
-			}
-			if anyToString(data["reason"]) == string(flruntime.ThreadWaitAttentionRequired) {
-				inputRequired = &fltools.InputRequest{Summary: "A child thread needs your approval or input. Open the child thread to handle it, then explicitly continue this parent.", Questions: []fltools.InputQuestion{{ID: "subagent_attention", Prompt: "How should the parent continue?", Kind: "select", Options: []string{"Continue after handling the child thread", "Continue using available results"}}}}
 			}
 		}
 	}
@@ -857,7 +852,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		DispatchErr:   dispatchErr,
 		EffectOutcome: effectOutcome,
 		OutputPolicy:  outputPolicy,
-		BoundedWait:   boundedWait, InputRequired: inputRequired,
+		BoundedWait:   boundedWait,
 	}, nil
 }
 
