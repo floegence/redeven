@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { downloadFlowerTaskFile, flowerTaskFilePath } from './flowerTaskFileDownload';
+import { loadFlowerTaskFile, downloadFlowerTaskFile, flowerTaskFilePath } from './flowerTaskFileDownload';
 const mock = vi.hoisted(() => ({ prepare: vi.fn(), write: vi.fn(), complete: vi.fn(), abort: vi.fn() }));
 vi.mock('./downloadSinks', () => ({
   resolveDownloadSink: () => ({ kind: 'desktop_file_system', prepare: mock.prepare }),
@@ -57,4 +57,27 @@ it('cancels without finishing a partial destination', async () => {
   });
   expect(mock.abort).toHaveBeenCalledWith('canceled');
   expect(mock.complete).not.toHaveBeenCalled();
+});
+
+
+it('previews authorized bytes without a destination and preserves text MIME', async () => {
+  const read = vi.fn().mockResolvedValueOnce({ bytes: btoa('# Report'), size: 8, next_offset: 8, version: 'v1' });
+  const blob = await loadFlowerTaskFile('/state/scratch/report.md', read, new AbortController().signal);
+  expect(blob.type).toBe('text/markdown');
+  expect(await blob.text()).toBe('# Report');
+  expect(mock.prepare).not.toHaveBeenCalled();
+  expect(new URL(flowerTaskFilePath('thread', '/state/scratch/report.md', true, 0), 'http://local').searchParams.get('kind')).toBe('working');
+});
+
+it('bounds preview memory and rejects changed bytes and cancelled reads', async () => {
+  const oversized = vi.fn().mockResolvedValue({ bytes: btoa('x'), size: 21 * 1024 * 1024, next_offset: 1, version: 'v1' });
+  await expect(loadFlowerTaskFile('/file.bin', oversized, new AbortController().signal)).rejects.toThrow('size limit');
+  expect(oversized).toHaveBeenCalledTimes(1);
+  const changed = vi.fn().mockResolvedValueOnce({ bytes: btoa('a'), size: 2, next_offset: 1, version: 'v1' })
+    .mockResolvedValueOnce({ bytes: btoa('b'), size: 2, next_offset: 2, version: 'v2' });
+  await expect(loadFlowerTaskFile('/file.txt', changed, new AbortController().signal)).rejects.toThrow('File changed');
+  const controller = new AbortController(); controller.abort();
+  const read = vi.fn();
+  await expect(loadFlowerTaskFile('/file.txt', read, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  expect(read).not.toHaveBeenCalled();
 });

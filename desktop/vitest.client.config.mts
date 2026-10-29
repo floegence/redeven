@@ -10,7 +10,7 @@ export default defineConfig({
     alias: [
       { find: /^lucide-solid$/, replacement: fileURLToPath(new URL('./node_modules/lucide-solid/dist/source/lucide-solid.jsx', import.meta.url)) },
       { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: `${coreDist}graph.css` },
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|icons|layout|loading|markdown|ui)$/, replacement: `${coreDist}$1.js` },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|html-preview|icons|layout|loading|markdown|ui)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },
       { find: /^marked$/, replacement: fileURLToPath(new URL('./node_modules/marked/lib/marked.esm.js', import.meta.url)) },
       { find: /^thinking-orbs\/engine$/, replacement: fileURLToPath(new URL('./node_modules/thinking-orbs/dist/engine.es.js', import.meta.url)) },

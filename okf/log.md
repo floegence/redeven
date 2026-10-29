@@ -6,6 +6,8 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-10-29
 
+- Separate [delivered/uploaded files from process images](ai/flower-task-files.md), add authorized temporary previews, and keep preview focus/stacking inside the file dialog without changing backend history or cleanup.
+
 - Simplify [conversation files](ai/flower-task-files.md) into a searchable direct list with automatic bounded discovery, cancellable host reads and a secondary temporary-files view; remove misleading counts and manual paging.
 - Fold settled [question/answer receipts](ui/flower-turn-process-disclosure.md) with their turn's process, including continuation runs; restore full content on expansion without leaving checkpoint gaps or hiding pending controls.
 - Unify standalone and grouped [thinking/tool row text](ui/flower-tool-sequences.md), including elapsed time, at 13px with unchanged line height and disclosure geometry.

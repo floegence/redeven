@@ -1,6 +1,7 @@
 import { historyItemNeedsObservation } from './historyWindowRetention';
 import { createHistorySequenceCompletion } from './historySequenceCompletion';
 import { createFlowerHistoryGapSubscriptions, createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions } from './flowerPresentationSubscriptions';
+import type { FlowerTaskFilePreviewContentProps } from './FlowerTaskFilePreview';
 import { FlowerTaskFiles } from './FlowerTaskFiles';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 import { createActivityFieldReader } from './activityFieldReader';
@@ -640,6 +641,7 @@ export type FlowerSurfaceProps = Readonly<{
   /** Read and freeze the current host page for a new draft only. */
   captureNewConversationContext?: () => FlowerPageContextSnapshot | undefined;
   /** Host-owned presentation shared with Ask Flower; snapshot validity stays here. */
+  renderTaskFilePreviewContent?: Component<FlowerTaskFilePreviewContentProps>;
   renderContextSnapshotPreview?: Component<FlowerContextSnapshotPreviewProps>;
   filesystemScopeKey?: string;
   filesystemScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement>;
@@ -14900,8 +14902,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </div>
       </Show>
       <FlowerTaskFiles onSource={props.adapter.loadHistory ? itemID => void showTaskMaterialSource(itemID) : undefined} open={taskFilesOpen()} onOpenChange={setTaskFilesOpen} threadID={selectedThreadID()} adapter={props.adapter} copy={copy().taskFiles}
-        onPreview={!props.adapter.openLinkedFilePreview && props.adapter.loadMessageFile ? path => openQueuedPathPreview(
-          { kind: 'file', label: path.split(/[/\\]/).pop() || path, path }, { thread_id: selectedThreadID(), message_id: '' }) : undefined}
+        renderPreviewContent={props.renderTaskFilePreviewContent}
         onOpenFolder={!props.adapter.openLinkedDirectoryBrowser && props.adapter.listWorkingDirectoryEntries ? path => openQueuedPathPreview(
           { kind: 'directory', label: path, path }, { thread_id: selectedThreadID(), message_id: '' }) : undefined} />
  <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>

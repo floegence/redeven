@@ -52,7 +52,7 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|icons|layout|loading|markdown|ui)$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|html-preview|icons|layout|loading|markdown|ui)$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
       { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/index.js') },
       { find: /^lucide-solid$/, replacement: path.resolve(import.meta.dirname, 'node_modules/lucide-solid/dist/esm/lucide-solid.mjs') },
       { find: /^marked$/, replacement: path.resolve(import.meta.dirname, 'node_modules/marked/lib/marked.esm.js') },

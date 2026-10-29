@@ -1,4 +1,4 @@
-import { downloadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../../../../internal/envapp/ui_src/src/ui/downloads/flowerTaskFileDownload';
+import { loadFlowerTaskFile, downloadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../../../../internal/envapp/ui_src/src/ui/downloads/flowerTaskFileDownload';
 import { createDirectoryFavoritesClient } from '../../../../internal/flower_ui/src/filePicker/directoryFavorites';
 import { withFlowerReadDeadline } from '../../../../internal/flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient, prepareFlowerNewConversationInput } from '../../../../internal/flower_ui/src/conversationPreferences';
@@ -846,6 +846,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       ),
       loadTaskFiles: (threadID, cursor, signal) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID, signal),
       loadTaskMaterials: (threadID, cursor, signal) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-materials' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID, signal),
+      loadTaskFile: (threadID, path, working, signal) => loadFlowerTaskFile(path, offset => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET', flowerTaskFilePath(threadID,path,working,offset), undefined, undefined, options.runtimeEnvironmentID, signal),signal),
       downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET', flowerTaskFilePath(threadID,path,working,offset), undefined, undefined, options.runtimeEnvironmentID, signal),signal),
       cleanTaskFiles: async (threadID) => { await runtimeJSON(bridge, 'DELETE', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', undefined, undefined, options.runtimeEnvironmentID); },
       loadToolPreview: (input) => runtimeJSON<FlowerToolPreview>(bridge, 'POST',

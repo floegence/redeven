@@ -2449,3 +2449,18 @@ it('keeps labels and localized errors live without replacing its adapter', async
   await expect(adapter.launchTurn({ client_request_id: 'empty', prompt: '' })).rejects.toThrow(emptyPrompt);
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+
+it('previews temporary files through the existing authorized chunk endpoint', async () => {
+  fetchMock.mockResolvedValue(jsonResponse({ bytes: btoa('print(1)'), size: 8, next_offset: 8, version: 'v1' }));
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+  const controller = new AbortController();
+  const blob = await adapter.loadTaskFile!('thread/one', '/state/scratch/helper.py', true, controller.signal);
+  expect(await blob.text()).toBe('print(1)');
+  expect(blob.type).toBe('text/plain');
+  const url = new URL(fetchMock.mock.calls[0][0] as string, 'http://local');
+  expect(url.pathname).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/task-file-content');
+  expect(url.searchParams.get('kind')).toBe('working');
+  expect(url.searchParams.get('path')).toBe('/state/scratch/helper.py');
+  expect(fetchMock.mock.calls[0][1]?.signal).toBe(controller.signal);
+});

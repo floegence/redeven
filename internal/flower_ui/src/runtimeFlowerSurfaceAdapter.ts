@@ -133,6 +133,7 @@ export type FlowerRuntimeTransport = Readonly<{
   loadTaskFiles?(threadID: string, cursor?: string, signal?: AbortSignal): Promise<FlowerTaskFiles>;
   loadTaskMaterials?(threadID: string, cursor?: string, signal?: AbortSignal): Promise<FlowerTaskMaterials>;
   cleanTaskFiles?(threadID: string): Promise<void>;
+  loadTaskFile?(threadID: string, path: string, working: boolean, signal: AbortSignal): Promise<Blob>;
   downloadTaskFile?(threadID: string, path: string, working: boolean, signal: AbortSignal): Promise<void>;
   loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }, signal?: AbortSignal): Promise<FlowerTerminalProcessSnapshot>;
@@ -760,6 +761,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.transport.loadTaskFiles ? { loadTaskFiles: (id: string, cursor?: string, signal?: AbortSignal) => options.transport.loadTaskFiles!(id, cursor, signal) } : {}),
     ...(options.transport.loadTaskMaterials ? { loadTaskMaterials: (id: string, cursor?: string, signal?: AbortSignal) => options.transport.loadTaskMaterials!(id, cursor, signal) } : {}),
     ...(options.transport.cleanTaskFiles ? { cleanTaskFiles: (id: string) => options.transport.cleanTaskFiles!(id) } : {}),
+    ...(options.transport.loadTaskFile ? { loadTaskFile: options.transport.loadTaskFile } : {}),
     ...(options.transport.downloadTaskFile ? { downloadTaskFile: options.transport.downloadTaskFile } : {}),
     ...(options.transport.loadToolPreview ? {
       loadToolPreview: (input) => options.transport.loadToolPreview!(input),

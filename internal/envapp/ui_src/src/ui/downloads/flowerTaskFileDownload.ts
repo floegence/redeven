@@ -1,3 +1,4 @@
+import { describeFilePreview, getExtDot, isTextFilePreview, mimeFromExtDot } from '../utils/filePreview';
 import { resolveDownloadSink } from './downloadSinks';
 import type { PreparedDownloadSink } from './types';
 
@@ -32,29 +33,7 @@ export async function downloadFlowerTaskFile(
       },
       signal,
     );
-    let offset = 0,
-      version: string | undefined;
-    for (;;) {
-      signal.throwIfAborted();
-      const chunk = await read(offset);
-      signal.throwIfAborted();
-      const bytes = Uint8Array.from(atob(chunk.bytes), (c) => c.charCodeAt(0));
-      if (
-        !Number.isSafeInteger(chunk.size) ||
-        chunk.size < 0 ||
-        chunk.next_offset !== offset + bytes.length ||
-        chunk.next_offset > chunk.size ||
-        bytes.length > 256 * 1024 ||
-        (bytes.length === 0 && offset !== chunk.size) ||
-        !chunk.version ||
-        (version !== undefined && chunk.version !== version)
-      )
-        throw new Error('File changed during download.');
-      version = chunk.version;
-      await destination.write(bytes);
-      offset = chunk.next_offset;
-      if (offset === chunk.size) break;
-    }
+    await readFlowerTaskFileChunks(read, signal, bytes => destination!.write(bytes));
     signal.throwIfAborted();
     await destination.complete();
   } catch (error) {
@@ -63,4 +42,52 @@ export async function downloadFlowerTaskFile(
     );
     throw error;
   }
+}
+
+/** One validated, cancellable read path for downloads and in-dialog previews. */
+async function readFlowerTaskFileChunks(
+  read: (offset: number) => Promise<FlowerTaskFileChunk>,
+  signal: AbortSignal,
+  receive: (bytes: Uint8Array<ArrayBuffer>, size: number) => void | Promise<void>,
+): Promise<void> {
+  let offset = 0,
+    version: string | undefined;
+  for (;;) {
+    signal.throwIfAborted();
+    const chunk = await read(offset);
+    signal.throwIfAborted();
+    const bytes = Uint8Array.from(atob(chunk.bytes), (c) => c.charCodeAt(0));
+    if (
+      !Number.isSafeInteger(chunk.size) ||
+      chunk.size < 0 ||
+      chunk.next_offset !== offset + bytes.length ||
+      chunk.next_offset > chunk.size ||
+      bytes.length > 256 * 1024 ||
+      (bytes.length === 0 && offset !== chunk.size) ||
+      !chunk.version ||
+      (version !== undefined && chunk.version !== version)
+    )
+      throw new Error('File changed during download.');
+    version = chunk.version;
+    await receive(bytes, chunk.size);
+    offset = chunk.next_offset;
+    if (offset === chunk.size) break;
+  }
+}
+
+/** Preview buffers are bounded; downloading retains the streaming path. */
+export async function loadFlowerTaskFile(
+  path: string,
+  read: (offset: number) => Promise<FlowerTaskFileChunk>,
+  signal: AbortSignal,
+): Promise<Blob> {
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  await readFlowerTaskFileChunks(read, signal, (bytes, size) => {
+    if (size > 20 * 1024 * 1024) throw new Error('File exceeds the preview size limit.');
+    chunks.push(bytes);
+  });
+  signal.throwIfAborted();
+  const mime = mimeFromExtDot(getExtDot(path)) || (describeFilePreview(path).mode === 'markdown' ? 'text/markdown'
+    : isTextFilePreview(describeFilePreview(path)) ? 'text/plain' : 'application/octet-stream');
+  return new Blob(chunks, { type: mime });
 }

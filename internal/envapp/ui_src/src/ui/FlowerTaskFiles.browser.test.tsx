@@ -1,9 +1,11 @@
 import { createSignal } from 'solid-js';
+import { DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
 import { render } from 'solid-js/web';
 import { it, expect, vi, onTestFinished } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { messageAttachmentPath } from '../../../../flower_ui/host/messageAttachmentPath';
 import { FlowerTaskFiles } from '../../../../flower_ui/src/FlowerTaskFiles';
+import { FlowerTaskFilePreviewContent } from './flower/FlowerTaskFilePreviewContent';
 import { taskFilesEnUS } from '../../../../flower_ui/src/taskFilesCopy';
 import zhCN from './i18n/locales/catalogs/zh-CN.json';
 import type {
@@ -64,7 +66,7 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
   document.body.append(host);
   const clean = vi.fn(async () => {}),
     download = vi.fn(async () => {}),
-    preview = vi.fn(async () => {}),
+    preview = vi.fn(async () => new Blob(['Report'], { type: 'text/plain' })),
     folder = vi.fn(async () => {});
   const a = {
     ...adapter(),
@@ -73,7 +75,7 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
     loadMessageAttachment: async () => new Blob(['input'],{type:'text/plain'}),
     cleanTaskFiles: clean,
     downloadTaskFile: download,
-    openLinkedFilePreview: preview,
+    loadTaskFile: preview,
     openLinkedDirectoryBrowser: folder,
   } as FlowerSurfaceAdapter;
   const dispose = render(
@@ -88,12 +90,16 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
     await waitFor(() => Boolean(document.querySelector('.flower-task-file-row')));
     button('Preview').focus();
     await userEvent.keyboard('{Enter}');
-    expect(preview).toHaveBeenCalledWith(expect.objectContaining({ path: '/project/report.html', thread_id: 'one' }));
+    await waitFor(() => preview.mock.calls.length === 1);
+    expect(preview).toHaveBeenCalledWith('one', '/project/report.html', false, expect.any(AbortSignal));
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => !document.querySelector('.flower-task-file-preview-dialog'));
     button('Open folder').click();
     expect(folder).toHaveBeenCalledWith(expect.objectContaining({ path: '/project' }));
     button('Download').click();
     await waitFor(() => download.mock.calls.length === 1);
     expect(download).toHaveBeenCalledWith('one', '/project/report.html', false, expect.any(AbortSignal));
+    button(taskFilesEnUS.process).click();
     button(taskFilesEnUS.working).click();
     const working = document.querySelector<HTMLElement>('.flower-task-working')!;
     expect(working.textContent).not.toContain(fixture().working_path);
@@ -110,7 +116,7 @@ it('keeps deliverables usable and confirms only disposable cleanup at desktop an
     button(taskFilesEnUS.clean).click();
     expect(clean).not.toHaveBeenCalled();
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(
-      'Generated files stay in their saved locations',
+      'Delivered files stay in their saved locations',
     );
     button('Cancel').click();
     expect(clean).not.toHaveBeenCalled();
@@ -144,7 +150,7 @@ it('ignores stale thread responses and disables missing files and active cleanup
     loadTaskFiles: load,
     cleanTaskFiles: vi.fn(),
     downloadTaskFile: vi.fn(),
-    openLinkedFilePreview: vi.fn(),
+    loadTaskFile: vi.fn(),
   } as FlowerSurfaceAdapter;
   const dispose = render(
     () => <FlowerTaskFiles open threadID={id()} adapter={a} copy={taskFilesEnUS} onOpenChange={() => {}} />,
@@ -160,7 +166,8 @@ it('ignores stale thread responses and disables missing files and active cleanup
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('.flower-task-files-dialog button')];
     for (const text of ['Preview', 'Download'])
       expect(buttons.find((b) => b.getAttribute('aria-label') === text || b.getAttribute('aria-label')?.startsWith(text + ': ') || b.textContent?.trim() === text)?.disabled).toBe(true);
-    buttons.find(b => b.textContent?.trim() === taskFilesEnUS.working)!.click();
+    dialogButton(taskFilesEnUS.process).click();
+    dialogButton(taskFilesEnUS.working).click();
     expect([...document.querySelectorAll<HTMLButtonElement>('.flower-task-working button')].find(b => b.textContent?.trim() === taskFilesEnUS.clean)?.disabled).toBe(true);
   } finally {
     dispose();
@@ -195,6 +202,8 @@ it('opens an image source in its historical turn even when tool steps were folde
   surface.querySelector<HTMLButtonElement>('[data-thread-id="source-thread"] button')!.click();
   await waitFor(()=>Boolean(surface.querySelector('button[aria-label="Conversation files"]:not(:disabled)')));
   surface.querySelector<HTMLButtonElement>('button[aria-label="Conversation files"]')!.click();
+  await waitFor(()=>Boolean(document.querySelector('.flower-task-files-dialog')));
+  dialogButton(taskFilesEnUS.process).click();
   await waitFor(()=>Boolean(document.querySelector('.flower-task-material-row')));
   [...document.querySelectorAll<HTMLButtonElement>('.flower-task-material-row button')].find(b=>b.getAttribute('aria-label')===taskFilesEnUS.source)!.click();
   await waitFor(()=>Boolean(surface.querySelector('[data-flower-message-id="source-image"]')));
@@ -216,12 +225,12 @@ for (const theme of ['light', 'dark'] as const) {
       adapter={{ ...adapter(), loadTaskFiles: async () => ({ ...base, files: [
         { ...base.files[0], title: 'Cloudflare 账号安全洞察汇总（可视化报告）', name: 'cloudflare-security-insights-2026-10-28.html', file_path: path, mime: 'text/html; charset=utf-8' },
         { ...base.files[0], title: 'Cloudflare 安全洞察汇总（Markdown）', name: 'cloudflare-security-insights-2026-10-28.md', file_path: path.replace('.html', '.md') },
-      ] }), downloadTaskFile: async () => {}, openLinkedFilePreview: async () => {}, openLinkedDirectoryBrowser: async () => {},
+      ] }), downloadTaskFile: async () => {}, loadTaskFile: async () => new Blob(['report']), openLinkedDirectoryBrowser: async () => {},
       loadTaskMaterials: async () => ({ items: [{ id: 'image', kind: 'media', name: 'Screenshot.png', mime: 'image/png', size: 5120,
         locator: 'media:v1:' + 'a'.repeat(64), url: '', item_id: 'image', turn_id: 'turn', created_at: '2026-10-28T12:00:00Z' }] }),
       }} />, host);
     onTestFinished(() => { dispose(); host.remove(); document.documentElement.classList.remove(theme); });
-    await waitFor(() => Boolean(document.querySelector('.flower-task-material-row')));
+    await waitFor(() => Boolean(document.querySelector('.flower-task-file-row')));
     const dialog = document.querySelector<HTMLElement>('.flower-task-files-dialog')!;
     for (const width of [1280, 768, 430, 390, 320]) {
       await page.viewport(width, 900);
@@ -264,15 +273,18 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-it('shows conversation files immediately without count headings, folded images or manual paging', async () => {
+it('keeps execution images in process files without count headings or manual paging', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const load = vi.fn(async (_id: string, cursor?: string) => cursor ? { items: [{ id: 'screenshot', locator: 'media:v1:' + 'a'.repeat(64), name: 'Workflow.png', kind: 'media' as const, mime: 'image/png', size: 512,
     url: '', item_id: 'tool:one', turn_id: 'turn', created_at: '2026-10-29T12:00:00Z' }] } : { items: [], next_cursor: 'older' });
   const dispose = render(() => <FlowerTaskFiles open threadID="one" onOpenChange={() => {}} copy={taskFilesEnUS}
     adapter={{ ...adapter(), loadTaskFiles: async () => ({ ...fixture(), files: [], working: [], working_files: 0, working_bytes: 0 }), loadTaskMaterials: load }} />, host);
   onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => load.mock.calls.length === 2);
+  expect(fileDialog().textContent).not.toContain('Workflow.png');
+  dialogButton(taskFilesEnUS.process).click();
   await waitFor(() => Boolean(document.querySelector('.flower-task-file-row')));
-  const dialog = document.querySelector('.flower-task-files-dialog')!;
+  const dialog = fileDialog();
   expect(dialog.textContent).toContain('Workflow.png');
   expect(dialog.querySelector('details')).toBeNull();
   expect(dialog.querySelector('.flower-task-count')).toBeNull();
@@ -305,19 +317,21 @@ it('restores all files when refresh removes the selected source category', async
   expect(fileDialog().querySelector('.flower-task-file-filters')).toBeNull();
 });
 
-it('pauses automatic search paging in temporary files and restores the file viewport', async () => {
+it('pauses process paging in temporary files and restores the process viewport', async () => {
   await page.viewport(1280, 900);
   let finish!: (page: { items: ReturnType<typeof material>[]; next_cursor: string }) => void;
-  const load = vi.fn((_thread: string, cursor?: string) => cursor === 'last' ? Promise.resolve({ items: [material('needle')] })
+  const load = vi.fn((_thread: string, cursor?: string) => cursor === 'last' ? Promise.resolve({ items: [material('needle', 'media')] })
     : cursor === 'older' ? new Promise<{ items: ReturnType<typeof material>[]; next_cursor: string }>(resolve => { finish = resolve; })
-    : Promise.resolve({ items: Array.from({ length: 24 }, (_, i) => material('page-' + i)), next_cursor: 'older' }));
+    : Promise.resolve({ items: Array.from({ length: 24 }, (_, i) => material('page-' + i, 'media')), next_cursor: 'older' }));
   renderFiles({ loadTaskFiles: async () => fixture(), loadTaskMaterials: load });
+  await waitFor(() => Boolean(fileDialog()));
+  dialogButton(taskFilesEnUS.process).click();
   await waitFor(() => fileDialog()?.querySelectorAll('.flower-task-material-row').length === 24);
   const viewport = fileDialog().querySelector<HTMLElement>('.flower-task-files-viewport')!;
   viewport.scrollTop = 200;
   dialogButton(taskFilesEnUS.working).click();
   expect(viewport.scrollTop).toBe(0);
-  dialogButton(taskFilesEnUS.back).click();
+  dialogButton(taskFilesEnUS.process).click();
   await waitFor(() => viewport.scrollTop === 200);
   const input = fileDialog().querySelector<HTMLInputElement>('input')!;
   input.value = 'needle'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -326,7 +340,7 @@ it('pauses automatic search paging in temporary files and restores the file view
   finish({ items: [], next_cursor: 'last' });
   await new Promise(resolve => setTimeout(resolve, 80));
   expect(load).toHaveBeenCalledTimes(2);
-  dialogButton(taskFilesEnUS.back).click();
+  dialogButton(taskFilesEnUS.process).click();
   await waitFor(() => fileDialog().textContent?.includes('needle.txt') === true);
   expect(load).toHaveBeenCalledTimes(3);
 });
@@ -354,12 +368,15 @@ it('automatically passes empty pages, deduplicates identities, previews original
     : cursor === 'older' ? { items: [item], next_cursor: 'last' } : { items: [], next_cursor: 'older' });
   const bytes = vi.fn(async () => new Blob(['amount\n4\n8\n15'], { type: 'text/plain' }));
   const { source } = renderFiles({ loadTaskMaterials: load, loadMessageAttachment: bytes });
-  await waitFor(() => fileDialog()?.querySelectorAll('.flower-task-material-row').length === 2);
+  await waitFor(() => load.mock.calls.length === 3);
+  await waitFor(() => fileDialog()?.querySelectorAll('.flower-task-material-row').length === 1);
   expect(load).toHaveBeenCalledTimes(3);
   expect(fileDialog().querySelector('details')).toBeNull();
   fileDialog().querySelector<HTMLButtonElement>('.flower-task-file-preview')!.click();
   await waitFor(() => document.querySelector('.flower-attachment-preview-text')?.textContent === 'amount\n4\n8\n15');
   expect(bytes).toHaveBeenCalledWith(expect.objectContaining({ url: item.url }));
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => !document.querySelector('.flower-task-file-preview-dialog'));
   const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   try {
     dialogButton(taskFilesEnUS.download).click();
@@ -471,4 +488,163 @@ it('retains successful rows on page failure and stops repeated cursors without r
   dialogButton(taskFilesEnUS.retry).click();
   await waitFor(() => fileDialog().textContent?.includes('recovered.txt') === true);
   expect(fileDialog().querySelector('.flower-task-files-notice[role="alert"]')).toBeNull();
+});
+
+
+it('keeps a dialog-owned preview above the product modal and returns focus on Escape', async () => {
+  await page.viewport(1280, 900);
+  const host = document.createElement('div'); document.body.append(host);
+  const [open, setOpen] = createSignal(true);
+  const dispose = render(() => <DialogPlacementProvider mode="global" globalZIndex={4000}>
+    <FlowerTaskFiles open={open()} onOpenChange={setOpen} threadID="one" copy={taskFilesEnUS}
+      adapter={{ ...adapter(), loadTaskFiles: async () => emptyFiles(),
+        loadTaskMaterials: async () => ({ items: [material()] }),
+        loadMessageAttachment: async () => new Blob(['Preview above the dialog'], { type: 'text/plain' }) }} />
+  </DialogPlacementProvider>, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => Boolean(fileDialog()?.querySelector('.flower-task-file-preview')));
+  const trigger = fileDialog().querySelector<HTMLButtonElement>('.flower-task-file-preview')!;
+  trigger.focus(); await userEvent.keyboard('{Enter}');
+  await waitFor(() => Boolean(document.querySelector('.flower-attachment-preview-text')));
+  const content = document.querySelector<HTMLElement>('.flower-attachment-preview-text')!;
+  const preview = content.closest('[role="dialog"]')!;
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const rect = content.getBoundingClientRect();
+  expect(preview.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(true);
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => !document.querySelector('.flower-attachment-preview-text'));
+  expect(open()).toBe(true);
+  await waitFor(() => document.activeElement === trigger);
+});
+
+
+for (const width of [1280, 390]) {
+  it('previews process images and temporary files with retained navigation at ' + width, async () => {
+    await page.viewport(width, 900);
+    const host = document.createElement('div'); document.body.append(host);
+    const [open, setOpen] = createSignal(true);
+    const clean = vi.fn(async () => {});
+    const read = vi.fn(async (_thread: string, path: string) => new Blob([path.endsWith('.py') ? 'print(1)' : 'report'], { type: 'text/plain' }));
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300"><rect width="500" height="300" fill="teal"/></svg>';
+    const images = Array.from({ length: 16 }, (_, i) => ({ ...material('capture-' + i, 'media'), name: 'browser-screenshot.png', mime: 'image/svg+xml', created_at: '2026-10-29T12:00:' + String(i).padStart(2, '0') + 'Z' }));
+    const dispose = render(() => <DialogPlacementProvider mode="global" globalZIndex={4000}>
+      <FlowerTaskFiles open={open()} onOpenChange={setOpen} threadID="one" copy={taskFilesEnUS}
+        adapter={{ ...adapter(), loadTaskFiles: async () => fixture(), loadTaskMaterials: async () => ({ items: images }),
+          loadTaskFile: read, cleanTaskFiles: clean, downloadTaskFile: async () => {},
+          loadMessageAttachment: async () => new Blob([svg], { type: 'image/svg+xml' }) }} />
+    </DialogPlacementProvider>, host);
+    onTestFinished(() => { dispose(); host.remove(); });
+    await waitFor(() => fileDialog()?.textContent?.includes('Quarterly report') === true);
+    expect(fileDialog().textContent).not.toContain('browser-screenshot.png');
+    dialogButton(taskFilesEnUS.process).click();
+    await waitFor(() => fileDialog().querySelectorAll('.flower-task-material-row').length === 16);
+    expect(fileDialog().textContent).not.toContain('Quarterly report');
+    expect(new Set([...fileDialog().querySelectorAll('.flower-task-file-meta')].map(el => el.textContent)).size).toBe(16);
+    expect(fileDialog().textContent).not.toContain(taskFilesEnUS.clean);
+    const viewport = fileDialog().querySelector<HTMLElement>('.flower-task-files-viewport')!;
+    viewport.scrollTop = 160;
+    const top = viewport.scrollTop;
+    const trigger = fileDialog().querySelectorAll<HTMLButtonElement>('.flower-task-file-preview')[3];
+    trigger.focus({ preventScroll: true }); trigger.click();
+    await waitFor(() => Boolean(document.querySelector('.flower-task-file-preview-dialog img')));
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const image = document.querySelector<HTMLImageElement>('.flower-task-file-preview-dialog img')!;
+    const rect = image.getBoundingClientRect();
+    expect(image.closest('[role="dialog"]')!.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(true);
+    expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: '__screenshots__/files-process-preview-' + width + '.png' });
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => document.activeElement === trigger);
+    expect(open()).toBe(true); expect(viewport.scrollTop).toBe(top);
+    dialogButton(taskFilesEnUS.working).click();
+    const temporary = fileDialog().querySelector<HTMLButtonElement>('.flower-task-file-preview')!;
+    temporary.focus(); temporary.click();
+    await waitFor(() => document.querySelector('.flower-attachment-preview-text')?.textContent === 'print(1)');
+    expect(read).toHaveBeenCalledWith('one', '/state/task-files/one/scratch/helper.py', true, expect.any(AbortSignal));
+    await userEvent.keyboard('{Escape}'); await waitFor(() => document.activeElement === temporary);
+    expect(fileDialog().textContent).toContain(taskFilesEnUS.clean); expect(clean).not.toHaveBeenCalled();
+    dialogButton(taskFilesEnUS.process).click();
+    await waitFor(() => viewport.scrollTop === top);
+  });
+}
+
+it('retains search and filter while a failed preview retries or closes', async () => {
+  const read = vi.fn().mockRejectedValueOnce(new Error('gone')).mockResolvedValue(new Blob(['Ready'], { type: 'text/plain' }));
+  renderFiles({ loadTaskFiles: async () => fixture(), loadTaskMaterials: async () => ({ items: [material()] }), loadTaskFile: read });
+  await waitFor(() => fileDialog()?.querySelectorAll('.flower-task-file-row').length === 2);
+  dialogButton(taskFilesEnUS.results).click();
+  const search = fileDialog().querySelector<HTMLInputElement>('input')!;
+  search.value = 'Quarterly'; search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  const trigger = fileDialog().querySelector<HTMLButtonElement>('.flower-task-file-preview')!; trigger.focus(); trigger.click();
+  await waitFor(() => Boolean(document.querySelector('.flower-task-file-preview-dialog [role="alert"]')));
+  expect(document.querySelector('.flower-task-file-preview-dialog')!.textContent).toContain(taskFilesEnUS.previewFailed);
+  await page.getByRole('button', { name: taskFilesEnUS.retry, exact: true }).click();
+  await waitFor(() => document.querySelector('.flower-attachment-preview-text')?.textContent === 'Ready');
+  await userEvent.keyboard('{Tab}');
+  expect(document.querySelector('.flower-task-file-preview-dialog')!.contains(document.activeElement)).toBe(true);
+  await userEvent.keyboard('{Escape}'); await waitFor(() => document.activeElement === trigger);
+  expect(search.value).toBe('Quarterly'); expect(dialogButton(taskFilesEnUS.results).getAttribute('aria-pressed')).toBe('true');
+});
+
+for (const hostKind of ['desktop', 'env'] as const) {
+  it('renders HTML and Markdown inside the foreground preview for ' + hostKind, async () => {
+    await page.viewport(1280, 900);
+    const host = document.createElement('div'); document.body.append(host);
+    const files = fixture();
+    const markdown = { ...files.files[0], name: 'report.md', file_path: '/project/report.md', title: 'Markdown report', mime: 'text/markdown' };
+    const dispose = render(() => <DialogPlacementProvider mode="global" globalZIndex={4000}>
+      <FlowerTaskFiles open onOpenChange={() => {}} threadID="one" copy={taskFilesEnUS}
+        renderPreviewContent={hostKind === 'env' ? FlowerTaskFilePreviewContent : undefined}
+        adapter={{ ...adapter(), loadTaskFiles: async () => ({ ...files, files: [...files.files, markdown] }),
+          loadTaskFile: async (_id, path) => new Blob([path.endsWith('.md') ? '# Quarterly summary\n\n**Revenue** increased.' : '<h1>Quarterly report</h1><button>Explore</button>'], { type: path.endsWith('.md') ? 'text/markdown' : 'text/html' }) }} />
+    </DialogPlacementProvider>, host);
+    onTestFinished(() => { dispose(); host.remove(); });
+    await waitFor(() => fileDialog()?.querySelectorAll('.flower-task-file-preview').length === 2);
+    fileDialog().querySelector<HTMLButtonElement>('.flower-task-file-preview')!.click();
+    await waitFor(() => Boolean(document.querySelector('.flower-task-file-preview-dialog iframe')));
+    const frame = document.querySelector<HTMLIFrameElement>('.flower-task-file-preview-dialog iframe')!;
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    expect(frame.srcdoc).toContain('Quarterly report');
+    await page.getByRole('button', { name: taskFilesEnUS.back, exact: true }).click();
+    await waitFor(() => !document.querySelector('.flower-task-file-preview-dialog'));
+    fileDialog().querySelectorAll<HTMLButtonElement>('.flower-task-file-preview')[1].click();
+    await waitFor(() => document.querySelector('.flower-task-file-preview-dialog h1')?.textContent === 'Quarterly summary');
+    expect(document.querySelector('.flower-task-file-preview-dialog strong')?.textContent).toBe('Revenue');
+  });
+}
+
+
+it('aborts an open preview on owner changes and ignores late bytes', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const [id, setID] = createSignal('one');
+  const signals: AbortSignal[] = [];
+  let finish!: (value: Blob) => void;
+  const dispose = render(() => <FlowerTaskFiles open threadID={id()} copy={taskFilesEnUS} onOpenChange={() => {}}
+    adapter={{ ...adapter(), loadTaskFiles: async () => fixture(), loadTaskFile: async (_thread, _path, _working, signal) => {
+      signals.push(signal); return new Promise<Blob>(resolve => { finish = resolve; });
+    } }} />, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => Boolean(fileDialog()?.querySelector('.flower-task-file-preview')));
+  fileDialog().querySelector<HTMLButtonElement>('.flower-task-file-preview')!.click();
+  await waitFor(() => signals.length === 1);
+  setID('two'); expect(signals[0].aborted).toBe(true);
+  finish(new Blob(['Stale bytes'], { type: 'text/plain' }));
+  await Promise.resolve();
+  expect(document.querySelector('.flower-task-file-preview-dialog')).toBeNull();
+  expect(document.body.textContent).not.toContain('Stale bytes');
+});
+
+it('keeps unsupported downloads and their errors visible inside the child preview', async () => {
+  const download = vi.fn(async () => { throw new Error('offline'); });
+  renderFiles({ loadTaskMaterials: async () => ({ items: [{ ...material(), mime: 'application/octet-stream' }] }),
+    loadMessageAttachment: async () => new Blob([new Uint8Array([0, 1, 2])], { type: 'application/octet-stream' }),
+    loadTaskFiles: async () => ({ ...fixture(), files: [{ ...fixture().files[0], name: 'data.bin', mime: 'application/octet-stream' }] }),
+    loadTaskFile: async () => new Blob([new Uint8Array([0, 1, 2])], { type: 'application/octet-stream' }), downloadTaskFile: download });
+  await waitFor(() => Boolean(fileDialog()?.querySelector('.flower-task-file-preview')));
+  fileDialog().querySelector<HTMLButtonElement>('.flower-task-file-preview')!.click();
+  await waitFor(() => document.querySelector('.flower-task-file-preview-dialog')?.textContent?.includes(taskFilesEnUS.unsupported) === true);
+  const child = document.querySelector('.flower-task-file-preview-dialog')!;
+  [...child.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === taskFilesEnUS.download)!.click();
+  await waitFor(() => Boolean(child.querySelector('[role="alert"]')));
+  expect(download).toHaveBeenCalledOnce(); expect(child.textContent).toContain(taskFilesEnUS.unavailable);
 });

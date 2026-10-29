@@ -1,3 +1,4 @@
+import { FlowerTaskFilePreviewContent } from '../flower/FlowerTaskFilePreviewContent';
 import { Show, createMemo, onCleanup, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 
@@ -204,7 +205,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
         const lifetime = new AbortController();
         onCleanup(() => lifetime.abort());
         const adapter = createAdapter(lifetime.signal);
-        return <FlowerSurface
+        return <FlowerSurface renderTaskFilePreviewContent={FlowerTaskFilePreviewContent}
           embeddedConversation={props.embeddedConversation}
           captureNewConversationContext={props.captureNewConversationContext}
           renderContextSnapshotPreview={FlowerContextSnapshotPreview}

@@ -6,14 +6,14 @@ export const taskFileSize = (bytes: number) => bytes < 1024 ? bytes + ' B'
 
 export function FlowerTaskFileIdentity(props: {
   name: string; title?: string; mime: string; size: number;
-  origin?: string; thumbnail?: JSX.Element; status?: JSX.Element;
+  timestamp?: string; origin?: string; thumbnail?: JSX.Element; status?: JSX.Element;
   onPreview?: () => void; previewLabel: string; previewDisabled?: boolean;
 }) {
   const content = () => <>
     <span class="flower-task-file-icon" aria-hidden="true"><Show when={props.thumbnail}
       fallback={<FileItemIcon item={{ name: props.name, type: 'file' }} size={22} />}>{props.thumbnail}</Show></span>
     <span class="flower-task-file-heading"><span class="flower-task-file-name">{props.title || props.name}</span>
-      <span class="flower-task-file-meta"><Show when={props.origin}><span>{props.origin}</span></Show><span>{taskFileSize(props.size)}</span>{props.status}</span>
+      <span class="flower-task-file-meta"><Show when={props.origin}><span>{props.origin}</span></Show><span>{taskFileSize(props.size)}</span><Show when={props.timestamp}><span>{props.timestamp}</span></Show>{props.status}</span>
     </span>
   </>;
   return <Show when={props.onPreview} fallback={<div class="flower-task-file-identity">{content()}</div>}>

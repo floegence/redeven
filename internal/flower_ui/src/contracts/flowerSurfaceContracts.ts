@@ -1805,6 +1805,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadTaskMaterials?: (threadID: string, cursor?: string, signal?: AbortSignal) => Promise<FlowerTaskMaterials>;
   loadTaskFiles?: (threadID: string, cursor?: string, signal?: AbortSignal) => Promise<FlowerTaskFiles>;
   cleanTaskFiles?: (threadID: string) => Promise<void>;
+  loadTaskFile?: (threadID: string, path: string, working: boolean, signal: AbortSignal) => Promise<Blob>;
   downloadTaskFile?: (threadID: string, path: string, working: boolean, signal: AbortSignal) => Promise<void>;
   loadToolPreview?: (input: FlowerToolPreviewRequest) => Promise<FlowerToolPreview>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest, signal?: AbortSignal) => Promise<FlowerTerminalProcessSnapshot>;

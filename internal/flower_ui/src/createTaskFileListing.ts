@@ -2,13 +2,13 @@ import { createEffect, createMemo, createSignal, onCleanup, untrack, type Access
 import type { FlowerSurfaceAdapter, FlowerTaskFiles, FlowerTaskMaterial } from './contracts/flowerSurfaceContracts';
 import { retainKeyedItems } from './presentationIdentity';
 
-export type TaskFileFilter = 'all' | 'results' | 'uploads' | 'media';
+export type TaskFileFilter = 'all' | 'results' | 'uploads';
 type Source = 'files' | 'materials';
 
 /** Dialog-owned discovery: bounded canonical pages, no second inventory or transcript. */
 export function createTaskFileListing(props: {
   open: boolean; threadID: string; adapter: FlowerSurfaceAdapter;
-}, query: Accessor<string>, filter: Accessor<TaskFileFilter>, nearEnd: Accessor<boolean>, browsing: Accessor<boolean>) {
+}, query: Accessor<string>, filter: Accessor<TaskFileFilter>, nearEnd: Accessor<boolean>, browsing: Accessor<boolean>, process: Accessor<boolean>) {
   const [data, setData] = createSignal<FlowerTaskFiles>();
   const [materials, setMaterials] = createSignal<readonly FlowerTaskMaterial[]>([]);
   const [materialCursor, setMaterialCursor] = createSignal<string>();
@@ -23,12 +23,12 @@ export function createTaskFileListing(props: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const seen = { files: new Set<string>(), materials: new Set<string>() };
   const matches = (name: string, title = '') => (name + ' ' + title).toLocaleLowerCase().includes(query().trim().toLocaleLowerCase());
-  const files = createMemo(() => filter() === 'uploads' || filter() === 'media' ? [] : (data()?.files ?? []).filter(file => matches(file.name, file.title)));
-  const visibleMaterials = createMemo(() => filter() === 'results' ? [] : materials().filter(item =>
-    (filter() === 'all' || item.kind === (filter() === 'uploads' ? 'input' : 'media')) && matches(item.name)));
+  const files = createMemo(() => process() || filter() === 'uploads' ? [] : (data()?.files ?? []).filter(file => matches(file.name, file.title)));
+  const visibleMaterials = createMemo(() => !process() && filter() === 'results' ? [] : materials().filter(item =>
+    item.kind === (process() ? 'media' : 'input') && matches(item.name)));
   const nextSource = (): Source | undefined => {
-    if (filter() !== 'uploads' && filter() !== 'media' && data()?.next_cursor) return 'files';
-    if (filter() !== 'results' && materialCursor()) return 'materials';
+    if (!process() && filter() !== 'uploads' && data()?.next_cursor) return 'files';
+    if ((process() || filter() !== 'results') && materialCursor()) return 'materials';
     return undefined;
   };
   const hasMore = createMemo(() => Boolean(nextSource()));

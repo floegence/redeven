@@ -1876,19 +1876,24 @@ it('cancels only the active detail IPC and ignores a late unmappable response', 
   expect(cancel).toHaveBeenCalledTimes(1);
 });
 
-it.each(['loadTaskFiles', 'loadTaskMaterials', 'loadMessageAttachment'] as const)('cancels %s through Desktop read ownership', async method => {
+it.each(['loadTaskFiles', 'loadTaskMaterials', 'loadMessageAttachment', 'loadTaskFile'] as const)('cancels %s through Desktop read ownership', async method => {
   let finish!: (value: unknown) => void;
   const bridge = bridgeFor(() => new Promise(resolve => { finish = resolve; }));
   const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: 'files-runtime' });
   const controller = new AbortController();
   const result = method === 'loadMessageAttachment'
     ? adapter.loadMessageAttachment!({ url: '/_redeven_proxy/api/ai/uploads/upl_file?thread_id=one&turn_id=turn', signal: controller.signal })
+    : method === 'loadTaskFile' ? adapter.loadTaskFile!('thread/one', '/scratch/test.txt', true, controller.signal)
     : adapter[method]!('thread/one', 'page/two', controller.signal);
   const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
   expect(bridge.requestRuntimeFlower).toHaveBeenCalledTimes(1);
   const request = vi.mocked(bridge.requestRuntimeFlower).mock.calls[0]![0];
   expect(request).toEqual(expect.objectContaining({ method: 'GET', environment_id: 'files-runtime', read_id: expect.any(String) }));
-  if (method !== 'loadMessageAttachment') expect(request.path).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/' + (method === 'loadTaskFiles' ? 'task-files' : 'task-materials') + '?cursor=page%2Ftwo');
+  if (method === 'loadTaskFile') {
+    const url = new URL(request.path, 'http://local');
+    expect(url.pathname).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/task-file-content');
+    expect(url.searchParams.get('kind')).toBe('working');
+  } else if (method !== 'loadMessageAttachment') expect(request.path).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/' + (method === 'loadTaskFiles' ? 'task-files' : 'task-materials') + '?cursor=page%2Ftwo');
   controller.abort(); await rejected;
   expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalledExactlyOnceWith(request.read_id);
   finish({ invalid: 'Late replies must be ignored' });
