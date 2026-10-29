@@ -52,7 +52,12 @@ function pageBounds(items: FlowerRuntimeCurrentItem[], selected: FlowerRuntimeCu
   const match = (item: FlowerRuntimeCurrentItem | undefined) => item && owner && item.turn_id === owner.turn_id && item.run_id === owner.run_id && (item.kind === 'tool' || item.kind === 'thinking');
   if (request?.skip_folded && match(owner)) { while (match(items[first - 1])) first--; while (match(items[last + 1])) last++; }
   const skipped = request?.skip_folded && match(owner) ? { leaf_id: 'folded-leaf', turn_id: owner.turn_id!, run_id: owner.run_id!, first_item_id: items[first].id, last_item_id: items[last].id, first_ordinal: items[first].ordinal, last_ordinal: items[last].ordinal } : undefined;
-  return { skipped_range: skipped, first_item_id: selected[0]?.id, last_item_id: selected.at(-1)?.id,
+  const sequence_gaps = skipped ? selected.flatMap((after, index) => {
+    const before = selected[index - 1];
+    return before && after.ordinal > before.ordinal + 1 && before.ordinal >= skipped.first_ordinal && after.ordinal <= skipped.last_ordinal
+      ? [{ before_id: before.id, after_id: after.id, first: before.ordinal + 1, last: after.ordinal, turn_id: skipped.turn_id, run_id: skipped.run_id }] : [];
+  }) : [];
+  return { skipped_range: skipped, sequence_gaps, first_item_id: selected[0]?.id, last_item_id: selected.at(-1)?.id,
     has_before: selected.length > 0 && selected[0].id !== items[0].id,
     has_after: selected.length > 0 && selected.at(-1)!.id !== items.at(-1)!.id };
 }
@@ -435,6 +440,88 @@ describe('continuous history navigation', () => {
       expect(viewport().scrollHeight - viewport().clientHeight - viewport().scrollTop).toBeLessThanOrEqual(1);
     } finally { sampling = false; held.resolve(); }
   });
+  it.each(['main', 'child', 'compaction'] as const)('keeps a certified folded %s sequence together across retained history islands', async target => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'folded-islands', messages: [] });
+    const items: FlowerRuntimeCurrentItem[] = [
+      { id: 'request', kind: 'user' as const, text: 'Inspect files', turn_id: 'work', run_id: 'run', ordinal: 1 },
+      ...Array.from({ length: 100 }, (_, i): FlowerRuntimeCurrentItem => ({ id: `island-${i}`, kind: 'tool', turn_id: 'work', run_id: 'run', ordinal: i + 2,
+        activity: { item_id: `island-${i}`, tool_id: `island-${i}`, kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+          presentation: { label: `Inspect ${i}`, renderer: 'terminal', payload: { command: 'pwd', output: 'Done' } } } })),
+      { id: 'answer', kind: 'assistant' as const, text: 'Complete', turn_id: 'work', run_id: 'run', ordinal: 102 },
+    ].map(item => ({ ...item, canonical_ordinal: item.ordinal * 2 }));
+    if (target === 'compaction') {
+      const answer = items.pop()!;
+      items.push(...[102, 103].map(ordinal => ({ ...items[1], id: `after-${ordinal}`, ordinal, canonical_ordinal: ordinal * 2,
+        activity: { ...items[1].activity!, item_id: `after-${ordinal}`, tool_id: `after-${ordinal}` } })),
+        { ...answer, ordinal: 104, canonical_ordinal: 208 });
+    }
+    const selected = items.filter(item => [1, 2, 3, 50, 51, 100, 101, 102, 103, 104].includes(item.ordinal));
+    const turns = [{ turn_id: 'work', run_id: 'run', started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:01:00Z',
+      outcome: 'completed' as const, elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000, final_boundary_complete: true, final_item_ids: ['answer'] }];
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: selected, turns,
+      window: { ...pageBounds(items, selected, { anchor_id: 'island-50', skip_folded: 'tools' }), leaf_id: 'folded-leaf' } };
+    const compaction = { operation_id: 'island-compaction', turn_id: 'work', run_id: 'run', canonical_ordinal: 203,
+      phase: 'complete' as const, status: 'compacted' as const, updated_at_ms: 1 };
+    const context = target === 'compaction' ? { context_compactions: [compaction], timeline_decorations: [{
+      decoration_id: compaction.operation_id, kind: 'context_compaction' as const, ordinal: 203,
+      anchor: { target_kind: 'message' as const, message_id: 'island-99', edge: 'after' as const }, compaction,
+    }] } : {};
+    const history = vi.fn(async () => ({ current, thread: { ...applyFlowerRuntimeCurrentView(seed, current), ...context }, ...context }));
+    const held = deferred<void>();
+    const pages = vi.fn(async (_id: string, request: import('../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerHistoryPageRequest, signal: AbortSignal) => {
+      await held.promise; signal.throwIfAborted();
+      const selected = selectPage(items, request);
+      return { thread_id: seed.thread_id, leaf_id: 'folded-leaf', ...pageBounds(items, selected), items: selected, turns };
+    });
+    const summary = subagentSummary({ parent_thread_id: 'island-parent', thread_id: seed.thread_id, status: 'completed' });
+    const parent = thread({ thread_id: summary.parent_thread_id, subagents: [summary], messages: [{ id: 'spawn-message', role: 'assistant', content: '', status: 'complete', created_at_ms: 100, turn_id: 'parent-turn',
+      blocks: [activityTimeline({ thread_id: summary.parent_thread_id, turn_id: 'parent-turn', run_id: 'parent-run', items: [activityItem({ item_id: 'spawn', tool_id: 'spawn', tool_name: 'subagents', renderer: 'subagent_operation', status: 'success',
+        payload: { action: 'spawn', targets: [{ thread_id: summary.thread_id, task_name: summary.task_name, status: 'completed' }], requested_count: 1 } })] })] }] });
+    const child = target === 'child', selectedThread = child ? parent : seed;
+    const bodies = vi.fn();
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [selectedThread], loadHistory: child ? async () => liveBootstrap(parent) : history, loadHistoryPage: pages, loadHistoryBody: bodies,
+      loadSubagentDetail: async () => ({ summary, current, window: current.window }),
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'island-reader', summaries: [selectedThread] };
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'open-islands', thread_id: selectedThread.thread_id } });
+    root.style.height = '780px';
+    if (child) {
+      await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-capsule]')));
+      root.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
+      await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
+    }
+    const surface = child ? document.querySelector<HTMLElement>('.flower-subagent-detail-transcript')! : root;
+    await waitFor(() => Boolean(surface.querySelector('.flower-turn-summary-button')));
+    await waitFor(() => (child ? surface : root.querySelector('.flower-chat-transcript'))?.getAttribute('data-flower-tail-preparing') !== 'true');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    surface.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!.click();
+    await waitFor(() => Boolean(surface.querySelector('.flower-tool-sequence-toggle')));
+    const expectedGroups = target === 'compaction' ? 2 : 1;
+    expect(surface.querySelectorAll('.flower-tool-sequence-toggle')).toHaveLength(expectedGroups);
+    expect(pages).not.toHaveBeenCalled();
+    const toggle = surface.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    await waitFor(() => pages.mock.calls.length === 1);
+    toggle.click();
+    await waitFor(() => pages.mock.calls[0][2].aborted);
+    toggle.click();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(pages).toHaveBeenCalledTimes(1);
+    held.resolve();
+    await waitFor(() => surface.querySelectorAll('[data-flower-row-message-id]').length === items.length, 5000);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    toggle.click();
+    expect(surface.querySelectorAll('.flower-tool-sequence-toggle')).toHaveLength(expectedGroups);
+    expect(surface.querySelector('.flower-tool-sequence-toggle')).toBe(toggle);
+    expect(toggle.textContent).toContain('100');
+    expect(pages).toHaveBeenCalledTimes(5);
+    expect(bodies).not.toHaveBeenCalled();
+  });
+
   it('publishes a partial ordered baseline without fetching the rest of its tool group', async () => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'atomic-history', messages: [] });
@@ -826,6 +913,7 @@ describe('continuous history navigation', () => {
     expect([...surface.querySelectorAll<HTMLElement>('[data-flower-history-gap]')].every(node => node.getBoundingClientRect().height === 0)).toBe(true);
     if (!toolsOnly) summaryButton.click();
     await waitFor(() => Boolean(surface.querySelector('.flower-tool-sequence-toggle')));
+    expect(surface.querySelectorAll('.flower-tool-sequence-toggle')).toHaveLength(1);
     const sequence = surface.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
     if (sequence.getAttribute('aria-expanded') === 'false') sequence.click();
     await waitFor(() => Boolean(surface.querySelector('[data-flower-row-message-id="folded-1"]')), 5000);

@@ -1,6 +1,7 @@
 import { createMemo, mapArray, type Accessor } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
-import type { FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
+import type { FlowerContextCompaction, FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
+import type { HistoryReadingGap } from './historyReadingWindow';
 import type { FlowerRenderableMessageBlock, FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerTurnDisclosurePolicy } from './flowerTurnPresentation';
 import { flowerActivityIdentity } from './flowerActivityIdentity';
@@ -18,7 +19,7 @@ type SequenceNode = Readonly<{
   uncertain?: boolean;
 }>;
 
-type SequenceToken = SequenceNode | { outputScope: string; contentKey: string } | { gap: true } | null;
+type SequenceToken = SequenceNode | { outputScope: string; contentKey: string } | { gap: true } | { continuity: HistoryReadingGap } | null;
 type MessageEntry = Extract<FlowerTimelineEntry, { type: 'message' }>;
 
 const sequenceBoundaryToolNames = new Set(['ask_user']);
@@ -39,6 +40,8 @@ export type FlowerToolSequence = Readonly<{
   lastMessageID?: string;
   missingBefore: boolean;
   missingAfter: boolean;
+  missingItemAfter?: string;
+  missingItemBefore?: string;
   toolCount: number;
   latestToolLabel?: string;
   failedCount: number;
@@ -146,7 +149,8 @@ export function projectFlowerToolSequences(
   turns: readonly FlowerRuntimeTurn[] = [],
   previous?: FlowerToolSequenceProjection,
   breakBefore: ReadonlySet<string> = new Set(),
-  coverage: Readonly<{ hasBefore: boolean; hasAfter: boolean; missingEvents?: readonly Readonly<{ after: number; before: number }>[] }> = { hasBefore: false, hasAfter: false },
+  coverage: Readonly<{ hasBefore: boolean; hasAfter: boolean; missingEvents?: readonly Readonly<{ after: number; before: number }>[];
+    sequenceGaps?: ReadonlyMap<string, HistoryReadingGap>; compactions?: readonly FlowerContextCompaction[] }> = { hasBefore: false, hasAfter: false },
   messageTokens: (entry: MessageEntry) => readonly SequenceToken[] = messageSequenceTokens,
 ): FlowerToolSequenceProjection {
   const tokens: SequenceToken[] = [];
@@ -162,8 +166,22 @@ export function projectFlowerToolSequences(
       failed: event.kind === 'failed' || event.kind === 'timed_out' } : null;
   };
 
-  for (const entry of entries) {
-    if (breakBefore.has(entry.key)) tokens.push({ gap: true });
+  for (const [index, entry] of entries.entries()) {
+    if (breakBefore.has(entry.key)) {
+      const gap = coverage.sequenceGaps?.get(entry.key), prior = entries[index - 1];
+      const before = prior?.type === 'message' ? readPresentationValue(prior.message) : undefined;
+      const after = entry.type === 'message' ? readPresentationValue(entry.message) : undefined;
+      const lower = before?.canonical_ordinal, upper = after?.canonical_ordinal;
+      const scoped = (message: typeof before) => message && message.thread_id === threadID
+        && message.turn_id === gap?.sequence?.turnID && message.run_id === gap?.sequence?.runID;
+      // Kind counts certify omitted item continuity, never omitted receipts or
+      // compactions. Known decorations still pass through the normal tokenizer.
+      const certified = gap?.sequence && before?.id === gap.beforeID && after?.id === gap.afterID
+        && scoped(before) && scoped(after) && lower !== undefined && upper !== undefined && lower < upper
+        && !coverage.compactions?.some(value => value.canonical_ordinal > lower && value.canonical_ordinal < upper)
+        && !coverage.missingEvents?.some(value => lower < value.before && upper > value.after);
+      tokens.push(certified ? { continuity: gap } : { gap: true });
+    }
     if (entry.type === 'parent_event') {
       tokens.push(parentEventNode(entry));
       continue;
@@ -172,10 +190,11 @@ export function projectFlowerToolSequences(
     else tokens.push(null);
   }
 
-  const runs: { nodes: SequenceNode[]; followingContentKeys: string[]; countsComplete: boolean; missingBefore: boolean; missingAfter: boolean }[] = [];
+  const runs: { nodes: SequenceNode[]; followingContentKeys: string[]; countsComplete: boolean; missingBefore: boolean; missingAfter: boolean; gap?: HistoryReadingGap }[] = [];
   let followingRun: typeof runs[number] | undefined;
   const headerKeys = new Set<string>();
   let pending: SequenceNode[] = [];
+  let pendingGap: HistoryReadingGap | undefined;
   let startComplete = !coverage.hasBefore;
   const flush = (endComplete: boolean, outputScope = '', contentKey?: string) => {
     // Reserve the first candidate's disclosure column, including leading
@@ -183,15 +202,20 @@ export function projectFlowerToolSequences(
     if (pending.length) headerKeys.add(pending[0].key);
     followingRun = undefined;
     if (pending.some(node => node.kind !== 'thinking')) {
-      const run = { nodes: pending, countsComplete: startComplete && endComplete, missingBefore: !startComplete, missingAfter: !endComplete,
+      const run = { nodes: pending, countsComplete: startComplete && endComplete && !pendingGap, missingBefore: !startComplete, missingAfter: !endComplete, gap: pendingGap,
         followingContentKeys: outputScope && pending[0].scope === outputScope && contentKey ? [contentKey] : [] };
       runs.push(run);
       if (run.followingContentKeys.length) followingRun = run;
     }
     pending = [];
+    pendingGap = undefined;
     startComplete = endComplete;
   };
   for (const node of tokens) {
+    if (node && 'continuity' in node) {
+      if (pending.length) pendingGap ??= node.continuity; else flush(false);
+      continue;
+    }
     if (node && 'gap' in node) { flush(false); continue; }
     if (node && 'outputScope' in node) {
       if (pending.length) flush(true, node.outputScope, node.contentKey);
@@ -212,7 +236,7 @@ export function projectFlowerToolSequences(
   const continuingEntries = new Set<string>();
   const settledTurns = new Set([...turnsByID.values()].filter((turn) => turn.outcome && turn.ended_at)
     .map((turn) => turn.turn_id));
-  runs.forEach(({ nodes, followingContentKeys, countsComplete, missingBefore, missingAfter }, index) => {
+  runs.forEach(({ nodes, followingContentKeys, countsComplete, missingBefore, missingAfter, gap }, index) => {
     if (nodes.length < 2) return;
     const tools = nodes.filter(node => node.kind === 'tool');
     const thinking = nodes.filter(node => node.kind === 'thinking');
@@ -235,6 +259,7 @@ export function projectFlowerToolSequences(
       key: retainedKey ?? nodes[0].key,
       countsComplete: countsComplete && !missingEvents,
       missingBefore, missingAfter,
+      missingItemAfter: gap?.beforeID, missingItemBefore: gap?.afterID,
       firstCanonicalOrdinal: ordinal(entries[firstEntry]),
       lastCanonicalOrdinal: ordinal(entries[lastEntry]),
       firstMessageID: messageEntries[0]?.message.id,

@@ -38,6 +38,7 @@ func flowerHistoryWindowInput(threadID identity.ThreadID, input FlowerHistoryReq
 
 // FlowerHistoryWindow is disposable reading state, never a journal cursor.
 type FlowerHistoryWindow struct {
+	SequenceGaps []FlowerHistorySequenceGap `json:"sequence_gaps,omitempty"`
 	SkippedRange *flruntime.ThreadItemRange `json:"skipped_range,omitempty"`
 	LeafID       string                     `json:"leaf_id,omitempty"`
 	Summary      *flruntime.ThreadSummary   `json:"-"`
@@ -45,6 +46,17 @@ type FlowerHistoryWindow struct {
 	LastItemID   string                     `json:"last_item_id,omitempty"`
 	HasBefore    bool                       `json:"has_before"`
 	HasAfter     bool                       `json:"has_after"`
+}
+
+// Endpoints bind disposable continuity evidence to the accepted reading path.
+// Counts and bodies still come exclusively from the canonical loaded items.
+type FlowerHistorySequenceGap struct {
+	BeforeID string          `json:"before_id"`
+	AfterID  string          `json:"after_id"`
+	First    uint64          `json:"first"`
+	Last     uint64          `json:"last"`
+	TurnID   identity.TurnID `json:"turn_id"`
+	RunID    identity.RunID  `json:"run_id"`
 }
 
 type FlowerHistoryRequest struct {
@@ -147,6 +159,9 @@ func readFlowerHistory(ctx context.Context, runtime flruntime.ThreadService, sco
 		}
 		if update.Window != nil && update.Window.Value != nil {
 			current, window := flowerHistoryCurrent(update)
+			if err := flowerHistorySequenceGaps(ctx, runtime, scope, update, window); err != nil {
+				return flruntime.ThreadView{}, nil, err
+			}
 			return current, window, nil
 		}
 	}

@@ -44,6 +44,27 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
+  it('keeps certified islands in one group without claiming complete counts or crossing compaction', () => {
+    const call = (ordinal: number) => { const row = tool(String(ordinal)); return { ...row, message: { ...row.message, canonical_ordinal: ordinal } }; };
+    const entries = [text('before'), call(1), call(2), call(9), call(10), text('after')];
+    const gap = { beforeID: '2', afterID: '9', first: 3, last: 9, height: 44, sequence: { turnID: 'turn', runID: 'run' } };
+    const coverage = { hasBefore: false, hasAfter: false, sequenceGaps: new Map([['9', gap]]) };
+    const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(['9']), coverage);
+    expect(value.groups.size).toBe(1);
+    const group = [...value.groups.values()][0];
+    expect(group).toMatchObject({ countsComplete: false, missingBefore: false, missingAfter: false, missingItemAfter: '2', missingItemBefore: '9', toolCount: 4 });
+    const filled = projectFlowerToolSequences([text('before'), ...Array.from({ length: 10 }, (_, i) => call(i + 1)), text('after')], 'thread', [], value);
+    expect([...filled.groups.values()][0]).toMatchObject({ key: group.key, countsComplete: true, toolCount: 10 });
+    for (const extra of [
+      { compactions: [{ operation_id: 'compact', turn_id: 'turn', run_id: 'run', canonical_ordinal: 5, phase: 'complete' as const, status: 'compacted' as const, updated_at_ms: 1 }] },
+      { missingEvents: [{ after: 2, before: 9 }] },
+      { sequenceGaps: new Map([['9', { ...gap, sequence: { turnID: 'other', runID: 'run' } }]]) },
+      { sequenceGaps: new Map([['9', { ...gap, beforeID: 'replaced' }]]) },
+    ]) expect(projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(['9']), { ...coverage, ...extra }).groups.size).toBe(2);
+    for (const boundary of [text('prose'), parentEvent('approval', 'approval_required')]) {
+      expect(projectFlowerToolSequences([...entries.slice(0, 3), boundary, ...entries.slice(3)], 'thread', [runtimeTurn()], undefined, new Set(['9']), coverage).groups.size).toBe(2);
+    }
+  });
   it('reserves candidate controls before grouping and preserves projection identity', () => {
     const first = projectFlowerToolSequences([tool('a')]);
     expect([...first.headerKeys]).toEqual([JSON.stringify(['thread', 'run', 'turn', 'a'])]);

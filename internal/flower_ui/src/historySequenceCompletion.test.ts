@@ -5,6 +5,18 @@ const item = (ordinal: number): FlowerRuntimeCurrentItem => ({ id: String(ordina
 const page = (...values: number[]): FlowerHistoryPage => ({ thread_id: 't', leaf_id: 'leaf', items: values.map(item), first_item_id: values.length ? String(values[0]) : undefined, last_item_id: values.length ? String(values.at(-1)) : undefined, has_before: true, has_after: true });
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 describe('sequence completion ownership', () => {
+  it('reads only missing interiors without resampling the tail or retransmitting retained islands', async () => {
+    const read = vi.fn(async (input: import('./contracts/flowerSurfaceContracts').FlowerHistoryPageRequest) =>
+      page(...Array.from({ length: input.limit }, (_, i) => Number(input.anchor_id) + i + 1)));
+    let after = '2';
+    const demand = () => ({ key: 'group', first: '1', last: '110', before: false, after: false, gapAfter: after || undefined, gapBefore: '100' });
+    const owner = createHistorySequenceCompletion({ scope: () => 'thread', leaf: () => 'leaf', item: id => item(Number(id)), read, state: () => {}, yield: async () => {},
+      accept(value) { after = value.items.at(-1)!.id; if (after === '99') after = ''; owner.demand(demand(), true); return true; } });
+    owner.demand(demand(), false); await flush(); expect(read).not.toHaveBeenCalled();
+    owner.demand(demand(), true); await flush(); await flush();
+    expect(read.mock.calls.map(([input]) => [input.anchor_id, input.limit])).toEqual([['2', 40], ['42', 40], ['82', 17]]);
+    owner.dispose();
+  });
   it('cancels collapse and holds the physical slot until an ignored abort settles', async () => {
     let resolve!: (value: FlowerHistoryPage) => void;
     const read = vi.fn((_input: import('./contracts/flowerSurfaceContracts').FlowerHistoryPageRequest, _signal: AbortSignal) => new Promise<FlowerHistoryPage>(done => { resolve = done; }));

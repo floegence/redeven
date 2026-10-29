@@ -86,18 +86,22 @@ export function historyReadingSelection(retained: readonly string[], page: reado
   return combined.filter(id => candidates.has(id));
 }
 
-export type HistoryReadingGap = Readonly<{ beforeID: string; afterID: string; first: number; last: number; height: number; folded?: boolean }>;
+export type HistoryReadingGap = Readonly<{ beforeID: string; afterID: string; first: number; last: number; height: number; folded?: boolean;
+  sequence?: Readonly<{ turnID: string; runID: string }>;
+}>;
 type Member = Readonly<{ id: string; ordinal: number }>;
 
 // Retain geometry only for gaps between the current finite selection. No map
 // grows with all previously visited history. Ordinals are public membership
 // positions, not journal depths, so hidden control records cannot create gaps.
 export function historyReadingGaps(previous: readonly Member[], next: readonly Member[], gaps: readonly HistoryReadingGap[],
-  heights: ReadonlyMap<string, number>, skipped?: FlowerHistoryWindow['skipped_range']): readonly HistoryReadingGap[] {
+  heights: ReadonlyMap<string, number>, skipped?: FlowerHistoryWindow['skipped_range'], proofs: FlowerHistoryWindow['sequence_gaps'] = []): readonly HistoryReadingGap[] {
   const result: HistoryReadingGap[] = [];
   const positions = new Map(next.map(item => [item.id, item.ordinal]));
-  const certified = gaps.filter(gap => gap.folded && positions.get(gap.beforeID) === gap.first - 1
+  const certified = gaps.filter(gap => (gap.folded || gap.sequence) && positions.get(gap.beforeID) === gap.first - 1
     && positions.get(gap.afterID) === gap.last);
+  const sequences = proofs.filter(proof => proof.turn_id && proof.run_id && positions.get(proof.before_id) === proof.first - 1
+    && positions.get(proof.after_id) === proof.last);
   for (let index = 1; index < next.length; index++) {
     const before = next[index - 1], after = next[index];
     const first = before.ordinal + 1, last = after.ordinal;
@@ -108,9 +112,14 @@ export function historyReadingGaps(previous: readonly Member[], next: readonly M
       if (overlap) height += gap.height * overlap / (gap.last - gap.first);
     }
     for (const item of previous) if (item.ordinal >= first && item.ordinal < last) height += heights.get(item.id) ?? 0;
-    const folded = Boolean(skipped && before.ordinal >= skipped.first_ordinal && after.ordinal <= skipped.last_ordinal)
-      || certified.some(gap => first >= gap.first && last <= gap.last);
-    result.push({ beforeID: before.id, afterID: after.id, first, last, height, ...(folded ? { folded: true } : {}) });
+    const inRange = Boolean(skipped && before.ordinal >= skipped.first_ordinal && after.ordinal <= skipped.last_ordinal);
+    const prior = certified.find(gap => first >= gap.first && last <= gap.last);
+    const proof = sequences.find(proof => first >= proof.first && last <= proof.last);
+    const continuity = proof
+      ? { turnID: proof.turn_id, runID: proof.run_id } : prior?.sequence;
+    const folded = inRange || Boolean(prior?.folded || continuity);
+    result.push({ beforeID: before.id, afterID: after.id, first, last, height, ...(folded ? { folded: true } : {}),
+      ...(continuity ? { sequence: continuity } : {}) });
   }
   return result;
 }

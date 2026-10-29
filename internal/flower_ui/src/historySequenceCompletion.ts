@@ -1,6 +1,6 @@
 import type { FlowerHistoryPage, FlowerHistoryPageRequest, FlowerRuntimeCurrentItem } from './contracts/flowerSurfaceContracts';
 
-export type SequenceHistoryDemand = Readonly<{ key: string; first: string; last: string; before: boolean; after: boolean }>;
+export type SequenceHistoryDemand = Readonly<{ key: string; first: string; last: string; before: boolean; after: boolean; gapAfter?: string; gapBefore?: string }>;
 // One physical request per document, including transports that ignore abort.
 // Reactive group replacement is coalesced before deciding whether to cancel.
 export function createHistorySequenceCompletion(options: {
@@ -47,34 +47,39 @@ export function createHistorySequenceCompletion(options: {
     const epoch = generation, revision = demandRevision;
     try {
       while (!disposed && epoch === generation && demands.size) {
-        const demand = [...demands.values()].find(value => value.before || value.after);
+        const demand = [...demands.values()].find(value => value.before || value.after || value.gapAfter);
         if (!demand) break;
         const document = options.document?.();
         const direction = demand.before ? 'before' : 'after';
-        const anchor = options.item(direction === 'before' ? demand.first : demand.last);
+        const internal = !demand.before && Boolean(demand.gapAfter);
+        const anchor = options.item(internal ? demand.gapAfter! : direction === 'before' ? demand.first : demand.last);
         if (!anchor || anchor.live) break;
         const controller = new AbortController();
         pending = { key: demand.key, controller };
         options.state(true, false);
         // Freeze the terminal item once. Continued streaming never extends the
         // finite expansion demand, and no cursor or lifecycle is persisted.
-        if (direction === 'after' && !horizons.has(demand.key)) {
+        if (!internal && direction === 'after' && !horizons.has(demand.key)) {
           const tail = await read({ anchor_id: '', direction: 'before', limit: 1, ancestor_leaf_id: options.leaf() }, controller);
           controller.signal.throwIfAborted();
           if (epoch !== generation || scope !== options.scope()) break;
           if (document !== options.document?.()) { await options.yield(); continue; }
           horizons.set(demand.key, tail.items.at(-1)?.ordinal ?? anchor.ordinal);
         }
-        if (direction === 'after' && anchor.ordinal >= horizons.get(demand.key)!) {
+        if (!internal && direction === 'after' && anchor.ordinal >= horizons.get(demand.key)!) {
           demands.set(demand.key, { ...demand, after: false });
           continue;
         }
-        const limit = direction === 'after' ? Math.min(40, horizons.get(demand.key)! - anchor.ordinal) : 40;
+        const gapEnd = internal ? options.item(demand.gapBefore ?? '') : undefined;
+        if (internal && (!gapEnd || gapEnd.ordinal <= anchor.ordinal + 1)) throw new Error('Invalid sequence history gap.');
+        const limit = internal ? Math.min(40, gapEnd!.ordinal - anchor.ordinal - 1)
+          : direction === 'after' ? Math.min(40, horizons.get(demand.key)! - anchor.ordinal) : 40;
         const page = await read({ anchor_id: anchor.id, direction, limit, ancestor_leaf_id: options.leaf() }, controller);
         controller.signal.throwIfAborted();
         if (epoch !== generation || scope !== options.scope() || !demands.has(demand.key)) break;
         if (document !== options.document?.()) { await options.yield(); continue; }
         const end = direction === 'before' ? page.items[0] : page.items.at(-1);
+        if (internal && (!end || end.ordinal >= gapEnd!.ordinal)) throw new Error('History page escaped its sequence gap.');
         if (!end && !(direction === 'before' ? page.has_before : page.has_after)) {
           demands.set(demand.key, { ...demand, [direction]: false });
           continue;
@@ -90,7 +95,8 @@ export function createHistorySequenceCompletion(options: {
         // supply the next exact demand; never recursively walk a stale range.
         await options.yield();
         const next = demands.get(demand.key);
-        if (next && (direction === 'before' ? next.first === anchor.id : next.last === anchor.id)) {
+        if (internal && next?.gapAfter === anchor.id) throw new Error('Sequence history gap did not advance.');
+        if (!internal && next && (direction === 'before' ? next.first === anchor.id : next.last === anchor.id)) {
           demands.set(demand.key, { ...next, [direction]: false });
         }
       }
@@ -109,7 +115,8 @@ export function createHistorySequenceCompletion(options: {
       if (scope !== nextScope) { reset(); scope = nextScope; }
       if (expanded) {
         const prior = demands.get(value.key);
-        if (!prior || prior.first !== value.first || prior.last !== value.last || prior.before !== value.before || prior.after !== value.after) demandRevision++;
+        if (!prior || prior.first !== value.first || prior.last !== value.last || prior.before !== value.before || prior.after !== value.after
+          || prior.gapAfter !== value.gapAfter || prior.gapBefore !== value.gapBefore) demandRevision++;
         demands.set(value.key, value);
       }
       else demands.delete(value.key);

@@ -21,6 +21,17 @@ Canonical call IDs preserve row lifetime; thinking moves in place. Pagination ke
 
 Counts require known boundaries and complete internal item/event coverage; a running turn/partial window can contain complete groups. Unknown coverage shows only localized Consecutive tool calls, including its accessible name: no partial totals, running counts, latest-tool preview or loading message. Known failures retain attention/details. Pagination completes counts without losing disclosure/focus/selection. Statistics never acquire history, whole turns, receipts or bodies.
 
+Sparse loaded islands share one folded group only when the accepted history
+window certifies tool/thinking continuity between their exact endpoints. The
+product adapter reuses published Floret range facts, or performs at most eight
+indexed range reads per explicit baseline, reusing each maximal result across
+islands. No queries run on ordinary streamed batches. Hidden prose, compaction,
+interactions, unknown receipts, active/unsafe facts and changed execution scope
+remain boundaries. Proofs are disposable endpoint metadata, not stored groups
+or counts. Partial refill retains proof only while both canonical endpoints
+survive. Explicit expansion fills internal gaps with at most 40 missing items
+per page; it neither resamples the tail nor retransmits retained islands.
+
 ## Disclosure and bodies
 
 History restoration settles automatic group/turn policy before exposure without motion; explicit choices survive. Choices also record animation eligibility so manual actions restore motion. Only admitted live arrivals use fold-before-prose. Preparation waits for queued row placement even for automatic groups; folded turns skip inner positioning.

@@ -3882,7 +3882,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const interruption = scroll.userInterruptionRevision();
     return (cache: ReturnType<typeof createThreadCache>) => {
       const next = cache.readingItemIDs(tid).flatMap(id => { const item = cache.runtimeItem(tid, id); return item ? [item] : []; });
-      const gaps = historyReadingGaps(previous, next, retained.thread === tid ? retained.gaps : [], heights, current.window?.skipped_range);
+      const gaps = historyReadingGaps(previous, next, retained.thread === tid ? retained.gaps : [], heights, current.window?.skipped_range, current.window?.sequence_gaps);
       (child ? setChildReadingGaps : setMainReadingGaps)({ thread: tid, gaps });
       if (virtualAnchor) queueMicrotask(() => {
         if (interruption !== scroll.userInterruptionRevision() || viewport !== scroll.viewport()) return;
@@ -4528,7 +4528,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ? { first: group.firstCanonicalOrdinal, last: group.lastCanonicalOrdinal } : undefined);
     if (!props.adapter.loadHistoryPage || !group.firstMessageID || !group.lastMessageID) return;
     (child ? childGroupCompletion : mainGroupCompletion).demand({ key: group.key, first: group.firstMessageID,
-      last: group.lastMessageID, before: group.missingBefore, after: group.missingAfter }, expanded);
+      last: group.lastMessageID, before: group.missingBefore, after: group.missingAfter,
+      gapAfter: group.missingItemAfter, gapBefore: group.missingItemBefore }, expanded);
   };
   const [receiptCompletion, setReceiptCompletion] = createSignal({ main: false, child: false });
   createEffect(() => {
@@ -13171,7 +13172,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show></>}
 
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
-      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded, true)} onDisclosure={() => interruptDisclosureRead(true)} renderInside={entry => historyGapBefore(entry, true, true)} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
+      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} sequenceGaps={childHistoryGaps.sequences()} missingEvents={subagentParentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded, true)} onDisclosure={() => interruptDisclosureRead(true)} renderInside={entry => historyGapBefore(entry, true, true)} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
@@ -15005,7 +15006,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
               fallback={selectedThreadFallbackState()}
             >
-              <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded)} onDisclosure={() => interruptDisclosureRead()} renderInside={entry => historyGapBefore(entry, false, true)} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
+              <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} sequenceGaps={mainHistoryGaps.sequences()} missingEvents={parentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded)} onDisclosure={() => interruptDisclosureRead()} renderInside={entry => historyGapBefore(entry, false, true)} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}

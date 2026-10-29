@@ -27,6 +27,7 @@ type flowerHistoryNoFullView struct {
 	flruntime.ThreadBodyReader
 	flruntime.ThreadBodyManifestReader
 	flruntime.ThreadLiveBodyReader
+	flruntime.ThreadItemRangeReader
 	allowFullView *atomic.Bool
 }
 
@@ -144,6 +145,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		ThreadWindowSource: runtime.(flruntime.ThreadWindowSource), ThreadSummaryReader: runtime.(flruntime.ThreadSummaryReader),
 		ThreadBodyReader: runtime.(flruntime.ThreadBodyReader), ThreadBodyManifestReader: runtime.(flruntime.ThreadBodyManifestReader),
 		ThreadLiveBodyReader: runtime.(flruntime.ThreadLiveBodyReader), allowFullView: &allowFullView,
+		ThreadItemRangeReader: runtime.(flruntime.ThreadItemRangeReader),
 	}
 	if err := svc.Activate(t.Context()); err != nil {
 		t.Fatal(err)
@@ -246,6 +248,9 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		if page.Window.SkippedRange == nil || page.Window.SkippedRange.LeafID != page.Window.LeafID || page.Window.HasBefore {
 			t.Fatalf("folded %s range did not reach the original request: %+v", mode, page.Window)
 		}
+		if len(page.Window.SequenceGaps) == 0 {
+			t.Fatal("folded canonical tools lost continuity evidence")
+		}
 		ids := map[string]bool{}
 		for _, item := range page.Current.Items {
 			ids[item.ID] = true
@@ -259,6 +264,10 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		if e != nil || len(page.Current.Items) > 150 || len(encoded) > 600<<10 {
 			t.Fatal("unbounded folded history", len(encoded), e)
 		}
+	}
+	sparse, e := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRequest{ItemIDs: []string{toolsInOrder[0], toolsInOrder[1], toolsInOrder[50], toolsInOrder[51], toolsInOrder[100], toolsInOrder[101]}})
+	if e != nil || len(sparse.Window.SequenceGaps) != 2 {
+		t.Fatalf("sparse canonical tools lost continuity: %+v %v", sparse, e)
 	}
 	if _, e := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRequest{SkipFolded: "unknown"}); !errors.Is(e, threadquery.ErrInvalidQuery) {
 		t.Fatalf("invalid folded mode accepted: %v", e)

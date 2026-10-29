@@ -7,6 +7,7 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 ## 2026-10-29
 
 - Preserve confirmed [Computer script](ai/computer-use-scripts.md) output independently of later invalid observations; retain known protocol methods and helper-exchange uncertainty without replay.
+- Keep [folded tool sequences](ui/flower-tool-sequences.md) stable across certified sparse history, using published canonical range metadata and bounded progressive interior reads. Preserve semantic boundaries, disclosure races and root/child reading geometry.
 
 ## 2026-10-28
 

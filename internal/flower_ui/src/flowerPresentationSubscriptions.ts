@@ -106,6 +106,8 @@ export function createFlowerHistoryGapSubscriptions(entries: Accessor<readonly F
   return { subscribe: createFlowerKeyedSubscriptions(current, (a, b) => a === b || Boolean(a && b
     && a.entryKey === b.entryKey && a.nested === b.nested && a.gap.beforeID === b.gap.beforeID
     && a.gap.afterID === b.gap.afterID && a.gap.first === b.gap.first && a.gap.last === b.gap.last
-    && a.gap.height === b.gap.height && a.gap.folded === b.gap.folded)),
+    && a.gap.height === b.gap.height && a.gap.folded === b.gap.folded
+    && a.gap.sequence?.turnID === b.gap.sequence?.turnID && a.gap.sequence?.runID === b.gap.sequence?.runID)),
+    sequences: createMemo(() => new Map([...current().values()].filter(value => value.gap.sequence).map(value => [value.entryKey, value.gap]))),
     breaks: createMemo(() => new Set([...current().values()].map(value => value.entryKey))) };
 }

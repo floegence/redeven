@@ -204,12 +204,26 @@ func (s *Service) observeFlowerHistoryInterest(observerCtx context.Context, meta
 				s.mu.Unlock()
 				return
 			}
+			var baseline flruntime.ThreadView
+			var bounds *FlowerHistoryWindow
+			if update.Window != nil && update.Window.Value != nil {
+				baseline, bounds = flowerHistoryCurrent(update)
+				if correlated {
+					if err := flowerHistorySequenceGaps(observerCtx, s.threadRuntime, scope, update, bounds); err != nil {
+						s.mu.Lock()
+						if interest.subscription == sub {
+							invalidateFlowerHistoryInterestLocked(s, subscriber, interest, threadID, parentID)
+						}
+						s.mu.Unlock()
+						return
+					}
+				}
+			}
 			if correlated && pending != nil && pending.revision == revision {
-				current, window := flowerHistoryCurrent(update)
 				s.mu.Lock()
 				if !subscriber.closed && interest.subscription == sub && interest.pending == pending {
 					select {
-					case pending.result <- flowerHistoryReadResult{current: current, window: window}:
+					case pending.result <- flowerHistoryReadResult{current: baseline, window: bounds}:
 					default:
 					}
 				}
@@ -244,7 +258,6 @@ func (s *Service) observeFlowerHistoryInterest(observerCtx context.Context, meta
 			}
 			envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: threadID, Update: &update, ReadingRevision: revision}
 			if update.Window != nil && update.Window.Value != nil {
-				baseline, bounds := flowerHistoryCurrent(update)
 				envelope.Update, envelope.Current, envelope.Window = nil, &baseline, bounds
 			}
 			var interactions []flruntime.ThreadInteraction

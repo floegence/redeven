@@ -3,6 +3,7 @@ import { createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, cr
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import type { HistoryReadingGap } from './historyReadingWindow';
 import type { FlowerTurnProcessCopy } from './copy';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerScrollTailController } from './flowerScrollTail';
@@ -33,6 +34,7 @@ type TimelineProps = Readonly<{
   receipt?: Readonly<{ live: boolean; restoration: number }>;
   copy: FlowerTurnProcessCopy;
   readingBreaks?: ReadonlySet<string>;
+  sequenceGaps?: ReadonlyMap<string, HistoryReadingGap>;
   missingEvents?: readonly Readonly<{ after: number; before: number }>[];
   renderBefore?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   onDisclosure?: () => void;
@@ -250,6 +252,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       hasBefore: props.thread?.history_window?.has_before ?? false,
       hasAfter: props.thread?.history_window?.has_after ?? false,
       missingEvents: props.missingEvents,
+      sequenceGaps: props.sequenceGaps, compactions: props.thread?.context_compactions,
     }, sequenceTokens);
     // The canonical first node may change on prepend. Share its choice so a
     // later navigation remount resolves the same manually controlled state.

@@ -85,6 +85,17 @@ describe('finite adjacent history selection', () => {
 });
 
 describe('finite history gap geometry', () => {
+  it('retains source-bound sequence continuity through partial refill and rejects replacement endpoints', () => {
+    const members = [1, 5, 10, 15, 20].map(ordinal => ({ id: String(ordinal), ordinal }));
+    const proof = { before_id: '1', after_id: '20', first: 2, last: 20, turn_id: 'turn', run_id: 'run' };
+    const initial = historyReadingGaps([], [members[0], members[4]], [], new Map(), undefined, [proof]);
+    expect(initial[0].sequence).toEqual({ turnID: 'turn', runID: 'run' });
+    const split = historyReadingGaps([members[0], members[4]], members, initial, new Map());
+    expect(split).toHaveLength(4); expect(split.every(gap => gap.sequence && gap.folded)).toBe(true);
+    const replaced = members.map(member => ({ ...member, id: 'replacement-' + member.id }));
+    expect(historyReadingGaps(members, replaced, initial, new Map()).every(gap => !gap.sequence)).toBe(true);
+    expect(historyReadingGaps([], [members[0], members[4]], [], new Map(), undefined, [{ ...proof, first: 3 }])[0].sequence).toBeUndefined();
+  });
   function viewportGap(top: number, bottom: number, first: number, last: number): HTMLElement {
     return { getBoundingClientRect: () => ({ top: 0, bottom: 700 }), querySelectorAll: () => [{
       getBoundingClientRect: () => ({ top, bottom, height: bottom - top }),

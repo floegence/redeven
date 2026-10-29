@@ -943,7 +943,9 @@ export type FlowerGoalInput = Readonly<{
 }>;
 export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: string; current: FlowerRuntimeCurrentView; goal: FlowerGoal; conflict: boolean; replayed?: boolean }>;
 
-export type FlowerHistoryWindow = Readonly<{ skipped_range?: Readonly<{ leaf_id: string; turn_id: string; run_id: string; first_item_id: string; last_item_id: string; first_ordinal: number; last_ordinal: number }>; leaf_id?: string; first_item_id?: string; last_item_id?: string; has_before: boolean; has_after: boolean }>;
+export type FlowerHistoryWindow = Readonly<{ skipped_range?: Readonly<{ leaf_id: string; turn_id: string; run_id: string; first_item_id: string; last_item_id: string; first_ordinal: number; last_ordinal: number }>;
+  sequence_gaps?: readonly Readonly<{ before_id: string; after_id: string; first: number; last: number; turn_id: string; run_id: string }>[];
+  leaf_id?: string; first_item_id?: string; last_item_id?: string; has_before: boolean; has_after: boolean }>;
 export type FlowerHistoryBodyRequest = Readonly<{ item_id: string; run_id?: string; source_id?: string; entry_id?: string; field: string; through_bytes: number; offset_bytes: number }>;
 export type FlowerHistoryBodyChunk = FlowerHistoryBodyRequest & Readonly<{ thread_id: string; bytes: number; text: string; source_changed?: boolean }>;
 // Demand-only canonical records; this is never an observation baseline.
