@@ -11980,12 +11980,12 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-turn-summary-chevron { width: 0.875rem; height: 0.875rem; flex-shrink: 0; transition: transform 140ms ease; }
 .flower-turn-summary-button[aria-expanded='true'] .flower-turn-summary-chevron { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .flower-turn-summary, .flower-turn-summary-button, .flower-turn-summary-chevron { transition: none; } }
-.flower-turn-row[data-flower-input-checkpoint='true'] {
+.flower-turn-row[data-flower-input-checkpoint='true'] > .flower-turn-row-viewport > .flower-turn-row-content {
   position: relative;
-  margin-block: 0.375rem;
-  padding-block: 0.25rem;
+  padding-top: 0.625rem;
+  padding-bottom: 1.625rem;
 }
-.flower-turn-row[data-flower-input-checkpoint='true']::before {
+.flower-turn-row[data-flower-input-checkpoint='true'] > .flower-turn-row-viewport > .flower-turn-row-content::before {
   position: absolute;
   inset-block: 0.75rem;
   inset-inline-start: -0.5rem;
@@ -12000,7 +12000,7 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-turn-summary-button { color: ButtonText; }
   .flower-turn-summary-button:hover { color: ButtonText; text-decoration: underline; }
   .flower-turn-summary-button:focus-visible { outline-color: Highlight; }
-  .flower-turn-row[data-flower-input-checkpoint='true']::before { background: CanvasText; }
+  .flower-turn-row[data-flower-input-checkpoint='true'] > .flower-turn-row-viewport > .flower-turn-row-content::before { background: CanvasText; }
 }
 .flower-turn-ended {
   display: flex;

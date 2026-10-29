@@ -73,7 +73,8 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     // A turn can continue in a new run after the user answers an interaction.
     // The response still belongs to the same canonical turn even when its
     // message retains the earlier run identity.
-    if (entry.blocks.some((block) => block.type === 'input_response')) {
+    const inputResponse = entry.blocks.some((block) => block.type === 'input_response');
+    if (inputResponse) {
       const responses = inputResponses.get(id) ?? [];
       responses.push(entry.key);
       inputResponses.set(id, responses);
@@ -83,23 +84,26 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     const final = finalItems.get(id)?.has(message!.id);
     const goalProcess = message!.role === 'system' && Boolean(message!.goal)
       && Boolean(turn && message!.run_id);
-    const dialogue = message!.role !== 'assistant' || entry.blocks.some((block) => block.type === 'input_response');
+    const dialogue = message!.role !== 'assistant';
     // Only the canonical owner can classify prose as superseded. Unknown and
     // trailing partial output stay visible regardless of terminal outcome.
     const intermediate = intermediateItems.get(id)?.has(message!.id) && !live;
     const explicitProcess = entry.blocks.length > 0 && entry.blocks.every((block) => block.type === 'activity'
       || block.type === 'content' && block.block_type === 'thinking');
-    if (!final && (goalProcess || !dialogue && (intermediate || explicitProcess))) groups.get(id)!.push(entry.key);
+    // Settled question/answer receipts are in-turn work, even though their
+    // canonical message uses the user role. The initiating request stays visible.
+    if (!final && (inputResponse || goalProcess || !dialogue && (intermediate || explicitProcess))) groups.get(id)!.push(entry.key);
   }
   const positions = new Map(entries.map((entry, index) => [entry.key, index]));
   const projected = new Map([...groups].map(([turnID, processKeys]) => {
     const turn = facts.get(turnID);
     const pending = pendingTurnIDs.includes(turnID);
     const disclosable = Boolean(turn?.outcome && turn.ended_at && turn.kind !== 'context_compaction' && processKeys.length && !pending);
-    const processPositions = processKeys.map((key) => positions.get(key) ?? -1).filter((position) => position >= 0);
+    const responses = new Set(inputResponses.get(turnID) ?? []);
+    const processPositions = processKeys.filter(key => !responses.has(key)).map((key) => positions.get(key) ?? -1).filter((position) => position >= 0);
     const firstProcess = Math.min(...processPositions);
     const lastProcess = Math.max(...processPositions);
-    const inputResponseCount = (inputResponses.get(turnID) ?? []).filter((key) => {
+    const inputResponseCount = [...responses].filter((key) => {
       const position = positions.get(key);
       return position !== undefined && position > firstProcess && position < lastProcess;
     }).length;

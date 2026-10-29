@@ -6,6 +6,7 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-10-29
 
+- Fold settled [question/answer receipts](ui/flower-turn-process-disclosure.md) with their turn's process, including continuation runs; restore full content on expansion without leaving checkpoint gaps or hiding pending controls.
 - Unify standalone and grouped [thinking/tool row text](ui/flower-tool-sequences.md), including elapsed time, at 13px with unchanged line height and disclosure geometry.
 - Set [tool-row text](ui/flower-tool-sequences.md) to 13px without changing line height, add decorative [terminal outcome icons](ui/flower-turn-process-disclosure.md), and strengthen [sent-message capsule separation](ui/flower-message-appearance.md) while preserving readable ink.
 - Align [sent-message capsules](ui/flower-message-appearance.md) with quiet Floe planes and strong reading ink; preserve complete question/answer context, selection, copying and responsive alignment.

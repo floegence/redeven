@@ -827,20 +827,32 @@ describe('completed turn process disclosure', () => {
     expectEndedPresentation(root.querySelector<HTMLElement>('.flower-turn-ended')!, 'Stopped');
     expect(hidden(root, 'progress')).toBe(true);
   });
-  it('keeps resolved clarification receipts and attachments visible in a completed turn', async () => {
+  it.each(['history', 'live'] as const)('folds resolved clarification receipts with %s work while keeping the request and final visible', async source => {
     const done = current(true);
     const receipt = { id: 'answer', turn_id: 'turn', run_id: 'run', ordinal: 4, kind: 'interaction' as const, interaction: {
       id: 'answer', turn_id: 'turn', run_id: 'run', kind: 'input' as const, resolved: true,
       input: { summary: 'Choose a route', questions: [{ id: 'route', kind: 'write' as const, prompt: 'Which route?' }] },
       resolution: { accepted: true, input: { route: 'Scenic' } },
     } };
-    const { root } = await mount({ ...done, items: [...done.items!.slice(0, 4), receipt, ...done.items!.slice(4)].map((item, index) => ({ ...item, ordinal: index + 1, ...(item.id === 'user' ? { attachments: [{ name: 'notes.txt', mime_type: 'text/plain', size_bytes: 7 }] } : {}) })) });
-    expect(hidden(root, 'answer')).toBe(false); expect(hidden(root, 'user')).toBe(false);
+    const terminal = { ...done, items: [...done.items!.slice(0, 4), receipt, ...done.items!.slice(4)].map((item, index) => ({ ...item, ordinal: index + 1, ...(item.id === 'user' ? { attachments: [{ name: 'notes.txt', mime_type: 'text/plain', size_bytes: 7 }] } : {}) })) };
+    const { root, live } = await mount(source === 'history' ? terminal : current(false, { items: terminal.items }));
+    if (source === 'live') {
+      expect(hidden(root, 'answer')).toBe(false);
+      expect(message(root, 'answer').textContent).toContain('Scenic');
+      live.push(terminal);
+    }
+    await waitFor(() => hidden(root, 'answer'));
+    expect(hidden(root, 'user')).toBe(false);
+    expect(hidden(root, 'final-a')).toBe(false);
+    expect(hidden(root, 'final-b')).toBe(false);
+    expect(message(root, 'user').textContent).toContain('notes.txt');
+    summary(root)!.click();
+    await waitFor(() => !hidden(root, 'answer'));
     expect(message(root, 'answer').textContent).toContain('Which route?');
     expect(message(root, 'answer').textContent).toContain('Scenic');
-    expect(message(root, 'user').textContent).toContain('notes.txt');
   });
-  it('keeps an answered interaction between independently folded tool groups', async () => {
+  it.each(['reduce', 'no-preference'] as const)('folds answered interactions with the turn and restores nested choices with %s motion', async reducedMotion => {
+    await media.emulateMediaPreferences({ reducedMotion });
     const done = current(true);
     const sourceTool = done.items!.find((item) => item.id === 'tool')!;
     const toolItem = (id: string, ordinal: number, status: 'success' | 'error' = 'success') => ({
@@ -895,18 +907,26 @@ describe('completed turn process disclosure', () => {
     expect(afterSequence?.hasAttribute('inert')).toBe(true);
 
     await userEvent.click(page.elementLocator(summary(root)!));
-    await waitFor(() => hidden(root, 'before-one') && hidden(root, 'after-one'));
-    expect(hidden(root, 'answer')).toBe(false);
+    await waitFor(() => hidden(root, 'before-one') && hidden(root, 'after-one') && hidden(root, 'answer'));
+    const answerViewport = messageRow(root, 'answer').querySelector<HTMLElement>('.flower-turn-row-viewport')!;
+    expect(answerViewport.hasAttribute('inert')).toBe(true);
+    await waitFor(() => answerViewport.getAttribute('data-state') === 'closed');
+    expect(messageRow(root, 'answer').getBoundingClientRect().height).toBe(0);
+    expect(hidden(root, 'user')).toBe(false);
+    expect(hidden(root, 'final-a')).toBe(false);
     expect(message(root, 'answer').textContent).toContain('Scenic');
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => !hidden(root, 'before-one') && !hidden(root, 'after-one'));
+    await waitFor(() => !hidden(root, 'before-one') && !hidden(root, 'after-one') && !hidden(root, 'answer'));
+    expect(answerViewport.hasAttribute('inert')).toBe(false);
+    expect(message(root, 'answer').textContent).toContain('Which route?');
+    expect(message(root, 'answer').textContent).toContain('Scenic');
     expect(toolGroups()[0]?.getAttribute('aria-expanded')).toBe('true');
     expect(toolGroups()[1]?.getAttribute('aria-expanded')).toBe('false');
     await page.viewport(390, 844);
     const label = overview()!.querySelector<HTMLElement>('span')!;
     expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(root.getBoundingClientRect().right + 1);
   });
-  it('keeps continuation-run tools folded while preserving the answered checkpoint', async () => {
+  it('folds continuation-run tools and answered checkpoints together', async () => {
     const done = current(true);
     const sourceUser = done.items!.find((item) => item.id === 'user')!;
     const sourceTool = done.items!.find((item) => item.id === 'tool')!;
@@ -951,11 +971,13 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => overview()?.getAttribute('aria-expanded') === 'false');
     expect(hidden(root, 'old-intro')).toBe(true);
     expect(hidden(root, 'old-goal')).toBe(true);
-    expect(hidden(root, 'answer')).toBe(false);
+    expect(hidden(root, 'answer')).toBe(true);
     overview()!.click();
     await waitFor(() => overview()?.getAttribute('aria-expanded') === 'true');
     expect(hidden(root, 'old-intro')).toBe(false);
     expect(hidden(root, 'old-goal')).toBe(false);
+    expect(hidden(root, 'answer')).toBe(false);
+    expect(message(root, 'answer').textContent).toContain('Scenic');
   });
   it.each(['canonical', 'legacy'] as const)('defaults %s child work to collapsed while preserving the parent background entry', async (history) => {
     await page.viewport(1280, 900);

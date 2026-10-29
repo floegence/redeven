@@ -187,7 +187,7 @@ describe('canonical turn process presentation', () => {
     expect(project([neighbor, ...rows.slice(1)], { hasBefore: true, hasAfter: false, readingBreaks: new Set(['before']) })?.countsComplete).toBe(false);
     expect(project([...rows, neighbor], { hasBefore: false, hasAfter: true, readingBreaks: new Set(['neighbor']) })?.countsComplete).toBe(false);
   });
-  it('allows manual folding when an answered interaction separates work segments', () => {
+  it('includes answered interactions when manually folding separated work segments', () => {
     const before = [toolEntry('before-one'), toolEntry('before-two')];
     const after = [toolEntry('after-one'), toolEntry('after-two', 'error')];
     const result = projectFlowerTurnProcess([...before, inputResponse(), ...after], [turn({
@@ -195,8 +195,31 @@ describe('canonical turn process presentation', () => {
     })]).groups.get('turn');
     expect(result).toMatchObject({
       disclosure: 'manual', interleavedInputs: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1,
-      processKeys: [...before, ...after].map(value => value.key),
+      processKeys: [...before, inputResponse(), ...after].map(value => value.key),
     });
+  });
+  it.each(['completed', 'failed', 'cancelled', 'interrupted'] as const)('folds answered interactions at every process position in a %s turn', outcome => {
+    for (const rows of [[inputResponse(), toolEntry('tool')], [toolEntry('tool'), inputResponse()], [inputResponse()]]) {
+      const result = projectFlowerTurnProcess([entries[0], ...rows, ...entries.slice(2)], [turn({ outcome })]).groups.get('turn');
+      expect(result?.processKeys).toEqual(rows.map(row => row.key));
+      expect(result?.disclosure).toBe('automatic');
+    }
+  });
+  it('keeps answered interactions expanded while a turn is active, pending, or unknown', () => {
+    const rows = [toolEntry('before'), inputResponse(), toolEntry('after')];
+    expect(projectFlowerTurnProcess(rows, [turn({ outcome: undefined, ended_at: undefined })]).groups.get('turn')?.disclosure).toBe('none');
+    expect(projectFlowerTurnProcess(rows, [turn()], ['turn']).groups.get('turn')?.disclosure).toBe('none');
+    expect(projectFlowerTurnProcess(rows).groups.get('turn')?.disclosure).toBe('none');
+  });
+  it('does not treat adjacent answered receipts as work surrounding an interaction', () => {
+    const next = { ...inputResponse(), key: 'next-answer', message: { ...inputResponse().message, id: 'next-answer' } };
+    const responses = [inputResponse(), next];
+    for (const rows of [[...responses, toolEntry('tool')], [toolEntry('tool'), ...responses], responses]) {
+      const result = projectFlowerTurnProcess(rows, [turn()]).groups.get('turn');
+      expect(result?.processKeys).toEqual(rows.map(row => row.key));
+      expect(result?.interleavedInputs).toBe(false);
+      expect(result?.disclosure).toBe('automatic');
+    }
   });
   it('anchors before old-run prose while folding only canonically confirmed work', () => {
     const intro = withRun(entry('intro'), 'run-a');
@@ -206,7 +229,7 @@ describe('canonical turn process presentation', () => {
     const rows = [entry('user', 'user'), unknown, intro, goal, withRun(toolEntry('before'), 'run-a'), inputResponse(), withRun(toolEntry('after'), 'run-b')];
     const result = projectFlowerTurnProcess(rows, [turn({ run_id: 'run-b', intermediate_item_ids: ['intro'] })]).groups.get('turn');
     expect(result?.summaryKey).toBe('unknown');
-    expect(result?.processKeys).toEqual(['intro', 'goal', 'before', 'after']);
+    expect(result?.processKeys).toEqual(['intro', 'goal', 'before', 'answer', 'after']);
     expect(result?.interleavedInputs).toBe(true);
   });
   it('moves the header when pagination prepends visible prose without changing process membership', () => {
@@ -225,6 +248,7 @@ describe('canonical turn process presentation', () => {
     const result = projectFlowerTurnProcess([...before, answer, ...after], [turn({ run_id: 'run-b', outcome: 'interrupted',
       ended_at: '2026-10-11T12:02:18Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
     expect(result).toMatchObject({ disclosure: 'manual', interleavedInputs: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1 });
+    expect(result?.processKeys).toContain('answer');
   });
   it('keeps ordinary dialogue outside the process without changing its disclosure', () => {
     const result = projectFlowerTurnProcess([toolEntry('before-one'), toolEntry('before-two'), entry('ordinary-user', 'user'), toolEntry('after-one')], [turn()]).groups.get('turn');
