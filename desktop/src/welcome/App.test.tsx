@@ -1739,22 +1739,19 @@ describe('DesktopWelcomeShell', () => {
     expect(chromeSrc).toContain("[data-floe-shell-slot='top-bar']");
     expect(chromeSrc).toContain('app-region: drag;');
 
-    expect(overlayRule).toContain('--redeven-welcome-dialog-titlebar-offset: var(--redeven-desktop-titlebar-height);');
-    expect(overlayRule).not.toContain('var(--redeven-desktop-titlebar-height,');
-    expect(overlayRule).toContain('--redeven-welcome-dialog-edge-gap: 1rem;');
+    expect(styles).toContain("@import '../../../internal/envapp/ui_src/src/styles/redeven.css';");
     expect(overlayRule).toContain(
-      'calc(100dvh - var(--redeven-welcome-dialog-titlebar-offset) - (var(--redeven-welcome-dialog-edge-gap) * 2))',
+      'calc(100dvh - var(--redeven-dialog-top-inset) - max(var(--floe-dialog-gap-y, 1rem), var(--floe-dialog-safe-bottom, 0px)))',
     );
     expect(overlayRule).toContain(
       '--redeven-welcome-dialog-panel-max-height: var(--redeven-welcome-dialog-available-height);',
     );
-    expect(overlayRule).toContain(
-      'padding:\n    calc(var(--redeven-welcome-dialog-titlebar-offset) + var(--redeven-welcome-dialog-edge-gap))',
-    );
+    expect(overlayRule).not.toContain('padding:');
+    expect(overlayRule).not.toContain('12rem');
     expect(overlayRule).toContain('app-region: no-drag;');
     expect(panelRule).toContain('app-region: no-drag;');
-    expect(panelRule).toContain('margin-block: auto;');
-    expect(panelRule).toContain('max-height: var(--redeven-welcome-dialog-panel-max-height);');
+    expect(panelRule).not.toContain('margin-block');
+    expect(panelRule).not.toContain('max-height');
     expect(backdropRule).toContain('app-region: no-drag;');
     expect(semanticPanelRule).toContain('display: flex;');
     expect(semanticPanelRule).toContain('flex-direction: column;');

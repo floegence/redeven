@@ -1,7 +1,9 @@
-import '../index.css';
-import './flower-feature.css';
+import envCSS from '../index.css?inline';
+import flowerCSS from './flower-feature.css?inline';
+import desktopCSS from '../../../../../desktop/src/welcome/index.css?inline';
 import { FloeProvider, builtInShellThemePresets, useTheme } from '@floegence/floe-webapp-core';
-import { createSignal, onMount } from 'solid-js';
+import { Shell } from '@floegence/floe-webapp-core/layout';
+import { createSignal, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
@@ -12,7 +14,11 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY;
-function mount(dark: boolean) {
+function mount(dark: boolean, surface: 'env' | 'desktop' = 'env', withShell = false) {
+  const style = document.createElement('style');
+  style.textContent = surface === 'desktop' ? desktopCSS : envCSS + flowerCSS;
+  document.head.append(style);
+  if (surface === 'desktop') document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
   let snapshot: FlowerSettingsSnapshot = withModelDirectoryFixture({
     defaults: { permission_type: 'approval_required' },
     model_profile: { schema_version: 1, current_model_id: 'openai/gpt-5.2', providers: [{
@@ -45,8 +51,9 @@ function mount(dark: boolean) {
     onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light'));
     return null;
   }
-  const dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSurface adapter={adapter} settingsRevision={revision} draftCoordinator={createFlowerComposerDraftCoordinator()} notify={vi.fn()} /></FloeProvider>, host);
-  onTestFinished(() => { dispose(); host.remove(); });
+  const content = () => <FlowerSurface adapter={adapter} settingsRevision={revision} draftCoordinator={createFlowerComposerDraftCoordinator()} notify={vi.fn()} />;
+  const dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><Show when={withShell} fallback={content()}><Shell fillParent>{content()}</Shell></Show></FloeProvider>, host);
+  onTestFinished(() => { dispose(); host.remove(); style.remove(); document.documentElement.style.removeProperty('--redeven-desktop-titlebar-height'); });
   return { host, setRevision, loadSettings, snapshot: () => snapshot };
 }
 
@@ -92,6 +99,45 @@ it.each([{ width: 1280, dark: false }, { width: 390, dark: true }])(
     await expect.element(dialog).not.toBeInTheDocument();
   },
 );
+
+for (const surface of ['env', 'desktop'] as const) for (const width of [1280, 390]) {
+  it(`keeps Flower settings and nested editors below the ${surface} header at ${width}px`, async () => {
+    const height = width === 1280 ? 500 : 420;
+    await page.viewport(width, height);
+    const { host } = mount(width === 390, surface, true);
+    const trigger = page.getByRole('button', { name: copy.chat.settingsLabel, exact: true });
+    await userEvent.click(trigger);
+    const assertBounds = async (title: string) => {
+      const dialog = page.getByRole('dialog', { name: title, exact: true });
+      await expect.element(dialog).toBeVisible();
+      await expect.poll(() => getComputedStyle(dialog.element()).opacity).toBe('1');
+      const headerBottom = host.querySelector('[data-floe-shell-slot=top-bar]')!.getBoundingClientRect().bottom;
+      const rect = dialog.element().getBoundingClientRect();
+      expect(rect.top).toBeGreaterThanOrEqual(headerBottom);
+      expect(rect.bottom).toBeLessThanOrEqual(height);
+      expect(rect.left).toBeGreaterThanOrEqual(0);
+      expect(rect.right).toBeLessThanOrEqual(width);
+      const body = dialog.element().querySelector<HTMLElement>('[data-floe-dialog-body]')!;
+      expect(body.clientHeight).toBeGreaterThan(0);
+      if (body.scrollHeight > body.clientHeight) { body.scrollTop = body.scrollHeight; expect(body.scrollTop).toBeGreaterThan(0); body.scrollTop = 0; }
+      return dialog;
+    };
+    const settings = await assertBounds(copy.settings.title);
+    await expect.element(page.getByRole('button', { name: copy.settings.changeModel, exact: true })).toBeVisible();
+    await page.screenshot({ path: `__screenshots__/flower-settings-header-${surface}-${width}.png` });
+    await userEvent.click(page.getByRole('button', { name: copy.settings.changeModel, exact: true }));
+    await assertBounds(copy.settings.changeModel);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(page.getByRole('button', { name: copy.settings.editProvider, exact: true }));
+    const provider = await assertBounds(copy.settings.dialog.editTitle);
+    await userEvent.click(provider.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
+    await expect.element(provider).not.toBeInTheDocument();
+    await expect.element(settings).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await expect.element(settings).not.toBeInTheDocument();
+    await expect.element(trigger).toHaveFocus();
+  });
+}
 
 
 it.each([{ width: 1280, dark: false }, { width: 390, dark: true }])(

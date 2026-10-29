@@ -589,28 +589,20 @@ html:not(.dark) .redeven-welcome-surface {
   }
 }
 
-/* ── Dialog layout: desktop titlebar safe area ── */
+/* Dialog bounds come from shared Redeven styles and Floe's viewport owner. */
 
 [data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] {
-  --redeven-welcome-dialog-titlebar-offset: var(--redeven-desktop-titlebar-height);
-  --redeven-welcome-dialog-edge-gap: 1rem;
   --redeven-welcome-dialog-available-height: max(
-    12rem,
-    calc(100dvh - var(--redeven-welcome-dialog-titlebar-offset) - (var(--redeven-welcome-dialog-edge-gap) * 2))
+    0px,
+    calc(100dvh - var(--redeven-dialog-top-inset) - max(var(--floe-dialog-gap-y, 1rem), var(--floe-dialog-safe-bottom, 0px)))
   );
   --redeven-welcome-dialog-panel-max-height: var(--redeven-welcome-dialog-available-height);
 
   app-region: no-drag;
-  padding:
-    calc(var(--redeven-welcome-dialog-titlebar-offset) + var(--redeven-welcome-dialog-edge-gap))
-    var(--redeven-welcome-dialog-edge-gap)
-    var(--redeven-welcome-dialog-edge-gap);
 }
 
 [data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] [data-floe-dialog-panel] {
   app-region: no-drag;
-  margin-block: auto;
-  max-height: var(--redeven-welcome-dialog-panel-max-height);
 }
 
 [data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] [data-floe-dialog-backdrop] {

@@ -1237,7 +1237,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let subagentDropdownRef: HTMLDivElement | undefined;
   // Floe retains the anchored panel through both enter and exit transitions.
   const subagentDropdownPresence = createFloatingPresence({ open: subagentDropdownOpen, element: () => subagentDropdownRef });
-  let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
   let headerRenameTriggerRef: HTMLButtonElement | undefined;
@@ -4750,12 +4749,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } finally {
       if (renameTarget() === target) setRenameSaving(false);
     }
-  };
-
-  const focusRenameDialogEdge = (edge: 'first' | 'last') => {
-    const items = Array.from(renameDialogRef?.querySelectorAll<HTMLElement>('input:not(:disabled), button:not(:disabled)') ?? []);
-    if (items.length === 0) return;
-    items[edge === 'first' ? 0 : items.length - 1]?.focus();
   };
 
   const restoreThreadMenuFocus = (restore?: HTMLElement) => {
@@ -15338,77 +15331,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
         </div>
       </ConfirmDialog>
-      <Show when={renameTarget()?.placement === 'dialog'}>
-        <div class="flower-rename-backdrop" role="presentation" onMouseDown={closeRename}>
-          <div
-            ref={renameDialogRef}
-            class="flower-rename-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="flower-thread-rename-title"
-            onMouseDown={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                closeRename();
-                return;
-              }
-              if (event.key !== 'Tab') return;
-              const items = Array.from(renameDialogRef?.querySelectorAll<HTMLElement>('input:not(:disabled), button:not(:disabled)') ?? []);
-              if (items.length === 0) {
-                event.preventDefault();
-                return;
-              }
-              const first = items[0];
-              const last = items[items.length - 1];
-              if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                focusRenameDialogEdge('last');
-              } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                focusRenameDialogEdge('first');
-              }
-            }}
-          >
-            <h2 id="flower-thread-rename-title">{copy().threadList.renameTitle}</h2>
-            <label>
-              <span>{copy().threadList.renameNameLabel}</span>
-              <input
-                ref={renameInputRef}
-                class="flower-rename-input"
-                value={renameDraft()}
-                disabled={renameSaving()}
-                aria-invalid={renameError() ? 'true' : undefined}
-                aria-describedby={renameError() ? 'flower-thread-rename-error' : undefined}
-                onInput={(event) => {
-                  setRenameDraft(event.currentTarget.value);
-                  setRenameError('');
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.isComposing) {
-                    event.preventDefault();
-                    void submitRename();
-                  }
-                }}
-              />
-            </label>
-            <Show when={renameError()}>
-              {(message) => <p id="flower-thread-rename-error" class="flower-rename-error" role="alert">{message()}</p>}
-            </Show>
-            <div class="flower-rename-actions">
-              <button type="button" class="flower-rename-secondary" disabled={renameSaving()} onClick={closeRename}>{copy().threadList.cancel}</button>
-              <button
-                type="button"
-                class="flower-rename-primary"
-                disabled={renameSaving() || renameUnchanged()}
-                onClick={() => void submitRename()}
-              >
-                <StableText reserve={[copy().threadList.saving, copy().threadList.save]}>{renameSaving() ? copy().threadList.saving : copy().threadList.save}</StableText>
-              </button>
-            </div>
-          </div>
-        </div>
-      </Show>
+      <DialogPlacementProvider mode="global">
+        <Dialog
+          open={renameTarget()?.placement === 'dialog'}
+          onOpenChange={open => { if (!open) closeRename(); }}
+          onPresenceChange={present => {
+            if (present) queueMicrotask(() => { renameInputRef?.focus(); renameInputRef?.select(); });
+          }}
+          title={copy().threadList.renameTitle}
+          closeLabel={copy().computer.close}
+          presentation="dialog"
+          class="flower-rename-dialog"
+          footer={<>
+            <button type="button" class="flower-rename-secondary" disabled={renameSaving()} onClick={closeRename}>{copy().threadList.cancel}</button>
+            <button
+              type="button"
+              class="flower-rename-primary"
+              disabled={renameSaving() || renameUnchanged()}
+              onClick={() => void submitRename()}
+            >
+              <StableText reserve={[copy().threadList.saving, copy().threadList.save]}>{renameSaving() ? copy().threadList.saving : copy().threadList.save}</StableText>
+            </button>
+          </>}
+        >
+          <label>
+            <span>{copy().threadList.renameNameLabel}</span>
+            <input
+              ref={renameInputRef}
+              data-floe-autofocus
+              class="flower-rename-input"
+              value={renameDraft()}
+              disabled={renameSaving()}
+              aria-invalid={renameError() ? 'true' : undefined}
+              aria-describedby={renameError() ? 'flower-thread-rename-error' : undefined}
+              onInput={(event) => {
+                setRenameDraft(event.currentTarget.value);
+                setRenameError('');
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.isComposing) {
+                  event.preventDefault();
+                  void submitRename();
+                }
+              }}
+            />
+          </label>
+          <Show when={renameError()}>
+            {(message) => <p id="flower-thread-rename-error" class="flower-rename-error" role="alert">{message()}</p>}
+          </Show>
+        </Dialog>
+      </DialogPlacementProvider>
       <button
         type="button"
         class="flower-component-rail-resizer"

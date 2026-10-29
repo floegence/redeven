@@ -2,6 +2,24 @@
 @import './settings-controls.css';
 @import './native-controls.css';
 
+/* Floe owns viewport/keyboard geometry; the product reserves its shell header.
+ * Inactive retained shells must not create a header on headerless mobile pages. */
+:root:has([data-floe-shell-slot='top-bar']:not([data-floe-keep-alive-view][aria-hidden='true'] *)) {
+  --redeven-dialog-shell-header-height: calc(2.5rem + 1px);
+}
+
+[data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] {
+  --redeven-dialog-top-inset: calc(
+    max(
+      var(--redeven-desktop-titlebar-height, 0px),
+      var(--redeven-dialog-shell-header-height, 0px) + var(--floe-dialog-safe-top, 0px)
+    ) + var(--floe-dialog-gap-y, 1rem)
+  );
+  /* The published Dialog sets inline padding. Only its top inset needs a
+   * product override; keep its visible viewport and other safe edges intact. */
+  padding-top: var(--redeven-dialog-top-inset) !important;
+}
+
 .managed-release-list-status {
   position: relative;
   display: flex;
@@ -84,8 +102,7 @@
   app-region: no-drag;
   pointer-events: auto;
   user-select: auto;
-  margin-top: var(--redeven-desktop-titlebar-height, 0px);
-  height: calc(100% - var(--redeven-desktop-titlebar-height, 0px));
+  height: 100%;
   width: min(58rem, 100%);
   max-width: 100%;
   --floe-floating-enter-duration: var(--floe-duration-float);
@@ -102,11 +119,6 @@
 
 [data-floe-dialog-panel].env-app-drawer-panel.managed-service-version-drawer {
   width: min(46rem, calc(100% - 4rem));
-}
-
-[data-floe-dialog-overlay-root][data-floe-dialog-mode="surface"] [data-floe-dialog-panel].env-app-drawer-panel {
-  margin-top: 0;
-  height: 100%;
 }
 
 @media (max-width: 639px) {

@@ -58,12 +58,13 @@ describe('EnvAppDrawer', () => {
     }
   });
 
-  it('reserves the Desktop title bar inside the shared drawer boundary', () => {
+  it('fills the shared drawer boundary without subtracting the header twice', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles/redeven.css'), 'utf8');
     const rule = css.match(/\[data-floe-dialog-panel\]\.env-app-drawer-panel\s*\{(?<body>[\s\S]*?)\n\}/u)?.groups?.body ?? '';
     expect(rule).toContain('app-region: no-drag');
-    expect(rule).toContain('margin-top: var(--redeven-desktop-titlebar-height, 0px)');
-    expect(rule).toContain('height: calc(100% - var(--redeven-desktop-titlebar-height, 0px))');
+    expect(rule).toContain('height: 100%');
+    expect(rule).not.toContain('margin-top');
+    expect(rule).not.toContain('--redeven-desktop-titlebar-height');
     expect(rule).not.toContain('position: fixed');
   });
 

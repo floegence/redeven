@@ -8436,30 +8436,10 @@ button.flower-composer-context-source:focus-visible,
   .flower-thread-warmup-menu > .flower-thread-warmup-line { width: 0.875rem; }
 }
 
-.flower-rename-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: color-mix(in srgb, var(--redeven-surface-shadow-source) 28%, transparent);
-}
-
 .flower-rename-dialog {
   width: min(100%, 22rem);
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 0.5rem;
-  padding: 1rem;
-  background: var(--flower-chat-surface-elevated, var(--card));
-  box-shadow: 0 24px 52px -34px color-mix(in srgb, var(--redeven-surface-shadow-source) 58%, transparent);
-}
-
-.flower-rename-dialog h2 {
-  margin: 0 0 0.875rem;
-  font-size: 0.9375rem;
-  font-weight: 650;
+  overflow: hidden;
+  padding: 0;
 }
 
 .flower-rename-dialog label {
@@ -8487,14 +8467,6 @@ button.flower-composer-context-source:focus-visible,
   color: var(--redeven-status-error-foreground);
   font-size: 0.75rem;
 }
-
-.flower-rename-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
 .flower-rename-secondary,
 .flower-rename-primary {
   min-width: 4.25rem;

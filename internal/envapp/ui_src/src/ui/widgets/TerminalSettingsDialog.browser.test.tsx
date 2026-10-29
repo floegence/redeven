@@ -74,6 +74,10 @@ async function settle(): Promise<void> {
   await Promise.resolve();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  // Geometry must be measured after Floe's entry scale and height motion settle.
+  const dialog = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+  await expect.poll(() => dialog.dataset.floatingPresence).toBe('open');
+  await expect.poll(() => dialog.getAnimations().every(animation => animation.playState !== 'running')).toBe(true);
 }
 
 function themeRadios(): HTMLInputElement[] {

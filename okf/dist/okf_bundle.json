@@ -24869,7 +24869,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "accessibility",
           "desktop",
@@ -24879,15 +24879,15 @@
         "title": "Dialog content placement",
         "type": "UI Contract"
       },
-      "body_length": 1216,
+      "body_length": 3125,
       "summary": "Published Floe Webapp owns the shared Dialog structure. Redeven supplies localized\ntitles, body guidance, and actions. Headers contain identity and controls;\ninstructions and consequences belong in the body. This applies to ordinary\ndialogs, confirmation dialogs, drawers, and window-local confirmations. A missing\nor misplaced description is a content integration failure, never a reason to\nrestore a header subtitle or hide the text.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and `ConfirmDialog`. Custom headers and title JSX must not recreate the removed explanatory subtitle.\n\nThis contract changes no application connection, process, or window lifecycle.",
-          "char_count": 260
+          "body": "Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and `ConfirmDialog`. Custom headers and title JSX must not recreate the removed explanatory subtitle.\n\nThis contract changes no application connection, process, or window lifecycle.\n\n## Header-safe bounds\n\nGlobal dialogs and drawers reserve the visible application header before allocating\ntheir body height. The shared Redeven stylesheet applies the larger of the native\nDesktop titlebar and Floe's visible shell top bar plus its top safe inset, followed\nby the published presentation gap. Floe owns the visible viewport, keyboard\nresponse, remaining safe edges, panel maximum height, focus and dismissal. The\nsingle product top-padding override is intentional because the published Dialog\nsets that padding inline. Do not reintroduce per-dialog viewport subtraction or\nminimum heights that can overflow short windows.\n\nThe shell header contract is Floe's `h-10` content plus its one-pixel border. A\nheaderless mobile shell adds no phantom header; inactive KeepAlive views do not\ncount as visible headers. Surface-local dialogs and Workbench window confirmations\nstay within their existing host below the shell header without subtracting it a\nsecond time. Side drawers keep their edge-attached presentation.\n\nHeaders, close controls and footer actions remain reachable while long content\nscrolls inside the body. Flower settings, nested editors and conversation rename\nuse the published Dialog. Preserve the bounded loading geometry defined in\n[page-loading continuity](page-loading-continuity.md).",
+          "char_count": 1578
         },
         {
           "id": "boundaries",
@@ -24907,9 +24907,32 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx:0:places window-local confirmation guidance in its scrollable body.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx",
           "description": "Places window-local confirmation guidance in its scrollable body."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx:0:real floe shells and both host styles: global dialog/drawers, resizing, native titlebars, safe insets, hidden mobile headers and surface-local placement.",
+          "source": "redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx",
+          "description": "Real Floe shells and both host styles: global dialog/drawers, resizing, native titlebars, safe insets, hidden mobile headers and surface-local placement."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx:0:settings and nested editors below actual shell headers at desktop/phone widths, with retained loading geometry.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx",
+          "description": "Settings and nested editors below actual shell headers at desktop/phone widths, with retained loading geometry."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx:0:short-window bounds, title editing, saving and focus behavior.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx",
+          "description": "Short-window bounds, title editing, saving and focus behavior."
         }
       ],
       "snippet": "Published Floe Webapp owns the shared Dialog structure. Redeven supplies localized titles, body guidance, and actions. Headers contain identity and controls; instructions and consequences belong in the body. This applies to ordinary",
+      "links": [
+        {
+          "label": "page-loading continuity",
+          "path": "ui/page-loading-continuity.md",
+          "concept_id": "ui.page-loading-continuity",
+          "title": "Redeven loading and layout continuity"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -30162,6 +30185,12 @@
           "title": "Redeven OKF Bundle"
         },
         {
+          "label": "Dialog content placement",
+          "path": "ui/dialog-content.md",
+          "concept_id": "ui.dialog-content",
+          "title": "Dialog content placement"
+        },
+        {
           "label": "Env App document reload presentation",
           "path": "ui/document-reload-presentation.md",
           "concept_id": "ui.document-reload-presentation",
@@ -31617,5 +31646,5 @@
       ]
     }
   ],
-  "source_sha256": "121afcb76bec1c69b203172e1822c1a1ef35034b0b46bd868b8e1875e5a9b5ab"
+  "source_sha256": "5098948f5ea0d23281ef81ee7fbd24b709c6215975a45c633960db47308b56a6"
 }

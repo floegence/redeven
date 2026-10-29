@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import '../index.css';
 import './flower-feature.css';
@@ -31,6 +31,62 @@ async function setup(otherThreads: ReturnType<typeof thread>[] = []) {
 }
 
 describe('Flower title rename shortcut', () => {
+  it('traps keyboard focus, retains a failed draft and dismisses with Escape or the backdrop', async () => {
+    const { runtime, renameThread } = await setup();
+    const trigger = runtime.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!;
+    trigger.focus();
+    trigger.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await waitFor(() => !!document.querySelector('.flower-rename-dialog'));
+    const dialog = document.querySelector<HTMLElement>('.flower-rename-dialog')!;
+    await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1');
+    const input = dialog.querySelector<HTMLInputElement>('.flower-rename-input')!;
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(input.value.length);
+    await userEvent.fill(input, 'Retained title');
+    const save = dialog.querySelector<HTMLButtonElement>('.flower-rename-primary')!;
+    save.focus();
+    await userEvent.keyboard('{Tab}');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    const pending = deferred<ReturnType<typeof liveBootstrap>>();
+    renameThread.mockImplementationOnce(() => pending.promise);
+    await userEvent.click(save);
+    await userEvent.keyboard('{Escape}');
+    expect(document.querySelector('.flower-rename-dialog')).toBe(dialog);
+    pending.reject(new Error('Rename temporarily unavailable'));
+    await waitFor(() => !!dialog.querySelector('[role=alert]'));
+    expect(input.value).toBe('Retained title');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => !document.querySelector('.flower-rename-dialog'));
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    trigger.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await waitFor(() => !!document.querySelector('.flower-rename-dialog'));
+    await userEvent.click(document.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!, { position: { x: 2, y: 2 } });
+    await waitFor(() => !document.querySelector('.flower-rename-dialog'));
+    await expect.poll(() => document.activeElement).toBe(trigger);
+  });
+
+  it('keeps sidebar rename below the header with reachable actions in a short window', async () => {
+    await page.viewport(1280, 240);
+    const header = document.createElement('header');
+    header.dataset.floeShellSlot = 'top-bar';
+    header.style.cssText = 'position:fixed;inset:0 0 auto;height:41px';
+    document.body.append(header);
+    onTestFinished(() => header.remove());
+    const { runtime, renameThread } = await setup();
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await waitFor(() => !!document.querySelector('.flower-rename-dialog'));
+    const dialog = document.querySelector<HTMLElement>('.flower-rename-dialog')!;
+    await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1');
+    expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(header.getBoundingClientRect().bottom + 15);
+    expect(dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(224);
+    const input = dialog.querySelector<HTMLInputElement>('.flower-rename-input')!;
+    await expect.poll(() => document.activeElement).toBe(input);
+    await userEvent.fill(input, 'Short window title');
+    await userEvent.click(dialog.querySelector<HTMLButtonElement>('.flower-rename-primary')!);
+    await waitFor(() => !document.querySelector('.flower-rename-dialog'));
+    expect(renameThread).toHaveBeenCalledExactlyOnceWith('thread-1', 'Short window title');
+  });
+
   it('preserves pencil focus while a deferred conversation selection finishes', async () => {
     const initial = thread({ title: 'Deferred selection', title_status: 'ready' });
     const detail = deferred<ReturnType<typeof liveBootstrap>>();
@@ -63,7 +119,7 @@ describe('Flower title rename shortcut', () => {
     await userEvent.keyboard('{Enter}');
     const input = runtime.querySelector<HTMLInputElement>('.flower-chat-header-title-input')!;
     expect(input.closest('.flower-chat-header-identity')).not.toBeNull();
-    expect(runtime.querySelector('.flower-rename-dialog')).toBeNull();
+    expect(document.querySelector('.flower-rename-dialog')).toBeNull();
     await waitFor(() => document.activeElement === input);
     expect(input.value).toBe(initial.title);
     expect(input.selectionStart).toBe(0);
@@ -222,11 +278,11 @@ describe('Flower title rename shortcut', () => {
   it('retains sidebar rename in its existing dialog', async () => {
     const { runtime, renameThread } = await setup();
     runtime.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-    await waitFor(() => !!runtime.querySelector('.flower-rename-dialog'));
+    await waitFor(() => !!document.querySelector('.flower-rename-dialog'));
     expect(runtime.querySelector('.flower-chat-header-title-input')).toBeNull();
-    await userEvent.fill(runtime.querySelector<HTMLInputElement>('.flower-rename-input')!, 'Sidebar title');
-    await userEvent.click(runtime.querySelector<HTMLButtonElement>('.flower-rename-primary')!);
-    await waitFor(() => !runtime.querySelector('.flower-rename-dialog'));
+    await userEvent.fill(document.querySelector<HTMLInputElement>('.flower-rename-input')!, 'Sidebar title');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-rename-primary')!);
+    await waitFor(() => !document.querySelector('.flower-rename-dialog'));
     expect(renameThread).toHaveBeenCalledExactlyOnceWith('thread-1', 'Sidebar title');
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Sidebar title');
     const trigger = runtime.querySelector<HTMLButtonElement>('.flower-chat-header-rename')!;
