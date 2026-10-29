@@ -6,20 +6,18 @@ export const taskFileSize = (bytes: number) => bytes < 1024 ? bytes + ' B'
 
 export function FlowerTaskFileIdentity(props: {
   name: string; title?: string; mime: string; size: number;
-  detail?: JSX.Element; status?: JSX.Element;
+  origin?: string; thumbnail?: JSX.Element; status?: JSX.Element;
   onPreview?: () => void; previewLabel: string; previewDisabled?: boolean;
 }) {
-  const format = () => props.name.includes('.') ? props.name.split('.').pop()!.toUpperCase() : props.mime.split(';')[0];
-  return <div class="flower-task-file-identity">
-    <span class="flower-task-file-icon" aria-hidden="true"><FileItemIcon item={{ name: props.name, type: 'file' }} size={22} /></span>
-    <div class="flower-task-file-heading">
-      <h4 class="flower-task-file-name">
-        <Show when={props.onPreview} fallback={props.title || props.name}>
-          <button type="button" class="flower-task-file-preview" aria-label={props.previewLabel + ': ' + (props.title || props.name)}
-            title={props.previewLabel} disabled={props.previewDisabled} onClick={() => props.onPreview?.()}>{props.title || props.name}</button>
-        </Show>
-      </h4>
-      <div class="flower-task-file-meta"><span title={props.mime}>{format()}</span><span>{taskFileSize(props.size)}</span>{props.status}{props.detail}</div>
-    </div>
-  </div>;
+  const content = () => <>
+    <span class="flower-task-file-icon" aria-hidden="true"><Show when={props.thumbnail}
+      fallback={<FileItemIcon item={{ name: props.name, type: 'file' }} size={22} />}>{props.thumbnail}</Show></span>
+    <span class="flower-task-file-heading"><span class="flower-task-file-name">{props.title || props.name}</span>
+      <span class="flower-task-file-meta"><Show when={props.origin}><span>{props.origin}</span></Show><span>{taskFileSize(props.size)}</span>{props.status}</span>
+    </span>
+  </>;
+  return <Show when={props.onPreview} fallback={<div class="flower-task-file-identity">{content()}</div>}>
+    <button type="button" class="flower-task-file-identity flower-task-file-preview" disabled={props.previewDisabled}
+      aria-label={props.previewLabel + ': ' + (props.title || props.name)} title={props.name} onClick={() => props.onPreview?.()}>{content()}</button>
+  </Show>;
 }

@@ -76,6 +76,20 @@ function errorResponse(code: string, data: unknown, status = 500): Response {
 
 const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
 
+it.each(['loadTaskFiles', 'loadTaskMaterials'] as const)('cancels %s discovery through authenticated fetch', async method => {
+  fetchMock.mockImplementation((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+    init!.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+  }));
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+  const controller = new AbortController();
+  const pending = adapter[method]!('thread/one', 'page/two', controller.signal);
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  expect(fetchMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread%2Fone/' + (method === 'loadTaskFiles' ? 'task-files' : 'task-materials') + '?cursor=page%2Ftwo',
+    expect.objectContaining({ method: 'GET', signal: controller.signal }));
+  controller.abort(); await rejected;
+});
+
 it('round-trips Responses continuation through Env App settings and provider bundles', async () => {
   let settings = { ai: { current_model_id: 'openai/gpt-5-mini', providers: [
     { id: 'openai', type: 'openai', responses_continuation: true, models: [{ model_name: 'gpt-5-mini' }] },

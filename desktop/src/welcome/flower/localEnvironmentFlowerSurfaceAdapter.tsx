@@ -844,8 +844,8 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         bridge, 'POST',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/input`, input,
       ),
-      loadTaskFiles: (threadID, cursor) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID),
-      loadTaskMaterials: (threadID, cursor) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-materials' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID),
+      loadTaskFiles: (threadID, cursor, signal) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID, signal),
+      loadTaskMaterials: (threadID, cursor, signal) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-materials' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID, signal),
       downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET', flowerTaskFilePath(threadID,path,working,offset), undefined, undefined, options.runtimeEnvironmentID, signal),signal),
       cleanTaskFiles: async (threadID) => { await runtimeJSON(bridge, 'DELETE', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', undefined, undefined, options.runtimeEnvironmentID); },
       loadToolPreview: (input) => runtimeJSON<FlowerToolPreview>(bridge, 'POST',
@@ -992,7 +992,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     loadMessageAttachment: async ({ url, signal }) => {
       signal.throwIfAborted();
-      const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID);
+      const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID, signal);
       signal.throwIfAborted();
       if (!(media.bytes instanceof Uint8Array)) throw new Error('Attachment preview is unavailable.');
       return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });

@@ -12655,63 +12655,53 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-history-text-skeleton span { height: 0.75rem; border-radius: 0.25rem; background: currentColor; opacity: 0.07; }
 .flower-history-text-skeleton span:last-child { width: 62%; }
 
-/* Thread files use published controls in a quiet, flat list. */
-.flower-task-files-content { display: flex; flex-direction: column; gap: .875rem; height: min(72dvh, 46rem); overflow-y: auto; padding: .75rem 1.25rem 1.25rem; scrollbar-gutter: stable; }
-.flower-task-files-content > * { flex-shrink: 0; }
-.flower-task-files-content > .flower-task-section-heading { margin-bottom: -.625rem; }
-.flower-task-files-section { display: flex; flex-direction: column; gap: .375rem; min-width: 0; }
-.flower-task-section-heading { display: flex; align-items: center; gap: .5rem; min-height: 2rem; }
-.flower-task-section-heading h3 { font-size: .75rem; font-weight: 500; color: var(--muted-foreground); }
-.flower-task-count { color: var(--muted-foreground); font-size: .6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.flower-task-refresh { margin-left: auto; color: var(--muted-foreground); }
+/* Conversation files compose the published Floe dialog, fields and controls. */
+.flower-task-files-content { display: flex; flex-direction: column; gap: var(--floe-gap-control); height: min(26rem, 70dvh); overflow: hidden; padding: var(--floe-pad-panel); }
+.flower-task-files-toolbar { display: flex; align-items: center; gap: var(--floe-gap-control); flex: 0 0 auto; min-width: 0; }
+.flower-task-files-toolbar > .relative { flex: 1; min-width: 0; }
+.flower-task-files-toolbar > button { flex-shrink: 0; }
+.flower-task-files-toolbar > button:last-child:first-child { margin-inline-end: auto; }
+.flower-task-file-filters { display: flex; flex-wrap: wrap; gap: var(--floe-gap-inline); flex: 0 0 auto; }
+.flower-task-files-viewport { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: .25rem; margin-inline: -.25rem; }
 .flower-task-files-list { display: flex; flex-direction: column; }
-.flower-task-file-row { display: flex; align-items: center; gap: .75rem; min-width: 0; padding: .625rem 0; }
-.flower-task-file-row + .flower-task-file-row { border-top: 1px solid var(--floe-line); }
-.flower-task-file-identity { display: grid; flex: 1; min-width: 0; grid-template-columns: 1.5rem minmax(0, 1fr); column-gap: .625rem; align-items: center; }
-.flower-task-file-icon { display: flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; }
-.flower-task-file-heading { min-width: 0; }
-.flower-task-file-name { font-size: .8125rem; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; color: var(--foreground); }
-.flower-task-file-preview { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; border-radius: .125rem; cursor: pointer; }
-.flower-task-file-preview:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
-.flower-task-file-preview:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
-.flower-task-file-preview:disabled { cursor: default; color: var(--muted-foreground); }
-.flower-task-file-meta { display: flex; align-items: center; flex-wrap: wrap; column-gap: .625rem; row-gap: .125rem; padding-top: .125rem; font-size: .6875rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.flower-task-file-row { display: flex; align-items: center; gap: var(--floe-gap-control); min-width: 0; min-height: 4rem; padding: .5rem .25rem; position: relative; }
+.flower-task-file-row + .flower-task-file-row::before { content: ''; position: absolute; top: 0; inset-inline: .25rem; height: 1px; background: var(--floe-line-quiet); pointer-events: none; }
+.flower-task-file-row:hover { background: var(--floe-state-hover); }
+.flower-task-file-identity { display: flex; flex: 1; min-width: 0; gap: var(--floe-gap-group); align-items: center; text-align: start; }
+.flower-task-file-icon { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 2.75rem; height: 2.25rem; border-radius: var(--floe-radius-sm); background: var(--floe-well); overflow: hidden; }
+.flower-task-file-icon :is(.flower-message-image, .flower-message-file[data-image-fallback]) { width: 100%; height: 100%; min-height: 0; max-width: none; margin: 0; aspect-ratio: auto; border: 0; background: transparent; }
+.flower-task-file-icon .flower-message-image img { width: 100%; height: 100%; object-fit: contain; }
+.flower-task-file-icon .flower-message-file-copy { display: none; }
+.flower-task-file-heading { min-width: 0; flex: 1; }
+.flower-task-file-name { display: block; font-size: var(--floe-type-body); line-height: var(--floe-line-body); font-weight: 500; overflow-wrap: anywhere; color: var(--floe-ink); }
+.flower-task-file-preview { white-space: normal; text-align: start; border-radius: var(--floe-radius-sm); cursor: pointer; }
+.flower-task-file-preview:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.flower-task-file-preview:disabled { cursor: default; color: var(--floe-ink-soft); }
+.flower-task-file-meta { display: flex; align-items: center; flex-wrap: wrap; column-gap: .625rem; row-gap: .125rem; padding-top: .125rem; font-size: var(--floe-type-supporting); color: var(--floe-ink-soft); font-variant-numeric: tabular-nums; }
 .flower-task-file-status[data-status='changed'] { color: var(--warning); }
 .flower-task-file-status[data-status='missing'], .flower-task-file-status[data-status='unavailable'] { color: var(--error); }
-.flower-task-file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem; }
-.flower-task-file-row > .flower-task-file-actions { flex: 0 0 auto; flex-wrap: nowrap; color: var(--muted-foreground); }
-.flower-task-load-more { align-self: flex-start; }
-.flower-task-files-empty { padding: .625rem 0; color: var(--muted-foreground); font-size: .75rem; }
-.flower-task-working, .flower-task-media { min-width: 0; }
-.flower-task-working { border-top: 1px solid var(--floe-line); padding-top: .5rem; }
-.flower-task-working summary, .flower-task-media summary { display: flex; align-items: center; gap: .5rem; cursor: pointer; list-style: none; min-height: 2.25rem; padding: .375rem 0; font-size: .75rem; border-radius: .25rem; }
-.flower-task-working summary::-webkit-details-marker, .flower-task-media summary::-webkit-details-marker { display: none; }
-.flower-task-working summary:hover, .flower-task-media summary:hover { color: var(--foreground); }
-.flower-task-working summary:focus-visible, .flower-task-media summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
-.flower-task-disclosure-title { font-weight: 500; }
-.flower-task-disclosure-size { color: var(--muted-foreground); font-size: .6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.flower-task-disclosure-chevron { flex-shrink: 0; margin-left: auto; color: var(--muted-foreground); transition: transform 140ms ease; }
-.flower-task-working[open] > summary .flower-task-disclosure-chevron, .flower-task-media[open] > summary .flower-task-disclosure-chevron { transform: rotate(90deg); }
-.flower-task-disclosure-body { display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; padding: .5rem 0; }
-.flower-task-working-list { align-self: stretch; max-height: 16rem; overflow-y: auto; font-size: .75rem; }
-.flower-task-working-list > div { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: .75rem; padding: .375rem 0; border-bottom: 1px solid var(--floe-line); }
-.flower-task-working-list > div:last-child { border-bottom: 0; }
-.flower-task-working-list > div > span:nth-child(2) { color: var(--muted-foreground); white-space: nowrap; }
-.flower-task-files-notice { padding: .75rem; border-radius: var(--floe-radius-control); background: var(--muted); font-size: .75rem; line-height: 1.6; }
-.flower-task-files-notice .flower-task-file-actions { margin-top: .75rem; }
+.flower-task-file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--floe-gap-inline); }
+.flower-task-file-row > .flower-task-file-actions { flex: 0 0 auto; flex-wrap: nowrap; color: var(--floe-ink-soft); }
+.flower-task-files-empty { min-height: 12rem; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--floe-gap-control); padding: var(--floe-pad-panel); text-align: center; color: var(--floe-ink-soft); font-size: var(--floe-type-supporting); }
+.flower-task-files-empty strong { color: var(--floe-ink); font-size: var(--floe-type-body); font-weight: 500; }
+.flower-task-files-empty svg { margin-bottom: var(--floe-gap-control); }
+.flower-task-files-empty p { max-width: 20rem; }
+.flower-task-working { display: flex; flex-direction: column; gap: var(--floe-gap-control); min-width: 0; }
+.flower-task-working > button { align-self: flex-start; }
+.flower-task-working-description { font-size: var(--floe-type-supporting); color: var(--floe-ink-soft); }
+.flower-task-files-footer { display: flex; align-items: center; flex: 0 0 auto; border-top: 1px solid var(--floe-line); padding-top: var(--floe-pad-control); color: var(--floe-ink-soft); font-size: var(--floe-type-supporting); }
+.flower-task-files-sentinel { height: 1px; }
+.flower-task-files-notice { flex-shrink: 0; padding: var(--floe-pad-group); border-radius: var(--floe-radius-control); background: var(--floe-well); font-size: var(--floe-type-supporting); line-height: var(--floe-line-body); }
+.flower-task-files-notice .flower-task-file-actions { margin-top: var(--floe-gap-group); }
 @media (max-width: 480px) {
-  .flower-task-files-content { padding: .625rem .875rem .875rem; }
-  .flower-task-file-row { gap: .5rem; }
-  .flower-task-file-identity { column-gap: .5rem; }
-  .flower-task-working-list > div { column-gap: .5rem; }
+  .flower-task-files-content { padding: var(--floe-pad-group); }
+  .flower-task-file-identity { gap: var(--floe-gap-control); }
+  .flower-task-file-icon { width: 2rem; height: 2rem; }
+  .flower-task-file-actions { gap: 0; }
 }
 @media (pointer: coarse) {
   .flower-task-file-actions button, .flower-task-file-preview { min-height: 2.75rem; }
   .flower-task-file-actions button { min-width: 2.75rem; }
-  .flower-task-working summary, .flower-task-media summary { min-height: 2.75rem; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .flower-task-disclosure-chevron { transition: none; }
 }
 
 /* Pending reads never insert a row above retained controls. */

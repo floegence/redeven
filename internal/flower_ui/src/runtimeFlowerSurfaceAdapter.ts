@@ -130,8 +130,8 @@ export type FlowerRuntimeTransport = Readonly<{
   readParentEvents?(threadID: string, query: FlowerParentEventQuery, signal?: AbortSignal): Promise<FlowerParentEventPage>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string, input?: FlowerHistoryRequest, signal?: AbortSignal): Promise<LoadSubagentDetailResponse>;
   operateSubagentInput?(parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation): Promise<LoadSubagentDetailResponse>;
-  loadTaskFiles?(threadID: string, cursor?: string): Promise<FlowerTaskFiles>;
-  loadTaskMaterials?(threadID: string, cursor?: string): Promise<FlowerTaskMaterials>;
+  loadTaskFiles?(threadID: string, cursor?: string, signal?: AbortSignal): Promise<FlowerTaskFiles>;
+  loadTaskMaterials?(threadID: string, cursor?: string, signal?: AbortSignal): Promise<FlowerTaskMaterials>;
   cleanTaskFiles?(threadID: string): Promise<void>;
   downloadTaskFile?(threadID: string, path: string, working: boolean, signal: AbortSignal): Promise<void>;
   loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
@@ -757,8 +757,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         ...(input.reject_all ? { reject_all: true } : {}),
       });
     },
-    ...(options.transport.loadTaskFiles ? { loadTaskFiles: (id: string, cursor?: string) => options.transport.loadTaskFiles!(id, cursor) } : {}),
-    ...(options.transport.loadTaskMaterials ? { loadTaskMaterials: (id: string, cursor?: string) => options.transport.loadTaskMaterials!(id, cursor) } : {}),
+    ...(options.transport.loadTaskFiles ? { loadTaskFiles: (id: string, cursor?: string, signal?: AbortSignal) => options.transport.loadTaskFiles!(id, cursor, signal) } : {}),
+    ...(options.transport.loadTaskMaterials ? { loadTaskMaterials: (id: string, cursor?: string, signal?: AbortSignal) => options.transport.loadTaskMaterials!(id, cursor, signal) } : {}),
     ...(options.transport.cleanTaskFiles ? { cleanTaskFiles: (id: string) => options.transport.cleanTaskFiles!(id) } : {}),
     ...(options.transport.downloadTaskFile ? { downloadTaskFile: options.transport.downloadTaskFile } : {}),
     ...(options.transport.loadToolPreview ? {
