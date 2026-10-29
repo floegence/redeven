@@ -1,5 +1,6 @@
+import { untrack } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
-import type { FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
+import type { FlowerRuntimeTurn, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 
 export type FlowerTurnDisclosurePolicy = 'none' | 'manual' | 'automatic';
@@ -162,4 +163,56 @@ export function flowerDurationParts(milliseconds: number): readonly FlowerDurati
     { unit: 'minute', count: Math.floor(seconds / 60) % 60 },
     { unit: 'second', count: seconds % 60 },
   ] as const).filter((part) => part.count > 0).slice(0, 2);
+}
+
+export type FlowerHistorySection = { key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] };
+
+export function projectFlowerHistorySections(entries: readonly FlowerTimelineEntry[], thread: FlowerThreadSnapshot | null | undefined,
+  previous: readonly FlowerHistorySection[] = []): FlowerHistorySection[] {
+  const threadID = thread?.thread_id;
+  const prior = new Map(previous.filter(section => section.threadID === threadID).map(section => [section.key, section]));
+  const id = (entry: FlowerTimelineEntry) => entry.type === 'message' ? readPresentationValue(entry.message).turn_id : entry.type === 'parent_event'
+    ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
+  const priorByEntry = new Map<string, string>();
+  for (const section of prior.values()) for (const entry of section.entries) priorByEntry.set(entry.key, section.key);
+  const used = new Set<string>();
+  const last = new Map<string, number>();
+  entries.forEach((entry, index) => { const turn = id(entry); if (turn) last.set(turn, index); });
+  const result: { key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[] = [];
+  for (let first = 0; first < entries.length;) {
+    let end = first;
+    // Keep every mounted partition through prepend, sealing and navigation.
+    // Only the growing active turn introduces new layout boundaries; historical
+    // pages retain their established reading owners.
+    const current = thread;
+    const active = current?.current_execution?.turn_id === id(entries[first])
+      && current && ['running', 'waiting_user', 'waiting_approval'].includes(current.status);
+    // Discover the reachable turn boundary only until this section closes.
+    // Scanning the whole remaining turn before every 24-row partition would
+    // revisit the same suffix quadratically as an active turn accumulates.
+    for (let i = first; i <= end; i++) {
+      end = Math.max(end, last.get(id(entries[i]) ?? '') ?? i);
+      if (i === end) continue;
+      const candidate = entries[i];
+      const owner = priorByEntry.get(candidate.key);
+      const nextOwner = priorByEntry.get(entries[i + 1].key);
+      if (owner && nextOwner && owner !== nextOwner) { end = i; break; }
+      if (!active || i - first < 23 || owner && owner === nextOwner) continue;
+      const lastBlock = candidate.type === 'message' ? candidate.blocks.at(-1) : undefined;
+      if (lastBlock?.type === 'content' && lastBlock.block_type !== 'thinking'
+        && untrack(() => Boolean(lastBlock.content.trim()))) { end = i; break; }
+    }
+    const entry = entries[first];
+    // Keep the first mounted section through admission and history prepend;
+    // subsequent chunks retain their own first-row identity as the turn grows.
+    const members = entries.slice(first, end + 1);
+    const priorKey = members.map(value => priorByEntry.get(value.key)).find(key => key && !used.has(key));
+    const key = priorKey ?? JSON.stringify([threadID, entry.key]);
+    used.add(key);
+    const retained = prior.get(key);
+    result.push(retained && retained.entries.length === members.length && members.every((value, index) => value === retained.entries[index])
+      ? retained : { key, threadID, entries: members });
+    first = end + 1;
+  }
+  return result;
 }

@@ -20956,7 +20956,7 @@
         "title": "Flower explicit long-thread qualification",
         "type": "Validation Contract"
       },
-      "body_length": 6500,
+      "body_length": 6714,
       "summary": "Complete long-conversation content and responsive interaction are required product properties. Run this fixed-budget suite explicitly for acceptance/investigation, outside unified commit, integration and CI gates; it is not a prerequisite for each commit.",
       "sections": [
         {
@@ -20970,8 +20970,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Metrics/traces stay outside Git; reports identify source/locks/host. Dirty development samples cannot certify committed tips. Seeding verifies complete canonical results once instead of rescanning every prefix; coverage is unchanged.\n\nReduce synchronous envelope work through stable turn/row inputs, keyed subscriptions, linear membership and bounded offscreen layout with reading/selection/focus pins. Retain DOM/disclosure owners, including growing active turns; this is layout containment, not virtualization. Preserve order/boundaries/full history/drafts/disclosure. Throttling, suppressed output, extra lifecycle or shortened fixtures cannot substitute.\n\nFloe owns shared floating mechanics; Redeven owns projection. Published shimmer pauses decorative paint only during shared drag/resize, retaining identity/phase. Text/tokens/content/terminal state stay live. Browser checks cover release/cancellation/blur and preserved preview drafts/selection. Workload and budgets remain unchanged.",
-          "char_count": 1082
+          "body": "Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Metrics/traces stay outside Git; reports identify source/locks/host. Dirty development samples cannot certify committed tips. Seeding verifies complete canonical results once instead of rescanning every prefix; coverage is unchanged.\n\nReduce synchronous envelope work through stable turn/row inputs, keyed subscriptions, linear membership and bounded offscreen layout with reading/selection/focus pins. Retain DOM/disclosure owners, including growing active turns; this is layout containment, not virtualization. Partition construction visits each retained entry once per structural change; never rescan the remaining active-turn suffix for each section. Preserve mounted partition keys through prepend, growth and completion. Preserve order/boundaries/full history/drafts/disclosure. Throttling, suppressed output, extra lifecycle or shortened fixtures cannot substitute.\n\nFloe owns shared floating mechanics; Redeven owns projection. Published shimmer pauses decorative paint only during shared drag/resize, retaining identity/phase. Text/tokens/content/terminal state stay live. Browser checks cover release/cancellation/blur and preserved preview drafts/selection. Workload and budgets remain unchanged.",
+          "char_count": 1296
         }
       ],
       "snippet": "Complete long-conversation content and responsive interaction are required product properties. Run this fixed-budget suite explicitly for acceptance/investigation, outside unified commit, integration and CI gates; it is not a prerequisite f",
@@ -31374,5 +31374,5 @@
       ]
     }
   ],
-  "source_sha256": "0bb349fcafc8c65867b16abb3a725bf113c492f64796e8cbd7ff9dfea81d2844"
+  "source_sha256": "008d0c0c91ee20d3f7b24269024f1b84c943db369b6350e4d858d9cfcb1b625c"
 }

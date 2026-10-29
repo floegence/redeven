@@ -12,7 +12,7 @@ import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolS
 import { createFlowerSequenceTokens, projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion, type FlowerActivityDisclosurePresentation } from './activityDisclosure';
 import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
-import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
+import { flowerDurationParts, projectFlowerTurnProcess, projectFlowerHistorySections, type FlowerHistorySection, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
 import { createFlowerActivityTitleReveal, FlowerActivityTitleRevealContext } from './flowerActivityTitleReveal';
 
 type PendingSequenceContent = Readonly<{
@@ -97,50 +97,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     restoration = props.receipt?.restoration;
     return !restored && (props.receipt?.live ?? true) && (props.liveConfirmed?.() ?? false) && !props.scroll.isPreparing();
   });
-  const sections = createMemo<{ key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[]>((previous = []) => {
-    const threadID = props.thread?.thread_id;
-    const prior = new Map(previous.filter(section => section.threadID === threadID).map(section => [section.key, section]));
-    const id = (entry: FlowerTimelineEntry) => entry.type === 'message' ? readPresentationValue(entry.message).turn_id : entry.type === 'parent_event'
-      ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
-    const priorByEntry = new Map<string, string>();
-    for (const section of prior.values()) for (const entry of section.entries) priorByEntry.set(entry.key, section.key);
-    const used = new Set<string>();
-    const last = new Map<string, number>();
-    props.entries.forEach((entry, index) => { const turn = id(entry); if (turn) last.set(turn, index); });
-    const result: { key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[] = [];
-    for (let first = 0; first < props.entries.length;) {
-      let end = first;
-      for (let i = first; i <= end; i++) end = Math.max(end, last.get(id(props.entries[i]) ?? '') ?? i);
-      // Keep every mounted partition through prepend, sealing and navigation.
-      // Only the growing active turn introduces new layout boundaries; historical
-      // pages retain their established reading owners.
-      const current = props.thread;
-      const active = current?.current_execution?.turn_id === id(props.entries[first])
-        && current && ['running', 'waiting_user', 'waiting_approval'].includes(current.status);
-      for (let i = first; i < end; i++) {
-        const candidate = props.entries[i];
-        const owner = priorByEntry.get(candidate.key);
-        const nextOwner = priorByEntry.get(props.entries[i + 1].key);
-        if (owner && nextOwner && owner !== nextOwner) { end = i; break; }
-        if (!active || i - first < 23 || owner && owner === nextOwner) continue;
-        const lastBlock = candidate.type === 'message' ? candidate.blocks.at(-1) : undefined;
-        if (lastBlock?.type === 'content' && lastBlock.block_type !== 'thinking'
-          && untrack(() => Boolean(lastBlock.content.trim()))) { end = i; break; }
-      }
-      const entry = props.entries[first];
-      // Keep the first mounted section through admission and history prepend;
-      // subsequent chunks retain their own first-row identity as the turn grows.
-      const entries = props.entries.slice(first, end + 1);
-      const priorKey = entries.map(value => priorByEntry.get(value.key)).find(key => key && !used.has(key));
-      const key = priorKey ?? JSON.stringify([threadID, entry.key]);
-      used.add(key);
-      const retained = prior.get(key);
-      result.push(retained && retained.entries.length === entries.length && entries.every((value, index) => value === retained.entries[index])
-        ? retained : { key, threadID, entries });
-      first = end + 1;
-    }
-    return result;
-  });
+  const sections = createMemo<FlowerHistorySection[]>((previous = []) => projectFlowerHistorySections(props.entries, props.thread, previous));
   const sectionKeys = createMemo(() => sections().map(section => section.key));
   const subscribeSection = createFlowerKeyedSubscriptions(() => new Map(sections().map(section => [section.key, section.entries])), Object.is, true);
   const subscribeEntry = createFlowerEntrySubscriptions(() => props.entries);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { projectFlowerTurnProcess, flowerDurationParts } from './flowerTurnPresentation';
+import { projectFlowerHistorySections, projectFlowerTurnProcess, flowerDurationParts } from './flowerTurnPresentation';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
-import type { FlowerActivityItem, FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerRuntimeTurn, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { parentProcessEvents } from './flowerParentEventProcess.testFixture';
 
 type MessageEntry = Extract<FlowerTimelineEntry, { type: 'message' }>;
@@ -269,4 +269,41 @@ it('folds every automatic compaction by its own turn and leaves manual compactio
   expect(projected.groups.get('turn')?.summaryKey).toBe('one');
   expect(projected.groups.get('turn')?.disclosure).toBe('automatic');
   expect(projected.groups.get('manual')?.disclosure).toBe('none');
+});
+
+describe('history layout sections', () => {
+  const active = { thread_id: 'thread', status: 'running', current_execution: { turn_id: 'turn', run_id: 'run' } } as FlowerThreadSnapshot;
+  const row = (index: number): MessageEntry => ({ ...entry('row-' + index), blocks: [{ type: 'content', key: 'text-' + index, block_index: 0, block_type: 'markdown', content: 'Visible prose' }] });
+
+  it('bounds membership reads linearly as one active turn grows', () => {
+    const rows = Array.from({ length: 6000 }, (_, i) => row(i));
+    let reads = 0;
+    for (const value of rows) Object.defineProperty(value.message, 'turn_id', { get() { reads++; return 'turn'; } });
+    const sections = projectFlowerHistorySections(rows, active);
+    expect(sections).toHaveLength(250);
+    expect(sections.every(section => section.entries.length === 24)).toBe(true);
+    expect(sections.flatMap(section => section.entries)).toEqual(rows);
+    expect(reads).toBeLessThanOrEqual(rows.length * 4);
+  });
+
+  it('preserves mounted partitions through growth, prepend and terminal settlement', () => {
+    const rows = Array.from({ length: 70 }, (_, i) => row(i));
+    const before = projectFlowerHistorySections(rows, active);
+    const expanded = [...Array.from({ length: 3 }, (_, i) => ({ ...row(-i - 1), message: { ...row(-i - 1).message, turn_id: 'older' } })), ...rows, row(70)];
+    const after = projectFlowerHistorySections(expanded, active, before);
+    expect(after[1]).toBe(before[0]);
+    expect(after[2]).toBe(before[1]);
+    expect(after[3].key).toBe(before[2].key);
+    expect(after[3].entries).toEqual([...before[2].entries, expanded.at(-1)]);
+    expect(projectFlowerHistorySections(expanded, { ...active, status: 'success' }, after)).toEqual(after);
+  });
+
+  it('preserves interleaved turn boundaries', () => {
+    const rows = ['a', 'b', 'b', 'a', 'c', 'd', 'c'].map((id, i) => {
+      const value = row(i);
+      return { ...value, message: { ...value.message, turn_id: id }, blocks: [] };
+    });
+    const sections = projectFlowerHistorySections(rows, undefined);
+    expect(sections.map(section => section.entries.map(entry => entry.key))).toEqual([['row-0', 'row-1', 'row-2', 'row-3'], ['row-4', 'row-5', 'row-6']]);
+  });
 });
