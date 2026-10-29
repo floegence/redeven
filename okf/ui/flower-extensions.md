@@ -12,7 +12,7 @@ Shared Flower owns retained Skills/MCP/Plugins management; both carriers supply 
 # Contract
 
 ## Navigation and presentation
-One header/return action serves accessible Skills/MCP/Plugins tabs with arrow/Home/End navigation, localized plural counts and check timestamps.
+One header owns the title and return action; a separate primary tab bar uses distinct Skills/MCP/Plugins icons and a persistent selected underline. Arrow/Home/End navigation and focus remain accessible. Each panel begins with one compact filter/action toolbar instead of repeating its tab title. Preserve check timestamps in entry details.
 
 ## Entry icons
 Decorative 32px row icons retain names and row height; never inject untrusted SVG or create icon-only targets. [MCP runtime](../ai/mcp-runtime.md#presentation-icons) owns discovery/persistence.
@@ -24,7 +24,7 @@ Usable connections load catalog/source metadata. Serialized reads/mutations prev
 Edit remote HTTP endpoints or local executables with one argument per line. Never prefill secrets: omitted values preserve, explicit empty object clears. Search, enabled filter, discovered tools, explicit checks and confirmed removal remain available.
 
 ## Agent Plugins
-The Plugins destination presents quiet Installed/Discover navigation, a search field and a responsive card gallery. Selecting a card opens one focused detail dialog: description, enable control and components first; install hashes and connection configuration remain in disclosures. Avoid repeating management controls in the gallery. Empty state supplies one install action. Both light/dark themes and narrow screens preserve readable controls without horizontal overflow.
+The Plugins destination presents a high-contrast Installed/Discover segmented control, contextual search and a responsive card gallery. Primary tabs and local view controls have distinct visual treatments. Omit introductory prose, raw environment identifiers and repeated headings from the landing surface. Empty libraries show a short factual title and direct actions; search appears only when there are entries to search. Filter misses show Clear filters instead of installation guidance. Selecting a card opens one focused detail dialog: description, enable control and components first; install hashes and connection configuration remain in disclosures. Avoid repeating management controls in the gallery. The plugin empty state supplies one install action; no marketing headline, explanatory paragraph or dashed placeholder frame competes with it. Skills and MCP use the same concise empty-state pattern. Preserve execution and destructive-action explanations at their relevant decision point. Both light/dark themes and narrow screens preserve readable controls without horizontal overflow.
 
 Preparation, preview and commit are distinct. Closing a pending preview never reopens it when an older poll completes; its operation remains resumable. Failed requests retain input. Component selection and enablement are explicit; package preparation never executes commands. Credential editing uses named password fields, replacement and explicit clearing, never returned secret values. Uninstall confirms separately and retains data by default.
 

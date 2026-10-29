@@ -7,6 +7,7 @@ Canonical repository rules. Keep this file within 100 lines, including headings 
 - Define the task scope, acceptance criteria, and non-goals before editing; diagnose from source contracts and reproducible evidence.
 - The primary agent owns delivery. Subagents require explicit user instruction for the current task, except the mandatory documentation-cap cleanup below.
 - Design for a polished professional SaaS experience: clear actions, accessible controls, responsive layouts, and stable interaction state.
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
 - Shape AI behavior through prompts and structured contracts. Prefer one authoritative state, one owner, and one clear path; remove duplication instead of adding speculative abstractions, heuristics, or silent fallbacks.
 - Preserve existing functionality and user data. Changing or bypassing an `IMPORTANT:` invariant requires explicit user confirmation; never hide a workaround.
 - Communicate decisions, acceptance evidence, and remaining limitations concisely and plainly.

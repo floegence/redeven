@@ -6,11 +6,11 @@ import { useFlowerExtensions } from './context';
 export function FieldLabel(props: { children: JSX.Element; hint?: string }) {
   return <div class="flower-extension-label">{props.children}<Show when={props.hint}><span>{props.hint}</span></Show></div>;
 }
-export function SettingsSection(props: { title: string; badge?: string; error?: string | null; feedback?: readonly FeedbackIndicatorEntry[]; actions?: JSX.Element; children: JSX.Element }) {
+export function SettingsSection(props: { title: string; filters?: JSX.Element; error?: string | null; feedback?: readonly FeedbackIndicatorEntry[]; actions?: JSX.Element; children: JSX.Element }) {
   const { i18n } = useFlowerExtensions();
   let section: HTMLElement | undefined;
-  return <section ref={section} class="flower-extension-section" tabIndex={-1}>
-    <header class="flower-extension-section-header"><div class="flower-extension-heading"><h2>{props.title}</h2><Show when={props.badge}><span class="flower-extension-count">{props.badge}</span></Show></div><div class="flower-extension-actions">{props.actions}<FeedbackIndicator label={props.title} closeLabel={i18n.t('common.actions.close')} entries={props.feedback ?? []} restoreFocus={() => section} /></div></header>
+  return <section ref={section} class="flower-extension-section" aria-label={props.title} tabIndex={-1}>
+    <div class="flower-extension-toolbar">{props.filters}<div class="flower-extension-actions">{props.actions}<FeedbackIndicator label={props.title} closeLabel={i18n.t('common.actions.close')} entries={props.feedback ?? []} restoreFocus={() => section} /></div></div>
     <Show when={props.error}><p role="alert" class="flower-extension-error">{props.error}</p></Show>
     {props.children}
   </section>;

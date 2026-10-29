@@ -75,6 +75,24 @@ function noOverflow() {
 }
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
+it('separates primary tabs from the page title and keeps plugin empty state concise', async () => {
+  await mount(1280, false, 'zh-CN');
+  const header = host.querySelector<HTMLElement>('.flower-extensions-header')!;
+  const navigation = host.querySelector<HTMLElement>('.flower-extensions-tabs')!;
+  expect(navigation.getBoundingClientRect().top).toBeGreaterThanOrEqual(header.getBoundingClientRect().bottom - 1);
+  await page.getByRole('tab', { name: '插件', exact: true }).click();
+  await expect.poll(() => host.querySelector('.flower-plugin-empty')).not.toBeNull();
+  const panel = host.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!;
+  expect(panel.querySelector('h2')).toBeNull();
+  expect(panel.textContent).not.toContain('为 Flower 安装');
+  expect(panel.textContent).not.toContain('环境：');
+  expect(panel.querySelector('.flower-plugin-empty p')).toBeNull();
+  expect(panel.querySelector('.flower-plugin-empty h3')?.textContent).toBe('暂无插件');
+  expect(panel.querySelector('input[type="search"]')).toBeNull();
+  await expect.element(page.getByRole('button', { name: '安装插件', exact: true })).toBeVisible();
+  noOverflow();
+});
+
 it('gives every entry a compact, stable identity icon across filtering and tabs', async () => {
   await mount();
   await expect.element(page.getByRole('heading', { name: 'code-review', exact: true })).toBeVisible();
@@ -228,12 +246,12 @@ it('keeps management read-only while allowing browsing and tab navigation', asyn
 
 it('offers clear first-use actions for an empty library', async () => {
   await mount(390, false, 'en-US', true);
-  await expect.element(page.getByRole('heading', { name: 'Build your skill library', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('heading', { name: 'No skills yet', exact: true })).toBeVisible();
   const skillsDrawing = host.querySelector('[role="tab"][id$="-skills-tab"] svg')?.innerHTML;
   expect(skillsDrawing).toBeTruthy();
   expect(host.querySelector('.flower-extension-empty-icon svg')?.innerHTML).toBe(skillsDrawing);
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
-  await expect.element(page.getByRole('heading', { name: 'Connect your first MCP server', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('heading', { name: 'No servers yet', exact: true })).toBeVisible();
   const mcpDrawing = host.querySelector('[role="tab"][id$="-mcp-tab"] svg')?.innerHTML;
   expect(mcpDrawing).toBeTruthy();
   expect(host.querySelector('[role="tabpanel"]:not([hidden]) .flower-extension-empty-icon svg')?.innerHTML).toBe(mcpDrawing);
@@ -344,10 +362,24 @@ it('retains an installation draft after failure and blocks writes after admin re
   await expect.element(page.getByRole('button', { name: 'Preview', exact: true })).toBeDisabled();
 });
 
-it.each([[390, false, 'zh-CN'], [390, true, 'de-DE'], [1280, false, 'en-US']] as const)('renders plugin management at %ipx (dark=%s, locale=%s)', async (width, dark, locale) => {
+it.each([[320, false, 'zh-TW'], [390, false, 'zh-CN'], [390, true, 'de-DE'], [1280, false, 'zh-CN'], [1280, true, 'zh-CN'], [1280, false, 'en-US']] as const)('renders plugin management at %ipx (dark=%s, locale=%s)', async (width, dark, locale) => {
   await mount(width, dark, locale); const i18n = extensionI18n(locale);
   await page.getByRole('tab', { name: i18n.t('plugins'), exact: true }).click();
-  await expect.element(page.getByText(i18n.t('plugins.target', { target: 'Development' }), { exact: true })).toBeVisible();
+  await expect.element(page.getByRole('heading', { name: i18n.t('plugins.emptyTitle'), exact: true })).toBeVisible();
+  const tabs = [...host.querySelectorAll<HTMLElement>('[role="tab"]')];
+  expect(tabs.map(tab => tab.querySelector('svg')?.innerHTML).filter((value, index, all) => all.indexOf(value) === index)).toHaveLength(3);
+  const selected = tabs.find(tab => tab.getAttribute('aria-selected') === 'true')!;
+  expect(getComputedStyle(selected, '::after').height).toBe('2px');
+  expect(getComputedStyle(selected, '::after').backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  const activeView = host.querySelector<HTMLElement>('.flower-plugin-segments [aria-pressed="true"]')!;
+  const inactiveView = host.querySelector<HTMLElement>('.flower-plugin-segments [aria-pressed="false"]')!;
+  expect(getComputedStyle(activeView).backgroundColor).not.toBe(getComputedStyle(inactiveView).backgroundColor);
+  for (const tab of tabs) {
+    const box = tab.getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(width);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
   noOverflow();
   await page.screenshot({ path: '__screenshots__/flower-plugins/plugins-' + width + '-' + locale + '-' + dark + '.png' });
 });
@@ -370,6 +402,35 @@ it.each([[1280, false], [1280, true], [390, false], [390, true]] as const)('pres
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
   await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => undefined)));
   await page.screenshot({ path: '__screenshots__/flower-plugins/detail-' + width + '-' + dark + '.png' });
+});
+
+it('keeps plugin search misses distinct from an uninstalled library', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await page.getByRole('textbox', { name: 'GitHub repository', exact: true }).fill('example/tools');
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Install plugin', exact: true }).click();
+  await expect.poll(() => state.adapter.plugins.commit).toHaveBeenCalled();
+  await userEvent.keyboard('{Escape}');
+  await page.getByRole('searchbox', { name: 'Search plugins' }).fill('missing-package');
+  await expect.element(page.getByRole('heading', { name: 'No matching plugins', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await expect.element(page.getByRole('searchbox', { name: 'Search plugins' })).toHaveValue('');
+  await expect.element(page.getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
+});
+
+it('preserves keyboard tab navigation and focus in the separate primary bar', async () => {
+  await mount(390);
+  await page.getByRole('tab', { name: 'Skills', exact: true }).click();
+  await userEvent.keyboard('{End}');
+  await expect.element(page.getByRole('tab', { name: 'Plugins', exact: true })).toHaveFocus();
+  await expect.element(page.getByRole('tab', { name: 'Plugins', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await userEvent.keyboard('{ArrowLeft}');
+  await expect.element(page.getByRole('tab', { name: 'MCP', exact: true })).toHaveFocus();
+  await userEvent.keyboard('{Home}');
+  await expect.element(page.getByRole('tab', { name: 'Skills', exact: true })).toHaveFocus();
+  expect(host.querySelectorAll('[role="tabpanel"]:not([hidden])')).toHaveLength(1);
 });
 
 it('edits plugin credentials through named secret fields and clears them explicitly', async () => {

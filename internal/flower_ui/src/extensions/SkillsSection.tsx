@@ -156,23 +156,9 @@ export function SkillsSection() {
     <>
       <SettingsSection
         title={i18n.t('skillsSettings.title')}
-        badge={skillsReloading() || skillsLoading() ? i18n.t('skillsSettings.loading') : i18n.tn('skillsSettings.skillCount', skillsCatalog()?.skills?.length ?? 0)}
         error={!skillsCatalog() ? skillsError() : null}
         feedback={skillsCatalog() && skillsError() ? [{ id: 'catalog', severity: 'error', summary: skillsError()!, actions: <Button size="sm" variant="outline" disabled={!ctx.canInteract() || catalogBusy()} onClick={() => void refreshSkillsCatalog()}>{i18n.t('common.actions.retry')}</Button> }] : []}
-        actions={
-          <>
-            <Button size="sm" variant="ghost" icon={Download} onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
-            <Button size="sm" variant="default" icon={Plus} onClick={() => { setSkillCreateError(null); setSkillCreateOpen(true); }} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.createSkill')}</Button>
-          </>
-        }
-      >
-        <div class="flower-extension-section-body">
-          <Show when={!skillsCatalog() && skillsError()}><Button size="sm" variant="outline" disabled={!ctx.canInteract() || catalogBusy()} onClick={() => void refreshSkillsCatalog()}>{i18n.t('common.actions.retry')}</Button></Show>
-          <Show when={skillsCatalog()?.skills.length === 0}>
-            <div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Wand class="h-6 w-6" aria-hidden="true" /></span><h3>{i18n.t('skillEmpty')}</h3><p>{i18n.t('skillEmptyHint')}</p></div>
-          </Show>
-          <Show when={skillsCatalog()?.skills.length !== 0}>
-          <div class="flower-extension-toolbar">
+        filters={<Show when={skillsCatalog()?.skills.length !== 0}>
             <div class="flower-extension-search">
                 <Search class="h-3.5 w-3.5" />
                 <Input value={skillQuery()} onInput={(e) => setSkillQuery(e.currentTarget.value)}
@@ -184,10 +170,24 @@ export function SkillsSection() {
                 options={[{ value: 'all', label: i18n.t('skillsSettings.scopeAll') }, { value: 'system', label: i18n.t('skillsSettings.source.systemBundle') }, { value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]}
                 class="w-full" />
             </div>
+        </Show>}
+        actions={
+          <>
             <Button size="icon" variant="ghost" icon={Refresh} aria-label={i18n.t('skillsSettings.reload')}
               onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading() || skillsLoading()} disabled={!ctx.canInteract() || catalogBusy()} />
-          </div>
-
+            <Show when={!!skillsCatalog()?.skills.length}>
+            <Button size="sm" variant="ghost" icon={Download} onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
+            <Button size="sm" variant="default" icon={Plus} onClick={() => { setSkillCreateError(null); setSkillCreateOpen(true); }} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.createSkill')}</Button>
+            </Show>
+          </>
+        }
+      >
+        <div class="flower-extension-section-body">
+          <Show when={!skillsCatalog() && skillsError()}><Button size="sm" variant="outline" disabled={!ctx.canInteract() || catalogBusy()} onClick={() => void refreshSkillsCatalog()}>{i18n.t('common.actions.retry')}</Button></Show>
+          <Show when={skillsCatalog()?.skills.length === 0}>
+            <div class="flower-extension-empty"><span class="flower-extension-empty-icon"><Wand class="h-6 w-6" aria-hidden="true" /></span><h3>{i18n.t('skillEmpty')}</h3><div class="flower-extension-empty-actions"><Button size="sm" variant="outline" icon={Download} onClick={openInstallDialog} disabled={!canManage()}>{i18n.t('skillsSettings.installFromGitHub')}</Button><Button size="sm" icon={Plus} onClick={() => { setSkillCreateError(null); setSkillCreateOpen(true); }} disabled={!canManage()}>{i18n.t('skillsSettings.createSkill')}</Button></div></div>
+          </Show>
+          <Show when={skillsCatalog()?.skills.length !== 0}>
           <SkillsCatalogList
             skills={filteredSkills()} sources={skillSources()} loading={skillsLoading() && !skillsCatalog()}
             canInteract={ctx.canInteract()} canAdmin={canMutateCatalog()}
