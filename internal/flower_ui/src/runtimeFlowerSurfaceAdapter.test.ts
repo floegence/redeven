@@ -8,6 +8,7 @@ import type {
   FlowerForkThreadInput,
   FlowerThreadReadStatus,
   FlowerLiveStreamConnectInput,
+  FlowerHistoryWindow,
 } from './contracts/flowerSurfaceContracts';
 import { flowerLiveWireFixture } from './test/flowerLiveWireFixture';
 import {
@@ -1129,4 +1130,43 @@ it.each([
   const detail = { summary: { parent_thread_id: 'parent', thread_id: 'child', task_name: 'Review', title: 'Review', title_status: 'ready' as const, title_generation: 1, status: 'running', can_send_input: true, can_interrupt: true, can_close: true }, current, window };
   const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadSubagentDetail: async () => ({ detail }) }));
   await expect(adapter.loadSubagentDetail('parent', 'child', {}, new AbortController().signal)).rejects.toThrow('invalid skipped history range');
+});
+
+describe.each(['root', 'child', 'live root', 'live child'] as const)('history sequence proof transport: %s', surface => {
+  const proof = { before_id: 'a', after_id: 'b', first: 2, last: 4, turn_id: 'turn', run_id: 'run' };
+  async function readWindow(window: FlowerHistoryWindow) {
+    const current = { thread_id: 'thread', activity: 'idle' as const, view_version: 1, items: [] };
+    const detail = { summary: { parent_thread_id: 'parent', thread_id: 'thread', task_name: 'Review', title: 'Review', title_status: 'ready' as const, title_generation: 1, status: 'completed', can_send_input: true, can_interrupt: false, can_close: true }, current, window };
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
+      loadHistory: async () => ({ thread: { thread_id: 'thread', title: 'Review', title_status: 'ready', title_generation: 1, read_status: readStatus(), created_at_unix_ms: 1, updated_at_unix_ms: 1 }, current, window }),
+      loadSubagentDetail: async () => ({ detail }),
+      connectLiveStream: async function* () {
+        yield { schema_version: 3, kind: 'thread.batch', thread_id: 'thread', window,
+          ...(surface === 'live child' ? { subagent_current: current } : { current }) };
+      },
+    }));
+    const signal = new AbortController().signal;
+    if (surface === 'root') return (await adapter.loadHistory!('thread', {}, signal)).current.window;
+    if (surface === 'child') return (await adapter.loadSubagentDetail('parent', 'thread', {}, signal)).window;
+    const iterator = adapter.connectLiveStream!({ signal })[Symbol.asyncIterator]();
+    try { return (await iterator.next()).value?.window; } finally { await iterator.return?.(); }
+  }
+  it('preserves ordered proofs, including adjacent gaps sharing a retained endpoint', async () => {
+    const window = { leaf_id: 'leaf', has_before: false, has_after: false, sequence_gaps: [proof, { ...proof, before_id: 'b', after_id: 'c', first: 5, last: 7 }] };
+    expect(await readWindow(window)).toEqual(window);
+  });
+  it.each([
+    { leaf_id: '' }, { leaf_id: undefined }, { sequence_gaps: null }, { sequence_gaps: {} },
+    { sequence_gaps: [null] },
+    ...[{ before_id: '' }, { after_id: 'a' }, { turn_id: '' }, { run_id: null }, { run_id: 'bad run' },
+      { first: 1 }, { first: 2.5 }, { last: 2 }, { last: Number.MAX_SAFE_INTEGER + 1 }]
+      .map(patch => ({ sequence_gaps: [{ ...proof, ...patch }] })),
+    { sequence_gaps: [proof, proof] },
+    { sequence_gaps: [proof, { ...proof, before_id: 'c', after_id: 'd', first: 3, last: 7 }] },
+    { sequence_gaps: [proof, { ...proof, after_id: 'c', first: 5, last: 7 }] },
+    { sequence_gaps: [proof, { ...proof, before_id: 'c', first: 5, last: 7 }] },
+  ])('rejects malformed or ambiguous proof metadata: %j', async patch => {
+    const window = { leaf_id: 'leaf', has_before: false, has_after: false, sequence_gaps: [proof], ...patch };
+    await expect(readWindow(window as FlowerHistoryWindow)).rejects.toThrow('invalid history sequence gaps');
+  });
 });

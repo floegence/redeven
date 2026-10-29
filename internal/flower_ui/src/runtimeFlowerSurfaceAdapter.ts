@@ -256,6 +256,23 @@ function mapHistoryWindow(raw: unknown): NonNullable<FlowerRuntimeCurrentView['w
     || !Number.isSafeInteger(skipped.last_ordinal) || skipped.last_ordinal < skipped.first_ordinal)) {
     throw new Error('Flower contract error: invalid skipped history range.');
   }
+  if (value.sequence_gaps !== undefined) {
+    const fail = (): never => { throw new Error('Flower contract error: invalid history sequence gaps.'); };
+    const identity = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.trim() === id
+      && !Array.from(id).some(character => character.charCodeAt(0) <= 32);
+    if (!Array.isArray(value.sequence_gaps) || value.sequence_gaps.length > 0 && !identity(value.leaf_id)) fail();
+    let last = 0;
+    const beforeIDs = new Set<string>(), afterIDs = new Set<string>();
+    for (const gap of value.sequence_gaps) {
+      if (!gap || [gap.before_id, gap.after_id, gap.turn_id, gap.run_id].some(id => !identity(id))
+        || gap.before_id === gap.after_id || beforeIDs.has(gap.before_id) || afterIDs.has(gap.after_id)
+        || !Number.isSafeInteger(gap.first) || gap.first < 2 || gap.first <= last
+        || !Number.isSafeInteger(gap.last) || gap.last <= gap.first) fail();
+      beforeIDs.add(gap.before_id);
+      afterIDs.add(gap.after_id);
+      last = gap.last;
+    }
+  }
   return value;
 }
 
