@@ -329,7 +329,7 @@ describe('FlowerSurface navigation', () => {
         }));
         await waitFor(() => Boolean(document.querySelector('[role="menu"]')));
         const stop = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
-          .find((item) => item.textContent?.includes('Stop conversation'));
+          .find((item) => item.textContent?.includes('Stop'));
         expect(stop).toBeTruthy();
         stop!.click();
       };

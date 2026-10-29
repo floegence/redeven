@@ -6,17 +6,22 @@ import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor 
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import type { EnvAppTranslationKey } from './i18n';
+import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 
 function menuAction(label: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>('[role=menuitem]'))
-    .find(item => item.textContent?.includes(label));
+    .find(item => {
+      const visible = item.cloneNode(true) as HTMLElement;
+      visible.querySelectorAll('[aria-hidden=true], .sr-only').forEach(node => node.remove());
+      return visible.textContent?.trim() === label;
+    });
   expect(button, label).toBeTruthy();
   return button!;
 }
 
 describe('Flower conversation directory menus', () => {
-  it.each((['en-US', 'zh-CN'] as const).flatMap(locale => [false, true].map(saved => ({ locale, saved }))))(
-    'keeps directory favorites out of $locale conversation actions (already saved: $saved)', async ({ locale, saved }) => {
+  it.each(SUPPORTED_LOCALES.flatMap(locale => [false, true].map(saved => ({ locale, saved }))))(
+    'renders concise $locale conversation actions without favorites (already saved: $saved)', async ({ locale, saved }) => {
     await page.viewport(1280, 900);
     const wasDark = document.documentElement.classList.contains('dark');
     document.documentElement.classList.toggle('dark', saved);
@@ -61,6 +66,7 @@ describe('Flower conversation directory menus', () => {
         const icon = button.querySelector('svg');
         expect(icon, button.textContent ?? '').not.toBeNull();
         const label = button.querySelector('span')!;
+        expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(Number.parseFloat(getComputedStyle(label).lineHeight) + 1);
         labelStarts.push(label.getBoundingClientRect().left);
         expect(icon!.getBoundingClientRect().width).toBeGreaterThan(0);
         expect(Math.abs(icon!.getBoundingClientRect().top + icon!.getBoundingClientRect().height / 2

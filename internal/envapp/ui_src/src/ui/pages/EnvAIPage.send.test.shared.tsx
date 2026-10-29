@@ -1194,7 +1194,7 @@ export function registerEnvAIPageSendTests() {
         expect(document.body.textContent).toContain('Mock fork');
         expect(document.body.textContent).toContain('Mock pin conversation');
         expect(document.body.textContent).toContain('Mock rename');
-        expect(document.body.textContent).not.toContain('Copy thread id');
+        expect(document.body.textContent).not.toContain('Copy ID');
         expect(document.body.textContent).not.toContain('Copy work directory');
       } finally {
         dispose();

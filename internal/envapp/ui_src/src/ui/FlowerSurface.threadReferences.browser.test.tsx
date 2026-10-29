@@ -26,7 +26,7 @@ async function reference(surface: HTMLElement, threadID: string, mode: 'more' | 
   else if (mode === 'right') row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 120 }));
   else { row.querySelector<HTMLButtonElement>('.flower-thread-card-select-button')!.focus(); await userEvent.keyboard('{Shift>}{F10}{/Shift}'); }
   await waitFor(() => Boolean(document.querySelector('[role="menu"]')));
-  const button = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(item => item.textContent?.includes('Reference this conversation'))!;
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(item => item.textContent?.includes('Reference'))!;
   return button;
 }
 

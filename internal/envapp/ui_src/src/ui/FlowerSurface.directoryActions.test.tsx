@@ -16,7 +16,7 @@ function openMenu(target: HTMLElement): void {
 
 function menuAction(label: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
-    .find((item) => item.textContent?.includes(label));
+    .find((item) => item.querySelector('span')?.textContent?.trim() === label);
   expect(button, label).toBeTruthy();
   return button!;
 }
@@ -65,7 +65,7 @@ describe('Flower working directory actions', () => {
   it('opens the right-clicked thread directory without selecting or loading that thread', async () => {
     const { surface, b, openFiles, loadThread } = await fixture();
     openMenu(surface.querySelector('[data-thread-id="directory-b"]')!);
-    menuAction('Browse working directory').click();
+    menuAction('Open folder').click();
     await flush();
     expect(openFiles).toHaveBeenCalledExactlyOnceWith({ thread_id: b.thread_id, path: b.working_dir });
     expect(loadThread.mock.calls.map(([id]) => id)).not.toContain(b.thread_id);
@@ -122,7 +122,7 @@ describe('Flower working directory actions', () => {
     document.body.appendChild(terminalInput);
     openTerminal.mockImplementation(async () => { terminalInput.focus(); });
     openMenu(surface.querySelector('.flower-chat-transcript')!);
-    menuAction('Open terminal in working directory').click();
+    menuAction('Open terminal').click();
     await flush();
     expect(openTerminal).toHaveBeenCalledExactlyOnceWith({ thread_id: a.thread_id, path: a.working_dir });
     expect(document.activeElement).toBe(terminalInput);
@@ -158,7 +158,7 @@ describe('Flower working directory actions', () => {
     const expected = selection.toString();
     openMenu(text);
     selection.removeAllRanges();
-    menuAction('Copy selected text').click();
+    menuAction('Copy').click();
     await flush();
     expect(writeText).toHaveBeenCalledExactlyOnceWith(expected);
   });
@@ -176,7 +176,8 @@ describe('Flower working directory actions', () => {
     const transcript = surface.querySelector<HTMLElement>('.flower-chat-transcript')!;
     openMenu(transcript);
     const menu = document.querySelector('[role="menu"]');
-    expect(menu?.textContent).not.toContain('Copy selected text');
+    expect(Array.from(menu!.querySelectorAll('[role=menuitem]'))
+      .map(item => item.querySelector('span')?.textContent?.trim())).not.toContain('Copy');
     transcript.dispatchEvent(new Event('scroll'));
     await flush();
     expect(document.querySelector('[role="menu"]')).toBe(menu);
@@ -189,7 +190,7 @@ describe('Flower working directory actions', () => {
     document.body.appendChild(destination);
     openTerminal.mockImplementation(async () => { destination.focus(); });
     (surface.querySelector('[data-thread-id="directory-b"] .flower-thread-card-menu-button') as HTMLButtonElement).click();
-    menuAction('Open terminal in working directory').click();
+    menuAction('Open terminal').click();
     await flush();
     expect(openTerminal).toHaveBeenCalledExactlyOnceWith({ thread_id: b.thread_id, path: b.working_dir });
     expect(document.activeElement).toBe(destination);
@@ -207,7 +208,7 @@ describe('Flower working directory actions', () => {
     expect(header.title).not.toContain('/workspace/a');
     header.click();
     openMenu(surface.querySelector('.flower-chat-transcript')!);
-    const browse = menuAction('Browse working directory');
+    const browse = menuAction('Open folder');
     expect(browse.getAttribute('aria-disabled')).toBe('true');
     expect(document.querySelector('.flower-directory-menu-path')?.textContent).not.toContain('/workspace/a');
     browse.click();
@@ -222,7 +223,7 @@ describe('Flower working directory actions', () => {
       workingDirectoryActionAvailability: () => ({ browse: { enabled: true }, terminal: { enabled: false, reason: 'Execution permission required' } }),
     });
     openMenu(surface.querySelector('[data-thread-id="directory-b"]')!);
-    const terminal = menuAction('Open terminal in working directory');
+    const terminal = menuAction('Open terminal');
     expect(terminal.getAttribute('aria-disabled')).toBe('true');
     terminal.click();
     expect(openTerminal).not.toHaveBeenCalled();
@@ -230,7 +231,7 @@ describe('Flower working directory actions', () => {
     await flush();
     expect(openFiles).toHaveBeenCalledExactlyOnceWith({ thread_id: 'directory-a', path: '/workspace/a' });
     openFiles.mockClear();
-    menuAction('Browse working directory').click();
+    menuAction('Open folder').click();
     await flush();
     expect(openFiles).toHaveBeenCalledTimes(1);
   });

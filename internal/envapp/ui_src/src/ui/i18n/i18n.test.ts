@@ -977,6 +977,28 @@ describe('Env App and Desktop i18n contract', () => {
     }
   });
 
+  it('uses concise Flower context-menu actions in every shipped locale', () => {
+    const actions = {
+      'en-US': ['Reference', 'Copy ID', 'Copy path', 'Open folder', 'Open terminal', 'Copy', 'Pin', 'Unpin', 'Stop', 'Delete'],
+      'zh-CN': ['引用', '复制 ID', '复制路径', '打开目录', '打开终端', '复制', '置顶', '取消置顶', '停止', '删除'],
+      'zh-TW': ['引用', '複製 ID', '複製路徑', '開啟資料夾', '開啟終端機', '複製', '釘選', '取消釘選', '停止', '刪除'],
+      'ja-JP': ['参照', 'ID をコピー', 'パスをコピー', 'フォルダーを開く', 'ターミナルを開く', 'コピー', '固定', '固定を解除', '停止', '削除'],
+      'ko-KR': ['참조', 'ID 복사', '경로 복사', '폴더 열기', '터미널 열기', '복사', '고정', '고정 해제', '중지', '삭제'],
+      'de-DE': ['Referenzieren', 'ID kopieren', 'Pfad kopieren', 'Ordner öffnen', 'Terminal öffnen', 'Kopieren', 'Anheften', 'Anheftung lösen', 'Stoppen', 'Löschen'],
+      'fr-FR': ['Référencer', 'Copier l’ID', 'Copier le chemin', 'Ouvrir le dossier', 'Ouvrir le terminal', 'Copier', 'Épingler', 'Désépingler', 'Arrêter', 'Supprimer'],
+      'es-ES': ['Referenciar', 'Copiar ID', 'Copiar ruta', 'Abrir carpeta', 'Abrir terminal', 'Copiar', 'Fijar', 'Desfijar', 'Detener', 'Eliminar'],
+      'pt-BR': ['Referenciar', 'Copiar ID', 'Copiar caminho', 'Abrir pasta', 'Abrir terminal', 'Copiar', 'Fixar', 'Desafixar', 'Parar', 'Excluir'],
+      'ru-RU': ['Сослаться', 'Копировать ID', 'Копировать путь', 'Открыть папку', 'Открыть терминал', 'Копировать', 'Закрепить', 'Открепить', 'Остановить', 'Удалить'],
+    } as const;
+    expect(Object.keys(actions).sort()).toEqual([...SUPPORTED_LOCALES].sort());
+    for (const locale of SUPPORTED_LOCALES) {
+      const copy = dictionaries[locale].flowerSurface.threadList;
+      expect([copy.referenceThread, copy.copyThreadID, copy.copyWorkingDirectory, copy.browseWorkingDirectory,
+        copy.openTerminalInWorkingDirectory, copy.copySelectedText, copy.pin, copy.unpin, copy.stop, copy.deleteMenuAction], locale)
+        .toEqual(actions[locale]);
+    }
+  });
+
   it('keeps Flower surface catalogs identical and avoids default-English production fallback', () => {
     const envAIPage = fs.readFileSync(
       path.resolve(process.cwd(), 'src/ui/pages/EnvAIPage.tsx'),

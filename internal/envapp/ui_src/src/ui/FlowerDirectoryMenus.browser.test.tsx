@@ -70,7 +70,7 @@ describe('Flower directory menus in projected surfaces', () => {
     expect(document.querySelector('[role="menu"]')).toBe(menu);
     expect(menu.textContent).toContain('/workspace/original');
     expect(menu.textContent).not.toContain('/workspace/replaced');
-    const browse = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => item.textContent?.includes('Browse working directory'))!;
+    const browse = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => item.textContent?.includes('Open folder'))!;
     expect(browse.getAttribute('aria-disabled')).toBe('false');
     await userEvent.click(browse);
     expect(action).toHaveBeenCalledExactlyOnceWith('browse_workdir', expect.objectContaining({ thread_id: thread.thread_id, working_dir: '/workspace/original' }), expect.any(HTMLElement));
@@ -92,7 +92,7 @@ describe('Flower directory menus in projected surfaces', () => {
     const trigger = host.querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!;
     await userEvent.click(trigger);
     await frames();
-    const terminal = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => item.textContent?.includes('Open terminal in working directory'))!;
+    const terminal = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => item.textContent?.includes('Open terminal'))!;
     terminal.focus();
     expect(terminal.getAttribute('aria-disabled')).toBe('true');
     expect(document.getElementById(terminal.getAttribute('aria-describedby')!)?.textContent).toBe('Execution permission required');

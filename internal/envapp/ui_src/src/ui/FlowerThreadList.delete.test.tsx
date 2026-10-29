@@ -109,7 +109,7 @@ describe('FlowerThreadList deletion entry', () => {
 
     const destructiveItems = host.querySelectorAll('[role="menuitem"][data-destructive="true"]');
     expect(destructiveItems).toHaveLength(1);
-    expect(destructiveItems[0]?.textContent).toContain('Delete conversation');
+    expect(destructiveItems[0]?.textContent).toContain('Delete');
     expect(host.querySelectorAll('[data-icon="trash"]')).toHaveLength(1);
     expect(host.querySelector('[data-icon="x"]')).toBeNull();
 
@@ -139,7 +139,7 @@ describe('FlowerThreadList deletion entry', () => {
     expect(menu?.getAttribute('aria-label')).toContain('Updated release review');
     expect(menu?.textContent).toContain('Unpin');
     const copyWorkdir = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes('Copy working directory'));
+      .find((item) => item.textContent?.includes('Copy path'));
     copyWorkdir?.click();
     expect(onMenuAction).toHaveBeenCalledWith(
       'copy_workdir',
