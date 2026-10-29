@@ -1,8 +1,75 @@
 <p align="center">
-  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="120">
+  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="72">
 </p>
 
 # Redeven
+
+**Where machines become workspaces.**
+
+컴퓨터와 서버의 파일, 터미널, Git, AI를 한곳에 모으세요. 브라우저에서 작업하고, 프로젝트는 내 장치에 그대로 두세요.
+
+**[공식 웹사이트](https://redeven.com)** · **[데모 체험](https://redeven.com/#product)** · [Desktop 다운로드](https://redeven.com/download) · [문서](https://redeven.com/docs)
+
+![실제로 실행 중인 Redeven Workbench의 파일, 터미널, 메모, 시스템 모니터링](assets/readme/runtime-workbench.webp)
+
+<!-- readme-section:work -->
+<a id="work"></a>
+
+## 다음 아이디어를 실현할 공간
+
+- **나에게 맞는 작업 흐름.** Workbench에 파일, 터미널, 메모, 모니터링을 자유롭게 배치하세요.
+- **아이디어에서 실행 가능한 코드로.** 변경 사항을 살펴보고 편집기를 열어 같은 장치에서 웹 서비스를 실행하세요.
+- **Flower와 함께 진행하세요.** 사용자가 허용한 환경의 도구로 작업하는 AI 도우미입니다.
+
+![실행 중인 Redeven 파일 탐색기에서 프로젝트 소스 미리 보기](assets/readme/runtime-files.webp)
+
+Chrome에서 실제로 실행 중인 Redeven을 캡처했습니다. 프로젝트 소스 파일과 실제 터미널 세션을 보여 줍니다.
+
+<!-- readme-section:start -->
+<a id="start"></a>
+
+## 나에게 맞는 시작점
+
+![Desktop은 환경 센터와 로컬 런타임을 포함합니다. Web Center는 서버에 독립 배포되며, 각 대상 장치는 자체 런타임을 유지합니다](assets/readme/ways-to-connect.svg)
+
+- **[Desktop](https://redeven.com/docs/download-desktop)** — macOS와 Linux에서 가장 간편하게 시작하세요. 로컬 런타임을 포함하고 원격 연결을 안내합니다.
+- **[런타임](https://redeven.com/docs/download-runtime)** — 컴퓨터나 서버에서 직접 실행하고 브라우저로 작업 공간을 여세요.
+- **[Web Center](https://redeven.com/docs/environment-center)** — 관리자 한 명을 위한 비공개 환경 디렉터리를 호스팅하세요. Desktop 없이 브라우저에서 승인된 런타임을 열 수 있습니다. 패키지 제공 여부와 설치 방법은 가이드를 참고하세요.
+
+계정 기반 공유 접근이 필요하다면 [Redeven Cloud](https://redeven.com/docs/control-plane-providers)를 살펴보세요.
+
+파일과 프로세스는 대상 장치에 유지됩니다. Flowersec이 원격 세션을 보호합니다. Web Center는 애플리케이션 트래픽을 볼 수 있는 신뢰된 프록시입니다. [보안 모델 알아보기](https://redeven.com/docs/security-architecture).
+
+<!-- readme-section:documentation -->
+<a id="documentation"></a>
+
+## 더 알아보기
+
+[시작 가이드](https://redeven.com/docs/getting-started) · [배포 가이드](okf/operations/web-center-deployment.md) · [릴리스](https://github.com/floegence/redeven/releases) · [소스 지식 베이스 · OKF v0.2](okf/index.md)
+
+<details>
+<summary>소스에서 빌드</summary>
+
+Go `1.27.3` · Node.js `26.7.0` · npm / pnpm
+
+[![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+```bash
+./scripts/build_assets.sh
+go build -o redeven ./cmd/redeven
+```
+
+개발 및 검증 요건은 [저장소 가이드](AGENTS.md)를 참고하세요.
+
+</details>
+
+<!-- readme-section:license -->
+<a id="license"></a>
+
+## 오픈 소스
+
+[MIT 라이선스](LICENSE). 런타임, Desktop, Web Center의 소스가 이 저장소에 있습니다. [서드 파티 고지](THIRD_PARTY_NOTICES.md).
 
 <!-- readme-locales:start -->
 <p align="center">
@@ -18,219 +85,3 @@
   <a href="README.ru-RU.md">Русский</a>
 </p>
 <!-- readme-locales:end -->
-
-<p align="center">
-  <strong>Where machines become workspaces.</strong><br>
-  컴퓨터와 서버에 안전하게 접근하고,
-  <br>하나로 연결된 플랫폼에서 도구, AI, 서비스를 사용합니다.
-</p>
-
-<p align="center">
-  <a href="https://github.com/floegence/redeven/releases">Desktop 다운로드</a> |
-  <a href="#quick-start">CLI 설치</a> |
-  <a href="#what-you-can-do">기능</a> |
-  <a href="#security">보안</a> |
-  <a href="#documentation">문서</a>
-</p>
-
-<p align="center">
-  <a href="https://go.dev/"><img alt="Go 버전" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go"></a>
-  <a href="https://nodejs.org/"><img alt="Node.js 버전" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
-  <a href="okf/index.md"><img alt="OKF 지식" src="https://img.shields.io/badge/Knowledge-OKF%20v0.2-6C3BFF?style=flat-square"></a>
-  <a href="https://github.com/floegence/redeven/releases"><img alt="릴리스" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
-</p>
-
-<p align="center">
-  <img src="assets/readme/redeven-demo.gif" alt="Redeven 데모: 파일, 터미널, Git, Workbench, Code Server를 하나의 브라우저 탭에서 사용" width="100%">
-</p>
-
-<!-- readme-section:what-is-redeven -->
-<a id="what-is-redeven"></a>
-
-## Redeven이란?
-
-Redeven은 파일, 터미널, Git, 브라우저 기반 개발, AI, 서비스, 모니터링을 갖춘 통합 작업 공간으로 컴퓨터와 서버를 연결합니다. 단일 런타임 바이너리가 호스트에서 실행되며 브라우저, Desktop, CLI 또는 SSH로 접근할 수 있습니다.
-
-파일과 프로세스는 호스트에 유지됩니다. Flowersec은 종단 간 암호화로 원격 작업 공간 세션을 보호합니다.
-
-- **클라이언트는 엔드포인트 런타임에 연결됩니다**: 브라우저, Desktop, CLI, SSH 호스트 세션이 모두 동일한 런타임 관리 작업 공간으로 들어갑니다.
-- **런타임이 신뢰 경계입니다**: 하나의 Go 바이너리가 파일, 터미널, 모니터링, Git, 웹 서비스 포워딩, Workbench 레이아웃, 메모, Browser Editor 설정, Flower 접근을 관리합니다.
-- **전송과 정책을 명확하게 유지합니다**: Flowersec은 암호화된 RPC와 스트림 트래픽을 전달하며, 세션 권한, 로컬 권한 정책, 파일 시스템 범위, 로컬 시크릿이 각 세션에서 할 수 있는 작업을 제한합니다.
-
-![Redeven 아키텍처 개요](assets/readme/architecture-overview.png)
-
-<!-- readme-section:quick-start -->
-<a id="quick-start"></a>
-
-## 빠른 시작
-
-시작 방법은 두 가지입니다. 대부분의 사용자에게 권장하는 Desktop 또는 CLI를 사용할 수 있습니다.
-
-<!-- readme-section:desktop-app -->
-<a id="desktop-app"></a>
-
-### Desktop 앱
-
-1. [GitHub Releases](https://github.com/floegence/redeven/releases)에서 Redeven Desktop을 다운로드합니다. 공개 릴리스는 현재 macOS 및 Linux 설치 프로그램을 제공합니다. 코드 서명과 서명된 업데이트 검증이 활성화되기 전까지 Windows 11 x64는 내부 WSL 인증 빌드로만 제공됩니다.
-2. 앱을 엽니다. macOS 또는 Linux에서는 로컬, Redeven Cloud, SSH 호스트 또는 저장된 URL을 선택할 수 있습니다. Windows에서는 환경 센터에서 초기화된 WSL 2 배포판을 등록하세요. Desktop은 네이티브 로컬 환경, Windows 런타임 또는 로컬 컨테이너 런타임을 제공하지 않습니다.
-3. 작업을 시작하면 작업 공간이 브라우저에서 자동으로 열립니다.
-
-등록된 각 배포판은 별도의 WSL 환경입니다. Desktop은 일치하는 Linux x64 런타임을 배포판 사용자의 `~/.redeven`으로 전송하며 WSL을 설치하거나 관리하지 않고, `/mnt/c`를 사용하거나 `systemd`에 의존하지 않습니다. Desktop을 종료, 업데이트 또는 제거해도 WSL 런타임이 중지되거나 데이터가 삭제되지 않습니다. 중지하려면 해당 환경의 중지 작업을 사용하세요.
-
-원격 컴퓨터의 경우 Desktop이 SSH를 통해 일치하는 Redeven 릴리스를 자동 설치할 수 있습니다. 이후 사용자가 선택하면 해당 관리형 SSH 런타임을 Redeven Cloud 환경에 명시적으로 연결합니다. 원격 호스트에서 수동으로 설정할 필요가 없습니다.
-
-<!-- readme-section:cli -->
-<a id="cli"></a>
-
-### CLI
-
-```bash
-# 1. 설치
-curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
-
-redeven run
-```
-
-새 환경은 HTTP의 `localhost:23998`에서 시작하며 런타임이 실행되는 기기에서만 접근할 수 있습니다. 인증서나 Redeven Cloud 설정은 필요하지 않습니다. 시작 후 출력된 실제 주소를 Desktop 또는 브라우저에서 여세요. 로컬 상태는 `~/.redeven/local-environment/`에 저장되며 Ctrl+C로 CLI 런타임을 중지할 수 있습니다.
-
-네트워크로 접근 가능한 기기의 연결을 허용하려면 수신 주소와 환경 접근 암호를 설정하세요. 각 Desktop과 브라우저는 독립적으로 로그인하며 페이지와 WS/WSS는 하나의 포트를 공유합니다. HTTP는 페이지나 로그인 정보의 전송을 암호화하지 않습니다. HTTPS는 선택 사항이며 인증서를 명시적으로 만들고 연결하는 모든 기기에서 신뢰해야 합니다:
-
-```bash
-# Local UI 기기 CA 생성(최초 1회)
-redeven local-authority device-ca generate --state-root ~/.redeven
-
-# macOS 또는 Windows: 현재 사용자의 신뢰 저장소에 설치
-redeven local-authority device-ca install --state-root ~/.redeven --scope user
-
-# Linux: 공개 인증서를 내보낸 다음 수동으로 가져오기
-redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
-
-redeven run --local-ui-protocol https
-```
-
-Linux에서는 내보낸 공개 인증서를 클라이언트의 신뢰 저장소에 가져오세요. `install --scope user`는 `manual_required`를 반환합니다. Redeven은 `sudo`를 호출하거나 시스템 전체 신뢰 저장소를 변경하지 않습니다. 인증서가 없거나 유효하지 않거나 만료되었거나 신뢰되지 않으면 HTTPS는 실패하며 HTTP로 전환하지 않습니다. 프로토콜이 저장되지 않은 기존 환경에서는 HTTP 또는 HTTPS를 명시적으로 선택해야 합니다. 설정 옵션은 `redeven help run`으로 확인하세요.
-
-<!-- readme-section:what-you-can-do -->
-<a id="what-you-can-do"></a>
-
-## 할 수 있는 작업
-
-| 화면 | 제공 기능 |
-|---|---|
-| 파일 및 Git | 파일 업로드와 다운로드, 인라인 미리보기와 편집, 폴더 범위 Git 변경, diff, stash 워크플로. |
-| 터미널 | 현재 작업 중인 디렉터리를 루트로 사용하고 동일한 런타임 권한 모델을 따르는 다중 탭 터미널. |
-| 모니터 | 엔드포인트 런타임에서 제공하는 CPU, 메모리, 디스크, 네트워크, 프로세스 보기. |
-| Browser Editor | Desktop이 명시적으로 설정하고 작업 공간별로 격리한 브라우저 편집기 세션. |
-| 웹 서비스 | 직접 SSH 터널을 작성하지 않고 사용할 수 있는 런타임 관리형 서비스 등록 및 포트 포워딩. |
-| Containers | Docker 및 Podman의 컨테이너, 이미지, 볼륨, Compose Project, Pod를 네이티브로 관리하며 로그, 통계, 웹 서비스 소유권 보호를 제공. |
-| Flower | 런타임에서 검증한 도구와 로컬 모델 및 호스트 설정을 사용하는 선택형 AI 화면. |
-| Desktop | 로컬, Redeven Cloud 호스팅, SSH 부트스트랩, 저장된 Local UI 환경을 위한 네이티브 실행기. |
-
-Flower는 제출한 참조 정보와 기기 선택을 대화에 보존하여 후속 질문에서도 맥락을 유지합니다. 선택한 기기와 도구가 실제로 실행되는 기기는 별도로 표시됩니다. 일시적인 비밀 입력은 저장된 기록에 남지 않습니다.
-
-Flower는 각 모델 요청 전에 실행 환경, 저장소, 날짜, 스킬, 위임 정보를 갱신합니다. 컨텍스트 패널에서 변경 내용과 최근 요청의 사용 여부를 확인할 수 있습니다. 정보 수집에 실패하면 안전하게 중지되며, 원인을 해결한 후 다시 시도할 수 있습니다. 저장된 기록은 그대로 유지됩니다.
-
-Flower는 제한된 스크립트로 브라우저와 데스크톱의 의미 기반 작업을 조합할 수 있습니다. 관리형 브라우저 프로필, 허용한 Chrome 탭 또는 앱 창을 선택하고 각 작업에 필요한 사이트 및 앱 권한을 명시적으로 설정합니다. 스크린샷은 필요할 때만 캡처하며 뷰어도 필요할 때 엽니다. 백그라운드 작업 지원 여부는 대상과 동작에 따라 다릅니다. Windows 및 Safari 자동화는 포함되지 않습니다.
-
-Flower는 API 키와 공식 ChatGPT 요금제 로그인을 지원합니다. 계정 로그인은 검증된 로컬 Desktop 또는 로컬 실행 환경에서만 사용할 수 있으며 원격 설정에서는 비활성화됩니다. 원격 채팅은 기존 Desktop 모델 소스를 계속 사용할 수 있습니다. ChatGPT 사용량이 자동으로 API 과금으로 전환되지는 않습니다. 런타임이 실행되는 동안 일시 중지된 연결을 포함한 저장된 계정의 인증이 모델 사용량을 소비하지 않고 자동 갱신됩니다. 일시적인 오류가 발생하면 로그인을 유지하고, 인증 만료가 확인된 경우에만 다시 로그인을 요청합니다. 로그아웃하거나 마지막 연결을 제거하면 관련 작업이 중지되고 로컬 token이 삭제되며, 원격 인증 취소 결과는 별도로 표시됩니다. 런타임 종료 시 로그인은 유지되며 시스템 백그라운드 작업은 예약하지 않습니다.
-
-<!-- readme-section:security -->
-<a id="security"></a>
-
-## 기능을 가리지 않는 보안
-
-Redeven은 기능을 앞세우지만, 런타임이 실제 호스트를 제어하므로 런타임은 여전히 신뢰 경계입니다.
-
-- 런타임은 엔드포인트에 존재하며 평문을 그곳에 유지합니다.
-- 컨트롤 플레인은 부트스트랩 페이로드, 권한, 변경 불가능한 세션 메타데이터를 발급합니다.
-- [Flowersec](https://github.com/floegence/flowersec)은 클라이언트와 엔드포인트 런타임 사이에서 암호화된 바이트를 전송합니다. 브라우저 화면은 Flowersec Core 5.1.0을, Go 소비 모듈은 `flowersec-go/v5@v5.1.0`을 사용합니다.
-- 유효 권한은 서버가 발급한 세션 권한에서 나오며 로컬 권한 정책으로 제한됩니다(`read`, `write`, `execute`, `admin`; 어떤 범주도 다른 범주를 암시하지 않습니다).
-- 로컬 설정, E2EE 자료, 감사 로그, 진단 정보는 엔드포인트 상태 디렉터리에 남습니다.
-- GitHub Releases는 바이너리, 체크섬, 서명, OKF 검증 자산의 공개 기준 정보입니다.
-
-<!-- readme-section:documentation -->
-<a id="documentation"></a>
-
-## 문서
-
-Redeven은 관리되는 저장소 지식을 [OKF v0.2](okf/index.md)에 보관합니다. OKF 코퍼스는 현재 소스 수준 동작에서 생성되며 `okf.search`를 위해 런타임에 포함됩니다.
-
-기계 판독 가능한 RCPP Provider 통합 인터페이스는 [spec/openapi/rcpp-v5.yaml](spec/openapi/rcpp-v5.yaml)에 정의되어 있습니다. OKF 외부에서 관리하는 Markdown은 `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, 기준 `README.md`, `assets/readme/locales.json`에 선언된 지원 `README.<locale>.md` 번역으로 제한됩니다.
-
-<!-- readme-section:for-developers -->
-<a id="for-developers"></a>
-
-## 개발자용
-
-소스에서 빌드하고 lint 및 검증을 실행합니다.
-
-<details>
-<summary>소스에서 빌드</summary>
-
-<!-- readme-section:prerequisites -->
-<a id="prerequisites"></a>
-
-### 사전 요구 사항
-
-- Go `1.27.3`
-- Node.js `26.7.0`
-- npm
-- pnpm 또는 Node.js `corepack`
-
-<!-- readme-section:build -->
-<a id="build"></a>
-
-### 빌드
-
-```bash
-./scripts/lint_ui.sh
-./scripts/check_desktop.sh
-./scripts/build_assets.sh
-go build -o redeven ./cmd/redeven
-```
-
-<!-- readme-section:local-guardrails -->
-<a id="local-guardrails"></a>
-
-### 로컬 보호 장치
-
-```bash
-./scripts/install_git_hooks.sh
-node scripts/generate_third_party_notices.mjs --check
-```
-
-참고:
-
-- `internal/**/dist/` 자산은 생성된 뒤 Go `embed`로 포함됩니다.
-- 프런트엔드 `dist` 자산은 Git에 커밋하지 않습니다. 추적되는 예외는 검증 가능한 OKF bundle 릴리스 메타데이터로 커밋되는 `okf/dist/*`입니다.
-- `THIRD_PARTY_NOTICES.md`는 Go 모듈과 JavaScript 잠금 파일에서 생성됩니다. 의존성을 변경한 뒤 `node scripts/generate_third_party_notices.mjs`를 실행하고 `--check`를 통과시키세요.
-- `./scripts/lint_ui.sh`, `./scripts/check_desktop.sh`, `./scripts/build_assets.sh`, `go test ./...`는 주요 소스 수준 검사입니다.
-- `./scripts/dev_desktop.sh`는 현재 체크아웃 또는 worktree에서 새로 번들된 런타임으로 Desktop을 시작합니다.
-- `cd desktop && npm run start`와 `cd desktop && npm run package`는 Electron이 Desktop 셸을 시작하거나 패키징하기 전에 `desktop/.bundle/<goos>-<goarch>/redeven`을 준비합니다.
-
-</details>
-
-<details>
-<summary>로컬 상태, 릴리스 경로 및 문제 해결</summary>
-
-- 로컬 환경 상태는 기본적으로 `~/.redeven/local-environment/`에 저장되며, Desktop과 독립 실행형 런타임 모드는 `~/.redeven/catalog/` 아래의 프로필 카탈로그도 공유합니다.
-- GitHub Releases는 버전이 지정된 CLI 아카이브, Desktop 설치 프로그램, 체크섬, 서명, OKF 검증 자산의 공개 기준 정보입니다.
-- 현재 구현 세부 정보는 `okf.search`로 내장 OKF bundle을 조회하거나 [okf/index.md](okf/index.md)를 확인하세요.
-
-</details>
-
-<!-- readme-section:license -->
-<a id="license"></a>
-
-## 라이선스
-
-Redeven은 [MIT License](LICENSE)에 따라 제공됩니다. 타사 의존성 고지는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에서 관리하며, 릴리스 아카이브와 Desktop 패키지는 런타임 산출물과 함께 이 파일들을 포함합니다.
-
-<!-- readme-section:open-source-scope -->
-<a id="open-source-scope"></a>
-
-## 오픈 소스 범위
-
-이 공개 저장소는 엔드포인트 및 런타임 계층, Redeven Local UI 동작, Desktop 셸, GitHub Release 계약을 다룹니다.
-
-조직별 배포 자동화, 컨트롤 플레인 구현, 사이트별 패키징 래퍼는 의도적으로 범위에서 제외됩니다.

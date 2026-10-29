@@ -1,8 +1,75 @@
 <p align="center">
-  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="120">
+  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="72">
 </p>
 
 # Redeven
+
+**Where machines become workspaces.**
+
+Tus ordenadores y servidores, con archivos, terminales, Git e IA en un solo lugar. Trabaja desde el navegador. Tus proyectos permanecen en tus máquinas.
+
+**[Web oficial](https://redeven.com)** · **[Probar la demo](https://redeven.com/#product)** · [Descargar Desktop](https://redeven.com/download) · [Documentación](https://redeven.com/docs)
+
+![Redeven Workbench en funcionamiento con archivos reales, terminal, notas y monitorización del sistema](assets/readme/runtime-workbench.webp)
+
+<!-- readme-section:work -->
+<a id="work"></a>
+
+## Todo para tu próxima idea
+
+- **Un espacio para tu forma de trabajar.** Organiza archivos, terminales, notas y monitorización en Workbench.
+- **De la idea al código en funcionamiento.** Revisa cambios, abre tu editor y ejecuta servicios web en la misma máquina.
+- **Trabaja con Flower.** Un asistente de IA que utiliza las herramientas de tu entorno con tu permiso.
+
+![El explorador de archivos de Redeven muestra el código fuente del proyecto en una instancia en ejecución](assets/readme/runtime-files.webp)
+
+Capturas de una instancia de Redeven en ejecución en Chrome, con los archivos fuente del proyecto y una sesión de terminal real.
+
+<!-- readme-section:start -->
+<a id="start"></a>
+
+## Elige tu punto de partida
+
+![Desktop reúne un centro de entornos y un motor local; Web Center se ejecuta de forma independiente en tu servidor; cada máquina de destino conserva su propio motor](assets/readme/ways-to-connect.svg)
+
+- **[Desktop](https://redeven.com/docs/download-desktop)** — la forma más sencilla de empezar en macOS y Linux, con un motor local integrado y conexiones remotas guiadas.
+- **[Motor](https://redeven.com/docs/download-runtime)** — ejecútalo directamente en un ordenador o servidor y abre su espacio de trabajo en el navegador.
+- **[Web Center](https://redeven.com/docs/environment-center)** — aloja un directorio privado de entornos para un administrador. Abre motores autorizados desde el navegador, sin Desktop. Consulta la disponibilidad de paquetes y la configuración en la guía.
+
+¿Necesitas acceso compartido mediante cuentas? Descubre [Redeven Cloud](https://redeven.com/docs/control-plane-providers).
+
+Los archivos y procesos permanecen en la máquina de destino. Flowersec protege las sesiones remotas; Web Center es un proxy de confianza que puede ver el tráfico de las aplicaciones. [Conoce el modelo de seguridad](https://redeven.com/docs/security-architecture).
+
+<!-- readme-section:documentation -->
+<a id="documentation"></a>
+
+## Explora más
+
+[Primeros pasos](https://redeven.com/docs/getting-started) · [Guía de despliegue](okf/operations/web-center-deployment.md) · [Versiones](https://github.com/floegence/redeven/releases) · [Conocimiento del código · OKF v0.2](okf/index.md)
+
+<details>
+<summary>Compilar desde el código fuente</summary>
+
+Go `1.27.3` · Node.js `26.7.0` · npm / pnpm
+
+[![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+```bash
+./scripts/build_assets.sh
+go build -o redeven ./cmd/redeven
+```
+
+Consulta la [guía del repositorio](AGENTS.md) para conocer los requisitos de desarrollo y validación.
+
+</details>
+
+<!-- readme-section:license -->
+<a id="license"></a>
+
+## Código abierto
+
+[Licencia MIT](LICENSE). Este repositorio contiene el motor, Desktop y Web Center. [Avisos de terceros](THIRD_PARTY_NOTICES.md).
 
 <!-- readme-locales:start -->
 <p align="center">
@@ -18,219 +85,3 @@
   <a href="README.ru-RU.md">Русский</a>
 </p>
 <!-- readme-locales:end -->
-
-<p align="center">
-  <strong>Where machines become workspaces.</strong><br>
-  Acceso seguro a ordenadores y servidores,
-  <br>con herramientas, IA y servicios en una plataforma conectada.
-</p>
-
-<p align="center">
-  <a href="https://github.com/floegence/redeven/releases">Descargar Desktop</a> |
-  <a href="#quick-start">Instalar la CLI</a> |
-  <a href="#what-you-can-do">Funciones</a> |
-  <a href="#security">Seguridad</a> |
-  <a href="#documentation">Documentación</a>
-</p>
-
-<p align="center">
-  <a href="https://go.dev/"><img alt="Versión de Go" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go"></a>
-  <a href="https://nodejs.org/"><img alt="Versión de Node.js" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
-  <a href="okf/index.md"><img alt="Conocimiento OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.2-6C3BFF?style=flat-square"></a>
-  <a href="https://github.com/floegence/redeven/releases"><img alt="Versiones publicadas" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
-</p>
-
-<p align="center">
-  <img src="assets/readme/redeven-demo.gif" alt="Demostración de Redeven: archivos, terminales, Git, Workbench y Code Server en una sola pestaña del navegador" width="100%">
-</p>
-
-<!-- readme-section:what-is-redeven -->
-<a id="what-is-redeven"></a>
-
-## ¿Qué es Redeven?
-
-Redeven conecta ordenadores y servidores mediante un espacio de trabajo unificado para archivos, terminales, Git, desarrollo en el navegador, IA, servicios y supervisión. Un único binario de ejecución funciona en el host y permite acceder desde un navegador, Desktop, la CLI o SSH.
-
-Los archivos y procesos permanecen en el host. Flowersec protege las sesiones de trabajo remoto con cifrado de extremo a extremo.
-
-- **Los clientes se conectan a un entorno de ejecución del endpoint**: el navegador, Desktop, la CLI y las sesiones alojadas mediante SSH entran en el mismo espacio de trabajo administrado por el entorno de ejecución.
-- **El entorno de ejecución es el límite de confianza**: un único binario de Go gestiona archivos, terminales, supervisión, Git, reenvío de servicios web, la disposición de Workbench, notas, la configuración de Browser Editor y Flower.
-- **El transporte y las políticas se mantienen explícitos**: Flowersec transporta el tráfico RPC y de streams cifrado, mientras que las concesiones de sesión, la política local de permisos, el alcance del sistema de archivos y los secretos locales limitan lo que puede hacer cada sesión.
-
-![Resumen de la arquitectura de Redeven](assets/readme/architecture-overview.png)
-
-<!-- readme-section:quick-start -->
-<a id="quick-start"></a>
-
-## Inicio rápido
-
-Hay dos formas de empezar: Desktop, recomendado para la mayoría de usuarios, o la CLI.
-
-<!-- readme-section:desktop-app -->
-<a id="desktop-app"></a>
-
-### Aplicación Desktop
-
-1. Descarga Redeven Desktop desde [GitHub Releases](https://github.com/floegence/redeven/releases). Las versiones públicas ofrecen actualmente instaladores para macOS y Linux. Windows 11 x64 seguirá siendo una compilación interna de certificación WSL hasta que se habiliten la firma de código y la verificación de actualizaciones firmadas.
-2. Abre la aplicación. En macOS o Linux, elige un entorno local, Redeven Cloud, un host SSH o una URL guardada. En Windows, registra una distribución WSL 2 inicializada en el centro de entornos. Desktop no proporciona un entorno local nativo, un entorno de ejecución de Windows ni un entorno de ejecución de contenedor local.
-3. Empieza a trabajar: el espacio de trabajo se abre automáticamente en el navegador.
-
-Cada distribución registrada es un entorno WSL independiente. Desktop transfiere el entorno de ejecución Linux x64 correspondiente al directorio `~/.redeven` del usuario de la distribución. No instala ni administra WSL, no usa `/mnt/c` ni depende de `systemd`. Cerrar, actualizar o desinstalar Desktop no detiene el entorno de ejecución WSL ni elimina sus datos. Usa la acción Detener del entorno cuando quieras detenerlo.
-
-Para equipos remotos, Desktop puede instalar automáticamente la versión correspondiente de Redeven mediante SSH y, cuando lo elijas, conectar explícitamente ese entorno de ejecución SSH administrado a un entorno de Redeven Cloud. No es necesario configurar manualmente el host remoto.
-
-<!-- readme-section:cli -->
-<a id="cli"></a>
-
-### CLI
-
-```bash
-# 1. Instalar
-curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
-
-redeven run
-```
-
-Los entornos nuevos se inician con HTTP en `localhost:23998`, accesible solo desde el dispositivo del entorno de ejecución. No necesitan certificados ni configuración de Redeven Cloud. Abra la dirección real que aparece al iniciar con Desktop o un navegador. El estado local se guarda en `~/.redeven/local-environment/`; Ctrl+C detiene el entorno de ejecución CLI.
-
-Para dispositivos accesibles por red, configure una dirección de escucha y una contraseña de acceso al entorno. Cada Desktop o navegador inicia sesión de forma independiente; las páginas y WS/WSS comparten un puerto. HTTP no cifra las páginas ni los datos de inicio de sesión. HTTPS es opcional y requiere crear un certificado explícitamente y confiar en él en cada dispositivo cliente:
-
-```bash
-# Generar la CA del dispositivo de Local UI (una vez)
-redeven local-authority device-ca generate --state-root ~/.redeven
-
-# macOS o Windows: instalarla en el almacén de confianza del usuario actual
-redeven local-authority device-ca install --state-root ~/.redeven --scope user
-
-# Linux: exportar el certificado público y después importarlo manualmente
-redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
-
-redeven run --local-ui-protocol https
-```
-
-En Linux, importe el certificado público exportado al almacén de confianza del cliente; `install --scope user` devuelve `manual_required`. Redeven nunca invoca `sudo` ni modifica la confianza del sistema. HTTPS rechaza certificados ausentes, no válidos, caducados o no confiables sin recurrir a HTTP. Los entornos existentes sin protocolo guardado requieren elegir explícitamente HTTP o HTTPS. Ejecute `redeven help run` para ver las opciones de configuración.
-
-<!-- readme-section:what-you-can-do -->
-<a id="what-you-can-do"></a>
-
-## Qué puedes hacer
-
-| Superficie | Funciones disponibles |
-|---|---|
-| Archivos y Git | Subida y descarga de archivos, vista previa y edición en línea, cambios de Git limitados por carpeta, diferencias y flujos de stash. |
-| Terminal | Terminales con varias pestañas que parten de tus directorios de trabajo y usan el mismo modelo de permisos del entorno de ejecución. |
-| Monitor | Vistas de CPU, memoria, disco, red y procesos procedentes del entorno de ejecución del endpoint. |
-| Browser Editor | Sesiones del editor en el navegador configuradas explícitamente por Desktop y aisladas por espacio de trabajo. |
-| Servicios web | Registro de servicios y acceso con reenvío de puertos administrados por el entorno de ejecución, sin túneles SSH escritos a mano. |
-| Containers | Gestión nativa de contenedores Docker y Podman, imágenes, volúmenes, Compose Projects y Pods, con registros, estadísticas y protección de propiedad de los servicios web. |
-| Flower | Superficies de IA opcionales que usan herramientas validadas por el entorno de ejecución y configuración local del modelo y del host. |
-| Desktop | Iniciador nativo para entornos locales, entornos alojados en Redeven Cloud, entornos inicializados mediante SSH y entornos de Local UI guardados. |
-
-Flower conserva en la conversación las referencias y la selección del dispositivo que envías, para que las preguntas posteriores mantengan su contexto. El dispositivo seleccionado y el equipo que ejecuta las herramientas se identifican por separado. Los datos secretos introducidos temporalmente no se guardan en el historial.
-
-Flower actualiza los datos de ejecución, repositorio, fecha, habilidades y delegación antes de cada solicitud al modelo. El panel de contexto muestra los cambios y si la última solicitud los utilizó. Si falla la recopilación, Flower se detiene de forma segura y permite reintentar tras corregir la causa. El historial guardado se conserva.
-
-Flower permite combinar operaciones semánticas del navegador y del escritorio mediante scripts con límites de ejecución. Selecciona un perfil de navegador administrado, una pestaña de Chrome autorizada o una ventana de aplicación, con permisos explícitos para sitios y aplicaciones en cada tarea. Las capturas se solicitan cuando hacen falta y el visor se abre a petición. La ejecución en segundo plano depende del destino y de la acción; no se incluye la automatización de Windows ni de Safari.
-
-Flower admite claves API e inicio de sesión oficial con un plan de ChatGPT. El acceso a la cuenta solo está disponible mediante un Desktop local o un entorno de ejecución local verificado; permanece desactivado en los ajustes remotos. Los chats remotos pueden seguir usando la fuente de modelos Desktop existente. El uso de ChatGPT nunca cambia automáticamente a la facturación de API. Mientras el entorno de ejecución esté activo, las cuentas guardadas se renuevan automáticamente sin consumir uso de modelos, incluidas las conexiones pausadas. Los fallos temporales conservan la sesión; la pérdida de autorización confirmada requiere volver a iniciar sesión. Cerrar sesión o eliminar la última conexión detiene las tareas de la cuenta y borra los tokens locales; la revocación remota se informa por separado. Al cerrar el entorno de ejecución se conserva la sesión y no se programan tareas del sistema en segundo plano.
-
-<!-- readme-section:security -->
-<a id="security"></a>
-
-## Seguridad sin restar protagonismo
-
-Redeven da prioridad a las funciones, pero el entorno de ejecución sigue siendo el límite de confianza porque controla el host real.
-
-- El entorno de ejecución reside en el endpoint y mantiene allí los datos en texto claro.
-- El plano de control emite cargas de inicialización, concesiones y metadatos de sesión inmutables.
-- [Flowersec](https://github.com/floegence/flowersec) transporta bytes cifrados entre el cliente y el entorno de ejecución del endpoint. Las superficies del navegador usan Flowersec Core 5.1.0 y el módulo Go `flowersec-go/v5@v5.1.0`.
-- Los permisos efectivos proceden de concesiones de sesión emitidas por el servidor y quedan limitados por la política local (`read`, `write`, `execute`, `admin`; ninguna categoría implica otra).
-- La configuración local, el material E2EE, los registros de auditoría y los diagnósticos permanecen en el directorio de estado del endpoint.
-- GitHub Releases sigue siendo la fuente pública de referencia para binarios, sumas de comprobación, firmas y recursos de verificación de OKF.
-
-<!-- readme-section:documentation -->
-<a id="documentation"></a>
-
-## Documentación
-
-Redeven mantiene el conocimiento del repositorio en [OKF v0.2](okf/index.md). El corpus de OKF se genera a partir del comportamiento actual del código fuente y se integra en el entorno de ejecución para `okf.search`.
-
-La superficie de integración RCPP Provider legible por máquinas se encuentra en [spec/openapi/rcpp-v5.yaml](spec/openapi/rcpp-v5.yaml). Fuera de OKF, los archivos Markdown mantenidos se limitan deliberadamente a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, el archivo canónico `README.md` y las traducciones compatibles `README.<locale>.md` declaradas en `assets/readme/locales.json`.
-
-<!-- readme-section:for-developers -->
-<a id="for-developers"></a>
-
-## Para desarrolladores
-
-Compila, ejecuta el lint y verifica el proyecto desde el código fuente.
-
-<details>
-<summary>Compilar desde el código fuente</summary>
-
-<!-- readme-section:prerequisites -->
-<a id="prerequisites"></a>
-
-### Requisitos previos
-
-- Go `1.27.3`
-- Node.js `26.7.0`
-- npm
-- pnpm o Node.js `corepack`
-
-<!-- readme-section:build -->
-<a id="build"></a>
-
-### Compilación
-
-```bash
-./scripts/lint_ui.sh
-./scripts/check_desktop.sh
-./scripts/build_assets.sh
-go build -o redeven ./cmd/redeven
-```
-
-<!-- readme-section:local-guardrails -->
-<a id="local-guardrails"></a>
-
-### Protecciones locales
-
-```bash
-./scripts/install_git_hooks.sh
-node scripts/generate_third_party_notices.mjs --check
-```
-
-Notas:
-
-- Los recursos `internal/**/dist/` se generan y se integran mediante Go `embed`.
-- Los recursos frontend de `dist` no se registran en Git. La excepción versionada es `okf/dist/*`, que permanece en el repositorio como metadatos verificables de publicación del paquete OKF.
-- `THIRD_PARTY_NOTICES.md` se genera a partir de módulos Go y archivos de bloqueo de JavaScript. Ejecuta `node scripts/generate_third_party_notices.mjs` después de cambiar dependencias y mantén `--check` en verde.
-- `./scripts/lint_ui.sh`, `./scripts/check_desktop.sh`, `./scripts/build_assets.sh` y `go test ./...` son las principales comprobaciones a nivel de código fuente.
-- `./scripts/dev_desktop.sh` inicia Desktop desde el checkout o worktree actual con un entorno de ejecución recién empaquetado.
-- `cd desktop && npm run start` y `cd desktop && npm run package` preparan `desktop/.bundle/<goos>-<goarch>/redeven` antes de que Electron inicie o empaquete el shell de Desktop.
-
-</details>
-
-<details>
-<summary>Estado local, rutas de publicación y resolución de problemas</summary>
-
-- El estado del entorno local se guarda de forma predeterminada en `~/.redeven/local-environment/`. Desktop y el modo independiente del entorno de ejecución también comparten el catálogo de perfiles en `~/.redeven/catalog/`.
-- GitHub Releases es la fuente pública de referencia para los archivos tar versionados de la CLI, los instaladores de Desktop, las sumas de comprobación, las firmas y los recursos de verificación de OKF.
-- Para consultar detalles actuales de implementación, busca en el paquete OKF integrado con `okf.search` o revisa [okf/index.md](okf/index.md).
-
-</details>
-
-<!-- readme-section:license -->
-<a id="license"></a>
-
-## Licencia
-
-Redeven se distribuye bajo la [MIT License](LICENSE). Los avisos de dependencias de terceros se mantienen en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Los archivos comprimidos de las versiones y los paquetes de Desktop incluyen estos archivos junto a los artefactos del entorno de ejecución.
-
-<!-- readme-section:open-source-scope -->
-<a id="open-source-scope"></a>
-
-## Alcance del código abierto
-
-Este repositorio público cubre la capa de endpoint y entorno de ejecución, el comportamiento de Redeven Local UI, el shell de Desktop y el contrato de GitHub Release.
-
-La automatización de despliegue específica de cada organización, las implementaciones del plano de control y los envoltorios de empaquetado específicos de cada sitio quedan deliberadamente fuera del alcance.

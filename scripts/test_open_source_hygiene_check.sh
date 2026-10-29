@@ -34,6 +34,14 @@ write_allowed_contract_files() {
 
   cat >"${root}/README.md" <<'EOF'
 The public installer endpoint is https://redeven.com/install.sh.
+[Website](https://redeven.com) [Demo](https://redeven.com/#product)
+[Desktop](https://redeven.com/download) [Docs](https://redeven.com/docs)
+[Desktop guide](https://redeven.com/docs/download-desktop)
+[Runtime guide](https://redeven.com/docs/download-runtime)
+[Center guide](https://redeven.com/docs/environment-center)
+[Cloud guide](https://redeven.com/docs/control-plane-providers)
+[Security](https://redeven.com/docs/security-architecture)
+[Start](https://redeven.com/docs/getting-started)
 EOF
 
   cat >"${root}/PUBLIC_ENDPOINTS.txt" <<'EOF'
@@ -100,6 +108,36 @@ if run_check "$bad_path_repo" "$bad_path_out" "$bad_path_err"; then
   exit 1
 fi
 assert_contains "$bad_path_err" "Only the canonical Cloud origin https://redeven.com, public installer/manifest/catalog endpoints, and package/plugin HTTPS origins may appear"
+
+# Public navigation is not a wildcard for paths, authorities or source code.
+blocked_readme_urls=(
+  "https://redeven.com/docs/private"
+  "https://redeven.com/docs/environment-center/private"
+  "https://redeven.com/docs/environment-center?token=example"
+  "https://redeven.com/download-admin"
+  "https://redeven.com.evil.example/docs"
+  "http://redeven.com/docs"
+  "https://redeven.com/product-preview/index.html?view=flower&theme=light&token=example"
+)
+for blocked_url in "${blocked_readme_urls[@]}"; do
+  write_allowed_contract_files "$bad_path_repo"
+  rm -f "${bad_path_repo}/reference/bad.md"
+  printf '[Blocked](%s)\n' "$blocked_url" >>"${bad_path_repo}/README.md"
+  git -C "$bad_path_repo" add -A
+  if run_check "$bad_path_repo" "$bad_path_out" "$bad_path_err"; then
+    echo "expected non-public README destination to fail: $blocked_url" >&2
+    exit 1
+  fi
+  assert_contains "$bad_path_out" "$blocked_url"
+done
+write_allowed_contract_files "$bad_path_repo"
+printf 'https://redeven.com/docs/environment-center\n' >"${bad_path_repo}/reference/bad.md"
+git -C "$bad_path_repo" add -A
+if run_check "$bad_path_repo" "$bad_path_out" "$bad_path_err"; then
+  echo "expected README-only URL to remain blocked outside root READMEs" >&2
+  exit 1
+fi
+assert_contains "$bad_path_out" "reference/bad.md"
 
 create_fixture_repo "$bad_domain_repo"
 write_allowed_contract_files "$bad_domain_repo"

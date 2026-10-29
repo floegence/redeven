@@ -1,8 +1,75 @@
 <p align="center">
-  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="120">
+  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="72">
 </p>
 
 # Redeven
+
+**Where machines become workspaces.**
+
+Your computers and servers, brought together with files, terminals, Git, and AI. Work in a browser. Keep your projects on your machines.
+
+**[Website](https://redeven.com)** · **[Try the demo](https://redeven.com/#product)** · [Get Desktop](https://redeven.com/download) · [Docs](https://redeven.com/docs)
+
+![Redeven Workbench running with real files, a terminal, notes, and system monitoring](assets/readme/runtime-workbench.webp)
+
+<!-- readme-section:work -->
+<a id="work"></a>
+
+## Everything your next idea needs
+
+- **Make room for your workflow.** Arrange files, terminals, notes, and monitoring on Workbench.
+- **Move from idea to working code.** Browse changes, open your editor, and bring up web services on the same machine.
+- **Work with Flower.** An AI assistant that can use your environment's tools with your permission.
+
+![Redeven file browser previewing the project source on a running Runtime](assets/readme/runtime-files.webp)
+
+Captured from a running Redeven instance in Chrome, using the project’s source files and a real terminal session.
+
+<!-- readme-section:start -->
+<a id="start"></a>
+
+## Start where you work
+
+![Desktop combines an Environment Center and local Runtime; Web Center runs independently on your server; each target machine keeps its own Runtime](assets/readme/ways-to-connect.svg)
+
+- **[Desktop](https://redeven.com/docs/download-desktop)** — the easiest starting point on macOS and Linux, with a bundled local Runtime and guided remote connections.
+- **[Runtime](https://redeven.com/docs/download-runtime)** — run directly on a computer or server and open its workspace in your browser.
+- **[Web Center](https://redeven.com/docs/environment-center)** — host a private environment directory for one administrator. Open approved Runtimes from a browser without Desktop. See the guide for package availability and setup.
+
+Prefer shared, account-based access? Explore [Redeven Cloud](https://redeven.com/docs/control-plane-providers).
+
+Files and processes stay on the target machine. Flowersec protects remote sessions; Web Center is a trusted proxy that can see application traffic. [Understand the security model](https://redeven.com/docs/security-architecture).
+
+<!-- readme-section:documentation -->
+<a id="documentation"></a>
+
+## Go further
+
+[Getting started](https://redeven.com/docs/getting-started) · [Deployment guide](okf/operations/web-center-deployment.md) · [Releases](https://github.com/floegence/redeven/releases) · [Source knowledge · OKF v0.2](okf/index.md)
+
+<details>
+<summary>Build from source</summary>
+
+Go `1.27.3` · Node.js `26.7.0` · npm / pnpm
+
+[![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+```bash
+./scripts/build_assets.sh
+go build -o redeven ./cmd/redeven
+```
+
+See the [repository guide](AGENTS.md) for development and validation requirements.
+
+</details>
+
+<!-- readme-section:license -->
+<a id="license"></a>
+
+## Open source
+
+[MIT licensed](LICENSE). Runtime, Desktop, and Web Center live here. [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 <!-- readme-locales:start -->
 <p align="center">
@@ -18,219 +85,3 @@
   <a href="README.ru-RU.md">Русский</a>
 </p>
 <!-- readme-locales:end -->
-
-<p align="center">
-  <strong>Where machines become workspaces.</strong><br>
-  Secure access to computers and servers,
-  <br>with tools, AI, and services in one connected platform.
-</p>
-
-<p align="center">
-  <a href="https://github.com/floegence/redeven/releases">Download Desktop</a> |
-  <a href="#quick-start">Install CLI</a> |
-  <a href="#what-you-can-do">Features</a> |
-  <a href="#security">Security</a> |
-  <a href="#documentation">Docs</a>
-</p>
-
-<p align="center">
-  <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go"></a>
-  <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
-  <a href="okf/index.md"><img alt="OKF Knowledge" src="https://img.shields.io/badge/Knowledge-OKF%20v0.2-6C3BFF?style=flat-square"></a>
-  <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
-</p>
-
-<p align="center">
-  <img src="assets/readme/redeven-demo.gif" alt="Redeven demo: files, terminals, Git, Workbench, and Code Server in one browser tab" width="100%">
-</p>
-
-<!-- readme-section:what-is-redeven -->
-<a id="what-is-redeven"></a>
-
-## What is Redeven?
-
-Redeven connects computers and servers through a unified workspace for files, terminals, Git, browser-based development, AI, services, and monitoring. A single runtime binary runs on the host, with access through a browser, Desktop, CLI, or SSH.
-
-Files and processes stay on the host. Flowersec protects remote workspace sessions with end-to-end encryption.
-
-- **Clients connect to an endpoint runtime** — Browser, Desktop, CLI, and SSH-hosted sessions all enter the same runtime-managed workspace.
-- **The runtime is the trust boundary** — a single Go binary owns files, terminals, monitoring, Git, web-service forwarding, Workbench layout, notes, Browser Editor setup, and Flower access.
-- **Transport and policy stay explicit** — Flowersec carries encrypted RPC and stream traffic, while session grants, local permission policy, filesystem scope, and local secrets constrain what each session can do.
-
-![Redeven architecture overview](assets/readme/architecture-overview.png)
-
-<!-- readme-section:quick-start -->
-<a id="quick-start"></a>
-
-## Quick start
-
-Two paths to get started: Desktop (recommended for most users) or CLI.
-
-<!-- readme-section:desktop-app -->
-<a id="desktop-app"></a>
-
-### Desktop App
-
-1. Download Redeven Desktop from [GitHub Releases](https://github.com/floegence/redeven/releases). Public releases currently provide macOS and Linux installers. Windows 11 x64 remains an internal WSL certification build until code signing and signed update verification are enabled.
-2. Open the app. On macOS or Linux, choose Local, Redeven Cloud, SSH Host, or a saved URL. On Windows, register an initialized WSL 2 distribution in the Environment Center; Desktop provides no native Local Environment, Windows Runtime, or local container Runtime.
-3. Start working — the workspace opens in your browser automatically.
-
-Each registered distribution is a separate WSL Environment. Desktop transfers its matching Linux x64 Runtime to the distribution user's `~/.redeven`; it does not install or manage WSL, use `/mnt/c`, or require `systemd`. Quitting, updating, or uninstalling Desktop does not stop the WSL Runtime or delete its data. Use Stop on that Environment when you want to stop it.
-
-For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a Redeven Cloud Environment when you choose to. No manual setup on the remote host.
-
-<!-- readme-section:cli -->
-<a id="cli"></a>
-
-### CLI
-
-```bash
-# 1. Install
-curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
-
-redeven run
-```
-
-New environments start with HTTP on `localhost:23998`, accessible only from the Runtime device. No certificate or Redeven Cloud setup is required. Open the actual address printed after startup with Desktop or a browser. Local state lives under `~/.redeven/local-environment/`; Ctrl+C stops a CLI Runtime.
-
-For network-reachable devices, configure a listening address and an environment password. Each Desktop or browser logs in independently; pages and WS/WSS share one port. HTTP does not encrypt pages or login information. HTTPS is optional and requires an explicitly created certificate and trust on every connecting device:
-
-```bash
-# Generate the Local UI device CA (once)
-redeven local-authority device-ca generate --state-root ~/.redeven
-
-# macOS or Windows: install it into the current user's trust store
-redeven local-authority device-ca install --state-root ~/.redeven --scope user
-
-# Linux: export the public certificate, then import it manually
-redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
-
-redeven run --local-ui-protocol https
-```
-
-On Linux, import the exported public certificate into the trust store used by the client; `install --scope user` returns `manual_required`. Redeven never invokes `sudo` or modifies system-wide trust. HTTPS rejects missing, invalid, expired, or untrusted certificates without falling back to HTTP. Existing environments without a saved protocol require an explicit HTTP or HTTPS choice. Run `redeven help run` for configuration options.
-
-<!-- readme-section:what-you-can-do -->
-<a id="what-you-can-do"></a>
-
-## What you can do
-
-| Surface | What it gives you |
-|---|---|
-| Files and Git | File upload/download, inline preview/edit, folder-scoped Git changes, diffs, and stash workflows. |
-| Terminal | Multi-tab terminals rooted in the directories you are working with, under the same runtime permission model. |
-| Monitor | CPU, memory, disk, network, and process views from the endpoint runtime. |
-| Browser Editor | Browser editor sessions set up explicitly by Desktop, isolated per workspace. |
-| Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. |
-| Containers | Native Docker and Podman management for containers, images, volumes, Compose Projects, and Pods, with logs, statistics, and Web Services ownership protection. |
-| Flower | Optional AI surfaces that use runtime-validated tools and local model/host configuration. |
-| Desktop | Native launcher for local, Redeven Cloud-hosted, SSH-bootstrapped, and saved Local UI environments. |
-
-Flower keeps the references and device selection you submit with the conversation, so follow-up questions retain their context. The selected device and the machine running tools are identified separately. Temporary secret inputs stay out of saved history.
-
-Flower refreshes current execution, repository, date, skill, and delegation facts before each model request. The context panel shows what changed and whether the latest request used it. Collection failures stop safely with a retry after repair; saved history remains intact.
-
-Flower can combine semantic browser and desktop operations in bounded scripts. Select a managed browser profile, an authorized Chrome tab, or an application window, with explicit site and app permissions for each task. Screenshots are requested when needed, and the viewer opens on demand. Background operation depends on the target and action; Windows and Safari automation are not included.
-
-Flower supports API keys and official ChatGPT plan sign-in. Account sign-in is available only through a verified local Desktop or local runtime; remote settings keep it disabled. Remote chats can still use the existing Desktop model source. ChatGPT usage never switches automatically to API billing. While Runtime is running, saved accounts renew automatically without model usage, including paused connections. Temporary failures preserve login; confirmed authorization loss requires sign-in. Signing out or removing the last connection stops account tasks and clears local tokens, with a separate result for remote revocation. Runtime shutdown preserves login and schedules no system background work.
-
-<!-- readme-section:security -->
-<a id="security"></a>
-
-## Security, without stealing the spotlight
-
-Redeven leads with capability, but the runtime is still the trust boundary because it owns the real host.
-
-- The runtime lives on the endpoint and keeps plaintext there.
-- The control plane issues bootstrap payloads, grants, and immutable session metadata.
-- [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime; browser surfaces use Flowersec Core 5.1.0 and the Go consumer module is `flowersec-go/v5@v5.1.0`.
-- Effective permissions come from server-issued session grants, clamped by the local permission policy (`read`, `write`, `execute`, `admin` — no category implies any other).
-- Local config, E2EE material, audit logs, and diagnostics stay in the endpoint state directory.
-- GitHub Releases remain the public source of truth for binaries, checksums, signatures, and OKF verification assets.
-
-<!-- readme-section:documentation -->
-<a id="documentation"></a>
-
-## Documentation
-
-Redeven keeps maintained repository knowledge in [OKF v0.2](okf/index.md). The OKF corpus is generated from current source-level behavior and is embedded into the runtime for `okf.search`.
-
-The machine-readable RCPP Provider integration surface lives in [spec/openapi/rcpp-v5.yaml](spec/openapi/rcpp-v5.yaml). Outside OKF, maintained Markdown is intentionally limited to `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, the canonical `README.md`, and the supported `README.<locale>.md` translations declared in `assets/readme/locales.json`.
-
-<!-- readme-section:for-developers -->
-<a id="for-developers"></a>
-
-## For developers
-
-Build, lint, and verify from source.
-
-<details>
-<summary>Build from source</summary>
-
-<!-- readme-section:prerequisites -->
-<a id="prerequisites"></a>
-
-### Prerequisites
-
-- Go `1.27.3`
-- Node.js `26.7.0`
-- npm
-- pnpm or Node.js `corepack`
-
-<!-- readme-section:build -->
-<a id="build"></a>
-
-### Build
-
-```bash
-./scripts/lint_ui.sh
-./scripts/check_desktop.sh
-./scripts/build_assets.sh
-go build -o redeven ./cmd/redeven
-```
-
-<!-- readme-section:local-guardrails -->
-<a id="local-guardrails"></a>
-
-### Local guardrails
-
-```bash
-./scripts/install_git_hooks.sh
-node scripts/generate_third_party_notices.mjs --check
-```
-
-Notes:
-
-- `internal/**/dist/` assets are generated and embedded via Go `embed`.
-- Frontend `dist` assets are not checked into git. The tracked exception is `okf/dist/*`, which stays committed as verifiable OKF bundle release metadata.
-- `THIRD_PARTY_NOTICES.md` is generated from Go modules and JavaScript lockfiles. Run `node scripts/generate_third_party_notices.mjs` after dependency changes, then keep `--check` green.
-- `./scripts/lint_ui.sh`, `./scripts/check_desktop.sh`, `./scripts/build_assets.sh`, and `go test ./...` are the main source-level checks.
-- `./scripts/dev_desktop.sh` starts Desktop from the current checkout or worktree with a freshly bundled runtime.
-- `cd desktop && npm run start` and `cd desktop && npm run package` prepare `desktop/.bundle/<goos>-<goarch>/redeven` before Electron starts or packages the desktop shell.
-
-</details>
-
-<details>
-<summary>Local state, release paths, and troubleshooting</summary>
-
-- Local Environment state defaults to `~/.redeven/local-environment/`; Desktop and standalone runtime mode also share the profile catalog under `~/.redeven/catalog/`.
-- GitHub Releases are the public source of truth for versioned CLI tarballs, Desktop installers, checksums, signatures, and OKF verification assets.
-- For current implementation details, query the embedded OKF bundle with `okf.search` or inspect [okf/index.md](okf/index.md).
-
-</details>
-
-<!-- readme-section:license -->
-<a id="license"></a>
-
-## License
-
-Redeven is licensed under the [MIT License](LICENSE). Third-party dependency notices are tracked in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); release archives and Desktop packages include these files alongside the runtime artifacts.
-
-<!-- readme-section:open-source-scope -->
-<a id="open-source-scope"></a>
-
-## Open-source scope
-
-This public repository covers the endpoint/runtime layer, Redeven Local UI behavior, the desktop shell, and the GitHub Release contract.
-
-Organization-specific deployment automation, control-plane implementations, and site-specific packaging wrappers are intentionally out of scope here.

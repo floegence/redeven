@@ -1,8 +1,75 @@
 <p align="center">
-  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="120">
+  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="72">
 </p>
 
 # Redeven
+
+**Where machines become workspaces.**
+
+将电脑与服务器上的文件、终端、Git 和 AI 汇聚一处。在浏览器里工作，项目始终留在自己的设备上。
+
+**[官网](https://redeven.com)** · **[体验 Demo](https://redeven.com/#product)** · [下载 Desktop](https://redeven.com/download) · [文档](https://redeven.com/docs)
+
+![实际运行的 Redeven Workbench：文件、终端、笔记和系统监控](assets/readme/runtime-workbench.webp)
+
+<!-- readme-section:work -->
+<a id="work"></a>
+
+## 让下一个想法，有处落地
+
+- **按自己的节奏工作。** 在 Workbench 上自由编排文件、终端、笔记和监控。
+- **从想法走向可运行的代码。** 查看代码变更、打开编辑器，在同一台设备上启动网页服务。
+- **与 Flower 一起推进。** 在你的授权下，AI 助手可以使用环境中的工具完成工作。
+
+![实际运行的 Redeven 文件浏览器，正在预览项目源码](assets/readme/runtime-files.webp)
+
+截图来自 Chrome 中实际运行的 Redeven，展示项目源码和真实终端会话。
+
+<!-- readme-section:start -->
+<a id="start"></a>
+
+## 选择适合你的入口
+
+![Desktop 包含环境中心和本地运行时；Web Center 独立部署在服务器上；每台目标设备保留自己的运行时](assets/readme/ways-to-connect.svg)
+
+- **[Desktop](https://redeven.com/docs/download-desktop)** — macOS 与 Linux 上最便捷的起点，内置本地运行时，并引导你连接远程设备。
+- **[运行时](https://redeven.com/docs/download-runtime)** — 直接运行在电脑或服务器上，通过浏览器打开工作区。
+- **[Web Center](https://redeven.com/docs/environment-center)** — 为一位管理员部署私有环境目录，无需 Desktop 即可在浏览器中打开已授权的运行时。安装包供应与部署步骤见指南。
+
+需要基于账号的共享访问？了解 [Redeven Cloud](https://redeven.com/docs/control-plane-providers)。
+
+文件和进程始终位于目标设备。Flowersec 保护远程会话；Web Center 是可信代理，可以看到应用流量。 [了解安全模型](https://redeven.com/docs/security-architecture)。
+
+<!-- readme-section:documentation -->
+<a id="documentation"></a>
+
+## 继续探索
+
+[入门指南](https://redeven.com/docs/getting-started) · [部署指南](okf/operations/web-center-deployment.md) · [版本发布](https://github.com/floegence/redeven/releases) · [源码知识库 · OKF v0.2](okf/index.md)
+
+<details>
+<summary>从源码构建</summary>
+
+Go `1.27.3` · Node.js `26.7.0` · npm / pnpm
+
+[![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+```bash
+./scripts/build_assets.sh
+go build -o redeven ./cmd/redeven
+```
+
+开发与验证要求见 [仓库指南](AGENTS.md)。
+
+</details>
+
+<!-- readme-section:license -->
+<a id="license"></a>
+
+## 开源
+
+[MIT 许可证](LICENSE)。运行时、Desktop 和 Web Center 的源码均在此仓库。 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
 <!-- readme-locales:start -->
 <p align="center">
@@ -18,219 +85,3 @@
   <a href="README.ru-RU.md">Русский</a>
 </p>
 <!-- readme-locales:end -->
-
-<p align="center">
-  <strong>Where machines become workspaces.</strong><br>
-  安全接入电脑与服务器，
-  <br>在统一互联的平台中使用工具、AI 与服务。
-</p>
-
-<p align="center">
-  <a href="https://github.com/floegence/redeven/releases">下载 Desktop</a> |
-  <a href="#quick-start">安装 CLI</a> |
-  <a href="#what-you-can-do">功能</a> |
-  <a href="#security">安全</a> |
-  <a href="#documentation">文档</a>
-</p>
-
-<p align="center">
-  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go"></a>
-  <a href="https://nodejs.org/"><img alt="Node.js 版本" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
-  <a href="okf/index.md"><img alt="OKF 知识库" src="https://img.shields.io/badge/Knowledge-OKF%20v0.2-6C3BFF?style=flat-square"></a>
-  <a href="https://github.com/floegence/redeven/releases"><img alt="发行版本" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
-</p>
-
-<p align="center">
-  <img src="assets/readme/redeven-demo.gif" alt="Redeven 演示：在一个浏览器标签页中使用文件、终端、Git、Workbench 和 Code Server" width="100%">
-</p>
-
-<!-- readme-section:what-is-redeven -->
-<a id="what-is-redeven"></a>
-
-## 什么是 Redeven？
-
-Redeven 通过统一工作区连接电脑与服务器，整合文件、终端、Git、浏览器开发环境、AI、服务与监控。单个运行时二进制程序在主机上运行，可通过浏览器、Desktop、CLI 或 SSH 访问。
-
-文件和进程保留在主机上。Flowersec 通过端到端加密保护远程工作区会话。
-
-- **客户端连接到端点运行时**：浏览器、Desktop、CLI 和基于 SSH 主机的会话都会进入由同一运行时管理的工作区。
-- **运行时是信任边界**：一个 Go 二进制程序统一负责文件、终端、监控、Git、Web 服务转发、Workbench 布局、笔记、Browser Editor 设置和 Flower 访问。
-- **传输与策略始终明确**：Flowersec 承载加密的 RPC 与流式通信流量；会话授权、本地权限策略、文件系统范围和本地机密信息共同限制每个会话可执行的操作。
-
-![Redeven 架构概览](assets/readme/architecture-overview.png)
-
-<!-- readme-section:quick-start -->
-<a id="quick-start"></a>
-
-## 快速开始
-
-您可以通过两种方式开始使用：Desktop（推荐大多数用户使用）或 CLI。
-
-<!-- readme-section:desktop-app -->
-<a id="desktop-app"></a>
-
-### Desktop 应用
-
-1. 从 [GitHub Releases](https://github.com/floegence/redeven/releases) 下载 Redeven Desktop。公开发布目前提供 macOS 和 Linux 安装包。在启用代码签名和签名更新验证前，Windows 11 x64 仅提供内部 WSL 认证构建。
-2. 打开应用。在 macOS 或 Linux 上，可选择本地、Redeven Cloud、SSH 主机或已保存的 URL；在 Windows 上，请在环境中心注册一个已初始化的 WSL 2 发行版。Desktop 不提供原生本地环境、Windows 运行时或本机容器运行时。
-3. 开始工作，工作区会自动在浏览器中打开。
-
-每个已注册的发行版都是独立的 WSL 环境。Desktop 会将匹配的 Linux x64 运行时传输到该发行版用户的 `~/.redeven`；它不会安装或管理 WSL，不使用 `/mnt/c`，也不依赖 `systemd`。退出、更新或卸载 Desktop 不会停止 WSL 运行时或删除其数据。如需停止，请使用对应环境的“停止”操作。
-
-对于远程计算机：Desktop 可以通过 SSH 自动安装匹配的 Redeven 版本，并在您选择后，将该托管 SSH 运行时明确连接到 Redeven Cloud 环境。无需在远程主机上手动设置。
-
-<!-- readme-section:cli -->
-<a id="cli"></a>
-
-### CLI
-
-```bash
-# 1. 安装
-curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
-
-redeven run
-```
-
-新环境默认使用 HTTP，监听 `localhost:23998`，仅运行时所在设备可访问，无需证书或 Redeven Cloud 配置。启动成功后，在 Desktop 或浏览器中打开运行时实际输出的地址。本地状态保存在 `~/.redeven/local-environment/`；按 Ctrl+C 可停止 CLI 运行时。
-
-如需让网络可达设备连接，请配置监听地址和环境访问密码。每个 Desktop 或浏览器独立登录，页面与 WS/WSS 共用一个端口。HTTP 不保护页面和登录信息的网络传输。HTTPS 为可选配置，需要明确创建证书，并在每台连接设备上建立信任：
-
-```bash
-# 生成 Local UI 设备 CA（仅需一次）
-redeven local-authority device-ca generate --state-root ~/.redeven
-
-# macOS 或 Windows：安装到当前用户的信任库
-redeven local-authority device-ca install --state-root ~/.redeven --scope user
-
-# Linux：导出公共证书，然后手动导入
-redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
-
-redeven run --local-ui-protocol https
-```
-
-Linux 用户需将导出的公共证书导入客户端使用的信任库；`install --scope user` 会返回 `manual_required`。Redeven 不调用 `sudo`，也不修改系统级信任库。证书缺失、无效、过期或不受信任时，HTTPS 明确失败，不会退回 HTTP。未保存协议的已有环境需要明确选择 HTTP 或 HTTPS。运行 `redeven help run` 查看配置选项。
-
-<!-- readme-section:what-you-can-do -->
-<a id="what-you-can-do"></a>
-
-## 您可以完成什么
-
-| 功能界面 | 提供的能力 |
-|---|---|
-| 文件与 Git | 文件上传和下载、内联预览和编辑、限定目录范围的 Git 变更、差异比较及 stash 工作流。 |
-| 终端 | 以当前工作目录为根目录的多标签终端，并遵循相同的运行时权限模型。 |
-| 监控 | 来自端点运行时的 CPU、内存、磁盘、网络和进程视图。 |
-| Browser Editor | 由 Desktop 明确设置、按工作区隔离的浏览器编辑器会话。 |
-| Web 服务 | 由运行时管理的服务注册和端口转发访问，无需手写 SSH 隧道。 |
-| Containers | 原生管理 Docker 和 Podman 的容器、镜像、卷、Compose Project 与 Pod，并提供日志、统计和 Web 服务所有权保护。 |
-| Flower | 可选的 AI 界面，使用经运行时验证的工具及本地模型和主机配置。 |
-| Desktop | 用于本地环境、Redeven Cloud 托管环境、通过 SSH 引导的环境和已保存 Local UI 环境的原生启动器。 |
-
-Flower 会在对话中保留你提交的引用和设备选择，让后续追问延续已有上下文。用户选择的设备与实际运行工具的设备会分别标明。临时秘密输入不会写入已保存的历史记录。
-
-Flower 会在每次模型请求前刷新执行环境、仓库、日期、技能和委派事实。上下文面板会显示变化，以及最近请求是否使用了这些事实。采集失败时会安全停止，修复来源后可重试；已保存的历史保持完整。
-
-Flower 可以通过受限脚本组合浏览器和桌面的语义操作。你可以选择托管浏览器配置、已授权的 Chrome 标签页或应用窗口，并为每个任务明确设置网站和应用权限。截图按需获取，画面查看器按需打开。能否在后台操作取决于目标和动作；不包含 Windows 和 Safari 自动化。
-
-Flower 支持 API 密钥和 ChatGPT 官方套餐登录。账号登录仅在经验证的本机 Desktop 或本地运行环境中可用，远程设置中的该选项保持禁用。远程聊天仍可使用现有 Desktop 模型来源。ChatGPT 用量不会自动切换为 API 计费。 运行时 运行期间，已保存账号会自动续期，包括已暂停的连接，不产生模型用量。临时故障保留登录，确认授权失效后才要求重新登录。退出账号或移除最后一个连接会停止相关任务并清除本地 token，远端撤销结果会单独说明。关闭 运行时 会保留登录，且不会安排系统后台任务。
-
-<!-- readme-section:security -->
-<a id="security"></a>
-
-## 安全，但不喧宾夺主
-
-Redeven 以能力为先，但运行时仍然是信任边界，因为它实际掌控主机。
-
-- 运行时位于端点，明文数据始终保留在端点。
-- 控制平面签发引导载荷、授权和不可变的会话元数据。
-- [Flowersec](https://github.com/floegence/flowersec) 在客户端与端点运行时之间传输加密字节；浏览器界面使用 Flowersec Core 5.1.0，Go 消费模块为 `flowersec-go/v5@v5.1.0`。
-- 有效权限来自服务器签发的会话授权，并受本地权限策略约束（`read`、`write`、`execute`、`admin`，任何类别都不会隐含其他类别）。
-- 本地配置、E2EE 材料、审计日志和诊断数据保留在端点状态目录中。
-- GitHub Releases 始终是二进制文件、校验和、签名及 OKF 验证资产的公开权威来源。
-
-<!-- readme-section:documentation -->
-<a id="documentation"></a>
-
-## 文档
-
-Redeven 在 [OKF v0.2](okf/index.md) 中维护仓库知识。OKF 语料由当前源代码层面的行为生成，并嵌入运行时供 `okf.search` 使用。
-
-机器可读的 RCPP Provider 集成接口位于 [spec/openapi/rcpp-v5.yaml](spec/openapi/rcpp-v5.yaml)。在 OKF 之外，维护中的 Markdown 被明确限制为 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、权威英文 `README.md`，以及在 `assets/readme/locales.json` 中声明的受支持 `README.<locale>.md` 翻译。
-
-<!-- readme-section:for-developers -->
-<a id="for-developers"></a>
-
-## 面向开发者
-
-从源代码构建、检查并验证项目。
-
-<details>
-<summary>从源代码构建</summary>
-
-<!-- readme-section:prerequisites -->
-<a id="prerequisites"></a>
-
-### 前置条件
-
-- Go `1.27.3`
-- Node.js `26.7.0`
-- npm
-- pnpm 或 Node.js `corepack`
-
-<!-- readme-section:build -->
-<a id="build"></a>
-
-### 构建
-
-```bash
-./scripts/lint_ui.sh
-./scripts/check_desktop.sh
-./scripts/build_assets.sh
-go build -o redeven ./cmd/redeven
-```
-
-<!-- readme-section:local-guardrails -->
-<a id="local-guardrails"></a>
-
-### 本地保护措施
-
-```bash
-./scripts/install_git_hooks.sh
-node scripts/generate_third_party_notices.mjs --check
-```
-
-说明：
-
-- `internal/**/dist/` 资产由构建生成，并通过 Go `embed` 嵌入。
-- 前端 `dist` 资产不会提交到 Git。受跟踪的例外是 `okf/dist/*`，它作为可验证的 OKF bundle 发行元数据保持提交状态。
-- `THIRD_PARTY_NOTICES.md` 由 Go 模块和 JavaScript 锁文件生成。依赖变更后运行 `node scripts/generate_third_party_notices.mjs`，并确保 `--check` 始终通过。
-- `./scripts/lint_ui.sh`、`./scripts/check_desktop.sh`、`./scripts/build_assets.sh` 和 `go test ./...` 是主要的源代码级检查。
-- `./scripts/dev_desktop.sh` 使用新打包的运行时，从当前检出目录或 worktree 启动 Desktop。
-- `cd desktop && npm run start` 和 `cd desktop && npm run package` 会在 Electron 启动或打包 Desktop shell 之前，准备 `desktop/.bundle/<goos>-<goarch>/redeven`。
-
-</details>
-
-<details>
-<summary>本地状态、发行路径与故障排除</summary>
-
-- 本地环境状态默认位于 `~/.redeven/local-environment/`；Desktop 和独立运行时模式还会共享 `~/.redeven/catalog/` 下的配置目录。
-- GitHub Releases 是带版本 CLI 压缩包、Desktop 安装程序、校验和、签名及 OKF 验证资产的公开权威来源。
-- 如需了解当前实现详情，请使用 `okf.search` 查询嵌入式 OKF bundle，或查看 [okf/index.md](okf/index.md)。
-
-</details>
-
-<!-- readme-section:license -->
-<a id="license"></a>
-
-## 许可证
-
-Redeven 采用 [MIT License](LICENSE)。第三方依赖声明记录在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中；发行归档和 Desktop 软件包会在运行时产物旁包含这些文件。
-
-<!-- readme-section:open-source-scope -->
-<a id="open-source-scope"></a>
-
-## 开源范围
-
-此公开仓库涵盖端点和运行时层、Redeven Local UI 行为、Desktop shell 以及 GitHub Release 契约。
-
-特定组织的部署自动化、控制平面实现和站点专用打包封装明确不在此仓库范围内。

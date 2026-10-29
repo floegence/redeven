@@ -1,8 +1,75 @@
 <p align="center">
-  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="120">
+  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="72">
 </p>
 
 # Redeven
+
+**Where machines become workspaces.**
+
+コンピューターやサーバーのファイル、ターミナル、Git、AI をひとつに。ブラウザーで作業し、プロジェクトは自分のマシンに保ちます。
+
+**[公式サイト](https://redeven.com)** · **[デモを試す](https://redeven.com/#product)** · [Desktop を入手](https://redeven.com/download) · [ドキュメント](https://redeven.com/docs)
+
+![実際に動作する Redeven Workbench：ファイル、ターミナル、ノート、システム監視](assets/readme/runtime-workbench.webp)
+
+<!-- readme-section:work -->
+<a id="work"></a>
+
+## 次のアイデアを形にする場所
+
+- **自分に合った作業環境を。** Workbench にファイル、ターミナル、ノート、監視を自由に配置できます。
+- **アイデアから動くコードへ。** 変更を確認し、エディターを開き、同じマシンで Web サービスを起動できます。
+- **Flower と一緒に進める。** 許可した環境のツールを使って作業する AI アシスタントです。
+
+![実際に動作する Redeven のファイルブラウザーでプロジェクトのソースをプレビュー](assets/readme/runtime-files.webp)
+
+Chrome で実際に動作する Redeven を撮影しました。プロジェクトのソースファイルと実際のターミナルセッションを表示しています。
+
+<!-- readme-section:start -->
+<a id="start"></a>
+
+## 自分に合った入口を選ぶ
+
+![Desktop は環境センターとローカルランタイムを搭載。Web Center はサーバーに独立して配置でき、各接続先のマシンでは専用のランタイムが動作します](assets/readme/ways-to-connect.svg)
+
+- **[Desktop](https://redeven.com/docs/download-desktop)** — macOS と Linux で手軽に始められます。ローカルランタイムを搭載し、リモート接続も案内します。
+- **[ランタイム](https://redeven.com/docs/download-runtime)** — コンピューターやサーバーで直接実行し、ブラウザーから作業環境を開きます。
+- **[Web Center](https://redeven.com/docs/environment-center)** — 管理者ひとり向けの専用環境ディレクトリーをホスト。Desktop なしで、承認済みのランタイムをブラウザーから開けます。パッケージの提供状況と設定方法はガイドをご覧ください。
+
+アカウントを使った共有アクセスには、[Redeven Cloud](https://redeven.com/docs/control-plane-providers) をご覧ください。
+
+ファイルとプロセスは接続先のマシンに残ります。Flowersec がリモートセッションを保護します。Web Center はアプリケーションの通信内容を扱う、信頼されたプロキシーです。 [セキュリティーモデルを確認](https://redeven.com/docs/security-architecture)。
+
+<!-- readme-section:documentation -->
+<a id="documentation"></a>
+
+## さらに詳しく
+
+[はじめに](https://redeven.com/docs/getting-started) · [デプロイガイド](okf/operations/web-center-deployment.md) · [リリース](https://github.com/floegence/redeven/releases) · [ソース知識ベース · OKF v0.2](okf/index.md)
+
+<details>
+<summary>ソースからビルド</summary>
+
+Go `1.27.3` · Node.js `26.7.0` · npm / pnpm
+
+[![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+```bash
+./scripts/build_assets.sh
+go build -o redeven ./cmd/redeven
+```
+
+開発と検証の要件は [リポジトリーガイド](AGENTS.md) をご覧ください。
+
+</details>
+
+<!-- readme-section:license -->
+<a id="license"></a>
+
+## オープンソース
+
+[MIT ライセンス](LICENSE)。ランタイム、Desktop、Web Center のソースを収録しています。 [サードパーティーに関する表記](THIRD_PARTY_NOTICES.md)。
 
 <!-- readme-locales:start -->
 <p align="center">
@@ -18,219 +85,3 @@
   <a href="README.ru-RU.md">Русский</a>
 </p>
 <!-- readme-locales:end -->
-
-<p align="center">
-  <strong>Where machines become workspaces.</strong><br>
-  コンピューターとサーバーへ安全にアクセス。
-  <br>ツール、AI、サービスを、ひとつにつながるプラットフォームに。
-</p>
-
-<p align="center">
-  <a href="https://github.com/floegence/redeven/releases">Desktop をダウンロード</a> |
-  <a href="#quick-start">CLI をインストール</a> |
-  <a href="#what-you-can-do">機能</a> |
-  <a href="#security">セキュリティ</a> |
-  <a href="#documentation">ドキュメント</a>
-</p>
-
-<p align="center">
-  <a href="https://go.dev/"><img alt="Go バージョン" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go"></a>
-  <a href="https://nodejs.org/"><img alt="Node.js バージョン" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
-  <a href="okf/index.md"><img alt="OKF ナレッジ" src="https://img.shields.io/badge/Knowledge-OKF%20v0.2-6C3BFF?style=flat-square"></a>
-  <a href="https://github.com/floegence/redeven/releases"><img alt="リリース" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
-</p>
-
-<p align="center">
-  <img src="assets/readme/redeven-demo.gif" alt="Redeven デモ：ファイル、ターミナル、Git、Workbench、Code Server を 1 つのブラウザータブで利用" width="100%">
-</p>
-
-<!-- readme-section:what-is-redeven -->
-<a id="what-is-redeven"></a>
-
-## Redeven とは
-
-Redeven は、ファイル、ターミナル、Git、ブラウザーでの開発、AI、サービス、監視を備えた統一ワークスペースを通じて、コンピューターとサーバーをつなぎます。単一のランタイムバイナリーがホスト上で動作し、ブラウザー、Desktop、CLI、SSH からアクセスできます。
-
-ファイルとプロセスはホスト上に保持されます。Flowersec がエンドツーエンド暗号化によってリモートワークスペースのセッションを保護します。
-
-- **クライアントはエンドポイントランタイムに接続**：ブラウザー、Desktop、CLI、SSH ホストのセッションは、すべて同じランタイム管理ワークスペースに入ります。
-- **ランタイムが信頼境界**：1 つの Go バイナリが、ファイル、ターミナル、監視、Git、Web サービス転送、Workbench レイアウト、ノート、Browser Editor のセットアップ、Flower へのアクセスを管理します。
-- **転送とポリシーを明示**：Flowersec が暗号化された RPC とストリームトラフィックを運び、セッション権限、ローカル権限ポリシー、ファイルシステム範囲、ローカルシークレットが各セッションの操作を制限します。
-
-![Redeven アーキテクチャー概要](assets/readme/architecture-overview.png)
-
-<!-- readme-section:quick-start -->
-<a id="quick-start"></a>
-
-## クイックスタート
-
-開始方法は 2 つあります。多くのユーザーには Desktop を推奨しますが、CLI も利用できます。
-
-<!-- readme-section:desktop-app -->
-<a id="desktop-app"></a>
-
-### Desktop アプリ
-
-1. [GitHub Releases](https://github.com/floegence/redeven/releases) から Redeven Desktop をダウンロードします。公開リリースでは現在、macOS と Linux のインストーラーを提供しています。コード署名と署名済み更新の検証が有効になるまで、Windows 11 x64 は内部 WSL 認証ビルドのみです。
-2. アプリを開きます。macOS または Linux では、ローカル、Redeven Cloud、SSH ホスト、または保存済み URL を選択できます。Windows では、環境センターで初期化済みの WSL 2 ディストリビューションを登録します。Desktop はネイティブのローカル環境、Windows ランタイム、ローカルコンテナーのランタイムを提供しません。
-3. 作業を開始します。ワークスペースはブラウザーで自動的に開きます。
-
-登録した各ディストリビューションは、個別の WSL 環境です。Desktop は対応する Linux x64 ランタイムをディストリビューション利用者の `~/.redeven` に転送します。WSL のインストールや管理、`/mnt/c` の使用、`systemd` への依存は行いません。Desktop を終了、更新、またはアンインストールしても、WSL ランタイムの停止やデータ削除は行われません。停止する場合は、該当する環境の停止操作を使用してください。
-
-リモートマシンでは、Desktop が SSH 経由で対応する Redeven リリースを自動インストールできます。必要に応じて、その管理対象 SSH ランタイムを Redeven Cloud 環境へ明示的に接続できます。リモートホストで手動設定を行う必要はありません。
-
-<!-- readme-section:cli -->
-<a id="cli"></a>
-
-### CLI
-
-```bash
-# 1. インストール
-curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
-
-redeven run
-```
-
-新しい環境は HTTP の `localhost:23998` で起動し、ランタイムを実行するデバイスからのみアクセスできます。証明書や Redeven Cloud の設定は不要です。起動後に表示される実際のアドレスを Desktop またはブラウザーで開いてください。ローカル状態は `~/.redeven/local-environment/` に保存されます。Ctrl+C で CLI ランタイムを停止できます。
-
-ネットワーク経由で接続できるデバイスに公開する場合は、待ち受けアドレスと環境のアクセスパスワードを設定してください。各 Desktop とブラウザーは個別にログインし、ページと WS/WSS は同じポートを使います。HTTP はページやログイン情報の通信を暗号化しません。HTTPS は任意で、証明書の明示的な作成と各接続デバイスでの信頼設定が必要です：
-
-```bash
-# Local UI デバイス CA を生成する（初回のみ）
-redeven local-authority device-ca generate --state-root ~/.redeven
-
-# macOS または Windows: 現在のユーザーの信頼ストアにインストールする
-redeven local-authority device-ca install --state-root ~/.redeven --scope user
-
-# Linux: 公開証明書をエクスポートし、手動でインポートする
-redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
-
-redeven run --local-ui-protocol https
-```
-
-Linux では、エクスポートした公開証明書をクライアントの信頼ストアにインポートしてください。`install --scope user` は `manual_required` を返します。Redeven は `sudo` を呼び出さず、システム全体の信頼設定を変更しません。証明書が存在しない、無効、期限切れ、または信頼されない場合、HTTPS は失敗し、HTTP に切り替わりません。プロトコルが未保存の既存環境では HTTP または HTTPS を明示的に選択してください。設定項目は `redeven help run` で確認できます。
-
-<!-- readme-section:what-you-can-do -->
-<a id="what-you-can-do"></a>
-
-## できること
-
-| サーフェス | 提供される機能 |
-|---|---|
-| ファイルと Git | ファイルのアップロードとダウンロード、インラインのプレビューと編集、フォルダー単位に限定された Git の変更、差分、stash ワークフロー。 |
-| ターミナル | 作業中のディレクトリをルートとし、同じランタイム権限モデルに従うマルチタブターミナル。 |
-| 監視 | エンドポイントランタイムから取得する CPU、メモリ、ディスク、ネットワーク、プロセスのビュー。 |
-| Browser Editor | Desktop が明示的にセットアップし、ワークスペースごとに分離されたブラウザーエディターセッション。 |
-| Web サービス | 手書きの SSH トンネルを使わずに、ランタイム管理のサービス登録とポートフォワーディングによるアクセス。 |
-| Containers | Docker と Podman のコンテナ、イメージ、ボリューム、Compose Project、Pod をネイティブに管理し、ログ、統計、Web サービスの所有権保護を提供。 |
-| Flower | ランタイムで検証されたツールと、ローカルのモデルおよびホスト設定を使用する、必要に応じて利用できる AI サーフェス。 |
-| Desktop | ローカル環境、Redeven Cloud でホストされた環境、SSH でブートストラップした環境、保存済みの Local UI 環境に対応するネイティブランチャー。 |
-
-Flower は、送信した参照情報とデバイスの選択を会話に保持するため、追加の質問にもそれまでの文脈が引き継がれます。選択したデバイスとツールを実行するマシンは区別して表示されます。一時的な機密入力は履歴に保存されません。
-
-Flower はモデルへの各リクエストの前に、実行環境、リポジトリ、日付、スキル、委任の情報を更新します。コンテキストパネルには変更内容と、最新のリクエストで使用されたかどうかが表示されます。取得に失敗した場合は安全に停止し、原因を修復してから再試行できます。保存済みの履歴は保持されます。
-
-Flower は、制限付きスクリプトでブラウザーとデスクトップの意味に基づく操作を組み合わせられます。管理対象のブラウザープロファイル、許可した Chrome タブ、またはアプリのウィンドウを選び、タスクごとにサイトとアプリの権限を明示的に設定します。スクリーンショットの取得とビューアーの表示は必要なときに行います。バックグラウンド操作の可否は対象と操作によって異なります。Windows と Safari の自動操作は含まれません。
-
-Flower は API キーと ChatGPT 公式プランのサインインに対応しています。アカウントでのサインインは、確認済みのローカル Desktop またはローカル実行環境でのみ利用でき、リモート設定では無効です。リモートチャットでは既存の Desktop モデルソースを引き続き利用できます。ChatGPT の利用が API 課金へ自動的に切り替わることはありません。 ランタイム の実行中は、一時停止した接続を含む保存済みアカウントの認証が、モデルの使用量を消費せずに自動更新されます。一時的な障害ではログインを維持し、認証の失効が確認された場合に再ログインを求めます。ログアウトまたは最後の接続の削除により、関連タスクが停止し、ローカルの token が削除されます。リモートでの認証取り消しの結果は別途表示されます。ランタイム の終了時はログインを維持し、システムのバックグラウンド処理は登録しません。
-
-<!-- readme-section:security -->
-<a id="security"></a>
-
-## 主役を奪わないセキュリティ
-
-Redeven は機能を前面に出しますが、実際のホストを管理するため、ランタイムが引き続き信頼境界です。
-
-- ランタイムはエンドポイント上で動作し、平文をそこに保持します。
-- コントロールプレーンはブートストラップペイロード、権限、不変のセッションメタデータを発行します。
-- [Flowersec](https://github.com/floegence/flowersec) はクライアントとエンドポイントランタイムの間で暗号化されたバイト列を転送します。ブラウザー画面は Flowersec Core 5.1.0、Go 消費モジュールは `flowersec-go/v5@v5.1.0` を使用します。
-- 有効な権限はサーバー発行のセッション権限から得られ、ローカル権限ポリシーによって制限されます（`read`、`write`、`execute`、`admin`。どのカテゴリも他のカテゴリを暗黙に含みません）。
-- ローカル設定、E2EE 資料、監査ログ、診断情報はエンドポイントの状態ディレクトリに残ります。
-- GitHub Releases は、バイナリ、チェックサム、署名、OKF 検証アセットの公開された信頼できる情報源です。
-
-<!-- readme-section:documentation -->
-<a id="documentation"></a>
-
-## ドキュメント
-
-Redeven は、保守対象のリポジトリ知識を [OKF v0.2](okf/index.md) に集約しています。OKF コーパスは現在のソースレベルの動作から生成され、`okf.search` 用にランタイムへ埋め込まれます。
-
-機械可読な RCPP Provider 統合サーフェスは [spec/openapi/rcpp-v5.yaml](spec/openapi/rcpp-v5.yaml) にあります。OKF 以外で保守する Markdown は、`AGENTS.md`、`THIRD_PARTY_NOTICES.md`、正本の `README.md`、および `assets/readme/locales.json` で宣言された対応 `README.<locale>.md` 翻訳に限定されます。
-
-<!-- readme-section:for-developers -->
-<a id="for-developers"></a>
-
-## 開発者向け
-
-ソースからビルド、lint、検証を行います。
-
-<details>
-<summary>ソースからビルド</summary>
-
-<!-- readme-section:prerequisites -->
-<a id="prerequisites"></a>
-
-### 前提条件
-
-- Go `1.27.3`
-- Node.js `26.7.0`
-- npm
-- pnpm または Node.js `corepack`
-
-<!-- readme-section:build -->
-<a id="build"></a>
-
-### ビルド
-
-```bash
-./scripts/lint_ui.sh
-./scripts/check_desktop.sh
-./scripts/build_assets.sh
-go build -o redeven ./cmd/redeven
-```
-
-<!-- readme-section:local-guardrails -->
-<a id="local-guardrails"></a>
-
-### ローカルガードレール
-
-```bash
-./scripts/install_git_hooks.sh
-node scripts/generate_third_party_notices.mjs --check
-```
-
-注意事項：
-
-- `internal/**/dist/` アセットは生成され、Go の `embed` で埋め込まれます。
-- フロントエンドの `dist` アセットは Git にコミットしません。追跡対象の例外は `okf/dist/*` で、検証可能な OKF bundle リリースメタデータとしてコミットされます。
-- `THIRD_PARTY_NOTICES.md` は Go モジュールと JavaScript ロックファイルから生成されます。依存関係の変更後に `node scripts/generate_third_party_notices.mjs` を実行し、`--check` を通過させてください。
-- `./scripts/lint_ui.sh`、`./scripts/check_desktop.sh`、`./scripts/build_assets.sh`、`go test ./...` が主なソースレベルのチェックです。
-- `./scripts/dev_desktop.sh` は、現在のチェックアウトまたは worktree から、新しくバンドルしたランタイムを使って Desktop を起動します。
-- `cd desktop && npm run start` と `cd desktop && npm run package` は、Electron が Desktop シェルを起動またはパッケージ化する前に `desktop/.bundle/<goos>-<goarch>/redeven` を準備します。
-
-</details>
-
-<details>
-<summary>ローカル状態、リリース経路、トラブルシューティング</summary>
-
-- ローカル環境の状態は既定で `~/.redeven/local-environment/` に保存されます。Desktop とスタンドアロンランタイムモードは、`~/.redeven/catalog/` にあるプロファイルカタログも共有します。
-- GitHub Releases は、バージョン付き CLI アーカイブ、Desktop インストーラー、チェックサム、署名、OKF 検証アセットの公開された信頼できる情報源です。
-- 現在の実装詳細は、`okf.search` で埋め込み OKF bundle を検索するか、[okf/index.md](okf/index.md) を参照してください。
-
-</details>
-
-<!-- readme-section:license -->
-<a id="license"></a>
-
-## ライセンス
-
-Redeven は [MIT License](LICENSE) の下で提供されます。第三者依存関係の通知は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に記録され、リリースアーカイブと Desktop パッケージにはランタイム成果物とともにこれらのファイルが含まれます。
-
-<!-- readme-section:open-source-scope -->
-<a id="open-source-scope"></a>
-
-## オープンソースの範囲
-
-この公開リポジトリは、エンドポイントおよびランタイム層、Redeven Local UI の動作、Desktop シェル、GitHub Release 契約を対象とします。
-
-組織固有のデプロイ自動化、コントロールプレーン実装、サイト固有のパッケージングラッパーは、意図的に対象外としています。

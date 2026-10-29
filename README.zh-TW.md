@@ -1,8 +1,75 @@
 <p align="center">
-  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="120">
+  <img src="assets/brand/redeven/png/app-icon-256.png" alt="Redeven" width="72">
 </p>
 
 # Redeven
+
+**Where machines become workspaces.**
+
+將電腦與伺服器上的檔案、終端機、Git 和 AI 整合於一處。在瀏覽器中工作，專案始終留在自己的裝置上。
+
+**[官網](https://redeven.com)** · **[體驗 Demo](https://redeven.com/#product)** · [下載 Desktop](https://redeven.com/download) · [文件](https://redeven.com/docs)
+
+![實際執行的 Redeven Workbench：檔案、終端機、筆記和系統監控](assets/readme/runtime-workbench.webp)
+
+<!-- readme-section:work -->
+<a id="work"></a>
+
+## 讓下一個想法，有處落實
+
+- **依照自己的步調工作。** 在 Workbench 上自由安排檔案、終端機、筆記和監控。
+- **從想法走向可執行的程式。** 檢視程式變更、開啟編輯器，在同一部裝置上啟動網頁服務。
+- **與 Flower 一起推進。** 在你的授權下，AI 助理可以使用環境中的工具完成工作。
+
+![實際執行的 Redeven 檔案瀏覽器，正在預覽專案原始碼](assets/readme/runtime-files.webp)
+
+截圖取自 Chrome 中實際執行的 Redeven，呈現專案原始碼和真實終端機工作階段。
+
+<!-- readme-section:start -->
+<a id="start"></a>
+
+## 選擇適合你的入口
+
+![Desktop 包含環境中心與本機執行環境；Web Center 獨立部署於伺服器；每部目標裝置保留自己的執行環境](assets/readme/ways-to-connect.svg)
+
+- **[Desktop](https://redeven.com/docs/download-desktop)** — macOS 與 Linux 上最方便的起點，內建本機執行環境，並引導你連接遠端裝置。
+- **[執行環境](https://redeven.com/docs/download-runtime)** — 直接在電腦或伺服器上執行，透過瀏覽器開啟工作區。
+- **[Web Center](https://redeven.com/docs/environment-center)** — 為一位管理員部署私人環境目錄，無需 Desktop 即可在瀏覽器中開啟已授權的執行環境。安裝套件供應與部署步驟請見指南。
+
+需要以帳號為基礎的共用存取？認識 [Redeven Cloud](https://redeven.com/docs/control-plane-providers)。
+
+檔案和程序始終位於目標裝置。Flowersec 保護遠端工作階段；Web Center 是受信任的代理，可看見應用程式流量。 [瞭解安全模型](https://redeven.com/docs/security-architecture)。
+
+<!-- readme-section:documentation -->
+<a id="documentation"></a>
+
+## 繼續探索
+
+[入門指南](https://redeven.com/docs/getting-started) · [部署指南](okf/operations/web-center-deployment.md) · [版本發行](https://github.com/floegence/redeven/releases) · [原始碼知識庫 · OKF v0.2](okf/index.md)
+
+<details>
+<summary>從原始碼建置</summary>
+
+Go `1.27.3` · Node.js `26.7.0` · npm / pnpm
+
+[![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+```bash
+./scripts/build_assets.sh
+go build -o redeven ./cmd/redeven
+```
+
+開發與驗證規範請參閱 [儲存庫指南](AGENTS.md)。
+
+</details>
+
+<!-- readme-section:license -->
+<a id="license"></a>
+
+## 開放原始碼
+
+[MIT 授權條款](LICENSE)。執行環境、Desktop 與 Web Center 的原始碼均位於此儲存庫。 [第三方聲明](THIRD_PARTY_NOTICES.md)。
 
 <!-- readme-locales:start -->
 <p align="center">
@@ -18,219 +85,3 @@
   <a href="README.ru-RU.md">Русский</a>
 </p>
 <!-- readme-locales:end -->
-
-<p align="center">
-  <strong>Where machines become workspaces.</strong><br>
-  安全存取電腦與伺服器，
-  <br>在統一互聯的平台中使用工具、AI 與服務。
-</p>
-
-<p align="center">
-  <a href="https://github.com/floegence/redeven/releases">下載 Desktop</a> |
-  <a href="#quick-start">安裝 CLI</a> |
-  <a href="#what-you-can-do">功能</a> |
-  <a href="#security">安全性</a> |
-  <a href="#documentation">文件</a>
-</p>
-
-<p align="center">
-  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go"></a>
-  <a href="https://nodejs.org/"><img alt="Node.js 版本" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
-  <a href="okf/index.md"><img alt="OKF 知識庫" src="https://img.shields.io/badge/Knowledge-OKF%20v0.2-6C3BFF?style=flat-square"></a>
-  <a href="https://github.com/floegence/redeven/releases"><img alt="發行版本" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
-</p>
-
-<p align="center">
-  <img src="assets/readme/redeven-demo.gif" alt="Redeven 示範：在單一瀏覽器分頁中使用檔案、終端、Git、Workbench 與 Code Server" width="100%">
-</p>
-
-<!-- readme-section:what-is-redeven -->
-<a id="what-is-redeven"></a>
-
-## 什麼是 Redeven？
-
-Redeven 透過統一工作區連接電腦與伺服器，整合檔案、終端機、Git、瀏覽器開發環境、AI、服務與監控。單一執行階段二進位檔在主機上執行，可透過瀏覽器、Desktop、CLI 或 SSH 存取。
-
-檔案和程序保留在主機上。Flowersec 透過端對端加密保護遠端工作區工作階段。
-
-- **用戶端連線到端點執行階段**：瀏覽器、Desktop、CLI 與透過 SSH 主機建立的工作階段，都會進入由同一執行階段管理的工作區。
-- **執行階段是信任邊界**：單一 Go 二進位檔統一負責檔案、終端機、監控、Git、Web 服務轉送、Workbench 版面配置、筆記、Browser Editor 設定與 Flower 存取。
-- **傳輸與原則保持明確**：Flowersec 承載加密 RPC 與串流流量；工作階段授權、本機權限原則、檔案系統範圍與本機機密資料共同限制各工作階段可執行的操作。
-
-![Redeven 架構概覽](assets/readme/architecture-overview.png)
-
-<!-- readme-section:quick-start -->
-<a id="quick-start"></a>
-
-## 快速開始
-
-您可以透過兩種方式開始使用：Desktop（建議大多數使用者使用）或 CLI。
-
-<!-- readme-section:desktop-app -->
-<a id="desktop-app"></a>
-
-### Desktop 應用程式
-
-1. 從 [GitHub Releases](https://github.com/floegence/redeven/releases) 下載 Redeven Desktop。公開發佈目前提供 macOS 與 Linux 安裝程式。在啟用程式碼簽署與已簽署更新驗證前，Windows 11 x64 僅提供內部 WSL 認證組建。
-2. 開啟應用程式。在 macOS 或 Linux 上，可選擇本機、Redeven Cloud、SSH 主機或已儲存的 URL；在 Windows 上，請在環境中心註冊一個已初始化的 WSL 2 發行版。Desktop 不提供原生本機環境、Windows 執行環境或本機容器執行環境。
-3. 開始工作，工作區會自動在瀏覽器中開啟。
-
-每個已註冊的發行版都是獨立的 WSL 環境。Desktop 會將相符的 Linux x64 執行環境傳輸到該發行版使用者的 `~/.redeven`；它不會安裝或管理 WSL、不使用 `/mnt/c`，也不依賴 `systemd`。結束、更新或解除安裝 Desktop 不會停止 WSL 執行環境或刪除其資料。如需停止，請使用對應環境的「停止」操作。
-
-對於遠端電腦：Desktop 可以透過 SSH 自動安裝相符的 Redeven 版本，並在您選擇後，將該受管理的 SSH 執行階段明確連線至 Redeven Cloud 環境。遠端主機不需要手動設定。
-
-<!-- readme-section:cli -->
-<a id="cli"></a>
-
-### CLI
-
-```bash
-# 1. 安裝
-curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
-
-redeven run
-```
-
-新環境預設使用 HTTP，監聽 `localhost:23998`，僅執行階段所在裝置可存取，無需憑證或 Redeven Cloud 設定。啟動成功後，在 Desktop 或瀏覽器中開啟執行階段實際輸出的位址。本機狀態儲存於 `~/.redeven/local-environment/`；按 Ctrl+C 可停止 CLI 執行階段。
-
-若要讓網路可達的裝置連線，請設定監聽位址與環境存取密碼。每個 Desktop 或瀏覽器獨立登入，頁面與 WS/WSS 共用一個連接埠。HTTP 不保護頁面與登入資訊的網路傳輸。HTTPS 為選用設定，需要明確建立憑證，並在每台連線裝置上建立信任：
-
-```bash
-# 產生 Local UI 裝置 CA（只需一次）
-redeven local-authority device-ca generate --state-root ~/.redeven
-
-# macOS 或 Windows：安裝到目前使用者的信任儲存區
-redeven local-authority device-ca install --state-root ~/.redeven --scope user
-
-# Linux：匯出公開憑證，然後手動匯入
-redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
-
-redeven run --local-ui-protocol https
-```
-
-Linux 使用者需將匯出的公開憑證匯入客戶端使用的信任庫；`install --scope user` 會傳回 `manual_required`。Redeven 不呼叫 `sudo`，也不修改系統層級信任庫。憑證缺失、無效、過期或不受信任時，HTTPS 明確失敗，不會退回 HTTP。未儲存協定的既有環境需要明確選擇 HTTP 或 HTTPS。執行 `redeven help run` 查看設定選項。
-
-<!-- readme-section:what-you-can-do -->
-<a id="what-you-can-do"></a>
-
-## 您可以完成的工作
-
-| 功能介面 | 提供的能力 |
-|---|---|
-| 檔案與 Git | 檔案上傳與下載、內嵌預覽與編輯、限定資料夾範圍的 Git 變更、差異比較及 stash 工作流程。 |
-| 終端機 | 以目前工作目錄為根目錄的多分頁終端機，並遵循相同的執行階段權限模型。 |
-| 監控 | 來自端點執行階段的 CPU、記憶體、磁碟、網路與處理程序檢視。 |
-| Browser Editor | 由 Desktop 明確設定、依工作區隔離的瀏覽器編輯器工作階段。 |
-| Web 服務 | 由執行階段管理的服務註冊與連接埠轉送存取，不必手動編寫 SSH 通道。 |
-| Containers | 原生管理 Docker 與 Podman 的容器、映像、磁碟區、Compose Project 與 Pod，並提供日誌、統計資料及 Web 服務擁有權保護。 |
-| Flower | 選用的 AI 介面，使用經執行階段驗證的工具及本機模型和主機設定。 |
-| Desktop | 用於本機環境、Redeven Cloud 託管環境、透過 SSH 引導初始化的環境及已儲存 Local UI 環境的原生啟動器。 |
-
-Flower 會在對話中保留你提交的參照和裝置選擇，讓後續提問延續既有脈絡。使用者選擇的裝置與實際執行工具的裝置會分別標示。暫時性的機密輸入不會寫入已儲存的歷史紀錄。
-
-Flower 會在每次模型請求前更新執行環境、儲存庫、日期、技能與委派資訊。上下文面板會顯示變更，以及最近請求是否使用了這些資訊。蒐集失敗時會安全停止，修復來源後可重試；已儲存的歷史保持完整。
-
-Flower 可以透過受限指令碼組合瀏覽器與桌面的語意操作。你可以選擇受管理的瀏覽器設定檔、已授權的 Chrome 分頁或應用程式視窗，並為每個任務明確設定網站與應用程式權限。需要時才擷取螢幕畫面及開啟檢視器。能否在背景操作取決於目標與動作；不包含 Windows 和 Safari 自動化。
-
-Flower 支援 API 金鑰與 ChatGPT 官方方案登入。帳號登入僅在經驗證的本機 Desktop 或本機執行環境中可用，遠端設定中的該選項維持停用。遠端聊天仍可使用既有 Desktop 模型來源。ChatGPT 用量不會自動切換為 API 計費。 執行環境 執行期間，已儲存的帳號會自動續期，包括已暫停的連線，不產生模型用量。暫時性故障會保留登入，確認授權失效後才要求重新登入。登出帳號或移除最後一個連線會停止相關任務並清除本機 token，遠端撤銷結果會另行說明。關閉 執行環境 會保留登入，且不會安排系統背景工作。
-
-<!-- readme-section:security -->
-<a id="security"></a>
-
-## 安全性，不喧賓奪主
-
-Redeven 以能力為核心，但執行階段仍是信任邊界，因為它實際掌控主機。
-
-- 執行階段位於端點，明文資料始終保留在端點。
-- 控制平面簽發引導初始化資料、授權及不可變的工作階段中繼資料。
-- [Flowersec](https://github.com/floegence/flowersec) 在用戶端與端點執行階段之間傳輸加密位元組；瀏覽器介面使用 Flowersec Core 5.1.0，Go 消費模組為 `flowersec-go/v5@v5.1.0`。
-- 有效權限來自伺服器簽發的工作階段授權，並受本機權限原則限制（`read`、`write`、`execute`、`admin`，任何類別都不隱含其他類別）。
-- 本機設定、E2EE 資料、稽核記錄與診斷資料都保留在端點狀態目錄。
-- GitHub Releases 始終是二進位檔、總和檢查碼、簽章及 OKF 驗證資產的公開權威來源。
-
-<!-- readme-section:documentation -->
-<a id="documentation"></a>
-
-## 文件
-
-Redeven 在 [OKF v0.2](okf/index.md) 中維護儲存庫知識。OKF 語料由目前原始碼層級的行為產生，並嵌入執行階段供 `okf.search` 使用。
-
-機器可讀的 RCPP Provider 整合介面位於 [spec/openapi/rcpp-v5.yaml](spec/openapi/rcpp-v5.yaml)。在 OKF 之外，維護中的 Markdown 明確限定為 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、權威英文 `README.md`，以及在 `assets/readme/locales.json` 中宣告的受支援 `README.<locale>.md` 翻譯。
-
-<!-- readme-section:for-developers -->
-<a id="for-developers"></a>
-
-## 開發人員專區
-
-從原始碼建置、檢查並驗證專案。
-
-<details>
-<summary>從原始碼建置</summary>
-
-<!-- readme-section:prerequisites -->
-<a id="prerequisites"></a>
-
-### 必要條件
-
-- Go `1.27.3`
-- Node.js `26.7.0`
-- npm
-- pnpm 或 Node.js `corepack`
-
-<!-- readme-section:build -->
-<a id="build"></a>
-
-### 建置
-
-```bash
-./scripts/lint_ui.sh
-./scripts/check_desktop.sh
-./scripts/build_assets.sh
-go build -o redeven ./cmd/redeven
-```
-
-<!-- readme-section:local-guardrails -->
-<a id="local-guardrails"></a>
-
-### 本機防護措施
-
-```bash
-./scripts/install_git_hooks.sh
-node scripts/generate_third_party_notices.mjs --check
-```
-
-附註：
-
-- `internal/**/dist/` 資產由建置產生，並透過 Go `embed` 嵌入。
-- 前端 `dist` 資產不會提交至 Git。受追蹤的例外是 `okf/dist/*`，它會以可驗證的 OKF bundle 發行中繼資料形式保留在版本控制中。
-- `THIRD_PARTY_NOTICES.md` 由 Go 模組與 JavaScript 鎖定檔產生。相依性變更後請執行 `node scripts/generate_third_party_notices.mjs`，並維持 `--check` 通過。
-- `./scripts/lint_ui.sh`、`./scripts/check_desktop.sh`、`./scripts/build_assets.sh` 與 `go test ./...` 是主要的原始碼層級檢查。
-- `./scripts/dev_desktop.sh` 會使用新封裝的執行階段，從目前檢出目錄或 worktree 啟動 Desktop。
-- `cd desktop && npm run start` 與 `cd desktop && npm run package` 會在 Electron 啟動或封裝 Desktop shell 前準備 `desktop/.bundle/<goos>-<goarch>/redeven`。
-
-</details>
-
-<details>
-<summary>本機狀態、發行路徑與疑難排解</summary>
-
-- 本機環境狀態預設位於 `~/.redeven/local-environment/`；Desktop 與獨立執行階段模式也會共用 `~/.redeven/catalog/` 下的設定檔目錄。
-- GitHub Releases 是版本化 CLI 壓縮檔、Desktop 安裝程式、總和檢查碼、簽章及 OKF 驗證資產的公開權威來源。
-- 如需目前實作詳細資料，請使用 `okf.search` 查詢嵌入式 OKF bundle，或查看 [okf/index.md](okf/index.md)。
-
-</details>
-
-<!-- readme-section:license -->
-<a id="license"></a>
-
-## 授權條款
-
-Redeven 採用 [MIT License](LICENSE)。第三方相依性聲明記錄於 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；發行封存檔與 Desktop 軟體套件會在執行階段成品旁一併包含這些檔案。
-
-<!-- readme-section:open-source-scope -->
-<a id="open-source-scope"></a>
-
-## 開放原始碼範圍
-
-此公開儲存庫涵蓋端點與執行階段層、Redeven Local UI 行為、Desktop shell 及 GitHub Release 契約。
-
-特定組織的部署自動化、控制平面實作與站台專用封裝程式明確不在此儲存庫範圍內。

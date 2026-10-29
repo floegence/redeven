@@ -6,27 +6,11 @@
   },
   "sections": [
     {
-      "id": "what-is-redeven",
+      "id": "work",
       "level": 2
     },
     {
-      "id": "quick-start",
-      "level": 2
-    },
-    {
-      "id": "desktop-app",
-      "level": 3
-    },
-    {
-      "id": "cli",
-      "level": 3
-    },
-    {
-      "id": "what-you-can-do",
-      "level": 2
-    },
-    {
-      "id": "security",
+      "id": "start",
       "level": 2
     },
     {
@@ -34,45 +18,19 @@
       "level": 2
     },
     {
-      "id": "for-developers",
-      "level": 2
-    },
-    {
-      "id": "prerequisites",
-      "level": 3
-    },
-    {
-      "id": "build",
-      "level": 3
-    },
-    {
-      "id": "local-guardrails",
-      "level": 3
-    },
-    {
       "id": "license",
-      "level": 2
-    },
-    {
-      "id": "open-source-scope",
       "level": 2
     }
   ],
   "required_literals": [
     "Redeven",
     "Where machines become workspaces.",
-    "Redeven Desktop",
     "Redeven Cloud",
     "Flowersec",
     "Flower",
     "Workbench",
-    "Browser Editor",
-    "Local UI",
-    "E2EE",
-    "OKF v0.2",
-    "flowersec-go/v5@v5.1.0",
-    "README.<locale>.md",
-    "assets/readme/locales.json"
+    "Web Center",
+    "OKF v0.2"
   ],
   "quality_rules": {
     "zh_tw_forbidden_simplified_characters": "这为发后里么个与门开关见览复务体进过还从无现将应类级仅启则处时实问载设线别确许组数选达边导创删击图广录补临协权术稳运连换",
@@ -98,16 +56,22 @@
   },
   "shared_visual_exceptions": [
     {
-      "path": "assets/readme/architecture-overview.png",
+      "path": "assets/readme/runtime-workbench.webp",
       "language": "en-US",
       "used_by": "all-locales",
-      "reason": "The existing branded architecture image has no editable source; each localized README provides localized surrounding copy and alternative text."
+      "reason": "Captured from a running Redeven Runtime in Chrome with real repository files and a real terminal session; localized prose and alt text describe the English interface."
     },
     {
-      "path": "assets/readme/redeven-demo.gif",
+      "path": "assets/readme/runtime-files.webp",
       "language": "en-US",
       "used_by": "all-locales",
-      "reason": "The README demo is a shared product recording with English UI and captions; each localized README provides localized alternative text and keeps surrounding localized copy."
+      "reason": "Captured from a running Redeven Runtime in Chrome with real repository files and a real terminal session; localized prose and alt text describe the English interface."
+    },
+    {
+      "path": "assets/readme/ways-to-connect.svg",
+      "language": "en-US",
+      "used_by": "all-locales",
+      "reason": "A shared product topology diagram; every localized README explains all three entry points in translated copy and alt text."
     }
   ],
   "tracked_markdown_exceptions": [
@@ -133,8 +97,8 @@
       "english_name": "Simplified Chinese",
       "file": "README.zh-CN.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "6edaaaa3b1c8475a2890da996064beca9243157f4513a8b16690d8a8b0ca41c6"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "cb21e20693b384f89e5b63e26fac4a607b2c2f3db083d72c715640519ea07d12"
       }
     },
     {
@@ -143,8 +107,8 @@
       "english_name": "Traditional Chinese",
       "file": "README.zh-TW.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "1f6832cb425d95b396008bdc885b919b4d1a798e808d09b20a5755312ff2b335"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "45acd91145cfa9df8271886af097b94aed0492ba92c20740704bc27f5cfda0f6"
       }
     },
     {
@@ -153,8 +117,8 @@
       "english_name": "Japanese",
       "file": "README.ja-JP.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "f46f255b9ac3efa90565eb78ded91a0280fa5bcf2566cb0a08f595616f6f242d"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "af0c45c51b5cc31147e8756413651aba508ce56297b61c76e760ef4a27de9431"
       }
     },
     {
@@ -163,8 +127,8 @@
       "english_name": "Korean",
       "file": "README.ko-KR.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "d2f3d74a6f5f63e6ceeb8889273e5761e004cbc80850ac22611488c60e948651"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "3db03ac12d94f340959627cca1d162b71535424385c8aa62b8911883591f90b1"
       }
     },
     {
@@ -173,8 +137,8 @@
       "english_name": "German",
       "file": "README.de-DE.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "6d79092cdb6bf04d067be4fefe30b627cc9bf0f89dfb6166c8ed3930200cac0a"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "66ac28b5249c653329cff66a94453b57f6342d0427155e2e2ab4c9c4539f7cf4"
       }
     },
     {
@@ -183,8 +147,8 @@
       "english_name": "French",
       "file": "README.fr-FR.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "ce526ad3f723af9fab78e8cbbb796a3d87ff32651469d6784026c37e86d4d1b7"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "433e681959634d7e4820caf2d55d79c7bb570ac41cfff6e37071df5220125e82"
       }
     },
     {
@@ -193,8 +157,8 @@
       "english_name": "Spanish",
       "file": "README.es-ES.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "a34eb38a827b02b195a177f160d982c27d0281e9ff9ea328051bc31fe182bcd8"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "b4640b9ed995e4de92927587f00e581215606fed11d162b3e4d97cf2c2245ccf"
       }
     },
     {
@@ -203,8 +167,8 @@
       "english_name": "Brazilian Portuguese",
       "file": "README.pt-BR.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "6283bf0203571de2258044c8bbd79466b60ae28643412af56bfce0f113d657b6"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "fd56911b13dbd87013344f39baee586e102890f1377d0e2be6d94731c9fd2615"
       }
     },
     {
@@ -213,8 +177,8 @@
       "english_name": "Russian",
       "file": "README.ru-RU.md",
       "synchronization": {
-        "source_sha256": "a34bb62b81d2f7ac493d95fe79d5677aeb03cdb4ac3af74f973c1c8ccdef79d7",
-        "content_sha256": "6423482f982ef4dd304ba5b04be4a2a14797ff6c6c29278bb0505b7460368ea9"
+        "source_sha256": "c54b280b62c87b453780121e1f0c4a460112514b339bb301d85b97e44d0fee20",
+        "content_sha256": "b7b518d74116aa7cf276c0853cf5cf03a10ccf269340e253d07ce934b600a8f4"
       }
     }
   ]

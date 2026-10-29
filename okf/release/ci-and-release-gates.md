@@ -3,7 +3,7 @@ type: Release Contract
 title: CI and release gates
 tags: [release, ci, quality, okf]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -29,7 +29,7 @@ Daily/manual CodeQL is separate: unchanged main since successful schedule skips;
 
 ## Build ownership
 
-go.mod owns exact Go patch/.node-version first-party Node; gates/engines/README agree. Desktop pnpm permits only electron/esbuild lifecycle; electron-winstaller ignored for internal NSIS. Dependency changes regenerate/check notices. README locales preserve structure/links/literals/terms/hashes, not reviewer counts. Commit all three OKF artifacts.
+go.mod owns exact Go patch/.node-version first-party Node; gates/engines/README agree. Desktop pnpm permits only electron/esbuild lifecycle; electron-winstaller ignored for internal NSIS. Dependency changes regenerate/check notices. README locales preserve structure/links/literals/terms/hashes, not reviewer counts. The concise README uses captures from a running Runtime, shared visual provenance and translated alt text; detailed setup lives in public Docs and OKF. Root READMEs may link only to the exact public product destinations enumerated in open_source_hygiene_check.sh; nested paths, query extensions, lookalike hosts and those same URLs in implementation files remain blocked. Commit all three OKF artifacts.
 
 Build embedded UI before Go consumers. Env App flock spans cleanup/typecheck/Vite/budgets/compression and lasts through builds; same checkout waits, separate worktrees do not. build_assets.sh cannot compress outside lock/skip missing output.
 

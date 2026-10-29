@@ -89,6 +89,12 @@ check_public_domain_literals() {
   local domain_failed=0
   while IFS=: read -r file_path line_number line_text; do
     local cleaned_line="$line_text"
+    # README navigation may link to these exact public product pages only.
+    case "$file_path" in
+      README.md|README.*.md)
+        cleaned_line="$(printf '%s\n' "$cleaned_line" | perl -pe 's{https://redeven[.]com/(?:#product|download|docs(?:/(?:download-desktop|download-runtime|environment-center|control-plane-providers|security-architecture|getting-started))?)(?=[\s"\x27`<>,;)]|$)}{}g')"
+        ;;
+    esac
     cleaned_line="${cleaned_line//https:\/\/redeven.com\/install.sh/}"
     cleaned_line="${cleaned_line//https:\/\/version.agent.redeven.com\/v1\/manifest.json/}"
     cleaned_line="${cleaned_line//https:\/\/version.agent.redeven.com\/v1\/browser-editor\/code-server\/latest.json/}"
@@ -102,7 +108,7 @@ check_public_domain_literals() {
   done <"$domain_matches"
 
   if [ "$domain_failed" -ne 0 ]; then
-    echo "[ERROR] Only the canonical Cloud origin https://redeven.com, public installer/manifest/catalog endpoints, and package/plugin HTTPS origins may appear in this public repository." >&2
+    echo "[ERROR] Only the canonical Cloud origin https://redeven.com, public installer/manifest/catalog endpoints, and package/plugin HTTPS origins may appear; root READMEs may also link to explicitly listed public product pages." >&2
     failed=1
   fi
 }

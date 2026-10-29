@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">Your machines. Your way in.</title>
+  <desc id="desc">Desktop includes an Environment Center and a local Runtime. Self-hosted Web Center runs independently and opens approved remote Runtimes through a Gateway. A standalone Runtime also works directly in a browser.</desc>
+  <rect width="1200" height="560" rx="24" fill="#f3f2ed"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" fill="#242a26">
+    <text x="56" y="72" font-size="36" font-weight="600">Your machines. Your way in.</text>
+    <g id="desktop" transform="translate(56 112)">
+      <rect width="528" height="196" rx="16" fill="#ffffff"/>
+      <g transform="translate(28 28)" fill="none" stroke="#39775b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="0" width="36" height="24" rx="3"/><path d="M0 31h40M15 24v7m10-7v7"/></g>
+      <text x="84" y="54" font-size="30" font-weight="600">Desktop</text>
+      <text x="28" y="108" font-size="24">Environment Center + local Runtime</text>
+      <text x="28" y="151" font-size="21" fill="#666f68">Start here. Connect local and remote.</text>
+    </g>
+    <g id="web-center" transform="translate(616 112)">
+      <rect width="528" height="196" rx="16" fill="#ffffff"/>
+      <g transform="translate(28 26)" fill="none" stroke="#39775b" stroke-width="2.5" stroke-linecap="round"><circle cx="20" cy="18" r="18"/><ellipse cx="20" cy="18" rx="8" ry="18"/><path d="M2 18h36"/></g>
+      <text x="84" y="54" font-size="30" font-weight="600">Web Center</text>
+      <text x="28" y="108" font-size="24">Your server. Your browser. Your directory.</text>
+      <text x="28" y="151" font-size="21" fill="#666f68">One administrator. No Desktop required.</text>
+    </g>
+    <g id="connections" stroke="#87968a" stroke-width="2" fill="none"><path d="M320 308v70h560v-70M600 378v38"/><path d="m594 410 6 6 6-6"/></g>
+    <rect x="796" y="330" width="168" height="34" rx="17" fill="#e1e8df"/>
+    <text x="880" y="354" text-anchor="middle" font-size="20" fill="#39775b">via Gateway</text>
+    <g id="runtime">
+      <rect x="240" y="424" width="720" height="88" rx="16" fill="#263e32"/>
+      <text x="600" y="461" text-anchor="middle" font-size="26" font-weight="600" fill="#ffffff">Runtime on each target machine</text>
+      <text x="600" y="492" text-anchor="middle" font-size="20" fill="#c5d6ca">Your files, processes, and tools stay here.</text>
+    </g>
+  </g>
+</svg>
