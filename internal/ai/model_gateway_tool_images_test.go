@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/png"
 	"io"
@@ -23,10 +25,25 @@ func TestProductionProvidersPreservePairedToolImagesAndNativeBudget(t *testing.T
 	if err := png.Encode(&pixels, image.NewRGBA(image.Rect(0, 0, 16, 16))); err != nil {
 		t.Fatal(err)
 	}
-	// The large valid transport must be budgeted as native image content, never
-	// as base64 prose. DecodeConfig still reads the exact 16 by 16 pixel header.
-	data := append(pixels.Bytes(), bytes.Repeat([]byte{0x52, 0x6a, 0x91}, 400_000)...)
+	// A large valid ancillary PNG chunk tests native image budgeting without
+	// relying on corrupt trailing bytes. Preparation removes unnecessary metadata.
+	chunk := append([]byte("tEXt"), append([]byte("fixture\x00"), bytes.Repeat([]byte("x"), 1_200_000)...)...)
+	var source bytes.Buffer
+	source.Write(pixels.Bytes()[:len(pixels.Bytes())-12])
+	_ = binary.Write(&source, binary.BigEndian, uint32(len(chunk)-4))
+	source.Write(chunk)
+	_ = binary.Write(&source, binary.BigEndian, crc32.ChecksumIEEE(chunk))
+	source.Write(pixels.Bytes()[len(pixels.Bytes())-12:])
+	data := source.Bytes()
 	uri := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+	expected, _, err := prepareModelImage(t.Context(), ContentPart{Type: "image", MimeType: "image/png", FileURI: uri})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedBytes, err := modelImageBytes(expected)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct{ provider, model string }{
 		{"openai", "gpt-5-mini"},
 		{"kimi_code", "k3.1-pro"},
@@ -106,7 +123,7 @@ func TestProductionProvidersPreservePairedToolImagesAndNativeBudget(t *testing.T
 			}
 			actual := <-wire
 			uri = strings.Replace(uri, "data:image/jpeg", "data:image/png", 1)
-			if !done || resolutions != 3 || bytes.Count(actual, []byte(base64.StdEncoding.EncodeToString(data))) != 3 || prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(actual)) {
+			if !done || resolutions != 3 || bytes.Count(actual, []byte(base64.StdEncoding.EncodeToString(expectedBytes))) != 3 || prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(actual)) {
 				t.Fatal("tool image bytes, count, preparation identity, or completion changed")
 			}
 			var body struct {

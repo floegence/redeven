@@ -35,6 +35,12 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 }
 
 func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
+	preparedImages, imageErr := prepareModelGatewayImages(ctx, req)
+	if imageErr != nil {
+		return nil, imageErr
+	}
+	req = preparedImages
+
 	var hosted []flprovider.HostedToolDefinition
 	if req.WebSearchMode != "" && req.WebSearchMode != providerWebSearchModeDisabled {
 		cap, ok := flprovider.DeepSeekModelCapabilities(req.Model)

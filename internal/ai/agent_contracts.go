@@ -58,15 +58,16 @@ type StreamEvent struct {
 }
 
 type ContentPart struct {
-	Type       string `json:"type"`
-	Text       string `json:"text,omitempty"`
-	FileURI    string `json:"file_uri,omitempty"`
-	MimeType   string `json:"mime_type,omitempty"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
-	ToolUseID  string `json:"tool_use_id,omitempty"`
-	ToolName   string `json:"tool_name,omitempty"`
-	ArgsJSON   string `json:"args_json,omitempty"`
-	JSON       []byte `json:"json,omitempty"`
+	ModelImage *modelImageRepresentation `json:"model_image,omitempty"`
+	Type       string                    `json:"type"`
+	Text       string                    `json:"text,omitempty"`
+	FileURI    string                    `json:"file_uri,omitempty"`
+	MimeType   string                    `json:"mime_type,omitempty"`
+	ToolCallID string                    `json:"tool_call_id,omitempty"`
+	ToolUseID  string                    `json:"tool_use_id,omitempty"`
+	ToolName   string                    `json:"tool_name,omitempty"`
+	ArgsJSON   string                    `json:"args_json,omitempty"`
+	JSON       []byte                    `json:"json,omitempty"`
 }
 
 type Message struct {

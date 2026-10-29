@@ -205,8 +205,8 @@ func TestAnthropicTextAttachmentDoesNotSilentlyTruncate(t *testing.T) {
 var _ ModelGateway = (*recordingPreparedGateway)(nil)
 
 func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T) {
-	data, frameAttachment, original := screenshotPreparationFixture(t)
-	modelPart, _, err := prepareModelScreenshot(t.Context(), frameAttachment, original, false)
+	data, _, original := screenshotPreparationFixture(t)
+	modelPart, _, err := prepareModelImage(t.Context(), original)
 	if err != nil {
 		t.Fatal(err)
 	}

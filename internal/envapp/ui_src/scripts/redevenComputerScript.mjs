@@ -134,7 +134,7 @@ export async function createComputerScript({ browser = true } = {}) {
         return value;
       };
       const call = async (operation) => JSON.parse(await invoke(JSON.stringify(operation)));
-      const imageOptions = (value) => { options(value, ['coordinate_space','frame','document_id']); if (value.coordinate_space !== 'image_pixels' || typeof value.frame !== 'string' || typeof value.document_id !== 'string') invalid(); return value; };
+      const imageOptions = (value) => { options(value, ['coordinate_space','frame','document_id']); if (!['image_pixels','model_pixels'].includes(value.coordinate_space) || typeof value.frame !== 'string' || typeof value.document_id !== 'string') invalid(); return value; };
       const canonicalNode = (value) => {
         const {canonical_role, platform_role, ...node} = value;
         return {...node, role: canonical_role || node.role};
@@ -157,9 +157,9 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const screenshot = async () => {
         const result = await call({action:'screenshot'});
-        if (!${browser ? 'true' : 'false'}) return result;
+        if (!result.frame_geometry) return result;
         // Capture scalar identities so guest mutation cannot retarget an image.
-        const identity = {coordinate_space:'image_pixels',frame:result.frame_geometry?.frame,document_id:result.frame_geometry?.document_id};
+        const identity = {coordinate_space:result.frame_geometry?.model_image?'model_pixels':'image_pixels',frame:result.frame_geometry?.frame,document_id:result.frame_geometry?.document_id};
         return Object.freeze({...result, ...expose('image',{
           click:(x,y)=>call({action:'pointer_click',x:number(x),y:number(y),...imageOptions(identity)}),
           doubleClick:(x,y)=>call({action:'double_click',x:number(x),y:number(y),...imageOptions(identity)}),

@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-29: Adopt Floret v7.93.0 for default bounded model images across ingress, typed media failures, MCP image retention and browser/native screenshot coordinate mapping.
+
 Recent pointers only; concepts own contracts/evidence and Git retains earlier entries.
 
 ## 2026-10-28

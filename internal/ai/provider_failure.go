@@ -27,6 +27,11 @@ const providerFailurePrefix = "redeven_provider_failure_v1:"
 // message. Only structured error messages and reviewed diagnostic fields enter
 // it; raw bodies, metadata, endpoints and credentials stay private.
 type providerFailureDiagnostic struct {
+	MediaKind string `json:"media_kind,omitempty"`
+	Actual    int64  `json:"actual,omitempty"`
+	Limit     int64  `json:"limit,omitempty"`
+	Stage     string `json:"stage,omitempty"`
+
 	ActualBytes int64                      `json:"actual_bytes,omitempty"`
 	LimitBytes  int64                      `json:"limit_bytes,omitempty"`
 	Attempt     *providerAttemptDiagnostic `json:"attempt,omitempty"`
@@ -68,6 +73,22 @@ var diagnosticParamPattern = regexp.MustCompile(`^(tools|input|messages|model|in
 var diagnosticRequestIDPattern = regexp.MustCompile(`^req[_-][A-Za-z0-9_-]{1,120}$`)
 
 func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
+	switch d.MediaKind {
+	case "dimension", "animated_dimension", "count", "bytes", "total_bytes":
+		if d.Code != "image_limit_exceeded" || d.Actual <= d.Limit || d.Limit <= 0 {
+			d.MediaKind = ""
+		}
+	default:
+		d.MediaKind = ""
+	}
+	if d.MediaKind == "" {
+		d.Actual = 0
+		d.Limit = 0
+	}
+	if d.Stage != "image_preparation" {
+		d.Stage = ""
+	}
+
 	if d.Code != "request_bytes_exceeded" || d.ActualBytes <= d.LimitBytes || d.LimitBytes <= 0 {
 		d.ActualBytes = 0
 		d.LimitBytes = 0
@@ -95,7 +116,7 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 		d.LimitSource = ""
 	}
 	switch d.Shape {
-	case "standard_error", "detail", "json_object", "json_array", "json_value", "empty", "non_json", "stream_error", "truncated", "transport_error", "unknown":
+	case "local_validation", "standard_error", "detail", "json_object", "json_array", "json_value", "empty", "non_json", "stream_error", "truncated", "transport_error", "unknown":
 	default:
 		d.Shape = "unknown"
 	}
@@ -284,6 +305,15 @@ func providerTransportFailure(err error, providerType string) error {
 	if err == nil {
 		return nil
 	}
+
+	var media *flprovider.MediaLimitError
+	if errors.As(err, &media) {
+		return newProviderFailure(providerFailureDiagnostic{Provider: providerType, Code: "image_limit_exceeded", Shape: "local_validation", MediaKind: media.Kind, Actual: media.Actual, Limit: media.Limit, Stage: "image_preparation"}, err, flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+	}
+	var imageFailure *modelImagePreparationError
+	if errors.As(err, &imageFailure) {
+		return newProviderFailure(providerFailureDiagnostic{Provider: providerType, Code: "image_preparation_failed", Shape: "local_validation", Stage: "image_preparation", Message: imageFailure.Error()}, err, flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+	}
 	var byteLimit *flprovider.RequestByteLimitError
 	if errors.As(err, &byteLimit) {
 		return newProviderFailure(providerFailureDiagnostic{Provider: providerType, Code: "request_bytes_exceeded", Shape: "unknown", ActualBytes: byteLimit.ActualBytes, LimitBytes: byteLimit.LimitBytes}, err, flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
@@ -412,7 +442,10 @@ func providerFailureDetail(message string) string {
 
 func providerDiagnosticRunCode(d providerFailureDiagnostic) string {
 	d = d.sanitized()
-	if d.Code == "request_bytes_exceeded" {
+	if d.Code == "image_preparation_failed" {
+		return runErrorCodeProviderRequestRejected
+	}
+	if d.Code == "request_bytes_exceeded" || d.Code == "image_limit_exceeded" {
 		return runErrorCodeProviderRequestTooLarge
 	}
 	status := d.failureStatus()

@@ -3,7 +3,7 @@ type: AI Media Contract
 title: Direct image reading and tool media retention
 tags: [ai, tools, images, media, security]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -23,9 +23,9 @@ remain available after model preparation.
 - Locator-only crop accepts integer x/y/width/height within original image pixels,
   never clips, and saves a new lossless PNG with source_crop metadata. It uses
   fresh canonical authorization. Image pixels differ from CSS action coordinates.
-- Ordinary image.read results preserve original encoding. Visual summaries may
-  optimize Computer frames through [model preparation](computer-use-media.md).
-  Original locators remain available; no automatic resizing or derivative cache.
+- image.read stores original snapshots, while every model input (including crops
+  and summaries) uses [default model preparation](computer-use-media.md). Original
+  locators remain available for detail crops; no durable derivative cache exists.
 - Floret preserves image order in summaries. Tokens and JSON bytes have separate
   limits; indivisible overflow fails.
 - toolMediaStore retains immutable images in computer/keyframes across source

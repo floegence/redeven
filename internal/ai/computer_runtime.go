@@ -361,7 +361,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	_ = json.Unmarshal(call.Arguments, &input)
 	if input["coordinate_space"] != nil || input["frame"] != nil || input["document_id"] != nil || input["action"] == "text" || input["action"] == "query" || input["action"] == "attribute" || input["action"] == "table" {
 		target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID)
-		if resolveErr != nil || !strings.HasPrefix(target.Kind, "browser.") {
+		if resolveErr != nil || (!strings.HasPrefix(target.Kind, "browser.") && !(target.Kind == "desktop.window" && input["coordinate_space"] == "model_pixels" && input["action"] != "text" && input["action"] != "query" && input["action"] != "attribute" && input["action"] != "table")) {
 			return TargetToolResult{}, computerTargetFailure(call, "TARGET_CAPABILITY_UNAVAILABLE")
 		}
 	}

@@ -41,7 +41,7 @@ func TestChatGPTWireFullHistoryNamespaceAndNativeReplay(t *testing.T) {
 	provider := adapter.(*openAIProvider)
 	provider.chatGPT = true
 	provider.chatGPTToken = func(context.Context) (string, error) { return "rotating-access", nil }
-	req := ModelGatewayRequest{Model: "gpt-5.5", Messages: []Message{{Role: "system", Content: []ContentPart{{Type: "text", Text: "system instructions"}}}, {Role: "user", Content: []ContentPart{{Type: "text", Text: "inspect the image"}, {Type: "image", MimeType: "image/png", FileURI: "https://example.com/image.png"}}}}, Tools: []ToolDef{{Name: "inspect", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}}
+	req := ModelGatewayRequest{Model: "gpt-5.5", Messages: []Message{{Role: "system", Content: []ContentPart{{Type: "text", Text: "system instructions"}}}, {Role: "user", Content: []ContentPart{{Type: "text", Text: "inspect the image"}, {Type: "image", MimeType: "image/png", FileURI: testModelImageURI(t)}}}}, Tools: []ToolDef{{Name: "inspect", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}}
 	first, err := provider.StreamTurn(context.Background(), req, nil)
 	if err != nil {
 		t.Fatal(err)

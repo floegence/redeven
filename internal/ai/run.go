@@ -1855,7 +1855,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if err := requireRWX(meta); err != nil {
 			return nil, err
 		}
-		return r.mcpManager.Call(ctx, toolName, args)
+		return r.callMCPWithImages(ctx, toolName, args)
 	}
 	if strings.HasPrefix(toolName, "threads.") {
 		if r.host.queryThreads == nil {

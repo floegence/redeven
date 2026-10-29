@@ -549,7 +549,7 @@ func connectMCP(ctx context.Context, input MCPServerInput) (*mcp.ClientSession, 
 		}
 		transport = &mcp.CommandTransport{Command: command, TerminateDuration: time.Second}
 	} else {
-		transport = &mcp.StreamableClientTransport{Endpoint: input.URL, HTTPClient: &http.Client{Transport: mcpHeaderTransport{headers: input.Headers}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("MCP redirects are not allowed") }}, MaxRetries: -1, DisableStandaloneSSE: true, MaxEventSize: 1 << 20}
+		transport = &mcp.StreamableClientTransport{Endpoint: input.URL, HTTPClient: &http.Client{Transport: mcpHeaderTransport{headers: input.Headers}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("MCP redirects are not allowed") }}, MaxRetries: -1, DisableStandaloneSSE: true, MaxEventSize: 48 << 20}
 	}
 	return mcp.NewClient(&mcp.Implementation{Name: "Redeven Flower", Version: "1"}, nil).Connect(ctx, transport, nil)
 }
@@ -594,6 +594,10 @@ func (m *mcpManager) Tools() []ToolDef {
 }
 
 func (m *mcpManager) Call(ctx context.Context, name string, args map[string]any) (json.RawMessage, error) {
+	return m.call(ctx, name, args, nil)
+}
+
+func (m *mcpManager) call(ctx context.Context, name string, args map[string]any, images func(*mcp.CallToolResult) error) (json.RawMessage, error) {
 	if m == nil {
 		return nil, errors.New("MCP is unavailable")
 	}
@@ -658,6 +662,12 @@ func (m *mcpManager) Call(ctx context.Context, name string, args map[string]any)
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: toolName, Arguments: args})
 	if err != nil {
 		return nil, errMCPEffectUnknown
+	}
+
+	if images != nil {
+		if err := images(result); err != nil {
+			return json.RawMessage("{\"invocation_completed\":true,\"result_unavailable\":true,\"stage\":\"image_preparation\"}"), fmt.Errorf("MCP tool completed, but image retention failed: %s; inspect current state before another action", err)
+		}
 	}
 	data, err := json.Marshal(result)
 	if err != nil {

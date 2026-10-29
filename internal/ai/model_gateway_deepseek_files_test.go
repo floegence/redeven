@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"net/http"
@@ -204,5 +205,83 @@ func TestDesktopCapacityRejectsAmbiguousEvidence(t *testing.T) {
 		if validateDesktopModelSourceRPCError(&DesktopModelSourceRPCError{Code: "FAILED", Message: message, RetryAdvice: &advice, Capacity: c}, true) == nil {
 			t.Fatal("invalid evidence accepted")
 		}
+	}
+}
+
+func TestDeepSeekFilesLargeImageCountBoundary(t *testing.T) {
+	var original bytes.Buffer
+	pixels := image.NewRGBA(image.Rect(0, 0, 5120, 2880))
+	for y := 0; y < 2880; y++ {
+		for x := 0; x < 5120; x++ {
+			pixels.SetRGBA(x, y, color.RGBA{uint8(x), uint8(y), 128, 255})
+		}
+	}
+	if err := png.Encode(&original, pixels); err != nil {
+		t.Fatal(err)
+	}
+	source := ContentPart{Type: "image", MimeType: "image/png", FileURI: "data:image/png;base64," + base64.StdEncoding.EncodeToString(original.Bytes())}
+	optimized, _, err := prepareModelImage(t.Context(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, _ := modelImageBytes(optimized)
+	uploads, requests, wantCount := 0, 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/files" {
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Error(err)
+				return
+			}
+			defer r.MultipartForm.RemoveAll()
+			file, _, err := r.FormFile("file")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer file.Close()
+			body, _ := io.ReadAll(file)
+			cfg, _, err := image.DecodeConfig(bytes.NewReader(body))
+			if err != nil || cfg.Width != 2560 || cfg.Height != 1440 || !bytes.Equal(body, expected) {
+				t.Error("upload escaped policy", err, cfg)
+			}
+			uploads++
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "file-optimized", "bytes": len(body), "expires_at": time.Now().Add(time.Hour).Unix()})
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if bytes.Count(body, []byte("\"file_id\"")) != wantCount || bytes.Contains(body, []byte("base64")) {
+			t.Error("attachments lost at count boundary", wantCount)
+		}
+		requests++
+		fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"incident\",\"status\":\"completed\",\"output\":[]}}\n\n")
+	}))
+	defer server.Close()
+	files, err := flprovider.NewDeepSeekImageFiles(flprovider.DeepSeekImageFilesOptions{BaseURL: server.URL, APIKey: "fixture", Expiration: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &deepSeekProvider{baseURL: server.URL, apiKey: "fixture", imageFiles: files}
+	for _, n := range []int{14, 15, 17} {
+		wantCount = n
+		parts := make([]ContentPart, n)
+		for i := range parts {
+			parts[i] = optimized
+		}
+		parts[0] = source
+		prepared, err := p.prepareTurn(t.Context(), ModelGatewayRequest{Model: "deepseek-flash", Messages: []Message{{Role: "user", Content: parts}}})
+		if err != nil {
+			t.Fatalf("count %d: %v", n, err)
+		}
+		_, err = prepared.StreamTurn(t.Context(), nil)
+		prepared.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if uploads != 1 || requests != 3 {
+		t.Fatal("unstable derived content or dispatch", uploads, requests)
+	}
+	if source.FileURI != "data:image/png;base64,"+base64.StdEncoding.EncodeToString(original.Bytes()) {
+		t.Fatal("source mutated")
 	}
 }

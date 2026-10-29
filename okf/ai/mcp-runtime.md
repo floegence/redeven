@@ -35,6 +35,20 @@ Enabled, previously discovered tools join the dynamic tool surface before the ex
 
 Enabled, checked configuration satisfies the catalog indicator; it does not promise current network reachability or bypass approval.
 
+## Image results
+Typed ImageContent and image EmbeddedResource blobs become immutable tool-media
+attachments before the text display limit. Ordered text placeholders retain each
+image's attachment index, original dimensions and canonical locator. Arbitrary
+strings, structured JSON and resource links never trigger image downloads.
+Admission bounds each original to 10 MiB/32 megapixels and each result to 64
+images/32 MiB; HTTP SSE events allow 48 MiB for Base64 and metadata. The released SDK
+retains its 16 MiB stdio frame bound; transport rejection is explicit and never
+authorizes replay. Provider delivery uses the shared [model policy](computer-use-media.md).
+If image retention fails after CallTool returned, the result records confirmed
+invocation completion and unavailable output. This does not authorize tool replay,
+including when retention observes cancellation. Already retained attachments stay
+paired with the completed result.
+
 # Boundaries
 
 MCP tools are conservatively mutating and open-world regardless of server annotation claims. An MCP handler cannot run directly without that proof.

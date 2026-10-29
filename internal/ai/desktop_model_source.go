@@ -649,6 +649,12 @@ func (c *desktopModelSourceClient) ModelGateway(defaultModelID string) ModelGate
 }
 
 func (c *desktopModelSourceClient) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	preparedImages, imageErr := prepareModelGatewayImages(ctx, req)
+	if imageErr != nil {
+		return ModelGatewayResult{}, imageErr
+	}
+	req = preparedImages
+
 	if c == nil {
 		return ModelGatewayResult{}, ErrNotConfigured
 	}

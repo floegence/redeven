@@ -257,7 +257,7 @@ func redevenFloretGatewayIdentity(providerID string, providerType string, baseUR
 	if err != nil {
 		return flprovider.Identity{}, err
 	}
-	identity := []string{providerID, providerType, endpoint, modelName, route, "screenshot-jpeg90-v1"}
+	identity := []string{providerID, providerType, endpoint, modelName, route, flowerModelImagePolicy}
 	if len(authIdentity) > 0 && authIdentity[0] == config.AIAuthChatGPT {
 		identity = append(identity, authIdentity...)
 	}

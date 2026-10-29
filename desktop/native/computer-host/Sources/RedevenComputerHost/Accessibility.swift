@@ -63,6 +63,7 @@ final class NativeWindow {
     func pause(_ reasons: Set<String>) { pauseReasons.formUnion(reasons); invalidate() }
     func resumeObservation() { pauseReasons.removeAll(); invalidate() }
     var changed = false
+    var modelImage: ModelImageGeometry?
 
     init(app: NSRunningApplication, application: AXUIElement, element: AXUIElement, windowID: CGWindowID, identity: String? = nil) {
         self.id = identity ?? "macos-window-" + UUID().uuidString.lowercased()
@@ -73,6 +74,7 @@ final class NativeWindow {
             let window = Unmanaged<NativeWindow>.fromOpaque(pointer).takeUnretainedValue()
             window.observeDestruction(element: element, notification: notification as String)
             window.changed = true
+            window.modelImage = nil
             if notification as String == kAXUIElementDestroyedNotification || notification as String == kAXWindowCreatedNotification {
                 window.invalidate()
             }
@@ -104,7 +106,7 @@ final class NativeWindow {
         }
         references.removeAll()
     }
-    func invalidate() { revision += 1; clearReferences(); changed = true }
+    func invalidate() { modelImage = nil; revision += 1; clearReferences(); changed = true }
 
     func validate() throws {
         guard !app.isTerminated,

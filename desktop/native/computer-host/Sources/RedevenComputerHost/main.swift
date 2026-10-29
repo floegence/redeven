@@ -3,6 +3,7 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import CryptoKit
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -19,7 +20,7 @@ func emit(_ value: [String: Any]) {
     fflush(stdout)
 }
 
-func screenshot(_ window: NativeWindow) throws -> [String: Any] {
+func screenshot(_ window: NativeWindow, modelAnchor: Bool = false) throws -> [String: Any] {
     try window.validate()
     guard let bounds = axRect(window.element) else { throw NativeInput.unavailable() }
     let excluded = try NativeScreenCapture.excludedOwner(environment: ProcessInfo.processInfo.environment)
@@ -37,8 +38,18 @@ func screenshot(_ window: NativeWindow) throws -> [String: Any] {
     guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { throw NativeInput.unavailable() }
     CGImageDestinationAddImage(destination, normalized, nil)
     guard CGImageDestinationFinalize(destination) else { throw NativeInput.unavailable() }
-    return ["screenshot_mime": "image/png", "screenshot_base64": (data as Data).base64EncodedString(),
-            "width": width, "height": height, "device_pixel_ratio": 1]
+    var geometry: [String: Any] = [:]
+    if modelAnchor {
+        guard axRect(window.element) == bounds else { throw NativeInput.unavailable() }
+        let digest = SHA256.hash(data: data as Data).map { String(format: "%02x", $0) }.joined()
+        let anchor = ModelImageGeometry(frame: "computer://" + window.id + "/" + digest,
+            documentID: UUID().uuidString, bounds: bounds, width: width, height: height)
+        window.modelImage = anchor
+        window.changed = false
+        geometry = ["frame_geometry": anchor.payload]
+    }
+    return geometry.merging(["screenshot_mime": "image/png", "screenshot_base64": (data as Data).base64EncodedString(),
+            "width": width, "height": height, "device_pixel_ratio": 1]) { _, new in new }
 }
 
 if CommandLine.arguments.contains("--host-applications") {
@@ -126,6 +137,12 @@ func handle(_ line: String) {
         }
         func point(_ x: String, _ y: String) throws -> CGPoint {
             guard let bounds = axRect(selected.element) else { throw NativeInput.unavailable() }
+            if args["coordinate_space"] != nil || args["frame"] != nil || args["document_id"] != nil {
+                guard args["coordinate_space"] as? String == "model_pixels", let anchor = selected.modelImage else {
+                    throw HostFailure(code: "STALE_REFERENCE", message: "Capture a fresh model screenshot.")
+                }
+                return try anchor.point(x: number(x), y: number(y), frame: text("frame"), document: text("document_id"), currentBounds: bounds, changed: selected.changed)
+            }
             let local = CGPoint(x: try number(x), y: try number(y))
             guard CGRect(origin: .zero, size: bounds.size).contains(local) else { throw NativeInput.invalid("Coordinates are outside the target window.") }
             return CGPoint(x: bounds.minX + local.x, y: bounds.minY + local.y)
@@ -188,6 +205,7 @@ func handle(_ line: String) {
         default: throw HostFailure(code: "TARGET_CAPABILITY_UNAVAILABLE", message: "The application target does not support this tool.")
         }
         if !input.events.isEmpty {
+            selected.modelImage = nil
             mode = "foreground"
             try foreground.post(input, window: selected, allowed: allowForeground, privateInput: privateInput, started: {
                 emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground", "reason": "native_input_required"])
@@ -197,6 +215,7 @@ func handle(_ line: String) {
                 }
             }, didPost: { effectStarted = true })
         }
+        if effectStarted { selected.modelImage = nil }
         inputConfirmed = true
         observing = true
         observationStage = "safety_scan"
@@ -220,7 +239,7 @@ func handle(_ line: String) {
         if after["level"] as? String == "takeover" { pause(after); return }
         if tool == "computer.screenshot" || (tool == "computer.observe" ? args["screenshot"] as? Bool == true : request["script_operation"] as? Bool != true) {
             observationStage = "capture"
-            payload.merge(try screenshot(selected)) { _, new in new }
+            payload.merge(try screenshot(selected, modelAnchor: !privateInput && request["live_frame"] as? Bool != true)) { _, new in new }
             CFRunLoopRunInMode(.defaultMode, 0, true)
             observationStage = "safety_scan"
             let captured = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess)

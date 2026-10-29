@@ -29,7 +29,7 @@ const maxImageReadBytes = 10 << 20
 
 var ErrThreadImageModelUnsupported = errors.New("this thread contains images; select an image-capable model")
 
-var imageSnapshotResourcePattern = regexp.MustCompile(`^image://[a-f0-9]{64}/(?:png|jpeg|webp)$`)
+var imageSnapshotResourcePattern = regexp.MustCompile(`^image://[a-f0-9]{64}/(?:png|jpeg|webp|gif)$`)
 
 func isToolMediaRef(ref string) bool {
 	return computerFrameResourcePattern.MatchString(ref) || imageSnapshotResourcePattern.MatchString(ref)

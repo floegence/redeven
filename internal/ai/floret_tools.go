@@ -1439,7 +1439,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			}
 		}
 	}
-	if toolName == "image.read" {
+	if toolName == "image.read" || strings.HasPrefix(toolName, "mcp_") {
 		for _, attachment := range result.Attachments {
 			ref := attachment.ResourceRef
 			if !imageSnapshotResourcePattern.MatchString(ref) && strings.HasPrefix(attachment.MIMEType, "image/") {

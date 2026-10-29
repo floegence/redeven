@@ -132,6 +132,12 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 }
 
 func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
+	preparedImages, imageErr := prepareModelGatewayImages(ctx, req)
+	if imageErr != nil {
+		return nil, imageErr
+	}
+	req = preparedImages
+
 	if p == nil {
 		return nil, errors.New("nil provider")
 	}
@@ -747,6 +753,12 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 }
 
 func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
+	preparedImages, imageErr := prepareModelGatewayImages(ctx, req)
+	if imageErr != nil {
+		return nil, imageErr
+	}
+	req = preparedImages
+
 	if p == nil {
 		return nil, errors.New("nil provider")
 	}
@@ -1029,6 +1041,12 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 }
 
 func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
+	preparedImages, imageErr := prepareModelGatewayImages(ctx, req)
+	if imageErr != nil {
+		return nil, imageErr
+	}
+	req = preparedImages
+
 	if p == nil {
 		return nil, errors.New("nil provider")
 	}
@@ -1298,6 +1316,12 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 }
 
 func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (ModelGatewayResult, error) {
+	preparedImages, imageErr := prepareModelGatewayImages(ctx, req)
+	if imageErr != nil {
+		return ModelGatewayResult{}, imageErr
+	}
+	req = preparedImages
+
 	if p == nil {
 		return ModelGatewayResult{}, errors.New("nil provider")
 	}
@@ -2183,6 +2207,12 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 }
 
 func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
+	preparedImages, imageErr := prepareModelGatewayImages(ctx, req)
+	if imageErr != nil {
+		return nil, imageErr
+	}
+	req = preparedImages
+
 	if p == nil {
 		return nil, errors.New("nil provider")
 	}

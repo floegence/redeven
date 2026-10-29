@@ -138,7 +138,15 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			if err := os.WriteFile(source, encoded.Bytes(), 0600); err != nil {
 				t.Fatal(err)
 			}
-			nativeImage := base64.StdEncoding.EncodeToString(encoded.Bytes())
+			preparedImage, _, err := prepareModelImage(t.Context(), ContentPart{Type: "image", MimeType: "image/png", FileURI: "data:image/png;base64," + base64.StdEncoding.EncodeToString(encoded.Bytes())})
+			if err != nil {
+				t.Fatal(err)
+			}
+			preparedBytes, err := modelImageBytes(preparedImage)
+			if err != nil {
+				t.Fatal(err)
+			}
+			nativeImage := base64.StdEncoding.EncodeToString(preparedBytes)
 			vision, _ := config.AIModelCatalogEntry(tc.provider, tc.model)
 			textModel := config.AIProviderModel{ModelName: "text-only", ContextWindow: 128000, MaxOutputTokens: 4096, InputModalities: []string{"text"}}
 			options := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: &config.AIConfig{CurrentModelID: tc.provider + "/" + vision.ModelName, Providers: []config.AIProvider{{ID: tc.provider, Type: tc.provider, BaseURL: provider.URL, Models: []config.AIProviderModel{vision, textModel}}}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 60 * time.Second, FirstOutputTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second}}
@@ -297,7 +305,7 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			}
 			for index := 1; index < len(captured); index++ {
 				if !bytes.Contains(captured[index], []byte(`"type":"input_image"`)) || !bytes.Contains(captured[index], []byte(nativeImage)) {
-					t.Fatalf("request %d lacks original native image", index)
+					t.Fatalf("request %d lacks prepared native image", index)
 				}
 				if strings.Contains(string(captured[index]), "browser_navigate") && bytes.Contains(captured[index], []byte(`"name":"browser_navigate","arguments"`)) {
 					t.Fatal("image inspection used browser")

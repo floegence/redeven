@@ -3,7 +3,7 @@ type: Media Contract
 title: Computer use media and visual requests
 tags: [ai, computer-use, media, attachments]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -18,32 +18,40 @@ lifetimes; tool success does not prove delivery. Model encodings never replace o
   computer:// identities and retention stay intact.
 - Safe results include target, location, summary and safety. Semantic/script
   operations include images only when requested.
-- Floret prepares Computer PNGs >=256 KiB as smaller JPEG90 (Go 4:2:0).
-  Transparency, dimensions, originals, hashes and visible history stay intact.
-- Model notices report dimensions/bytes/encoding; image pixels differ from CSS coordinates.
-- Ordinary/summary/Retry/Fork share preparation before estimation/freezing.
-  Retries reuse bytes; encoding revisions invalidate provider state. Ordinary
-  image.read originals bypass compression.
+- All authorized model images use published Floret PrepareModelImage: JPEG quality
+  85 and a 2560-pixel longest side, without upscaling. Uploads, image.read/crops,
+  browser/native screenshots, MCP images, summaries and historical replay share
+  this policy. Alpha remains PNG; EXIF orientation is applied and ICC retained.
+  An animation stays byte-identical when it fits; oversized animation fails
+  explicitly without flattening frames. An unchanged smaller original may be kept.
+- Canonical original bytes, hashes, locators and visible history never change.
+  Model notices report source/model dimensions and bytes; fine text can be read
+  through an original-backed crop. Preparation never fetches arbitrary URLs.
+- Preparation precedes estimation/freezing. Transport retries reuse exact bytes;
+  Desktop RPC carries validated derived metadata to prevent lossy recompression.
+  Encoding revisions invalidate provider state. No durable derivative cache exists.
 - Flower caps JSON/base64 at 32 MiB independently of tokens: product policy,
   not a provider limit. Remote DTOs share the cap; services own final rendering.
-- Floret compacts complete tool pairs and retains causes. UI provides numeric
+- Media dimension/count/byte failures retain typed actual/limit/stage through
+  Desktop RPC and canonical failure projection; they are permanent, not token
+  overflow. Invalid images report preparation failures. UI provides numeric
   diagnostics and input/model guidance without unchanged Retry or secret payloads.
 
-## Browser image coordinates
-A model screenshot returns frame_geometry: its existing computer:// resource,
-document identity, actual PNG dimensions, CSS visual viewport and image-to-input
-scale/offset. Browser image input explicitly supplies coordinate_space:
-"image_pixels", frame and document_id. Default coordinates remain browser CSS
-viewport pixels or the native adapter's existing units. Native image mode is
-rejected before dispatch; full-page/cropped arbitrary images have no input mapping.
+## Screenshot coordinates
+A model screenshot returns frame_geometry with its computer:// identity, original
+image dimensions and model_image dimensions. Browser geometry also carries CSS
+visual viewport scale/offset. Screenshot handles use model_pixels plus frame and
+document_id; explicit browser image_pixels retains original pixel semantics.
+Default browser CSS and native window coordinates keep their existing units.
+Native window screenshots support model_pixels with a transient window anchor.
+Full-page/cropped arbitrary images do not establish an input mapping.
 
-The current controller holds one bounded model anchor. Viewer sampling cannot
-replace it. Changed target, document, scroll, viewport or scale rejects the image
-operation before input. This checks known changes, not arbitrary dynamic layout
-races; semantic locators remain preferable for moving controls. Existing model
-JPEG preparation preserves dimensions. Script geometry is invalidated after an
-action and suppressed after takeover or failed observation. The final attachment
-supplies after_frame when several screenshots were taken.
+Each controller holds one model anchor. Viewer sampling cannot replace it.
+Changed target, document, viewport, bounds or observed native accessibility state
+rejects stale input. Input and takeover invalidate the anchor. Known-change
+checks cannot eliminate arbitrary dynamic layout races; semantic locators remain
+preferable for moving controls. The final attachment supplies after_frame when
+several screenshots were taken.
 
 # Boundaries
 
@@ -53,4 +61,6 @@ share paths, not authentication. Fixtures do not establish product qualification
 # Evidence
 
 - [Preparation](../../internal/ai/model_image_preparation.go)
+- [Image ingress and RPC tests](../../internal/ai/model_image_coverage_test.go)
+- [Count-boundary Files transport](../../internal/ai/model_gateway_deepseek_files_test.go)
 - [Viewer paths](../../internal/flower_ui/host/computerFramePath.ts)

@@ -647,12 +647,15 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 				parts = append(parts, ContentPart{Type: "text", Text: part.Text})
 				continue
 			}
+			if isModelImagePart(part) {
+				part.Type = "image"
+			}
 			if err := p.validateResolvedAttachment(part); err != nil {
 				return nil, err
 			}
-			part, notice, err := prepareModelScreenshot(ctx, attachment, part, msg.ToolResult != nil && msg.ToolResult.ToolName == "image.read")
+			part, notice, err := prepareModelImage(ctx, part)
 			if err != nil {
-				return nil, err
+				return nil, providerTransportFailure(err, p.providerType)
 			}
 			if notice != "" {
 				if msg.ToolResult != nil {

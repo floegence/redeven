@@ -2811,6 +2811,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     includeUnmappedMessage = true,
   ): string => {
     const code = trimString(error?.code);
+    if (code === 'provider_request_too_large') {
+      try {
+        const d = JSON.parse(trimString(error?.detail));
+        if (d.code === 'image_limit_exceeded' && Number.isSafeInteger(d.actual) && Number.isSafeInteger(d.limit) && d.actual > d.limit && d.limit > 0) {
+          const template = ['dimension', 'animated_dimension'].includes(d.media_kind) ? copy().chat.runErrors.mediaDimensionLimit
+            : d.media_kind === 'count' ? copy().chat.runErrors.mediaCountLimit
+            : ['bytes', 'total_bytes'].includes(d.media_kind) ? copy().chat.runErrors.mediaBytesLimit : '';
+          if (template) return template.replace('{actual}', String(d.actual)).replace('{limit}', String(d.limit)) + ' ' + copy().chat.runErrors.providerRequestTooLarge;
+        }
+      } catch { /* Historical failures may have no numeric media evidence. */ }
+    }
     // The backend owns message selection and redaction. Provider prose is
     // literal text; it is never rendered as Markdown or executable markup.
     if (code.startsWith('provider_') || code.startsWith('chatgpt_')) {

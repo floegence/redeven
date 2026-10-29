@@ -138,7 +138,7 @@ func TestDesktopModelContinuationEndToEnd(t *testing.T) {
 								results++
 							}
 						}
-						if calls != 1 || results != 1 || !strings.Contains(string(body["input"]), "data:image/png;base64,AQID") {
+						if calls != 1 || results != 1 || !strings.Contains(string(body["input"]), testModelImageURI(t)) {
 							t.Errorf("lost or duplicated tool/image history: calls=%d results=%d", calls, results)
 						}
 					}
@@ -310,7 +310,7 @@ func desktopContinuationGateway(t *testing.T, providerType, model, baseURL strin
 	adapter.identity = flprovider.Identity{Provider: DesktopModelSourceProviderType, Model: snapshot.CurrentModel, StateCompatibilityKey: "desktop-continuation:" + model}
 	adapter.supportsImageInput = true
 	adapter.attachmentResolver = func(context.Context, flprovider.Attachment) (ContentPart, error) {
-		return ContentPart{Type: "image", MimeType: "image/png", FileURI: "data:image/png;base64,AQID"}, nil
+		return ContentPart{Type: "image", MimeType: "image/png", FileURI: testModelImageURI(t)}, nil
 	}
 	return adapter
 }

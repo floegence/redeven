@@ -7695,7 +7695,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-26",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "ai",
           "attachments",
@@ -7705,15 +7705,15 @@
         "title": "Computer use media and visual requests",
         "type": "Media Contract"
       },
-      "body_length": 2739,
+      "body_length": 3550,
       "summary": "Redeven owns authorized screenshots; Floret owns history/preparation. Flower\nshows frames inline/in Stage. Durable frames and ephemeral samples have separate\nlifetimes; tool success does not prove delivery. Model encodings never replace original assets.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Missing, changed or unauthorized bytes fail explicitly. No unrestricted URL fallback.\n- [Image reads](image-read-and-retention.md) share immutable Computer storage;\n  computer:// identities and retention stay intact.\n- Safe results include target, location, summary and safety. Semantic/script\n  operations include images only when requested.\n- Floret prepares Computer PNGs \u003e=256 KiB as smaller JPEG90 (Go 4:2:0).\n  Transparency, dimensions, originals, hashes and visible history stay intact.\n- Model notices report dimensions/bytes/encoding; image pixels differ from CSS coordinates.\n- Ordinary/summary/Retry/Fork share preparation before estimation/freezing.\n  Retries reuse bytes; encoding revisions invalidate provider state. Ordinary\n  image.read originals bypass compression.\n- Flower caps JSON/base64 at 32 MiB independently of tokens: product policy,\n  not a provider limit. Remote DTOs share the cap; services own final rendering.\n- Floret compacts complete tool pairs and retains causes. UI provides numeric\n  diagnostics and input/model guidance without unchanged Retry or secret payloads.\n\n## Browser image coordinates\nA model screenshot returns frame_geometry: its existing computer:// resource,\ndocument identity, actual PNG dimensions, CSS visual viewport and image-to-input\nscale/offset. Browser image input explicitly supplies coordinate_space:\n\"image_pixels\", frame and document_id. Default coordinates remain browser CSS\nviewport pixels or the native adapter's existing units. Native image mode is\nrejected before dispatch; full-page/cropped arbitrary images have no input mapping.\n\nThe current controller holds one bounded model anchor. Viewer sampling cannot\nreplace it. Changed target, document, scroll, viewport or scale rejects the image\noperation before input. This checks known changes, not arbitrary dynamic layout\nraces; semantic locators remain preferable for moving controls. Existing model\nJPEG preparation preserves dimensions. Script geometry is invalidated after an\naction and suppressed after takeover or failed observation. The final attachment\nsupplies after_frame when several screenshots were taken.",
-          "char_count": 2141
+          "body": "- Missing, changed or unauthorized bytes fail explicitly. No unrestricted URL fallback.\n- [Image reads](image-read-and-retention.md) share immutable Computer storage;\n  computer:// identities and retention stay intact.\n- Safe results include target, location, summary and safety. Semantic/script\n  operations include images only when requested.\n- All authorized model images use published Floret PrepareModelImage: JPEG quality\n  85 and a 2560-pixel longest side, without upscaling. Uploads, image.read/crops,\n  browser/native screenshots, MCP images, summaries and historical replay share\n  this policy. Alpha remains PNG; EXIF orientation is applied and ICC retained.\n  An animation stays byte-identical when it fits; oversized animation fails\n  explicitly without flattening frames. An unchanged smaller original may be kept.\n- Canonical original bytes, hashes, locators and visible history never change.\n  Model notices report source/model dimensions and bytes; fine text can be read\n  through an original-backed crop. Preparation never fetches arbitrary URLs.\n- Preparation precedes estimation/freezing. Transport retries reuse exact bytes;\n  Desktop RPC carries validated derived metadata to prevent lossy recompression.\n  Encoding revisions invalidate provider state. No durable derivative cache exists.\n- Flower caps JSON/base64 at 32 MiB independently of tokens: product policy,\n  not a provider limit. Remote DTOs share the cap; services own final rendering.\n- Media dimension/count/byte failures retain typed actual/limit/stage through\n  Desktop RPC and canonical failure projection; they are permanent, not token\n  overflow. Invalid images report preparation failures. UI provides numeric\n  diagnostics and input/model guidance without unchanged Retry or secret payloads.\n\n## Screenshot coordinates\nA model screenshot returns frame_geometry with its computer:// identity, original\nimage dimensions and model_image dimensions. Browser geometry also carries CSS\nvisual viewport scale/offset. Screenshot handles use model_pixels plus frame and\ndocument_id; explicit browser image_pixels retains original pixel semantics.\nDefault browser CSS and native window coordinates keep their existing units.\nNative window screenshots support model_pixels with a transient window anchor.\nFull-page/cropped arbitrary images do not establish an input mapping.\n\nEach controller holds one model anchor. Viewer sampling cannot replace it.\nChanged target, document, viewport, bounds or observed native accessibility state\nrejects stale input. Input and takeover invalidate the anchor. Known-change\nchecks cannot eliminate arbitrary dynamic layout races; semantic locators remain\npreferable for moving controls. The final attachment supplies after_frame when\nseveral screenshots were taken.",
+          "char_count": 2781
         },
         {
           "id": "boundaries",
@@ -7750,6 +7750,12 @@
           "path": "ai/image-read-and-retention.md",
           "concept_id": "ai.image-read-and-retention",
           "title": "Direct image reading and tool media retention"
+        },
+        {
+          "label": "Flower MCP runtime",
+          "path": "ai/mcp-runtime.md",
+          "concept_id": "ai.mcp-runtime",
+          "title": "Flower MCP runtime"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -10000,7 +10006,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-28",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "ai",
           "images",
@@ -10011,15 +10017,15 @@
         "title": "Direct image reading and tool media retention",
         "type": "AI Media Contract"
       },
-      "body_length": 2320,
+      "body_length": 2327,
       "summary": "image.read inspects authorized files/snapshots. Redeven owns bytes/authorization;\nFloret owns history/membership. File references stay references; results use native\nimages, not browsers, temporary servers or Base64 result JSON. Original snapshots\nremain available after model preparation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- File mode accepts file_path and optional target_id; locator mode requires a\n  canonical media:v1 locator, excludes file_path/target_id, and reuses original\n  bytes without reopening the source. Default behavior remains unchanged.\n- Every permission mode checks image capability, CanRead, filesystem scope and\n  ToolTargetPolicy. Unavailable explicit targets fail without device fallback.\n- File reads retain their 10 MiB bound; Computer snapshots retain 16 MiB.\n- Locator-only crop accepts integer x/y/width/height within original image pixels,\n  never clips, and saves a new lossless PNG with source_crop metadata. It uses\n  fresh canonical authorization. Image pixels differ from CSS action coordinates.\n- Ordinary image.read results preserve original encoding. Visual summaries may\n  optimize Computer frames through [model preparation](computer-use-media.md).\n  Original locators remain available; no automatic resizing or derivative cache.\n- Floret preserves image order in summaries. Tokens and JSON bytes have separate\n  limits; indivisible overflow fails.\n- toolMediaStore retains immutable images in computer/keyframes across source\n  changes, Retry, restart, Fork and compaction.\n- Previews check ownership/canonical membership directly. Markdown images stay unchanged.\n\n## Maintenance and interactive writes\n\nOne in-process media gate protects writes and the complete canonical inventory\nthrough deletion, following Floret's published retention contract. Maintenance\nskips a held gate or queued writers. An interactive write cancels a running\nmaintenance scan and waits for that scan to settle; its own wait honors caller\ncancellation. Partial or failed inventory never authorizes deletion. No second\nmembership ledger, detached scan, speculative unlock or input replay is used.",
-          "char_count": 1791
+          "body": "- File mode accepts file_path and optional target_id; locator mode requires a\n  canonical media:v1 locator, excludes file_path/target_id, and reuses original\n  bytes without reopening the source. Default behavior remains unchanged.\n- Every permission mode checks image capability, CanRead, filesystem scope and\n  ToolTargetPolicy. Unavailable explicit targets fail without device fallback.\n- File reads retain their 10 MiB bound; Computer snapshots retain 16 MiB.\n- Locator-only crop accepts integer x/y/width/height within original image pixels,\n  never clips, and saves a new lossless PNG with source_crop metadata. It uses\n  fresh canonical authorization. Image pixels differ from CSS action coordinates.\n- image.read stores original snapshots, while every model input (including crops\n  and summaries) uses [default model preparation](computer-use-media.md). Original\n  locators remain available for detail crops; no durable derivative cache exists.\n- Floret preserves image order in summaries. Tokens and JSON bytes have separate\n  limits; indivisible overflow fails.\n- toolMediaStore retains immutable images in computer/keyframes across source\n  changes, Retry, restart, Fork and compaction.\n- Previews check ownership/canonical membership directly. Markdown images stay unchanged.\n\n## Maintenance and interactive writes\n\nOne in-process media gate protects writes and the complete canonical inventory\nthrough deletion, following Floret's published retention contract. Maintenance\nskips a held gate or queued writers. An interactive write cancels a running\nmaintenance scan and waits for that scan to settle; its own wait honors caller\ncancellation. Partial or failed inventory never authorizes deletion. No second\nmembership ledger, detached scan, speculative unlock or input replay is used.",
+          "char_count": 1798
         },
         {
           "id": "boundaries",
@@ -10032,7 +10038,7 @@
       "snippet": "image.read inspects authorized files/snapshots. Redeven owns bytes/authorization; Floret owns history/membership. File references stay references; results use native images, not browsers, temporary servers or Base64 result JSON. Original sn",
       "links": [
         {
-          "label": "model preparation",
+          "label": "default model preparation",
           "path": "ai/computer-use-media.md",
           "concept_id": "ai.computer-use-media",
           "title": "Computer use media and visual requests"
@@ -10081,15 +10087,15 @@
         "title": "Flower MCP runtime",
         "type": "Runtime Contract"
       },
-      "body_length": 3564,
+      "body_length": 4510,
       "summary": "Redeven configures MCP and adapts the released official Go SDK, which owns stdio/Streamable HTTP sessions. Floret owns invocation, approval, one-shot effects, history/recovery. Add no second execution queue/lifecycle/retry authority. Unknown call outcomes are terminal and never replayed; invalid persisted config fails without changing bytes.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Configuration and protocol\nStandalone configuration lives at `\u003cstateDir\u003e/ai/mcp.json`, with schema version 2, one monotonic configuration revision, and server revisions for optimistic edits. Persistence failure leaves the in-memory catalog unchanged.\n\nCatalog limits are 32 servers, 128 tools per server, 32 KiB per schema, and 4 MiB total persisted configuration.\n\nPackage-owned connections project from the [Agent Plugins registry](flower-agent-plugins.md). They use the same SDK/session and Floret invocation paths, with separate credentials and explicit discovery. They cannot be edited through standalone MCP writes.\n\n## Standalone identity\nCreation accepts an omitted local ID and display name. The runtime generates a cryptographically random lowercase ID with an mcp_ prefix, independently of the name or connection address; duplicate explicit IDs are conflicts, never replacements. Edits require the saved ID and revision. Missing IDs with a nonzero revision fail without creating another connection. Existing IDs and exact-ID Skill dependency matching remain unchanged.\n\nFor new unnamed connections, use the HTTP hostname or local executable basename, then prefer serverInfo.title followed by serverInfo.name from the existing successful initialize exchange. Automatically selected names are trimmed, limited to 120 UTF-8 bytes without splitting a character, and reject control characters. Explicit names win. Edits with an omitted name retain the saved name, and checks never rename a connection. Disabled creation uses connection-derived names without starting a command or contacting the server.\n\nTyping or opening a form does not probe connections. Failed discovery/persistence does not create a saved identity; retry remains an explicit user action. The persisted schema and credential-preservation rules do not change.\n\n## Presentation icons\nSave and explicit Check read `serverInfo.icons` from the existing SDK initialize result. Connection-preserving disabled edits retain icons; changed connection settings clear stale discovery.\n\nRejected sources receive the generated identity described in [the shared UI contract](../ui/flower-extensions.md#entry-icons).\n\n## Execution and dependencies\nEnabled, previously discovered tools join the dynamic tool surface before the existing permission filter. Their identity binds the exact server configuration and tool schema, so a changed or disabled configuration cannot execute through an old invocation name.\n\nEnabled, checked configuration satisfies the catalog indicator; it does not promise current network reachability or bypass approval.",
-          "char_count": 2605
+          "body": "## Configuration and protocol\nStandalone configuration lives at `\u003cstateDir\u003e/ai/mcp.json`, with schema version 2, one monotonic configuration revision, and server revisions for optimistic edits. Persistence failure leaves the in-memory catalog unchanged.\n\nCatalog limits are 32 servers, 128 tools per server, 32 KiB per schema, and 4 MiB total persisted configuration.\n\nPackage-owned connections project from the [Agent Plugins registry](flower-agent-plugins.md). They use the same SDK/session and Floret invocation paths, with separate credentials and explicit discovery. They cannot be edited through standalone MCP writes.\n\n## Standalone identity\nCreation accepts an omitted local ID and display name. The runtime generates a cryptographically random lowercase ID with an mcp_ prefix, independently of the name or connection address; duplicate explicit IDs are conflicts, never replacements. Edits require the saved ID and revision. Missing IDs with a nonzero revision fail without creating another connection. Existing IDs and exact-ID Skill dependency matching remain unchanged.\n\nFor new unnamed connections, use the HTTP hostname or local executable basename, then prefer serverInfo.title followed by serverInfo.name from the existing successful initialize exchange. Automatically selected names are trimmed, limited to 120 UTF-8 bytes without splitting a character, and reject control characters. Explicit names win. Edits with an omitted name retain the saved name, and checks never rename a connection. Disabled creation uses connection-derived names without starting a command or contacting the server.\n\nTyping or opening a form does not probe connections. Failed discovery/persistence does not create a saved identity; retry remains an explicit user action. The persisted schema and credential-preservation rules do not change.\n\n## Presentation icons\nSave and explicit Check read `serverInfo.icons` from the existing SDK initialize result. Connection-preserving disabled edits retain icons; changed connection settings clear stale discovery.\n\nRejected sources receive the generated identity described in [the shared UI contract](../ui/flower-extensions.md#entry-icons).\n\n## Execution and dependencies\nEnabled, previously discovered tools join the dynamic tool surface before the existing permission filter. Their identity binds the exact server configuration and tool schema, so a changed or disabled configuration cannot execute through an old invocation name.\n\nEnabled, checked configuration satisfies the catalog indicator; it does not promise current network reachability or bypass approval.\n\n## Image results\nTyped ImageContent and image EmbeddedResource blobs become immutable tool-media\nattachments before the text display limit. Ordered text placeholders retain each\nimage's attachment index, original dimensions and canonical locator. Arbitrary\nstrings, structured JSON and resource links never trigger image downloads.\nAdmission bounds each original to 10 MiB/32 megapixels and each result to 64\nimages/32 MiB; HTTP SSE events allow 48 MiB for Base64 and metadata. The released SDK\nretains its 16 MiB stdio frame bound; transport rejection is explicit and never\nauthorizes replay. Provider delivery uses the shared [model policy](computer-use-media.md).\nIf image retention fails after CallTool returned, the result records confirmed\ninvocation completion and unavailable output. This does not authorize tool replay,\nincluding when retention observes cancellation. Already retained attachments stay\npaired with the completed result.",
+          "char_count": 3551
         },
         {
           "id": "boundaries",
@@ -10101,6 +10107,12 @@
       ],
       "snippet": "Redeven configures MCP and adapts the released official Go SDK, which owns stdio/Streamable HTTP sessions. Floret owns invocation, approval, one-shot effects, history/recovery. Add no second execution queue/lifecycle/retry authority. Unknow",
       "links": [
+        {
+          "label": "model policy",
+          "path": "ai/computer-use-media.md",
+          "concept_id": "ai.computer-use-media",
+          "title": "Computer use media and visual requests"
+        },
         {
           "label": "Agent Plugins registry",
           "path": "ai/flower-agent-plugins.md",
@@ -31523,5 +31535,5 @@
       ]
     }
   ],
-  "source_sha256": "ebedff3fd10de9c560531d5ce561f504ce13dde81b6e814c5bd44d97b19e73fb"
+  "source_sha256": "970f2f36b948ed3dee86887092971d7497ee68155c6276f70c6c5f850f119361"
 }

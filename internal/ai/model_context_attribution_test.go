@@ -79,7 +79,7 @@ func TestRenderedContextAttributionAfterChatToolImages(t *testing.T) {
 	}
 	req := ModelGatewayRequest{Model: "gpt-4o", Messages: []Message{
 		{Role: "user", Content: []ContentPart{{Type: "text", Text: "Inspect the image"}}},
-		{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: "screen", ToolName: "screen", Text: "captured"}, {Type: "image", FileURI: "https://example.invalid/screen.png", MimeType: "image/png"}}},
+		{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: "screen", ToolName: "screen", Text: "captured"}, {Type: "image", FileURI: testModelImageURI(t), MimeType: "image/png"}}},
 		{Role: "user", Content: []ContentPart{{Type: "text", Text: "Current environment"}}, Attribution: &flprovider.MessageAttribution{Category: "model_context", Parts: []flprovider.ContentAttributionPart{{Start: 0, End: len("Current environment"), Key: "execution_environment"}}}},
 	}}
 	prepared, err := gateway.(modelGatewayRequestPreparer).prepareTurn(t.Context(), req)

@@ -153,11 +153,11 @@ it('ignores a late child settings read after returning to the parent', async () 
   expect(state.surface.textContent).toContain(state.parent.title);
 });
 
-async function mount(options: { missingProvider?: boolean; code?: string; deepseek?: boolean; disconnectable?: boolean } = {}) {
+async function mount(options: { missingProvider?: boolean; code?: string; deepseek?: boolean; disconnectable?: boolean; detail?: string } = {}) {
   const failed = thread({ messages: [
     { id: 'accepted-user', role: 'user', content: 'continue', status: 'error', created_at_ms: 1 },
     { id: 'accepted-assistant', role: 'assistant', content: 'I will inspect the runtime.', status: 'error', created_at_ms: 2 },
-  ], status: 'failed', error: { code: options.code ?? 'provider_request_rejected', message: 'private protocol error', detail: '{"provider":"unknown","code":"provider_request_rejected","response_shape":"empty"}' } });
+  ], status: 'failed', error: { code: options.code ?? 'provider_request_rejected', message: 'private protocol error', detail: options.detail ?? '{"provider":"unknown","code":"provider_request_rejected","response_shape":"empty"}' } });
   const initial = settingsSnapshot();
   const provider = { ...initial.model_profile!.providers[0], ...(options.deepseek ? { type: 'deepseek' as const, base_url: 'https://api.deepseek.com' } : {}), web_search: { enabled: false, source: 'native' as const } };
   const policy = { editable: true, default_enabled: true, default_model_enabled: true, default_fetch_source: 'direct' as const, enabled: false, source: 'native' as const, supported_sources: ['native'] as const };
@@ -486,4 +486,18 @@ it('refuses correction retry when canonical preflight makes the root conversatio
   state.setFocusThreadRequest({ request_id: 'leave-read-only-correction', thread_id: 'thread-2' });
   await waitFor(() => state.surface.textContent?.includes('Other chat') === true);
   expect(state.surface.querySelector('.flower-error-card')).toBeNull();
+});
+
+
+it.each([390, 1100])('shows numeric image limits without unsafe unchanged retry at width %s', async width => {
+  await page.viewport(width, 900);
+  const {surface, retryThread} = await mount({code: 'provider_request_too_large', detail: JSON.stringify({code: 'image_limit_exceeded', media_kind: 'dimension', actual: 5120, limit: 4096, stage: 'image_preparation'})});
+  const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+  expect(card.textContent).toContain('5120');
+  expect(card.textContent).toContain('4096');
+  expect(card.textContent).toContain(copy.chat.runErrors.providerRequestTooLarge);
+  expect([...card.querySelectorAll('button')].some(button => button.textContent === copy.chat.retryReply)).toBe(false);
+  expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+  await page.screenshot({ element: surface, path: '__screenshots__/image-limit-' + width + '.png' });
+  expect(retryThread).not.toHaveBeenCalled();
 });

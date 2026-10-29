@@ -13,7 +13,7 @@ import (
 )
 
 func TestGeminiStreamPreservesToolSignaturesAndImageInput(t *testing.T) {
-	const image = "data:image/png;base64,AQID"
+	image := testModelImageURI(t)
 	requests := make(chan map[string]any, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1beta/openai/chat/completions" || r.Header.Get("Authorization") != "Bearer gemini-test" {

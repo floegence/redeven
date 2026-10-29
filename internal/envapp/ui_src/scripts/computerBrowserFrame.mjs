@@ -30,19 +30,24 @@ export function screenshotGeometry(data, viewport, documentID, targetID) {
   const width=png.readUInt32BE(16),height=png.readUInt32BE(20);
   if (!width || !height) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
   const frame = 'computer://' + targetID + '/' + createHash('sha256').update(png).digest('hex');
-  return {frame,document_id:documentID,coordinate_space:'image_pixels',image:{width,height},viewport,
+  const divisor=Math.max(2560,width,height);
+  const model={width:Math.max(1,Math.floor(width*2560/divisor)),height:Math.max(1,Math.floor(height*2560/divisor))};
+  return {model_image:model,frame,document_id:documentID,coordinate_space:'image_pixels',image:{width,height},viewport,
     transform:{scale_x:(viewport.capture_width??viewport.width)/width,scale_y:(viewport.capture_height??viewport.height)/height,offset_x:viewport.offset_x,offset_y:viewport.offset_y}};
 }
 export function imageCoordinates(args, anchor, current, documentID, targetID) {
   if (args.coordinate_space === undefined && args.frame === undefined && args.document_id === undefined) return args;
-  if (args.coordinate_space !== 'image_pixels' || typeof args.frame !== 'string' || typeof args.document_id !== 'string' || args.selector) throw argumentFailure('coordinate_space','image_pixels_with_frame');
+  if (!['image_pixels','model_pixels'].includes(args.coordinate_space) || typeof args.frame !== 'string' || typeof args.document_id !== 'string' || args.selector) throw argumentFailure('coordinate_space','image_pixels_with_frame');
   if (!anchor || anchor.frame !== args.frame || !args.frame.startsWith('computer://' + targetID + '/') || anchor.document_id !== documentID || args.document_id !== documentID || !sameGeometry(anchor.viewport,current)) throw new Error('STALE_REFERENCE');
   const mapped={...args};
+  const dimensions=args.coordinate_space==='model_pixels'?anchor.model_image:anchor.image;
+  if(!dimensions) throw new Error('STALE_REFERENCE');
+  const ratioX=anchor.image.width/dimensions.width,ratioY=anchor.image.height/dimensions.height;
   const pairs=args.action === 'drag' ? [['from_x','from_y'],['to_x','to_y']] : [['x','y']];
   for (const [x,y] of pairs) {
-    if (!Number.isFinite(args[x]) || !Number.isFinite(args[y]) || args[x]<0 || args[y]<0 || args[x]>=anchor.image.width || args[y]>=anchor.image.height) throw argumentFailure('coordinates','inside_image');
-    mapped[x]=args[x]*anchor.transform.scale_x+anchor.transform.offset_x;
-    mapped[y]=args[y]*anchor.transform.scale_y+anchor.transform.offset_y;
+    if (!Number.isFinite(args[x]) || !Number.isFinite(args[y]) || args[x]<0 || args[y]<0 || args[x]>=dimensions.width || args[y]>=dimensions.height) throw argumentFailure('coordinates','inside_image');
+    mapped[x]=args[x]*ratioX*anchor.transform.scale_x+anchor.transform.offset_x;
+    mapped[y]=args[y]*ratioY*anchor.transform.scale_y+anchor.transform.offset_y;
   }
   delete mapped.coordinate_space; delete mapped.frame; delete mapped.document_id;
   return mapped;

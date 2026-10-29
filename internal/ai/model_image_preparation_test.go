@@ -43,13 +43,13 @@ func screenshotPreparationFixture(t *testing.T) ([]byte, flprovider.Attachment, 
 func TestModelScreenshotPreparationAndOriginalRead(t *testing.T) {
 	body, a, part := screenshotPreparationFixture(t)
 	source := sha256.Sum256(body)
-	got, notice, err := prepareModelScreenshot(t.Context(), a, part, false)
+	got, notice, err := prepareModelImage(t.Context(), part)
 	if err != nil || got.MimeType != "image/jpeg" || len(got.FileURI) >= len(part.FileURI) || !strings.Contains(notice, "512x256") || sha256.Sum256(body) != source {
 		t.Fatalf("mime=%s notice=%s err=%v", got.MimeType, notice, err)
 	}
-	exact, notice, err := prepareModelScreenshot(t.Context(), a, part, true)
-	if err != nil || exact.FileURI != part.FileURI || notice != "" {
-		t.Fatal("original read changed", err)
+	exact, notice, err := prepareModelImage(t.Context(), part)
+	if err != nil || exact.FileURI != got.FileURI || notice == "" {
+		t.Fatal("default image preparation differs", err)
 	}
 	adapter := &floretProviderAdapter{supportsImageInput: true, providerType: "deepseek", modelName: "deepseek-flash"}
 	resolver := func(context.Context, flprovider.Attachment) (ContentPart, error) { return part, nil }
@@ -76,8 +76,8 @@ func TestModelScreenshotPreparationAndOriginalRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range mapped[0].Content {
-		if p.Type == "image" && p.FileURI != part.FileURI {
-			t.Fatal("explicit original lost")
+		if p.Type == "image" && p.FileURI == part.FileURI {
+			t.Fatal("image.read bypassed default preparation")
 		}
 	}
 }
@@ -155,7 +155,7 @@ func TestRequestCapacityDiagnosticSurvivesRecovery(t *testing.T) {
 
 func TestModelScreenshotFrozenTransportPreservesSixFrames(t *testing.T) {
 	body, attachment, original := screenshotPreparationFixture(t)
-	expected, _, err := prepareModelScreenshot(t.Context(), attachment, original, false)
+	expected, _, err := prepareModelImage(t.Context(), original)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestModelScreenshotFrozenTransportPreservesSixFrames(t *testing.T) {
 	defer retry.Close()
 	second := consume(retry)
 	encoded := strings.TrimPrefix(expected.FileURI, "data:image/jpeg;base64,")
-	if resolutions != 6 || !bytes.Equal(first, second) || bytes.Count(first, []byte(encoded)) != 6 || bytes.Count(first, []byte("Model screenshot:")) != 6 || bytes.Contains(first, []byte(base64.StdEncoding.EncodeToString(body))) || int64(len(first)) >= flowerModelRequestMaxBytes {
+	if resolutions != 6 || !bytes.Equal(first, second) || bytes.Count(first, []byte(encoded)) != 6 || bytes.Count(first, []byte("Model image:")) != 6 || bytes.Contains(first, []byte(base64.StdEncoding.EncodeToString(body))) || int64(len(first)) >= flowerModelRequestMaxBytes {
 		t.Fatalf("lost frames, original preservation or frozen replay: resolutions=%d bytes=%d", resolutions, len(first))
 	}
 }

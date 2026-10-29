@@ -17,7 +17,7 @@ export function validateBrowserAction(args, privateInput = false) {
   if (!allowed) throw argumentFailure('action', 'supported_action');
   const image = ['coordinate_space', 'frame', 'document_id'];
   if (Object.keys(args).some(key => !['action', 'target', 'description', ...allowed, ...image].includes(key))) throw argumentFailure('arguments', 'documented_fields');
-  if (image.some(key => args[key] !== undefined) && (!['pointer_click', 'double_click', 'scroll', 'drag'].includes(args.action) || args.selector || args.coordinate_space !== 'image_pixels' || typeof args.frame !== 'string' || typeof args.document_id !== 'string')) throw argumentFailure('coordinate_space', 'image_pixels_with_frame');
+  if (image.some(key => args[key] !== undefined) && (!['pointer_click', 'double_click', 'scroll', 'drag'].includes(args.action) || args.selector || !['image_pixels','model_pixels'].includes(args.coordinate_space) || typeof args.frame !== 'string' || typeof args.document_id !== 'string')) throw argumentFailure('coordinate_space', 'image_pixels_with_frame');
   if (['click', 'fill', 'read', 'query', 'table', 'attribute', 'text', 'wait'].includes(args.action) && !args.selector) throw argumentFailure('selector', 'documented_selector');
   if (args.selector !== undefined) {
     const s = args.selector;

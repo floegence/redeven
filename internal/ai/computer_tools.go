@@ -61,7 +61,7 @@ func builtInComputerToolDefinitions() []ToolDef {
 			var schema map[string]any
 			_ = json.Unmarshal(defs[i].InputSchema, &schema)
 			properties := schema["properties"].(map[string]any)
-			properties["coordinate_space"] = map[string]any{"type": "string", "enum": []string{"image_pixels"}, "description": "Browser-only: coordinates in the referenced screenshot; requires frame and document_id. Omit for existing target coordinates."}
+			properties["coordinate_space"] = map[string]any{"type": "string", "enum": []string{"image_pixels", "model_pixels"}, "description": "Coordinates in the referenced screenshot; model_pixels uses the optimized image, image_pixels retains browser source pixels. Requires frame and document_id. Omit for existing target coordinates."}
 			properties["frame"] = map[string]any{"type": "string", "pattern": computerFrameResourcePattern.String()}
 			properties["document_id"] = map[string]any{"type": "string", "maxLength": 1024}
 			defs[i].InputSchema = toolSchemaRaw(schema)

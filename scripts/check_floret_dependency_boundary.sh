@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.92\.2$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.92.2"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.93\.0$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.93.0"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
