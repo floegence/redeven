@@ -24,6 +24,8 @@ export default defineConfig({
   },
   plugins: [
     solid({
+      // Tests consume generated JavaScript; compact output avoids large pretty-printed intermediates.
+      babel: { compact: true },
       ssr: true,
       dev: false,
       hot: false,

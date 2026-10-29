@@ -518,6 +518,8 @@ func (c *Center) ChangePassword(session, grant, password string) error {
 	defer c.endAuth()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Bind the one-use step-up grant to the browser's exact requested action.
+	// The credential verifier below is independently salted by bcrypt.
 	if err := c.grantLocked(session, grant, "password:"+digest(password)); err != nil {
 		return err
 	}

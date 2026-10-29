@@ -2,6 +2,7 @@ package managedwebservice
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -10,7 +11,7 @@ import (
 )
 
 func readManagedProcess(pid int) (managedProcessSnapshot, error) {
-	if pid <= 0 {
+	if pid <= 0 || pid > math.MaxInt32 {
 		return managedProcessSnapshot{}, os.ErrNotExist
 	}
 	info, err := unix.SysctlKinfoProc("kern.proc.pid", pid)

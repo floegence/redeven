@@ -45,7 +45,7 @@ Use published Dialog, file-type icons and Button loading. Counted deliverable/ma
 
 ## Cleanup
 
-List at most 200 files while inspecting at most 10,000 entries; disclose truncation/lower bounds. Confirmed RWX cleanup uses rooted owned scratch/staging only. Active/queued turns, interactions, admitted work and unreaped terminals block it. In-process admissions/canonical View suffice; no durable cleanup ledger/lease.
+List at most 200 files while inspecting at most 10,000 entries; disclose truncation/lower bounds. Confirmed RWX cleanup uses owned scratch/staging only. Listing, reads, preparation, Fork and cleanup pin each directory from Runtime state, reject symlinks and compare opened identities. Absolute paths remain presentation/routing values, never cleanup authority. Active/queued turns, interactions, admitted work and unreaped terminals block it. In-process admissions/canonical View suffice; no durable cleanup ledger/lease.
 
 Deletion settles canonical work/stops owned terminals first. Interrupted deletion resumes from settings only when canonical Summary confirms ErrThreadDeleted; missing/unavailable is not authority. Maintenance processes at most 50 settings/pass with bounded per-item waits, advances past failures and retries retained anchors next cycle. Explicit/recovery paths both clean files then product state, including children; remove anchors only after success. Normal deletion refuses live work; force explicitly cancels.
 

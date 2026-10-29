@@ -152,55 +152,93 @@ func taskFiles(state, thread string) (taskFileSpace, error) {
 	root := filepath.Join(state, "task-files", thread)
 	return taskFileSpace{Root: root, Scratch: filepath.Join(root, "scratch"), Staging: filepath.Join(root, "staging")}, nil
 }
-func prepareTaskFiles(state, thread string) (taskFileSpace, error) {
-	space, err := taskFiles(state, thread)
-	if err != nil {
-		return space, err
-	}
+
+func openTaskFilesParent(state string, create bool) (*os.Root, error) {
 	base, err := os.OpenRoot(state)
 	if err != nil {
-		return space, err
+		return nil, err
 	}
 	defer base.Close()
-	for _, dir := range []string{"task-files", filepath.Join("task-files", thread), filepath.Join("task-files", thread, "scratch"), filepath.Join("task-files", thread, "staging")} {
-		info, e := base.Lstat(dir)
-		if errors.Is(e, os.ErrNotExist) {
-			if e = base.Mkdir(dir, 0700); e != nil && !errors.Is(e, os.ErrExist) {
-				return space, e
-			}
-			info, e = base.Lstat(dir)
-		}
-		if e != nil {
-			return space, e
-		}
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return space, errors.New("task directory must not be a symbolic link")
-		}
+	return openTaskDirectory(base, "task-files", create)
+}
+
+// openTaskFileRoot keeps every operation anchored to runtime state.
+func openTaskFileRoot(state, thread string, create bool) (*os.Root, error) {
+	if _, err := taskFiles(state, thread); err != nil {
+		return nil, err
 	}
-	real, err := filepath.EvalSymlinks(space.Root)
+	base, err := openTaskFilesParent(state, create)
 	if err != nil {
-		return space, err
+		return nil, err
 	}
-	expected, err := filepath.EvalSymlinks(state)
+	defer func() {
+		if base != nil {
+			_ = base.Close()
+		}
+	}()
+	for _, name := range []string{thread} {
+		child, err := openTaskDirectory(base, name, create)
+		if err != nil {
+			return nil, err
+		}
+		base.Close()
+		base = child
+	}
+	for _, name := range []string{"scratch", "staging"} {
+		child, err := openTaskDirectory(base, name, create)
+		if !create && errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		child.Close()
+	}
+	result := base
+	base = nil
+	return result, nil
+}
+
+func openTaskDirectory(base *os.Root, name string, create bool) (*os.Root, error) {
+	if !taskFileComponent(name) {
+		return nil, errors.New("invalid task directory")
+	}
+	info, err := base.Lstat(name)
+	if create && errors.Is(err, os.ErrNotExist) {
+		if err = base.Mkdir(name, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+			return nil, err
+		}
+		info, err = base.Lstat(name)
+	}
 	if err != nil {
-		return space, err
+		return nil, err
 	}
-	if real != filepath.Join(expected, "task-files", thread) {
-		return space, errors.New("task directory must not be a symbolic link")
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("task directory must not be a symbolic link")
 	}
-	space.Root = real
-	space.Scratch = filepath.Join(real, "scratch")
-	space.Staging = filepath.Join(real, "staging")
-	for _, dir := range []string{space.Scratch, space.Staging} {
-		info, e := os.Lstat(dir)
-		if e != nil {
-			return space, e
-		}
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return space, errors.New("task directory must be a real directory")
-		}
+	child, err := base.OpenRoot(name)
+	if err != nil {
+		return nil, err
 	}
-	return space, nil
+	opened, err := child.Stat(".")
+	if err != nil || !os.SameFile(info, opened) {
+		child.Close()
+		return nil, errors.New("task directory changed while opening")
+	}
+	return child, nil
+}
+
+func prepareTaskFiles(state, thread string) (taskFileSpace, error) {
+	root, err := openTaskFileRoot(state, thread, true)
+	if err != nil {
+		return taskFileSpace{}, err
+	}
+	defer root.Close()
+	realState, err := filepath.EvalSymlinks(state)
+	if err != nil {
+		return taskFileSpace{}, err
+	}
+	return taskFiles(realState, thread)
 }
 func (r *run) prepareTaskFiles() (taskFileSpace, error) {
 	return r.prepareTaskFilesContext(context.Background())
@@ -274,12 +312,7 @@ func (r *run) presentFile(ctx context.Context, path, title string) (deliveredFil
 			return out, errors.New("final files must be saved to the user destination, outside application state and task directories")
 		}
 	}
-	parent, err := os.OpenRoot(filepath.Dir(path))
-	if err != nil {
-		return out, err
-	}
-	defer parent.Close()
-	f, err := parent.Open(filepath.Base(path))
+	f, err := scope.Registry.OpenRead(path)
 	if err != nil {
 		return out, err
 	}
@@ -318,7 +351,12 @@ func (r *run) presentFile(ctx context.Context, path, title string) (deliveredFil
 	if err != nil {
 		return out, err
 	}
-	current, currentErr := parent.Stat(filepath.Base(path))
+	currentFile, currentErr := scope.Registry.OpenRead(path)
+	var current os.FileInfo
+	if currentErr == nil {
+		current, currentErr = currentFile.Stat()
+		_ = currentFile.Close()
+	}
 	if currentErr != nil || !os.SameFile(before, current) || !current.ModTime().Equal(after.ModTime()) || before.Size() != size || after.Size() != size || !before.ModTime().Equal(after.ModTime()) {
 		return out, errors.New("file changed while verifying delivery")
 	}

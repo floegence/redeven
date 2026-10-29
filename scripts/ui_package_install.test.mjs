@@ -18,8 +18,8 @@ function fixture(t, manager) {
     writeFileSync(path.join(root, 'bin', executable), '#!/bin/sh\nset -eu\ncase \"$*\" in *--version*) echo 10.32.1; exit 0;; esac\necho install >> "$TEST_ROOT/calls"\nmkdir -p node_modules\nprintf "{}" > node_modules/.package-lock.json\nprintf "installed" > node_modules/.modules.yaml\n', { mode: 0o755 });
   }
   function run(script) {
-    const result = spawnSync('bash', ['-c', 'set -euo pipefail; source "$1"; ROOT_DIR="$2"; cd "$3"; ' + script, 'bash', common, path.resolve(import.meta.dirname, '..'), dir], {
-      env: { ...process.env, PATH: root + '/bin:' + process.env.PATH, TEST_ROOT: root, REDEVEN_AGENT_FORCE_INSTALL: '' }, encoding: 'utf8',
+    const result = spawnSync('/bin/bash', ['-c', 'set -euo pipefail; export PATH="$TEST_BIN:$PATH"; source "$TEST_COMMON"; cd "$TEST_PACKAGE"; ' + script], {
+      env: { ...process.env, TEST_BIN: path.join(root, 'bin'), TEST_ROOT: root, TEST_COMMON: common, TEST_PACKAGE: dir, ROOT_DIR: path.resolve(import.meta.dirname, '..'), REDEVEN_AGENT_FORCE_INSTALL: '' }, encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stderr);
     return result.stdout;
@@ -43,7 +43,7 @@ for (const manager of ['npm', 'pnpm']) test(manager + ': unchanged dependencies 
 for (const manager of ['npm', 'pnpm']) test(manager + ': a failed install preserves its status without a reusable receipt', t => {
   const f = fixture(t, manager);
   writeFileSync(path.join(f.root, 'bin', manager === 'pnpm' ? 'corepack' : 'npm'), '#!/bin/sh\ncase \"$*\" in *--version*) echo 10.32.1; exit 0;; esac\nexit 23\n');
-  const result = spawnSync('bash', ['-c', 'set -e; source "$1"; ROOT_DIR="$2"; ui_pkg_ensure_dependencies "$3"', 'bash', common, path.resolve(import.meta.dirname, '..'), f.dir], { env: { ...process.env, PATH: f.root + '/bin:' + process.env.PATH } });
+  const result = spawnSync('/bin/bash', ['-c', 'set -e; export PATH="$TEST_BIN:$PATH"; source "$TEST_COMMON"; ui_pkg_ensure_dependencies "$TEST_PACKAGE"'], { env: { ...process.env, TEST_BIN: path.join(f.root, 'bin'), TEST_COMMON: common, TEST_PACKAGE: f.dir, ROOT_DIR: path.resolve(import.meta.dirname, '..') } });
   assert.equal(result.status, 23);
   assert.throws(() => readFileSync(path.join(f.dir, "node_modules/.redeven-install-v1")), /ENOENT/);
 });

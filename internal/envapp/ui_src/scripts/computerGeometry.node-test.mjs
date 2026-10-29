@@ -17,7 +17,8 @@ for (const deviceScaleFactor of [1, 2]) test('real browser zoom preserves semant
   await writeFile(path.join(extension, 'worker.js'), 'chrome.runtime.onInstalled.addListener(()=>{});');
   const server = http.createServer((req,res) => {
     res.setHeader('content-type','text/html');
-    const top = new URL(req.url,'http://fixture').searchParams.get('top') || '100';
+    const top = Number(new URL(req.url,'http://fixture').searchParams.get('top') || '100');
+    if (!Number.isInteger(top) || top < 0 || top > 5000) { res.writeHead(400); res.end('Invalid top'); return; }
     res.end('<!doctype html><style>body{margin:0;height:5000px}button{position:absolute;left:200px;top:'+top+'px;width:100px;height:50px;background:#ff00ff;border:0;color:#ff00ff}</style><button onclick="window.hits=(window.hits||0)+1">Probe</button>');
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));

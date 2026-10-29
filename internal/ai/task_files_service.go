@@ -100,7 +100,12 @@ func (s *Service) GetTaskFiles(ctx context.Context, meta *session.Meta, threadID
 			var path string
 			path, e = resolved.ResolveExistingPath(file.FilePath)
 			if e == nil {
-				info, e = os.Stat(path)
+				var handle *os.File
+				handle, e = resolved.Registry.OpenRead(path)
+				if e == nil {
+					info, e = handle.Stat()
+					_ = handle.Close()
+				}
 			}
 		}
 		switch {
@@ -125,29 +130,16 @@ func (s *Service) GetTaskFiles(ctx context.Context, meta *session.Meta, threadID
 	}
 	space.Root = filepath.Join(stateReal, "task-files", threadID)
 	out.WorkingPath = space.Root
-	if info, e := os.Lstat(space.Root); e == nil {
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return out, errors.New("invalid task directory")
-		}
-		parentInfo, e := os.Lstat(filepath.Dir(space.Root))
-		if e != nil {
-			return out, e
-		}
-		if !parentInfo.IsDir() || parentInfo.Mode()&os.ModeSymlink != 0 {
-			return out, errors.New("invalid task directory parent")
-		}
-		root, e := os.OpenRoot(space.Root)
-		if e != nil {
-			return out, e
-		}
+	root, e := openTaskFileRoot(s.stateDir, threadID, false)
+	if e == nil {
 		defer root.Close()
 		if err = scanTaskWorkingFiles(ctx, root, space.Root, &out); err != nil {
 			return out, err
 		}
-
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return out, e
 	}
+
 	current, _, err := readFlowerHistory(ctx, s.threadRuntime, scope, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(threadID), Limit: 1, PreviewBytes: 128, ActivityFields: true})
 	if err != nil {
 		return out, err
@@ -277,21 +269,10 @@ func (s *Service) CleanTaskFiles(ctx context.Context, meta *session.Meta, thread
 	if canonicalThreadBusy(current) || s.taskFilesBusyLocked(meta.EndpointID, threadID) {
 		return ErrThreadBusy
 	}
-	space, err := taskFiles(s.stateDir, threadID)
-	if err != nil {
-		return err
-	}
-	// OpenRoot pins the owned directory and never follows symlinks outside it.
-	if _, err = os.Lstat(space.Root); errors.Is(err, os.ErrNotExist) {
+	root, err := openTaskFileRoot(s.stateDir, threadID, false)
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
-	} else if err != nil {
-		return err
 	}
-	space, err = prepareTaskFiles(s.stateDir, threadID)
-	if err != nil {
-		return err
-	}
-	root, err := os.OpenRoot(space.Root)
 	if err != nil {
 		return err
 	}
@@ -329,7 +310,7 @@ func (s *Service) OpenTaskFile(ctx context.Context, meta *session.Meta, threadID
 		if err != nil || !taskPathWithin(filepath.Clean(path), space.Root) {
 			return nil, filesystemscope.ErrPathOutsideScope
 		}
-		root, err := os.OpenRoot(space.Root)
+		root, err := openTaskFileRoot(s.stateDir, threadID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -352,12 +333,7 @@ func (s *Service) OpenTaskFile(ctx context.Context, meta *session.Meta, threadID
 	if taskPathWithin(resolved.RealAbs, state) {
 		return nil, filesystemscope.ErrPathOutsideScope
 	}
-	root, err := os.OpenRoot(filepath.Dir(resolved.RealAbs))
-	if err != nil {
-		return nil, err
-	}
-	defer root.Close()
-	return root.Open(filepath.Base(resolved.RealAbs))
+	return scope.Registry.OpenRead(resolved.RealAbs)
 }
 
 // Deleting a conversation releases only its owned disposable tree after writers settle.
@@ -396,22 +372,18 @@ func (s *Service) deleteTaskFiles(ctx context.Context, endpoint, thread string) 
 	if !taskFileComponent(thread) {
 		return errors.New("invalid task identity")
 	}
-	space, err := taskFiles(s.stateDir, thread)
-	if err != nil {
-		return err
-	}
-	if _, err = os.Lstat(space.Root); errors.Is(err, os.ErrNotExist) {
+	root, err := openTaskFileRoot(s.stateDir, thread, false)
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
-	} else if err != nil {
-		return err
 	}
-	if _, err = prepareTaskFiles(s.stateDir, thread); err != nil {
-		return err
-	}
-	base, err := os.OpenRoot(s.stateDir)
 	if err != nil {
 		return err
 	}
-	defer base.Close()
-	return base.RemoveAll(filepath.Join("task-files", thread))
+	defer root.Close()
+	parent, err := openTaskFilesParent(s.stateDir, false)
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	return parent.RemoveAll(thread)
 }

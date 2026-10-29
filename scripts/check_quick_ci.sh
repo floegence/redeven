@@ -28,7 +28,7 @@ node --test scripts/computer_webtop_cleanup.test.mjs scripts/computer_webtop_acc
 node --test scripts/interaction_continuity_policy.test.mjs
 node --test scripts/check_staged_viewer_assets.test.mjs
 node --test scripts/check_floeterm_dependency_consistency.test.mjs
-node --test scripts/install_bootstrap_contract.test.mjs scripts/security_scan_boundaries.test.mjs
+node --test scripts/install_bootstrap_contract.test.mjs scripts/security_scan_boundaries.test.mjs scripts/security_dependency_contract.test.mjs
 node scripts/check_floeterm_dependency_consistency.mjs
 node --test scripts/ui_package_install.test.mjs scripts/run_parallel_builds.test.mjs scripts/dev_desktop_build_cache.test.mjs scripts/redevplugin_build_cache.test.mjs scripts/dev_desktop_gateways.test.mjs internal/envapp/ui_src/scripts/buildEnvApp.node-test.mjs
 ./scripts/ui_package_common_node_test.sh

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, symlinkSync, chmodSync, utimesSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, symlinkSync, chmodSync, openSync, fstatSync, futimesSync, writeSync, closeSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { treeDigest, lookupBuild, recordBuild, buildInputKey, dependencyDigests } from './dev_desktop_build_cache.mjs';
 import { captureSourceBuildIdentity } from './source_build_identity.mjs';
 
@@ -71,9 +73,9 @@ test('toolchain and dependency changes miss; drift during lookup or publication 
 
 test('dependency digest checks bytes even when mtimes are restored and rejects external symlinks', t => {
   const f = fixture(t), root = path.join(f.root, 'desktop/dist');
-  const file = path.join(root, 'main.js'), stat = statSync(file);
+  const file = path.join(root, 'main.js');
   const before = treeDigest(root, { dependencies: true });
-  writeFileSync(file, 'changed'); utimesSync(file, stat.atime, stat.mtime);
+  replaceBytesPreservingTimes(file, 'changed');
   assert.notEqual(treeDigest(root, { dependencies: true }), before);
   symlinkSync(path.join(f.root, 'input.ts'), path.join(root, 'external'));
   assert.throws(() => treeDigest(root, { dependencies: true }), /leaves its package/);
@@ -108,9 +110,38 @@ test('parallel dependency verification matches serial bytes and rejects a broken
   }
   const expected = packages.map(directory => [directory, treeDigest(path.join(f.root, directory, 'node_modules'), { dependencies: true })]);
   assert.deepEqual(await dependencyDigests(f.root), expected);
-  const file = path.join(f.root, packages[1], 'node_modules/input'), stat = statSync(file);
-  writeFileSync(file, 'changed bytes'); utimesSync(file, stat.atime, stat.mtime);
+  const file = path.join(f.root, packages[1], 'node_modules/input');
+  replaceBytesPreservingTimes(file, 'changed bytes');
   assert.notDeepEqual(await dependencyDigests(f.root), expected);
   symlinkSync(path.join(f.root, 'input.ts'), path.join(f.root, packages[2], 'node_modules/external'));
   await assert.rejects(dependencyDigests(f.root), /leaves its package/);
 });
+
+
+test('build digest rejects a file swapped to a symlink before opening', t => {
+  const f = fixture(t), file = path.join(f.root, 'desktop/dist/main.js');
+  const original = fs.openSync;
+  t.mock.method(fs, 'openSync', (name, ...args) => {
+    if (name === file) {
+      fs.unlinkSync(file);
+      fs.symlinkSync(path.join(f.root, 'input.ts'), file);
+    }
+    return original(name, ...args);
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.throws(() => treeDigest(path.dirname(file)), /ELOOP|changed|symbolic link/iu);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+function replaceBytesPreservingTimes(file, value) {
+  const fd = openSync(file, 'r+');
+  try {
+    const stat = fstatSync(fd);
+    writeSync(fd, value, 0, 'utf8');
+    futimesSync(fd, stat.atime, stat.mtime);
+  } finally { closeSync(fd); }
+}

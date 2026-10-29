@@ -10,7 +10,7 @@ const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   root: path.resolve(desktopDir, 'src', 'welcome'),
   base: './',
-  plugins: [solid(), tailwindcss()],
+  plugins: [solid({ babel: { compact: true } }), tailwindcss()],
   publicDir: false,
   resolve: {
     alias: [

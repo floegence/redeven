@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { captureSourceBuildIdentity, verifySourceBuildIdentity } from './source_build_identity.mjs';
@@ -15,22 +15,37 @@ export function treeDigest(root, { dependencies = false } = {}) {
   const digest = createHash('sha256');
   const boundary = path.resolve(root);
   function walk(file, name) {
-    const stat = lstatSync(file);
-    digest.update(JSON.stringify([name, stat.isDirectory() ? 'directory' : stat.isSymbolicLink() ? 'link' : 'file', stat.mode & 0o111]) + '\0');
-    if (stat.isSymbolicLink()) {
-      if (!dependencies) throw new Error('Build outputs cannot contain symlinks: ' + name);
+    let fd;
+    try { fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW); }
+    catch (error) {
+      if (!dependencies || error.code !== 'ELOOP') throw error;
       const target = realpathSync(file);
       if (target !== boundary && !target.startsWith(boundary + path.sep)) throw new Error('Dependency link leaves its package: ' + name);
+      const stat = lstatSync(file);
+      if (!stat.isSymbolicLink()) throw new Error('Build entry changed during verification: ' + name);
+      digest.update(JSON.stringify([name, 'link', stat.mode & 0o111]) + '\0');
       digest.update(readlinkSync(file));
-    } else if (stat.isDirectory()) {
-      for (const child of readdirSync(file).sort()) {
-        if (dependencies && volatileDependencyDirectories.has(child)) continue;
-        walk(path.join(file, child), name + '/' + child);
+      digest.update('\0');
+      return;
+    }
+    try {
+      const stat = fstatSync(fd);
+      digest.update(JSON.stringify([name, stat.isDirectory() ? 'directory' : 'file', stat.mode & 0o111]) + '\0');
+      if (stat.isDirectory()) {
+        for (const child of readdirSync(file).sort()) {
+          if (dependencies && volatileDependencyDirectories.has(child)) continue;
+          walk(path.join(file, child), name + '/' + child);
+        }
+      } else if (stat.isFile()) digest.update(readFileSync(fd));
+      else throw new Error('Unsupported build entry: ' + name);
+      const after = fstatSync(fd);
+      if (after.size !== stat.size || after.mtimeMs !== stat.mtimeMs || after.ctimeMs !== stat.ctimeMs) {
+        throw new Error('Build entry changed during verification: ' + name);
       }
-    } else if (stat.isFile()) digest.update(readFileSync(file));
-    else throw new Error('Unsupported build entry: ' + name);
-    digest.update('\0');
+      digest.update('\0');
+    } finally { closeSync(fd); }
   }
+
   walk(boundary, '.');
   return digest.digest('hex');
 }
@@ -100,7 +115,12 @@ export async function captureBuildContext(root) {
   for (const directory of ['desktop/src/welcome', 'internal/envapp/ui_src']) {
     for (const name of ['.env', '.env.local', '.env.production', '.env.production.local']) {
       const file = path.join(root, directory, name);
-      external.push([directory + '/' + name, lstatSync(file, { throwIfNoEntry: false }) ? hash(readFileSync(file)) : null]);
+      let value;
+      try { value = hash(readFileSync(file)); } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        value = null;
+      }
+      external.push([directory + '/' + name, value]);
     }
   }
   for (const key of ['REDEVEN_DESKTOP_RUNTIME_TARBALL', 'REDEVEN_DESKTOP_AGENT_TARBALL', 'REDEVEN_NODE_ARCHIVE']) {

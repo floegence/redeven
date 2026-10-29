@@ -27,11 +27,11 @@ func forkTaskStagingName(sourceID, requestKey string) string {
 // stageForkTaskFiles prepares a private copy. Only complete directories are
 // renamed into a thread root, before settings publish the fork to the product.
 func stageForkTaskFiles(ctx context.Context, state, sourceID, requestKey, item string) (*os.Root, string, func(), error) {
-	source, err := prepareTaskFiles(state, sourceID)
+	_, err := prepareTaskFiles(state, sourceID)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	base, err := os.OpenRoot(filepath.Dir(source.Root))
+	base, err := openTaskFilesParent(state, false)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -50,7 +50,7 @@ func stageForkTaskFiles(ctx context.Context, state, sourceID, requestKey, item s
 		return fail(err)
 	}
 	defer dst.Close()
-	src, err := base.OpenRoot(sourceID)
+	src, err := openTaskDirectory(base, sourceID, false)
 	if err != nil {
 		return fail(err)
 	}
@@ -120,7 +120,7 @@ func publishedForkTaskFiles(base *os.Root, sourceID, targetID, item string) (boo
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return false, errors.New("invalid fork working directory")
 	}
-	root, err := base.OpenRoot(targetID)
+	root, err := openTaskDirectory(base, targetID, false)
 	if err != nil {
 		return false, err
 	}
@@ -140,7 +140,7 @@ func inheritForkTaskFiles(ctx context.Context, state, sourceID, targetID, reques
 		return err
 	}
 	// Recover a completed publication without requiring its source to still exist.
-	parent, err := os.OpenRoot(filepath.Join(state, "task-files"))
+	parent, err := openTaskFilesParent(state, false)
 	if err == nil {
 		ready, e := publishedForkTaskFiles(parent, sourceID, targetID, item)
 		parent.Close()
@@ -188,7 +188,7 @@ func readTaskForkSource(root *os.Root) (*taskForkSource, error) {
 }
 
 func taskForkContext(space taskFileSpace) (string, error) {
-	root, err := os.OpenRoot(space.Root)
+	root, err := openTaskFileRoot(filepath.Dir(filepath.Dir(space.Root)), filepath.Base(space.Root), false)
 	if err != nil {
 		return "", err
 	}

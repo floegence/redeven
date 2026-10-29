@@ -5,14 +5,14 @@ import solid from 'vite-plugin-solid';
 import { createReloadPlaceholderScript } from '@floegence/floe-webapp-core/reload-placeholder';
 import { pdfAssetsPlugin } from '@floegence/floe-webapp-core/pdf-assets';
 
-import { REDEVEN_ENV_APP_BASE_PATH } from './src/build/envAppBasePath';
+import { REDEVEN_ENV_APP_BASE_PATH } from './src/build/envAppBasePath.ts';
 
 function normalizeBuildModuleId(moduleId: string): string {
   const normalized = moduleId.split('?')[0]!.replaceAll('\\', '/').replace(/^\0/u, 'virtual:');
   const nodeModulesMarker = '/node_modules/';
   const nodeModulesIndex = normalized.lastIndexOf(nodeModulesMarker);
   if (nodeModulesIndex >= 0) return normalized.slice(nodeModulesIndex + nodeModulesMarker.length);
-  const relative = path.relative(__dirname, normalized).replaceAll('\\', '/');
+  const relative = path.relative(import.meta.dirname, normalized).replaceAll('\\', '/');
   return relative.startsWith('../') ? normalized : relative;
 }
 
@@ -48,15 +48,15 @@ export default defineConfig({
         }) }];
       },
     },
-  }, solid(), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
+  }, solid({ babel: { compact: true } }), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
   resolve: {
     alias: [
-      { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|icons|layout|loading|markdown|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
-      { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/index.js') },
-      { find: /^lucide-solid$/, replacement: path.resolve(__dirname, 'node_modules/lucide-solid/dist/esm/lucide-solid.mjs') },
-      { find: /^marked$/, replacement: path.resolve(__dirname, 'node_modules/marked/lib/marked.esm.js') },
-      { find: /^thinking-orbs\/engine$/, replacement: path.resolve(__dirname, 'node_modules/thinking-orbs/dist/engine.es.js') },
+      { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|icons|layout|loading|markdown|ui)$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
+      { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/index.js') },
+      { find: /^lucide-solid$/, replacement: path.resolve(import.meta.dirname, 'node_modules/lucide-solid/dist/esm/lucide-solid.mjs') },
+      { find: /^marked$/, replacement: path.resolve(import.meta.dirname, 'node_modules/marked/lib/marked.esm.js') },
+      { find: /^thinking-orbs\/engine$/, replacement: path.resolve(import.meta.dirname, 'node_modules/thinking-orbs/dist/engine.es.js') },
     ],
     dedupe: ['solid-js'],
   },
@@ -71,10 +71,10 @@ export default defineConfig({
   base: REDEVEN_ENV_APP_BASE_PATH,
   build: {
     target: 'esnext',
-    outDir: path.resolve(__dirname, '../ui/dist/env'),
+    outDir: path.resolve(import.meta.dirname, '../ui/dist/env'),
     emptyOutDir: true,
     manifest: true,
-    rolldownOptions: { input: { index: path.resolve(__dirname, 'index.html'), access: path.resolve(__dirname, 'access.html') } },
+    rolldownOptions: { input: { index: path.resolve(import.meta.dirname, 'index.html'), access: path.resolve(import.meta.dirname, 'access.html') } },
   },
   server: {
     host: true,
@@ -91,7 +91,7 @@ export default defineConfig({
     environmentOptions: {
       jsdom: { url: 'https://localhost/_redeven_proxy/env/' },
     },
-    setupFiles: [path.resolve(__dirname, 'src/test/vitestDomPlatform.ts')],
+    setupFiles: [path.resolve(import.meta.dirname, 'src/test/vitestDomPlatform.ts')],
   },
   worker: {
     format: 'es',

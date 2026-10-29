@@ -262,3 +262,26 @@ func TestTaskFilesDoesNotExpandProjectWritePermission(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestTaskFilesRejectParentReplacementAfterPreparation(t *testing.T) {
+	state, outside := t.TempDir(), t.TempDir()
+	if _, err := prepareTaskFiles(state, "thread-one"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepareTaskFiles(outside, "thread-one"); err != nil {
+		t.Fatal(err)
+	}
+	parent := filepath.Join(state, "task-files")
+	if err := os.Rename(parent, parent+".old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "task-files"), parent); err != nil {
+		t.Fatal(err)
+	}
+	for _, create := range []bool{false, true} {
+		if root, err := openTaskFileRoot(state, "thread-one", create); err == nil {
+			root.Close()
+			t.Fatal("replaced task parent accepted")
+		}
+	}
+}

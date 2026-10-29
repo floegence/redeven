@@ -8,6 +8,9 @@ import { chromium, firefox, webkit } from '../internal/envapp/ui_src/node_module
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fixture = JSON.parse(await readFile(process.argv[2], 'utf8'));
+const controlURL = new URL(fixture.control);
+if (controlURL.protocol !== 'http:' || controlURL.hostname !== '127.0.0.1' || controlURL.username || controlURL.password || controlURL.pathname !== '/' || controlURL.search || controlURL.hash || !controlURL.port) throw new Error('Fixture control must be an explicit loopback origin');
+const controlOrigin = 'http://127.0.0.1:' + Number(controlURL.port);
 const temporary = await mkdtemp(path.join(tmpdir(), 'redeven-web-entry-browser-'));
 const reportDir = process.env.REDEVEN_WEB_ENTRY_REPORT_DIR;
 const engine = process.env.REDEVEN_WEB_ENTRY_BROWSER_ENGINE ?? 'chromium';
@@ -86,7 +89,7 @@ try {
   await until(async () => await status(recovery) === 200, 'Recovery-code login failed');
   await device.close();
   report.cases.push({ assertions: ['independent browser device requires login', 'actual recovery-code form interaction'] });
-  const revoked = await fetch(fixture.control + '/revoke-first', { method: 'POST' });
+  const revoked = await fetch(controlOrigin + '/revoke-first', { method: 'POST' });
   if (revoked.status !== 204) throw new Error('Fixture revocation failed');
   await until(async () => await status(pages[0]) === 421, 'Revoked binding remained accessible');
   if (await status(pages[1]) !== 200) throw new Error('Revocation crossed into another Runtime');

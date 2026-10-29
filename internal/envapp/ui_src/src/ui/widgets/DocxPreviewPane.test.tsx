@@ -230,7 +230,7 @@ it('isolates late document and style writes after changing the source', async ()
       const page = document.createElement('section'); page.className = 'docx-preview-container'; page.textContent = marker;
       defineElementSize(page, 800, 1200); wrapper.append(page); defineElementSize(wrapper, 800, 1200);
       container.replaceChildren(wrapper);
-      const style = document.createElement('style'); style.textContent = marker; styleContainer.replaceChildren(style);
+      const style = document.createElement('style'); style.textContent = '/* ' + marker + ' */'; styleContainer.replaceChildren(style);
       resolve();
     });
   }));
@@ -243,6 +243,6 @@ it('isolates late document and style writes after changing the source', async ()
     await waitFor(() => pending.length === 2, 'Second render not started');
     pending[1]!(); await flushAsyncWork(); pending[0]!(); await flushAsyncWork();
     expect(host.querySelector('.docx-preview-pane__document')?.textContent).toBe('new document');
-    expect(host.querySelector('style')?.textContent).toBe('new document');
+    expect(host.querySelector('style')?.textContent).toBe('/* new document */');
   } finally { dispose(); }
 });

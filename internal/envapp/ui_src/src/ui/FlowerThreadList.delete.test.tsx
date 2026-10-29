@@ -31,7 +31,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
-  StableText: (await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>()).StableText,
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Input: (props: Record<string, unknown>) => <input {...props} />,
   SurfaceFloatingLayer: (props: any) => <div data-floating-layer>{props.children}</div>,
 }));

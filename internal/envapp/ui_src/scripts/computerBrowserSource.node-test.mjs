@@ -56,7 +56,7 @@ test('captured downloads keep exact identities across frames and source pages', 
   const site = http.createServer((request, response) => {
     response.setHeader('content-type', 'text/html');
     if (request.url === '/') response.end('<iframe src="/one"></iframe><iframe src="/two"></iframe>');
-    else response.end(`<button onclick="const a=document.createElement('a');a.href=window.URL.createObjectURL(new Blob(['${request.url}']));a.download='same.csv';a.click()">Export</button>`);
+    else response.end(`<button onclick="const a=document.createElement('a');a.href=window.URL.createObjectURL(new Blob([window.location.pathname]));a.download='same.csv';a.click()">Export</button>`);
   });
   site.listen(0, '127.0.0.1'); await once(site, 'listening');
   t.after(async () => { await Promise.all(owners.map(owner => owner.dispose())); await browser.close(); site.closeAllConnections(); await new Promise(resolve => site.close(resolve)); });

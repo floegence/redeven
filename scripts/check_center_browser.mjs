@@ -23,6 +23,9 @@ function changedDisplayPixels(before, after) {
   return changed;
 }
 const fixture = JSON.parse(await readFile(process.argv[2], 'utf8'));
+const controlURL = new URL(fixture.control);
+if (controlURL.protocol !== 'http:' || controlURL.hostname !== '127.0.0.1' || controlURL.username || controlURL.password || controlURL.pathname !== '/' || controlURL.search || controlURL.hash || !controlURL.port) throw new Error('Fixture control must be an explicit loopback origin');
+const controlOrigin = 'http://127.0.0.1:' + Number(controlURL.port);
 const temporary = await mkdtemp(path.join(tmpdir(), 'redeven-center-browser-'));
 const reportDir = process.env.REDEVEN_CENTER_REPORT_DIR;
 const engine = process.env.REDEVEN_CENTER_BROWSER_ENGINE ?? 'chromium';
@@ -407,7 +410,7 @@ async function verifyFlowerRecovery(page, context, portal, other, bundle) {
   const probe = { threadID: receipt.data.thread_id, runID: receipt.data.run_id };
   if (!probe.threadID || !probe.runID) throw new Error('UI Flower receipt missing identity: ' + JSON.stringify(receipt));
   const provider = async (method = 'GET') => {
-    const response = await fetch(fixture.control + '/flower-recovery', { method });
+    const response = await fetch(controlOrigin + '/flower-recovery', { method });
     if (!response.ok) throw new Error('Recovery provider control rejected');
     const status = await response.json();
     if (status.requests > 1 || status.canceled !== 0) throw new Error('Browser lifecycle canceled or duplicated inference: ' + JSON.stringify(status));
@@ -487,7 +490,7 @@ async function verifyFlowerRecovery(page, context, portal, other, bundle) {
       if (offline) await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
       await cdp.detach();
     }
-    await fetch(fixture.control + '/flower-recovery', { method: 'POST' });
+    await fetch(controlOrigin + '/flower-recovery', { method: 'POST' });
     const cleanupPage = observer ?? reopened ?? page;
     if (!cleaned) await cleanupPage.evaluate(id => GatewayAcceptance.inspectFlowerRecoveryProbe(id, true), probe.threadID);
     if (observer) await observer.close();
@@ -701,7 +704,7 @@ try {
         report.cases.push('Center Copy reports actual Chrome clipboard denial; keyboard manual selection preserves the complete descriptor; granting permission and retrying copies exact text');
       } finally { await context.clearPermissions(); await cdp.detach(); }
     }
-    const applied = await fetch(fixture.control + '/binding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(descriptor) });
+    const applied = await fetch(controlOrigin + '/binding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(descriptor) });
     if (applied.status !== 204) throw new Error('Runtime owner rejected binding: ' + await applied.text());
     await portal.locator('#binding-title').locator('..').getByRole('button', { name: 'Continue', exact: true }).click();
   }
@@ -800,7 +803,7 @@ try {
     report.cases.push('20 real Chrome directory/open latency samples meet the documented P95 targets on the recorded local topology');
   }
   if (process.env.REDEVEN_CENTER_CONNECTOR_BIN) {
-    const restart = await fetch(fixture.control + '/restart-connector', { method: 'POST' });
+    const restart = await fetch(controlOrigin + '/restart-connector', { method: 'POST' });
     if (restart.status !== 204) throw new Error('Independent Connector restart failed');
     for (const environment of environments) {
       const responses = [];
@@ -839,7 +842,7 @@ try {
         await environments[0].bringToFront();
         await environments[0].mouse.click(5,5);
         const tabs=await Promise.all(environments.map(page=>page.evaluate(()=>window.controlledWorkload.tick())));
-        const server=await(await fetch(fixture.control+'/resources')).json();
+        const server=await(await fetch(controlOrigin+'/resources')).json();
         evidence.samples.push({elapsedMs:Date.now()-started,tabs,server});
         if(reportDir)await writeFile(path.join(reportDir,engine+'-soak.json'),JSON.stringify(evidence,null,2),{mode:0o600});
         const remaining=seconds*1000-(Date.now()-started);
@@ -899,7 +902,7 @@ try {
     await applicationEnv.addScriptTag({path:bundled});
     const samples=[];
     let sampling=false;
-    const sample=async()=>{if(sampling)return;sampling=true;try{samples.push({at:Date.now(),...await (await fetch(fixture.control+'/resources')).json()});}finally{sampling=false;}};
+    const sample=async()=>{if(sampling)return;sampling=true;try{samples.push({at:Date.now(),...await (await fetch(controlOrigin+'/resources')).json()});}finally{sampling=false;}};
     await sample();
     const timer=setInterval(()=>{void sample().catch(()=>{});},500);
     try {
@@ -1012,7 +1015,7 @@ try {
         await physicalViewer.keyboard.press('Escape');
         await physicalViewer.locator('#cancel-unlock').click();
       } else {
-        const started=await fetch(fixture.control+'/desktop-input/start',{method:'POST'});
+        const started=await fetch(controlOrigin+'/desktop-input/start',{method:'POST'});
         if(started.status!==204)throw new Error('Physical input fixture did not start');
         await until(async()=>changedDisplayPixels(before,await physicalViewer.locator('#desktop').screenshot())>1000,'Physical test dialog was not painted');
         await physicalViewer.locator('#desktop').click();
@@ -1024,7 +1027,7 @@ try {
         if(reportDir)await physicalViewer.screenshot({path:path.join(reportDir,engine+'-udesk26-input.png'),fullPage:true});
         await physicalViewer.keyboard.press('Enter');
         let result;
-        await until(async()=>{result=await(await fetch(fixture.control+'/desktop-input/result')).json();return result.done;},'Host did not complete the typed dialog');
+        await until(async()=>{result=await(await fetch(controlOrigin+'/desktop-input/result')).json();return result.done;},'Host did not complete the typed dialog');
         if(result.value!==marker)throw new Error('Host input differs from Chrome keyboard marker');
         const clipboardAvailable=await physicalViewer.locator('#clipboard').isEnabled();
         await physicalViewer.locator('#settings').click();
@@ -1141,7 +1144,7 @@ try {
   const replacement=JSON.parse(await portal.locator('#binding-title').locator('..').locator('pre').textContent());
   await until(async()=>await runtimeStatus(environments[0])!==200,'Rotation retained old entry admission');
   if(await runtimeStatus(environments[1])!==200) throw new Error('Rotation invalidated unrelated route');
-  const appliedRotation=await fetch(fixture.control+'/binding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(replacement)});
+  const appliedRotation=await fetch(controlOrigin+'/binding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(replacement)});
   if(appliedRotation.status!==204) throw new Error('Owner rejected rotated identity');
   await portal.locator('#binding-title').locator('..').getByRole('button',{name:'Continue',exact:true}).click();
   const rotated=await openEnvironment(portal,context,0);
@@ -1151,7 +1154,7 @@ try {
   report.cases.push('Entry client certificate rotation fences old access, preserves another Runtime and requires fresh owner consent');
   if (reportDir) await portal.screenshot({ path: path.join(reportDir, engine + '-center.png'), fullPage: true });
   if (fixture.externalHost && process.env.REDEVEN_CENTER_RESTART_RUNTIME==='1') {
-    const restarted=await fetch(fixture.control+'/restart-runtime',{method:'POST'});
+    const restarted=await fetch(controlOrigin+'/restart-runtime',{method:'POST'});
     if(restarted.status!==204)throw new Error('Task-owned Runtime restart failed');
     await until(async()=>await runtimeStatus(environments[0])!==200,'Runtime restart retained old authentication');
     if(await runtimeStatus(environments[1])!==200 || (await centerCall(portal,'directory')).status!==200)throw new Error('Target restart affected another environment or Center');
@@ -1188,12 +1191,12 @@ try {
   await runtimeLogin(other, fixture.targets[1], true);
   await secondEnvironment.addScriptTag({path:bundled});
   await secondEnvironment.evaluate(async()=>{window.entryRevocation=await GatewayAcceptance.observeEntryRevocation();});
-  const revoked = await fetch(fixture.control+'/revoke-binding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({RuntimeID:fixture.targets[0].runtimeID})});
+  const revoked = await fetch(controlOrigin+'/revoke-binding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({RuntimeID:fixture.targets[0].runtimeID})});
   if(revoked.status!==204)throw new Error('Fixture binding revoke failed');
   await until(async()=>await secondEnvironment.evaluate(()=>window.entryRevocation.ended()),'Runtime binding revoke left live session');
   if(await runtimeStatus(other)!==200)throw new Error('Binding revoke affected unrelated Runtime');
   report.cases.push('Runtime owner binding revoke closes its live Flowersec session and preserves another Runtime');
-  const clientRevoked=await fetch(fixture.control+'/revoke-client',{method:'POST'});
+  const clientRevoked=await fetch(controlOrigin+'/revoke-client',{method:'POST'});
   if(clientRevoked.status!==204)throw new Error('Gateway client revoke failed');
   await until(async()=>await runtimeStatus(other)!==200,'Gateway client revoke left access usable');
   report.cases.push('Gateway client revoke removes server access without stopping target Runtime');
@@ -1214,7 +1217,7 @@ try {
 } finally {
   if (reportDir) {
     await writeFile(path.join(reportDir, engine + '-report.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
-    for (const file of await readdir(reportDir)) await chmod(path.join(reportDir,file),0o600);
+    for (const file of await readdir(reportDir)) await chmod(path.join(reportDir,path.basename(file)),0o600);
   }
   await browser?.close();
   await rm(temporary, { recursive: true, force: true });

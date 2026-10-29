@@ -11,8 +11,8 @@ it('retries Desktop models only on explicit AI refresh and coalesces repeated cl
   const directory: FlowerModelDirectory = { current_model_id: '', models: [], sources: [{ id: 'desktop', kind: 'desktop_model_source', state: 'unavailable', reason: 'unbound' }] };
   const read = vi.fn(async () => directory);
   const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: async () => ({ ...settingsSnapshot(), model_profile: null }), loadDirectory: read });
-  const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: resource.loadSettings,
-    loadModelDirectory: refresh => resource.loadDirectory(refresh, retry), subscribeModelDirectory: resource.subscribe });
+  const surface = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [], loadSettings: resource.loadSettings,
+    loadModelDirectory: resource.loadDirectory, recoverModelSource: retry, subscribeModelDirectory: resource.subscribe });
   await waitFor(() => Boolean(surface.querySelector('.flower-model-source-status-refresh')));
   await resource.loadDirectory();
   expect(retry).not.toHaveBeenCalled();

@@ -85,7 +85,7 @@ function PptxPreviewPage(props: {
       >
         <div
           ref={holder}
-          class="absolute left-0 top-0 origin-top-left text-black"
+          class="pptx-preview-pane__slide-content absolute left-0 top-0 origin-top-left text-black"
           style={{
             width: props.document.pageWidth + 'px',
             height: props.document.pageHeight + 'px',

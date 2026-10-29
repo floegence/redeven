@@ -50,7 +50,7 @@ describe('Runtime monitor chart paint ownership', () => {
 
     const line = host.querySelector<SVGPathElement>('.chart-line');
     const area = host.querySelector<SVGPathElement>('.chart-area');
-    const stops = [...host.querySelectorAll<SVGStopElement>('linearGradient stop')];
+    const stops = [...host.querySelectorAll<SVGStopElement>('stop')];
     expect(line?.getAttribute('stroke')).toBe(SERIES_COLOR);
     expect(line?.getAttribute('opacity')).toBeNull();
     expect(area?.getAttribute('fill')).toMatch(/^url\(#gradient-/u);

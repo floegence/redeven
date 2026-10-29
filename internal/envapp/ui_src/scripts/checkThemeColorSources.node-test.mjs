@@ -317,3 +317,22 @@ test('terminal preview exceptions require exact ANSI fields inside the preview f
     THEME_COLOR_EXCEPTIONS,
   ).length, 1);
 });
+
+
+test('slide paper and exported document palettes cannot exempt product chrome', () => {
+  const slide = 'internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.tsx';
+  assert.deepEqual(findThemeColorViolations('<div class="pptx-preview-pane__page-frame bg-white"/><div class="pptx-preview-pane__slide-content text-black"/>', slide, THEME_COLOR_EXCEPTIONS), []);
+  assert.equal(findThemeColorViolations('<div class="bg-white text-black"/>', slide, THEME_COLOR_EXCEPTIONS).length, 2);
+  const exported = 'internal/flower_ui/src/chat/markdown/flowerAnswerExport.ts';
+  assert.equal(findThemeColorViolations('const chrome = "#fff";', exported, THEME_COLOR_EXCEPTIONS).length, 1);
+  const artwork = 'internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx';
+  assert.equal(findThemeColorViolations('function Other(){ return <path fill="#765597"/>; }', artwork, THEME_COLOR_EXCEPTIONS).length, 1);
+});
+
+ test('printable answer colors stay inside the exact HTML palette function', () => {
+  const file = 'internal/flower_ui/src/chat/markdown/flowerAnswerExport.ts';
+  const source = "function flowerAnswerHTML() { return ''\n + 'body{max-width:760px;color:#25262a;background:#fff}'; }";
+  assert.deepEqual(findThemeColorViolations(source, file), []);
+  assert.equal(findThemeColorViolations(source.replace('flowerAnswerHTML', 'productChrome'), file).length, 2);
+  assert.equal(findThemeColorViolations(source, 'other.ts').length, 2);
+});

@@ -52,9 +52,16 @@ await session.run(async () => {
     }
     await sleep(500);
   }
-  await session.port(Number(new URL(info.url).port));
+  const fixtureURL = new URL(info.url);
+  assert.equal(fixtureURL.protocol, 'http:');
+  assert.equal(fixtureURL.hostname, '127.0.0.1');
+  assert.equal(fixtureURL.username + fixtureURL.password + fixtureURL.search + fixtureURL.hash, '');
+  assert.equal(fixtureURL.pathname, '/');
+  assert.ok(fixtureURL.port);
+  const fixtureOrigin = 'http://127.0.0.1:' + Number(fixtureURL.port);
+  await session.port(Number(fixtureURL.port));
   const api = async (op, extra = '') => {
-    const response = await fetch(info.url + '/fixture?op=' + op + extra, { signal: AbortSignal.timeout(60000) });
+    const response = await fetch(fixtureOrigin + '/fixture?op=' + op + extra, { signal: AbortSignal.timeout(60000) });
     assert.ok(response.ok, op + ': ' + (response.ok ? '' : await response.text()));
     return response.json();
   };
@@ -91,6 +98,7 @@ await session.run(async () => {
   let generationStarted = 0;
   let fixtureClosed = false;
   const sample = async name => {
+    assert.ok(['idle', 'early', 'long', 'repeat'].includes(name));
     await page.bringToFront();
     const titlebar = page.locator('[data-floe-floating-window-titlebar]').filter({ hasText: 'Long-thread preview' });
     await page.locator('[aria-label="Preview draft"]').evaluate(node => { node.focus({ preventScroll: true }); node.setSelectionRange(5, 12); });

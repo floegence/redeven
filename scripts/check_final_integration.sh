@@ -215,7 +215,7 @@ run_step "testing controlled Desktop runtime extraction" ./scripts/extract_deskt
 run_step "testing development build reuse" node --test scripts/ui_package_install.test.mjs scripts/run_parallel_builds.test.mjs scripts/build_assets.test.mjs scripts/dev_desktop_build_cache.test.mjs scripts/redevplugin_build_cache.test.mjs scripts/dev_desktop_gateways.test.mjs internal/envapp/ui_src/scripts/buildEnvApp.node-test.mjs
 run_step "testing development launch lifecycle" ./scripts/dev_desktop_signal_cleanup_test.sh
 run_step "testing development build proxy settings" node --test scripts/dev_desktop_build_proxy.test.mjs
-run_step "testing Desktop bundle source identity" node --test scripts/desktop_bundle_build_contract.test.mjs scripts/verify_desktop_runtime_source.test.mjs scripts/desktop_signed_manifest.test.mjs scripts/security_scan_boundaries.test.mjs
+run_step "testing Desktop bundle source identity" node --test scripts/desktop_bundle_build_contract.test.mjs scripts/verify_desktop_runtime_source.test.mjs scripts/desktop_signed_manifest.test.mjs scripts/security_scan_boundaries.test.mjs scripts/security_dependency_contract.test.mjs
 run_step "testing portable macOS package verification" node --test scripts/verify_macos_desktop_update_package.test.mjs
 run_step "testing official Node archive acquisition" node --test scripts/resolve_node_archive.test.mjs
 run_step "checking release artifact collector syntax" node --check scripts/collect_release_artifacts.mjs

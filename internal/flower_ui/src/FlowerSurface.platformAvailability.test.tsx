@@ -2,20 +2,24 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { modelDirectoryFixture } from '../testing/modelDirectoryFixture';
+import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import type { FlowerSettingsSnapshot } from './contracts/flowerSurfaceContracts';
 import {
   adapter,
+  composerModelTrigger,
   renderSurfaceWithAdapter,
   settingsSnapshot,
   waitFor,
 } from '../../envapp/ui_src/src/ui/FlowerSurface.navigation.testHarness';
 
-const unavailable = 'Redeven AI is currently unavailable. Select another model or try again.';
+const unavailable = DEFAULT_FLOWER_SURFACE_COPY.chat.modelsCheckFailed;
 
 function renderUnavailablePlatform(snapshot: FlowerSettingsSnapshot) {
   return renderSurfaceWithAdapter({
     ...adapter(true),
     loadSettings: vi.fn(async () => snapshot),
+    loadModelDirectory: vi.fn(async () => modelDirectoryFixture(snapshot)),
     listThreads: vi.fn(async () => []),
   });
 }
@@ -32,7 +36,9 @@ describe('Flower platform model availability', () => {
     await waitFor(() => surface.textContent?.includes(unavailable) ?? false);
     expect(surface.querySelector('[data-setup-welcome="true"]')).toBeNull();
     expect(surface.querySelector('.flower-model-source-status[data-state="not_configured"]')).toBeNull();
-    expect(surface.querySelector('[role="alert"] button')).not.toBeNull();
+    (await composerModelTrigger(surface)).click();
+    await waitFor(() => Boolean(document.querySelector('.flower-model-menu-action')));
+    expect(document.querySelector('.flower-model-menu-action')).not.toBeNull();
   });
 
   it.each([false, true])('keeps an unavailable selection when replacement platform models exist: %s', async (hasReplacement) => {
@@ -41,7 +47,7 @@ describe('Flower platform model availability', () => {
       platform_model_source: { models: hasReplacement ? [{ id: 'platform/replacement', label: 'Replacement', input_modalities: ['text'] }] : [], current_model_id: 'platform/selected', error: unavailable },
     });
 
-    await waitFor(() => surface.querySelector('[role="alert"]')?.textContent?.includes(unavailable) ?? false);
+    await waitFor(() => surface.querySelector('.flower-setup-inline')?.textContent?.includes(unavailable) ?? false);
     const textarea = surface.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'Keep the selected model';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -62,16 +68,24 @@ describe('Flower platform model availability', () => {
         models: [{ id: 'platform/selected', label: 'Redeven AI model', input_modalities: ['text'] }],
       },
     };
-    const loadSettings = vi.fn().mockResolvedValueOnce(failed).mockResolvedValue(recovered);
+    const loadSettings = vi.fn(async () => failed);
+    let current = failed;
+    const loadDirectory = vi.fn(async () => modelDirectoryFixture(current));
     const surface = renderSurfaceWithAdapter({
       ...adapter(true),
       loadSettings,
+      loadModelDirectory: loadDirectory,
       listThreads: vi.fn(async () => []),
     });
 
     await waitFor(() => surface.textContent?.includes(unavailable) ?? false);
-    (surface.querySelector('[role="alert"] button') as HTMLButtonElement).click();
-    await waitFor(() => loadSettings.mock.calls.length === 2 && !surface.textContent?.includes(unavailable));
+    current = recovered;
+    const previousReads = loadDirectory.mock.calls.length;
+    (await composerModelTrigger(surface)).click();
+    await waitFor(() => Boolean(document.querySelector('.flower-model-menu-action')));
+    document.querySelector<HTMLButtonElement>('.flower-model-menu-action')!.click();
+    await waitFor(() => loadDirectory.mock.calls.length > previousReads && !surface.textContent?.includes(unavailable));
+    document.querySelector<HTMLButtonElement>('.flower-model-menu-close')!.click();
     const textarea = surface.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'Continue using Redeven AI';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));

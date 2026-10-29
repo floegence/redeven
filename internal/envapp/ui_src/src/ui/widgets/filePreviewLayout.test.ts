@@ -36,8 +36,8 @@ describe('file preview wiring', () => {
     expect(rendererRegistrySrc).toContain("import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';");
     expect(rendererRegistrySrc).toContain('<FilePreviewErrorState');
     expect(rendererRegistrySrc).toContain('export const REDEVEN_FILE_PREVIEW_RENDERERS');
-    expect(rendererRegistrySrc).toContain('<DocxPreviewPane bytes={props.bytes} surface={props.surface} />');
-    expect(rendererRegistrySrc).toContain('<PdfPreviewPane bytes={props.bytes} surface={props.surface} editing={props.editing}');
+    expect(rendererRegistrySrc).toMatch(/<DocxPreviewPane[^\n]+bytes=\{props.bytes\} surface=\{props.surface\}/);
+    expect(rendererRegistrySrc).toMatch(/<PdfPreviewPane[^\n]+bytes=\{props.bytes\} surface=\{props.surface\} editing=\{props.editing\}/);
     expect(rendererRegistrySrc).toContain('surface={props.surface} />');
     expect(rendererRegistrySrc).toContain('redeven-file-preview-surface-window');
     expect(rendererRegistrySrc).toContain('<TextFilePreviewPane');
@@ -146,7 +146,8 @@ describe('file preview wiring', () => {
     expect(flowerTurnLauncherSrc).toContain("const FLOWER_TURN_LAUNCHER_STACK_ID = 'flower-turn-launcher';");
     expect(flowerTurnLauncherSrc).toContain('onActivate={activateLauncher}');
     expect(flowerTurnLauncherSrc).toContain('stackId="flower-turn-context-browser"');
-    expect(flowerTurnLauncherSrc).toContain('stackId="flower-turn-context-preview"');
+    expect(flowerTurnLauncherSrc).toContain('<FlowerContextPreviewWindow preview={contextPreview()} onClose={closeContextPreview} />');
+    expect(read('./FlowerContextPreviewWindow.tsx')).toContain('stackId="flower-turn-context-preview"');
   });
 
   it('routes remote previews through the shared controller and browser entry points through the app-level browser host', () => {
@@ -184,7 +185,7 @@ describe('file preview wiring', () => {
     expect(shellSrc).toContain("import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';");
     expect(shellSrc).toContain('const filePreviewController = createFilePreviewController');
     expect(shellSrc).toContain('const fileBrowserSurfaceController = createFileBrowserSurfaceController();');
-    expect(shellSrc).toContain('const openFilePreview = async (');
+    expect(shellSrc).toContain('const openFilePreview = (');
     expect(shellSrc).toContain("setWorkbenchFilePreviewActivation({");
     expect(shellSrc).toContain("const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost')");
     expect(shellSrc).toContain('viewMode() !== \'workbench\' && filePreviewHostRequested()');

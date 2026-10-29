@@ -30,6 +30,9 @@ type gatewayError struct {
 
 func (e *gatewayError) Error() string { return e.Code }
 func newGatewayClient(record GatewayRecord) *gatewayClient {
+	// Gateway destinations are explicitly authorized by the sole administrator's
+	// action-bound step-up grant (or the UID-authenticated Connector channel).
+	// Private network Gateways are supported; redirects and proxies are denied.
 	transport := &http.Transport{Proxy: nil, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}, MaxConnsPerHost: 4, MaxIdleConns: 4, IdleConnTimeout: 30 * time.Second, ResponseHeaderTimeout: 15 * time.Second, MaxResponseHeaderBytes: 32 << 10}
 	return &gatewayClient{record: record, http: &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrDenied }}}
 }

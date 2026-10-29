@@ -60,17 +60,6 @@ vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
       {props.children}
     </button>
   ),
-  ConfirmDialog: (props: any) => (
-    <Show when={props.open}>
-      <div role="dialog">
-        <div>{props.title}</div>
-        <div>{props.children}</div>
-        <button type="button" onClick={() => props.onConfirm?.()} disabled={props.loading}>
-          {props.confirmText}
-        </button>
-      </div>
-    </Show>
-  ),
   HighlightBlock: (props: any) => (
     <div class={['highlight-block', props.class].filter(Boolean).join(' ')} data-highlight-variant={props.variant}>
       <div>{props.title}</div>
@@ -78,6 +67,10 @@ vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
     </div>
   ),
   Tag: (props: any) => <span>{props.children}</span>,
+}));
+
+vi.mock('../../primitives/EnvAppModal', () => ({
+  ConfirmDialog: (props: any) => <Show when={props.open}><div role="dialog"><div>{props.title}</div>{props.children}<button onClick={props.onConfirm} disabled={props.loading}>{props.confirmText}</button></div></Show>,
 }));
 
 vi.mock('../../primitives/Tooltip', () => ({

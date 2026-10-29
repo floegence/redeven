@@ -1,15 +1,19 @@
 package environmentcenter
 
 import (
-	"golang.org/x/sys/unix"
 	"net"
 	"os"
+
+	"golang.org/x/sys/unix"
 )
 
 func authorizedPeer(conn net.Conn) bool {
 	return connectorPeer(conn, os.Geteuid()) || connectorPeer(conn, 0)
 }
 func connectorPeer(conn net.Conn, uid int) bool {
+	if uid < 0 {
+		return false
+	}
 	socket, ok := conn.(*net.UnixConn)
 	if !ok {
 		return false
@@ -21,7 +25,7 @@ func connectorPeer(conn net.Conn, uid int) bool {
 	allowed := false
 	err = raw.Control(func(fd uintptr) {
 		cred, e := unix.GetsockoptXucred(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERCRED)
-		allowed = e == nil && cred.Uid == uint32(uid)
+		allowed = e == nil && uint64(cred.Uid) == uint64(uid)
 	})
 	return err == nil && allowed
 }

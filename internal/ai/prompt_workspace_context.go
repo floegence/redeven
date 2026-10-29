@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -120,7 +119,12 @@ func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir string)
 		if err != nil {
 			return discovery, fmt.Errorf("cannot inspect repository rule directory %q within authorized filesystem roots", dir)
 		}
-		entries, err := os.ReadDir(resolvedDir.RealAbs)
+		directory, err := scope.Registry.OpenRead(resolvedDir.RealAbs)
+		if err != nil {
+			return discovery, fmt.Errorf("repository rule directory %q is unreadable", dir)
+		}
+		entries, err := directory.ReadDir(-1)
+		_ = directory.Close()
 		if err != nil {
 			return discovery, fmt.Errorf("repository rule directory %q is unreadable", dir)
 		}
@@ -140,11 +144,13 @@ func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir string)
 			resolved, err := scope.Registry.Resolve(file.Path, filesystemscope.ResolveOptions{RequireExisting: true})
 			if err != nil {
 				file.ReadError = "path is not readable within authorized filesystem roots"
-			} else if info, err := os.Stat(resolved.RealAbs); err != nil || !info.Mode().IsRegular() {
-				file.ReadError = "source is not an accessible regular file"
-			} else if handle, err := os.Open(resolved.RealAbs); err != nil {
+			} else if handle, err := scope.Registry.OpenRead(resolved.RealAbs); err != nil {
 				file.ReadError = "file is unreadable"
 			} else {
+				info, err := handle.Stat()
+				if err != nil || !info.Mode().IsRegular() {
+					file.ReadError = "source is not an accessible regular file"
+				}
 				_ = handle.Close()
 			}
 			discovery.Files = append(discovery.Files, file)

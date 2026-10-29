@@ -105,6 +105,14 @@ an obsolete external-tool installer or a duplicated rollback shell source.
 Installation, historical upgrade, native execution and page integration are
 independent feature/release acceptance, not additional ordinary push gates.
 
+## Dependency security
+
+The verifier consumes published Cosign/Rekor patches and their checksum-verified
+module graph. Current security qualification requires go-jose v4.1.6 or newer
+and no imported legacy golang.org/x/crypto/openpgp packages. Retain authenticated
+TUF roots, certificate identity, signing time and transparency checks; dependency
+updates must pass official-release acceptance plus tampering and cross-tag denial.
+
 # Boundaries
 
 Verification is online; transparency or trust-service outages fail closed.

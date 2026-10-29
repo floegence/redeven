@@ -3,7 +3,7 @@ type: AI Configuration Contract
 title: Model directory and selection
 tags: [ai, models, providers, settings]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-28"
 ---
 # Summary
 
@@ -18,6 +18,8 @@ Profiles separate selection, overrides, custom definitions and default identity 
 Flower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 17rem width, 20rem height cap, 24px minimum rows, 10px labels and 9px provider headings. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.
 
 Both `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.
+
+A selected platform whose catalog is unavailable shows the localized model-check failure and recovery action, never the first-use setup welcome. Preserve draft and selection; explicit model-menu refresh recovers from an authoritative directory response.
 
 `LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.
 

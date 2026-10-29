@@ -16,7 +16,9 @@ export default defineConfig({
       { find: /^thinking-orbs\/engine$/, replacement: fileURLToPath(new URL('./node_modules/thinking-orbs/dist/engine.es.js', import.meta.url)) },
     ],
   },
-  plugins: [solid({ dev: false, hot: false })],
+  plugins: [solid({
+      // Tests consume generated JavaScript; compact output avoids large pretty-printed intermediates.
+      babel: { compact: true }, dev: false, hot: false })],
   test: {
     environment: 'jsdom',
     server: { deps: { inline: [/\.css$/] } },

@@ -21,7 +21,7 @@
     "test:startup-continuity": "node scripts/check-startup-continuity.mjs",
     "test:flower-startup": "node scripts/check-flower-startup.mjs",
     "test:flower-media": "node scripts/check-flower-media.mjs",
-    "test": "vitest run && vitest run --config vitest.client.config.ts",
+    "test": "vitest run && vitest run --config vitest.client.config.mts",
     "package": "npm run typecheck && npm run build && npm run prepare:bundled-runtime && npm run prepare:macos-updater && npm run prepare:windows-ssh && electron-builder --config electron-builder.config.mjs --publish never"
   },
   "engines": {
@@ -52,7 +52,7 @@
     "undici": "^7.30.1",
     "http-cache-semantics": "^4.3.0",
     "global-agent": "^4.1.3",
-    "seroval": "^1.6.3",
+    "seroval": "^1.6.11",
     "source-map-js": "^1.2.2",
     "baseline-browser-mapping": "^2.11.0",
     "browserslist": "^4.28.7",
@@ -92,7 +92,7 @@
       "undici": "^7.30.1",
       "http-cache-semantics": "^4.3.0",
       "global-agent": "^4.1.3",
-      "seroval": "^1.6.3",
+      "seroval": "^1.6.11",
       "source-map-js": "^1.2.2",
       "baseline-browser-mapping": "^2.11.0",
       "browserslist": "^4.28.7",
@@ -104,7 +104,7 @@
     "@eslint/js": "^9.39.4",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/iosevka": "^5.2.5",
-    "@tailwindcss/vite": "^4.0.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.0.0",
     "@types/ws": "8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
@@ -113,14 +113,14 @@
     "electron-builder": "26.15.3",
     "electron-builder-squirrel-windows": "26.15.3",
     "esbuild": "^0.28.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.13.0",
     "globals": "^17.4.0",
     "jsdom": "^29.0.1",
     "marked": "^17.0.6",
     "node-gyp": "^13.0.1",
     "solid-js": "^1.9.17",
     "solid-motionone": "^1.0.4",
-    "tailwindcss": "^4.0.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.3",
     "vite-plugin-solid": "^2.11.10",
@@ -137,5 +137,10 @@
     "qrcode-generator": "^2.0.4",
     "thinking-orbs": "0.3.1",
     "ws": "8.21.3"
+  },
+  "allowScripts": {
+    "electron-winstaller": false,
+    "esbuild@0.28.1": true,
+    "fsevents": false
   }
 }

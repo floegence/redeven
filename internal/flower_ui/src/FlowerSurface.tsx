@@ -3303,7 +3303,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const anyModelReady = createMemo(() => catalogModelOptions().some(option => !option.disabled));
   const selectedModelNeedsAttention = createMemo(() => Boolean(snapshot() && selectedComposerModelID()
     && !readyForChat() && !selectedModelOption()?.pending));
-  const selectedModelAvailabilityMessage = createMemo(() => selectedModelOption()?.unavailableReason ?? copy().chat.modelsUnavailable);
+  const unavailablePlatformCatalog = createMemo(() => modelDirectory()?.sources.some(source => source.kind === 'platform' && source.state === 'unavailable') ?? false);
+  const selectedModelAvailabilityMessage = createMemo(() => selectedModelOption()?.unavailableReason
+    ?? (unavailablePlatformCatalog() && selectedComposerModelID().startsWith('platform/') ? copy().chat.modelsCheckFailed : copy().chat.modelsUnavailable));
   const unavailableModelSource = createMemo<UnavailableFlowerModelSourceStatus | null>(() => {
     const source = modelSource();
     if (source && (source.state === 'not_configured' || source.state === 'empty') && snapshot()?.model_profile) return null;
@@ -3361,7 +3363,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const needsSetup = createMemo(() => !!snapshot() && !anyModelReady());
   const showSetupWelcome = createMemo(() => {
     const source = unavailableModelSource();
-    return needsSetup() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
+    return needsSetup() && !unavailablePlatformCatalog() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
       && (!source || source.state === 'not_configured' || source.state === 'empty');
   });
   const companionCompactComposer = createMemo(() => (
@@ -13430,7 +13432,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <Show when={bottomActionMode() === 'chat' && !companionCollapsed()}>
       <div class="flower-composer-notices">
         <Show when={(needsSetup() || selectedModelNeedsAttention()) && !composerModelLoading() && (presentation() !== 'companion' || !unavailableModelSource())}>
-          <div class="flower-setup-inline" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking : selectedModelNeedsAttention() ? selectedModelAvailabilityMessage() : selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
+          <div class="flower-setup-inline" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking : selectedModelNeedsAttention() ? selectedModelAvailabilityMessage() : unavailablePlatformCatalog() ? copy().chat.modelsCheckFailed : selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
         </Show>
         <Show when={!anyModelReady() || selectedComposerModelID().startsWith('desktop:')}>{modelSourceStatusRow('footer')}</Show>
         <Show when={handlerNotice()}>

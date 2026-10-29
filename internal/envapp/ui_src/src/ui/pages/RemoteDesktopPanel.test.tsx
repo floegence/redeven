@@ -432,7 +432,7 @@ it('offers an explicit update for an incompatible service instead of installing 
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'SERVICE_UPDATE_REQUIRED' }, login_service: { state: 'failed', backend: 'linux-drm-kms', reason: 'SERVICE_UPDATE_REQUIRED' } });
   await mount();
   await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined());
-  expect(host.textContent).toContain('Update remote desktop in the Env App');
+  expect(host.textContent).toContain('Update remote desktop in the environment window');
   host.querySelector<HTMLButtonElement>('.remote-desktop-connect')!.click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
   expect(flow.textContent).toContain('Prepare remote desktop');

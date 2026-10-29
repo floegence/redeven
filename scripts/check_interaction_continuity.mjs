@@ -11,7 +11,7 @@ export function runContinuity({ suites = continuityTests, execute = spawnSync, e
   for (const [kind, tests] of Object.entries(suites)) {
     if (tests.length === 0 || new Set(tests).size !== tests.length) throw new Error('Continuity test list must be nonempty and unique');
     for (const test of tests) if (!exists(new URL('../desktop/' + test, import.meta.url))) throw new Error('Missing continuity test: ' + test);
-    const result = execute(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...(kind === 'client' ? ['--config', 'vitest.client.config.ts'] : []), ...tests], { cwd: desktop, stdio: 'inherit' });
+    const result = execute(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...(kind === 'client' ? ['--config', 'vitest.client.config.mts'] : []), ...tests], { cwd: desktop, stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) return result.status ?? 1;
   }

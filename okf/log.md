@@ -4,6 +4,8 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-10-28
 
+- Patch JOSE/Seroval and signature-verification dependencies; pin authorized filesystem reads to handles and retain [dependency floors](architecture/env-app-upstream-web-dependencies.md), [filesystem scope](security/permission-policy-and-filesystem-scope.md) and explicit catalog recovery.
+
 - Add independent [Web Center packages](operations/web-center-deployment.md), signed checksums, exact source identity and closed release collection without Runtime/Desktop lifecycle coupling.
 - Keep [long-thread acceptance](operations/flower-long-thread-gate.md) explicit, with fixed content, drag and compositor budgets outside ordinary gates.
 - Bound [timeline](ui/flower-live-timeline.md)/[sequences](ui/flower-tool-sequences.md), preserving reading, selection, provenance, retained bodies and live motion; retain [entry performance failures](operations/flower-thread-switch-qualification.md).

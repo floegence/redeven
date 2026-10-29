@@ -38,6 +38,8 @@ func (o *deepSeekImageFileOwners) configure(adapter ModelGateway, providerID str
 	if baseURL == "" {
 		baseURL = "https://api.deepseek.com"
 	}
+	// This ephemeral cache identity detects API-key rotation, not password
+	// authentication or persisted credential verification.
 	scope := fmt.Sprintf("%s:%x", baseURL, sha256.Sum256([]byte(p.apiKey)))
 	o.mu.Lock()
 	defer o.mu.Unlock()

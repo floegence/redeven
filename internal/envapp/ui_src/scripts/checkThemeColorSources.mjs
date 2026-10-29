@@ -258,6 +258,35 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     ].includes(value.toLowerCase()) && /(?:stop-color|\bfill|\bstroke)=/u.test(lineSource),
   ),
   exception(
+    'internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx',
+    'brand',
+    'Remote Desktop and Tessiven glyphs retain their authored contrast pairs within their SVG functions.',
+    ({ value, source, offset, lineSource }) => (
+      ['#d9eaf2', '#b9d8e8', '#adcddd', '#8bb6cc', '#587f98', '#87afc7', '#355e79', '#294c65', '#edf4f7', '#daeaf2'].includes(value.toLowerCase())
+      && isInsideNamedFunction(source, offset, 'RemoteDesktopWorkbenchIcon')
+      && /stop-color=|color:|'--remote-desktop-(?:pointer|pointer-outline)':/u.test(lineSource)
+    ) || (
+      ['#765597', '#b49acb', '#b37b37', '#d7b175'].includes(value.toLowerCase())
+      && isInsideNamedFunction(source, offset, 'TessivenWorkbenchIcon')
+      && /(?:fill|stroke)=/u.test(lineSource)
+    ),
+  ),
+  exception(
+    'internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.tsx',
+    'media',
+    'Rendered slide paper and default document ink remain independent of application chrome.',
+    ({ value, lineSource }) => (value === 'bg-white' && lineSource.includes('pptx-preview-pane__page-frame'))
+      || (value === 'text-black' && lineSource.includes('pptx-preview-pane__slide-content')),
+  ),
+  exception(
+    'internal/flower_ui/src/chat/markdown/flowerAnswerExport.ts',
+    'media',
+    'Standalone printable HTML owns its static paper palette without application styles.',
+    ({ value, source, offset, lineSource }) => ['#25262a', '#fff', '#385c89', '#f5f5f6', '#e5e5e8', '#ddd', '#62636b', '#e8e8eb', '#74757d'].includes(value.toLowerCase())
+      && isInsideNamedFunction(source, offset, 'flowerAnswerHTML')
+      && lineSource.includes("+ 'body{max-width:760px;"),
+  ),
+  exception(
     'internal/flower_ui/src/icons/FlowerIcon.tsx',
     'brand',
     'Flower icon artwork retains its authored petal and center palette.',

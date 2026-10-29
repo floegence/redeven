@@ -284,7 +284,9 @@ describe('macOS application viewer', () => {
     const v = await viewer(); await v.activate();
     let move!: VoidFunction;
     vi.spyOn(dom.window, 'queueMicrotask').mockImplementation(callback => { move = callback; });
-    dom.window.document.querySelector('canvas')!.dispatchEvent(new dom.window.MouseEvent('pointermove', {clientX: 20, clientY: 30}));
+    const canvas = dom.window.document.querySelector('canvas')!;
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({left:0, top:0, width:640, height:480, right:640, bottom:480} as DOMRect);
+    canvas.dispatchEvent(new dom.window.PointerEvent('onpointerrawupdate' in dom.window ? 'pointerrawupdate' : 'pointermove', {clientX: 20, clientY: 30, pointerType: 'mouse', bubbles: true}));
     v.window(2); v.socket().frame(); await drain();
     expect(move).toBeTypeOf('function');
     move();

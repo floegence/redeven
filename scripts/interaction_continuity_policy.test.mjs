@@ -22,7 +22,7 @@ test('continuity remains registered in cached commit and integration gates', () 
   assert.deepEqual(groups.groups.find(group => group.id === 'interaction-continuity').command, ['node', 'scripts/check_interaction_continuity.mjs', '--staged']);
   assert.match(read('.githooks/pre-commit'), /local_gate\.py --profile commit --mode staged/u);
   assert.match(read('scripts/check_final_integration.sh'), /node "\$ROOT_DIR\/scripts\/check_interaction_continuity\.mjs"/u);
-  for (const path of ['desktop/src/welcome/App.tsx', 'desktop/package.json', 'desktop/vitest.client.config.ts', 'internal/flower_ui/src/FlowerSurface.tsx', '.githooks/pre-commit', 'scripts/local_gate_groups.json']) assert.equal(continuityAffected(path), true, path);
+  for (const path of ['desktop/src/welcome/App.tsx', 'desktop/package.json', 'desktop/vitest.client.config.mts', 'internal/flower_ui/src/FlowerSurface.tsx', '.githooks/pre-commit', 'scripts/local_gate_groups.json']) assert.equal(continuityAffected(path), true, path);
 });
 test('browser qualification has one explicit local and manual workflow entry', () => {
   const scripts = JSON.parse(read('desktop/package.json')).scripts;

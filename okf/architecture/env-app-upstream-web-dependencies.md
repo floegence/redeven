@@ -36,7 +36,17 @@ Core supplies Host Applications' remote pointer/input controllers with render-in
 
 # Boundaries
 
-Env App and Desktop use Solid 1.9.17 or newer for patched Seroval serialization.
+Env App and Desktop retain Solid 1.9.17 or newer. Both npm and pnpm overrides
+and lockfiles require Seroval >=1.6.11 for RegExp and typed-array serialization
+fixes; a Solid version alone does not establish the transitive security floor.
+
+Tailwind Node/Vite 4.3.3 uses the current Node loader hook, avoiding deprecated asynchronous loader registration on the pinned toolchain.
+
+ESLint 10 runs the existing explicit ESLint 9 recommended rule policy; engine
+maintenance does not silently change product lint policy. Solid lint supports
+ESLint 10. Desktop test configs use explicit ESM extensions. npm lifecycle
+permissions pin reviewed Electron/esbuild versions and deny other install hooks,
+matching the pnpm build allowlist.
 
 Matching npm/pnpm overrides and locks require Zod 4.6.7 or newer within major 4,
 including FloeBrowser's transitive validator.

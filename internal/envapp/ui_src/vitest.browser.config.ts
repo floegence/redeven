@@ -7,7 +7,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { build } from 'esbuild';
 import type { CDPSession, Frame, Page } from 'playwright';
-import viteConfig from './vite.config';
+import viteConfig from './vite.config.ts';
 import { dragViewerHandle, qualifyComputerLauncherTouch, qualifyComputerViewer, qualifyComputerViewerSurface } from './scripts/computerViewerInteraction.mjs';
 
 const configuredBrowserPort = Number.parseInt(process.env.REDEVEN_VITEST_BROWSER_PORT ?? '', 10);
@@ -234,7 +234,7 @@ export default mergeConfig(viteConfig, defineConfig({
         },
         recordCanvasScale: async (_context, metric: { count: number; grouped: boolean; [key: string]: unknown }) => {
           if (![100, 500, 1000].includes(metric.count)) throw new Error('Unknown canvas scale fixture');
-          const output = path.resolve(__dirname, '.vitest-attachments');
+          const output = path.resolve(import.meta.dirname, '.vitest-attachments');
           await mkdir(output, { recursive: true });
           await writeFile(path.join(output, `tessiven-scale-${metric.count}-${metric.grouped ? 'grouped' : 'flat'}.json`), JSON.stringify(metric, null, 2));
         },
@@ -312,12 +312,12 @@ export default mergeConfig(viteConfig, defineConfig({
           await frame.locator('.mac-app-canvas').click();
         },
         savePdfEvidence: async (_context, base64: string, script: 'latin' | 'cjk') => {
-          const output = path.resolve(__dirname, '.cache/pdf-document-surface');
+          const output = path.resolve(import.meta.dirname, '.cache/pdf-document-surface');
           await mkdir(output, { recursive: true });
           await writeFile(path.join(output, `saved-${script}.pdf`), Buffer.from(base64, 'base64'));
         },
         recordPdfEvidence: async ({ page }, metrics: { firstPaintMs: number; canvases: number }) => {
-          const output = path.resolve(__dirname, '.cache/pdf-document-surface');
+          const output = path.resolve(import.meta.dirname, '.cache/pdf-document-surface');
           await mkdir(output, { recursive: true });
           await writeFile(path.join(output, 'long-document.json'), JSON.stringify({
             ...metrics, pages: 300, browser: page.context().browser()?.version(),
@@ -458,7 +458,7 @@ export default mergeConfig(viteConfig, defineConfig({
             }
             regions.push({ selector, changed, brightened, darkened, rasterNoisePixels, backgroundChanged, width: first.width, height: first.height });
           }
-          const output = path.resolve(__dirname, '.cache/progress-shimmer');
+          const output = path.resolve(import.meta.dirname, '.cache/progress-shimmer');
           await mkdir(output, { recursive: true });
           if (/classic-light|classic-dark|nord|solarized-light/u.test(name)) {
             await frame.locator('body').screenshot({ path: path.join(output, `${name}.png`), animations: 'allow' });
@@ -671,7 +671,7 @@ export default mergeConfig(viteConfig, defineConfig({
             });
             const capture = await session.send('Page.captureScreenshot', { format: 'png' });
             const screenshot = Buffer.from(capture.data, 'base64');
-            const output = path.resolve(__dirname, '.vitest-attachments');
+            const output = path.resolve(import.meta.dirname, '.vitest-attachments');
             await mkdir(output, { recursive: true });
             await writeFile(path.join(output, 'approval-200-percent-zoom.png'), screenshot);
             return { ...geometry, screenshotWidth: PNG.sync.read(screenshot).width };

@@ -1,15 +1,13 @@
 // @vitest-environment jsdom
-import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FlowerSurface, createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src';
+import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createFlowerModelReadResource } from '../../../../flower_ui/src/modelDirectory';
 import type { FlowerModelDirectory } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { adapter, deferred, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, renderSurfaceWithDraftCoordinator, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
 
-let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
-afterEach(() => { dispose?.(); host?.remove(); });
+afterEach(() => { host?.remove(); });
 
 const directory: FlowerModelDirectory = {
   current_model_id: 'openai/gpt-5.2',
@@ -25,11 +23,10 @@ function mount(models: FlowerModelDirectory, loadModelDirectory: () => Promise<F
     loadConfiguration: async () => ({ ...settingsSnapshot(), model_directory: models }),
     loadDirectory: loadModelDirectory,
   });
-  host = document.createElement('div'); document.body.append(host);
-  dispose = render(() => <FlowerSurface adapter={{ ...base,
+  host = renderSurfaceWithDraftCoordinator({ ...base,
     loadSettings: resource.loadSettings, loadModelDirectory: resource.loadDirectory,
     subscribeModelDirectory: resource.subscribe, listThreads: async () => [], launchTurn,
-  }} notify={vi.fn()} draftCoordinator={createFlowerComposerDraftCoordinator()} />, host);
+  }, createFlowerComposerDraftCoordinator());
   return launchTurn;
 }
 
