@@ -2222,7 +2222,7 @@ html:not(.dark) .redeven-header-separator {
   border: 1px solid var(--floe-line);
   border-left: 0;
   border-radius: 0 var(--floe-radius-md) var(--floe-radius-md) 0;
-  background: var(--floe-well);
+  background: var(--secondary);
   color: var(--floe-ink-soft);
   transition:
     background-color var(--floe-duration-fast) var(--floe-ease-out),
@@ -2231,7 +2231,7 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-split-action-toggle:hover {
-  background: var(--floe-well-strong);
+  background: color-mix(in srgb, var(--foreground) 7%, var(--secondary));
   color: var(--foreground);
 }
 
@@ -4443,14 +4443,14 @@ pre,
  * attention and blocked faces keep their own treatment. */
 .redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention) {
   border: 0;
-  background: var(--floe-well);
-  color: var(--foreground);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
   box-shadow: none;
   transition: background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention):hover {
-  background: var(--floe-well-strong);
+  background: color-mix(in srgb, var(--foreground) 7%, var(--secondary));
 }
 .redeven-environment-card .redeven-split-action-primary button > svg { flex-shrink: 0; }
 .redeven-environment-kind-tag { max-width: 100%; }
