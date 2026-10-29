@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/floret/v7/observation"
 	flprovider "github.com/floegence/floret/v7/provider"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -34,7 +35,7 @@ import (
 
 const (
 	DesktopModelSourceProviderType      = "desktop_model_source"
-	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v4"
+	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v5"
 	DesktopModelSourceDefaultSource     = "desktop_local_environment"
 	desktopModelSourceModelIDPrefix     = "desktop:model_"
 	defaultDesktopModelSourceRPCTimeout = 30 * time.Second
@@ -177,6 +178,12 @@ func (e *DesktopModelSourceRPCError) Unwrap() error {
 		return nil
 	}
 	if c := e.Capacity; c != nil {
+		if c.Kind == "image_count" {
+			return &flprovider.MediaLimitError{Kind: "count", Actual: c.ActualImages, Limit: c.LimitImages}
+		}
+		if c.Kind == "image_bytes" {
+			return &flprovider.MediaLimitError{Kind: "total_bytes", Actual: c.ActualBytes, Limit: c.LimitBytes}
+		}
 		if c.Source == "host_policy" {
 			return &flprovider.RequestByteLimitError{ActualBytes: c.ActualBytes, LimitBytes: c.LimitBytes}
 		}
@@ -200,7 +207,7 @@ func validateDesktopModelSourceRPCError(e *DesktopModelSourceRPCError, model boo
 	}
 	if e.Capacity != nil {
 		c := e.Capacity
-		valid := c.Kind == "request_bytes" && ((c.Source == "host_policy" && c.Stage == "prepare" && c.LimitBytes > 0 && c.ActualBytes > c.LimitBytes) || (c.Source == "provider" && c.Stage == "response" && c.LimitBytes == 0 && c.ActualBytes == 0))
+		valid := (&observation.CompactionCapacity{Kind: c.Kind, Stage: c.Stage, Source: c.Source, ActualBytes: c.ActualBytes, LimitBytes: c.LimitBytes, ActualImages: c.ActualImages, LimitImages: c.LimitImages}).Validate() == nil
 		if !model || !valid || e.Reprepare {
 			return fmt.Errorf("%w: invalid capacity evidence", errDesktopModelSourceProtocol)
 		}
@@ -1348,10 +1355,21 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 	sendErr := func(code string, err error) {
 		failure := &DesktopModelSourceRPCError{Code: code, Message: "Desktop model source request failed."}
 		if frame.Method == "ai.turn.stream" {
+			var media *flprovider.MediaLimitError
 			var bytes *flprovider.RequestByteLimitError
 			var httpError *flprovider.ProviderHTTPError
 			var reprepare *flprovider.RequestPreparationError
 			switch {
+			case errors.As(err, &media) && (media.Kind == "count" || media.Kind == "total_bytes"):
+				kind, actual, limit := media.RequestCapacityLimit()
+				if kind != "" {
+					failure.Capacity = &FlowerCompactionCapacity{Kind: kind, Stage: "prepare", Source: "provider"}
+					if kind == "image_count" {
+						failure.Capacity.ActualImages, failure.Capacity.LimitImages = actual, limit
+					} else {
+						failure.Capacity.ActualBytes, failure.Capacity.LimitBytes = actual, limit
+					}
+				}
 			case errors.As(err, &bytes):
 				failure.Capacity = &FlowerCompactionCapacity{Kind: "request_bytes", Stage: "prepare", Source: "host_policy", ActualBytes: bytes.ActualBytes, LimitBytes: bytes.LimitBytes}
 			case errors.As(err, &httpError) && httpError.StatusCode == 413 && errors.Is(err, flprovider.ErrContextOverflow):

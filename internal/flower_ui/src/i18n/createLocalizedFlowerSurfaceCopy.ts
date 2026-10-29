@@ -753,6 +753,9 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         messageEstimate: (tokens) => t(i18n, k('chat.compactionDividerMessageEstimate'), { tokens }),
         requestBytes: (actual, limit) => t(i18n, k('chat.compactionDividerRequestBytes'), { actual, limit }),
         providerBytes: t(i18n, k('chat.compactionDividerProviderBytes')),
+        compactingImages: t(i18n, k('chat.compactionDividerCompactingImages')),
+        imageCount: (actual, limit) => t(i18n, k('chat.compactionDividerImageCount'), { actual, limit }),
+        imageBytes: (actual, limit) => t(i18n, k('chat.compactionDividerImageBytes'), { actual, limit }),
       },
       projectionUnavailable: {
         title: t(i18n, k('chat.projectionUnavailableTitle')),

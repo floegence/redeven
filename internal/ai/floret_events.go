@@ -369,7 +369,7 @@ func flowerCompactionDecision(decision *observation.CompactionDecision) *FlowerC
 	}
 	var capacity *FlowerCompactionCapacity
 	if c := decision.Capacity; c != nil {
-		capacity = &FlowerCompactionCapacity{Kind: c.Kind, Stage: c.Stage, Source: c.Source, ActualBytes: c.ActualBytes, LimitBytes: c.LimitBytes}
+		capacity = &FlowerCompactionCapacity{Kind: c.Kind, Stage: c.Stage, Source: c.Source, ActualBytes: c.ActualBytes, LimitBytes: c.LimitBytes, ActualImages: c.ActualImages, LimitImages: c.LimitImages}
 	}
 	return &FlowerCompactionDecision{Capacity: capacity, Pressure: decision.Pressure, Before: candidate(decision.Before), After: candidate(decision.After)}
 }

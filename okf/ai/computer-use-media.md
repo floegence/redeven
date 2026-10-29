@@ -33,8 +33,10 @@ lifetimes; tool success does not prove delivery. Model encodings never replace o
 - Flower caps JSON/base64 at 32 MiB independently of tokens: product policy,
   not a provider limit. Remote DTOs share the cap; services own final rendering.
 - Media dimension/count/byte failures retain typed actual/limit/stage through
-  Desktop RPC and canonical failure projection; they are permanent, not token
-  overflow. Invalid images report preparation failures. UI provides numeric
+  Desktop RPC and canonical failure projection. Published Floret v7.94.0 recovers
+  aggregate count/total-byte failures through safe historical compaction even
+  with low token usage. Individual invalid/dimension failures remain terminal;
+  neither class aliases token overflow. UI provides numeric
   diagnostics and input/model guidance without unchanged Retry or secret payloads.
 
 ## Screenshot coordinates

@@ -24,3 +24,5 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 - Compact Computer Use around targets/select_target/exec, exact downloads, bounded observations and confirmed effects through failure.
 - Preserve streaming follow/fold order, immediate send feedback and full Markdown; scope performance and recovery claims to tested source.
+
+- 2026-10-29: Adopt published Floret v7.94.0 aggregate image-capacity recovery, Desktop typed cause transport and localized inline history organization.

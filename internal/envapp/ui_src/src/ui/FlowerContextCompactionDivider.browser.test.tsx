@@ -249,3 +249,32 @@ it.each(['en-US', 'zh-CN', 'de-DE'] as const)('explains byte capacity without cl
   await userEvent.keyboard('{Escape}');
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
 });
+
+it.each(['en-US', 'zh-CN', 'de-DE'] as const)('explains image capacity without clipping on a narrow screen in %s', async locale => {
+  await page.viewport(360, 640);
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;inset:0;padding:260px 16px 16px';
+  document.body.append(host);
+  dispose = render(() => <FlowerContextCompactionDivider copy={copy} decoration={{
+    decoration_id: 'context-compaction:images', kind: 'context_compaction', ordinal: 0,
+    anchor: { target_kind: 'message', message_id: 'message-1', edge: 'after' },
+    compaction: { operation_id: 'images', reason: 'image_count', turn_id: 'turn', canonical_ordinal: 1, phase: 'start', status: 'compacting', tokens_before: 169238, updated_at_ms: 1,
+      decision: { pressure: { pressure_signal: 'image_count' }, capacity: { kind: 'image_count', stage: 'prepare', source: 'provider', actual_images: 17, limit_images: 15 } },
+    },
+  }} />, host);
+  const trigger = host.querySelector<HTMLElement>('.flower-compaction-divider-pill')!;
+  expect(trigger.textContent).toContain(copy.chat.compactionDivider.compactingImages);
+  trigger.focus();
+  const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+  await expect.poll(() => tooltip.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+  expect(tooltip.textContent).toContain(copy.chat.compactionDivider.imageCount('17', '15'));
+  expect(tooltip.scrollHeight).toBeLessThanOrEqual(tooltip.clientHeight);
+  expect(tooltip.scrollWidth).toBeLessThanOrEqual(tooltip.clientWidth);
+  expect(tooltip.getBoundingClientRect().right).toBeLessThanOrEqual(360);
+  expect(tooltip.getBoundingClientRect().bottom).toBeLessThanOrEqual(640);
+  if (locale === 'zh-CN') await page.screenshot({ element: host, path: '__screenshots__/flower-image-capacity-recovery.png' });
+  await userEvent.keyboard('{Escape}');
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+});

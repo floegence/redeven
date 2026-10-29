@@ -26,7 +26,8 @@ remain available after model preparation.
 - image.read stores original snapshots, while every model input (including crops
   and summaries) uses [default model preparation](computer-use-media.md). Original
   locators remain available for detail crops; no durable derivative cache exists.
-- Floret preserves image order in summaries. Tokens and JSON bytes have separate
+- Floret preserves every image in ordered summary batches; capacity failures shrink
+  the same unconsumed batch. Current user images remain exact. Tokens and JSON bytes have separate
   limits; indivisible overflow fails.
 - toolMediaStore retains immutable images in computer/keyframes across source
   changes, Retry, restart, Fork and compaction.

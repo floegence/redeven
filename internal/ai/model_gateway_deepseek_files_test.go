@@ -149,6 +149,8 @@ func TestDeepSeekFilesAdapterPreservesImagesAcrossPreparations(t *testing.T) {
 
 func TestDesktopModelSourceCapacityEvidenceRoundTrip(t *testing.T) {
 	for _, c := range []*FlowerCompactionCapacity{
+		{Kind: "image_count", Stage: "prepare", Source: "provider", ActualImages: 17, LimitImages: 15},
+		{Kind: "image_bytes", Stage: "prepare", Source: "provider", ActualBytes: 201, LimitBytes: 200},
 		{Kind: "request_bytes", Stage: "prepare", Source: "host_policy", ActualBytes: 101, LimitBytes: 100},
 		{Kind: "request_bytes", Stage: "response", Source: "provider"}, nil,
 	} {
@@ -166,6 +168,15 @@ func TestDesktopModelSourceCapacityEvidenceRoundTrip(t *testing.T) {
 			var refresh *flprovider.RequestPreparationError
 			if !errors.As(normalized, &refresh) {
 				t.Fatalf("capacity=%+v raw=%T %v normalized=%T %v", c, err, err, normalized, normalized)
+			}
+		} else if c.Kind == "image_count" || c.Kind == "image_bytes" {
+			var media *flprovider.MediaLimitError
+			if !errors.As(normalized, &media) || errors.Is(normalized, flprovider.ErrContextOverflow) {
+				t.Fatalf("lost independent media capacity: %v", normalized)
+			}
+			kind, _, _ := media.RequestCapacityLimit()
+			if kind != c.Kind {
+				t.Fatalf("kind=%s want=%s", kind, c.Kind)
 			}
 		} else {
 			if !errors.Is(normalized, flprovider.ErrContextOverflow) {
@@ -194,6 +205,14 @@ func TestFlowerCompactionCapacityProjection(t *testing.T) {
 	}
 }
 
+func TestFlowerImageCapacityProjection(t *testing.T) {
+	d := &observation.CompactionDecision{Capacity: &observation.CompactionCapacity{Kind: "image_count", Stage: "prepare", Source: "provider", ActualImages: 17, LimitImages: 15}}
+	got := flowerCompactionDecision(d)
+	if got.Capacity == nil || got.Capacity.ActualImages != 17 || got.Capacity.LimitImages != 15 || got.Capacity.ActualBytes != 0 {
+		t.Fatal(got)
+	}
+}
+
 func TestDesktopCapacityRejectsAmbiguousEvidence(t *testing.T) {
 	advice := flprovider.RetryAdvice{Category: flprovider.RetryPermanent}
 	message := newProviderFailure(providerFailureDiagnostic{Provider: "deepseek", Shape: "unknown"}, errors.New("fixture"), advice).Error()
@@ -201,6 +220,9 @@ func TestDesktopCapacityRejectsAmbiguousEvidence(t *testing.T) {
 		{Kind: "request_bytes", Stage: "response", Source: "provider", ActualBytes: 10},
 		{Kind: "request_bytes", Stage: "prepare", Source: "host_policy", ActualBytes: 1, LimitBytes: 2},
 		{Kind: "request_bytes", Stage: "response", Source: "unknown"},
+		{Kind: "image_count", Stage: "prepare", Source: "provider", ActualImages: 1, LimitImages: 2},
+		{Kind: "image_count", Stage: "prepare", Source: "provider", ActualImages: 3, LimitImages: 2, ActualBytes: 99},
+		{Kind: "image_bytes", Stage: "prepare", Source: "provider", ActualBytes: 3, LimitBytes: 2, ActualImages: 99},
 	} {
 		if validateDesktopModelSourceRPCError(&DesktopModelSourceRPCError{Code: "FAILED", Message: message, RetryAdvice: &advice, Capacity: c}, true) == nil {
 			t.Fatal("invalid evidence accepted")

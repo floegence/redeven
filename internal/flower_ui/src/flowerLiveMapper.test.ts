@@ -530,6 +530,10 @@ describe('request byte capacity contract', () => {
     const wire = [{ ...base, decision: { pressure, capacity } }];
     expect(mapFlowerContextCompactions(wire)?.[0].decision?.capacity).toEqual(capacity);
     expect(mapFlowerContextCompactions(JSON.parse(JSON.stringify(wire)))).toEqual(mapFlowerContextCompactions(wire));
+    for (const media of [
+      { kind: 'image_count', stage: 'prepare', source: 'provider', actual_images: 17, limit_images: 15 },
+      { kind: 'image_bytes', stage: 'response', source: 'provider', actual_bytes: 201, limit_bytes: 200 },
+    ]) expect(mapFlowerContextCompactions([{ ...base, decision: { pressure, capacity: media } }])?.[0].decision?.capacity).toEqual(media);
     const server = { kind: 'request_bytes', stage: 'response', source: 'provider' };
     expect(mapFlowerContextCompactions([{ ...base, decision: { pressure, capacity: server } }])?.[0].decision?.capacity).toEqual(server);
   });
@@ -537,6 +541,9 @@ describe('request byte capacity contract', () => {
     { kind: 'request_bytes', stage: 'prepare', source: 'host_policy', actual_bytes: 1, limit_bytes: 2 },
     { kind: 'request_bytes', stage: 'response', source: 'provider', actual_bytes: 42 },
     { kind: 'request_bytes', stage: 'prepare', source: 'provider' },
+    { kind: 'image_count', stage: 'prepare', source: 'provider', actual_images: 1, limit_images: 2 },
+    { kind: 'image_count', stage: 'prepare', source: 'provider', actual_images: 3, limit_images: 2, actual_bytes: 99 },
+    { kind: 'image_bytes', stage: 'prepare', source: 'provider', actual_bytes: 3, limit_bytes: 2, actual_images: 99 },
   ])('rejects ambiguous or fabricated evidence %j', capacity => {
     expect(() => mapFlowerContextCompactions([{ ...base, decision: { pressure, capacity } }])).toThrow('capacity evidence');
   });

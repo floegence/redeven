@@ -464,12 +464,19 @@ function mapCompactionDecision(raw: unknown): FlowerCompactionDecision | undefin
   let capacity: FlowerCompactionDecision['capacity'];
   if (record.capacity !== undefined) {
     const value = plainRecordValue(record.capacity);
-    if (!value || value.kind !== 'request_bytes') throw new Error('Flower contract error: invalid capacity evidence.');
+    if (!value || !['request_bytes', 'image_count', 'image_bytes'].includes(String(value.kind))) throw new Error('Flower contract error: invalid capacity evidence.');
     const actual = value.actual_bytes === undefined ? 0 : nonNegativeInteger(value.actual_bytes, 'capacity.actual_bytes');
     const limit = value.limit_bytes === undefined ? 0 : nonNegativeInteger(value.limit_bytes, 'capacity.limit_bytes');
-    if (value.stage === 'prepare' && value.source === 'host_policy' && limit > 0 && actual > limit) {
+    const images = value.actual_images === undefined ? 0 : nonNegativeInteger(value.actual_images, 'capacity.actual_images');
+    const imageLimit = value.limit_images === undefined ? 0 : nonNegativeInteger(value.limit_images, 'capacity.limit_images');
+    const mediaStage = value.stage === 'prepare' || value.stage === 'response';
+    if (value.kind === 'image_count' && mediaStage && value.source === 'provider' && imageLimit > 0 && images > imageLimit && actual === 0 && limit === 0) {
+      capacity = { kind: 'image_count', stage: value.stage as 'prepare' | 'response', source: 'provider', actual_images: images, limit_images: imageLimit };
+    } else if (value.kind === 'image_bytes' && mediaStage && value.source === 'provider' && limit > 0 && actual > limit && images === 0 && imageLimit === 0) {
+      capacity = { kind: 'image_bytes', stage: value.stage as 'prepare' | 'response', source: 'provider', actual_bytes: actual, limit_bytes: limit };
+    } else if (value.kind === 'request_bytes' && images === 0 && imageLimit === 0 && value.stage === 'prepare' && value.source === 'host_policy' && limit > 0 && actual > limit) {
       capacity = { kind: 'request_bytes', stage: 'prepare', source: 'host_policy', actual_bytes: actual, limit_bytes: limit };
-    } else if (value.stage === 'response' && value.source === 'provider' && actual === 0 && limit === 0) {
+    } else if (value.kind === 'request_bytes' && images === 0 && imageLimit === 0 && value.stage === 'response' && value.source === 'provider' && actual === 0 && limit === 0) {
       capacity = { kind: 'request_bytes', stage: 'response', source: 'provider' };
     } else throw new Error('Flower contract error: invalid capacity evidence.');
   }

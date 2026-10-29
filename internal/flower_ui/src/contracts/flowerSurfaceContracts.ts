@@ -508,9 +508,11 @@ export type FlowerCompactionRequestSnapshot = Readonly<{
 }>;
 
 export type FlowerCompactionCapacity = Readonly<{
-  kind: 'request_bytes';
+  kind: 'request_bytes' | 'image_count' | 'image_bytes';
   stage: 'prepare' | 'response';
   source: 'host_policy' | 'provider';
+  actual_images?: number;
+  limit_images?: number;
   actual_bytes?: number;
   limit_bytes?: number;
 }>;

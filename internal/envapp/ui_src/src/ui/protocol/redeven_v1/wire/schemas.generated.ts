@@ -466,8 +466,21 @@ export const redevenWireSchemas = {
                       "kind": "object",
                       "properties": {
                         "kind": {
-                          "kind": "literal",
-                          "value": "request_bytes"
+                          "kind": "union",
+                          "options": [
+                            {
+                              "kind": "literal",
+                              "value": "request_bytes"
+                            },
+                            {
+                              "kind": "literal",
+                              "value": "image_count"
+                            },
+                            {
+                              "kind": "literal",
+                              "value": "image_bytes"
+                            }
+                          ]
                         },
                         "stage": {
                           "kind": "union",
@@ -494,6 +507,12 @@ export const redevenWireSchemas = {
                               "value": "provider"
                             }
                           ]
+                        },
+                        "actual_images": {
+                          "kind": "number"
+                        },
+                        "limit_images": {
+                          "kind": "number"
                         },
                         "actual_bytes": {
                           "kind": "number"

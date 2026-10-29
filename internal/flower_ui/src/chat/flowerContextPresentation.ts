@@ -195,6 +195,7 @@ export function compactionDividerLabel(compaction: FlowerContextCompaction, copy
   const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
   switch (trimString(compaction.status)) {
     case 'compacting':
+      if (compaction.reason === 'image_count' || compaction.reason === 'image_bytes') return labels.compactingImages;
       return trimString(labels.compacting) || fallback.compacting;
     case 'compacted':
       return trimString(labels.compacted) || fallback.compacted;
@@ -221,7 +222,11 @@ export function compactionDividerDetail(compaction: FlowerContextCompaction, cop
   const after = formatContextTokenCount(compaction.tokens_after_estimate);
   const labels = copy.chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
   const capacity = compaction.decision?.capacity;
-  const cause = capacity?.source === 'host_policy'
+  const cause = capacity?.kind === 'image_count'
+    ? labels.imageCount(String(capacity.actual_images), String(capacity.limit_images))
+    : capacity?.kind === 'image_bytes'
+      ? labels.imageBytes(((capacity.actual_bytes ?? 0) / 1048576).toFixed(2), ((capacity.limit_bytes ?? 0) / 1048576).toFixed(2))
+      : capacity?.source === 'host_policy'
     ? labels.requestBytes(((capacity.actual_bytes ?? 0) / 1048576).toFixed(2), ((capacity.limit_bytes ?? 0) / 1048576).toFixed(2))
     : capacity?.source === 'provider' ? labels.providerBytes : '';
   if (compaction.status === 'compacted' && before && after) return [cause, labels.tokenChange(before, after)].filter(Boolean).join(' · ');

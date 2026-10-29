@@ -274,3 +274,11 @@ describe('independent request byte capacity', () => {
     expect(compactionDividerDetail(compaction({ tokens_before: 100, tokens_after_estimate: 50 }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Message text estimate: ≈ 100 → 50 tokens');
   });
 });
+
+it('explains image capacity independently of token utilization', () => {
+ const state = compaction({status:'compacting',reason:'image_count',decision:{pressure:{},capacity:{kind:'image_count',stage:'prepare',source:'provider',actual_images:17,limit_images:15}}});
+ expect(compactionDividerLabel(state,DEFAULT_FLOWER_SURFACE_COPY)).toBe('Organizing image history…');
+ const detail=compactionDividerDetail(state,DEFAULT_FLOWER_SURFACE_COPY);
+ expect(detail).toContain('17 images'); expect(detail).toContain('15-image');
+ expect(detail).not.toContain('HTTP 413'); expect(detail).not.toContain('100%');
+});

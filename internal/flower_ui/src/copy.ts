@@ -778,6 +778,9 @@ export type FlowerSurfaceCopy = Readonly<{
       messageEstimate: (tokens: string) => string;
       requestBytes: (actual: string, limit: string) => string;
       providerBytes: string;
+      compactingImages: string;
+      imageCount: (actual: string, limit: string) => string;
+      imageBytes: (actual: string, limit: string) => string;
     }>;
     projectionUnavailable: Readonly<{
       title: string;
@@ -1314,6 +1317,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       tokenChange: (before, after) => 'Message text estimate: ≈ ' + before + ' → ' + after + ' tokens',
       messageEstimate: (tokens) => 'Message text estimate: ≈ ' + tokens + ' tokens',
       requestBytes: (actual, limit) => 'Request size ' + actual + ' MiB exceeds the ' + limit + ' MiB transport limit',
+      compactingImages: 'Organizing image history…',
+      imageCount: (actual, limit) => actual + ' images exceed the ' + limit + '-image request limit',
+      imageBytes: (actual, limit) => 'Image data ' + actual + ' MiB exceeds the ' + limit + ' MiB limit',
       providerBytes: 'The model provider rejected the request size (HTTP 413). Token usage is a separate limit.',
     },
     projectionUnavailable: {

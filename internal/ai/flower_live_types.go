@@ -170,11 +170,13 @@ type FlowerCompactionRequestSnapshot struct {
 }
 
 type FlowerCompactionCapacity struct {
-	Kind        string `json:"kind"`
-	Stage       string `json:"stage"`
-	Source      string `json:"source"`
-	ActualBytes int64  `json:"actual_bytes,omitempty"`
-	LimitBytes  int64  `json:"limit_bytes,omitempty"`
+	ActualImages int64  `json:"actual_images,omitempty"`
+	LimitImages  int64  `json:"limit_images,omitempty"`
+	Kind         string `json:"kind"`
+	Stage        string `json:"stage"`
+	Source       string `json:"source"`
+	ActualBytes  int64  `json:"actual_bytes,omitempty"`
+	LimitBytes   int64  `json:"limit_bytes,omitempty"`
 }
 
 type FlowerCompactionDecision struct {
