@@ -90,6 +90,13 @@ function createFixture(root, version = '1.2.3') {
       }, null, 2)}\n`);
     }
   }
+  for (const architecture of ['amd64', 'arm64']) {
+    const directory = path.join(downloads, 'center-linux-' + architecture);
+    mkdirSync(directory);
+    const archive = 'redeven-center_linux_' + architecture + '.tar.gz';
+    const file = write(directory, archive, Buffer.from('center ' + architecture));
+    write(directory, archive + '.manifest.json', JSON.stringify({ schema_version: 'redeven.center.release.v1', version: 'v' + version, source_commit: process.env.GITHUB_SHA || 'a'.repeat(40), target: 'linux/' + architecture, package: packageDescriptor(file) }));
+  }
   const sparkleDirectory = path.join(downloads, 'desktop-sparkle');
   mkdirSync(sparkleDirectory);
   write(sparkleDirectory, 'appcast-mac-x64.xml', Buffer.from('<rss>signed x64</rss>\n'));
@@ -112,7 +119,7 @@ test('collects only the closed four-target release inventory', () => {
     assert.equal(outputs.filter((name) => /\.(?:deb|rpm|dmg)$/u.test(name)).length, 6);
     assert.equal(outputs.filter((name) => name.endsWith('.redevplugin-verification.json')).length, 6);
     assert.equal(outputs.filter((name) => name.startsWith('redeven-installer_')).length, 4);
-    assert.equal(outputs.length, 37);
+    assert.equal(outputs.length, 41);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -148,7 +155,7 @@ test('excludes Sparkle stable-feed assets from prereleases', () => {
     const outputs = readdirSync(destination).sort();
     assert.equal(outputs.some((name) => name.startsWith('appcast-mac-')), false);
     assert.equal(outputs.some((name) => name.startsWith('Redeven-Desktop-') && name.endsWith('.md')), false);
-    assert.equal(outputs.length, 33);
+    assert.equal(outputs.length, 37);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -291,3 +298,26 @@ test('rejects symbolic-link release sources without publishing output', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+for (const scenario of ['missing', 'digest', 'version', 'target', 'commit', 'symlink']) {
+  test('rejects Center release ' + scenario + ' violations', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'redeven-center-collector-'));
+    try {
+      const downloads = createFixture(root);
+      const directory = path.join(downloads, 'center-linux-arm64');
+      const archive = path.join(directory, 'redeven-center_linux_arm64.tar.gz');
+      const receiptPath = archive + '.manifest.json';
+      const receipt = JSON.parse(readFileSync(receiptPath));
+      if (scenario === 'missing') unlinkSync(archive);
+      if (scenario === 'digest') writeFileSync(archive, 'tampered');
+      if (scenario === 'version') receipt.version = 'v9.9.9';
+      if (scenario === 'target') receipt.target = 'linux/amd64';
+      if (scenario === 'commit') receipt.source_commit = 'b'.repeat(40);
+      if (scenario === 'symlink') { unlinkSync(archive); symlinkSync(receiptPath, archive); }
+      writeFileSync(receiptPath, JSON.stringify(receipt));
+      const output = path.join(root, 'output');
+      assert.throws(() => collect(downloads, output, 'v1.2.3'), /Center|center-linux-arm64/);
+      assert.deepEqual(readdirSync(output), []);
+    } finally { rmSync(root, {recursive: true, force: true}); }
+  });
+}

@@ -1,6 +1,6 @@
 services:
   connector:
-    image: redeven-center:local
+    image: redeven-center:${CENTER_VERSION:?Use the version file from the package}
     build: .
     user: "10002:10001"
     command: ["connector", "--connector-socket", "/run/redeven-connector/connector.sock", "--center-user", "10001"]
@@ -11,7 +11,7 @@ services:
     volumes: ["connector-ipc:/run/redeven-connector"]
     tmpfs: [/tmp]
   center:
-    image: redeven-center:local
+    image: redeven-center:${CENTER_VERSION:?Use the version file from the package}
     user: "10001:10001"
     command: ["serve", "--state-root", "/var/lib/redeven-center", "--listen", "0.0.0.0:8443", "--assets", "/opt/redeven-center/ui", "--connector-socket", "/run/redeven-connector/connector.sock", "--connector-user", "10002", "--origin", "${CENTER_ORIGIN:?Set CENTER_ORIGIN}", "--tls-cert", "/tls/server.pem", "--tls-key", "/tls/server-key.pem"]
     depends_on: [connector]

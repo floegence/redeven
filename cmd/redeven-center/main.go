@@ -24,6 +24,13 @@ import (
 	"github.com/floegence/redeven/internal/environmentcenter"
 )
 
+// Build identity is injected by scripts/build_center.sh.
+var (
+	Version   = "dev"
+	Commit    = "unknown"
+	BuildTime = "unknown"
+)
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -31,6 +38,20 @@ func main() {
 	}
 }
 func run(args []string) error {
+	return runWithOutput(args, os.Stdout)
+}
+
+func runWithOutput(args []string, output io.Writer) error {
+	if len(args) > 0 && (args[0] == "version" || args[0] == "--version") {
+		if len(args) != 1 {
+			return errors.New("version accepts no arguments")
+		}
+		return json.NewEncoder(output).Encode(struct {
+			Version   string `json:"version"`
+			Commit    string `json:"commit"`
+			BuildTime string `json:"build_time"`
+		}{Version, Commit, BuildTime})
+	}
 	command := "serve"
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
 		command = args[0]
@@ -92,7 +113,7 @@ func run(args []string) error {
 		return owner(*state, command)
 	}
 	if command != "serve" {
-		return errors.New("use serve, connector, setup, or recover")
+		return errors.New("use serve, connector, setup, recover, or version")
 	}
 	if *origin == "" || *cert == "" || *key == "" || *assets == "" || !filepath.IsAbs(*connector) || *connectorUser == "" {
 		return errors.New("serve requires --origin, --tls-cert, --tls-key, --assets, --connector-user and an absolute --connector-socket")

@@ -255,6 +255,55 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
+  center:
+    name: Build Web Center linux-${{ matrix.goarch }}
+    needs: release-ref
+    environment: redeven-release
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: amd64
+            runner: ubuntu-24.04
+          - goarch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Install Center UI dependencies
+        run: |
+          corepack enable
+          corepack pnpm --dir desktop install --frozen-lockfile
+      - name: Build independent Center
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOWORK: 'off'
+        run: |
+          set -euo pipefail
+          ./scripts/build_center.sh "$RUNNER_TEMP/center-package" "$GITHUB_REF_NAME"
+          "$RUNNER_TEMP/center-package/redeven-center" version > "$RUNNER_TEMP/center-version.json"
+          node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/center-version.json")); if(v.version!==process.env.GITHUB_REF_NAME||v.commit!==process.env.GITHUB_SHA)process.exit(1)'
+          node scripts/package_center_release.mjs "$RUNNER_TEMP/center-package" "$RUNNER_TEMP/center-assets" "$GITHUB_REF_NAME" "linux/$GOARCH" "$GITHUB_SHA"
+      - name: Upload Center package artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: center-linux-${{ matrix.goarch }}
+          path: ${{ runner.temp }}/center-assets/*
+          if-no-files-found: error
+
   desktop:
     name: Desktop ${{ matrix.goos }}-${{ matrix.goarch }}
     needs: build
@@ -599,9 +648,10 @@ jobs:
     name: Create GitHub Release
     needs:
       - build
+      - center
       - desktop
       - sparkle
-    if: ${{ always() && needs.build.result == 'success' && needs.desktop.result == 'success' && (needs.sparkle.result == 'success' || needs.sparkle.result == 'skipped') }}
+    if: ${{ always() && needs.build.result == 'success' && needs.center.result == 'success' && needs.desktop.result == 'success' && (needs.sparkle.result == 'success' || needs.sparkle.result == 'skipped') }}
     environment: redeven-release
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -637,6 +687,12 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --dir dist/downloads \
             --pattern "desktop-*"
+
+      - name: Download all Center artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir dist/downloads --pattern "center-*"
 
       - name: Collect release assets
         run: |
@@ -683,6 +739,8 @@ jobs:
             redeven-install.sh
             redeven-install-portal.sh
             redeven-gateway_*.tar.gz
+            redeven-center_*.tar.gz
+            redeven-center_*.tar.gz.manifest.json
             redeven-runtime-compatibility_*.json
             redeven-runtime-compatibility_*.sig
             redeven-runtime-compatibility_*.pem
@@ -772,6 +830,8 @@ jobs:
             dist/redeven-runtime-compatibility_*.sig
             dist/redeven-runtime-compatibility_*.pem
             dist/redeven-gateway_*.tar.gz
+            dist/redeven-center_*.tar.gz
+            dist/redeven-center_*.tar.gz.manifest.json
             dist/Redeven-Desktop-*.deb
             dist/Redeven-Desktop-*.rpm
             dist/Redeven-Desktop-*.dmg

@@ -49,6 +49,8 @@ Security reads/hash/consumption share one no-follow descriptor for signed manife
 
 ## Release handoff
 
+Web Center joins Runtime and Desktop under the same tag as independently installable Linux amd64/arm64 archives. Native Center jobs build a static binary with exact version/commit/time, and package the UI, licenses and deployment templates. The closed collector requires both Center archives and matching digest receipts from the release commit. Missing or mismatched Center artifacts block publication; archives/receipts join signed aggregate checksums and remote readback. [Center deployment](../operations/web-center-deployment.md) owns installation and upgrade details. No tag creation or successful CI run alone claims completion of long-duration or physical-device qualification.
+
 [Plugin artifact gates](redevplugin-release-gates.md) own publication/evidence/inventory; [integration](plugin-integration-gates.md) owns Host/market/UI. Consuming runners install pinned Cosign. Desktop jobs use Corepack/frozen Env App dependencies to stage Playwright/QuickJS without browser download/qualification. Bundle traps retain exact staging path and original failure under Bash3.2/Linux.
 
 Protected redeven-release supplies signing/notarization/Sparkle/Team ID secrets; Desktop exposes credential-free HTTPS feed/public key. Verify App/framework/bridge/DMG architecture, Team ID, hardened runtime and notarization. DMG requires Accepted/stapled validation before receipts/feeds; App ticket and syspolicy_check distribution pass.

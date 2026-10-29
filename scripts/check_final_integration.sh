@@ -219,7 +219,7 @@ run_step "testing Desktop bundle source identity" node --test scripts/desktop_bu
 run_step "testing portable macOS package verification" node --test scripts/verify_macos_desktop_update_package.test.mjs
 run_step "testing official Node archive acquisition" node --test scripts/resolve_node_archive.test.mjs
 run_step "checking release artifact collector syntax" node --check scripts/collect_release_artifacts.mjs
-run_step "testing release artifact collector" node --test scripts/collect_release_artifacts.test.mjs
+run_step "testing release artifact collector" node --test scripts/collect_release_artifacts.test.mjs scripts/package_center_release.test.mjs
 run_step "testing self-contained installation bootstrap" node --test scripts/install_bootstrap_contract.test.mjs
 run_step "testing self-contained installer contracts" env GOWORK=off go test ./internal/installer ./cmd/redeven-installer
 run_step "testing ReDevPlugin release artifact verifier" ./scripts/check_redevplugin_release_artifacts.sh --self-test

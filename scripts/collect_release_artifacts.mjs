@@ -24,6 +24,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { centerTargets, centerAssetNames, validateCenterReceipt } from './package_center_release.mjs';
 
 const targetDefinitions = Object.freeze([
   Object.freeze({ goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'], updateFiles: ['latest-linux.yml'] }),
@@ -98,7 +99,7 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
   const expectedArtifactDirectories = targetDefinitions.flatMap((target) => [
     `package-${target.goos}-${target.goarch}`,
     `desktop-${target.goos}-${target.goarch}`,
-  ]).concat(stableRelease ? ['desktop-sparkle'] : []).sort(compareStrings);
+  ]).concat(centerTargets.map(target => 'center-' + target.replace('/', '-')), stableRelease ? ['desktop-sparkle'] : []).sort(compareStrings);
   const actualArtifactDirectories = readdirSync(downloadsDir).sort(compareStrings);
   const windowsArtifacts = actualArtifactDirectories.filter((name) => /(?:^|[-_])windows(?:[-_]|$)|(?:^|[-_])win(?:32|64|[-_]|$)/iu.test(name));
   if (windowsArtifacts.length > 0) {
@@ -170,6 +171,23 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
         if (target.goos === 'linux') normalizeLinuxUpdateFeed(update, target, installerNames);
         addOutput(outputs, updateFile, update);
       }
+    }
+
+    let centerCommit;
+    for (const target of centerTargets) {
+      const label = 'center-' + target.replace('/', '-');
+      const directory = path.join(downloadsDir, label);
+      const names = centerAssetNames(target);
+      requireClosedDirectory(directory, names, label);
+      sourceInventories.push([directory, names, label]);
+      const archive = stage(path.join(directory, names[0]));
+      const receipt = stage(path.join(directory, names[1]));
+      const commit = validateCenterReceipt(readJSON(receipt.stagedPath), archive.descriptor, tag, target);
+      if (centerCommit && centerCommit !== commit) fail('Center targets must use the same source commit');
+      if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== commit) fail('Center source commit must match the release workflow');
+      centerCommit = commit;
+      addOutput(outputs, names[0], archive);
+      addOutput(outputs, names[1], receipt);
     }
 
     if (stableRelease) {
@@ -368,6 +386,7 @@ function fsyncDirectory(directory) {
 function expectedReleaseOutputNames(version, stableRelease) {
   return [
     ...packageSharedFiles,
+    ...centerTargets.flatMap(centerAssetNames),
     ...targetDefinitions.flatMap((target) => [
       `redeven_${target.goos}_${target.goarch}.tar.gz`,
       `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`,
@@ -398,7 +417,7 @@ function requireManagedOutputInventory(directory, expectedNames, phase) {
 }
 
 function isManagedReleaseOutput(name) {
-  return name === markerName || packageSharedFiles.includes(name) || /^redeven_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
+  return /^redeven-center_/.test(name) || name === markerName || packageSharedFiles.includes(name) || /^redeven_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven_relink_linux_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven-gateway_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven-installer_(?:darwin|linux)_(?:amd64|arm64)$/u.test(name) ||

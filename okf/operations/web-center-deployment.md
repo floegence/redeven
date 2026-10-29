@@ -13,13 +13,23 @@ Center binary/UI deploy separately from Desktop and Runtime. Evidence records so
 
 # Contract
 
+## Versioned release artifacts
+
+Web Center is a third independently installable product alongside Runtime and Desktop. One repository release tag identifies all three; installing or upgrading Center never installs, restarts or upgrades Runtime or Desktop. The Center/Runtime binding protocol and explicit capability checks remain authoritative; a shared tag does not grant cross-version compatibility automatically.
+
+Every successful tagged release includes `redeven-center_linux_amd64.tar.gz` and `redeven-center_linux_arm64.tar.gz`, each with an external `.tar.gz.manifest.json` receipt. These files join the existing signed `SHA256SUMS` and upload/download byte verification. Center failures block the whole release. Native Linux runners build and execute their own architecture. macOS source builds remain available for development; no formal macOS/Windows Center service package or published container registry is promised.
+
+Each archive contains `redeven-center`, `ui/`, both service units, environment examples, Docker/Compose files, `.env`, licenses, this guide as `DEPLOYMENT.md` and `manifest.json`. `redeven-center version` (or `--version`) reports the release tag, source commit and build time without opening state. The manifest hashes every payload file; packaging rejects dirty source, wrong commit/version/architecture, missing or unexpected files, symlinks and digest mismatches. Collection requires both architectures from the same release commit.
+
+Download the architecture matching the server from the chosen GitHub release, verify its signed checksum using the release instructions, and extract it into a new version directory. Use the systemd or Compose procedure below. No Node.js, Go, Electron or local Runtime is required on the deployment host. Compose builds a local image from the verified package and reads the exact version from the supplied `.env`; preserve that file and the state volume on upgrade. Never use the Runtime install command to install Center.
+
 ## Install
 
-Use `.node-version`, Desktop package-manager declaration, `go.mod` and published dependencies. `scripts/build_center.sh <new-directory>` produces binary/UI and systemd/env/Docker templates. Cross-compiled output needs target-host testing.
+Use `.node-version`, Desktop package-manager declaration, `go.mod` and published dependencies. `scripts/build_center.sh <new-directory> [version]` produces binary/UI, version metadata and systemd/env/Docker templates. Production packages pass an explicit release tag; omitted versions are marked dev. Cross-compiled output needs target-host testing.
 
 Start `redeven-center serve` with required `--state-root`, `--origin`, `--tls-cert`, `--tls-key`, `--assets`, `--connector-socket`, `--connector-user`, and chosen `--listen`. Run the separate worker with `connector --connector-socket ... --center-user <Center OS user>`. Both sides verify the configured OS peer UID before exchanging route credentials. Origin is immutable identity. Valid TLS must cover portal, Env and derived child origins. Configure DNS and wildcard/SAN certificates. TLS terminates in Center; an edge may use TCP passthrough. Forwarded headers confer no authority.
 
-Linux service uses account `redeven-center`, state `/var/lib/redeven-center` mode 0700 and binaries/UI `/opt/redeven-center`. It has no Runtime dependency. Docker runs UID/GID 10001; mount ownership must match with private permissions.
+Linux service uses account `redeven-center`, state `/var/lib/redeven-center` mode 0700 and binaries/UI `/opt/redeven-center`. It has no Runtime dependency. Docker Center runs UID/GID 10001; mount ownership must match with private permissions.
 
 For a new Linux installation, create separate system accounts `redeven-center` and `redeven-connector` with no login shells, both in group `redeven-center`. Copy one matching package into root-owned `/opt/redeven-center`, install both supplied units into `/etc/systemd/system`, and create `/etc/redeven-center/center.env` from the example. Keep state and TLS keys readable only by Center. The Connector unit has no state directory, denies access to Center state/config and owns `/run/redeven-connector/connector.sock`; group access lets Center connect, and kernel peer credentials enforce its exact UID. `systemctl daemon-reload` and `systemctl enable --now redeven-center` start both units. Connector can restart independently. Run owner CLI commands with `sudo -u redeven-center` or root. Existing installations require a stopped-state backup and explicit artifact replacement, not blind recursive deletion.
 

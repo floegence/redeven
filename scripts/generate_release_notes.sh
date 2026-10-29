@@ -264,8 +264,19 @@ Upgrade an existing runtime in place:
 curl -fsSL ${install_script_url} | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION=${release_tag} sh
 \`\`\`
 
+## Web Center
+
+Web Center is independently deployable on Linux amd64/arm64. Download the matching
+Center archive below, verify its signed checksum, and follow \`DEPLOYMENT.md\`
+inside the package for systemd or Docker Compose installation. It includes the
+UI and isolated Connector; no Desktop or local Runtime installation is required.
+Keep the supplied \`.env\` version file when building the local Docker image.
+
 ## Binary Assets
 
+- \`redeven-center_linux_amd64.tar.gz\`
+- \`redeven-center_linux_arm64.tar.gz\`
+- \`redeven-center_*.tar.gz.manifest.json\`: matching Center source and archive digest receipts
 - \`redeven_linux_amd64.tar.gz\`
 - \`redeven_linux_arm64.tar.gz\`
 - \`redeven_darwin_amd64.tar.gz\`
