@@ -70,6 +70,8 @@ opening a group does not acquire hidden terminal, thinking or report bodies.
 
 ## Geometry and input
 
+Tool titles, inline summaries, elapsed times and folded sequence labels use 13px (`0.8125rem`) text with the existing 18px (`1.125rem`) line height. Thinking labels retain their separate reading scale.
+
 Prose, Goal/tool/thinking icons, summary and progress share one left edge. Permanent outer/native-scrollbar gutters, including the child transcript, prevent scrollbar appearance and singleton promotion from indenting or adding a blank title row. Tools retain icons and independent details. Full-row targets place elapsed time/chevron immediately after intrinsic text; only long text shrinks. Use CSS, without text measurement loops.
 
 One native gutter button with downward chevron/continuous bracket collapses the expanded group; no right-side group action. Its hit area is 24px, 44px for coarse pointers, outside tools. Folded, the same button covers summary with trailing inline chevron. Summary bounds remain stable during crossfade; counts outrank optional latest-tool preview on narrow screens. Rail stays outside scrolling body, follows shared viewport height and stops before prose, without per-row connectors or scroll-time hit testing.

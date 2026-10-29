@@ -91,6 +91,22 @@ const message = (root: HTMLElement, id: string) => root.querySelector<HTMLElemen
 const summary = (root: HTMLElement) => root.querySelector<HTMLButtonElement>('.flower-turn-summary-button');
 const messageRow = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-row-message-id="${id}"]`)!;
 const hidden = (root: HTMLElement, id: string) => messageRow(root, id)?.querySelector('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
+function expectEndedPresentation(notice: HTMLElement, label: string) {
+  expect(notice.textContent).toBe(label);
+  expect(notice.getAttribute('role')).toBe('status');
+  expect(getComputedStyle(notice).fontSize).toBe('13px');
+  expect(getComputedStyle(notice).lineHeight).toBe('20px');
+  const icon = notice.querySelector<HTMLElement>('.flower-turn-ended-icon')!;
+  expect(icon).not.toBeNull();
+  expect(icon.getAttribute('aria-hidden')).toBe('true');
+  const glyph = icon.querySelector('svg')!.getBoundingClientRect();
+  const text = notice.querySelector<HTMLElement>('.flower-turn-ended-label')!.getBoundingClientRect();
+  expect(glyph.width).toBe(16);
+  expect(glyph.height).toBe(16);
+  expect(text.left - glyph.right).toBeGreaterThanOrEqual(6);
+  expect(Math.abs(glyph.top + glyph.height / 2 - text.top - 10)).toBeLessThanOrEqual(1);
+  expect(notice.scrollWidth).toBeLessThanOrEqual(notice.clientWidth + 1);
+}
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
@@ -580,7 +596,7 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => Boolean(root.querySelector('.flower-error-card')));
     expect(root.querySelectorAll('.flower-error-card')).toHaveLength(1);
     expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).toBeNull();
-    expect(root.querySelector('[data-flower-turn-id="old-turn"] .flower-turn-ended')).not.toBeNull();
+    expectEndedPresentation(root.querySelector<HTMLElement>('[data-flower-turn-id="old-turn"] .flower-turn-ended')!, 'Flower could not complete this turn.');
     expect(root.querySelector('.flower-error-message')?.textContent).toBe('The model is overloaded.');
   });
   it('retains the interruption label when the generic failure notice is hidden', async () => {
@@ -589,7 +605,7 @@ describe('completed turn process disclosure', () => {
       turns: [turn({ outcome: 'interrupted', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
     }));
     expect(root.querySelector('.flower-error-card')).toBeNull();
-    expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).not.toBeNull();
+    expectEndedPresentation(root.querySelector<HTMLElement>('[data-flower-turn-id="turn"] .flower-turn-ended')!, 'This turn was interrupted.');
   });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('automatically folds %s work and keeps partial output visible', async (outcome) => {
     const { root, live } = await mount();
@@ -808,7 +824,7 @@ describe('completed turn process disclosure', () => {
     expect(hidden(root, 'old-thinking')).toBe(true);
     expect(hidden(root, 'old-tool')).toBe(true);
     expect(hidden(root, 'old-progress')).toBe(false);
-    expect(root.querySelector('.flower-turn-ended')?.textContent).toBe('Stopped');
+    expectEndedPresentation(root.querySelector<HTMLElement>('.flower-turn-ended')!, 'Stopped');
     expect(hidden(root, 'progress')).toBe(true);
   });
   it('keeps resolved clarification receipts and attachments visible in a completed turn', async () => {
@@ -1066,7 +1082,12 @@ describe('completed turn process disclosure', () => {
   });
   it('keeps the disclosure aligned and compact in representative themed layouts', async () => {
     const copy = createLocalizedFlowerSurfaceCopy(createTestI18nHelpers('zh-CN') as unknown as FlowerSurfaceTranslator);
-    const { root } = await mount(current(true, { parent_events: parentProcessPage() }), copy);
+    const done = current(true, { parent_events: parentProcessPage() });
+    const outcomes = ['failed', 'cancelled', 'interrupted'] as const;
+    const { root } = await mount({ ...done,
+      items: [...outcomes.map(outcome => ({ id: `old-${outcome}`, turn_id: `old-${outcome}`, run_id: `old-${outcome}`, kind: 'user' as const, text: '继续' })), ...done.items!].map((item, index) => ({ ...item, ordinal: index + 1 })),
+      turns: [...outcomes.map(outcome => turn({ turn_id: `old-${outcome}`, run_id: `old-${outcome}`, outcome, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })), ...done.turns!],
+    }, copy);
     const themeRoot = document.documentElement;
     const previousStyle = themeRoot.getAttribute('style');
     const previousClass = themeRoot.getAttribute('class');
@@ -1074,6 +1095,8 @@ describe('completed turn process disclosure', () => {
     const previousMaterial = themeRoot.getAttribute('data-floe-surface-style');
     try {
       for (const [name, material, width] of [
+        ['classic-dark', 'standard', 1280],
+        ['classic-light', 'standard', 320],
         ['paper', 'standard', 1280],
         ['porcelain-dark', 'standard', 1280],
         ['porcelain-light', 'soft-neumorphic', 1280],
@@ -1090,6 +1113,9 @@ describe('completed turn process disclosure', () => {
           if (value) themeRoot.style.setProperty(token, value);
         }
         await page.viewport(width, 900);
+        for (const outcome of outcomes) {
+          expectEndedPresentation(root.querySelector<HTMLElement>(`[data-flower-turn-id="old-${outcome}"] .flower-turn-ended`)!, copy.chat.turnProcess[outcome]);
+        }
         const button = summary(root)!;
         const final = message(root, 'final-a');
         for (const expanded of [false, true]) {
@@ -1109,8 +1135,13 @@ describe('completed turn process disclosure', () => {
   });
   it.each(SUPPORTED_LOCALES)('renders localized durations and accessible controls at narrow width in %s', async (locale) => {
     const copy = createLocalizedFlowerSurfaceCopy(createTestI18nHelpers(locale) as unknown as FlowerSurfaceTranslator);
-    const { root } = await mount(current(true, { parent_events: parentProcessPage() }), copy);
+    const done = current(true, { parent_events: parentProcessPage() });
+    const { root } = await mount({ ...done,
+      items: [{ id: 'old-user', turn_id: 'old-turn', run_id: 'old-run', kind: 'user' as const, text: 'Previous request' }, ...done.items!].map((item, index) => ({ ...item, ordinal: index + 1 })),
+      turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'failed', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }), ...done.turns!],
+    }, copy);
     await page.viewport(420, 900);
+    expectEndedPresentation(root.querySelector<HTMLElement>('.flower-turn-ended')!, copy.chat.turnProcess.failed);
     const button = summary(root)!;
     const worked = copy.chat.turnProcess.worked(`${copy.chat.turnProcess.minute(2)} ${copy.chat.turnProcess.second(18)}`);
     expect(button.textContent).toBe(worked + ' · ' + copy.chat.turnProcess.subtaskUpdates(11));

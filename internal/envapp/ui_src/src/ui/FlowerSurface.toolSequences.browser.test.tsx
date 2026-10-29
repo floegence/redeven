@@ -512,7 +512,14 @@ describe('consecutive tools in the shared Flower surface', () => {
     const chevronCenter = () => { const bounds = chevron.getBoundingClientRect(); return bounds.left + bounds.width / 2; };
     const before = chevronCenter();
     expect(button.querySelector('.flower-activity-inline-title')!.textContent).toBe('Run command');
+    expect(button.querySelector('.flower-activity-inline-duration')).not.toBeNull();
     const expectAdjacent = (target: HTMLElement) => {
+      if (!target.classList.contains('flower-thinking-toggle')) {
+        for (const text of target.querySelectorAll('.flower-activity-inline-title, .flower-activity-inline-detail, .flower-activity-inline-duration')) {
+          expect(getComputedStyle(text).fontSize).toBe('13px');
+          expect(getComputedStyle(text).lineHeight).toBe('18px');
+        }
+      }
       const copy = target.querySelector<HTMLElement>('.flower-activity-inline-copy, .flower-activity-inline-title')!;
       const elapsed = target.querySelector<HTMLElement>('.flower-activity-inline-duration');
       const arrow = target.querySelector<HTMLElement>('.flower-activity-inline-chevron, .flower-thinking-toggle-icon')!;
@@ -1284,6 +1291,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     const sequenceKey = group(root, 'search').dataset.flowerSequence;
     expect(sequenceToggle.textContent).toContain('2 tool calls');
     expect(sequenceToggle.textContent).toContain('1 thinking segment');
+    expect(getComputedStyle(sequenceToggle).fontSize).toBe('13px');
+    expect(getComputedStyle(sequenceToggle).lineHeight).toBe('18px');
     expect(group(root, 'goal').dataset.flowerSequence).toBe(sequenceKey);
     expect(thinking.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence).toBe(sequenceKey);
     expect(thinking.querySelector('.flower-activity-inline-icon .flower-thinking-flower')).not.toBeNull();
@@ -1391,7 +1400,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(row(root, 'a').getBoundingClientRect().height).toBe(32);
     expect(Math.abs(row(root, 'b').getBoundingClientRect().top - thoughts[1].getBoundingClientRect().bottom)).toBeLessThan(1);
     expectSharedRailBetween(root, 'a', 'b');
-    expect(getComputedStyle(row(root, 'a').querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
+    expect(getComputedStyle(row(root, 'a').querySelector('.flower-activity-inline-title')!).fontSize).toBe('13px');
     expect(getComputedStyle(row(root, 'a').querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
     await page.screenshot({ element: root, path: '__screenshots__/flower-tools-mixed.png' });
   });
@@ -1415,7 +1424,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(getComputedStyle(failedGlyph).color).toBe(getComputedStyle(warning).color);
     expect(getComputedStyle(failedTitle).color).toBe(getComputedStyle(warningForeground).color);
     expect(getComputedStyle(failedButton).color).toBe(getComputedStyle(warningForeground).color);
-    expect(getComputedStyle(failedTitle).fontSize).toBe('12px');
+    expect(getComputedStyle(failedTitle).fontSize).toBe('13px');
     warningForeground.remove();
     warning.remove();
     failedRow.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!.click();
@@ -1466,6 +1475,10 @@ describe('consecutive tools in the shared Flower surface', () => {
     const pendingNode = pendingRow.closest<HTMLElement>('.flower-tool-sequence-node')!;
     const groupKey = pendingNode.dataset.flowerSequence;
     expect(pendingRow.classList.contains('flower-activity-inline-row-generating')).toBe(true);
+    const summary = pendingRow.querySelector('.flower-activity-inline-detail')!;
+    expect(summary.textContent).toBe('Preparing changes');
+    expect(getComputedStyle(summary).fontSize).toBe('13px');
+    expect(getComputedStyle(summary).lineHeight).toBe('18px');
     expect(root.querySelector('.flower-tool-sequence-toggle')?.textContent).toContain('3 tool calls');
     expect(Math.abs(pendingRow.getBoundingClientRect().top - row(root, 'b').getBoundingClientRect().bottom)).toBeLessThan(1);
     expectSharedRailBetweenNodes(group(root, 'b'), pendingNode);

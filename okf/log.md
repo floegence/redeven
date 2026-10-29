@@ -6,6 +6,7 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-10-29
 
+- Set [tool-row text](ui/flower-tool-sequences.md) to 13px without changing line height, add decorative [terminal outcome icons](ui/flower-turn-process-disclosure.md), and strengthen [sent-message capsule separation](ui/flower-message-appearance.md) while preserving readable ink.
 - Align [sent-message capsules](ui/flower-message-appearance.md) with quiet Floe planes and strong reading ink; preserve complete question/answer context, selection, copying and responsive alignment.
 - Preserve confirmed [Computer script](ai/computer-use-scripts.md) output independently of later invalid observations; retain known protocol methods and helper-exchange uncertainty without replay.
 - Keep [folded tool sequences](ui/flower-tool-sequences.md) stable across certified sparse history, using published canonical range metadata and bounded progressive interior reads. Preserve semantic boundaries, disclosure races and root/child reading geometry.

@@ -1,7 +1,8 @@
 import { observeFlowerSequenceDisclosure } from './flowerSequenceDisclosure';
 import { createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerSequenceSubscriptions, createFlowerProcessSubscriptions } from './flowerPresentationSubscriptions';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
-import { ChevronRight } from '@floegence/floe-webapp-core/icons';
+import { Dynamic } from 'solid-js/web';
+import { AlertCircle, AlertTriangle, ChevronRight, CircleStop } from '@floegence/floe-webapp-core/icons';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { HistoryReadingGap } from './historyReadingWindow';
 import type { FlowerTurnProcessCopy } from './copy';
@@ -550,7 +551,14 @@ export function FlowerTurnTimeline(props: TimelineProps) {
             {props.renderInside?.(entry)}<Show when={contentMounted()}><Content /></Show>
           </div>
         </div>
-        <Show when={ended()}>{(label) => <div class="flower-turn-ended" role="status">{label()}</div>}</Show>
+        <Show when={ended()}>{(label) => (
+          <div class="flower-turn-ended" role="status">
+            <span class="flower-turn-ended-icon" aria-hidden="true">
+              <Dynamic component={state()?.outcome === 'cancelled' ? CircleStop : state()?.outcome === 'interrupted' ? AlertCircle : AlertTriangle} size={16} />
+            </span>
+            <span class="flower-turn-ended-label">{label()}</span>
+          </div>
+        )}</Show>
       </div>
     );
   };

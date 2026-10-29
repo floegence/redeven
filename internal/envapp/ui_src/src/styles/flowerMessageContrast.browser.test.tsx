@@ -124,10 +124,14 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
     const bubble = host.querySelector<HTMLElement>('.flower-message-bubble-user')!;
     const face = background(bubble);
     const probe = document.createElement('span');
-    probe.style.backgroundColor = 'var(--floe-well-on-plane)';
+    probe.style.backgroundColor = 'color-mix(in srgb, var(--foreground) 4%, var(--floe-well-on-plane))';
     bubble.parentElement!.append(probe);
-    expect.soft(face, `${label} uses the quiet Floe reading plane`).toEqual(background(probe));
-    expect.soft(contrast(face, background(bubble.parentElement)), `${label} quiet capsule fill`).toBeLessThan(1.2);
+    expect.soft(face, `${label} uses the strengthened Floe reading plane`).toEqual(background(probe));
+    const canvas = background(bubble.parentElement);
+    const surfaceContrast = contrast(face, canvas);
+    probe.style.backgroundColor = 'var(--floe-well-on-plane)';
+    expect.soft(surfaceContrast, `${label} capsule separates from canvas more than the base well`).toBeGreaterThan(contrast(background(probe), canvas) + 0.03);
+    expect.soft(surfaceContrast, `${label} capsule fill stays restrained`).toBeLessThan(1.6);
     probe.remove();
     const assistant = host.querySelector<HTMLElement>('.flower-message-bubble-assistant')!;
     for (const node of host.querySelectorAll<HTMLElement>('.flower-message-plain-text, .flower-input-response-question, .flower-input-response-answer:not(.flower-input-response-answer-redacted)')) {

@@ -132,8 +132,8 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
   return {
     ...actual,
     Activity: (props: any) => props.class === 'size-6 shrink-0' ? <Dynamic component={actual.Activity} {...props} /> : <Icon {...props} />,
-    AlertCircle: Icon,
-    AlertTriangle: Icon,
+    AlertCircle: actual.AlertCircle,
+    AlertTriangle: actual.AlertTriangle,
     ArrowUp: Icon,
     ArrowDown: Icon,
     ArrowRightLeft: Icon,

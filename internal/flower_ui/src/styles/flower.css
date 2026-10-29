@@ -3540,8 +3540,8 @@
 }
 
 .flower-message-bubble-user {
-  /* Keep the resting surface quiet and derive strong reading ink from each theme. */
-  --flower-user-bubble-background: var(--floe-well-on-plane);
+  /* Lift the quiet Floe well enough to distinguish sent messages from the canvas. */
+  --flower-user-bubble-background: color-mix(in srgb, var(--foreground) 4%, var(--floe-well-on-plane));
   --flower-user-bubble-foreground: oklch(from var(--foreground) min(0.42, max(0, calc(l - 0.025))) c h);
   --flower-user-bubble-meta: color-mix(in srgb, var(--flower-user-bubble-foreground) 82%, var(--flower-user-bubble-background));
   --flower-user-inset-foreground: oklch(from var(--foreground) min(l, 0.4) c h);
@@ -6494,6 +6494,10 @@ button.flower-composer-context-source:focus-visible,
   line-height: 1.125rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.flower-activity-inline-row:not(.flower-activity-inline-row-thinking) :is(.flower-activity-inline-title, .flower-activity-inline-detail, .flower-activity-inline-duration) {
+  font-size: 0.8125rem;
 }
 
 .flower-activity-inline-row[data-flower-activity-active='true'] .flower-activity-inline-title {
@@ -12022,7 +12026,17 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-turn-summary-button:focus-visible { outline-color: Highlight; }
   .flower-turn-row[data-flower-input-checkpoint='true']::before { background: CanvasText; }
 }
-.flower-turn-ended { margin: 0.5rem 0 0.75rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.25rem; }
+.flower-turn-ended {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.42rem;
+  margin: 0.5rem 0 0.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+.flower-turn-ended-icon { display: flex; flex: 0 0 1rem; height: 1rem; margin-top: 0.125rem; }
+.flower-turn-ended-label { min-width: 0; overflow-wrap: anywhere; }
 @media (forced-colors: active) { .flower-turn-ended { color: CanvasText; } }
 
 .flower-composer-reference-chip-preview {
@@ -12507,7 +12521,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   box-sizing: border-box; width: 100%; min-height: var(--flower-sequence-row-height, 2rem);
   padding: 0; border: 0; border-radius: 0.25rem; background: transparent;
   color: var(--flower-activity-tool-row-quiet); cursor: pointer; text-align: left; pointer-events: auto;
-  font-family: inherit; font-size: 0.75rem; font-weight: 400; line-height: 1.125rem;
+  font-family: inherit; font-size: 0.8125rem; font-weight: 400; line-height: 1.125rem;
 }
 .flower-tool-sequence-toggle:hover { color: var(--foreground); }
 .flower-tool-sequence-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
