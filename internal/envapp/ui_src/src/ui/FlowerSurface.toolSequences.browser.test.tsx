@@ -514,11 +514,9 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(button.querySelector('.flower-activity-inline-title')!.textContent).toBe('Run command');
     expect(button.querySelector('.flower-activity-inline-duration')).not.toBeNull();
     const expectAdjacent = (target: HTMLElement) => {
-      if (!target.classList.contains('flower-thinking-toggle')) {
-        for (const text of target.querySelectorAll('.flower-activity-inline-title, .flower-activity-inline-detail, .flower-activity-inline-duration')) {
-          expect(getComputedStyle(text).fontSize).toBe('13px');
-          expect(getComputedStyle(text).lineHeight).toBe('18px');
-        }
+      for (const text of target.querySelectorAll('.flower-activity-inline-title, .flower-activity-inline-detail, .flower-activity-inline-duration')) {
+        expect(getComputedStyle(text).fontSize).toBe('13px');
+        expect(getComputedStyle(text).lineHeight).toBe('18px');
       }
       const copy = target.querySelector<HTMLElement>('.flower-activity-inline-copy, .flower-activity-inline-title')!;
       const elapsed = target.querySelector<HTMLElement>('.flower-activity-inline-duration');
@@ -583,6 +581,13 @@ describe('consecutive tools in the shared Flower surface', () => {
     const { root, push } = await mount([prose, thought]);
     const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
     const title = thinking.querySelector<HTMLElement>('.flower-thinking-toggle')!;
+    const expectThinkingTypography = () => {
+      for (const text of title.querySelectorAll('.flower-activity-inline-title, .flower-activity-inline-duration')) {
+        expect(getComputedStyle(text).fontSize).toBe('13px');
+        expect(getComputedStyle(text).lineHeight).toBe('18px');
+      }
+    };
+    expectThinkingTypography();
     const header = thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header');
     expect(header).not.toBeNull();
     const top = title.getBoundingClientRect().top;
@@ -595,6 +600,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     await waitFor(() => Boolean(root.querySelector('.flower-tool-sequence-toggle')));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header')).toBe(header);
+    expectThinkingTypography();
     expect(Math.abs(title.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(title.getBoundingClientRect().left).toBe(left);
     expect(icon.getBoundingClientRect().left).toBe(proseLeft);
@@ -1296,7 +1302,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(group(root, 'goal').dataset.flowerSequence).toBe(sequenceKey);
     expect(thinking.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence).toBe(sequenceKey);
     expect(thinking.querySelector('.flower-activity-inline-icon .flower-thinking-flower')).not.toBeNull();
-    expect(getComputedStyle(thinking.querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
+    expect(getComputedStyle(thinking.querySelector('.flower-activity-inline-title')!).fontSize).toBe('13px');
     expect(getComputedStyle(thinking.querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
 
     sequenceToggle.click();

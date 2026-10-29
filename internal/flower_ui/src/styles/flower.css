@@ -6427,7 +6427,7 @@ button.flower-composer-context-source:focus-visible,
   overflow: hidden;
   color: currentColor;
   font-family: var(--font-sans);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.125rem;
@@ -6467,7 +6467,7 @@ button.flower-composer-context-source:focus-visible,
   font-family: var(--font-sans, inherit);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.125rem;
@@ -6488,16 +6488,12 @@ button.flower-composer-context-source:focus-visible,
 .flower-activity-inline-duration {
   color: var(--flower-activity-tool-row-quiet);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.125rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.flower-activity-inline-row:not(.flower-activity-inline-row-thinking) :is(.flower-activity-inline-title, .flower-activity-inline-detail, .flower-activity-inline-duration) {
-  font-size: 0.8125rem;
 }
 
 .flower-activity-inline-row[data-flower-activity-active='true'] .flower-activity-inline-title {

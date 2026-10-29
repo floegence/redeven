@@ -61,6 +61,14 @@ function stream(initial: FlowerRuntimeCurrentView, summaries: () => FlowerLiveSt
 }
 const disclosure = (root: ParentNode, id = 'thinking') => root.querySelector<HTMLElement>(`[data-flower-thinking-id="${id}:block:0"]`)!;
 const toggle = (root: ParentNode, id = 'thinking') => disclosure(root, id).querySelector<HTMLButtonElement>('button')!;
+function expectThinkingTypography(root: ParentNode, id = 'thinking') {
+  for (const selector of ['.flower-activity-inline-title', '.flower-activity-inline-duration']) {
+    const text = toggle(root, id).querySelector(selector)!;
+    expect(text).not.toBeNull();
+    expect(getComputedStyle(text).fontSize).toBe('13px');
+    expect(getComputedStyle(text).lineHeight).toBe('18px');
+  }
+}
 function chevronDirection(root: ParentNode): number {
   const path = toggle(root).querySelector<SVGPathElement>('.flower-thinking-toggle-icon path')!;
   const length = path.getTotalLength();
@@ -100,6 +108,7 @@ it.each(['full', 'companion'] as const)('retains completed thinking duration whi
   const seed = current();
   const initial = { ...seed, items: seed.items?.map(item => ({ ...item, created_at: new Date(started).toISOString() })) };
   const { root, live } = await mount(presentation, true, initial);
+  expectThinkingTypography(root);
   const duration = (id = 'thinking') => disclosure(root, id).querySelector('.flower-activity-inline-duration')?.textContent;
   expect(duration()).toBe('4s');
   vi.setSystemTime(started + 9000);
@@ -112,6 +121,7 @@ it.each(['full', 'companion'] as const)('retains completed thinking duration whi
   await waitFor(() => disclosure(root).dataset.flowerThinkingActive === 'false');
   expect(duration()).toBe('9s');
   expect(toggle(root).querySelector('.flower-activity-inline-title')?.textContent).toBe('思考过程');
+  expectThinkingTypography(root);
   toggle(root).click();
   expect(duration()).toBe('9s');
   expect(disclosure(root).dataset.flowerThinkingView).toBe('expanded');
@@ -134,6 +144,8 @@ it.each(['full', 'companion'] as const)('retains completed thinking duration whi
   }
   await page.viewport(360, 760);
   const button = toggle(root);
+  expectThinkingTypography(root);
+  expectThinkingTypography(root, 'thinking-next');
   expect(getComputedStyle(button.querySelector('.flower-activity-inline-duration')!).display).not.toBe('none');
   expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
 });
@@ -153,10 +165,10 @@ it('uses the tool activity row and flower animation for standalone live thinking
   expect(button.querySelector('.flower-activity-inline-title')?.textContent).toBe('Thinking...');
   expect(button.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
   expect(button.querySelector('.flower-activity-inline-duration')?.textContent).not.toBe('');
-  expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
-  expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
+  expectThinkingTypography(root);
   expect(button.querySelector('.flower-thinking-toggle-icon')).not.toBeNull();
   await page.viewport(360, 760);
+  expectThinkingTypography(root);
   expect(getComputedStyle(button.querySelector('.flower-activity-inline-duration')!).display).not.toBe('none');
   expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
 });

@@ -70,7 +70,7 @@ opening a group does not acquire hidden terminal, thinking or report bodies.
 
 ## Geometry and input
 
-Tool titles, inline summaries, elapsed times and folded sequence labels use 13px (`0.8125rem`) text with the existing 18px (`1.125rem`) line height. Thinking labels retain their separate reading scale.
+Tool and thinking titles, inline summaries, elapsed times and folded sequence labels share 13px (`0.8125rem`) text with the existing 18px (`1.125rem`) line height. The same scale applies to standalone rows and rows inside a sequence, while live, completed, expanded or folded.
 
 Prose, Goal/tool/thinking icons, summary and progress share one left edge. Permanent outer/native-scrollbar gutters, including the child transcript, prevent scrollbar appearance and singleton promotion from indenting or adding a blank title row. Tools retain icons and independent details. Full-row targets place elapsed time/chevron immediately after intrinsic text; only long text shrinks. Use CSS, without text measurement loops.
 
