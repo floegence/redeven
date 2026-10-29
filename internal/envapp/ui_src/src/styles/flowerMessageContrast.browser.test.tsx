@@ -92,7 +92,10 @@ function mount() {
       <div class="flower-message-row flower-message-row-user">
         <section class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-input-response-receipt">
           <div class="flower-input-response-status" data-copy>Answered</div>
-          <dl><dt class="flower-input-response-question" data-copy>Which theme?</dt><dd class="flower-input-response-answer" data-copy>Follow the system</dd><dd class="flower-input-response-answer flower-input-response-answer-redacted" data-copy>Answer hidden</dd></dl>
+          <dl class="flower-input-response-list">
+            <div class="flower-input-response-row"><dt class="flower-input-response-question" data-copy>Which theme?</dt><dd class="flower-input-response-answer" data-copy>Follow the system</dd></div>
+            <div class="flower-input-response-row"><dt class="flower-input-response-question" data-copy>Which credential?</dt><dd class="flower-input-response-answer flower-input-response-answer-redacted" data-copy>Answer hidden</dd></div>
+          </dl>
         </section>
       </div>
       <div class="flower-message-row flower-message-row-user">
@@ -115,14 +118,30 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
   const { rgb, mix, background, contrast } = colors();
   for (const preset of builtInShellThemePresets) {
     applyTheme(preset, material);
+    // Include Redeven's Classic palettes and the released stylesheet in acceptance.
+    document.documentElement.removeAttribute('style');
     const label = `${preset.name}/${material}`;
     const bubble = host.querySelector<HTMLElement>('.flower-message-bubble-user')!;
     const face = background(bubble);
     const probe = document.createElement('span');
-    probe.style.backgroundColor = 'var(--selection-bg)';
+    probe.style.backgroundColor = 'var(--floe-well-on-plane)';
     bubble.parentElement!.append(probe);
-    expect.soft(face, `${label} uses the text-selection accent`).toEqual(background(probe));
+    expect.soft(face, `${label} uses the quiet Floe reading plane`).toEqual(background(probe));
+    expect.soft(contrast(face, background(bubble.parentElement)), `${label} quiet capsule fill`).toBeLessThan(1.2);
     probe.remove();
+    const assistant = host.querySelector<HTMLElement>('.flower-message-bubble-assistant')!;
+    for (const node of host.querySelectorAll<HTMLElement>('.flower-message-plain-text, .flower-input-response-question, .flower-input-response-answer:not(.flower-input-response-answer-redacted)')) {
+      const style = getComputedStyle(node);
+      expect.soft(contrast(rgb(style.color), background(node)), `${label}: strong message ink`).toBeGreaterThanOrEqual(7);
+      // Compare inks on the same surface; the capsule intentionally adds a fill step.
+      expect.soft(contrast(rgb(style.color), face), `${label}: message ink is not weaker than body ink`).toBeGreaterThanOrEqual(contrast(rgb(getComputedStyle(assistant).color), face));
+      expect.soft(rgb(style.color), `${label}: question and answer share message ink`).toEqual(rgb(getComputedStyle(bubble).color));
+      expect.soft(style.fontSize, `${label}: consistent reading size`).toBe(getComputedStyle(assistant).fontSize);
+      expect.soft(style.lineHeight, `${label}: consistent reading rhythm`).toBe(getComputedStyle(bubble).lineHeight);
+    }
+    expect.soft(getComputedStyle(host.querySelector('.flower-input-response-question')!).fontWeight, `${label}: regular question`).toBe('400');
+    expect.soft(getComputedStyle(host.querySelector('.flower-input-response-answer')!).fontWeight, `${label}: medium answer`).toBe('500');
+    expect.soft(getComputedStyle(host.querySelector('.flower-input-response-status')!).fontWeight, `${label}: quiet status`).toBe('400');
     for (const node of host.querySelectorAll<HTMLElement>('[data-copy], .flower-chat-md-link, .flower-chat-md-inline-code, .flower-chat-md-blockquote p, th, td, pre code')) {
       const style = getComputedStyle(node);
       const nodeFace = background(node);

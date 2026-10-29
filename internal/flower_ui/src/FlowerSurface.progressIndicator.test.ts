@@ -352,7 +352,7 @@ describe('Flower progress indicator', () => {
     const answerRule = cssRule(css, '.flower-input-response-answer');
 
     expect(receiptRule).toContain('display: grid');
-    expect(receiptRule).toContain('min-width: min(18rem, 100%)');
+    expect(receiptRule).not.toContain('min-width:');
     expect(questionRule).toContain('white-space: pre-wrap');
     expect(answerRule).toContain('white-space: pre-wrap');
     expect(answerRule).toContain('overflow-wrap: anywhere');

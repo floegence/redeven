@@ -12315,6 +12315,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       aria-label={chatCopyValue('inputRequestAnswered', 'Answered')}
     >
       <div class="flower-input-response-status">
+        <span class="flower-input-response-status-icon" aria-hidden="true"><Check /></span>
         {chatCopyValue('inputRequestAnswered', 'Answered')}
       </div>
       <dl class="flower-input-response-list">

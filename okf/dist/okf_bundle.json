@@ -27577,7 +27577,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "accessibility",
           "flower",
@@ -27587,15 +27587,15 @@
         "title": "Flower message appearance",
         "type": "UI Contract"
       },
-      "body_length": 2442,
+      "body_length": 3808,
       "summary": "Shared Flower uses published Floe colors for compact assistant/user reading and contrasting sent-message selection. Theme changes affect paint while preserving DOM, geometry and selection. Queued input stays quieter; forced colors use system roles. Media and resource cards retain canonical identity and never require an empty text bubble.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Transcript reading scale\nAssistant/user text uses `0.875rem` and unitless `1.75` line height. Composer controls retain published control scale.\n\n## Assistant reading roles\nBody/headings retain the chat foreground. Presentation does not rewrite Markdown or infer metadata from authored bold text, dates, identifiers or citations. [Citations](flower-citations.md) own destinations/copy.\n\n## Filled messages and content\nSent text/answered-question receipts use `selection-bg`/`selection-fg`. Text, placeholders and actions share the right edge; the full-row history wrapper makes the 78% desktop bubble limit relative to the transcript. Short text fits intrinsically; narrow views retain the full-column limit. Error/code insets use readable foreground and selection roles over their own backgrounds.\n\n## User media and resources\nOrder is image thumbnails, wrapping resource cards, text bubble, then timestamp/copy. Resource/image-only messages omit empty bubbles. Canonical previews use exact thread/turn/reference identity; queued actions retain their separate authority/click guard.\n\n## Native text selection\nFilled text, including transparent table headers, uses contrasting `selection-on-primary` roles. Selection never changes parsing, copying or transport. Browser checks require 4.5:1 ordinary/selected text across all presets/materials. [Highlighting](flower-code-highlighting.md) retains its own stable-content contract.",
-          "char_count": 1430
+          "body": "## Transcript reading scale\nAssistant/user text uses `0.875rem` and unitless `1.75` line height. Composer controls retain published control scale.\n\n## Assistant reading roles\nBody/headings retain the chat foreground. Presentation does not rewrite Markdown or infer metadata from authored bold text, dates, identifiers or citations. [Citations](flower-citations.md) own destinations/copy.\n\n## Filled messages and content\nSent text/answered-question receipts use the published `floe-well-on-plane` fill and `floe-radius-group` corners, with 16px horizontal padding. Reading ink derives from the theme foreground with stronger light/dark luminance; ordinary text, full questions and answers share that ink and the transcript reading scale. Across published presets and both materials, body ink clears 7:1 and is no weaker than assistant ink on the same capsule surface. Only status/redacted metadata is secondary. Queued input retains its separate paint and spacing.\n\nAnswered receipts retain every complete question followed by its answer in canonical order, without disclosure or choices. Questions use regular weight, answers medium weight, and a quiet check accompanies the localized status. Spacing and thin neutral separators distinguish multiple responses. Short receipts fit their content without a minimum-width panel.\n\nText, placeholders and actions share the right edge; the full-row history wrapper makes the 78% desktop bubble limit relative to the transcript. Short text fits intrinsically; narrow views retain the full-column limit. Error/code insets use readable foreground and selection roles over their own backgrounds.\n\n## User media and resources\nOrder is image thumbnails, wrapping resource cards, text bubble, then timestamp/copy. Resource/image-only messages omit empty bubbles. Canonical previews use exact thread/turn/reference identity; queued actions retain their separate authority/click guard.\n\n## Native text selection\nFilled text, including transparent table headers, reverses capsule ink and fill for visible native selection; code and queued insets retain their own selection roles. Selection never changes parsing, copying or transport. Browser checks require 4.5:1 supporting/selected text and a visible selection surface across all presets/materials. Copying answered receipts retains complete ordered questions/answers and the localized hidden-answer placeholder. [Highlighting](flower-code-highlighting.md) retains its own stable-content contract.",
+          "char_count": 2482
         },
         {
           "id": "boundaries",
@@ -31541,5 +31541,5 @@
       ]
     }
   ],
-  "source_sha256": "8a9fec7a28b58595f3f9e2f87614ab4e7cddd77fddac8001ee16b7fb0138f85c"
+  "source_sha256": "6c3ac3125d3d931e2cc5429409f556a45337f5cd34ebdb1232322bdfbe54478a"
 }
