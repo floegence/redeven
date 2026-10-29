@@ -85,9 +85,10 @@ type storedOperation struct {
 	CommitSelection string `json:"commit_selection"`
 }
 type CatalogSource struct {
-	ID   string `json:"id"`
-	URL  string `json:"url"`
-	Name string `json:"name"`
+	ID      string `json:"id"`
+	URL     string `json:"url"`
+	Name    string `json:"name"`
+	Managed bool   `json:"managed,omitempty"`
 }
 type State struct {
 	Revision   int64             `json:"revision"`
@@ -96,22 +97,33 @@ type State struct {
 	Sources    []CatalogSource   `json:"sources"`
 }
 type Manager struct {
-	mu        sync.Mutex
-	db        *sql.DB
-	root      string
-	state     State
-	active    map[string]int
-	http      *http.Client
-	closed    bool
-	ctx       context.Context
-	cancel    context.CancelFunc
-	workers   sync.WaitGroup
-	preparing int
+	mu                sync.Mutex
+	db                *sql.DB
+	root              string
+	state             State
+	active            map[string]int
+	http              *http.Client
+	closed            bool
+	ctx               context.Context
+	cancel            context.CancelFunc
+	workers           sync.WaitGroup
+	preparing         int
+	configuredSources []CatalogSource
 }
 
 const registryDDL = `CREATE TABLE agent_plugin_state (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL CHECK(revision>0), payload TEXT NOT NULL)`
 
 func Open(stateDir string) (*Manager, error) {
+	return OpenWithCatalogs(stateDir, nil)
+}
+
+// OpenWithCatalogs validates configuration without fetching catalogs or mutating
+// user-managed sources. Installations remain usable when a directory is offline.
+func OpenWithCatalogs(stateDir string, config []CatalogConfig) (*Manager, error) {
+	configured, err := configuredCatalogSources(config)
+	if err != nil {
+		return nil, err
+	}
 	root := filepath.Join(stateDir, "ai", "agent-plugins")
 	if e := os.MkdirAll(root, 0700); e != nil {
 		return nil, e
@@ -187,7 +199,7 @@ func Open(stateDir string) (*Manager, error) {
 		return nil, e
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
-	m := &Manager{db: db, root: root, active: map[string]int{}, http: DistributionHTTP(), ctx: lifetime, cancel: cancel}
+	m := &Manager{db: db, root: root, active: map[string]int{}, http: DistributionHTTP(), ctx: lifetime, cancel: cancel, configuredSources: configured}
 	var b string
 	if e = db.QueryRow(`SELECT payload FROM agent_plugin_state WHERE id=1`).Scan(&b); e != nil {
 		db.Close()
@@ -362,7 +374,7 @@ func validateState(s State, rev int64) error {
 		}
 	}
 	for _, source := range s.Sources {
-		if !validID(source.ID) || source.URL == "" {
+		if !validID(source.ID) || source.URL == "" || source.Managed {
 			return errors.New("invalid catalog identity")
 		}
 	}

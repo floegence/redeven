@@ -138,6 +138,12 @@ describe('Desktop computer management routes', () => {
 
 
 describe('Flower extensions management routes', () => {
+  it('admits encoded runtime-configured catalog ids through the read-only route', () => {
+    const path = '/_redeven_proxy/api/ai/agent-plugins/catalog?id=configured%3Ateam';
+    expect(runtimeFlowerPath(path)).toBe(path);
+    expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(false);
+  });
   it.each<[string, RuntimeFlowerRequestMethod[]]>([
     ['agent-plugins', ['GET', 'PUT', 'DELETE']], ['agent-plugins/prepare', ['POST']], ['agent-plugins/commit', ['POST']], ['agent-plugins/check', ['POST']], ['agent-plugins/credentials', ['PUT']], ['agent-plugins/sources', ['POST', 'DELETE']], ['agent-plugins/operation?id=operation', ['GET']], ['agent-plugins/catalog?id=source', ['GET']],
     ['mcp', ['GET', 'PUT', 'DELETE']], ['mcp/check', ['POST']],

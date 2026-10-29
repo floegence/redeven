@@ -187,3 +187,18 @@
 .flower-plugin-credential-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
 .flower-plugin-credential-row label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted-foreground); }
 .flower-plugin-credential-row input { min-width: 0; width: 100%; }
+
+.flower-plugin-catalog-picker { max-width: 20rem; margin-bottom: 1rem; }
+.flower-plugin-catalog-card { cursor: default; display: flex; flex-direction: column; }
+.flower-plugin-catalog-card:hover { background: var(--card); border-color: var(--extensions-divider); }
+.flower-plugin-catalog-card .flower-plugin-card-top { flex: none; }
+.flower-plugin-catalog-card .flower-plugin-card-footer { justify-content: space-between; margin-top: auto; gap: .75rem; }
+.flower-plugin-catalog-card .flower-plugin-card-footer { padding-top: 1rem; }
+.flower-plugin-catalog-card .flower-plugin-card-footer > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flower-plugin-catalog-author { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: .75rem; }
+.flower-plugin-source-list { display: flex; flex-direction: column; gap: .75rem; }
+.flower-plugin-source-row { display: flex; align-items: center; gap: .75rem; padding-bottom: .75rem; border-bottom: 1px solid var(--border); }
+.flower-plugin-source-row > div { flex: 1; min-width: 0; }
+.flower-plugin-source-row p { font-size: .8125rem; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: .25rem; }
+.flower-plugin-source-row small { color: var(--muted-foreground); font-size: .75rem; }
+.flower-extension-dialog .flower-plugin-source-form { border: 0; padding: 0; margin: 1rem 0 0; background: transparent; }

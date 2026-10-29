@@ -15,8 +15,9 @@ export type AgentPluginOperation = {
   id: string; kind: string; status: string; install_id: string; expected_revision: number; source: AgentPluginSource;
   digest?: string; package?: AgentPluginPackage; previous?: AgentPluginPackage; expires_at: number; error?: string;
 };
-export type AgentPluginCatalogSource = { id: string; name: string; url: string };
-export type AgentPluginCatalog = { id: string; plugins: { id: string; source: AgentPluginSource }[] };
+export type AgentPluginCatalogSource = { id: string; name: string; url: string; managed?: boolean };
+export type AgentPluginCatalogEntry = { id: string; source: AgentPluginSource; display?: { name?: string; description?: string; author?: string } };
+export type AgentPluginCatalog = { id: string; plugins: AgentPluginCatalogEntry[] };
 export type AgentPluginListing = {
   items: AgentPluginInstall[]; sources: AgentPluginCatalogSource[]; operations: AgentPluginOperation[] | null;
   revision: number; target: string; can_launch: boolean;

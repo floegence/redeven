@@ -20,6 +20,7 @@ import (
 )
 
 func TestAgentPluginManagementRoutes(t *testing.T) {
+	t.Setenv("REDEVEN_AGENT_AI_PLUGIN_CATALOGS", `[{"id":"team","name":"Team extensions","url":"https://catalog.example.com/plugins.json"}]`)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	state := t.TempDir()
 	service, e := ai.NewService(ai.Options{Logger: logger, StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: "https://api.openai.com/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}})
@@ -47,6 +48,15 @@ func TestAgentPluginManagementRoutes(t *testing.T) {
 	reader := newServer(session.Meta{CanRead: true, UserPublicID: "reader"})
 	other := newServer(session.Meta{CanRead: true, CanAdmin: true, UserPublicID: "other"})
 	const base = "/_redeven_proxy/api/ai/agent-plugins"
+	var listing struct{ Data ai.AgentPluginsView }
+	listed := request(reader, "GET", base, nil)
+	if listed.Code != 200 || json.Unmarshal(listed.Body.Bytes(), &listing) != nil || len(listing.Data.Sources) != 1 || !listing.Data.Sources[0].Managed || listing.Data.Sources[0].ID != "configured:team" {
+		t.Fatal("configured source unavailable to readers", listed.Code, listed.Body)
+	}
+	removed := request(admin, "DELETE", base+"/sources", map[string]any{"id": "configured:team", "revision": listing.Data.Revision})
+	if removed.Code < 400 || !strings.Contains(removed.Body.String(), "catalog_source_managed") {
+		t.Fatal("runtime configuration mutated through user source API", removed.Code, removed.Body)
+	}
 	for _, action := range []struct{ method, path string }{{"POST", "/prepare"}, {"POST", "/commit"}, {"PUT", ""}, {"DELETE", ""}, {"POST", "/check"}, {"PUT", "/credentials"}, {"POST", "/sources"}, {"DELETE", "/sources"}} {
 		if w := request(reader, action.method, base+action.path, map[string]any{}); w.Code != 403 {
 			t.Fatalf("reader %s %s: %d", action.method, action.path, w.Code)

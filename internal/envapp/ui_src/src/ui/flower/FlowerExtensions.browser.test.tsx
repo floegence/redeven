@@ -93,6 +93,16 @@ it('separates primary tabs from the page title and keeps plugin empty state conc
   noOverflow();
 });
 
+it('hides discovery until a catalog is configured', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'No plugins yet', exact: true })).toBeVisible();
+  expect(host.querySelector('.flower-plugin-segments')).toBeNull();
+  await expect.element(page.getByRole('textbox', { name: 'Catalog URL', exact: true })).not.toBeInTheDocument();
+  expect(state.adapter.plugins.catalog).not.toHaveBeenCalled();
+  await expect.element(page.getByRole('button', { name: 'Install plugin', exact: true })).toBeVisible();
+});
+
 it('gives every entry a compact, stable identity icon across filtering and tabs', async () => {
   await mount();
   await expect.element(page.getByRole('heading', { name: 'code-review', exact: true })).toBeVisible();
@@ -371,9 +381,7 @@ it.each([[320, false, 'zh-TW'], [390, false, 'zh-CN'], [390, true, 'de-DE'], [12
   const selected = tabs.find(tab => tab.getAttribute('aria-selected') === 'true')!;
   expect(getComputedStyle(selected, '::after').height).toBe('2px');
   expect(getComputedStyle(selected, '::after').backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-  const activeView = host.querySelector<HTMLElement>('.flower-plugin-segments [aria-pressed="true"]')!;
-  const inactiveView = host.querySelector<HTMLElement>('.flower-plugin-segments [aria-pressed="false"]')!;
-  expect(getComputedStyle(activeView).backgroundColor).not.toBe(getComputedStyle(inactiveView).backgroundColor);
+  expect(host.querySelector('.flower-plugin-segments')).toBeNull();
   for (const tab of tabs) {
     const box = tab.getBoundingClientRect();
     expect(box.left).toBeGreaterThanOrEqual(0);
@@ -473,18 +481,121 @@ it('keeps a dismissed preparation closed when a poll finishes and allows resumin
   await expect.element(page.getByRole('textbox', { name: 'GitHub repository', exact: true })).toHaveValue('example/tools');
 });
 
-it('discovers packages through an explicit catalog and reviews their source', async () => {
+it('discovers packages through managed sources and reviews their source', async () => {
   const state = await mount();
   await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
-  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage sources', exact: true }).click();
   await page.getByRole('textbox', { name: 'Catalog URL', exact: true }).fill('https://catalog.example.com/plugins.json');
   await page.getByRole('button', { name: 'Add catalog', exact: true }).click();
-  await page.getByRole('button', { name: 'Browse', exact: true }).click();
-  await expect.element(page.getByText('review-tools', { exact: true })).toBeVisible();
+  await expect.element(page.getByText('Trusted catalog', { exact: true })).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
   expect(state.adapter.plugins.prepare).not.toHaveBeenCalled();
   await page.getByRole('button', { name: 'Install plugin', exact: true }).last().click();
   await expect.element(page.getByRole('textbox', { name: 'GitHub repository', exact: true })).toHaveValue('example/tools');
   expect(state.adapter.plugins.commit).not.toHaveBeenCalled();
+});
+
+it.each([[1280, false, 'en-US'], [390, true, 'zh-CN'], [320, false, 'de-DE']] as const)('browses a configured catalog at %ipx (dark=%s, locale=%s)', async (width, dark, locale) => {
+  const i18n = extensionI18n(locale);
+  const state = await mount(width, dark, locale, false, 0, adapter => {
+    vi.mocked(adapter.plugins.list).mockResolvedValue({ items: [], sources: [{ id: 'configured:team', name: 'Team extensions', url: 'https://example.com/plugins.json', managed: true }], operations: [], revision: 1, target: 'Development', can_launch: true });
+    vi.mocked(adapter.plugins.catalog).mockResolvedValue({ id: 'team', plugins: [{ id: 'review', display: { name: 'Code review', description: 'Review changes with your team.', author: 'Example' }, source: { type: 'github', repository: 'example/tools', ref: 'stable', path: 'plugins/review' } }] });
+  });
+  await page.getByRole('tab', { name: i18n.t('plugins'), exact: true }).click();
+  expect(state.adapter.plugins.catalog).not.toHaveBeenCalled();
+  await page.getByRole('button', { name: i18n.t('plugins.discover'), exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'Code review', exact: true })).toBeVisible();
+  expect(state.adapter.plugins.catalog).toHaveBeenCalledWith('configured:team');
+  expect(host.querySelector('.flower-plugin-source-form')).toBeNull();
+  const active = host.querySelector<HTMLElement>('.flower-plugin-segments [aria-pressed="true"]')!;
+  const inactive = host.querySelector<HTMLElement>('.flower-plugin-segments [aria-pressed="false"]')!;
+  expect(getComputedStyle(active).backgroundColor).not.toBe(getComputedStyle(inactive).backgroundColor);
+  noOverflow();
+  await page.screenshot({ path: '__screenshots__/flower-plugins/catalog-' + width + '-' + locale + '.png' });
+  await page.getByRole('searchbox', { name: i18n.t('plugins.search') }).fill('missing');
+  await expect.element(page.getByRole('heading', { name: i18n.t('plugins.noResults'), exact: true })).toBeVisible();
+  await page.getByRole('button', { name: i18n.t('clear'), exact: true }).click();
+  await page.getByRole('button', { name: i18n.t('plugins.manageSources'), exact: true }).click();
+  await expect.element(page.getByText(i18n.t('plugins.managedSource'), { exact: true })).toBeVisible();
+  expect(document.querySelector('[role="dialog"] button[aria-label^="' + i18n.t('plugins.removeSource') + '"]')).toBeNull();
+  await userEvent.keyboard('{Escape}');
+  await page.getByRole('button', { name: i18n.t('plugins.install'), exact: true }).last().click();
+  await expect.element(page.getByRole('textbox', { name: i18n.t('plugins.path'), exact: true })).toHaveValue('plugins/review');
+  await page.getByRole('button', { name: i18n.t('plugins.preview'), exact: true }).click();
+  await expect.element(page.getByText('review-tools 1.0', { exact: true })).toBeVisible();
+  expect(state.adapter.plugins.prepare).toHaveBeenCalledWith(expect.objectContaining({ source: { type: 'github', repository: 'example/tools', ref: 'stable', path: 'plugins/review' } }));
+});
+
+it('retries failed catalogs without hiding installed management and respects read-only access', async () => {
+  const state = await mount(390, false, 'en-US', false, 0, adapter => {
+    vi.mocked(adapter.plugins.list).mockResolvedValue({ items: [], sources: [{ id: 'configured:team', name: 'Team', url: 'https://example.com/plugins.json', managed: true }], operations: [], revision: 1, target: 'Development', can_launch: true });
+    vi.mocked(adapter.plugins.catalog).mockRejectedValueOnce(new Error('offline'));
+  });
+  state.setAdmin(false);
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await expect.element(page.getByText('Unable to load catalog', { exact: true })).toBeVisible();
+  await expect.element(page.getByText('No plugins in this catalog', { exact: true })).not.toBeInTheDocument();
+  await page.getByRole('button', { name: 'Installed', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'No plugins yet', exact: true })).toBeVisible();
+  vi.mocked(state.adapter.plugins.catalog).mockRejectedValueOnce(new Error('offline'));
+  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: 'Install plugin', exact: true }).last()).toBeDisabled();
+});
+
+it('removes the final custom source and hides discovery without losing plugin management', async () => {
+  const state = await mount(390);
+  await state.adapter.plugins.addSource({ url: 'https://example.com/plugins.json', revision: 1 });
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Manage sources', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove catalog: Trusted catalog', exact: true }).click();
+  await expect.poll(() => state.adapter.plugins.removeSource).toHaveBeenCalled();
+  await expect.element(page.getByText('Trusted catalog', { exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('textbox', { name: 'Catalog URL', exact: true })).toBeEnabled();
+  await userEvent.keyboard('{Escape}');
+  await expect.element(page.getByRole('heading', { name: 'No plugins yet', exact: true })).toBeVisible();
+  expect(host.querySelector('.flower-plugin-segments')).toBeNull();
+});
+
+it('retains discovery filters and ignores a response after leaving discovery', async () => {
+  let finish: ((catalog: Awaited<ReturnType<FlowerExtensionsAdapter['plugins']['catalog']>>) => void) | undefined;
+  await mount(390, false, 'en-US', false, 0, adapter => {
+    vi.mocked(adapter.plugins.list).mockResolvedValue({ items: [], sources: [{ id: 'team', name: 'Team', url: 'https://example.com/plugins.json' }], operations: [], revision: 1, target: 'Development', can_launch: true });
+    vi.mocked(adapter.plugins.catalog).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  });
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search plugins' }).fill('review');
+  await page.getByRole('button', { name: 'Installed', exact: true }).click();
+  finish?.({ id: 'team', plugins: [] });
+  await expect.element(page.getByRole('heading', { name: 'No plugins yet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Discover', exact: true }).click();
+  await expect.element(page.getByRole('searchbox', { name: 'Search plugins' })).toHaveValue('review');
+  await expect.element(page.getByRole('heading', { name: 'review-tools', exact: true })).toBeVisible();
+});
+
+it('retains failed source input and keeps the source dialog within a narrow viewport', async () => {
+  const state = await mount(320, true, 'zh-TW');
+  const i18n = extensionI18n('zh-TW');
+  await page.getByRole('tab', { name: i18n.t('plugins'), exact: true }).click();
+  await page.getByRole('button', { name: i18n.t('plugins.manageSources'), exact: true }).click();
+  const address = 'https://catalog.example.com/plugins.json';
+  await page.getByRole('textbox', { name: i18n.t('plugins.catalogURL'), exact: true }).fill(address);
+  vi.mocked(state.adapter.plugins.addSource).mockRejectedValueOnce(new Error('offline'));
+  await page.getByRole('button', { name: i18n.t('plugins.addSource'), exact: true }).click();
+  await expect.element(page.getByText(i18n.t('plugins.failed'), { exact: true })).toBeVisible();
+  await expect.element(page.getByRole('textbox', { name: i18n.t('plugins.catalogURL'), exact: true })).toHaveValue(address);
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  await page.screenshot({ path: '__screenshots__/flower-plugins/sources-320-zh-TW.png' });
+  state.setAdmin(false);
+  await expect.element(page.getByRole('button', { name: i18n.t('plugins.addSource'), exact: true })).not.toBeInTheDocument();
 });
 
 it('opens the same plugin owner repeatedly from its skill projection', async () => {

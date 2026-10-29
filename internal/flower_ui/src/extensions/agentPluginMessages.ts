@@ -1,5 +1,10 @@
 export const agentPluginMessages = {
   "en-US": {
+    "plugins.manageSources": "Manage sources",
+    "plugins.managedSource": "Configured by runtime",
+    "plugins.catalog": "Catalog",
+    "plugins.catalogEmpty": "No plugins in this catalog",
+    "plugins.catalogFailed": "Unable to load catalog",
     "plugins": "Plugins",
     "plugins.install": "Install plugin",
     "plugins.view": "Plugin view",
@@ -70,6 +75,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "Clear saved credentials"
   },
   "zh-CN": {
+    "plugins.manageSources": "管理来源",
+    "plugins.managedSource": "由运行时配置",
+    "plugins.catalog": "目录",
+    "plugins.catalogEmpty": "此目录暂无插件",
+    "plugins.catalogFailed": "无法加载目录",
     "plugins": "插件",
     "plugins.install": "安装插件",
     "plugins.view": "插件视图",
@@ -140,6 +150,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "清除已存凭据"
   },
   "zh-TW": {
+    "plugins.manageSources": "管理來源",
+    "plugins.managedSource": "由執行環境設定",
+    "plugins.catalog": "目錄",
+    "plugins.catalogEmpty": "此目錄尚無外掛",
+    "plugins.catalogFailed": "無法載入目錄",
     "plugins": "外掛程式",
     "plugins.install": "安裝外掛程式",
     "plugins.view": "外掛程式檢視",
@@ -210,6 +225,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "清除已儲存的憑證"
   },
   "de-DE": {
+    "plugins.manageSources": "Quellen verwalten",
+    "plugins.managedSource": "Durch die Laufzeit konfiguriert",
+    "plugins.catalog": "Katalog",
+    "plugins.catalogEmpty": "Keine Plugins in diesem Katalog",
+    "plugins.catalogFailed": "Katalog konnte nicht geladen werden",
     "plugins": "Plugins",
     "plugins.install": "Plugin installieren",
     "plugins.view": "Plugin-Ansicht",
@@ -280,6 +300,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "Gespeicherte Zugangsdaten löschen"
   },
   "es-ES": {
+    "plugins.manageSources": "Gestionar fuentes",
+    "plugins.managedSource": "Configurada por el entorno de ejecución",
+    "plugins.catalog": "Catálogo",
+    "plugins.catalogEmpty": "No hay plugins en este catálogo",
+    "plugins.catalogFailed": "No se pudo cargar el catálogo",
     "plugins": "Complementos",
     "plugins.install": "Instalar complemento",
     "plugins.view": "Vista de complementos",
@@ -350,6 +375,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "Borrar credenciales guardadas"
   },
   "fr-FR": {
+    "plugins.manageSources": "Gérer les sources",
+    "plugins.managedSource": "Configurée par l’environnement d’exécution",
+    "plugins.catalog": "Catalogue",
+    "plugins.catalogEmpty": "Aucun plugin dans ce catalogue",
+    "plugins.catalogFailed": "Impossible de charger le catalogue",
     "plugins": "Extensions",
     "plugins.install": "Installer une extension",
     "plugins.view": "Vue des extensions",
@@ -420,6 +450,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "Effacer les identifiants enregistrés"
   },
   "ja-JP": {
+    "plugins.manageSources": "ソースを管理",
+    "plugins.managedSource": "実行環境で設定済み",
+    "plugins.catalog": "カタログ",
+    "plugins.catalogEmpty": "このカタログにプラグインはありません",
+    "plugins.catalogFailed": "カタログを読み込めません",
     "plugins": "プラグイン",
     "plugins.install": "プラグインをインストール",
     "plugins.view": "プラグイン表示",
@@ -490,6 +525,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "保存済みの認証情報を削除"
   },
   "ko-KR": {
+    "plugins.manageSources": "소스 관리",
+    "plugins.managedSource": "실행 환경에서 구성됨",
+    "plugins.catalog": "카탈로그",
+    "plugins.catalogEmpty": "이 카탈로그에 플러그인이 없습니다",
+    "plugins.catalogFailed": "카탈로그를 불러올 수 없습니다",
     "plugins": "플러그인",
     "plugins.install": "플러그인 설치",
     "plugins.view": "플러그인 보기",
@@ -560,6 +600,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "저장된 인증 정보 삭제"
   },
   "pt-BR": {
+    "plugins.manageSources": "Gerenciar fontes",
+    "plugins.managedSource": "Configurada pelo ambiente de execução",
+    "plugins.catalog": "Catálogo",
+    "plugins.catalogEmpty": "Nenhum plugin neste catálogo",
+    "plugins.catalogFailed": "Não foi possível carregar o catálogo",
     "plugins": "Plugins",
     "plugins.install": "Instalar plugin",
     "plugins.view": "Visualização de plugins",
@@ -630,6 +675,11 @@ export const agentPluginMessages = {
     "plugins.clearCredentials": "Limpar credenciais salvas"
   },
   "ru-RU": {
+    "plugins.manageSources": "Управление источниками",
+    "plugins.managedSource": "Настроен средой выполнения",
+    "plugins.catalog": "Каталог",
+    "plugins.catalogEmpty": "В этом каталоге нет плагинов",
+    "plugins.catalogFailed": "Не удалось загрузить каталог",
     "plugins": "Плагины",
     "plugins.install": "Установить плагин",
     "plugins.view": "Вид плагинов",

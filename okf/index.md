@@ -191,6 +191,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [Flower MCP runtime](ai/mcp-runtime.md)
 - [Flower Agent Plugins](ai/flower-agent-plugins.md)
+- [Flower plugin catalog integration](ai/flower-plugin-catalogs.md)
 ## UI
 
 - [Tessiven canvas](ui/tessiven-canvas.md)

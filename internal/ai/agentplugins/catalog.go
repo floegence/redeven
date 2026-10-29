@@ -8,14 +8,41 @@ import (
 	"io"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
 
 type CatalogEntry struct {
-	ID     string `json:"id"`
-	Source Source `json:"source"`
+	ID      string          `json:"id"`
+	Source  Source          `json:"source"`
+	Display *CatalogDisplay `json:"display,omitempty"`
 }
+
+// CatalogDisplay is untrusted presentation metadata, never installation authority.
+// Only this namespace accepts additive fields; they are discarded on decoding.
+type CatalogDisplay struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Author      string `json:"author,omitempty"`
+}
+
+func (d *CatalogDisplay) UnmarshalJSON(data []byte) error {
+	type display CatalogDisplay
+	var value display
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if !catalogText(value.Name, 128) || !catalogText(value.Description, 512) || !catalogText(value.Author, 128) {
+		return errors.New("invalid_catalog_display")
+	}
+	*d = CatalogDisplay(value)
+	return nil
+}
+func catalogText(value string, limit int) bool {
+	return utf8.ValidString(value) && utf8.RuneCountInString(value) <= limit && !strings.ContainsAny(value, "\x00\r\n")
+}
+
 type Catalog struct {
 	Schema  string         `json:"schema_version"`
 	ID      string         `json:"id"`
@@ -24,6 +51,9 @@ type Catalog struct {
 
 func DecodeCatalog(b []byte) (Catalog, error) {
 	c := Catalog{}
+	if len(b) > MaxConfigBytes {
+		return c, errors.New("invalid_catalog")
+	}
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
 	if e := d.Decode(&c); e != nil {
@@ -33,13 +63,15 @@ func DecodeCatalog(b []byte) (Catalog, error) {
 		return c, errors.New("invalid_catalog")
 	}
 	seen := map[string]bool{}
-	for _, entry := range c.Plugins {
-		if entry.ID == "" || len(entry.ID) > 128 || seen[entry.ID] || entry.Source.Type != "github" {
+	for i, entry := range c.Plugins {
+		if !pluginName.MatchString(entry.ID) || len(entry.ID) > 128 || seen[entry.ID] || entry.Source.Type != "github" {
 			return c, errors.New("invalid_catalog_entry")
 		}
-		if _, e := entry.Source.Normalize(); e != nil {
+		source, e := entry.Source.Normalize()
+		if e != nil {
 			return c, e
 		}
+		c.Plugins[i].Source = source
 		seen[entry.ID] = true
 	}
 	return c, nil
@@ -47,14 +79,34 @@ func DecodeCatalog(b []byte) (Catalog, error) {
 func (m *Manager) Sources() ([]CatalogSource, int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]CatalogSource{}, m.state.Sources...), m.state.Revision
+	return m.sourcesLocked(), m.state.Revision
+}
+func (m *Manager) sourcesLocked() []CatalogSource {
+	sources := append([]CatalogSource{}, m.configuredSources...)
+	urls := map[string]bool{}
+	for _, source := range sources {
+		urls[source.URL] = true
+	}
+	for _, source := range m.state.Sources {
+		if !urls[source.URL] {
+			sources = append(sources, source)
+		}
+	}
+	return sources
+}
+func catalogURL(raw string) (string, error) {
+	u, e := url.Parse(strings.TrimSpace(raw))
+	if e != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return "", errors.New("invalid_catalog_url")
+	}
+	return u.String(), nil
 }
 func (m *Manager) AddSource(ctx context.Context, raw string, revision int64) (CatalogSource, error) {
-	u, e := url.Parse(strings.TrimSpace(raw))
-	if e != nil || u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return CatalogSource{}, errors.New("invalid_catalog_url")
+	address, e := catalogURL(raw)
+	if e != nil {
+		return CatalogSource{}, e
 	}
-	b, e := get(ctx, m.http, u.String(), MaxConfigBytes)
+	b, e := get(ctx, m.http, address, MaxConfigBytes)
 	if e != nil {
 		return CatalogSource{}, e
 	}
@@ -70,12 +122,12 @@ func (m *Manager) AddSource(ctx context.Context, raw string, revision int64) (Ca
 	if len(m.state.Sources) >= 16 {
 		return CatalogSource{}, errors.New("source_limit")
 	}
-	for _, s := range m.state.Sources {
-		if s.URL == u.String() {
+	for _, s := range m.sourcesLocked() {
+		if s.URL == address {
 			return s, nil
 		}
 	}
-	source := CatalogSource{ID: uuid.NewString(), URL: u.String(), Name: catalog.ID}
+	source := CatalogSource{ID: uuid.NewString(), URL: address, Name: catalog.ID}
 	next := cloneState(m.state)
 	next.Sources = append(next.Sources, source)
 	return source, m.saveLocked(next)
@@ -83,6 +135,11 @@ func (m *Manager) AddSource(ctx context.Context, raw string, revision int64) (Ca
 func (m *Manager) RemoveSource(id string, revision int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for _, source := range m.configuredSources {
+		if source.ID == id {
+			return errors.New("catalog_source_managed")
+		}
+	}
 	if m.state.Revision != revision {
 		return ErrConflict
 	}
@@ -98,7 +155,7 @@ func (m *Manager) RemoveSource(id string, revision int64) error {
 func (m *Manager) ReadCatalog(ctx context.Context, id string) (Catalog, error) {
 	m.mu.Lock()
 	raw := ""
-	for _, s := range m.state.Sources {
+	for _, s := range m.sourcesLocked() {
 		if s.ID == id {
 			raw = s.URL
 		}

@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { Button, ConfirmDialog, Dialog, Input, Select, Switch } from '@floegence/floe-webapp-core/ui';
-import { Plus, Refresh, Trash, Search, Package } from '@floegence/floe-webapp-core/icons';
+import { Plus, Refresh, Trash, Search, Package, Settings } from '@floegence/floe-webapp-core/icons';
 import { useFlowerExtensions } from './context';
-import { SettingsList, SettingsSection, SettingRow } from './primitives';
+import { SettingsSection } from './primitives';
+import { AgentPluginCatalogView, AgentPluginSourcesDialog } from './AgentPluginCatalog';
 import { AgentPluginCard, AgentPluginDetails, pluginComponentKeys, pluginComponentName } from './AgentPluginDetails';
-import type { AgentPluginCatalog, AgentPluginInstall, AgentPluginListing, AgentPluginOperation, AgentPluginSource } from './agentPluginTypes';
+import type { AgentPluginInstall, AgentPluginListing, AgentPluginOperation, AgentPluginSource } from './agentPluginTypes';
 
 const componentKeys = pluginComponentKeys;
 export function AgentPluginsPanel() {
@@ -12,9 +13,14 @@ export function AgentPluginsPanel() {
   const t = (key: string, params?: Record<string, string | number>) => ctx.i18n.t(key, params);
   const [listing, setListing] = createSignal<AgentPluginListing>();
   const [busy, setBusy] = createSignal(''); const [error, setError] = createSignal(''); const [notice, setNotice] = createSignal('');
-  const [query, setQuery] = createSignal(''); const [view, setView] = createSignal<'installed' | 'discover'>('installed');
-  const [sourceURL, setSourceURL] = createSignal(''); const [catalog, setCatalog] = createSignal<AgentPluginCatalog>();
-  const [sourceID, setSourceID] = createSignal(''); const [installing, setInstalling] = createSignal(false);
+  const [view, setView] = createSignal<'installed' | 'discover'>('installed');
+  const [installedQuery, setInstalledQuery] = createSignal(''); const [discoveryQuery, setDiscoveryQuery] = createSignal('');
+  const [selectedSource, setSelectedSource] = createSignal('');
+  const query = () => view() === 'installed' ? installedQuery() : discoveryQuery();
+  const setQuery = (value: string) => view() === 'installed' ? setInstalledQuery(value) : setDiscoveryQuery(value);
+  const [sourcesOpen, setSourcesOpen] = createSignal(false); const [catalogRefresh, setCatalogRefresh] = createSignal(0);
+  const [installing, setInstalling] = createSignal(false);
+  const hasSources = () => !!listing()?.sources.length;
   const [updating, setUpdating] = createSignal<AgentPluginInstall>();
   const [source, setSource] = createSignal<AgentPluginSource>({ type: 'github', repository: '', ref: '', path: '.' });
   const [operation, setOperation] = createSignal<AgentPluginOperation>(); const [selected, setSelected] = createSignal<string[]>([]);
@@ -39,6 +45,7 @@ export function AgentPluginsPanel() {
     try { await action(); await load(); if (key !== 'load' && key !== 'catalog') ctx.catalogChanged?.(); } catch (e) { setError(fail(e)); } finally { setBusy(''); }
   }
   createEffect(on(ctx.canInteract, available => { if (available && !listing()) void run('load', load); }));
+  createEffect(() => { if (listing() && !hasSources()) setView('installed'); });
   createEffect(on(() => ctx.selectedPlugin?.(), selection => { if (selection?.id) { setDetail(selection.id); setView('installed'); setQuery(''); } }));
   const preview = (op: AgentPluginOperation, generation = ++previewGeneration) => {
     if (disposed || generation !== previewGeneration) return;
@@ -78,21 +85,20 @@ export function AgentPluginsPanel() {
   const field = (key: keyof AgentPluginSource, value: string) => setSource(previous => ({ ...previous, [key]: value }));
   const closeInstall = () => { if (!busy()) { previewGeneration++; clearTimeout(polling); setInstalling(false); } };
   return <>
-    <SettingsSection title={t('plugins')} filters={<><div class="flower-plugin-segments" role="group" aria-label={t('plugins.view')}><For each={['installed', 'discover'] as const}>{value => <button type="button" aria-pressed={view() === value} onClick={() => setView(value)}>{t('plugins.' + value)}<Show when={value === 'installed' && listing()?.items.length}><span>{listing()?.items.length}</span></Show></button>}</For></div><Show when={view() === 'installed' ? !!listing()?.items.length : !!catalog()?.plugins.length}><label class="flower-extension-search"><Search class="h-4 w-4" aria-hidden="true" /><Input type="search" aria-label={t('plugins.search')} placeholder={t('plugins.search')} value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label></Show></>} actions={<><Button size="icon" variant="ghost" icon={Refresh} aria-label={t('skillsSettings.reload')} title={t('skillsSettings.reload')} loading={busy() === 'load'} disabled={!ctx.canInteract() || !!busy()} onClick={() => void run('load', load)} /><Show when={view() === 'discover' || !!listing()?.items.length}><Button size="sm" icon={Plus} disabled={!canManage()} onClick={() => newInstall()}>{t('plugins.install')}</Button></Show></>}>
+    <SettingsSection title={t('plugins')} filters={<><Show when={hasSources()}><div class="flower-plugin-segments" role="group" aria-label={t('plugins.view')}><For each={['installed', 'discover'] as const}>{value => <button type="button" aria-pressed={view() === value} onClick={() => setView(value)}>{t('plugins.' + value)}<Show when={value === 'installed' && listing()?.items.length}><span>{listing()?.items.length}</span></Show></button>}</For></div></Show><Show when={view() === 'discover' || !!listing()?.items.length}><label class="flower-extension-search"><Search class="h-4 w-4" aria-hidden="true" /><Input type="search" aria-label={t('plugins.search')} placeholder={t('plugins.search')} value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label></Show></>} actions={<><Button size="icon" variant="ghost" icon={Refresh} aria-label={t('skillsSettings.reload')} title={t('skillsSettings.reload')} loading={busy() === 'load'} disabled={!ctx.canInteract() || !!busy()} onClick={() => void run('load', async () => { await load(); setCatalogRefresh(value => value + 1); })} /><Show when={ctx.canAdmin() || hasSources()}><Button size="icon" variant="ghost" icon={Settings} aria-label={t('plugins.manageSources')} title={t('plugins.manageSources')} disabled={!ctx.canInteract() || !!busy()} onClick={() => setSourcesOpen(true)} /></Show><Show when={view() === 'discover' || !!listing()?.items.length}><Button size="sm" icon={Plus} disabled={!canManage()} onClick={() => newInstall()}>{t('plugins.install')}</Button></Show></>}>
       <Show when={error()}><p role="alert" class="flower-extension-error">{error()}</p></Show>
       <Show when={notice()}><p role="status" class="flower-extension-notice">{notice()}</p></Show>
       <Show when={busy()}><p role="status" class="flower-extension-notice">{t(busy() === 'prepare' ? 'plugins.preparing' : 'loading')}</p></Show>
 
       <Show when={view() === 'installed'} fallback={<>
-        <div class="flower-plugin-source-form"><label><span class="flower-extension-label">{t('plugins.catalogURL')}</span><Input type="url" aria-label={t('plugins.catalogURL')} placeholder="https://example.com/catalog.json" value={sourceURL()} onInput={event => setSourceURL(event.currentTarget.value)} /></label><Button size="sm" disabled={!canManage() || !sourceURL().trim()} onClick={() => void run('source', async () => { await api.addSource({ url: sourceURL().trim(), revision: listing()?.revision ?? 0 }); setSourceURL(''); })}>{t('plugins.addSource')}</Button></div>
-        <SettingsList><For each={listing()?.sources}>{item => <SettingRow icon={undefined} metadata={undefined} children={undefined} title={item.name} description={item.url} control={<><Button size="sm" variant="outline" disabled={!ctx.canInteract() || !!busy()} onClick={() => void run('catalog', async () => { const next = await api.catalog(item.id); setCatalog(next); setSourceID(item.id); })}>{t('plugins.browse')}</Button><Button size="icon" variant="ghost" icon={Trash} aria-label={t('plugins.removeSource') + ': ' + item.name} disabled={!canManage()} onClick={() => void run('source', async () => { await api.removeSource({ id: item.id, revision: listing()?.revision ?? 0 }); if (sourceID() === item.id) setCatalog(undefined); })} /></>} />}</For></SettingsList>
-        <Show when={catalog()}>{value => <SettingsList><For each={value().plugins.filter(item => item.id.toLowerCase().includes(query().toLowerCase()))}>{item => <SettingRow icon={undefined} metadata={undefined} children={undefined} title={item.id} description={item.source.repository ?? ''} control={<Button size="sm" disabled={!canManage()} onClick={() => newInstall(item.source)}>{t('plugins.install')}</Button>} />}</For></SettingsList>}</Show>
+        <AgentPluginCatalogView sources={listing()?.sources ?? []} selectedSource={selectedSource()} onSelectSource={setSelectedSource} query={query()} refresh={catalogRefresh()} canManage={!!canManage()} onInstall={newInstall} onClear={() => setQuery('')} />
       </>}>
         <For each={listing()?.operations ?? []}>{op => <div class="flower-plugin-recovery"><span>{t('plugins.pending')} · {op.package?.manifest.name ?? op.source.repository ?? op.source.directory}</span><Button size="sm" variant="outline" disabled={!canManage()} onClick={() => { setFormError(''); preview(op); }}>{t('plugins.resume')}</Button></div>}</For>
         <Show when={listing() && !items().length}><div class="flower-plugin-empty"><span class="flower-plugin-empty-icon"><Package class="h-6 w-6" aria-hidden="true" /></span><h3>{t(listing()?.items.length ? 'plugins.noResults' : 'plugins.emptyTitle')}</h3><Show when={listing()?.items.length} fallback={<Button size="sm" icon={Plus} disabled={!canManage()} onClick={() => newInstall()}>{t('plugins.install')}</Button>}><Button size="sm" variant="outline" onClick={() => setQuery('')}>{t('clear')}</Button></Show></div></Show>
         <div class="flower-plugin-grid"><For each={items()}>{item => <AgentPluginCard item={item} onOpen={() => setDetail(item.id)} />}</For></div>
       </Show>
     </SettingsSection>
+    <AgentPluginSourcesDialog open={sourcesOpen()} onClose={() => setSourcesOpen(false)} sources={listing()?.sources ?? []} revision={listing()?.revision ?? 0} onChanged={load} />
     <Dialog open={!!detailItem() && !installing() && !credential() && !deleting()} onOpenChange={open => { if (!open && !busy()) setDetail(''); }} title={detailItem()?.package.manifest.name ?? ''} class="flower-extension-dialog flower-plugin-detail-dialog w-[min(40rem,94vw)]">
       <Show when={error()}><p role="alert" class="flower-extension-error">{error()}</p></Show><Show when={notice()}><p role="status" class="flower-extension-notice">{notice()}</p></Show>
       <Show when={detailItem()}>{item => <AgentPluginDetails item={item()} canManage={!!canManage()} busy={!!busy()} onChange={(enabled, key) => change(item(), enabled, key)} onAutoCheck={auto_check => { if (canManage()) void run(item().id, () => api.change({ id: item().id, revision: item().revision, auto_check })); }} onCheck={key => { if (canManage()) void run(key, async () => { await api.check({ id: item().id, revision: item().revision, component: key }); setNotice(t('checkSuccess')); }); }} onCredentials={key => { setCredential({ install: item(), key }); setCredentialFields([{ name: '', value: '' }]); setFormError(''); }} onUpdate={() => void prepare(item())} onRemove={() => { setDeleteData(false); setDeleting(item()); }} />}</Show>

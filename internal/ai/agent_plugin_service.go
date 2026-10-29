@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -32,7 +33,11 @@ type AgentPluginsView struct {
 }
 
 func (s *Service) initializeAgentPlugins() error {
-	m, e := agentplugins.Open(s.stateDir)
+	catalogs, e := agentplugins.ParseCatalogConfig(os.Getenv("REDEVEN_AGENT_AI_PLUGIN_CATALOGS"))
+	if e != nil {
+		return e
+	}
+	m, e := agentplugins.OpenWithCatalogs(s.stateDir, catalogs)
 	if e != nil {
 		return e
 	}
