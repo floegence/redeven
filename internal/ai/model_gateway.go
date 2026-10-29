@@ -202,7 +202,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if req.ProviderControls.TopP != nil && p.providerType != "kimi_code" {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
-	if state := req.PreviousState; state != nil && !p.chatGPT && p.responsesContinuation && (req.ReusePolicy == nil || req.ReusePolicy.PreferContinuation) {
+	if state := req.PreviousState; state != nil && state.Kind == providerContinuationKindOpenAIResponses && !p.chatGPT && p.responsesContinuation && (req.ReusePolicy == nil || req.ReusePolicy.PreferContinuation) {
 		if state.Kind != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" || len(state.Attributes) != 0 {
 			return nil, errors.New("invalid OpenAI Responses continuation state")
 		}
@@ -249,8 +249,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 		params.Tools = tools
 	}
 
-	records := []chatGPTNativeRecord{}
-	canonical := []json.RawMessage{}
+	var history *flprovider.ResponsesHistory
 	if p.chatGPT {
 		params.MaxOutputTokens = param.Opt[int64]{}
 		params.Temperature = param.Opt[float64]{}
@@ -261,13 +260,37 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 		if err != nil {
 			return nil, err
 		}
-		params.Input.OfInputItemList, records, canonical, err = chatGPTReplay(req, inputItems)
+	}
+	if p.providerType != "kimi_code" {
+		history, err = p.prepareResponsesHistory(req, inputItems)
 		if err != nil {
 			return nil, err
 		}
+		params.Input.OfInputItemList = responsesInput(history.Input())
+		if !p.chatGPT {
+			params.Include = append(params.Include, oresponses.ResponseIncludableReasoningEncryptedContent)
+		}
 	}
+	// Freeze the capability decision with preparation. Always estimate the full
+	// replay input; a supported server continuation sends only its validated suffix.
+	continueServer := !p.chatGPT && p.responsesContinuation && (req.ReusePolicy == nil || req.ReusePolicy.PreferContinuation)
 	prepared, err := newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, req, aliases, func(ctx context.Context, attempt ModelGatewayRequest, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-		return p.streamResponsesTurn(ctx, aliases, payload, onEvent, chatGPTStreamContext{Request: attempt, Records: records, Canonical: canonical})
+		if continueServer && history != nil {
+			if id, delta := history.Continuation(); id != "" {
+				var body map[string]json.RawMessage
+				if err := json.Unmarshal(payload, &body); err != nil {
+					return ModelGatewayResult{}, err
+				}
+				body["previous_response_id"], _ = json.Marshal(id)
+				body["input"], _ = json.Marshal(delta)
+				var err error
+				payload, err = json.Marshal(body)
+				if err != nil {
+					return ModelGatewayResult{}, err
+				}
+			}
+		}
+		return p.streamResponsesTurn(ctx, aliases, payload, onEvent, responsesStreamContext{Request: attempt, History: history})
 	})
 	if err != nil {
 		return nil, err
@@ -279,7 +302,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	return prepared, nil
 }
 
-func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent), chatGPTContext ...chatGPTStreamContext) (result ModelGatewayResult, resultErr error) {
+func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent), native responsesStreamContext) (result ModelGatewayResult, resultErr error) {
 	var bearer string
 	if p.chatGPTWatch != nil {
 		watchCtx, cancel := context.WithCancelCause(ctx)
@@ -315,10 +338,6 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		bearer = token
 		options = append(options, ooption.WithAPIKey(token), ooption.WithMaxRetries(0))
 	}
-	var native chatGPTStreamContext
-	if len(chatGPTContext) == 1 {
-		native = chatGPTContext[0]
-	}
 	diag := newProviderAttemptDiagnostic(ctx, native.Request, payload, p, onEvent)
 
 	stream, lease, _, err := p.responsesStream(ctx, native.Request, bearer, payload, &httpResponse, options, diag)
@@ -349,7 +368,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	var assistantFragments []Message
 	fragmentStart := 0
 	originalOnEvent := onEvent
-	if p.chatGPT {
+	if native.History != nil {
 		onEvent = func(event StreamEvent) {
 			if event.Type == StreamEventHostedTool {
 				text := textBuf.String()[fragmentStart:]
@@ -364,7 +383,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		}
 	}
 	hosted := newResponsesHostedEvents(onEvent)
-	var nativeCompletedItems chatGPTCompletedItems
+	var nativeCompletedItems responsesCompletedItems
 
 	type partialCall struct {
 		ItemID      string
@@ -523,7 +542,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 		case "response.output_item.done":
 			item := event.Item
-			if p.chatGPT {
+			if native.History != nil {
 				if err := nativeCompletedItems.add(event.OutputIndex, item); err != nil {
 					return ModelGatewayResult{}, err
 				}
@@ -558,7 +577,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 				return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, p.failureProviderType())
 			}
 			completed = event.Response
-			if p.chatGPT {
+			if native.History != nil && (completed.Status == "completed" || completed.Status == "incomplete") {
 				var err error
 				completed.Output, err = nativeCompletedItems.complete(completed.Output)
 				if err != nil {
@@ -608,12 +627,8 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	}
 	result.Usage = usage
 	result.ResponseID = completed.ID
-	if rid := strings.TrimSpace(completed.ID); rid != "" && p.providerType != "kimi_code" {
+	if rid := strings.TrimSpace(completed.ID); rid != "" {
 		result.RawProviderDiag["response_id"] = rid
-		result.ProviderState = &ModelGatewayState{
-			Kind: providerContinuationKindOpenAIResponses,
-			ID:   rid,
-		}
 	}
 
 	type orderedToolCall struct {
@@ -705,13 +720,9 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
-	if p.chatGPT {
-		if len(chatGPTContext) != 1 {
-			return ModelGatewayResult{}, errors.New("missing ChatGPT request identity")
-		}
-		native := chatGPTContext[0]
+	if native.History != nil && (completed.Status == "completed" || completed.Status == "incomplete") && (native.Request.ReusePolicy == nil || native.Request.ReusePolicy.ProviderStateAllowed) {
 		var stateErr error
-		result.ProviderState, stateErr = chatGPTState(native.Request, result, completed, aliases, native.Records, native.Canonical, append(assistantFragments, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: textBuf.String()[fragmentStart:]}}}))
+		result.ProviderState, stateErr = p.responsesState(native.History, result, completed, aliases, append(assistantFragments, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: textBuf.String()[fragmentStart:]}}}))
 		if stateErr != nil {
 			return ModelGatewayResult{}, stateErr
 		}

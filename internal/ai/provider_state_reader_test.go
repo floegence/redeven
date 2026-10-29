@@ -26,7 +26,7 @@ func TestChatGPTNativeStateReaderSupportsPublishedWriters(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := ModelGatewayRequest{Model: state.ID, PreviousState: &restored}
-			if _, _, _, err = chatGPTReplay(req, oresponses.ResponseInputParam{}); err != nil {
+			if _, err = (&openAIProvider{chatGPT: true}).prepareResponsesHistory(req, oresponses.ResponseInputParam{}); err != nil {
 				t.Fatalf("policy=%q response=%q: %v", policy, responseID, err)
 			}
 		}
@@ -39,12 +39,12 @@ func TestChatGPTNativeStateReaderSupportsPublishedWriters(t *testing.T) {
 		{"response_id": "resp_without_history"},
 	} {
 		req := ModelGatewayRequest{Model: "gpt-6.1-sol", PreviousState: &ModelGatewayState{Kind: chatGPTStateKind, ID: "gpt-6.1-sol", Attributes: attributes}}
-		if _, _, _, err := chatGPTReplay(req, oresponses.ResponseInputParam{}); err == nil {
+		if _, err := (&openAIProvider{chatGPT: true}).prepareResponsesHistory(req, oresponses.ResponseInputParam{}); err == nil {
 			t.Fatal("accepted malformed native state")
 		}
 	}
 	req := ModelGatewayRequest{Model: "gpt-6.1-sol", PreviousState: &ModelGatewayState{Kind: chatGPTStateKind, ID: "gpt-6.1-sol", ReusePolicy: "unknown", Attributes: map[string]string{"native_output": "[]"}}}
-	if _, _, _, err := chatGPTReplay(req, oresponses.ResponseInputParam{}); err == nil {
+	if _, err := (&openAIProvider{chatGPT: true}).prepareResponsesHistory(req, oresponses.ResponseInputParam{}); err == nil {
 		t.Fatal("accepted unknown reuse policy")
 	}
 }

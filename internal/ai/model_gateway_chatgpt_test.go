@@ -185,7 +185,7 @@ func TestChatGPTCompletedItemBoundaries(t *testing.T) {
 	}
 	one := item(`{"type":"message","id":"one","role":"assistant","content":[]}`)
 	two := item(`{"type":"message","id":"two","role":"assistant","content":[]}`)
-	var c chatGPTCompletedItems
+	var c responsesCompletedItems
 	if _, err := c.complete(nil); err == nil {
 		t.Fatal("empty output accepted")
 	}

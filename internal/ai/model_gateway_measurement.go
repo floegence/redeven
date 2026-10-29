@@ -70,15 +70,13 @@ func (p *openAIProvider) responseMeasurement(payload []byte, completed responses
 	if !p.chatGPT || result.ProviderState == nil || result.ProviderState.Kind != chatGPTStateKind || !result.Usage.OutputTokensReported {
 		return evidence
 	}
-	var records []chatGPTNativeRecord
-	if json.Unmarshal([]byte(result.ProviderState.Attributes["native_output"]), &records) != nil || len(records) == 0 {
-		return evidence
-	}
 	var input []json.RawMessage
 	if json.Unmarshal(body["input"], &input) != nil {
 		return evidence
 	}
-	input = append(input, records[len(records)-1].Output...)
+	for _, item := range completed.Output {
+		input = append(input, json.RawMessage(item.RawJSON()))
+	}
 	body["input"], _ = json.Marshal(input)
 	rendered.Payload, _ = json.Marshal(body)
 	if !included && hasEncryptedReasoning(rendered.Payload) {

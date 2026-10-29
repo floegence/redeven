@@ -750,6 +750,7 @@ func TestOpenAICompatibleBuiltinWebSearch_AttachesResponsesHostedTool(t *testing
 				"id":     "resp_builtin_search",
 				"model":  "compat-model",
 				"status": "completed",
+				"output": []any{map[string]any{"type": "message", "id": "resp_builtin_search-message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": "ok", "annotations": []any{}}}}},
 				"usage": map[string]any{
 					"input_tokens":  1,
 					"output_tokens": 1,
@@ -1005,6 +1006,7 @@ func TestQwenResponsesBuiltinWebSearch_AttachesResponsesTool(t *testing.T) {
 				"id":     "resp_qwen_builtin_search",
 				"model":  "qwen3.6-plus",
 				"status": "completed",
+				"output": []any{map[string]any{"type": "message", "id": "resp_qwen_builtin_search-message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": "ok", "annotations": []any{}}}}},
 				"usage": map[string]any{
 					"input_tokens":  1,
 					"output_tokens": 1,

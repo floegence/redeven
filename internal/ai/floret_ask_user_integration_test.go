@@ -687,6 +687,10 @@ func writeAskUserIntegrationCompletedResponse(w http.ResponseWriter, flusher htt
 
 func writeAskUserIntegrationTextResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
 	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": text})
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"type": "response.output_item.done", "output_index": 0,
+		"item": map[string]any{"type": "message", "id": responseID + "-message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}}},
+	})
 	writeAskUserIntegrationCompletedResponse(w, flusher, responseID)
 }
 

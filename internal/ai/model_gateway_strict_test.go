@@ -203,6 +203,9 @@ func TestStrictArgumentsFrozenWithPreparedRequest(t *testing.T) {
 					return
 				}
 				item := fmt.Sprintf(`{"type":"function_call","id":"item","call_id":"call","name":"inspect","namespace":"redeven","arguments":%q,"status":"completed"}`, rawArgs)
+				if !strings.HasPrefix(route, "chatgpt") {
+					item = strings.Replace(item, `,"namespace":"redeven"`, "", 1)
+				}
 				if strings.HasSuffix(route, "stream") {
 					fmt.Fprintf(w, "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":%s}\n\n", item)
 					fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item\",\"arguments\":%q}\n\n", rawArgs)

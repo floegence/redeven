@@ -2755,7 +2755,7 @@ SOFTWARE.
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floe-native-apps | v0.25.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.25.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.92.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.92.1 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.92.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.92.2 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.7.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.37 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.37 | Floegence first-party dependency. |

@@ -130,7 +130,7 @@ func TestPlatformGatewayNativeStreamingAndLease(t *testing.T) {
 			if calls != 1 || renewals != 1 {
 				t.Fatalf("calls=%d renewals=%d", calls, renewals)
 			}
-			if protocol == "" && (result.ProviderState == nil || result.ProviderState.ID != "resp-a") {
+			if protocol == "" && (result.ProviderState == nil || result.ProviderState.Attributes["response_id"] != "resp-a" || !strings.Contains(result.ProviderState.Attributes["native_output"], "hello")) {
 				t.Fatalf("continuation state lost: %+v", result.ProviderState)
 			}
 		})

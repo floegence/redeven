@@ -15,6 +15,37 @@ Floret owns the provider-visible history and render lineage for each Turn. Redev
 OpenAI Responses hosted search requests include `web_search_call.action.sources` so returned source URLs can reach the canonical Activity. Qwen requests keep their existing tool shape.
 
 ## Provider surface and history
+Published Floret v7.92.2 owns native Responses replay through
+PrepareResponsesHistory. API-key OpenAI, compatible Responses, Qwen and
+ChatGPT adapters retain search receipts, encrypted reasoning and original
+function items across local tools. Activity is never a replay source.
+Disabling new searches retains old evidence. Completed item events supply
+output when terminal snapshots omit it. Confirmed terminal incomplete responses
+retain their native snapshot for length
+continuations; interrupted and failed streams install no state. ChatGPT continues
+to reject incomplete responses. Content-filtered output never advances Engine
+history.
+
+Preparation estimates complete native input. API-key OpenAI uses server
+continuation only with explicit responses_continuation and Engine permission;
+it sends only the validated suffix after the response ID. Other connections
+send complete native input. This choice freezes with preparation and transport
+retries. Rejected IDs never trigger automatic evidence-dropping retries;
+explicit configuration changes can select full replay using retained state.
+ChatGPT keeps its namespace, OAuth, WebSocket and published native state format.
+
+Published ID-only OpenAI states remain readable with their original opt-in
+continuation behavior; missing historical bytes cannot be recovered. New
+responses write the complete upstream envelope. Removing the historical reader
+requires a domain migration in a future major release, never within v7.
+Changed canonical prefixes discard stale native suffixes and server IDs;
+model/account and supplemental-secret isolation remain Floret boundaries.
+The Responses history acceptance test covers provider modes, streamed-only
+output, continuation suffixes, immutable retries, Goal review, truncation and
+restart. Manual Retry and Fork retain canonical facts and confirmed tool results;
+their existing lineage boundaries discard source provider state. Transport retry
+keeps the frozen native request.
+
 Flower's provider prefix has one owner. Published Floret v7.37.0 keeps one append-only canonical history and keys each render lineage by the complete provider request surface: provider, model, reasoning, System Prompt, local and hosted tools, adapter, context policy, and provider-state compatibility.
 
 Flower reads persisted Activity first and otherwise uses a neutral label and renderer without exposing arguments or unknown JSON.

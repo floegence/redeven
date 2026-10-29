@@ -114,8 +114,11 @@ func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model strin
 		"type":         "response.output_item.done",
 		"output_index": 0,
 		"item": map[string]any{
-			"type": "message",
-			"id":   itemID,
+			"type":    "message",
+			"id":      itemID,
+			"role":    "assistant",
+			"status":  "completed",
+			"content": []any{map[string]any{"type": "output_text", "text": token, "annotations": []any{}}},
 		},
 	})
 	writeSSEJSON(w, flusher, map[string]any{
@@ -236,7 +239,7 @@ func TestOpenAIProviderStreamTurnUsesPreviousResponseIDAndReturnsProviderState(t
 	if gotPrevious != "resp_prev" {
 		t.Fatalf("previous_response_id=%q, want resp_prev", gotPrevious)
 	}
-	if result.ProviderState == nil || result.ProviderState.ID != "resp_next" {
+	if result.ProviderState == nil || result.ProviderState.Attributes["response_id"] != "resp_next" {
 		t.Fatalf("provider state=%+v, want resp_next", result.ProviderState)
 	}
 }
@@ -361,7 +364,11 @@ func TestIntegrationServiceDurableRuntimeContextReusesOpenAIContinuation(t *test
 			mock.mu.Lock()
 			secondInput := mock.inputs[1]
 			mock.mu.Unlock()
-			for _, text := range []string{"hello", "CONTINUATION_TOKEN_1", "hello again"} {
+			wantTexts := []string{"hello", "CONTINUATION_TOKEN_1", "hello again"}
+			if continuation {
+				wantTexts = []string{"hello again"}
+			}
+			for _, text := range wantTexts {
 				if !strings.Contains(secondInput, text) {
 					t.Errorf("missing canonical history %q: %s", text, secondInput)
 				}

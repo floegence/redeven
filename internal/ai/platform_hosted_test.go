@@ -49,7 +49,7 @@ func testPlatformHostedSearch(t *testing.T, incremental bool) {
 				w.(http.Flusher).Flush()
 			}
 			_, _ = fmt.Fprint(w, "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"Checking sources\"}\n\n")
-			_, _ = fmt.Fprint(w, `data: {"type":"response.completed","response":{"id":"resp_rd_search","status":"completed","output":[{"type":"web_search_call","id":"search1","status":"completed","action":{"type":"search","query":"reference"}},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Sourced answer","annotations":[{"type":"url_citation","url":"https://example.com","title":"Reference","start_index":0,"end_index":6}]}]}],"usage":{"input_tokens":12,"output_tokens":8,"output_tokens_details":{"reasoning_tokens":2}}}}`+"\n\n")
+			_, _ = fmt.Fprint(w, `data: {"type":"response.completed","response":{"id":"resp_rd_search","status":"completed","output":[{"type":"web_search_call","id":"search1","status":"completed","action":{"type":"search","query":"reference","sources":[{"url":"https://example.com","title":"Reference"}]}},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Sourced answer","annotations":[{"type":"url_citation","url":"https://example.com","title":"Reference","start_index":0,"end_index":6}]}]}],"usage":{"input_tokens":12,"output_tokens":8,"output_tokens_details":{"reasoning_tokens":2}}}}`+"\n\n")
 		default:
 			w.WriteHeader(404)
 		}
@@ -92,7 +92,7 @@ func testPlatformHostedSearch(t *testing.T, incremental bool) {
 				t.Fatalf("usage lost: %+v", event.Usage)
 			}
 		}
-		if event.Type == flprovider.EventDone && (event.ResponseState == nil || event.ResponseState.ID != "resp_rd_search") {
+		if event.Type == flprovider.EventDone && (event.ResponseState == nil || event.ResponseState.Attributes["response_id"] != "resp_rd_search" || !strings.Contains(event.ResponseState.Attributes["native_output"], "search1")) {
 			t.Fatal("continuation lost")
 		}
 	}
@@ -145,7 +145,7 @@ func TestPlatformGatewayRequiresTerminalEvidence(t *testing.T) {
 			if tc.name == "responses-filtered" {
 				wantReason = "content_filter"
 			}
-			if !tc.wantError && (result.FinishReason != wantReason || result.ProviderState == nil || result.ProviderState.ID != "resp_rd_partial") {
+			if !tc.wantError && (result.FinishReason != wantReason || result.ProviderState == nil || result.ProviderState.Attributes["response_id"] != "resp_rd_partial" || !strings.Contains(result.ProviderState.Attributes["native_output"], "partial")) {
 				t.Fatalf("truncation/continuation lost: %+v", result)
 			}
 		})

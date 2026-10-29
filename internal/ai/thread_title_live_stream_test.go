@@ -75,6 +75,7 @@ func (mock *liveAutomaticTitleOpenAIMock) handle(w http.ResponseWriter, r *http.
 			text = "Brief system health check"
 		}
 		writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": text})
+		writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": map[string]any{"type": "message", "id": responseID + "-message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}}}})
 	}
 	writeTestRealtimeSSE(w, flusher, map[string]any{
 		"type": "response.completed",

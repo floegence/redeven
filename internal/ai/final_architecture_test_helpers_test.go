@@ -119,6 +119,7 @@ func (m slowOpenAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.created", "response": map[string]any{"id": "resp_realtime_test_1", "created_at": time.Now().Unix(), "model": "gpt-5-mini"}})
 	time.Sleep(m.delay)
 	writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": "working"})
+	writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": map[string]any{"type": "message", "id": "message_realtime_test_1", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": "working", "annotations": []any{}}}}})
 	writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "resp_realtime_test_1", "model": "gpt-5-mini", "status": "completed", "usage": map[string]any{"input_tokens": 1, "output_tokens": 1, "output_tokens_details": map[string]any{"reasoning_tokens": 0}}}})
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()
