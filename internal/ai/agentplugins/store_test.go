@@ -64,6 +64,33 @@ func TestInstallRecoveryAndRevocation(t *testing.T) {
 		t.Fatal(items)
 	}
 }
+func TestRemoveRejectsUnregisteredPathsWithoutChangingState(t *testing.T) {
+	m, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	in := install(t, m, fixture(t))
+	put(t, m.Data(in.ID), "keep", "retained plugin data")
+	outside := t.TempDir()
+	put(t, outside, "keep", "outside data")
+	_, revision := m.List()
+	for _, id := range []string{"../..", outside, in.ID + "/../../..", "00000000-0000-0000-0000-000000000000"} {
+		if err := m.Remove(id, in.Revision, true); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("unregistered path was not rejected: %q: %v", id, err)
+		}
+	}
+	items, after := m.List()
+	if len(items) != 1 || items[0].ID != in.ID || after != revision {
+		t.Fatal("rejected removal changed the installation registry")
+	}
+	for path, expected := range map[string]string{filepath.Join(m.Data(in.ID), "keep"): "retained plugin data", filepath.Join(outside, "keep"): "outside data"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != expected {
+			t.Fatalf("rejected removal changed data: %s: %v", path, err)
+		}
+	}
+}
 func TestPrepareBindsBytesAndUpdatePreservesData(t *testing.T) {
 	m, e := Open(t.TempDir())
 	if e != nil {

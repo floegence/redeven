@@ -35,7 +35,7 @@ Flower's distribution format is deliberately outside the Agent Plugins standard:
 }
 ```
 
-Catalogs recommend GitHub sources only. They cannot install local paths, enable components, supply credentials or execute commands. No default marketplace or auto-discovery of arbitrary JSON is implied. Distribution rejects private resolved network addresses, unsafe redirects, archive links/duplicate paths and Windows drive/stream paths. Local contained symlinks are materialized; escapes fail preparation. These distribution restrictions precede component loading. Limits: 4,096 entries, 16 MiB per file, 128 MiB per package/archive, 1 MiB per manifest/catalog configuration.
+Catalogs recommend GitHub sources only. They cannot install local paths, enable components, supply credentials or execute commands. No default marketplace or auto-discovery of arbitrary JSON is implied. Distribution rejects private resolved network addresses, unsafe redirects, archive links/duplicate paths and Windows drive/stream paths. Archive admission counts files and directories before extraction, limits paths to 32 separators, and writes through a pinned `os.Root` handle. Local contained symlinks are materialized; escapes fail preparation. These restrictions precede component loading. Limits: 4,096 entries, 16 MiB per file, 128 MiB per package/archive, 1 MiB per manifest/catalog configuration.
 
 ## Review, persistence and recovery
 

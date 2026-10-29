@@ -180,12 +180,21 @@ func Fetch(ctx context.Context, client *http.Client, s Source, dest string) (Sou
 		return s, e
 	}
 	defer zr.Close()
+	// Count every archive entry before extraction, including directories. The
+	// later snapshot limit must not permit unbounded temporary extraction first.
+	if len(zr.File) > MaxFiles {
+		return s, errors.New("archive exceeds limits")
+	}
 	expanded := filepath.Join(temp, "expanded")
 	if e = os.Mkdir(expanded, 0700); e != nil {
 		return s, e
 	}
+	extraction, e := os.OpenRoot(expanded)
+	if e != nil {
+		return s, e
+	}
+	defer extraction.Close()
 	var total uint64
-	count := 0
 	first := ""
 	names := map[string]bool{}
 	for _, f := range zr.File {
@@ -193,7 +202,7 @@ func Fetch(ctx context.Context, client *http.Client, s Source, dest string) (Sou
 			return s, e
 		}
 		name := f.Name
-		if !portableRelativePath(strings.TrimSuffix(name, "/")) {
+		if !portableRelativePath(strings.TrimSuffix(name, "/")) || strings.Count(name, "/") > 32 {
 			return s, errors.New("unsafe archive path")
 		}
 		top := strings.Split(name, "/")[0]
@@ -211,26 +220,25 @@ func Fetch(ctx context.Context, client *http.Client, s Source, dest string) (Sou
 		if f.Mode()&os.ModeSymlink != 0 || (!f.FileInfo().IsDir() && !f.Mode().IsRegular()) {
 			return s, errors.New("unsupported archive entry")
 		}
-		target := filepath.Join(expanded, filepath.FromSlash(name))
+		target := filepath.FromSlash(name)
 		if f.FileInfo().IsDir() {
-			if e = os.MkdirAll(target, 0700); e != nil {
+			if e = extraction.MkdirAll(target, 0700); e != nil {
 				return s, e
 			}
 			continue
 		}
-		count++
 		total += f.UncompressedSize64
-		if count > MaxFiles || f.UncompressedSize64 > MaxFileBytes || total > MaxPackageBytes {
+		if f.UncompressedSize64 > MaxFileBytes || total > MaxPackageBytes {
 			return s, errors.New("archive exceeds limits")
 		}
-		if e = os.MkdirAll(filepath.Dir(target), 0700); e != nil {
+		if e = extraction.MkdirAll(filepath.Dir(target), 0700); e != nil {
 			return s, e
 		}
 		in, err := f.Open()
 		if err != nil {
 			return s, err
 		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600|f.Mode().Perm()&0111)
+		out, err := extraction.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600|f.Mode().Perm()&0111)
 		if err != nil {
 			in.Close()
 			return s, err
