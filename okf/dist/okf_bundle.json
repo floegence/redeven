@@ -18906,7 +18906,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "desktop",
           "interaction",
@@ -18916,15 +18916,15 @@
         "title": "Desktop environment settings presentation",
         "type": "Desktop Contract"
       },
-      "body_length": 1917,
+      "body_length": 2666,
       "summary": "Desktop composes published Floe Dialog, Tabs, controls and presence into one Environment settings surface. Theme tokens own material and contrast; product CSS owns grouping and geometry. Every page preserves readable labels, reachable actions and a fixed viewport. Loading, failure and disclosures retain the draft owner. [Settings sessions](desktop-environment-settings.md) own authority, persistence and recovery; styling adds no operation state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- The panel is at most 50rem wide and 44.375rem high, capped by viewport/titlebar. Only viewport resizing changes that cap; tabs, loading and disclosures never recenter it or move actions.\n- Use one Current connection card and consistent address reading edges. Text, diagnostics, paths and addresses remain selectable and wrap.\n- Browser scope, sign-in protection and certificate tasks use matching rows, meaningful icons and published outline controls. Preserve their borders, hover/focus states and specialized QR/recovery-code geometry. Removal drafts never appear already committed.\n- Separate footer feedback from actions; review never shows passwords. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.\n- Floe owns modal presence and the 200ms tab underline; retained exit never blanks the closing panel. [Interaction continuity](desktop-interaction-continuity.md) owns invalidation, drafts and stale responses.",
-          "char_count": 948
+          "body": "- The panel is at most 50rem wide and 44.375rem high, capped by viewport/titlebar. Only viewport resizing changes that cap; tabs, loading and disclosures never recenter it or move actions.\n- Use one Current connection card and consistent address reading edges. Text, diagnostics, paths and addresses remain selectable and wrap.\n- Browser scope, sign-in protection and certificate tasks use matching rows, meaningful icons and published outline controls. Preserve their borders, hover/focus states and specialized QR/recovery-code geometry. Removal drafts never appear already committed.\n- Separate footer feedback from actions; review never shows passwords. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.\n- SSH destination fields fill the same control column as adjacent fields in creation and settings. Loading and cached-host failure feedback occupies the field's trailing inset, preserving width, draft and focus; an idle indicator never consumes an external column or intercepts input clicks.\n- Access configuration steps place equal flexible connectors directly after each non-final label. Narrow layouts stack aligned step badges without horizontal connectors.\n- Floe owns modal presence and the 200ms tab underline; retained exit never blanks the closing panel. [Interaction continuity](desktop-interaction-continuity.md) owns invalidation, drafts and stale responses.",
+          "char_count": 1410
         },
         {
           "id": "boundaries",
@@ -18949,6 +18949,16 @@
           "id": "redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx:0:released dialog, retained panels and fixed scrolling/actions.",
           "source": "redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx",
           "description": "Released Dialog, retained panels and fixed scrolling/actions."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/SSHDestinationCombobox.tsx:0:shared destination field and published feedback indicator.",
+          "source": "redeven:desktop/src/welcome/SSHDestinationCombobox.tsx",
+          "description": "Shared destination field and published feedback indicator."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-welcome-form-alignment.mjs:0:browser geometry, localized stepper, ssh creation variants, feedback recovery and input focus checks.",
+          "source": "redeven:desktop/scripts/check-welcome-form-alignment.mjs",
+          "description": "Browser geometry, localized stepper, SSH creation variants, feedback recovery and input focus checks."
         }
       ],
       "snippet": "Desktop composes published Floe Dialog, Tabs, controls and presence into one Environment settings surface. Theme tokens own material and contrast; product CSS owns grouping and geometry. Every page preserves readable labels, reachable actio",
@@ -31646,5 +31656,5 @@
       ]
     }
   ],
-  "source_sha256": "5098948f5ea0d23281ef81ee7fbd24b709c6215975a45c633960db47308b56a6"
+  "source_sha256": "7494689b3a4c743830e635cdd3f6e008398d1af23ca56c9fd19b66f02c216acb"
 }

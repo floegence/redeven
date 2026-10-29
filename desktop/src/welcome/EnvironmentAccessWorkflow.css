@@ -16,8 +16,9 @@
 .access-flow-summary button { flex-shrink: 0; max-width: 100%; height: auto; min-height: 32px; white-space: nowrap; }
 .access-flow-icon { flex: none; width: 36px; height: 36px; padding: 9px; border-radius: 10px; background: var(--muted); color: var(--muted-foreground); }
 .access-flow-steps { display: flex; gap: .875rem; list-style: none; padding: 0; margin: 0; }
-.access-flow-steps li { display: flex; align-items: center; gap: .5rem; flex: 1; font-size: var(--floe-type-caption); line-height: 1.5; color: var(--muted-foreground); }
-.access-flow-steps li + li::before { content: ''; height: 1px; min-width: .5rem; flex: 1; background: var(--border); }
+.access-flow-steps li { display: flex; align-items: center; gap: .5rem; flex: 1 1 auto; font-size: var(--floe-type-caption); line-height: 1.5; color: var(--muted-foreground); }
+.access-flow-steps li:last-child { flex: 0 1 auto; }
+.access-flow-steps li:not(:last-child)::after { content: ''; height: 1px; min-width: .5rem; flex: 1; margin-inline-start: .375rem; background: var(--border); }
 .access-flow-steps li > span { display: grid; place-items: center; flex: 0 0 1.375rem; height: 1.375rem; border-radius: 50%; background: var(--muted); border: 1px solid var(--border); }
 .access-flow-steps li[aria-current=step] { color: var(--foreground); font-weight: 500; }
 .access-flow-steps li[aria-current=step] > span { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
@@ -86,6 +87,7 @@
   .access-flow-review > div { grid-template-columns: minmax(6rem,1fr) 2fr; gap: .5rem; }
   .access-flow-steps { gap: .375rem; }
   .access-flow-steps li { gap: .375rem; font-size: var(--floe-type-caption); }
+  .access-flow-steps li:not(:last-child)::after { margin-inline-start: 0; }
   .access-flow-notice { flex-wrap: wrap; }
   .access-flow-notice button { margin-inline-start: auto; }
   .access-flow-password-actions { flex-basis: 100%; }
@@ -216,5 +218,5 @@
 
 @container (max-width: 20rem) {
   .access-flow-steps { flex-direction: column; }
-  .access-flow-steps li + li::before { display: none; }
+  .access-flow-steps li:not(:last-child)::after { display: none; }
 }

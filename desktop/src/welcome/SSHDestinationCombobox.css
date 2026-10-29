@@ -1,0 +1,5 @@
+/* Keep the feedback inset above the shared settings field's padding recipe. */
+.ssh-destination-combobox [data-floe-control='input'][role='combobox'] { padding-right: 2.5rem; }
+@media (pointer: coarse) {
+  .ssh-destination-combobox [data-floe-control='input'][role='combobox'] { padding-right: 3rem; }
+}

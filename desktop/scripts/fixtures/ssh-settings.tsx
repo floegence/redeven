@@ -45,6 +45,8 @@ function Fixture() {
   const [errors, setErrors] = createSignal<Partial<Record<string, string>>>({});
   const [error, setError] = createSignal('');
   const [hostsError, setHostsError] = createSignal(query.has('fail-ssh-config'));
+  const [hostsLoading, setHostsLoading] = createSignal(false);
+  Object.assign(window, { sshSettingsFixture: { setHostsError, setHostsLoading } });
   const [saved, setSaved] = createSignal('');
   const i18n = createDesktopI18n(locale);
   return (
@@ -88,7 +90,7 @@ function Fixture() {
             source_path: '~/.ssh/config',
           },
         ]}
-        sshConfigHostsLoading={false}
+        sshConfigHostsLoading={hostsLoading()}
         sshConfigHostsLoadError={hostsError()}
         refreshSSHConfigHosts={() => setHostsError(false)}
         updateField={(name, value) => {

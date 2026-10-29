@@ -10,6 +10,7 @@ import {
   scrollDesktopListboxOptionIntoView,
 } from './DesktopAnchoredListbox';
 import { DesktopTooltip } from './DesktopTooltip';
+import './SSHDestinationCombobox.css';
 import {
   filterAndRankSSHConfigHosts,
   sshConfigHostEndpointLabel,
@@ -40,6 +41,7 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
   let optionsRef: HTMLDivElement | undefined;
 
   const filteredHosts = createMemo(() => filterAndRankSSHConfigHosts(props.hosts, props.value));
+  const showFeedback = () => props.hosts.length > 0 && props.loadError && !props.loading;
   const showEmptyState = createMemo(() => (
     !props.loading && (!props.loadError || props.hosts.length > 0)
   ));
@@ -111,7 +113,7 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
   return (
     <div
       ref={rootRef}
-      class="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1"
+      class="ssh-destination-combobox relative min-w-0"
       onFocusOut={(event) => {
         if (containsTarget(event.relatedTarget)) {
           return;
@@ -166,8 +168,8 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
         aria-describedby={props['aria-describedby']}
         aria-busy={props.loading ? 'true' : 'false'}
       />
-      <div class="relative flex items-center">
-        <FeedbackIndicator label={props.i18n.t('connectionDialog.sshConfigLoadFailed')} closeLabel={props.i18n.t('common.close')} restoreFocus={() => rootRef?.querySelector('input') ?? undefined} entries={props.hosts.length > 0 && props.loadError && !props.loading ? [{ id: 'ssh-config', severity: 'error', summary: props.i18n.t('connectionDialog.sshConfigLoadFailed'), actions: <Button size="sm" variant="outline" onClick={props.onRetry}>{props.i18n.t('common.retry')}</Button> }] : []} />
+      <div class="pointer-events-none absolute inset-y-0 right-0.5 flex items-center">
+        <FeedbackIndicator class={showFeedback() ? 'pointer-events-auto' : undefined} label={props.i18n.t('connectionDialog.sshConfigLoadFailed')} closeLabel={props.i18n.t('common.close')} restoreFocus={() => rootRef?.querySelector('input') ?? undefined} entries={showFeedback() ? [{ id: 'ssh-config', severity: 'error', summary: props.i18n.t('connectionDialog.sshConfigLoadFailed'), actions: <Button size="sm" variant="outline" onClick={props.onRetry}>{props.i18n.t('common.retry')}</Button> }] : []} />
         <Show when={props.loading}><Refresh class="pointer-events-none absolute inset-0 m-auto h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label={props.i18n.t('connectionDialog.sshConfigLoading')} /></Show>
       </div>
       <Show when={open()}>
