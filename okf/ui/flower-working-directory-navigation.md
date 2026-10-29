@@ -21,6 +21,8 @@ Right-click captures its row's thread/directory without loading, selecting or ac
 
 Conversation transcript and thread-list menus expose browsing, opening a terminal, and copying the working directory. They never expose directory Favorite or Unfavorite actions; thread pinning remains a separate conversation action. Directory favorites belong to filesystem surfaces and the directory picker.
 
+Directory actions retain real icons and aligned labels. Long localized labels wrap within the menu instead of introducing horizontal scrolling. Browser visual acceptance uses the published icons and floating layer.
+
 ## Destination behavior
 Activity Files reuses its singleton window/geometry; Terminal creates a new session. Workbench creates the matching widget. Request IDs, lazy loading, terminal admission and layout persistence retain ownership. Created-thread browsing includes ThreadID; menu/terminal actions require it.
 
@@ -39,4 +41,4 @@ Directory callbacks express product navigation, not file-action authorization or
 
 - `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` -   Shared accessible header and selector presentation with suffix-preserving names.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx` - Saved and unsaved paths retain navigation and thread pinning without directory-favorite actions.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx` - Saved and unsaved paths retain navigation and thread pinning without directory-favorite actions; English and Chinese layouts verify real icons, alignment and overflow in both themes.

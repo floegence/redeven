@@ -29,7 +29,7 @@ export function FlowerDirectoryMenuItems(props: Readonly<{
         onClick={() => { if (!reason()) props.onAction(action); }}
       >
         {icon}
-        <span>{label}</span>
+        <span class="flower-directory-menu-label">{label}</span>
         <Show when={reason()}><span id={reasonID} class="sr-only">{reason()}</span></Show>
       </button>
     );

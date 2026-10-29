@@ -128,6 +128,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => {
 
 vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>();
+  if (typeof window.matchMedia === 'function') return actual;
   const Icon = (props: any) => <span data-icon class={props.class} />;
   return {
     ...actual,

@@ -11687,6 +11687,12 @@ button.flower-attachment-preview-trigger:disabled {
   flex-shrink: 0;
 }
 
+.flower-directory-menu-label {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .flower-web-operation { min-width: 0; }
 .flower-web-operation a { cursor: pointer; color: var(--flower-content-link); text-decoration: none; }
 .flower-web-operation a:hover { color: var(--flower-content-link-hover); text-decoration: underline; }
