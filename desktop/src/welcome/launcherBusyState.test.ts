@@ -40,6 +40,7 @@ import {
 } from './launcherBusyState';
 import type { RuntimeProgressEnvironmentMatch } from './launcherBusyState';
 import { environmentProgressPrimaryPresentation } from './environmentProgressPrimaryPresentation';
+import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
 
 function runtimeID(value: `local:${string}` | `ssh:${string}`): DesktopRuntimeTargetID {
   return value as DesktopRuntimeTargetID;
@@ -550,6 +551,15 @@ describe('launcherBusyState', () => {
       isSubmitting: false,
       actionsDisabled: false,
     });
+  });
+
+  it('does not project batch health observation as an operation on every environment', () => {
+    const busy = busyStateForLauncherRequest({ kind: 'refresh_all_environment_runtimes' });
+    for (const environment of mixedEnvironmentFixture().snapshot.environments) {
+      expect(environmentOperationState(environment, [], busy)).toMatchObject({
+        isSubmitting: false, actionsDisabled: false,
+      });
+    }
   });
 
   it('keeps retained terminal Open progress inspectable without blocking the primary action', () => {

@@ -448,9 +448,7 @@ export function environmentOperationState(
           launcherProgressStartedAt(left) - launcherProgressStartedAt(right) ||
           String(left.operation_key ?? '').localeCompare(String(right.operation_key ?? '')),
       )[0] ?? null;
-  const busyRequestMatches =
-    busyStateMatchesEnvironment(busyState, environment.id, ENVIRONMENT_OPERATION_BUSY_ACTIONS) ||
-    busyStateMatchesAction(busyState, 'refresh_all_environment_runtimes');
+  const busyRequestMatches = busyStateMatchesEnvironment(busyState, environment.id, ENVIRONMENT_OPERATION_BUSY_ACTIONS);
   const isSubmitting = activeProgress === null && busyRequestMatches;
   return {
     activeProgress,

@@ -62,6 +62,61 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
 }
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
+it.each(['fresh', 'failed'] as const)('releases a %s environment refresh while slow probes and unrelated actions remain pending', async freshness => {
+  const { snapshot: initial } = mixedEnvironmentFixture({ linkState: 'unbound' });
+  const h = await mount(initial);
+  const i18n = createDesktopI18n('en-US');
+  const fast = initial.environments.find(entry => entry.kind === 'local_environment')!;
+  const slow = initial.environments.find(entry => entry.kind === 'ssh_environment')!;
+  const refreshAll = button(document, i18n.t('environmentCenter.refreshRuntimeStatuses'));
+  const refreshCard = (id: string) => {
+    const entry = initial.environments.find(entry => entry.id === id)!;
+    return button(document.querySelector(`[data-environment-group="${id}"]`)!,
+      i18n.t('environmentCenter.refreshRuntimeStatusForLabel', { label: entry.label }));
+  };
+  let finishBatch!: (value: DesktopLauncherActionResult) => void;
+  let finishCard!: (value: DesktopLauncherActionResult) => void;
+  h.performAction.mockImplementation(request => new Promise(resolve => {
+    if (request.kind === 'refresh_all_environment_runtimes') finishBatch = resolve;
+    else finishCard = resolve;
+  }));
+  refreshAll.click(); await settle();
+  const snapshot = { ...initial, environments: initial.environments.map(entry => ({
+    ...entry, runtime_health: { ...entry.runtime_health, freshness: 'checking' as const },
+  })) };
+  h.publish(snapshot); await settle();
+  expect(refreshAll.disabled).toBe(true);
+  expect(refreshAll.getAttribute('aria-busy')).toBe('true');
+  expect(refreshCard(fast.id).getAttribute('aria-busy')).toBe('true');
+  expect(refreshCard(slow.id).getAttribute('aria-busy')).toBe('true');
+
+  // Main has already published the fast result; the batch IPC is still waiting.
+  h.publish({ ...snapshot, environments: snapshot.environments.map(entry => entry.id === fast.id
+    ? { ...entry, runtime_health: { ...entry.runtime_health, freshness } } : entry) });
+  await settle();
+  expect(refreshCard(fast.id).disabled).toBe(false);
+  expect(refreshCard(fast.id).getAttribute('aria-busy')).not.toBe('true');
+  expect(refreshCard(slow.id).disabled).toBe(true);
+  expect(refreshCard(slow.id).getAttribute('aria-busy')).toBe('true');
+  const fastCard = document.querySelector(`[data-environment-group="${fast.id}"]`)!;
+  expect(button(fastCard, 'Open window').disabled).toBe(false);
+
+  // A new action on the completed card must not release the batch button.
+  refreshCard(fast.id).click(); await settle();
+  expect(h.performAction.mock.calls.at(-1)?.[0].kind).toBe('refresh_environment_runtime');
+  expect(refreshAll.disabled).toBe(true);
+  refreshAll.click();
+  expect(h.performAction.mock.calls.filter(([request]) => request.kind === 'refresh_all_environment_runtimes')).toHaveLength(1);
+  finishBatch({ ok: true, outcome: 'refreshed_all_environment_runtimes' }); await settle();
+  expect(refreshAll.disabled).toBe(false);
+  expect(refreshAll.getAttribute('aria-busy')).not.toBe('true');
+  expect(refreshCard(fast.id).disabled).toBe(true);
+  finishCard({ ok: true, outcome: 'refreshed_environment_runtime' });
+  h.publish(initial); await settle();
+  expect(refreshCard(fast.id).disabled).toBe(false);
+  expect(refreshCard(slow.id).disabled).toBe(false);
+});
+
 it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('keeps all %s enrollment steps and controls stable through the production background observer', async kind => {
   const f = await runtimeGatewayBackgroundProbeFixture(kind);
   const h = await mount(f.snapshot());

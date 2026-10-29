@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Environment card presentation
 tags: [desktop, environment, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-24"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -21,6 +21,8 @@ Settings, progress, recovery and titles use Environment, environment window or R
 ## Alignment
 Center visible content within the primary button, excluding the menu toggle. Idle text reserves no icon space. Submission shows a loader/shimmer, exposes busy state and blocks repeat clicks; completion restores centered text. Keep geometry fixed and meaningful icons grouped with labels.
 
+Batch health refresh owns only the header refresh control until the batch settles. Each card's refresh icon follows its own health observation or explicit refresh request, so completed and failed probes stop independently. Observation never turns every card's primary action into a pending submission. Starting a card action cannot release the batch refresh control, and batch completion cannot clear that card's pending action.
+
 ## Perspectives and platform
 Linked cards place Runtime, Redeven Cloud and paired Gateway tabs in the standalone badge slot. Cloud authorization or sync failure never disables Runtime actions. [Center navigation](desktop-welcome-navigation.md) transitions preserve card layout and do not restart on snapshots.
 
@@ -33,3 +35,5 @@ A bundled original-color OS mark beside the Runtime name reflects trusted platfo
 # Evidence
 
 - `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Ten locales, themes, text scaling, tabs, alignment, focus and busy states.
+- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Independent card refresh completion and overlapping batch/card requests.
+- `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Per-target success and failure snapshots before the slowest probe settles.

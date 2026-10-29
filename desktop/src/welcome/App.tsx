@@ -2578,6 +2578,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [connectionDialogFieldErrors, setConnectionDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
   const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
   const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
+  const [refreshingAllEnvironments, setRefreshingAllEnvironments] = createSignal(false);
 
   createEffect(() => {
     if (!updateBridge) {
@@ -4231,8 +4232,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const resultIsCurrent = () => opening ? settingsController.current(opening) : connectionDialogState() === openingDraft;
     const resultErrorTarget = () => (errorTarget === 'dialog' || errorTarget === 'settings') && !resultIsCurrent() ? 'connect' : errorTarget;
     resetMessages();
-    const actionState = busyStateForLauncherRequest(request);
-    setBusyState(actionState);
+    // Batch observation owns only the header refresh control, not card operations.
+    const actionState = request.kind === 'refresh_all_environment_runtimes' ? null : busyStateForLauncherRequest(request);
+    if (actionState) setBusyState(actionState);
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
@@ -4255,7 +4257,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       else setErrorMessage(resultErrorTarget(), getErrorMessage(error));
       return null;
     } finally {
-      setBusyState(current => current.request_started_at_unix_ms === actionState.request_started_at_unix_ms && current.action === actionState.action
+      setBusyState(current => actionState && current.request_started_at_unix_ms === actionState.request_started_at_unix_ms && current.action === actionState.action
         ? IDLE_LAUNCHER_BUSY_STATE : current);
     }
   }
@@ -4800,11 +4802,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function refreshAllEnvironmentRuntimes(): Promise<void> {
-    const result = await performLauncherAction({
-      kind: 'refresh_all_environment_runtimes',
-    });
-    if (result?.outcome === 'refreshed_all_environment_runtimes') {
-      showActionToast(i18n().t('toast.runtimeStatusesRefreshed'), 'info');
+    if (refreshingAllEnvironments()) return;
+    setRefreshingAllEnvironments(true);
+    try {
+      const result = await performLauncherAction({
+        kind: 'refresh_all_environment_runtimes',
+      });
+      if (result?.outcome === 'refreshed_all_environment_runtimes') {
+        showActionToast(i18n().t('toast.runtimeStatusesRefreshed'), 'info');
+      }
+    } finally {
+      setRefreshingAllEnvironments(false);
     }
   }
 
@@ -6622,6 +6630,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               closeEmbeddedGatewayService={() => setEmbeddedGatewayService('')}
               openGatewayMembers={openGatewayMembers}
               openCreateControlPlaneDialog={openCreateControlPlaneDialog}
+              refreshingAllEnvironments={refreshingAllEnvironments()}
               refreshAllEnvironmentRuntimes={refreshAllEnvironmentRuntimes}
               refreshWSLDiscovery={refreshWSLDiscovery}
               registerWSLDistribution={registerWSLDistribution}
@@ -7568,6 +7577,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   embeddedGatewayService: string;
   closeEmbeddedGatewayService: () => void;
   openCreateControlPlaneDialog: (message?: string) => void;
+  refreshingAllEnvironments: boolean;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
   refreshWSLDiscovery: () => Promise<DesktopWSLDiscoverySnapshot>;
   registerWSLDistribution: (request: DesktopWSLRegisterRequest) => Promise<DesktopWSLActionResponse>;
@@ -7865,12 +7875,13 @@ function ConnectEnvironmentSurface(props: Readonly<{
                         variant="outline"
                         class="px-2.5"
                         aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatuses')}
-                        disabled={busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')}
+                        disabled={props.refreshingAllEnvironments}
+                        aria-busy={props.refreshingAllEnvironments || undefined}
                         onClick={() => {
                           void props.refreshAllEnvironmentRuntimes();
                         }}
                       >
-                        <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
+                        <Refresh class={cn('h-3.5 w-3.5', props.refreshingAllEnvironments && 'animate-spin')} aria-hidden="true" />
                       </Button>
                     </DesktopTooltip>
                   </Show>

@@ -6,6 +6,39 @@ import { DesktopWelcomeRuntimeHealthStore, desktopWelcomeOnlineRuntimeHealth, ty
 import { buildLocalEnvironmentDesktopTarget, buildSSHDesktopTarget, buildWSLDesktopTarget, type DesktopSessionSummary } from './desktopTarget';
 
 describe('Welcome health refresh relationship continuity', () => {
+  it('publishes completed and failed targets before the slowest batch probe settles', async () => {
+    const { inputs } = mixedEnvironmentFixture({ linkState: 'unbound' });
+    const snapshots: ReturnType<typeof buildDesktopWelcomeSnapshot>[] = [];
+    const store = new DesktopWelcomeRuntimeHealthStore(() => {
+      snapshots.push(buildDesktopWelcomeSnapshot({ ...inputs, ...store.snapshot() }));
+    });
+    const controls: { resolve: (result: DesktopWelcomeRuntimeHealthProbeResult) => void; reject: (error: Error) => void }[] = [];
+    const targets: DesktopWelcomeRuntimeHealthTarget[] = Object.values(inputs.managedRuntimePresenceByTargetID).map(presence => ({
+      key: presence.target_id, environment_id: presence.environment_id,
+      slot: presence.kind === 'local_environment' ? 'local_environment' : 'runtime_target',
+      auto_refresh_enabled: true,
+      checking_health: { status: 'offline', checked_at_unix_ms: 0, source: 'local_runtime_probe' },
+      probe: () => new Promise((resolve, reject) => { controls.push({ resolve, reject }); }),
+    }));
+    let completed = false;
+    const batch = store.refresh(targets, { force: true, mode: 'manual' }).then(() => { completed = true; });
+    const freshness = () => targets.map(target => snapshots.at(-1)!.environments
+      .find(entry => entry.id === target.environment_id)!.runtime_health.freshness);
+    expect(freshness()).toEqual(['checking', 'checking', 'checking']);
+    controls[0].resolve({ health: { status: 'online', checked_at_unix_ms: Date.now(), source: 'local_runtime_probe' } });
+    await store.refresh([targets[0]], { force: true });
+    expect(completed).toBe(false);
+    expect(freshness()).toEqual(['fresh', 'checking', 'checking']);
+    controls[1].reject(new Error('SSH authentication required'));
+    await store.refresh([targets[1]], { force: true });
+    expect(completed).toBe(false);
+    expect(freshness()).toEqual(['fresh', 'failed', 'checking']);
+    controls[2].resolve({ health: { status: 'offline', checked_at_unix_ms: Date.now(), source: 'ssh_runtime_probe' } });
+    await batch;
+    expect(completed).toBe(true);
+    expect(freshness()).toEqual(['fresh', 'failed', 'fresh']);
+  });
+
   it.each((['local_environment', 'ssh_environment', 'wsl_environment'] as const).flatMap(linkKind =>
     [false, true].map(open => ({ linkKind, open }))))(
     'keeps the $linkKind pair during refresh with an open window: $open', async ({ linkKind, open }) => {

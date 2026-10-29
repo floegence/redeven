@@ -878,6 +878,8 @@ function EnvironmentOwnerSurface(
   const refreshLabel = createMemo(() => props.environment.kind === 'provider_environment'
     ? props.i18n.t('environmentCenter.refreshCloudStatus')
     : props.i18n.t('environmentCenter.refreshRuntimeStatus'));
+  const refreshing = createMemo(() => props.environment.runtime_health.freshness === 'checking'
+    || busyStateMatchesEnvironment(props.busyState, props.environment.id, ['refresh_environment_runtime']));
   const environmentActionPresentation = createMemo(() => {
     const presentation = environmentAccessPresentation(props.environment, props.presentation.actions(environmentActionModel().action_presentation), props.i18n);
     if (props.gatewayPerspective && props.environment.kind !== 'gateway_environment') return {...presentation,primary_action:{...presentation.primary_action,enabled:false,disabled_reason:props.i18n.t('gatewayConnections.unavailable')},menu_actions:[]};
@@ -989,11 +991,12 @@ function EnvironmentOwnerSurface(
                   label: ownerLabel(),
                 })}
                 disabled={operationState().actionsDisabled}
+                loading={refreshing()}
                 onClick={() => {
                   void props.refreshEnvironmentRuntime(props.environment, 'connect');
                 }}
               >
-                <Refresh class="h-3.5 w-3.5" />
+                <Refresh class={cn('h-3.5 w-3.5', refreshing() && 'animate-spin')} />
               </ConsoleActionIconButton>
             </span>
           </DesktopTooltip>

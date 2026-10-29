@@ -18445,7 +18445,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-24",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "accessibility",
           "desktop",
@@ -18455,15 +18455,15 @@
         "title": "Environment card presentation",
         "type": "Interaction Contract"
       },
-      "body_length": 1969,
+      "body_length": 2678,
       "summary": "Environment cards preserve geometry across perspectives, snapshots, narrow layouts and long translations. Each perspective selects an explicit route without granting authority or falling back. Snapshots retain nodes, selection and focus; owner removal invalidates submission but retains open sessions.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "[Interaction continuity](desktop-interaction-continuity.md) owns authority, drafts, visibility and stale completions. Controls stay single-line.\n\n## Window actions\nAll perspectives use **Open window** for unopened environments and **Show window** to focus an existing session. Labels preserve readiness, authority, lifecycle and session ownership.\n\nSettings, progress, recovery and titles use Environment, environment window or Redeven. Env App is internal, never a label or brand. All shipped catalogs explicitly translate this copy.\n\n## Alignment\nCenter visible content within the primary button, excluding the menu toggle. Idle text reserves no icon space. Submission shows a loader/shimmer, exposes busy state and blocks repeat clicks; completion restores centered text. Keep geometry fixed and meaningful icons grouped with labels.\n\n## Perspectives and platform\nLinked cards place Runtime, Redeven Cloud and paired Gateway tabs in the standalone badge slot. Cloud authorization or sync failure never disables Runtime actions. [Center navigation](desktop-welcome-navigation.md) transitions preserve card layout and do not restart on snapshots.\n\nA bundled original-color OS mark beside the Runtime name reflects trusted platform data. Unknown platforms use a device mark; recognized Linux distributions use brand marks, otherwise Tux. Keep the slot fixed.",
-          "char_count": 1358
+          "body": "[Interaction continuity](desktop-interaction-continuity.md) owns authority, drafts, visibility and stale completions. Controls stay single-line.\n\n## Window actions\nAll perspectives use **Open window** for unopened environments and **Show window** to focus an existing session. Labels preserve readiness, authority, lifecycle and session ownership.\n\nSettings, progress, recovery and titles use Environment, environment window or Redeven. Env App is internal, never a label or brand. All shipped catalogs explicitly translate this copy.\n\n## Alignment\nCenter visible content within the primary button, excluding the menu toggle. Idle text reserves no icon space. Submission shows a loader/shimmer, exposes busy state and blocks repeat clicks; completion restores centered text. Keep geometry fixed and meaningful icons grouped with labels.\n\nBatch health refresh owns only the header refresh control until the batch settles. Each card's refresh icon follows its own health observation or explicit refresh request, so completed and failed probes stop independently. Observation never turns every card's primary action into a pending submission. Starting a card action cannot release the batch refresh control, and batch completion cannot clear that card's pending action.\n\n## Perspectives and platform\nLinked cards place Runtime, Redeven Cloud and paired Gateway tabs in the standalone badge slot. Cloud authorization or sync failure never disables Runtime actions. [Center navigation](desktop-welcome-navigation.md) transitions preserve card layout and do not restart on snapshots.\n\nA bundled original-color OS mark beside the Runtime name reflects trusted platform data. Unknown platforms use a device mark; recognized Linux distributions use brand marks, otherwise Tux. Keep the slot fixed.",
+          "char_count": 1788
         },
         {
           "id": "boundaries",
@@ -18478,6 +18478,16 @@
           "id": "redeven:desktop/scripts/check-environment-card-tabs.mjs:0:ten locales, themes, text scaling, tabs, alignment, focus and busy states.",
           "source": "redeven:desktop/scripts/check-environment-card-tabs.mjs",
           "description": "Ten locales, themes, text scaling, tabs, alignment, focus and busy states."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx:0:independent card refresh completion and overlapping batch/card requests.",
+          "source": "redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx",
+          "description": "Independent card refresh completion and overlapping batch/card requests."
+        },
+        {
+          "id": "redeven:desktop/src/main/desktopWelcomeRefresh.test.ts:0:per-target success and failure snapshots before the slowest probe settles.",
+          "source": "redeven:desktop/src/main/desktopWelcomeRefresh.test.ts",
+          "description": "Per-target success and failure snapshots before the slowest probe settles."
         }
       ],
       "snippet": "Environment cards preserve geometry across perspectives, snapshots, narrow layouts and long translations. Each perspective selects an explicit route without granting authority or falling back. Snapshots retain nodes, selection and focus; ow",
@@ -31588,5 +31598,5 @@
       ]
     }
   ],
-  "source_sha256": "8ea190258c77d9ed8e3c46135a284bafa7d2a0b1e3c80f986fc9baff45e969cf"
+  "source_sha256": "5c8537a46873b36074440d31521fec24d69ec0a0c82d33bbc79cf1b5592c5ffe"
 }
