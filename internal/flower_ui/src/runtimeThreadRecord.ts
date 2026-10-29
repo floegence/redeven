@@ -1,12 +1,12 @@
 import { batch, createSignal } from 'solid-js';
 import { createStore, type SetStoreFunction } from 'solid-js/store';
-import type { FlowerChatMessage, FlowerHistoryBodyChunk, FlowerHistoryWindow, FlowerRuntimeTurn, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import type { FlowerChatMessage, FlowerHistoryPage, FlowerHistoryBodyChunk, FlowerHistoryWindow, FlowerRuntimeTurn, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { FlowerLiveSyncError } from './flowerLiveWire';
 import { readPresentationValue, retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 import { retainThinkingTiming } from './thinkingTiming';
 import { createMessageTextSource } from './messageTextSource';
-import { historyItemConfirmsPrefix, historyWindowForItems } from './historyWindowRetention';
+import { historyItemConfirmsPrefix, historyItemNeedsObservation, historyWindowForItems } from './historyWindowRetention';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
 
 type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean; displayText?: string };
@@ -101,7 +101,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   let order = [...items.keys()];
   let priorReading = previous?.readingState();
   const priorWindow = priorReading?.window;
-  const priorTurns = priorReading?.turns ?? [];
+  const priorTurns = new Map((priorReading?.turns ?? []).map(turn => [turn.turn_id, turn]));
   const archive = new Map<string, ItemRecord>();
   const sameLeaf = Boolean(current.window?.leaf_id && current.window.leaf_id === priorReading?.window?.leaf_id);
   // A matching sealed canonical item proves its preceding active-path prefix.
@@ -112,6 +112,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       return incoming && historyItemConfirmsPrefix(incoming, record.item) ? [incoming.ordinal] : [];
     })) : -1;
   const retainedPrefix = sameLeaf || sharedPrefix >= 0;
+  if (!retainedPrefix) priorTurns.clear();
   const sharedCanonicalOrdinal = current.items?.find(item => item.ordinal === sharedPrefix)?.canonical_ordinal ?? -1;
   if (retainedPrefix) {
     for (const record of priorReading!.records) {
@@ -147,7 +148,12 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       timeline_decorations: lastDecorations,
     };
   };
-  const readingRecords = () => [...archive.values(), ...items.values()].sort((a, b) => a.item.ordinal - b.item.ordinal);
+  let readingOrder: string[] | undefined;
+  const readingRecords = () => {
+    readingOrder ??= [...new Set([...archive.keys(), ...items.keys()])].sort((a, b) =>
+      (items.get(a) ?? archive.get(a))!.item.ordinal - (items.get(b) ?? archive.get(b))!.item.ordinal);
+    return readingOrder.map(id => (items.get(id) ?? archive.get(id))!);
+  };
   const readingWindow = (window: FlowerHistoryWindow | undefined) => {
     if (!window || !archive.size) return window;
     const records = readingRecords();
@@ -156,7 +162,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   const mergeTurns = (turns: readonly FlowerRuntimeTurn[] | undefined) => {
     if (!archive.size) return turns;
     const ids = new Set(readingRecords().map(record => record.item.turn_id));
-    const byID = new Map((retainedPrefix ? priorTurns : []).filter(turn => ids.has(turn.turn_id)).map(turn => [turn.turn_id, turn]));
+    const byID = new Map([...priorTurns.values()].filter(turn => ids.has(turn.turn_id)).map(turn => [turn.turn_id, turn]));
     const positions = new Map(readingRecords().map(record => [record.item.id, record.item.ordinal]));
     const mergeMembership = (previous: readonly string[], incoming: readonly string[]) =>
       [...new Set([...previous.filter(id => archive.has(id)), ...incoming])].filter(id => positions.has(id))
@@ -231,6 +237,49 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     readingState() { return { window: thread.history_window, records: readingRecords(), turns: thread.turns ?? [],
       context_compactions: thread.context_compactions, timeline_decorations: thread.timeline_decorations }; },
     readingItemIDs(): readonly string[] { return readingRecords().map(record => record.item.id); },
+    acceptPage(page: FlowerHistoryPage, anchor: FlowerRuntimeCurrentItem) {
+      // The request belongs to this document and its exact canonical anchor.
+      // New live facts always win; a page cannot replace lifecycle or bodies.
+      if ((items.get(anchor.id) ?? archive.get(anchor.id))?.item !== anchor) return false;
+      if (page.thread_id !== threadID || !page.leaf_id || page.items.length > 150
+        || page.first_item_id !== page.items[0]?.id || page.last_item_id !== page.items.at(-1)?.id
+        || new Set(page.items.map(item => item.id)).size !== page.items.length
+        || page.items.some((item, i) => !item.id || item.live || !Number.isSafeInteger(item.ordinal) || item.ordinal < 0
+          || i > 0 && item.ordinal <= page.items[i - 1].ordinal)) invalid('invalid history page');
+      for (const item of page.items) {
+        const known = items.get(item.id) ?? archive.get(item.id);
+        if (known && (known.item.ordinal !== item.ordinal || known.item.kind !== item.kind
+          || known.item.turn_id !== item.turn_id || known.item.run_id !== item.run_id
+          || known.item.canonical_ordinal !== item.canonical_ordinal)) invalid('history page identity changed');
+      }
+      const added = page.items.filter(item => !items.has(item.id) && !archive.has(item.id));
+      if (added.some(item => historyItemNeedsObservation(item, page.turns))) invalid('unobserved mutable history item');
+      const projected = runtimeMessages(thread, { ...components, tool_call_previews: [], items: added });
+      batch(() => {
+        if (added.length) readingOrder = undefined;
+        for (const item of added) archive.set(item.id, { item, bytes: utf8.encode(item.text ?? '').length });
+        for (const message of projected) makeMessage(message);
+        for (const turn of page.turns ?? []) {
+          const prior = priorTurns.get(turn.turn_id);
+          priorTurns.set(turn.turn_id, prior ? { ...turn,
+            intermediate_item_ids: [...new Set([...(prior.intermediate_item_ids ?? []), ...(turn.intermediate_item_ids ?? [])])],
+            final_item_ids: [...new Set([...(prior.run_id === turn.run_id ? prior.final_item_ids : []), ...turn.final_item_ids])] } : turn);
+        }
+        retainedWindows.push({ leaf_id: page.leaf_id, first_item_id: page.first_item_id, last_item_id: page.last_item_id, has_before: page.has_before, has_after: page.has_after });
+        // Keep only the two outer coverage proofs, not one object per page.
+        if (retainedWindows.length > 2) {
+          const records = readingRecords();
+          const first = records[0]?.item.id, last = records.at(-1)?.item.id;
+          const before = retainedWindows.find(value => value.first_item_id === first);
+          const after = retainedWindows.find(value => value.last_item_id === last);
+          retainedWindows.splice(0, retainedWindows.length, ...[before, after].filter((value): value is FlowerHistoryWindow => Boolean(value)));
+        }
+        projectedMessages = withReadingMessages(projectedMessages);
+        setThread({ messages: projectedMessages, turns: mergeTurns(components.turns ?? []), history_window: readingWindow(components.window) });
+        projectedMessages = thread.messages;
+      });
+      return true;
+    },
     hydrate(expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem) {
       const before = items.get(expected.id) ?? archive.get(expected.id);
       const source = before?.item.body ?? before?.preview?.body;
@@ -451,6 +500,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       structure ||= (update.items ?? []).some(change => change.kind === 'replace') || Boolean(previews) || [...replacements].some(([id, message]) => Boolean(messages.has(id)) !== Boolean(message));
       let result!: FlowerThreadSnapshot;
       batch(() => {
+        if (structure || update.item_order) readingOrder = undefined;
         for (const [id, record] of staged) { if (record) items.set(id, record); else items.delete(id); }
         if (previewGrowth) for (const call of nextPreviews) {
           const message = messages.get('tool:' + call.turn_id + ':' + call.call_id);

@@ -119,6 +119,7 @@ export type FlowerRuntimeTransport = Readonly<{
   listThreads(input?: { cursor?: string; limit?: number; signal?: AbortSignal }): Promise<ListThreadsResponse>;
   loadThread(threadID: string, signal: AbortSignal): Promise<unknown>;
   releaseHistory?(threadID: string, input: { observer_id: string; reading_revision: number; subagent?: boolean }): Promise<void>;
+  loadHistoryPage?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryPageRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerHistoryPage>;
   loadHistory?(threadID: string, input: FlowerHistoryRequest, signal: AbortSignal): Promise<unknown>;
   loadActivityValue?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityValueRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityValue>;
   loadActivityStructure?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityStructureRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityStructurePage>;
@@ -499,6 +500,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     },
     loadThread,
     releaseHistory: options.transport.releaseHistory,
+    loadHistoryPage: options.transport.loadHistoryPage ? async (threadID, input, signal) =>
+      historyTransportRead(() => options.transport.loadHistoryPage!(threadID, input, signal), signal) : undefined,
     loadHistory: options.transport.loadHistory ? async (threadID, input, signal) => {
       signal.throwIfAborted();
       const raw = await historyTransportRead(() => options.transport.loadHistory!(threadID, input, signal), signal);

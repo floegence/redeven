@@ -32,7 +32,7 @@ Disclosure is ephemeral UI state. Final content and dialogue stay mounted and or
 
 # Evidence
 
-Browser regressions cover reserved running headers, frame-by-frame real-tail alignment and answer visibility, large and repeated folds, narrow viewports, reduced motion, subsequent growth, explicit navigation, short-history pagination, focus, selection and nested choices in main/child views. Continuation cases retain old-run prose and Goal; history prepends retain header focus and disclosure state. Existing isolated historical-copy qualification covers one opening read, no idle traversal, and complete statistics after explicit paging.
+Browser regressions cover reserved running headers, frame-by-frame real-tail alignment and answer visibility, large and repeated folds, narrow viewports, reduced motion, subsequent growth, explicit navigation, short-history pagination, focus, selection and nested choices in main/child views. Continuation cases retain old-run prose and Goal; history prepends retain header focus and disclosure state. Existing isolated historical-copy qualification covers one opening read, no idle traversal, and complete statistics after explicit sequence expansion and progressive paging.
 
 - `redeven:go.mod` - Published Floret dependency.
 

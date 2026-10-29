@@ -33,6 +33,12 @@ export type FlowerToolSequence = Readonly<{
   nodeKeys: readonly string[];
   entryKeys: readonly string[];
   countsComplete: boolean;
+  firstCanonicalOrdinal?: number;
+  lastCanonicalOrdinal?: number;
+  firstMessageID?: string;
+  lastMessageID?: string;
+  missingBefore: boolean;
+  missingAfter: boolean;
   toolCount: number;
   latestToolLabel?: string;
   failedCount: number;
@@ -166,7 +172,7 @@ export function projectFlowerToolSequences(
     else tokens.push(null);
   }
 
-  const runs: { nodes: SequenceNode[]; followingContentKeys: string[]; countsComplete: boolean }[] = [];
+  const runs: { nodes: SequenceNode[]; followingContentKeys: string[]; countsComplete: boolean; missingBefore: boolean; missingAfter: boolean }[] = [];
   let followingRun: typeof runs[number] | undefined;
   const headerKeys = new Set<string>();
   let pending: SequenceNode[] = [];
@@ -177,7 +183,7 @@ export function projectFlowerToolSequences(
     if (pending.length) headerKeys.add(pending[0].key);
     followingRun = undefined;
     if (pending.some(node => node.kind !== 'thinking')) {
-      const run = { nodes: pending, countsComplete: startComplete && endComplete,
+      const run = { nodes: pending, countsComplete: startComplete && endComplete, missingBefore: !startComplete, missingAfter: !endComplete,
         followingContentKeys: outputScope && pending[0].scope === outputScope && contentKey ? [contentKey] : [] };
       runs.push(run);
       if (run.followingContentKeys.length) followingRun = run;
@@ -206,7 +212,7 @@ export function projectFlowerToolSequences(
   const continuingEntries = new Set<string>();
   const settledTurns = new Set([...turnsByID.values()].filter((turn) => turn.outcome && turn.ended_at)
     .map((turn) => turn.turn_id));
-  runs.forEach(({ nodes, followingContentKeys, countsComplete }, index) => {
+  runs.forEach(({ nodes, followingContentKeys, countsComplete, missingBefore, missingAfter }, index) => {
     if (nodes.length < 2) return;
     const tools = nodes.filter(node => node.kind === 'tool');
     const thinking = nodes.filter(node => node.kind === 'thinking');
@@ -224,9 +230,15 @@ export function projectFlowerToolSequences(
     const settled = Boolean(nodes[0].turnID && settledTurns.has(nodes[0].turnID));
     // Keep disclosure identity when pagination prepends the missing prefix.
     const retainedKey = nodes.find(node => previous?.groups.has(node.key) && !groups.has(node.key))?.key;
+    const messageEntries = entries.slice(firstEntry, lastEntry + 1).filter((entry): entry is MessageEntry => entry.type === 'message');
     let group: FlowerToolSequence = {
       key: retainedKey ?? nodes[0].key,
       countsComplete: countsComplete && !missingEvents,
+      missingBefore, missingAfter,
+      firstCanonicalOrdinal: ordinal(entries[firstEntry]),
+      lastCanonicalOrdinal: ordinal(entries[lastEntry]),
+      firstMessageID: messageEntries[0]?.message.id,
+      lastMessageID: messageEntries.at(-1)?.message.id,
       nodeKeys: nodes.map(node => node.key),
       entryKeys,
       toolCount: tools.length,

@@ -585,6 +585,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       loadThread: (threadID, signal) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET', signal }),
       releaseHistory: async (threadID, input) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-release', { method: 'POST', body: JSON.stringify(input) }); },
       loadHistory: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', { method: 'POST', body: JSON.stringify(input), signal }),
+      loadHistoryPage: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-page', { method: 'POST', body: JSON.stringify(input), signal }),
       loadActivityValue: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-value', { method: 'POST', body: JSON.stringify(input), signal }),
       loadActivityStructure: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-structure', { method: 'POST', body: JSON.stringify(input), signal }),
       loadActivityField: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-field', { method: 'POST', body: JSON.stringify(input), signal }),

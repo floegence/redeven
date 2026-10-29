@@ -5330,7 +5330,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: value})
 			return
-		case (action == "history" || action == "history-item" || action == "history-body") && r.Method == http.MethodPost && len(parts) == 2:
+		case (action == "history" || action == "history-page" || action == "history-item" || action == "history-body") && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok || !g.requireAIService(w, aiSvc) {
 				return
@@ -5341,6 +5341,21 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, requestLimit))
 			dec.DisallowUnknownFields()
+			if action == "history-page" {
+				var input flruntime.ThreadItemPageInput
+				if err := dec.Decode(&input); err != nil || input.ThreadID != "" || dec.Decode(&struct{}{}) != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history page"})
+					return
+				}
+				page, err := aiSvc.GetFlowerHistoryPage(r.Context(), meta, threadID, input)
+				if err != nil {
+					writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: page})
+				return
+			}
+
 			if action == "history-body" {
 				var input ai.FlowerHistoryBodyRequest
 				if err := dec.Decode(&input); err != nil || input.ItemID == "" || dec.Decode(&struct{}{}) != io.EOF {

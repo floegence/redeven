@@ -1,4 +1,5 @@
 import { createEffect, createSignal, onCleanup, untrack, type Accessor } from 'solid-js';
+import type { FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerToolSequenceProjection } from './flowerToolSequences';
 
 export type FlowerToolSequenceElement = Readonly<{
@@ -7,15 +8,17 @@ export type FlowerToolSequenceElement = Readonly<{
   body: HTMLDivElement;
   prepareArrival: () => number;
   prepareDestination: () => boolean;
+  restore: (anchor: HTMLElement | undefined, top: number, offset: number) => void;
 }>;
 
 // Rendering remains with each canonical row's Solid owner. Only placement is
 // shared, so a growing sequence gains one viewport without recreating details.
-export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSequenceProjection>) {
+export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSequenceProjection>, outerScroll: FlowerScrollTailController) {
   const elements = new Map<string, FlowerToolSequenceElement>();
   const [revision, setRevision] = createSignal(0);
   let disposed = false;
   let scheduled = false;
+  let owners = new Map<string, FlowerToolSequenceElement>();
   const move = (parent: HTMLElement, node: HTMLElement, before: ChildNode | null) => {
     if (node.parentNode === parent && node.nextSibling === before) return;
     // Native movement retains embedded content and focus, but selection ranges
@@ -25,6 +28,21 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
     if (target.moveBefore && parent.isConnected && node.isConnected) target.moveBefore(node, before);
     else parent.insertBefore(node, before);
     if (focus && document.activeElement !== focus) focus.focus({ preventScroll: true });
+  };
+  const reading = new Map<string, { body: HTMLElement; bodyTop: number; anchor?: HTMLElement; top: number; offset: number }>();
+  const captureReading = (current: FlowerToolSequenceProjection) => {
+    for (const [key, owner] of owners) {
+      const next = current.groups.get(key);
+      if (!next || next.nodeKeys[0] === owner.node.dataset.flowerToolRowIdentity || reading.has(key)) continue;
+      const bounds = owner.body.getBoundingClientRect();
+      if (!bounds.height) continue;
+      const focus = document.activeElement instanceof HTMLElement && owner.body.contains(document.activeElement)
+        ? document.activeElement.closest<HTMLElement>('[data-flower-activity-item-id], [data-flower-message-id]') : undefined;
+      const visible = document.elementFromPoint(Math.max(0, bounds.left + bounds.width / 2), Math.max(0, bounds.top + Math.min(12, bounds.height / 2)))
+        ?.closest<HTMLElement>('[data-flower-activity-item-id], [data-flower-message-id]');
+      const anchor = focus ?? (visible && owner.body.contains(visible) ? visible : undefined);
+      reading.set(key, { body: owner.body, bodyTop: bounds.top, anchor, top: anchor?.getBoundingClientRect().top ?? 0, offset: owner.body.scrollTop });
+    }
   };
   const place = () => {
     scheduled = false;
@@ -53,6 +71,17 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
         next = element.node;
       }
     }
+    owners = new Map([...current.groups].flatMap(([key, group]) => {
+      const first = elements.get(group.nodeKeys[0]);
+      if (!first) return [];
+      const saved = reading.get(key);
+      if (saved) {
+        outerScroll.transferReadingAnchor(saved.body, first.body, saved.bodyTop);
+        first.restore(saved.anchor, saved.top, saved.offset);
+        reading.delete(key);
+      }
+      return [[key, first] as const];
+    }));
     const changed = ranges.length && selection && (selection.rangeCount !== ranges.length || ranges.some((saved, index) => {
       const range = selection.getRangeAt(index);
       return range.startContainer !== saved.start || range.startOffset !== saved.startOffset
@@ -75,6 +104,7 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
   });
   onCleanup(() => { disposed = true; elements.clear(); });
   return {
+    captureReading,
     prepareDestination: () => {
       if (scheduled) return false;
       const latest = [...untrack(projection).groups.values()].at(-1);

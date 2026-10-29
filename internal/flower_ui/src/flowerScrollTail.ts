@@ -14,6 +14,7 @@ export type FlowerScrollTailController = Readonly<{
   preserveLayoutAnchor: (title: HTMLElement) => void;
   beginAutomaticFold: (moving?: () => boolean) => void;
   restoreReadingAnchor: (title: HTMLElement, screenTop: number) => void;
+  transferReadingAnchor: (previous: HTMLElement, next: HTMLElement, screenTop: number) => void;
   showLatest: Accessor<boolean>;
   latestPointerBlocked: Accessor<boolean>;
   onPointerDown: (event: PointerEvent) => void;
@@ -737,6 +738,13 @@ export function createFlowerScrollTailController(
       if (!node?.contains(title) || followingLatest()) return;
       anchor = { title, top: screenTop, activated: true, finished: true };
       flushLayout();
+    },
+    transferReadingAnchor: (previous, next, screenTop) => {
+      if (!node?.contains(next) || followingLatest() || !anchor || anchor.title !== previous) return;
+      // Prepending can move the shared viewport to an earlier canonical row.
+      // The former viewport remains connected, but no longer owns scrolling.
+      anchor = { title: next, top: screenTop, activated: true, finished: true, reading: true };
+      flushLayout(false);
     },
     showLatest: () => gesture()?.latestVisible ?? latestVisible(),
     latestPointerBlocked: () => Boolean(gesture() && !gesture()!.latest),

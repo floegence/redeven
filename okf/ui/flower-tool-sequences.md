@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower consecutive tool sequences
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -34,6 +34,28 @@ Title arrivals finish first. When a terminal snapshot closes the enclosing turn,
 Closed groups mount only shells/summary. First expansion mounts details; subsequent folding makes retained bodies inert. New manually closed members wait; whole-turn closure retains inspected bodies after motion. Existing owners lend DOM to the first-node viewport and restore on disposal, preserving focus/selection/nested state. Growth preserves identity; replace projection only for changed membership/status/disclosure/order.
 
 Thinking hydration observes its displayed movable node. Sealed pending thinking reads only when explicitly expanded and visible through nested clips; live thinking keeps its policy. The shared two-slot queue prioritizes interactive demand, cancelling obsolete folded/offscreen/navigation reads. Reuse completed text; loading represents real demand. Unopened tools never mount/read bodies.
+
+## Progressive completion
+
+An explicit sequence expansion, or an explicit enclosing-turn expansion that
+reveals an open sequence, owns completion of its missing record boundaries.
+Automatically open live groups do not trigger historical traversal. Loaded rows
+remain usable while pages arrive; canonical first-node changes transfer the
+inner and outer reading anchors, focus, selection and nested detail owners before paint.
+An explicit reopen retains the established latest-tools destination behavior.
+
+The runtime document accepts immutable page records incrementally without
+overwriting newer observed facts or expanded bodies. Newly encountered mutable
+items enter the existing bounded tail observer through a retained-ID handoff;
+no second subscriber or archive polling is introduced.
+Thread, connection, navigation and document identity fence every response.
+Collapse stops demand; an abort-ignoring transport retains its physical slot until
+settlement. Forward completion samples its finite tail once and never chases
+continued output. Exhausted empty boundaries finish normally; nonadvancing pages
+fail locally without automatic loops. A 15-second deadline exposes Retry while
+an abort-ignoring request retains its physical slot.
+Parent receipts inside the requested canonical interval reuse the event reader;
+opening a group does not acquire hidden terminal, thinking or report bodies.
 
 ## Geometry and input
 

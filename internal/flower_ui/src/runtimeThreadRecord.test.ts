@@ -21,6 +21,31 @@ function append(base = 1, text = '!', offset = 10): FlowerRuntimeUpdate {
 }
 
 describe('runtime item records', () => {
+  it('accepts canonical pages without replacing live facts or scanning archives on text append', () => {
+    const { initial, record } = fixture();
+    const anchor = record.item('one')!;
+    const archived = { id: 'old', kind: 'user' as const, ordinal: 0, canonical_ordinal: 1, text: 'history', turn_id: 'prior', run_id: 'prior' };
+    expect(record.acceptPage({ thread_id: 'thread', leaf_id: 'leaf', items: [archived], first_item_id: 'old', last_item_id: 'old', has_before: false, has_after: true }, anchor)).toBe(true);
+    const live = record.initializeThread().messages.at(-1);
+    expect(record.version).toBe(1);
+    expect(record.initializeThread().status).toBe('running');
+    expect(record.initializeThread().messages.map(value => value.id)).toEqual(['old', 'one']);
+    let reads = 0;
+    Object.defineProperty(archived, 'ordinal', { get() { reads++; return 0; } });
+    record.apply(initial, append());
+    expect(reads).toBe(0);
+    expect(record.initializeThread().messages.at(-1)).toBe(live);
+    expect(record.initializeThread().messages.at(-1)?.content).toBe('中文🌸!');
+    expect(record.acceptPage({ thread_id: 'thread', leaf_id: 'leaf', items: [], has_before: false, has_after: false }, anchor)).toBe(false);
+  });
+
+  it('rejects an unobserved running tool without installing stale page facts', () => {
+    const { record } = fixture();
+    const item = { id: 'pending', kind: 'tool' as const, ordinal: 0, canonical_ordinal: 1, activity: { status: 'running' } };
+    expect(() => record.acceptPage({ thread_id: 'thread', leaf_id: 'leaf', items: [item], first_item_id: item.id, last_item_id: item.id, has_before: false, has_after: true }, record.item('one')!)).toThrow('unobserved mutable history item');
+    expect(record.item('pending')).toBeUndefined();
+    expect(record.version).toBe(1);
+  });
   it('validates growing preview counters and removes a withdrawn preview without changing history', () => {
     const { current, initial } = fixture();
     const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',

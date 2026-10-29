@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { observeFlowerSequenceDisclosure } from './flowerSequenceDisclosure';
 import type { FlowerToolSequence } from './flowerToolSequences';
 
-const group = (key: string): FlowerToolSequence => ({ key, countsComplete: true, nodeKeys: [key], entryKeys: [key],
+const group = (key: string): FlowerToolSequence => ({ key, countsComplete: true, missingBefore: false, missingAfter: false, nodeKeys: [key], entryKeys: [key],
   toolCount: 1, failedCount: 0, uncertainCount: 0, failedSubagentEventCount: 0, thinkingCount: 0,
   subagentEventCount: 0, runningCount: 0, followingContentKeys: [key + ':prose'], disclosure: 'automatic' });
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); };

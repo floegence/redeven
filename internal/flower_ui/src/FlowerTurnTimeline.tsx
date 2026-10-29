@@ -36,6 +36,7 @@ type TimelineProps = Readonly<{
   missingEvents?: readonly Readonly<{ after: number; before: number }>[];
   renderBefore?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   onDisclosure?: () => void;
+  onSequenceDemand?: (group: FlowerToolSequence, expanded: boolean) => void;
   renderInside?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
 }>;
@@ -276,6 +277,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       }
     });
     if (next !== previous) untrack(() => {
+      if (previous) sequenceLayout.captureReading(next);
       const pending = new Map(pendingSequenceContent());
       const owners = new Set([...next.groups.values()].map(group => group.nodeKeys[0]));
       for (const [key, owner] of pending) if (!previous || !owners.has(owner.nodeKey)) pending.delete(key);
@@ -302,7 +304,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     previousSequences = { threadID: props.thread?.thread_id, value: next };
     return next;
   });
-  const sequenceLayout = createFlowerToolSequenceLayout(sequences);
+  const sequenceLayout = createFlowerToolSequenceLayout(sequences, props.scroll);
   createEffect(() => {
     const groups = processes();
     const animate = liveArrival();
@@ -361,6 +363,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   const subscribeProcess = createFlowerProcessSubscriptions(processes);
   const subscribeContinuation = createFlowerMembershipSubscriptions(() => sequences().continuingEntries);
   const sequenceContext = {
+    processManuallyExpanded: (turnID: string) => props.choices.manuallyExpanded(identity(turnID)),
+    demand: (group: FlowerToolSequence, expanded: boolean) => props.onSequenceDemand?.(group, expanded),
     ...sequenceLayout,
     subscribeHeader: createFlowerMembershipSubscriptions(() => sequences().headerKeys),
     subscribeProcess,

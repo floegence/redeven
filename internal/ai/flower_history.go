@@ -222,6 +222,22 @@ func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta
 	return &FlowerThreadDetail{Thread: thread, Current: current, Window: window, ComputerEvidence: evidence}, nil
 }
 
+// GetFlowerHistoryPage reads canonical records without changing observation.
+func (s *Service) GetFlowerHistoryPage(ctx context.Context, meta *session.Meta, threadID string, input flruntime.ThreadItemPageInput) (flruntime.ThreadItemPage, error) {
+	scope, err := s.flowerHistoryScope(ctx, meta, threadID)
+	if err != nil {
+		return flruntime.ThreadItemPage{}, err
+	}
+	reader, ok := s.threadRuntime.(flruntime.ThreadItemPageReader)
+	if !ok {
+		return flruntime.ThreadItemPage{}, errors.New("published Floret item page contract is unavailable")
+	}
+	input.ThreadID = identity.ThreadID(threadID)
+	// Keep summaries source-backed. Target/body hydration belongs to each
+	// disclosed item; enumerating turn tools here would repeat work per page.
+	return reader.ItemPage(ctx, scope, input)
+}
+
 // GetFlowerHistoryItem expands exactly one authorized item. Body locators come
 // from the canonical window, never from client-provided entry identifiers.
 func (s *Service) GetFlowerHistoryItem(ctx context.Context, meta *session.Meta, threadID, itemID string) (json.RawMessage, error) {

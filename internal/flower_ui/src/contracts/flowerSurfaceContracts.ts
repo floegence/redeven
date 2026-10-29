@@ -946,6 +946,11 @@ export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: 
 export type FlowerHistoryWindow = Readonly<{ skipped_range?: Readonly<{ leaf_id: string; turn_id: string; run_id: string; first_item_id: string; last_item_id: string; first_ordinal: number; last_ordinal: number }>; leaf_id?: string; first_item_id?: string; last_item_id?: string; has_before: boolean; has_after: boolean }>;
 export type FlowerHistoryBodyRequest = Readonly<{ item_id: string; run_id?: string; source_id?: string; entry_id?: string; field: string; through_bytes: number; offset_bytes: number }>;
 export type FlowerHistoryBodyChunk = FlowerHistoryBodyRequest & Readonly<{ thread_id: string; bytes: number; text: string; source_changed?: boolean }>;
+// Demand-only canonical records; this is never an observation baseline.
+export type FlowerHistoryPageRequest = Readonly<{ ancestor_leaf_id?: string; anchor_id: string; direction: 'before' | 'after'; limit: number }>;
+export type FlowerHistoryPage = Readonly<{ thread_id: string; leaf_id: string; first_item_id?: string; last_item_id?: string;
+  has_before: boolean; has_after: boolean; items: readonly FlowerRuntimeCurrentItem[]; turns?: readonly FlowerRuntimeTurn[] }>;
+
 export type FlowerHistoryRequest = Readonly<{ skip_folded?: 'turn' | 'tools'; retain_item_ids?: readonly string[]; anchor_offset?: number; item_ids?: readonly string[]; anchor_id?: string; direction?: 'before' | 'after' | 'around'; limit?: number; observer_id?: string; reading_revision?: number }>;
 // Field sources freeze decoded UTF-8 independently of subsequent live growth.
 export type FlowerActivityField = Readonly<{
@@ -1733,6 +1738,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   listThreads: (options?: { signal?: AbortSignal; onPage?: (threads: readonly FlowerThreadSnapshot[]) => void }) => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string, signal: AbortSignal) => Promise<FlowerThreadView>;
   releaseHistory?: (threadID: string, input: { observer_id: string; reading_revision: number; subagent?: boolean }) => Promise<void>;
+  loadHistoryPage?: (threadID: string, input: FlowerHistoryPageRequest, signal: AbortSignal) => Promise<FlowerHistoryPage>;
   loadHistory?: (threadID: string, input: FlowerHistoryRequest, signal: AbortSignal) => Promise<FlowerThreadView>;
   loadActivityValue?: (threadID: string, input: FlowerActivityValueRequest, signal: AbortSignal) => Promise<FlowerActivityValue>;
   loadActivityStructure?: (threadID: string, input: FlowerActivityStructureRequest, signal: AbortSignal) => Promise<FlowerActivityStructurePage>;

@@ -14,7 +14,7 @@ import { retainKeyedItems } from './presentationIdentity';
 type ParentEventReader = (threadID: string, query: FlowerParentEventQuery, signal?: AbortSignal) => Promise<FlowerParentEventPage>;
 
 type EventReadRequest = Readonly<{ threadID: string; query: FlowerParentEventQuery;
-  intervalQueries?: readonly FlowerParentEventQuery[]; replaceInterval?: boolean; tailFirst?: number }>;
+  completionKey?: string; intervalQueries?: readonly FlowerParentEventQuery[]; replaceInterval?: boolean; tailFirst?: number }>;
 export type ParentEventReadingInterval = Readonly<{ first: number; last: number; hasAfter: boolean;
   spans?: readonly Readonly<{ first: number; last: number }>[]; revision?: number }>;
 type EventReadState = Readonly<
@@ -29,10 +29,13 @@ export function createParentEventReading(props: Readonly<{
 }>) {
   const [retained, setRetained] = createSignal<readonly FlowerParentEvent[]>([]);
   const [gaps, setGaps] = createSignal<readonly { beforeID: string; afterID: string; height: number }[]>([]);
+  const coveredEmpty = new Map<string, { after: number; before: number }>();
+  const [coverageRevision, setCoverageRevision] = createSignal(0);
   const neighbors = new Map<string, { before?: string; after?: string; beforeOrdinal?: number; afterOrdinal?: number; leaf?: string }>();
   const [beforeCursor, setBeforeCursor] = createSignal('');
   const [bodies, setBodies] = createSignal<Readonly<Record<string, FlowerParentEvent>>>({});
   const detailQueue = createActivityReadQueue();
+  const pageQueue = createActivityReadQueue();
   const demanded = new Map<string, { scope: AbortController; consumers: Set<object>; status: 'reading' | 'failed' | 'ready'; accessed: number }>();
   const [detailRevision, setDetailRevision] = createSignal(0);
   let accessSequence = 0;
@@ -97,7 +100,7 @@ export function createParentEventReading(props: Readonly<{
     const cached = key && pagesByQuery.get(key);
     if (cached) { signal.throwIfAborted(); return cached; }
     const page = validateParentEventPage(await recoverHistoryRead(() => withFlowerReadDeadline(
-      readSignal => reader(threadID, query, readSignal), props.timeoutMessage ?? 'Event read timed out.', signal), signal), threadID, query);
+      readSignal => pageQueue.run(JSON.stringify([threadID, query]), readSignal, signal => reader(threadID, query, signal)), props.timeoutMessage ?? 'Event read timed out.', signal), signal), threadID, query);
     signal.throwIfAborted();
     if (key && pagesLeaf === query.leaf_id) {
       pagesByQuery.set(key, page);
@@ -187,7 +190,9 @@ export function createParentEventReading(props: Readonly<{
     const nextGaps: { beforeID: string; afterID: string; height: number }[] = [];
     for (let i = 1; i < next.length; i++) {
       const before = next[i - 1], after = next[i];
-      if (neighbors.get(before.id)?.after === after.id || neighbors.get(after.id)?.before === before.id) continue;
+      if (neighbors.get(before.id)?.after === after.id || neighbors.get(after.id)?.before === before.id
+        || neighbors.get(before.id)?.leaf === page.leaf_id && (neighbors.get(before.id)?.afterOrdinal ?? -Infinity) >= (after.canonical_ordinal ?? Infinity)
+        || neighbors.get(after.id)?.leaf === page.leaf_id && (neighbors.get(after.id)?.beforeOrdinal ?? Infinity) <= (before.canonical_ordinal ?? -Infinity)) continue;
       let height = 0;
       const first = previous.findIndex(event => event.id === before.id), last = previous.findIndex(event => event.id === after.id);
       if (first >= 0 && last > first) {
@@ -249,7 +254,18 @@ export function createParentEventReading(props: Readonly<{
           : retained().slice(anchorIndex)).map(event => event.id));
         if (result.events.some(event => forbidden.has(event.id))) throw new Error('Flower contract error: event continuation crossed its cursor.');
       }
-      if (!replaceInterval && result.events.every(event => loaded.has(event.id))) throw new Error('Flower contract error: event continuation repeated loaded events.');
+      if (!replaceInterval && result.events.length && result.events.every(event => loaded.has(event.id))) throw new Error('Flower contract error: event continuation repeated loaded events.');
+      if (request.query.after_ordinal !== undefined && request.query.before_ordinal !== undefined && result.events.length < (request.query.limit ?? 50)) {
+        const coverage = { after: request.query.after_ordinal, before: request.query.before_ordinal };
+        for (const [key, value] of coveredEmpty) {
+          if (value.before < coverage.after || value.after > coverage.before) continue;
+          coverage.after = Math.min(coverage.after, value.after);
+          coverage.before = Math.max(coverage.before, value.before);
+          coveredEmpty.delete(key);
+        }
+        coveredEmpty.set(JSON.stringify([coverage.after, coverage.before]), coverage);
+        setCoverageRevision(value => value + 1);
+      }
       if (replaceInterval) {
         // The active document retains every displayed interval. Keep its
         // receipts as well, so warm scrolling cannot split a tool group.
@@ -300,7 +316,7 @@ export function createParentEventReading(props: Readonly<{
         while (remaining > 0) {
           const query: FlowerParentEventQuery = { action: 'list', leaf_id: leaf, after_ordinal: lower, before_ordinal: upper, limit: Math.min(100, remaining) };
           const page = validateParentEventPage(await recoverHistoryRead(() => withFlowerReadDeadline(
-            signal => reader(thread, query, signal), props.timeoutMessage ?? 'Event read timed out.', scope.signal), scope.signal), thread, query);
+            signal => pageQueue.run(JSON.stringify([thread, query]), signal, transportSignal => reader(thread, query, transportSignal)), props.timeoutMessage ?? 'Event read timed out.', scope.signal), scope.signal), thread, query);
           scope.signal.throwIfAborted();
           pages.push({ page, query });
           for (const event of page.events) updated.set(event.id, event);
@@ -403,7 +419,7 @@ export function createParentEventReading(props: Readonly<{
     const page = props.page;
     const epoch = props.connectionEpoch;
     if (pagesLeaf !== page?.leaf_id || epoch !== previousEpoch || props.read !== previousReader || props.threadID !== previousThread) {
-      pagesByQuery.clear(); pagesLeaf = page?.leaf_id ?? '';
+      pagesByQuery.clear(); coveredEmpty.clear(); setCoverageRevision(value => value + 1); pagesLeaf = page?.leaf_id ?? '';
     }
     const reader = props.read;
     const interval = props.interval;
@@ -488,17 +504,62 @@ export function createParentEventReading(props: Readonly<{
       const value = id ? neighbors.get(id) : undefined;
       return value?.leaf === leaf ? value?.[side] : undefined;
     };
+    coverageRevision();
     const next = [
       ...(beforeCursor() ? [{ after: -Infinity, before: boundary(rows[0]?.id, 'beforeOrdinal') ?? rows[0]?.canonical_ordinal ?? Infinity }] : []),
       ...gaps().map(gap => ({ after: boundary(gap.beforeID, 'afterOrdinal') ?? positions.get(gap.beforeID) ?? -Infinity, before: boundary(gap.afterID, 'beforeOrdinal') ?? positions.get(gap.afterID) ?? Infinity })),
       ...(cursor() ? [{ after: boundary(rows.at(-1)?.id, 'afterOrdinal') ?? rows.at(-1)?.canonical_ordinal ?? -Infinity, before: Infinity }] : []),
-    ];
+    ].flatMap(gap => {
+      let pieces = [gap];
+      for (const covered of coveredEmpty.values()) pieces = pieces.flatMap(value => covered.after >= value.before || covered.before <= value.after ? [value]
+        : [...(covered.after > value.after ? [{ after: value.after, before: covered.after }] : []), ...(covered.before < value.before ? [{ after: covered.before, before: value.before }] : [])]);
+      return pieces;
+    });
     // A leaf revision does not change coverage by itself. Keep equal coverage
     // stable so live source notifications cannot invalidate every timeline row.
     return previous.length === next.length && next.every((gap, index) =>
       gap.after === previous[index].after && gap.before === previous[index].before) ? previous : next;
   });
+  // Explicitly expanded groups may fill missing receipts inside their finite
+  // canonical bounds. Reuse this reader's single request/authorization owner.
+  const [completionRevision, setCompletionRevision] = createSignal(0);
+  const completions = new Map<string, { first: number; last: number }>();
+  let completionFrame = 0;
+  createEffect(() => {
+    const gaps = missingIntervals();
+    const current = state();
+    completionRevision();
+    const thread = props.threadID, leaf = props.page?.leaf_id;
+    if (completionFrame) cancelAnimationFrame(completionFrame);
+    if (current.status !== 'idle' || !initialReady() || !leaf || !props.read || !completions.size) return;
+    completionFrame = requestAnimationFrame(() => {
+      completionFrame = 0;
+      for (const [key, span] of completions) {
+        const gap = gaps.find(gap => gap.after < span.last && gap.before > span.first);
+        if (!gap) continue;
+        const after = Math.max(span.first - 1, gap.after);
+        const before = Math.min(span.last + 1, gap.before);
+        void read({ completionKey: key, threadID: thread, query: { action: 'list', leaf_id: leaf, after_ordinal: after, before_ordinal: before, limit: 50 } });
+        break;
+      }
+    });
+  });
+  onCleanup(() => cancelAnimationFrame(completionFrame));
+  createEffect(on(() => [props.threadID, props.connectionEpoch], () => { completions.clear(); setCompletionRevision(value => value + 1); }));
   return { events, cursor, beforeCursor, gaps, schedule, initialReady, missingIntervals,
+    completing: () => { const current = state(); return current.status === 'reading' && Boolean(current.request.completionKey); },
+    complete(key: string, span?: { first: number; last: number }) {
+      const prior = completions.get(key);
+      if (prior?.first === span?.first && prior?.last === span?.last) return;
+      if (span) completions.set(key, span); else completions.delete(key);
+      if (!span) queueMicrotask(() => {
+        const current = state();
+        if (!completions.has(key) && current.status === 'reading' && current.request.completionKey === key) {
+          invalidate(); setState({ status: 'idle' });
+        }
+      });
+      setCompletionRevision(value => value + 1);
+    },
     retainBody: (id: string) => {
       const consumer = {};
       let owner = demanded.get(id);

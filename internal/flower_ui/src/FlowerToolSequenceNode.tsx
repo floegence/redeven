@@ -11,6 +11,7 @@ export const FlowerToolSequenceContext = createContext<Readonly<{
   subscribeHeader: (key: string) => Accessor<true | undefined>;
   subscribeProcess: ReturnType<typeof createFlowerProcessSubscriptions>;
   subscribe: (key: string) => Accessor<FlowerToolSequenceMember | undefined>;
+  demand?: (group: FlowerToolSequence, expanded: boolean) => void;
   manuallyExpanded: (group: FlowerToolSequence) => boolean;
   expanded: (group: FlowerToolSequence) => boolean;
   toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => void;
@@ -19,6 +20,7 @@ export const FlowerToolSequenceContext = createContext<Readonly<{
   onLayoutFrame: (key: string, moving: boolean) => void;
   onMotionEnd: (key: string) => void;
   contentPending: (key: string) => boolean;
+  processManuallyExpanded: (turnID: string) => boolean;
   processExpanded: (turnID: string, disclosure: FlowerToolSequence['disclosure']) => boolean;
   parentFolding: (group: FlowerToolSequence) => boolean;
   reducedMotion: Accessor<boolean>;
@@ -43,6 +45,15 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     return Boolean(value && !context?.processExpanded(value.turnID, value.disclosure));
   });
   const first = createMemo(() => member()?.first);
+  createEffect(() => {
+    const value = member();
+    if (!value?.first) return;
+    const process = parent()?.();
+    const requested = context?.manuallyExpanded(value.group) || process && context?.processManuallyExpanded(process.turnID);
+    const open = expanded() && !parentCollapsed() && Boolean(requested);
+    context?.demand?.(value.group, open);
+    onCleanup(() => context?.demand?.(value.group, false));
+  });
   const last = createMemo(() => member()?.last);
   const expanded = createMemo(() => !member() || !context || context.expanded(member()!.group));
   // Unopened history needs only its disclosure shell. Once inspected, retain
@@ -99,8 +110,19 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     },
   });
   onCleanup(() => context?.onMotionEnd(motionKey));
+  let savedReading: { top: number; following: boolean } | undefined;
   onMount(() => {
-    const unregister = context?.register(props.nodeKey, { node, slot, body, prepareArrival, prepareDestination });
+    const unregister = context?.register(props.nodeKey, { node, slot, body, prepareArrival, prepareDestination,
+      restore: (anchor, top, offset) => {
+        savedReading = { top: offset, following: false };
+        scroll.stopFollowing();
+        body.scrollTop = offset;
+        if (anchor?.isConnected && body.contains(anchor)) {
+          body.scrollTop += anchor.getBoundingClientRect().top - top;
+          savedReading.top = body.scrollTop;
+          scroll.restoreReadingAnchor(anchor, top);
+        }
+      } });
     onCleanup(() => unregister?.());
   });
   createEffect(() => {
@@ -114,7 +136,14 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     body.addEventListener('keydown', scroll.onKeyDown);
     // Placement completes in the same microtask checkpoint, before first paint.
     let cancelled = false;
-    queueMicrotask(() => { if (!cancelled) scroll.scrollToBottom(); });
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (savedReading) {
+        body.scrollTop = savedReading.top;
+        if (savedReading.following) scroll.startFollowing(); else scroll.stopFollowing();
+        savedReading = undefined;
+      } else scroll.scrollToBottom();
+    });
     onCleanup(() => {
       cancelled = true;
       body.removeEventListener('scroll', onScroll);

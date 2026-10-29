@@ -41,6 +41,7 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
     loadThread: (threadID, signal) => api('detail', threadID, undefined, signal),
     ...(new URLSearchParams(location.search).has('cpu') || new URLSearchParams(location.search).has('window') ? {
       loadHistory: (threadID: string, input: unknown, signal: AbortSignal) => api('history', threadID, input, signal),
+      loadHistoryPage: (threadID: string, input: unknown, signal: AbortSignal) => api('history_page', threadID, input, signal),
       loadHistoryItem: (threadID: string, itemID: string, signal: AbortSignal) => api('history_item', threadID, { item_id: itemID }, signal),
       loadHistoryBody: (threadID: string, input: unknown, signal: AbortSignal) => api('history_body', threadID, input, signal),
       releaseHistory: async (threadID: string, input: unknown) => { await api('history_release', threadID, input); },

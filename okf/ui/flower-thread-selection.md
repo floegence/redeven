@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation selection and detail reads
 tags: [flower, navigation, cancellation, recovery, detail]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -52,8 +52,12 @@ suppress a reading baseline, and obsolete refresh markers retire without
 invalidating a newer interest. Existing queue byte/count limits still apply.
 Collapsed turn/tool ranges
 use one canonical skip-and-retain installation to reach preceding dialogue. Opening
-a skipped disclosure reveals a bounded missing-content control; scrolling or that
-action fills the interval without changing the user's disclosure choice. Changing
+a skipped disclosure immediately reveals cached rows and completes its requested
+sequence with demand-only canonical pages. There is no full-content button.
+Each document has one page request, forty records per page, and a finite forward
+horizon; page acceptance never replaces the live observation interest. A single
+floating indicator appears after 150 ms without changing transcript geometry.
+Cancellation hides it immediately; only actual failures expose Retry. Changing
 disclosure during a read cancels obsolete navigation, while live updates continue
 under the accepted interest. Thread/child selection and Latest clear queued gap
 requests. Header placement continues to follow chronological turn order and transfers
@@ -65,9 +69,11 @@ Collapse, navigation and disposal cancel unused demand; reconnect restores activ
 consumers. Retry is local to an actual read failure. Released empty activity
 sources use Floret's canonical default presentation in source order.
 
-Field-only activity presentation remains disabled for ordinary product history
-until complete renderer parity is qualified. Complete body expansion is retained;
-computer evidence and target hydration can still require full canonical reads.
+Ordinary observed history retains complete activity expansion. Demand-only pages
+use published Floret v7.91.0 source-backed activity summaries; opening individual
+activities acquires bodies/targets through the existing detail owner. Page reads
+never enumerate all tools in a turn for target hydration. Mutable live records,
+lifecycle and observation versions remain owned by the current runtime document.
 This release does not promise a fixed opening latency or globally bounded memory
 for all expanded terminal output.
 

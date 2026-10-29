@@ -79,6 +79,29 @@ it('aligns receipt reads to the displayed canonical interval instead of the defa
   expect(reading.missingIntervals()).toEqual([{ after: -Infinity, before: 3999 }, { after: 4101, before: Infinity }]);
 });
 
+it('completes dense receipts only inside an explicitly expanded finite group', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const all = Array.from({ length: 350 }, (_, index) => ({ ...event('dense-' + index, 'completed'), canonical_ordinal: index + 1 }));
+  const pageOf = (events: FlowerParentEvent[]): FlowerParentEventPage => ({ thread_id: 'parent', leaf_id: 'leaf', first_event_id: all[0].id, last_event_id: all.at(-1)!.id, events });
+  const read = vi.fn(async (_thread: string, query: { action: string; after_ordinal?: number; before_ordinal?: number; limit?: number }) => {
+    expect(query.action).toBe('list');
+    return pageOf(all.filter(value => value.canonical_ordinal > (query.after_ordinal ?? 0) && value.canonical_ordinal < (query.before_ordinal ?? Infinity)).slice(-(query.limit ?? 50)));
+  });
+  let reading!: ReturnType<typeof createParentEventReading>;
+  const dispose = render(() => { reading = createParentEventReading({ threadID: 'parent', page: pageOf(all.slice(-50)), read, interval: { first: 1, last: 350, hasAfter: false } }); return null; }, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => reading.initialReady());
+  const baseline = read.mock.calls.length;
+  reading.complete('group', { first: 1, last: 350 });
+  await waitFor(() => reading.events().length === 350);
+  expect(read.mock.calls.length - baseline).toBeLessThanOrEqual(7);
+  expect(reading.missingIntervals().some(gap => gap.after < 350 && gap.before > 1)).toBe(false);
+  const calls = read.mock.calls.length;
+  reading.complete('group');
+  await new Promise(resolve => setTimeout(resolve, 80));
+  expect(read).toHaveBeenCalledTimes(calls);
+});
+
 it('does not fetch report bodies while every report is collapsed', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const events = { thread_id: 'parent', events: [event('report')], first_event_id: 'report', last_event_id: 'report' };

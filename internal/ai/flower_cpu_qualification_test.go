@@ -366,7 +366,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 				return
 			}
 			encode(w, value)
-		case "history", "history_release", "history_body", "history_item":
+		case "history", "history_page", "history_release", "history_body", "history_item":
 			var value any
 			var err error
 			id := r.URL.Query().Get("id")
@@ -377,6 +377,13 @@ func TestFlowerCPUQualification(t *testing.T) {
 				if err == nil {
 					value, err = service.GetFlowerThreadHistory(r.Context(), meta, id, input)
 				}
+			case "history_page":
+				var input flruntime.ThreadItemPageInput
+				err = json.NewDecoder(r.Body).Decode(&input)
+				if err == nil {
+					value, err = service.GetFlowerHistoryPage(r.Context(), meta, id, input)
+				}
+
 			case "history_release":
 				var input FlowerHistoryRelease
 				err = json.NewDecoder(r.Body).Decode(&input)

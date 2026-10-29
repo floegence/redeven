@@ -80,6 +80,25 @@ func TestServerFlowerHistoryAcceptsCompleteReadingSelection(t *testing.T) {
 	if !reflect.DeepEqual(selected.Data.Current.Items, page.Data.Current.Items) {
 		t.Fatal("selection changed canonical contents or order")
 	}
+	pageBody, _ := json.Marshal(map[string]any{"ancestor_leaf_id": page.Data.Window.LeafID, "anchor_id": ids[0], "direction": "before", "limit": 40})
+	rr := performServerRequest(server, http.MethodPost, path+"-page", origin, string(pageBody))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("page status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var canonical struct {
+		Data flruntime.ThreadItemPage `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &canonical); err != nil {
+		t.Fatal(err)
+	}
+	if len(canonical.Data.Items) != 2 || canonical.Data.ThreadID.String() != thread.ThreadID || canonical.Data.HasBefore {
+		t.Fatal("invalid canonical page")
+	}
+	for _, invalid := range []string{`{"unknown":true}`, `{} {}`, `{"thread_id":"another"}`, `{"limit":151}`, `{"ancestor_leaf_id":"missing"}`} {
+		if response := performServerRequest(server, http.MethodPost, path+"-page", origin, invalid); response.Code == http.StatusOK {
+			t.Fatalf("invalid page accepted: %s", invalid)
+		}
+	}
 	// Child reads use the same membership budget before validating the parent
 	// relationship. A root cannot be read as its own child, regardless of size.
 	childPath := "/_redeven_proxy/api/ai/threads/" + thread.ThreadID + "/subagents/" + thread.ThreadID + "/detail"

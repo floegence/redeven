@@ -1,3 +1,5 @@
+import { historyItemNeedsObservation } from './historyWindowRetention';
+import { createHistorySequenceCompletion } from './historySequenceCompletion';
 import { createFlowerHistoryGapSubscriptions, createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions } from './flowerPresentationSubscriptions';
 import { FlowerTaskFiles } from './FlowerTaskFiles';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
@@ -1176,11 +1178,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let flowerLiveReadyCount = 0;
   const flowerBaseline = createFlowerThreadBaseline();
   let navigationReadController = new AbortController();
+  const [navigationReadRevision, setNavigationReadRevision] = createSignal(0);
   const releaseNavigationReads = () => {
     navigationReadController.abort();
     for (const controller of preparingBodyReads.values()) controller.abort();
     preparingBodyReads.clear();
     navigationReadController = new AbortController();
+    setNavigationReadRevision(value => value + 1);
   };
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
@@ -3889,11 +3893,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       data-flower-history-gap-before={value().beforeID} data-flower-history-gap-after={value().afterID}
       data-flower-history-gap-first={value().first} data-flower-history-gap-last={value().last}
       style={{ height: Math.max(44, value().height) + 'px', 'flex-shrink': '0' }}>
-      <button type="button" class="flower-history-gap-button" disabled={child ? activeSubagentDetail()?.requestStatus === 'loading' : historyBusy()} onClick={() => {
-        const input: FlowerHistoryRequest = { anchor_id: value().beforeID, direction: 'after', limit: Math.min(40, value().last - value().first) };
-        if (child) { subagentExplicitHistoryRead = input; subagentReadingPending = true; subagentHistoryEdgeKey = ''; scheduleSubagentHistoryReading(); }
-        else { explicitHistoryRead = input; historyReadingPending = true; historyEdgeKey = ''; scheduleHistoryReading(); }
-      }}>{copy().chat.history.expand}</button>
+
     </div>}</Show>;
   };
 
@@ -4434,6 +4434,104 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (signal === navigationReadController.signal && tid === selectedThreadID()) { setHistoryBusy(false); scheduleHistoryReading(); }
     }
   };
+  const [groupCompletion, setGroupCompletion] = createSignal({ main: false, child: false, mainFailed: false, childFailed: false });
+  const [groupDemandRevision, setGroupDemandRevision] = createSignal(0);
+  const createGroupCompletion = (child: boolean) => {
+    const tid = () => child ? activeSubagentID() : selectedThreadID();
+    const scroll = child ? subagentDetailScroll : transcriptScroll;
+    let feedback: ReturnType<typeof setTimeout> | undefined;
+    const publish = (loading: boolean, failed: boolean) => setGroupCompletion(previous => ({ ...previous,
+      [child ? 'child' : 'main']: loading, [child ? 'childFailed' : 'mainFailed']: failed }));
+    const owner = createHistorySequenceCompletion({
+      scope: () => JSON.stringify([tid(), liveTransport.connectionEpoch()]),
+      leaf: () => threadCache().views.get(tid())?.thread.history_window?.leaf_id,
+      document: () => threadCache().runtimeDocument(tid()),
+      item: id => threadCache().runtimeItem(tid(), id),
+      read: async (input, signal) => {
+        const id = tid();
+        const pending = AbortSignal.any([signal, navigationReadController.signal]);
+        const page = await props.adapter.loadHistoryPage!(id, input, pending);
+        pending.throwIfAborted();
+        if (id !== tid()) throw new DOMException('History thread changed.', 'AbortError');
+        return page;
+      },
+      accept: async (page, anchor, demandSignal) => {
+        const id = tid(), document = threadCache().runtimeDocument(id);
+        const observed = threadCache().runtimeItemIDs(id);
+        const observedIDs = new Set(observed);
+        const unsettled = page.items.filter(item => !observedIDs.has(item.id) && historyItemNeedsObservation(item, page.turns));
+        if (unsettled.length) {
+          // Most pages contain immutable history. Only newly discovered mutable
+          // facts need one bounded handoff to the existing observer, never a
+          // second subscription or periodic archive refresh.
+          const pinned = [...new Set([...protectedHistoryItems(scroll), anchor.id, ...unsettled.map(item => item.id),
+            ...observed.filter(itemID => historyItemNeedsObservation(threadCache().runtimePreviewItem(id, itemID)!, threadCache().views.get(id)?.thread.turns))])];
+          if (pinned.length > 147) throw new Error('Active history interest exceeds its bounded capacity.');
+          // Retain the live tail policy so subsequent tools/output keep arriving.
+          const interest: FlowerHistoryRequest = { direction: 'before', limit: Math.min(50, 148 - pinned.length), retain_item_ids: pinned };
+          if (child) {
+            if (!await refreshActiveSubagentDetail(false, interest, true, demandSignal)) return false;
+          } else {
+            const signal = AbortSignal.any([navigationReadController.signal, demandSignal]), epoch = liveTransport.connectionEpoch();
+            const release = threadCache().beginRuntimeRead(id);
+            try {
+              const view = await readDetail(signal => readHistory(id, interest, signal, true), signal);
+              signal.throwIfAborted();
+              if (id !== tid() || epoch !== liveTransport.connectionEpoch()) return false;
+              const outer = visibleHistoryAnchor(scroll);
+              if (outer) scroll.preserveLayoutAnchor(outer);
+              receiveThreadView(view, 'user_action', epoch, true);
+            } finally { release(); }
+          }
+          demandSignal.throwIfAborted();
+          anchor = threadCache().runtimeItem(id, anchor.id)!;
+          if (!anchor || id !== tid()) return false;
+        } else if (document !== threadCache().runtimeDocument(id)) return false;
+        const outer = visibleHistoryAnchor(scroll);
+        if (outer) scroll.preserveLayoutAnchor(outer);
+        const updateGaps = prepareReadingGaps(tid(), { thread_id: tid(), view_version: 0, items: page.items, window: page });
+        const accepted = threadCache().acceptHistoryPage(tid(), page, anchor);
+        if (accepted) {
+          updateGaps?.(threadCache());
+          recordTimelineReceipt(tid(), false);
+          setTranscriptLayoutRevision(value => value + 1);
+        }
+        return accepted;
+      },
+      state: (loading, failed) => {
+        if (!loading) { clearTimeout(feedback); feedback = undefined; publish(false, failed); }
+        else if (feedback === undefined) feedback = setTimeout(() => publish(true, false), 150);
+      },
+      yield: () => new Promise(resolve => requestTranscriptAnimationFrame(() => resolve())),
+    });
+    createEffect(() => { tid(); void liveSyncState().connectionEpoch; navigationReadRevision(); owner.reset(); setGroupDemandRevision(value => value + 1); });
+    onCleanup(owner.dispose);
+    return owner;
+  };
+  const mainGroupCompletion = createGroupCompletion(false);
+  const childGroupCompletion = createGroupCompletion(true);
+  const sequenceDemand = (group: import('./flowerToolSequences').FlowerToolSequence, expanded: boolean, child = false) => {
+    groupDemandRevision();
+    (child ? subagentParentEventReading : parentEventReading).complete(group.key,
+      expanded && group.firstCanonicalOrdinal !== undefined && group.lastCanonicalOrdinal !== undefined
+        ? { first: group.firstCanonicalOrdinal, last: group.lastCanonicalOrdinal } : undefined);
+    if (!props.adapter.loadHistoryPage || !group.firstMessageID || !group.lastMessageID) return;
+    (child ? childGroupCompletion : mainGroupCompletion).demand({ key: group.key, first: group.firstMessageID,
+      last: group.lastMessageID, before: group.missingBefore, after: group.missingAfter }, expanded);
+  };
+  const [receiptCompletion, setReceiptCompletion] = createSignal({ main: false, child: false });
+  createEffect(() => {
+    const main = parentEventReading.completing(), child = subagentParentEventReading.completing();
+    setReceiptCompletion(previous => ({ main: main && previous.main, child: child && previous.child }));
+    if (!main && !child) return;
+    const timer = setTimeout(() => setReceiptCompletion({ main, child }), 150);
+    onCleanup(() => clearTimeout(timer));
+  });
+  const groupCompletionNotice = (child = false) => <Show when={child ? groupCompletion().childFailed : groupCompletion().mainFailed}>
+    <div class="flower-history-navigation flower-chat-notice" role="alert"><span>{copy().chat.history.failed}</span>
+      <Button size="sm" variant="outline" icon={Refresh} onClick={() => (child ? childGroupCompletion : mainGroupCompletion).retry()}>{copy().chat.handlerRetry}</Button>
+    </div>
+  </Show>;
   const historyReadNotice = () => <Show when={historyError()}>
     <div class="flower-history-navigation flower-chat-notice" role="alert">
       <span>{historyError()}</span>
@@ -6048,12 +6146,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return accepted;
   };
 
-  const refreshActiveSubagentDetail = async (scrollToBottom = false, input = subagentReadingInput, preserveReading = false): Promise<boolean> => {
+  const refreshActiveSubagentDetail = async (scrollToBottom = false, input = subagentReadingInput, preserveReading = false, demandSignal?: AbortSignal): Promise<boolean> => {
     const active = untrack(activeSubagentDetail);
     if (!active) return false;
     subagentDetailReadController?.abort();
     const readController = new AbortController();
     subagentDetailReadController = readController;
+    const cancelDemand = () => readController.abort();
+    demandSignal?.addEventListener('abort', cancelDemand, { once: true });
+    if (demandSignal?.aborted) readController.abort();
     const requestEpoch = liveTransport.connectionEpoch();
     const generation = ++subagentDetailGeneration;
     if (scrollToBottom) setSubagentTailReveal(active.childThreadID);
@@ -6129,7 +6230,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           : current
       ));
       return false;
-    } finally { if (subagentHandoff === handoff) subagentHandoff = undefined; releaseRead(); }
+    } finally { demandSignal?.removeEventListener('abort', cancelDemand); if (subagentHandoff === handoff) subagentHandoff = undefined; releaseRead(); }
   };
 
   let subagentExplicitHistoryRead: FlowerHistoryRequest | undefined;
@@ -6991,6 +7092,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
   const returnToLatest = (child = false) => {
+    (child ? childGroupCompletion : mainGroupCompletion).reset();
     const scroll = child ? subagentDetailScroll : transcriptScroll;
     const thread = child ? subagentDetailThread() : selectedThread();
     const input = child ? subagentReadingInput : historyReadingInput;
@@ -13019,9 +13121,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       statusIndicator={subagentStatusIndicator(subagentDetailActiveStatus())}
       elapsedLabel={subagentDetailElapsedLabel()}
       description={subagentDetailMeta()}
-      loading={subagentDetailLoading()}
+      loading={subagentDetailLoading() || groupCompletion().child || receiptCompletion().child}
       preparing={subagentTailPreparing()}
-      preparationNotice={subagentParentEventReading.recovering() ? receiptReadNotice(subagentParentEventReading) : undefined}
+      preparationNotice={<>{groupCompletionNotice(true)}{subagentParentEventReading.recovering() ? receiptReadNotice(subagentParentEventReading) : undefined}</>}
       error={subagentDetailError()}
       detailAvailable={Boolean(subagentDetailThread())}
       entries={subagentDetailTimelineEntries()}
@@ -13058,7 +13160,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show></>}
 
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
-      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} onDisclosure={() => interruptDisclosureRead(true)} renderInside={entry => historyGapBefore(entry, true, true)} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
+      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded, true)} onDisclosure={() => interruptDisclosureRead(true)} renderInside={entry => historyGapBefore(entry, true, true)} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
@@ -14847,14 +14949,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           {settingsReadNotice(true)}
           {initialThreadErrorNotice()}
           {threadSyncErrorNotice()}
-          {historyReadNotice()}
+          {historyReadNotice()}{groupCompletionNotice()}
           {receiptReadNotice(parentEventReading)}
           <Show when={attentionNavigation() && selectedThreadID() === attentionNavigation()?.childThreadID}>
             <div class="flower-chat-notice flower-error-actions"><Button size="sm" variant="ghost" onClick={() => { const navigation = attentionNavigation(); if (navigation) { selectThread(navigation.parentThreadID); setAttentionNavigation(null); } }}>{copy().chat.subagentReturnParent}</Button></div>
           </Show>
           <Show when={!threadLoadError() && !historyError() && !parentEventReading.recovering() && settingsReady()
             && (!props.adapter.connectLiveStream || livePresentationConfirmed())
-            && (threadLoadingFeedbackVisible() || !selectedThreadTailPreparing() && (historyBusy() || !parentEventReading.initialReady()))}>
+            && (threadLoadingFeedbackVisible() || !selectedThreadTailPreparing() && (historyBusy() || groupCompletion().main || receiptCompletion().main || !parentEventReading.initialReady()))}>
             {threadLoadingState()}
           </Show>
         </div>
@@ -14892,7 +14994,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
               fallback={selectedThreadFallbackState()}
             >
-              <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} onDisclosure={() => interruptDisclosureRead()} renderInside={entry => historyGapBefore(entry, false, true)} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
+              <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded)} onDisclosure={() => interruptDisclosureRead()} renderInside={entry => historyGapBefore(entry, false, true)} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
