@@ -13003,8 +13003,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </nav>
       </Show>}
       syncNotice={workspaceSyncNotice()}
-      runProgress={<Show when={subagentDetailRunProgress()}>{(progress) => (
-        <div class="flower-subagent-detail-progress flower-chat-notice">
+      progressDock={<Show when={subagentDetailRunProgress()}>{(progress) => (
+        <div class="flower-subagent-detail-progress">
           <FlowerProgressIndicator progress={progress()} label={liveProgressLabel(progress().kind, progress().retry)} outputCopy={copy().chat.outputProgress} />
         </div>
       )}</Show>}

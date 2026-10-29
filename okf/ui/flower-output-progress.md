@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower received output progress
 tags: [flower, streaming, progress, tools]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -20,6 +20,9 @@ are required.
 Each logical request and attempt has its own start, first-output time, last semantic-progress time and estimated received output tokens. Local tools, approvals and user input never use this model-pause presentation.
 
 Only phase text is a live region; numerical updates are readable without repeated automatic announcements.
+
+## Indicator geometry
+A live run indicator holds one width while it reports. Inside a host that gives it a bounded track, the mark and phase label keep a constant start inset, the token-and-clock metric keeps a constant end inset, and digits grow only in the free space between them. Reveal dots reserve their full width instead of animating it, so no tick resizes or recenters the indicator. The [subagent detail window](flower-subagent-detail-window.md) supplies that track in its footer rail.
 
 ## Progress symbol
 The shared Flower mark retains its five-petal geometry.

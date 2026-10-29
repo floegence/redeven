@@ -27814,7 +27814,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "flower",
           "progress",
@@ -27824,15 +27824,15 @@
         "title": "Flower received output progress",
         "type": "UI Contract"
       },
-      "body_length": 1817,
+      "body_length": 2314,
       "summary": "Flower shows how long a dispatched model request has waited and how much output\nhas arrived. Edit rows show line counts while their arguments are generated,\nthen use the confirmed tool result. Published Floret v7.42.0 owns the generic\nin-memory progress and preview lifecycle; Redeven interprets its own tool JSON\nand presents the safe observations. No new journal records or schema changes\nare required.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Model request\nEach logical request and attempt has its own start, first-output time, last semantic-progress time and estimated received output tokens. Local tools, approvals and user input never use this model-pause presentation.\n\nOnly phase text is a live region; numerical updates are readable without repeated automatic announcements.\n\n## Progress symbol\nThe shared Flower mark retains its five-petal geometry.\n\nThe symbol is decorative beside the existing localized status text and does not create another live announcement or execution state.\n\n## Edit arguments\nThe frozen tool definition supplies one optional argument preview parser per call. Their input budget is 1 MiB per call, with bounded JSON depth and field counts.\n\n[Confirmed file Activity](flower-file-activity.md) remains the durable outcome.",
-          "char_count": 813
+          "body": "## Model request\nEach logical request and attempt has its own start, first-output time, last semantic-progress time and estimated received output tokens. Local tools, approvals and user input never use this model-pause presentation.\n\nOnly phase text is a live region; numerical updates are readable without repeated automatic announcements.\n\n## Indicator geometry\nA live run indicator holds one width while it reports. Inside a host that gives it a bounded track, the mark and phase label keep a constant start inset, the token-and-clock metric keeps a constant end inset, and digits grow only in the free space between them. Reveal dots reserve their full width instead of animating it, so no tick resizes or recenters the indicator. The [subagent detail window](flower-subagent-detail-window.md) supplies that track in its footer rail.\n\n## Progress symbol\nThe shared Flower mark retains its five-petal geometry.\n\nThe symbol is decorative beside the existing localized status text and does not create another live announcement or execution state.\n\n## Edit arguments\nThe frozen tool definition supplies one optional argument preview parser per call. Their input budget is 1 MiB per call, with bounded JSON depth and field counts.\n\n[Confirmed file Activity](flower-file-activity.md) remains the durable outcome.",
+          "char_count": 1310
         },
         {
           "id": "boundaries",
@@ -27849,6 +27849,12 @@
           "path": "ui/flower-file-activity.md",
           "concept_id": "ui.flower-file-activity",
           "title": "Flower file activity presentation"
+        },
+        {
+          "label": "subagent detail window",
+          "path": "ui/flower-subagent-detail-window.md",
+          "concept_id": "ui.flower-subagent-detail-window",
+          "title": "Flower subagent detail window"
         }
       ],
       "backlinks": [
@@ -27856,6 +27862,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower subagent detail window",
+          "path": "ui/flower-subagent-detail-window.md",
+          "concept_id": "ui.flower-subagent-detail-window",
+          "title": "Flower subagent detail window"
         }
       ]
     },
@@ -28611,7 +28623,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "ai",
           "flower",
@@ -28621,15 +28633,15 @@
         "title": "Flower subagent detail window",
         "type": "UI Contract"
       },
-      "body_length": 1330,
+      "body_length": 2052,
       "summary": "The child detail window reads the complete canonical Floret `ThreadView`. HTTP and live updates share the selected parent-child identity, while Activity and queued-input controls remain attached to the same canonical child. The window preserves navigation and scroll state across updates without creating a second transcript or lifecycle owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The detail GET returns exactly `{ summary, current }` and accepts no paging query. Child currents use the same bounded unsent-text coalescing and transient browser-frame rules as roots, described by [live current transport](flower-live-timeline.md).\n\nFloret remains the lifecycle owner described in [Subagent runtime](../ai/subagent-runtime.md).",
-          "char_count": 345
+          "body": "The detail GET returns exactly `{ summary, current }` and accepts no paging query. Child currents use the same bounded unsent-text coalescing and transient browser-frame rules as roots, described by [live current transport](flower-live-timeline.md).\n\nThe window stacks three in-flow regions: a facts band, the transcript region, and an optional run-progress footer. The footer is a sibling of the transcript region, never an overlay, so a live run indicator can neither cover message text nor change the transcript's measured top and height. The footer centers one fixed-width pill under the window's inline center; [received output progress](flower-output-progress.md) owns the pill's stability rules.\n\nFloret remains the lifecycle owner described in [Subagent runtime](../ai/subagent-runtime.md).",
+          "char_count": 798
         },
         {
           "id": "boundaries",
@@ -28649,6 +28661,11 @@
           "id": "redeven:internal/flower_ui/src/threadCache.ts:0:owns bounded retained detail and root-inventory cleanup; cache tests cover capacity, reconnect, attention and release.",
           "source": "redeven:internal/flower_ui/src/threadCache.ts",
           "description": "Owns bounded retained detail and root-inventory cleanup; cache tests cover capacity, reconnect, attention and release."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/flower/SubagentDetailWindow.progressDock.browser.test.tsx:0:asserts the footer rail sits below the transcript region, stays centered, and keeps its pill width and label inset while reported tokens grow from `11` to `1234567`.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/flower/SubagentDetailWindow.progressDock.browser.test.tsx",
+          "description": "Asserts the footer rail sits below the transcript region, stays centered, and keeps its pill width and label inset while reported tokens grow from `11` to `1234567`."
         }
       ],
       "snippet": "The child detail window reads the complete canonical Floret `ThreadView`. HTTP and live updates share the selected parent-child identity, while Activity and queued-input controls remain attached to the same canonical child. The window prese",
@@ -28666,6 +28683,12 @@
           "title": "Flower incremental live state"
         },
         {
+          "label": "received output progress",
+          "path": "ui/flower-output-progress.md",
+          "concept_id": "ui.flower-output-progress",
+          "title": "Flower received output progress"
+        },
+        {
           "label": "Subagent detail presentation",
           "path": "ui/flower-subagent-detail.md",
           "concept_id": "ui.flower-subagent-detail",
@@ -28677,6 +28700,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower received output progress",
+          "path": "ui/flower-output-progress.md",
+          "concept_id": "ui.flower-output-progress",
+          "title": "Flower received output progress"
         },
         {
           "label": "Flower subagent detail presentation",
@@ -31494,5 +31523,5 @@
       ]
     }
   ],
-  "source_sha256": "ae754699571ba280a65ea649abc15ea17a13415a45b9740350196530bcba05d7"
+  "source_sha256": "bcdcd875e6bb0eca304d4428557f773568bfde4ee7604d5e99e98a9df02d074c"
 }

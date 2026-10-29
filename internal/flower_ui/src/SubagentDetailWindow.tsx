@@ -20,7 +20,7 @@ export type SubagentDetailWindowProps = Readonly<{
   statusIndicator: JSX.Element;
   agentSwitcher?: JSX.Element;
   syncNotice?: JSX.Element;
-  runProgress?: JSX.Element;
+  progressDock?: JSX.Element;
   elapsedLabel: string;
   description: string;
   loading: boolean;
@@ -92,7 +92,6 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         <div class="flower-subagent-detail-transcript-region">
           <div class="flower-chat-notices">
             {props.syncNotice}
-            {props.runProgress}
             <Show when={props.preparationNotice}>{props.preparationNotice}</Show>
             <Show when={!props.error && (props.loading && !props.detailAvailable || props.preparing && !props.preparationNotice)}>
               <div class="flower-subagent-detail-loading flower-chat-notice" role="status" aria-live="polite" aria-label={props.threadLoadingLabel}>
@@ -156,6 +155,11 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         </Show>
 
         </div>
+        <Show when={props.progressDock}>
+          <div class="flower-subagent-detail-progress-dock">
+            {props.progressDock}
+          </div>
+        </Show>
       </div>
     </FloatingWindow>
   );

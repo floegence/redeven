@@ -10470,22 +10470,74 @@ button.flower-attachment-preview-trigger:disabled {
   display: inline-block;
 }
 
-.flower-subagent-detail-progress {
-  flex: 0 0 auto;
+/* The run indicator rests on a footer rail centered under the transcript,
+ * mirroring the overview band above it. The pill holds a fixed width, and its
+ * contents are pinned to opposite edges: the flower and label start at the same
+ * inset on every tick, the metric ends at the same inset, and the numbers grow
+ * into the space between them. Nothing recenters a live status. */
+.flower-subagent-detail-progress-dock {
+  display: flex;
   min-width: 0;
-  padding: 0.5rem 1rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid var(--flower-subagent-window-border-soft);
+  background: var(--flower-subagent-window-surface-soft);
+  padding: 0.5rem 1rem 0.6rem;
+}
+
+.flower-subagent-detail-progress {
+  display: flex;
+  box-sizing: border-box;
+  width: min(100%, 22rem);
+  min-height: 2rem;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--flower-subagent-window-border-soft);
+  border-radius: 9999px;
+  background: var(--flower-subagent-window-surface-raised);
   color: var(--flower-subagent-window-muted);
+  padding: 0.3rem 0.9rem;
   font-size: var(--floe-type-caption);
+  line-height: 1.2;
 }
 
 .flower-subagent-detail-progress .flower-model-status-indicator {
   display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
 }
 
 .flower-subagent-detail-progress .flower-model-status-text {
-  white-space: normal;
+  flex: 0 1 auto;
+  white-space: nowrap;
 }
 
+/* Hold the reveal placeholder at full width: a width-animated ellipsis would
+ * move the pill's own content on every cycle. */
+.flower-subagent-detail-progress .flower-model-status-dots {
+  width: 3ch;
+  animation: none;
+}
+
+/* The metric is anchored to the right inset, so a growing token count or clock
+ * extends toward the label instead of pushing it. Tabular figures from the base
+ * rule keep each digit the same width while the value climbs. */
+.flower-subagent-detail-progress .flower-model-status-metric {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  color: var(--flower-subagent-window-muted);
+}
+
+/* The metric is separated from the label by free space, so the inline dot that
+ * used to join them would read as a stray mark on the trailing edge. */
+.flower-subagent-detail-progress .flower-model-status-metric > span[aria-hidden='true'] {
+  display: none;
+}
 
 .flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,
 .flower-subagent-status-label-running .flower-subagent-status-text {

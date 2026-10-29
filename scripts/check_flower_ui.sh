@@ -286,6 +286,7 @@ main() {
         src/ui/pages/settings/FlowerStorageSettings.browser.test.tsx
         src/ui/FlowerSurface.storageRecovery.browser.test.tsx
         src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
+        src/ui/flower/SubagentDetailWindow.progressDock.browser.test.tsx
       )
       local browser_offset
       for ((browser_offset = 0; browser_offset < ${#browser_tests[@]}; browser_offset += 12)); do
