@@ -45,7 +45,14 @@ retained trailing room at arrival. Otherwise it cancels obsolete reading demand,
 installs one bounded tail interest and reveals the prepared latest destination;
 it never walks intervening pages. Main and child views share these semantics.
 The accepted history baseline belongs to the live observer and reading revision;
-superseded navigation cannot replace a newer selection.
+superseded navigation cannot replace a newer selection. Collapsed turn/tool ranges
+use one canonical skip-and-retain installation to reach preceding dialogue. Opening
+a skipped disclosure reveals a bounded missing-content control; scrolling or that
+action fills the interval without changing the user's disclosure choice. Changing
+disclosure during a read cancels obsolete navigation, while live updates continue
+under the accepted interest. Thread/child selection and Latest clear queued gap
+requests. Header placement continues to follow chronological turn order and transfers
+focus when preceding content supplies an earlier header owner.
 
 Collapsed tools and parent reports retain presentation previews. Full activity
 bodies and report text are requested when disclosed, under fresh authorization.

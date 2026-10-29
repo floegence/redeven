@@ -36,6 +36,8 @@ type TimelineProps = Readonly<{
   readingBreaks?: ReadonlySet<string>;
   missingEvents?: readonly Readonly<{ after: number; before: number }>[];
   renderBefore?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
+  onDisclosure?: () => void;
+  renderInside?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
 }>;
 
@@ -412,6 +414,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
     manuallyExpanded: (group: FlowerToolSequence) => props.choices.manuallyExpanded(sequenceIdentity(group.key)),
     toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => {
+      props.onDisclosure?.();
       if (group.entryKeys.some(key => nodes.get(key)?.contains(document.activeElement))) button.focus({ preventScroll: true });
       layoutAnchor = button;
       props.scroll.activateDisclosure(button);
@@ -532,6 +535,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const toggle = (button: HTMLButtonElement) => {
       const current = group();
       if (!current || current.disclosure === 'none') return;
+      props.onDisclosure?.();
       if (turnExpanded()) {
         const focus = document.activeElement;
         if (current.processKeys.some((id) => focus && nodes.get(id)?.contains(focus))) button.focus({ preventScroll: true });
@@ -580,7 +584,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
             onPointerDown={(event) => startGesture(event.target as Element)}
             onKeyDown={(event) => startGesture(event.target as Element)}
             onContextMenu={() => { menuOwner = state()?.turnID; }}>
-            <Show when={contentMounted()}><Content /></Show>
+            {props.renderInside?.(entry)}<Show when={contentMounted()}><Content /></Show>
           </div>
         </div>
         <Show when={ended()}>{(label) => <div class="flower-turn-ended" role="status">{label()}</div>}</Show>

@@ -1,6 +1,7 @@
 import { batch, createComputed, createMemo, createSignal, onCleanup, untrack, type Accessor } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import type { HistoryReadingGap } from './historyReadingWindow';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerTurnProcess, FlowerTurnProcessProjection } from './flowerTurnPresentation';
 import type { FlowerToolSequenceMember, FlowerToolSequenceProjection } from './flowerToolSequences';
@@ -85,4 +86,26 @@ export function createFlowerTurnEndSubscriptions(thread: Accessor<Pick<FlowerThr
     return new Map(readPresentationValue(current?.turns ?? []).map(turn => [JSON.stringify([current!.thread_id, turn.turn_id]), turn.ended_at]));
   });
   return (threadID: string | undefined, turnID: string | undefined) => subscribe(JSON.stringify([threadID, turnID]));
+}
+
+// One bounded index per reading window; mounted rows subscribe only to their
+// own gap. Streaming text never invalidates every row's gap lookup.
+export function createFlowerHistoryGapSubscriptions(entries: Accessor<readonly FlowerTimelineEntry[]>, gaps: Accessor<readonly HistoryReadingGap[]>) {
+  type Gap = Readonly<{ gap: HistoryReadingGap; entryKey: string; nested: boolean }>;
+  const current = createMemo(() => {
+    const missing = new Map(gaps().map(gap => [gap.afterID, gap]));
+    const result = new Map<string, Gap>();
+    if (missing.size) for (const entry of entries()) {
+      if (entry.type !== 'message' || result.has(entry.message.id)) continue;
+      const gap = missing.get(entry.message.id);
+      if (gap) result.set(entry.message.id, { gap, entryKey: entry.key,
+        nested: entry.blocks.some(block => block.type === 'activity' || block.type === 'content' && block.block_type === 'thinking') });
+    }
+    return result;
+  });
+  return { subscribe: createFlowerKeyedSubscriptions(current, (a, b) => a === b || Boolean(a && b
+    && a.entryKey === b.entryKey && a.nested === b.nested && a.gap.beforeID === b.gap.beforeID
+    && a.gap.afterID === b.gap.afterID && a.gap.first === b.gap.first && a.gap.last === b.gap.last
+    && a.gap.height === b.gap.height && a.gap.folded === b.gap.folded)),
+    breaks: createMemo(() => new Set([...current().values()].map(value => value.entryKey))) };
 }

@@ -1,6 +1,6 @@
 import { createComputed, createMemo, createRoot, createSignal } from 'solid-js';
 import { expect, it } from 'vitest';
-import { createFlowerTurnEndSubscriptions, createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerProcessSubscriptions, createFlowerFinalItemSubscriptions } from './flowerPresentationSubscriptions';
+import { createFlowerHistoryGapSubscriptions, createFlowerTurnEndSubscriptions, createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerProcessSubscriptions, createFlowerFinalItemSubscriptions } from './flowerPresentationSubscriptions';
 import { projectFlowerTurnProcess } from './flowerTurnPresentation';
 import type { FlowerRuntimeTurn, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
@@ -101,5 +101,27 @@ it('keeps historical answer time subscribers stable while active turn facts chan
     expect(runs).toBe(1); expect(end()).toBe(history.ended_at);
     setThread({ thread_id: 'thread', turns: [{ ...history, ended_at: '2026-10-28T00:00:02Z' }] });
     expect(runs).toBe(2); expect(end()).toBe('2026-10-28T00:00:02Z');
+  } finally { dispose(); }
+}));
+
+it('keeps gap subscriptions local across 600 retained rows and streaming updates', () => createRoot(dispose => {
+  try {
+    const row = (id: string): FlowerTimelineEntry => ({ type: 'message', key: id, blocks: [],
+      message: { id, role: 'assistant', content: id, status: 'complete', created_at_ms: 1 } });
+    const rows = Array.from({ length: 600 }, (_, i) => row(String(i)));
+    const [entries, setEntries] = createSignal<readonly FlowerTimelineEntry[]>(rows);
+    const gap = { beforeID: '10', afterID: '11', first: 11, last: 40, height: 44, folded: true };
+    const [gaps, setGaps] = createSignal([gap]);
+    const index = createFlowerHistoryGapSubscriptions(entries, gaps);
+    const counts = Array.from({ length: 600 }, () => 0);
+    rows.forEach((entry, i) => { const read = index.subscribe(entry.key); createComputed(() => { read(); counts[i]++; }); });
+    for (let i = 0; i < 100; i++) setEntries([...rows, row('tail-' + i)]);
+    expect(counts.every(count => count === 1)).toBe(true);
+    expect([...index.breaks()]).toEqual(['11']);
+    setGaps([{ ...gap, height: 60 }]);
+    expect(counts[11]).toBe(2);
+    expect(counts.filter(count => count > 1)).toHaveLength(1);
+    setEntries([]);
+    expect(index.subscribe('11')()).toBeUndefined();
   } finally { dispose(); }
 }));

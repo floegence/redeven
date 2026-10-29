@@ -86,15 +86,18 @@ export function historyReadingSelection(retained: readonly string[], page: reado
   return combined.filter(id => candidates.has(id));
 }
 
-export type HistoryReadingGap = Readonly<{ beforeID: string; afterID: string; first: number; last: number; height: number }>;
+export type HistoryReadingGap = Readonly<{ beforeID: string; afterID: string; first: number; last: number; height: number; folded?: boolean }>;
 type Member = Readonly<{ id: string; ordinal: number }>;
 
 // Retain geometry only for gaps between the current finite selection. No map
 // grows with all previously visited history. Ordinals are public membership
 // positions, not journal depths, so hidden control records cannot create gaps.
 export function historyReadingGaps(previous: readonly Member[], next: readonly Member[], gaps: readonly HistoryReadingGap[],
-  heights: ReadonlyMap<string, number>): readonly HistoryReadingGap[] {
+  heights: ReadonlyMap<string, number>, skipped?: FlowerHistoryWindow['skipped_range']): readonly HistoryReadingGap[] {
   const result: HistoryReadingGap[] = [];
+  const positions = new Map(next.map(item => [item.id, item.ordinal]));
+  const certified = gaps.filter(gap => gap.folded && positions.get(gap.beforeID) === gap.first - 1
+    && positions.get(gap.afterID) === gap.last);
   for (let index = 1; index < next.length; index++) {
     const before = next[index - 1], after = next[index];
     const first = before.ordinal + 1, last = after.ordinal;
@@ -105,7 +108,9 @@ export function historyReadingGaps(previous: readonly Member[], next: readonly M
       if (overlap) height += gap.height * overlap / (gap.last - gap.first);
     }
     for (const item of previous) if (item.ordinal >= first && item.ordinal < last) height += heights.get(item.id) ?? 0;
-    result.push({ beforeID: before.id, afterID: after.id, first, last, height });
+    const folded = Boolean(skipped && before.ordinal >= skipped.first_ordinal && after.ordinal <= skipped.last_ordinal)
+      || certified.some(gap => first >= gap.first && last <= gap.last);
+    result.push({ beforeID: before.id, afterID: after.id, first, last, height, ...(folded ? { folded: true } : {}) });
   }
   return result;
 }
@@ -140,4 +145,49 @@ export function historyGapRequest(viewport: HTMLElement, direction: 'before' | '
   // Do not read past a small missing interval into another retained island.
   // Overshooting would evict the opposite page and alternate between gaps.
   return { anchor_id: edge === 'before' ? after : before, direction: edge, limit };
+}
+
+// Resolve only the mounted anchor's disclosure. No historical scan or hidden
+// page traversal is needed; the canonical owner validates every skipped fact.
+export function historyFoldedNavigation(viewport: HTMLElement, input: FlowerHistoryRequest,
+  items: readonly FlowerRuntimeCurrentItem[], protectedIDs: readonly string[]): FlowerHistoryRequest | undefined {
+  if (!input.anchor_id || input.anchor_offset || input.direction !== 'before' && input.direction !== 'after') return;
+  const row = [...viewport.querySelectorAll<HTMLElement>('[data-flower-row-message-id]')]
+    .find(node => node.dataset.flowerRowMessageId === input.anchor_id);
+  if (!row || row.dataset.flowerTurnProcess !== 'true') return;
+  const source = items.find(item => item.id === input.anchor_id);
+  if (!source || source.live) return;
+  const turn = row.dataset.flowerTurnId;
+  const closedTurn = [...viewport.querySelectorAll<HTMLElement>('[data-flower-turn-id]')]
+    .filter(node => node.dataset.flowerTurnId === turn)
+    .some(node => node.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded') === 'false');
+  // Sequence DOM may be reparented into its first node. Its mounted disclosure
+  // remains the only authority for a nested manual choice.
+  const message = [...viewport.querySelectorAll<HTMLElement>('[data-flower-message-id]')]
+    .find(node => node.dataset.flowerMessageId === input.anchor_id);
+  const sequenceID = row.querySelector<HTMLElement>('[data-flower-sequence-owner]')?.dataset.flowerSequenceOwner;
+  const sequence = sequenceID ? [...viewport.querySelectorAll<HTMLElement>('[data-flower-sequence]')].find(node => node.dataset.flowerSequence === sequenceID && node.querySelector('.flower-tool-sequence-toggle')) : message?.closest('[data-flower-sequence]');
+  const closedTools = sequence?.querySelector('.flower-tool-sequence-toggle')?.getAttribute('aria-expanded') === 'false';
+  if (!closedTurn && !closedTools) return;
+  const limit = Math.min(input.limit ?? HISTORY_PAGE_ITEMS, HISTORY_PAGE_ITEMS);
+  const available = new Set(items.map(item => item.id));
+  const retained = new Set(protectedIDs.filter(id => available.has(id)));
+  retained.add(input.anchor_id);
+  // Keep mounted summary owners through prepend and preserve their focus.
+  for (const summary of viewport.querySelectorAll('.flower-turn-summary-button')) {
+    const id = summary.closest<HTMLElement>('[data-flower-row-message-id]')?.dataset.flowerRowMessageId;
+    if (id && available.has(id)) retained.add(id);
+  }
+  const costs = new Map(items.map(item => [item.id, historyReadingItemBytes(item)]));
+  let bytes = [...retained].reduce((sum, id) => sum + (costs.get(id) ?? 0), 0);
+  const maximum = HISTORY_READING_ITEMS - limit - 2;
+  const budget = HISTORY_READING_BYTES - limit * 4096;
+  if (retained.size > maximum || bytes > budget) return;
+  const ordered = input.direction === 'before' ? items : [...items].reverse();
+  for (const item of ordered) {
+    if (retained.has(item.id)) continue;
+    if (retained.size >= maximum || bytes + costs.get(item.id)! > budget) break;
+    retained.add(item.id); bytes += costs.get(item.id)!;
+  }
+  return { ...input, limit, skip_folded: closedTurn ? 'turn' : 'tools', retain_item_ids: [...retained] };
 }

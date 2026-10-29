@@ -16,8 +16,23 @@ afterEach(() => {
   expect(ownerWarnings).toEqual([]);
 });
 
-function selectPage(items: FlowerRuntimeCurrentItem[], request: FlowerHistoryRequest = {}) {
+function selectPage(items: FlowerRuntimeCurrentItem[], request: FlowerHistoryRequest = {}): FlowerRuntimeCurrentItem[] {
   if (request.item_ids) return items.filter(item => request.item_ids!.includes(item.id)).map(item => ({ ...item }));
+  if (request.skip_folded) {
+    const anchor = items.findIndex(item => item.id === request.anchor_id);
+    const owner = items[anchor];
+    const matches = (item: FlowerRuntimeCurrentItem | undefined) => item && item.turn_id === owner.turn_id && item.run_id === owner.run_id
+      && (item.kind === 'tool' || item.kind === 'thinking');
+    if (owner && matches(owner)) {
+      let first = anchor, last = anchor;
+      while (matches(items[first - 1])) first--;
+      while (matches(items[last + 1])) last++;
+      const adjacent = selectPage(items, { ...request, skip_folded: undefined, retain_item_ids: undefined,
+        anchor_id: items[request.direction === 'before' ? first : last].id });
+      const ids = new Set([...(request.retain_item_ids ?? []), items[first].id, items[last].id, ...adjacent.map(item => item.id)]);
+      return items.filter(item => ids.has(item.id)).map(item => ({ ...item }));
+    }
+  }
   const limit = request.limit ?? 150;
   const anchor = request.anchor_id ? items.findIndex(item => item.id === request.anchor_id) + (request.anchor_offset ?? 0) : items.length;
   const first = request.direction === 'after' ? request.anchor_id ? anchor + 1 : 0
@@ -26,8 +41,14 @@ function selectPage(items: FlowerRuntimeCurrentItem[], request: FlowerHistoryReq
   const end = request.direction === 'after' || request.direction === 'around' ? Math.min(items.length, first + limit) : anchor;
   return items.slice(first, end).map(item => ({ ...item }));
 }
-function pageBounds(items: FlowerRuntimeCurrentItem[], selected: FlowerRuntimeCurrentItem[]) {
-  return { first_item_id: selected[0]?.id, last_item_id: selected.at(-1)?.id,
+function pageBounds(items: FlowerRuntimeCurrentItem[], selected: FlowerRuntimeCurrentItem[], request?: FlowerHistoryRequest) {
+  const anchor = items.findIndex(item => item.id === request?.anchor_id);
+  const owner = items[anchor];
+  let first = anchor, last = anchor;
+  const match = (item: FlowerRuntimeCurrentItem | undefined) => item && owner && item.turn_id === owner.turn_id && item.run_id === owner.run_id && (item.kind === 'tool' || item.kind === 'thinking');
+  if (request?.skip_folded && match(owner)) { while (match(items[first - 1])) first--; while (match(items[last + 1])) last++; }
+  const skipped = request?.skip_folded && match(owner) ? { leaf_id: 'folded-leaf', turn_id: owner.turn_id!, run_id: owner.run_id!, first_item_id: items[first].id, last_item_id: items[last].id, first_ordinal: items[first].ordinal, last_ordinal: items[last].ordinal } : undefined;
+  return { skipped_range: skipped, first_item_id: selected[0]?.id, last_item_id: selected.at(-1)?.id,
     has_before: selected.length > 0 && selected[0].id !== items[0].id,
     has_after: selected.length > 0 && selected.at(-1)!.id !== items.at(-1)!.id };
 }
@@ -569,8 +590,14 @@ describe('continuous history navigation', () => {
     expect(history.mock.calls.every(([, request]) => (request.limit ?? request.item_ids?.length ?? 150) <= 150)).toBe(true);
   });
 
-  it.each(['main-wheel', 'main-keyboard', 'child-wheel', 'child-keyboard'])('reads older %s history when all loaded message bodies are folded', async mode => {
+  it.each(['main-wheel', 'main-keyboard', 'child-wheel', 'child-keyboard', 'main-toggle', 'child-toggle', 'main-tools', 'child-tools', 'main-stream', 'child-stream'])('reaches preceding dialogue with one %s read through a folded turn', async mode => {
     const child = mode.startsWith('child');
+    const race = mode.endsWith('toggle'), toolsOnly = mode.endsWith('tools'), streaming = mode.endsWith('stream');
+    const events: FlowerLiveStreamEnvelope[] = [];
+    let wake: (() => void) | undefined;
+    let version = 1;
+    const hold = deferred<void>();
+    let skippedSignal: AbortSignal | undefined;
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'folded-history', messages: [] });
     const items: FlowerRuntimeCurrentItem[] = [
@@ -582,13 +609,28 @@ describe('continuous history navigation', () => {
           presentation: { label: `Inspect ${i}`, renderer: 'terminal', payload: { command: 'pwd', output: 'Done' } } },
       })),
     ].map(item => ({ ...item, canonical_ordinal: item.ordinal }));
-    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
+    if (streaming) items.push({ id: 'live-tail', kind: 'assistant', turn_id: 'active', run_id: 'active', ordinal: 102, canonical_ordinal: 102, text: 'Live output', live: true });
+    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest, signal?: AbortSignal) => {
+      if (race && request.skip_folded) { skippedSignal = signal; await hold.promise; }
       const selected = request.anchor_id || request.item_ids ? selectPage(items, request) : items.slice(-50);
-      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1,
-        items: selected, window: { ...pageBounds(items, selected), leaf_id: 'folded-leaf' },
+      if (streaming && request.skip_folded) version = 2;
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: streaming ? 'active' : 'idle', view_version: version,
+        ...(streaming ? { turn_id: 'active', run_id: 'active', run_progress: { phase: 'streaming' as const } } : {}),
+        items: selected, window: { ...pageBounds(items, selected, request), leaf_id: 'folded-leaf' },
         turns: [{ turn_id: 'work', run_id: 'work', started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:14:02Z',
           outcome: 'interrupted', elapsed_ms: 842000, waiting_ms: 0, work_duration_ms: 842000,
           final_item_ids: [], final_boundary_complete: false }] };
+      if (streaming && request.skip_folded) {
+        const update = { thread_id: seed.thread_id, turn_id: 'active', run_id: 'active', base_version: 2, view_version: 3,
+          facts: { activity: 'active' as const, queue_count: 0, run_progress: { phase: 'streaming' as const } },
+          items: [{ kind: 'append' as const, item_id: 'live-tail', append: { offset_bytes: 11, text: ' continues through navigation' } }] };
+        version = 3;
+        items[items.length - 1] = { ...items.at(-1)!, text: 'Live output continues through navigation' };
+        events.push({ schema_version: 3, kind: 'thread.batch', thread_id: child ? 'folded-parent' : seed.thread_id,
+          reading_revision: request.reading_revision, ...(child ? { subagent_update: update } : { update }) });
+        wake?.();
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
     });
     const childSummary = subagentSummary({ parent_thread_id: 'folded-parent', thread_id: seed.thread_id, status: 'interrupted' });
@@ -601,10 +643,12 @@ describe('continuous history navigation', () => {
     }] });
     const selected = child ? parent : seed;
     const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [selected], loadHistory: child ? async () => liveBootstrap(parent) : history,
-      loadSubagentDetail: async (_parent, id, input) => { const result = await history(id, input ?? {}); return { summary: childSummary, current: result.current, window: result.current.window }; },
+      loadSubagentDetail: async (_parent, id, input, signal) => { const result = await history(id, input ?? {}, signal); return { summary: childSummary, current: result.current, window: result.current.window }; },
       async *connectLiveStream({ signal }) {
         yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'folded-reader', summaries: [selected] };
-        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+        const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
+        try { while (!signal.aborted) { const value = events.shift(); if (value) yield value; else await new Promise<void>(resolve => { wake = resolve; }); } }
+        finally { signal.removeEventListener('abort', abort); }
       },
     }, { focusThreadRequest: { request_id: 'folded-history', thread_id: selected.thread_id } });
     root.style.height = '780px';
@@ -617,10 +661,37 @@ describe('continuous history navigation', () => {
     await waitFor(() => Boolean(surface?.querySelector('.flower-turn-summary-button')) && surface.querySelector<HTMLElement>('.flower-chat-transcript, .flower-subagent-detail-transcript')?.dataset.flowerTailPreparing !== 'true');
     const viewport = surface.querySelector<HTMLDivElement>('.flower-chat-transcript, .flower-subagent-detail-transcript')!;
     await waitFor(() => surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded') === 'false');
-    expect([...surface.querySelectorAll<HTMLElement>('[data-flower-message-id]')].some(node => node.getBoundingClientRect().height > 0)).toBe(false);
+    if (!streaming) expect([...surface.querySelectorAll<HTMLElement>('[data-flower-message-id]')].some(node => node.getBoundingClientRect().height > 0)).toBe(false);
     expect(viewport.scrollHeight).toBe(viewport.clientHeight);
     expect(history).toHaveBeenCalledOnce();
-    for (let pass = 0; pass < 3 && !surface.querySelector('[data-flower-message-id="earliest-user"]'); pass++) {
+    let summaryButton = surface.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!;
+    summaryButton.focus({ preventScroll: true });
+    if (toolsOnly) {
+      summaryButton.click();
+      await waitFor(() => Boolean(surface.querySelector('.flower-tool-sequence-toggle')));
+      const sequence = surface.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+      if (sequence.getAttribute('aria-expanded') === 'true') sequence.click();
+    }
+    if (race) {
+      viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+      await waitFor(() => Boolean(skippedSignal));
+      summaryButton.click(); summaryButton.click(); summaryButton.click();
+      expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
+      expect(skippedSignal!.aborted).toBe(true);
+      await waitFor(() => Boolean(surface.querySelector('.flower-tool-sequence-toggle')));
+      const sequence = surface.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+      if (sequence.getAttribute('aria-expanded') === 'false') sequence.click();
+      hold.resolve();
+      await waitFor(() => history.mock.calls.length >= 3);
+      await new Promise(resolve => setTimeout(resolve, 250));
+      expect(surface.querySelector('.flower-turn-summary-button')).toBe(summaryButton);
+      expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
+      expect(sequence.getAttribute('aria-expanded')).toBe('true');
+      expect(history.mock.calls.filter(([, input]) => input.skip_folded)).toHaveLength(1);
+      expect([...surface.querySelectorAll('[role="alert"]')].some(node => Boolean(node.textContent?.trim()))).toBe(false);
+      return;
+    }
+    for (let pass = 0; pass < 1; pass++) {
       const before = history.mock.calls.length;
       if (mode.endsWith('keyboard')) {
         viewport.tabIndex = 0; viewport.focus({ preventScroll: true });
@@ -628,13 +699,28 @@ describe('continuous history navigation', () => {
       } else viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
       await waitFor(() => history.mock.calls.length > before);
       await new Promise(resolve => setTimeout(resolve, 150));
-      expect(history.mock.calls.length - before).toBe(2);
+      expect(history.mock.calls.length - before).toBe(1);
     }
     expect(surface.querySelector('[data-flower-message-id="earliest-user"]')?.textContent).toContain('The original request');
+    if (streaming) await waitFor(() => Boolean(surface.querySelector('[data-flower-message-id="live-tail"]')?.textContent?.includes('continues through navigation')));
     const calls = history.mock.calls.length;
     await new Promise(resolve => setTimeout(resolve, 250));
     expect(history.mock.calls.length).toBe(calls);
-    expect(surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('false');
+    summaryButton = surface.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!;
+    expect(summaryButton.getAttribute('aria-expanded')).toBe(toolsOnly ? 'true' : 'false');
+    expect(history.mock.calls.at(-1)![1].skip_folded).toBe(toolsOnly ? 'tools' : 'turn');
+    expect([...surface.querySelectorAll<HTMLElement>('[data-flower-history-gap]')].every(node => node.getBoundingClientRect().height === 0)).toBe(true);
+    if (!toolsOnly) summaryButton.click();
+    await waitFor(() => Boolean(surface.querySelector('.flower-tool-sequence-toggle')));
+    const sequence = surface.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+    if (sequence.getAttribute('aria-expanded') === 'false') sequence.click();
+    await waitFor(() => [...surface.querySelectorAll<HTMLElement>('[data-flower-history-gap]')].some(node => node.getBoundingClientRect().height > 0));
+    expect(history.mock.calls.length).toBe(calls);
+    const gapButton = surface.querySelector<HTMLButtonElement>('.flower-history-gap-button')!;
+    gapButton.click();
+    await waitFor(() => history.mock.calls.length > calls);
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-row-message-id="folded-1"]')));
+    expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('bounds collapsed history reads to scroll demand, including input at an immovable edge', async () => {

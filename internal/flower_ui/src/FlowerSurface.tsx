@@ -1,4 +1,4 @@
-import { createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions } from './flowerPresentationSubscriptions';
+import { createFlowerHistoryGapSubscriptions, createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions } from './flowerPresentationSubscriptions';
 import { FlowerTaskFiles } from './FlowerTaskFiles';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 import { createActivityFieldReader } from './activityFieldReader';
@@ -293,7 +293,8 @@ import { applyFlowerRuntimeContext, applyFlowerRuntimeCurrentView } from './runt
 import { threadNeedsFileActivityTargets } from './fileActivityTargets';
 import { mapFlowerActivityItem, mapFlowerGoal } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
-import { historyReadingKey, historyReadingRequest, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes, type HistoryReadingGap } from './historyReadingWindow';
+import type { FlowerHistoryRequest } from './contracts/flowerSurfaceContracts';
+import { historyFoldedNavigation, historyReadingKey, historyReadingRequest, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes, type HistoryReadingGap } from './historyReadingWindow';
 import { recoverHistoryRead, recoverableHistoryRead } from './historyReadRecovery';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
@@ -3866,7 +3867,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const interruption = scroll.userInterruptionRevision();
     return (cache: ReturnType<typeof createThreadCache>) => {
       const next = cache.readingItemIDs(tid).flatMap(id => { const item = cache.runtimeItem(tid, id); return item ? [item] : []; });
-      const gaps = historyReadingGaps(previous, next, retained.thread === tid ? retained.gaps : [], heights);
+      const gaps = historyReadingGaps(previous, next, retained.thread === tid ? retained.gaps : [], heights, current.window?.skipped_range);
       (child ? setChildReadingGaps : setMainReadingGaps)({ thread: tid, gaps });
       if (virtualAnchor) queueMicrotask(() => {
         if (interruption !== scroll.userInterruptionRevision() || viewport !== scroll.viewport()) return;
@@ -3875,35 +3876,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     };
   };
-  const historyReadingBreaks = (child = false) => {
-    const retained = child ? childReadingGaps() : mainReadingGaps();
-    const tid = child ? activeSubagentID() : selectedThreadID();
-    const entries = child ? subagentDetailTimelineEntries() : visibleTimelineEntries();
-    if (retained.thread !== tid) return new Set<string>();
-    return new Set(retained.gaps.flatMap(gap => {
-      const entry = entries.find(row => row.type === 'message' && row.message.id === gap.afterID);
-      return entry ? [entry.key] : [];
-    }));
-  };
-  const historyGapBefore = (entry: Accessor<FlowerTimelineEntry>, child = false) => {
+  const historyReadingBreaks = (child = false) => (child ? childHistoryGaps : mainHistoryGaps).breaks();
+  const renderHistoryGap = (id: string, child: boolean, inside: boolean, sequence: boolean, entryKey?: Accessor<string>) => {
+    const subscribed = (child ? childHistoryGaps : mainHistoryGaps).subscribe(id);
     const gap = createMemo(() => {
-      const value = entry();
-      if (value.type !== 'message') return;
-      const retained = child ? childReadingGaps() : mainReadingGaps();
-      const tid = child ? activeSubagentID() : selectedThreadID();
-      if (retained.thread !== tid) return;
-      const missing = retained.gaps.find(gap => gap.afterID === value.message.id);
-      if (!missing) return;
-      const entries = child ? subagentDetailTimelineEntries() : visibleTimelineEntries();
-      const first = entries.find(row => row.type === 'message' && row.message.id === value.message.id);
-      if (first?.key !== value.key) return;
-      return missing;
+      const value = subscribed();
+      if (!value || entryKey && entryKey() !== value.entryKey || inside && value.nested !== sequence
+        || Boolean(value.gap.folded) !== inside) return;
+      return value.gap;
     });
-    return <Show when={gap()}>{value => <div aria-hidden="true" data-flower-history-gap
+    return <Show when={gap()}>{value => <div data-flower-history-gap
       data-flower-history-gap-before={value().beforeID} data-flower-history-gap-after={value().afterID}
       data-flower-history-gap-first={value().first} data-flower-history-gap-last={value().last}
-      style={{ height: value().height + 'px', 'flex-shrink': '0' }} />}</Show>;
+      style={{ height: Math.max(44, value().height) + 'px', 'flex-shrink': '0' }}>
+      <button type="button" class="flower-history-gap-button" disabled={child ? activeSubagentDetail()?.requestStatus === 'loading' : historyBusy()} onClick={() => {
+        const input: FlowerHistoryRequest = { anchor_id: value().beforeID, direction: 'after', limit: Math.min(40, value().last - value().first) };
+        if (child) { subagentExplicitHistoryRead = input; subagentReadingPending = true; subagentHistoryEdgeKey = ''; scheduleSubagentHistoryReading(); }
+        else { explicitHistoryRead = input; historyReadingPending = true; historyEdgeKey = ''; scheduleHistoryReading(); }
+      }}>{copy().chat.history.expand}</button>
+    </div>}</Show>;
   };
+
+  const historyGapBefore = (entry: Accessor<FlowerTimelineEntry>, child = false, inside = false) => {
+    const id = createMemo(() => { const value = entry(); return value.type === 'message' ? value.message.id : undefined; });
+    return <Show when={id()} keyed>{value => renderHistoryGap(value, child, inside, false, () => entry().key)}</Show>;
+  };
+  const sequenceHistoryGap = (messageID: Accessor<string>, scroll: FlowerScrollTailController) =>
+    <Show when={messageID()} keyed>{id => renderHistoryGap(id, scroll === subagentDetailScroll, true, true)}</Show>;
 
   const receiveThreadDetail = (
     candidate: ThreadView,
@@ -4268,12 +4267,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const view = await props.adapter.loadHistory(tid, { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) }, signal);
       signal.throwIfAborted();
       if (observer && (revision !== historyReadingRevision || observer !== computerObserverID())) throw new DOMException('History read was superseded.', 'AbortError');
-      if (observer) { historyReadingInput = input; historyReadRevisions.set(view, revision); }
+      if (observer) { historyReadingInput = input.skip_folded ? { item_ids: view.current.items?.map(item => item.id) } : input; historyReadRevisions.set(view, revision); }
       return view;
   };
-  type ReadingHandoff = { controller: AbortController; itemIDs: ReadonlySet<string>; moved: boolean };
+  type ReadingHandoff = { controller: AbortController; itemIDs: ReadonlySet<string>; moved: boolean; disclosed: boolean };
   let historyHandoff: ReadingHandoff | undefined;
   let subagentHandoff: ReadingHandoff | undefined;
+  const interruptDisclosureRead = (child = false) => {
+    const pending = child ? subagentHandoff : historyHandoff;
+    if (pending) { pending.moved = true; pending.disclosed = true; pending.controller.abort(); }
+    if (child) { subagentHistoryEdgeKey = ''; subagentReadingPending = false; subagentExplicitHistoryRead = undefined; }
+    else { historyEdgeKey = ''; historyReadingPending = false; explicitHistoryRead = undefined; }
+  };
   const protectReadingHandoff = (child = false) => {
     const pending = child ? subagentHandoff : historyHandoff;
     if (!pending || pending.moved) return pending?.moved === true;
@@ -4298,6 +4303,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     document.removeEventListener('selectionchange', scheduleProtectedReading);
     document.removeEventListener('focusin', scheduleProtectedReading);
   });
+  let explicitHistoryRead: FlowerHistoryRequest | undefined;
   let historyEdgeKey = '';
   let historyReadingPending = false;
   let historyReadingFrame = 0;
@@ -4354,9 +4360,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // Consume one coalesced user demand. Layout/HTTP completion may service a
     // newer demand, but cannot recursively walk collapsed history by itself.
     historyReadingPending = false;
-    const input = historyGapRequest(viewport, historyScrollDirection) ?? historyReadingRequest(window,
+    const input = explicitHistoryRead ?? historyGapRequest(viewport, historyScrollDirection) ?? historyReadingRequest(window,
       { top: viewport.scrollTop, height: viewport.scrollHeight, viewport: viewport.clientHeight },
       transcriptScroll.followingLatest(), historyScrollDirection, historyReadingInput);
+    explicitHistoryRead = undefined;
     if (!input) return;
     const key = historyReadingKey(tid, window, input, protectedHistoryItems(transcriptScroll));
     if (historyEdgeKey === key) return;
@@ -4367,8 +4374,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     let release: (() => void) | undefined;
     setHistoryBusy(true); setHistoryError('');
     try {
-      let interest = input;
-      if (input.anchor_id) {
+      let interest = historyFoldedNavigation(viewport, input, [...new Set([...threadCache().readingItemIDs(tid), ...protectedHistoryItems(transcriptScroll)])].flatMap(id => { const item = threadCache().runtimePreviewItem(tid, id); return item ? [item] : []; }), protectedHistoryItems(transcriptScroll)) ?? input;
+      if (input.anchor_id && !interest.skip_folded) {
         // Prefetch never fences the current observer or queues its live deltas.
         const page = await recoverHistoryRead(() => readHistory(tid, input, signal, false), signal);
         signal.throwIfAborted();
@@ -4379,7 +4386,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       release = threadCache().beginRuntimeRead(tid);
       const previousInput = historyReadingInput;
-      const handoff = interest.item_ids ? { controller: new AbortController(), itemIDs: new Set(interest.item_ids), moved: false } : undefined;
+      const handoffIDs = interest.item_ids ?? interest.retain_item_ids;
+      const handoff = handoffIDs ? { controller: new AbortController(), itemIDs: new Set(handoffIDs), moved: false, disclosed: false } : undefined;
       historyHandoff = handoff;
       let view: Awaited<ReturnType<typeof readHistory>>;
       try {
@@ -4395,7 +4403,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         historyReadingInput = previousInput;
         view = await recoverHistoryRead(() => readDetail(readSignal => readHistory(tid, previousInput, readSignal, true), signal), signal);
         historyEdgeKey = '';
-        historyReadingPending = true;
+        historyReadingPending = !handoff.disclosed;
       } finally {
         if (historyHandoff === handoff) historyHandoff = undefined;
       }
@@ -4845,7 +4853,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setPresentedSelection(null);
       historyRecoveryUsed = false;
       historyAcceptedReadingRevision = 0; historyPendingEnvelopes.clear();
-      releaseHistoryInterest(historyReadingThreadID, ++historyReadingRevision); historyReadingInput = {}; historyReadingThreadID = tid; historyEdgeKey = ''; historyReadingPending = false; historyScrollDirection = undefined; setHistoryBusy(false); setHistoryError('');
+      releaseHistoryInterest(historyReadingThreadID, ++historyReadingRevision); historyReadingInput = {}; historyReadingThreadID = tid; historyEdgeKey = ''; historyReadingPending = false; explicitHistoryRead = undefined; historyScrollDirection = undefined; setHistoryBusy(false); setHistoryError('');
       beginThreadDetailDisplayCycle(tid);
       setThreadLoadError('');
       transcriptScroll.startFollowing();
@@ -6055,7 +6063,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const releaseRead = threadCache().beginRuntimeRead(request.childThreadID);
     const observer = computerObserverID();
     const previousInput = subagentReadingInput;
-    const handoff = preserveReading && input.item_ids ? { controller: readController, itemIDs: new Set(input.item_ids), moved: false } : undefined;
+    const handoffIDs = input.item_ids ?? input.retain_item_ids;
+    const handoff = preserveReading && handoffIDs ? { controller: readController, itemIDs: new Set(handoffIDs), moved: false, disclosed: false } : undefined;
     subagentHandoff = handoff;
     let revision = 0;
     try {
@@ -6069,7 +6078,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       protectReadingHandoff(true);
       readController.signal.throwIfAborted();
       if (revision !== subagentReadingRevision || observer !== computerObserverID()) return false;
-      subagentReadingInput = input;
+      subagentReadingInput = input.skip_folded ? { item_ids: detail.current.items?.map(item => item.id) } : input;
       const parentThreadID = trimString(detail.summary.parent_thread_id);
       const childThreadID = trimString(detail.summary.thread_id);
       if (
@@ -6109,7 +6118,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (subagentHandoff === handoff) subagentHandoff = undefined;
         subagentReadingInput = previousInput;
         subagentHistoryEdgeKey = '';
-        subagentReadingPending = true;
+        subagentReadingPending = !handoff.disclosed;
         return await refreshActiveSubagentDetail(false, previousInput, false);
       }
       if ((error as { code?: unknown })?.code === 'flower_live_sync_error') liveTransport.fail(error, requestEpoch);
@@ -6123,6 +6132,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } finally { if (subagentHandoff === handoff) subagentHandoff = undefined; releaseRead(); }
   };
 
+  let subagentExplicitHistoryRead: FlowerHistoryRequest | undefined;
   let subagentHistoryEdgeKey = '';
   let subagentReadingPending = false;
   let subagentHistoryDirection: 'before' | 'after' | undefined;
@@ -6148,17 +6158,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const viewport = subagentDetailScroll.viewport();
     if (!subagentReadingPending || !active || !window || !viewport || !props.adapter.loadHistory || active.requestStatus === 'loading' || subagentTailPreparing()) return;
     subagentReadingPending = false;
-    const input = historyGapRequest(viewport, subagentHistoryDirection) ?? historyReadingRequest(window,
+    const input = subagentExplicitHistoryRead ?? historyGapRequest(viewport, subagentHistoryDirection) ?? historyReadingRequest(window,
       { top: viewport.scrollTop, height: viewport.scrollHeight, viewport: viewport.clientHeight },
       subagentDetailScroll.followingLatest(), subagentHistoryDirection, subagentReadingInput);
+    subagentExplicitHistoryRead = undefined;
     if (!input) return;
     const key = historyReadingKey(active.childThreadID, window, input, protectedHistoryItems(subagentDetailScroll));
     if (key === subagentHistoryEdgeKey) return;
     subagentHistoryEdgeKey = key;
     subagentEdgeRecoverable = false;
     subagentHistoryRecoveryUsed = false;
-    let interest = input;
-    if (input.anchor_id) {
+    let interest = historyFoldedNavigation(viewport, input, [...new Set([...threadCache().readingItemIDs(active.childThreadID), ...protectedHistoryItems(subagentDetailScroll)])].flatMap(id => { const item = threadCache().runtimePreviewItem(active.childThreadID, id); return item ? [item] : []; }), protectedHistoryItems(subagentDetailScroll)) ?? input;
+    if (input.anchor_id && !interest.skip_folded) {
       subagentDetailReadController?.abort();
       const controller = new AbortController();
       subagentDetailReadController = controller;
@@ -6247,7 +6258,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (previousChildID && previousChildID !== childID) releaseHistoryInterest(previousChildID, ++subagentReadingRevision, true);
     subagentDetailGeneration += 1;
     subagentReadingInput = {};
-    subagentHistoryEdgeKey = ''; subagentReadingPending = false; subagentHistoryDirection = undefined;
+    subagentHistoryEdgeKey = ''; subagentReadingPending = false; subagentExplicitHistoryRead = undefined; subagentHistoryDirection = undefined;
     subagentHistoryRecoveryUsed = false;
     setSubagentInputCommands({});
     resetSubagentDetailScroll(true);
@@ -6990,6 +7001,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       // every intervening history page or mistaking a window edge for latest.
       if (child) {
         subagentReadingPending = false;
+        subagentExplicitHistoryRead = undefined;
         subagentHistoryDirection = undefined;
         subagentHistoryEdgeKey = '';
         subagentDetailScroll.startFollowing();
@@ -11909,6 +11921,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             {(itemKey) => {
               const visibleItem = createMemo(() => visibleItemsByKey().get(itemKey) ?? null);
               return <FlowerToolSequenceNode nodeKey={itemKey}>
+                <Show when={visibleItemKeys()[0] === itemKey}>{sequenceHistoryGap(messageID, viewportScope)}</Show>
                 <Show when={visibleItem()} fallback={<Show when={preview()}>{argumentPreviewRow}</Show>}>
                   {(item) => activityRow(messageID, blockIndex, () => block()!, item, viewportScope, media)}
                 </Show>
@@ -12034,6 +12047,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         )}
       >
         <FlowerToolSequenceNode nodeKey={block().key}>
+          {sequenceHistoryGap(() => message().id, viewportScope)}
           <FlowerThinkingDisclosure
             bindElement={bindThinkingElement}
             scroll={viewportScope}
@@ -12955,6 +12969,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const subagentDetailTimelineEntries = createMemo(() => subagentTimelineDocument().entries);
   const subagentTimelineThread = createMemo(() => subagentTimelineDocument().thread);
+  const mainHistoryGaps = createFlowerHistoryGapSubscriptions(visibleTimelineEntries, () => mainReadingGaps().thread === selectedThreadID() ? mainReadingGaps().gaps : []);
+  const childHistoryGaps = createFlowerHistoryGapSubscriptions(subagentDetailTimelineEntries, () => childReadingGaps().thread === activeSubagentID() ? childReadingGaps().gaps : []);
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
     Boolean(subagentDetailThread())
@@ -13042,7 +13058,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show></>}
 
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
-      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
+      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} onDisclosure={() => interruptDisclosureRead(true)} renderInside={entry => historyGapBefore(entry, true, true)} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
@@ -14876,7 +14892,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
               fallback={selectedThreadFallbackState()}
             >
-              <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
+              <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} onDisclosure={() => interruptDisclosureRead()} renderInside={entry => historyGapBefore(entry, false, true)} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}

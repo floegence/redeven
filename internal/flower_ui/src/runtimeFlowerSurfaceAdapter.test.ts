@@ -1118,3 +1118,15 @@ it('validates bounded child windows at the same boundary as root windows', async
   Object.assign(detail.window, { has_before: 'false' });
   await expect(adapter.loadSubagentDetail('parent', 'child', request, signal)).rejects.toThrow('invalid history window');
 });
+
+it.each([
+  { leaf_id: 'other' }, { first_ordinal: 0 }, { last_ordinal: 1 }, { run_id: '' }, { first_item_id: null },
+])('rejects malformed canonical skip metadata: %j', async patch => {
+  const window = { leaf_id: 'leaf', has_before: false, has_after: false, skipped_range: {
+    leaf_id: 'leaf', turn_id: 'turn', run_id: 'run', first_item_id: 'first', last_item_id: 'last', first_ordinal: 2, last_ordinal: 20 } };
+  Object.assign(window.skipped_range, patch);
+  const current = { thread_id: 'child', activity: 'idle' as const, view_version: 1, items: [] };
+  const detail = { summary: { parent_thread_id: 'parent', thread_id: 'child', task_name: 'Review', title: 'Review', title_status: 'ready' as const, title_generation: 1, status: 'running', can_send_input: true, can_interrupt: true, can_close: true }, current, window };
+  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadSubagentDetail: async () => ({ detail }) }));
+  await expect(adapter.loadSubagentDetail('parent', 'child', {}, new AbortController().signal)).rejects.toThrow('invalid skipped history range');
+});

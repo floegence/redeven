@@ -52,6 +52,9 @@ func (interest *flowerHistoryInterest) lock(ctx context.Context) (func(), error)
 }
 
 func (s *Service) readFlowerHistoryForObserver(ctx context.Context, meta *session.Meta, scope threadquery.Scope, request FlowerHistoryRequest, input flruntime.ThreadWindowInput) (flruntime.ThreadView, *FlowerHistoryWindow, error) {
+	if request.SkipFolded != "" && request.SkipFolded != "turn" && request.SkipFolded != "tools" {
+		return flruntime.ThreadView{}, nil, threadquery.ErrInvalidQuery
+	}
 	if request.ObserverID == "" {
 		return readFlowerHistory(ctx, s.threadRuntime, scope, input)
 	}

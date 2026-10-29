@@ -181,7 +181,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
       </button>
     );
   };
-  return <div class="flower-tool-sequence-slot" ref={slot}><div class="flower-tool-sequence-node" ref={node} data-flower-tool-row-identity={props.nodeKey}
+  return <div class="flower-tool-sequence-slot" data-flower-sequence-owner={member()?.group.key} ref={slot}><div class="flower-tool-sequence-node" ref={node} data-flower-tool-row-identity={props.nodeKey}
     classList={{ 'flower-activity-inline': Boolean(member()) }}
     data-flower-sequence={member()?.group.key}
     data-flower-sequence-start={first() === undefined ? undefined : String(first())}

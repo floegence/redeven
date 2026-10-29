@@ -248,6 +248,13 @@ function mapHistoryWindow(raw: unknown): NonNullable<FlowerRuntimeCurrentView['w
   if (!value || typeof value.has_before !== 'boolean' || typeof value.has_after !== 'boolean'
     || value.first_item_id !== undefined && typeof value.first_item_id !== 'string'
     || value.last_item_id !== undefined && typeof value.last_item_id !== 'string') throw new Error('Flower contract error: invalid history window.');
+  const skipped = value.skipped_range;
+  if (skipped && (!value.leaf_id || skipped.leaf_id !== value.leaf_id
+    || [skipped.turn_id, skipped.run_id, skipped.first_item_id, skipped.last_item_id].some(id => typeof id !== 'string' || !id)
+    || !Number.isSafeInteger(skipped.first_ordinal) || skipped.first_ordinal < 1
+    || !Number.isSafeInteger(skipped.last_ordinal) || skipped.last_ordinal < skipped.first_ordinal)) {
+    throw new Error('Flower contract error: invalid skipped history range.');
+  }
   return value;
 }
 

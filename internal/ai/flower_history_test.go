@@ -227,6 +227,42 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		canonicalItems[item.ID] = value
 	}
 	allowFullView.Store(false)
+	// The product adapter consumes the published canonical range API, including
+	// source identity, retained islands and the exact final-answer boundary.
+	var toolsInOrder []string
+	for _, item := range full.Current.Items {
+		if item.Kind == flruntime.ThreadItemTool {
+			toolsInOrder = append(toolsInOrder, item.ID)
+		}
+	}
+	for _, mode := range []string{"turn", "tools"} {
+		page, e := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRequest{
+			SkipFolded: mode, AnchorID: toolsInOrder[100], Direction: flruntime.ThreadWindowBefore, Limit: 40,
+			RetainItemIDs: []string{toolsInOrder[100], full.Current.Items[len(full.Current.Items)-1].ID},
+		})
+		if e != nil {
+			t.Fatal(e)
+		}
+		if page.Window.SkippedRange == nil || page.Window.SkippedRange.LeafID != page.Window.LeafID || page.Window.HasBefore {
+			t.Fatalf("folded %s range did not reach the original request: %+v", mode, page.Window)
+		}
+		ids := map[string]bool{}
+		for _, item := range page.Current.Items {
+			ids[item.ID] = true
+		}
+		for _, id := range []string{full.Current.Items[0].ID, toolsInOrder[0], toolsInOrder[100], page.Window.SkippedRange.LastItemID, full.Current.Items[len(full.Current.Items)-1].ID} {
+			if !ids[id] {
+				t.Fatalf("folded %s lost protected endpoint %s", mode, id)
+			}
+		}
+		encoded, e := json.Marshal(page)
+		if e != nil || len(page.Current.Items) > 150 || len(encoded) > 600<<10 {
+			t.Fatal("unbounded folded history", len(encoded), e)
+		}
+	}
+	if _, e := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRequest{SkipFolded: "unknown"}); !errors.Is(e, threadquery.ErrInvalidQuery) {
+		t.Fatalf("invalid folded mode accepted: %v", e)
+	}
 	materialsStart := time.Now()
 	materialsPages := 0
 	materialsCursor := ""

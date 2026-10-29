@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { historyReadingKey, historyReadingRequest, HISTORY_READING_ITEMS, HISTORY_READING_BYTES, HISTORY_PAGE_ITEMS, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes } from './historyReadingWindow';
+import { historyFoldedNavigation, historyReadingKey, historyReadingRequest, HISTORY_READING_ITEMS, HISTORY_READING_BYTES, HISTORY_PAGE_ITEMS, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes } from './historyReadingWindow';
 
 describe('continuous reading interest', () => {
   const window = { first_item_id: 'first', last_item_id: 'last', has_before: true, has_after: true };
@@ -127,4 +127,34 @@ describe('finite history gap geometry', () => {
     ]);
     expect(historyReadingGaps(next, members.slice(8, 15), gaps, heights)).toEqual([]);
   });
+});
+
+it('preserves split folded gaps only while their canonical endpoints survive', () => {
+  const members = [1, 5, 10, 15, 20].map(ordinal => ({ id: String(ordinal), ordinal }));
+  const skipped = { leaf_id: 'leaf', turn_id: 'turn', run_id: 'run', first_item_id: '1', last_item_id: '20', first_ordinal: 1, last_ordinal: 20 };
+  const original = historyReadingGaps([], [members[0], members[4]], [], new Map(), skipped);
+  expect(original[0].folded).toBe(true);
+  const split = historyReadingGaps([members[0], members[4]], members, original, new Map());
+  expect(split.every(gap => gap.folded)).toBe(true);
+  const replaced = members.map(item => ({ ...item, id: 'replacement-' + item.id }));
+  expect(historyReadingGaps(members, replaced, original, new Map()).every(gap => !gap.folded)).toBe(true);
+});
+
+it('bounds a folded navigation union and refuses live or oversized protected interests', () => {
+  const row = { dataset: { flowerRowMessageId: '50', flowerTurnId: 'turn', flowerTurnProcess: 'true' }, querySelector: () => undefined };
+  const summary = { getAttribute: () => 'false' };
+  const turn = { dataset: { flowerTurnId: 'turn' }, querySelector: () => summary };
+  const viewport = { querySelectorAll: (selector: string) => selector === '[data-flower-row-message-id]' ? [row]
+    : selector === '[data-flower-turn-id]' ? [turn] : [] } as unknown as HTMLElement;
+  const items = Array.from({ length: 150 }, (_, i) => ({ id: String(i), ordinal: i + 1, kind: 'tool' as const, window_bytes: 1024 }));
+  const input = { anchor_id: '50', direction: 'before' as const, limit: 40 };
+  const request = historyFoldedNavigation(viewport, input, items, ['149'])!;
+  expect(request.skip_folded).toBe('turn');
+  expect(request.retain_item_ids).toContain('149');
+  expect(request.retain_item_ids).toContain('50');
+  expect(request.retain_item_ids!.length + request.limit! + 2).toBeLessThanOrEqual(HISTORY_READING_ITEMS);
+  expect(historyFoldedNavigation(viewport, input, items.map(item => ({ ...item, live: true })), [])).toBeUndefined();
+  expect(historyFoldedNavigation(viewport, input, items.map(item => ({ ...item, window_bytes: HISTORY_READING_BYTES })), ['149'])).toBeUndefined();
+  expect(historyFoldedNavigation(viewport, input, items, items.map(item => item.id))).toBeUndefined();
+  expect(historyFoldedNavigation(viewport, { ...input, anchor_offset: 5 }, items, [])).toBeUndefined();
 });

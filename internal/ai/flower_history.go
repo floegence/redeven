@@ -25,20 +25,31 @@ func flowerHistoryWindowInput(threadID identity.ThreadID, input FlowerHistoryReq
 	if limit == 0 && input.ItemIDs == nil {
 		limit = flowerInitialHistoryItems
 	}
-	return flruntime.ThreadWindowInput{ThreadID: threadID, AnchorID: input.AnchorID, AnchorOffset: input.AnchorOffset, Direction: input.Direction, Limit: limit, ItemIDs: input.ItemIDs, IncludeSummary: true, ActivityFields: true, PreviewBytes: 1024}
+	var skip *flruntime.ThreadWindowRange
+	if input.SkipFolded != "" {
+		skip = &flruntime.ThreadWindowRange{SettledActivities: true, Kinds: []flruntime.ThreadItemKind{flruntime.ThreadItemTool, flruntime.ThreadItemThinking}, Exclude: flruntime.ThreadItemRangeUncertainEffect | flruntime.ThreadItemRangeErrorPayload | flruntime.ThreadItemRangeErrorWithoutFailure | flruntime.ThreadItemRangeUnknownActivity | flruntime.ThreadItemRangeDeclined | flruntime.ThreadItemRangeCanceled | flruntime.ThreadItemRangeApproval | flruntime.ThreadItemRangeInputRequired}
+		if input.SkipFolded == "turn" {
+			skip.Kinds = append(skip.Kinds, flruntime.ThreadItemAssistant)
+			skip.IntermediateAssistant = true
+		}
+	}
+	return flruntime.ThreadWindowInput{SkipRange: skip, RetainItemIDs: input.RetainItemIDs, ThreadID: threadID, AnchorID: input.AnchorID, AnchorOffset: input.AnchorOffset, Direction: input.Direction, Limit: limit, ItemIDs: input.ItemIDs, IncludeSummary: true, ActivityFields: true, PreviewBytes: 1024}
 }
 
 // FlowerHistoryWindow is disposable reading state, never a journal cursor.
 type FlowerHistoryWindow struct {
-	LeafID      string                   `json:"leaf_id,omitempty"`
-	Summary     *flruntime.ThreadSummary `json:"-"`
-	FirstItemID string                   `json:"first_item_id,omitempty"`
-	LastItemID  string                   `json:"last_item_id,omitempty"`
-	HasBefore   bool                     `json:"has_before"`
-	HasAfter    bool                     `json:"has_after"`
+	SkippedRange *flruntime.ThreadItemRange `json:"skipped_range,omitempty"`
+	LeafID       string                     `json:"leaf_id,omitempty"`
+	Summary      *flruntime.ThreadSummary   `json:"-"`
+	FirstItemID  string                     `json:"first_item_id,omitempty"`
+	LastItemID   string                     `json:"last_item_id,omitempty"`
+	HasBefore    bool                       `json:"has_before"`
+	HasAfter     bool                       `json:"has_after"`
 }
 
 type FlowerHistoryRequest struct {
+	SkipFolded      string                          `json:"skip_folded,omitempty"`
+	RetainItemIDs   []string                        `json:"retain_item_ids,omitempty"`
 	AnchorOffset    int                             `json:"anchor_offset,omitempty"`
 	ItemIDs         []string                        `json:"item_ids,omitempty"`
 	ParentThreadID  string                          `json:"-"`
@@ -170,7 +181,7 @@ func flowerHistoryCurrent(update flruntime.ThreadUpdate) (flruntime.ThreadView, 
 	if update.RestoredInputs != nil {
 		current.RestoredInputs = update.RestoredInputs.Value
 	}
-	return current, &FlowerHistoryWindow{LeafID: w.LeafID, Summary: w.Summary, FirstItemID: w.FirstItemID, LastItemID: w.LastItemID, HasBefore: w.HasBefore, HasAfter: w.HasAfter}
+	return current, &FlowerHistoryWindow{SkippedRange: w.SkippedRange, LeafID: w.LeafID, Summary: w.Summary, FirstItemID: w.FirstItemID, LastItemID: w.LastItemID, HasBefore: w.HasBefore, HasAfter: w.HasAfter}
 }
 
 func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta, threadID string, input FlowerHistoryRequest) (*FlowerThreadDetail, error) {
