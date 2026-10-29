@@ -300,7 +300,7 @@ export function createParentEventReading(props: Readonly<{
     if (!current.length || current.some(event => event.canonical_ordinal === undefined)) { acceptedLeaf = leaf; return; }
     const thread = props.threadID;
     const scope = new AbortController(); refreshController = scope;
-    const intervals: FlowerParentEvent[][] = [];
+    let intervals: FlowerParentEvent[][] = [];
     for (const event of current) {
       const last = intervals.at(-1)?.at(-1);
       if (!last || neighbors.get(last.id)?.after !== event.id && neighbors.get(event.id)?.before !== last.id) intervals.push([]);
@@ -309,6 +309,39 @@ export function createParentEventReading(props: Readonly<{
     const updated = new Map<string, FlowerParentEvent>();
     const pages: { page: FlowerParentEventPage; query: FlowerParentEventQuery }[] = [];
     try {
+      // A successful old-leaf seek proves that the retained path is still an
+      // ancestor. Settled facts then need no retransmission; only admission
+      // and interaction state can change. A replaced path uses the
+      // ordinary bounded interval refresh, never a guessed identity merge.
+      let samePath = false;
+      if (acceptedLeaf && acceptedLeaf !== leaf && current.some(event => event.admitted && !event.interaction_id)) {
+        const query: FlowerParentEventQuery = { action: 'list', leaf_id: acceptedLeaf, limit: 1 };
+        const proof = await recoverHistoryRead(async () => {
+          try {
+            return validateParentEventPage(await withFlowerReadDeadline(signal => pageQueue.run(JSON.stringify([thread, query]), signal,
+              transportSignal => reader(thread, query, transportSignal)), props.timeoutMessage ?? 'Event read timed out.', scope.signal), thread, query);
+          } catch (error) {
+            if ((error as { code?: string })?.code === 'history_source_changed') return undefined;
+            throw error;
+          }
+        }, scope.signal);
+        samePath = Boolean(proof);
+      }
+      const ownedCurrent = samePath ? current.filter(event => !event.admitted || Boolean(event.interaction_id)
+        || neighbors.get(event.id)?.leaf !== acceptedLeaf && neighbors.get(event.id)?.leaf !== leaf) : current;
+      if (samePath) {
+        const mutable = new Set(ownedCurrent.map(event => event.id));
+        intervals = intervals.flatMap(interval => {
+          const values: FlowerParentEvent[][] = [];
+          let contiguous = false;
+          for (const event of interval) {
+            if (!mutable.has(event.id)) { contiguous = false; continue; }
+            if (!contiguous) values.push([]);
+            values.at(-1)!.push(event); contiguous = true;
+          }
+          return values;
+        });
+      } else { coveredEmpty.clear(); }
       for (const interval of intervals) {
         const lower = interval[0].canonical_ordinal! - 1;
         let upper = interval.at(-1)!.canonical_ordinal! + 1;
@@ -328,7 +361,7 @@ export function createParentEventReading(props: Readonly<{
       scope.signal.throwIfAborted();
       // A navigation response may already have accepted newer identities. Only
       // replace the interval this read owned; retain newer baseline facts.
-      const owned = new Set(current.map(event => event.id));
+      const owned = new Set(ownedCurrent.map(event => event.id));
       const retainedIDs = new Set(retained().map(event => event.id));
       // Keep only the parts of the accepted intervals that navigation still
       // owns. A replacement identity is no reason to refill an evicted gap or
@@ -361,6 +394,7 @@ export function createParentEventReading(props: Readonly<{
         }
         next.sort((a, b) => a.canonical_ordinal! - b.canonical_ordinal!);
       }
+      if (samePath) for (const value of neighbors.values()) if (value.leaf === acceptedLeaf) value.leaf = leaf;
       for (const { page, query } of pages) rememberNeighbors(page, query);
       const ids = new Set(next.map(event => event.id));
       for (const id of neighbors.keys()) if (!ids.has(id)) neighbors.delete(id);
@@ -370,7 +404,7 @@ export function createParentEventReading(props: Readonly<{
         setBeforeCursor(next.length && next[0].id !== props.page?.first_event_id ? next[0].id : '');
         setCursor(next.length && next.at(-1)!.id !== props.page?.last_event_id ? next.at(-1)!.id : '');
       });
-      acceptedLeaf = leaf;
+      acceptedLeaf = leaf; setCoverageRevision(value => value + 1);
     } catch { if (!scope.signal.aborted) setRefreshFailure(true); }
     finally {
       if (refreshController === scope) { refreshController = undefined; if (requestedLeaf !== leaf) void refresh(); }
@@ -419,7 +453,10 @@ export function createParentEventReading(props: Readonly<{
     const page = props.page;
     const epoch = props.connectionEpoch;
     if (pagesLeaf !== page?.leaf_id || epoch !== previousEpoch || props.read !== previousReader || props.threadID !== previousThread) {
-      pagesByQuery.clear(); coveredEmpty.clear(); setCoverageRevision(value => value + 1); pagesLeaf = page?.leaf_id ?? '';
+      pagesByQuery.clear(); pagesLeaf = page?.leaf_id ?? '';
+      if (epoch !== previousEpoch || props.read !== previousReader || props.threadID !== previousThread) {
+        coveredEmpty.clear(); setCoverageRevision(value => value + 1);
+      }
     }
     const reader = props.read;
     const interval = props.interval;
@@ -499,7 +536,8 @@ export function createParentEventReading(props: Readonly<{
   const missingIntervals = createMemo<readonly Readonly<{ after: number; before: number }>[]>((previous = []) => {
     const rows = events();
     const positions = new Map(rows.map(event => [event.id, event.canonical_ordinal]));
-    const leaf = props.page?.leaf_id;
+    void props.page?.leaf_id;
+    const leaf = acceptedLeaf;
     const boundary = (id: string | undefined, side: 'beforeOrdinal' | 'afterOrdinal') => {
       const value = id ? neighbors.get(id) : undefined;
       return value?.leaf === leaf ? value?.[side] : undefined;
@@ -513,7 +551,7 @@ export function createParentEventReading(props: Readonly<{
       let pieces = [gap];
       for (const covered of coveredEmpty.values()) pieces = pieces.flatMap(value => covered.after >= value.before || covered.before <= value.after ? [value]
         : [...(covered.after > value.after ? [{ after: value.after, before: covered.after }] : []), ...(covered.before < value.before ? [{ after: covered.before, before: value.before }] : [])]);
-      return pieces;
+      return pieces.filter(value => value.before - value.after > 1);
     });
     // A leaf revision does not change coverage by itself. Keep equal coverage
     // stable so live source notifications cannot invalidate every timeline row.

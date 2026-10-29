@@ -1,10 +1,13 @@
 package appserver
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -75,5 +78,22 @@ func TestServerFlowerParentEventsRejectsUnauthorizedAndNonStrictRequests(t *test
 				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 			}
 		})
+	}
+}
+
+func TestFlowerParentEventReadErrorPreservesSourceAndAuthorization(t *testing.T) {
+	for _, test := range []struct {
+		leaf string
+		err  error
+		code string
+	}{
+		{"old-path", fmt.Errorf("source: %w", flruntime.ErrJournalInvariant), "history_source_changed"},
+		{"", flruntime.ErrJournalInvariant, ""},
+		{"old-path", errors.New("permission denied"), ""},
+		{"old-path", errors.New("transport closed"), ""},
+	} {
+		if got := flowerParentEventReadErrorCode(test.leaf, test.err); got != test.code {
+			t.Fatalf("leaf=%q error=%v code=%q want=%q", test.leaf, test.err, got, test.code)
+		}
 	}
 }

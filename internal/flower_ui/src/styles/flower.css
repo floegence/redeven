@@ -10629,6 +10629,7 @@ button.flower-attachment-preview-trigger:disabled {
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   scrollbar-color: color-mix(in srgb, var(--flower-subagent-window-border) 70%, transparent) transparent;
   scrollbar-width: thin;

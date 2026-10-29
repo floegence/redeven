@@ -102,6 +102,57 @@ it('completes dense receipts only inside an explicitly expanded finite group', a
   expect(read).toHaveBeenCalledTimes(calls);
 });
 
+it('does not redownload settled dense receipt history when its source advances', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const all = Array.from({ length: 1000 }, (_, index) => ({ ...event('settled-' + index, 'completed'), admitted: true, canonical_ordinal: index + 1 }));
+  const pageOf = (leaf: string, events: FlowerParentEvent[]): FlowerParentEventPage => ({ thread_id: 'parent', leaf_id: leaf,
+    first_event_id: all[0].id, last_event_id: all.at(-1)!.id, events });
+  const [source, setSource] = createSignal(pageOf('leaf-1', all.slice(-50)));
+  let transmitted = 0;
+  const read = vi.fn(async (_thread: string, query: { leaf_id?: string; after_ordinal?: number; before_ordinal?: number; limit?: number }) => {
+    const values = all.filter(value => value.canonical_ordinal > (query.after_ordinal ?? 0)
+      && value.canonical_ordinal < (query.before_ordinal ?? Infinity)).slice(-(query.limit ?? 50));
+    transmitted += values.length;
+    return pageOf(query.leaf_id!, values);
+  });
+  let reading!: ReturnType<typeof createParentEventReading>;
+  const dispose = render(() => { reading = createParentEventReading({ threadID: 'parent', get page() { return source(); }, read,
+    interval: { first: 1, last: 1000, hasAfter: false } }); return null; }, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => reading.initialReady());
+  reading.complete('group', { first: 1, last: 1000 });
+  await waitFor(() => reading.events().length === 1000);
+  const baseline = read.mock.calls.length, bytes = transmitted;
+  setSource(pageOf('leaf-2', all.slice(0, 100)));
+  await new Promise(resolve => setTimeout(resolve, 150));
+  expect(reading.events()).toHaveLength(1000);
+  expect(read.mock.calls.length - baseline).toBeLessThanOrEqual(1);
+  expect(transmitted - bytes).toBeLessThanOrEqual(1);
+  expect(reading.missingIntervals().some(gap => gap.after < 1000 && gap.before > 1)).toBe(false);
+});
+
+it('revalidates settled receipts after the canonical owner rejects their old path', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const first = { ...event('common', 'completed'), admitted: true, canonical_ordinal: 1 };
+  const old = { ...event('old-settled', 'completed'), admitted: true, canonical_ordinal: 5 };
+  const replacement = { ...old, id: 'new-settled' };
+  const last = { ...event('tail', 'completed'), admitted: true, canonical_ordinal: 10 };
+  const pageOf = (leaf: string, events: FlowerParentEvent[]): FlowerParentEventPage => ({ thread_id: 'parent', leaf_id: leaf,
+    first_event_id: first.id, last_event_id: last.id, events });
+  const [source, setSource] = createSignal(pageOf('old-path', [first, old, last]));
+  const read = vi.fn(async (_thread: string, query: { leaf_id?: string }) => {
+    if (query.leaf_id === 'old-path') throw Object.assign(new Error('Removed path'), { code: 'history_source_changed' });
+    return pageOf('new-path', [first, replacement, last]);
+  });
+  let reading!: ReturnType<typeof createParentEventReading>;
+  const dispose = render(() => { reading = createParentEventReading({ threadID: 'parent', get page() { return source(); }, read }); return null; }, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  setSource(pageOf('new-path', [first]));
+  await waitFor(() => reading.events().some(value => value.id === replacement.id));
+  expect(reading.events().map(value => value.id)).toEqual([first.id, replacement.id, last.id]);
+  expect(read.mock.calls.map(([, query]) => query.leaf_id)).toEqual(['old-path', 'new-path']);
+});
+
 it('does not fetch report bodies while every report is collapsed', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const events = { thread_id: 'parent', events: [event('report')], first_event_id: 'report', last_event_id: 'report' };
@@ -1013,9 +1064,9 @@ it('finishes an accepted receipt refresh while newer source notifications coales
     first_event_id: all[0].id, last_event_id: all.at(-1)!.id, events: values,
     ...(values.at(-1)?.id !== all.at(-1)!.id ? { next_after_event_id: values.at(-1)!.id } : {}) });
   const [source, setSource] = createSignal(result('leaf-1'));
-  const read = vi.fn(async (_thread: string, query: { leaf_id?: string }) => {
-    if (query.leaf_id === 'leaf-2') await new Promise<void>(resolve => { release = resolve; });
-    return result(query.leaf_id!, all.map(value => ({ ...value, admitted: true })));
+  const read = vi.fn(async (_thread: string, query: { leaf_id?: string; limit?: number }) => {
+    if (query.leaf_id === 'leaf-2' && query.limit !== 1) await new Promise<void>(resolve => { release = resolve; });
+    return result(query.leaf_id!, all.map(value => ({ ...value, admitted: true })).slice(0, query.limit ?? all.length));
   });
   const host = document.createElement('div'); document.body.append(host);
   let reading!: ReturnType<typeof createParentEventReading>;
@@ -1027,8 +1078,11 @@ it('finishes an accepted receipt refresh while newer source notifications coales
   expect(read).toHaveBeenCalledTimes(1);
   release();
   await waitFor(() => read.mock.calls.length === 2 && reading.events().every(value => value.admitted));
-  expect(read.mock.calls.map(([, query]) => query.leaf_id)).toEqual(['leaf-2', 'leaf-10']);
+  expect(read.mock.calls.map(([, query]) => query.leaf_id)).toEqual(['leaf-2', 'leaf-2']);
+  expect(read.mock.calls[1][1]).toMatchObject({ action: 'list', limit: 1 });
   expect(reading.events()).toHaveLength(60);
+  await new Promise(resolve => setTimeout(resolve, 40));
+  expect(read).toHaveBeenCalledTimes(2);
 });
 
 it('drops replaced-path receipts when the first receipt identity stays the same', async () => {

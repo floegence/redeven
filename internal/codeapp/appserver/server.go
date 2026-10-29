@@ -1591,6 +1591,15 @@ func writeAIApprovalError(w http.ResponseWriter, err error) {
 	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 }
 
+// A rejected frozen path may be retried against the current canonical path.
+// Authorization, transport and unrelated read errors retain their own meaning.
+func flowerParentEventReadErrorCode(leafID string, err error) string {
+	if leafID != "" && errors.Is(err, flruntime.ErrJournalInvariant) {
+		return "history_source_changed"
+	}
+	return ""
+}
+
 func aiThreadActionHTTPStatus(err error) int {
 	switch {
 	case err == nil:
@@ -5445,7 +5454,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			page, err := aiSvc.GetFlowerParentEvents(r.Context(), meta, threadID, *body)
 			if err != nil {
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: flowerParentEventReadErrorCode(body.LeafID, err)})
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: page})

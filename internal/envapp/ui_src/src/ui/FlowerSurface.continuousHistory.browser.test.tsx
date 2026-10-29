@@ -9,11 +9,15 @@ import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtime
 import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 let warningSpy: ReturnType<typeof vi.spyOn>;
-beforeEach(() => { warningSpy = vi.spyOn(console, 'warn'); });
+let layoutErrors: string[];
+const recordLayoutError = (event: ErrorEvent) => { if (event.message.includes('ResizeObserver')) layoutErrors.push(event.message); };
+beforeEach(() => { warningSpy = vi.spyOn(console, 'warn'); layoutErrors = []; window.addEventListener('error', recordLayoutError); });
 afterEach(() => {
   const ownerWarnings = warningSpy.mock.calls.filter((args: unknown[]) => String(args[0]).includes('computations created outside'));
   warningSpy.mockRestore();
+  window.removeEventListener('error', recordLayoutError);
   expect(ownerWarnings).toEqual([]);
+  expect(layoutErrors).toEqual([]);
 });
 
 function selectPage(items: FlowerRuntimeCurrentItem[], request: FlowerHistoryRequest = {}): FlowerRuntimeCurrentItem[] {
@@ -768,6 +772,7 @@ describe('continuous history navigation', () => {
     await waitFor(() => surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded') === 'false');
     if (!streaming) expect([...surface.querySelectorAll<HTMLElement>('[data-flower-message-id]')].some(node => node.getBoundingClientRect().height > 0)).toBe(false);
     expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+    const viewportWidth = viewport.clientWidth;
     expect(history).toHaveBeenCalledOnce();
     let summaryButton = surface.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!;
     summaryButton.focus({ preventScroll: true });
@@ -810,6 +815,7 @@ describe('continuous history navigation', () => {
       expect(history.mock.calls.length - before).toBe(1);
     }
     expect(surface.querySelector('[data-flower-message-id="earliest-user"]')?.textContent).toContain('The original request');
+    expect(viewport.clientWidth).toBe(viewportWidth);
     if (streaming) await waitFor(() => Boolean(surface.querySelector('[data-flower-message-id="live-tail"]')?.textContent?.includes('continues through navigation')));
     const calls = history.mock.calls.length;
     await new Promise(resolve => setTimeout(resolve, 250));

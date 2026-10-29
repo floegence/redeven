@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower parent event timeline
 tags: [ai, flower, subagents, ui]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -14,6 +14,8 @@ Floret owns canonical child reports/events and admission; UI owns pages/bodies/d
 The parent transcript merges messages, anchored decorations and events by published canonical_ordinal on the queried Path; received time is display-only. Published Floret v7.61.0 supplies optional parent_turn_id from canonical receipt order.
 
 Event headers keep the received time directly after the source/status in one compact row. Long source names truncate within the available width, including narrow companion surfaces. The source-name button is the only child-navigation action; report expansion stays independent. Preserve the event header row height so removing the duplicate action does not change disclosure anchoring. Layout uses CSS without measurement listeners, polling or extra reads.
+
+Explicit group expansion completes only its finite canonical receipt interval. Source notifications coalesce into the existing reader. A one-record frozen-leaf read validates ancestry before reusing settled non-interaction admission facts; unadmitted and all interaction receipts require status pages. A rejected old path triggers canonical interval replacement. Authorization and transport errors never establish ancestry. This avoids retransmitting an expanded settled archive on every source notification, without adding polling, subscriptions or a durable projection.
 
 An isolated Service/SQLite/scripted-provider browser qualification exercises actual fork, detail and report JSON through the production adapter and FlowerSurface, including read failures and restart.
 
