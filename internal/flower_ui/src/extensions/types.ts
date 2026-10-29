@@ -142,8 +142,8 @@ export type FlowerExtensionsAdapter = Readonly<{
 }>;
 export type SkillImportInput = Readonly<{ scope: string; url: string; repo: string; ref: string; paths: string[]; overwrite: boolean }>;
 export type MCPServerIdentity = Readonly<{ id: string; revision: number }>;
-export type MCPServerInput = MCPServerIdentity & Readonly<{
-  name: string; transport: 'stdio' | 'http'; enabled: boolean;
+export type MCPServerInput = Readonly<{
+  id?: string; revision: number; name?: string; transport: 'stdio' | 'http'; enabled: boolean;
   url?: string; command?: string; args?: string[];
   headers?: Record<string, string>; env?: Record<string, string>;
 }>;

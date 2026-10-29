@@ -79,10 +79,14 @@ func TestMCPManagementRoutes(t *testing.T) {
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "icons", Version: "1", Icons: []mcp.Icon{{Source: icon}}}, nil)
 	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, &mcp.StreamableHTTPOptions{Stateless: true}))
 	defer upstream.Close()
-	payload, _ := json.Marshal(ai.MCPServerInput{ID: "icons", Name: "Icon server", Transport: "http", URL: upstream.URL, Enabled: true})
+	payload, _ := json.Marshal(map[string]any{"transport": "http", "url": upstream.URL, "enabled": true})
 	response = request(admin, http.MethodPut, base, string(payload), envOriginWithChannel(channel))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), icon) {
 		t.Fatalf("save omitted discovered icon: %d: %s", response.Code, response.Body)
+	}
+	var saved struct{ Data ai.MCPCatalog }
+	if err := json.Unmarshal(response.Body.Bytes(), &saved); err != nil || len(saved.Data.Servers) != 1 || saved.Data.Servers[0].Name != "icons" || !strings.HasPrefix(saved.Data.Servers[0].ID, "mcp_") {
+		t.Fatalf("connection-only API did not resolve identity: %s", response.Body)
 	}
 	response = request(reader, http.MethodGet, base, "", envOriginWithChannel(channel))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), icon) {

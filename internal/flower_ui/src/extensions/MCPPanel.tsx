@@ -8,7 +8,6 @@ import type { MCPCatalog, MCPServer } from './types';
 
 type Draft = { id: string; revision: number; name: string; transport: 'http' | 'stdio'; url: string; command: string; arguments: string; credentials: string };
 const freshDraft = (): Draft => ({ id: '', revision: 0, name: '', transport: 'http', url: '', command: '', arguments: '', credentials: '' });
-const serverID = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 48);
 
 export function MCPPanel() {
   const ctx = useFlowerExtensions(); const t = (key: string, params?: Record<string, string | number>) => ctx.i18n.t(key, params);
@@ -18,6 +17,7 @@ export function MCPPanel() {
   const [query, setQuery] = createSignal(''); const [enabledOnly, setEnabledOnly] = createSignal(false);
   const [editing, setEditing] = createSignal<MCPServer | null | undefined>();
   const [draft, setDraft] = createSignal<Draft>(freshDraft()); const [formError, setFormError] = createSignal('');
+  const [advanced, setAdvanced] = createSignal(false);
   const [deleting, setDeleting] = createSignal<MCPServer>(); const [deleteError, setDeleteError] = createSignal('');
   const [notice, setNotice] = createSignal('');
   const canManage = () => ctx.canInteract() && ctx.canAdmin() && !busy();
@@ -44,7 +44,7 @@ export function MCPPanel() {
     return { id: server.id, revision: server.revision, name: server.name, transport: server.transport, url: server.url, command: server.command, args: server.args, enabled };
   }
   function open(server: MCPServer | null) {
-    setFormError(''); setEditing(server);
+    setFormError(''); setAdvanced(false); setEditing(server);
     setDraft(server ? { id: server.id, revision: server.revision, name: server.name, transport: server.transport, url: server.url ?? '', command: server.command ?? '', arguments: (server.args ?? []).join('\n'), credentials: '' } : freshDraft());
   }
   const field = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(previous => ({ ...previous, [key]: value }));
@@ -57,7 +57,7 @@ export function MCPPanel() {
     }
     setBusy('save'); setFormError('');
     try {
-      const payload = { id: value.id.trim(), revision: value.revision, name: value.name.trim(), transport: value.transport, enabled: editing()?.enabled ?? true,
+      const payload = { id: value.id.trim() || undefined, revision: value.revision, name: value.name.trim() || undefined, transport: value.transport, enabled: editing()?.enabled ?? true,
         ...(value.transport === 'http' ? { url: value.url.trim(), headers: credentials } : { command: value.command.trim(), args: value.arguments.split('\n').filter(Boolean), env: credentials }) };
       setCatalog(await ctx.saveMCP(payload)); setEditing(undefined); setDraft(freshDraft());
     } catch (error) { setFormError(failure(error)); } finally { setBusy(''); }
@@ -92,14 +92,16 @@ export function MCPPanel() {
         <Show when={!filtered().length}><div class="flower-extension-empty"><h3>{t('noResults')}</h3><Button variant="ghost" onClick={() => { setQuery(''); setEnabledOnly(false); }}>{t('clear')}</Button></div></Show>
       </Show>
     </SettingsSection>
-    <Dialog open={editing() !== undefined} onOpenChange={value => { if (!value && !busy()) { setEditing(undefined); setDraft(freshDraft()); } }} title={t(editing() ? 'edit' : 'add')} bodyDescription={t('saveHint')} class="flower-extension-dialog w-[min(36rem,94vw)]" footer={<><Button variant="outline" disabled={Boolean(busy())} onClick={() => { setEditing(undefined); setDraft(freshDraft()); }}>{t('common.actions.cancel')}</Button><Button loading={busy() === 'save'} disabled={!canManage() || !draft().name.trim() || !draft().id.trim() || !(draft().transport === 'http' ? draft().url.trim() : draft().command.trim())} onClick={() => void save()}>{t('save')}</Button></>}>
+    <Dialog open={editing() !== undefined} onOpenChange={value => { if (!value && !busy()) { setEditing(undefined); setDraft(freshDraft()); } }} title={t(editing() ? 'edit' : 'add')} bodyDescription={draft().transport === 'stdio' && (editing()?.enabled ?? true) ? t('localExecutionHint') : undefined} class="flower-extension-dialog w-[min(36rem,94vw)]" footer={<><Button variant="outline" disabled={Boolean(busy())} onClick={() => { setEditing(undefined); setDraft(freshDraft()); }}>{t('common.actions.cancel')}</Button><Button loading={busy() === 'save'} disabled={!canManage() || !(draft().transport === 'http' ? draft().url.trim() : draft().command.trim())} onClick={() => void save()}>{t(editing() ? 'save' : 'add')}</Button></>}>
       <Show when={formError()}><p class="flower-extension-error" role="alert">{formError()}</p></Show>
       <fieldset class="flower-extension-form" disabled={!ctx.canAdmin() || !ctx.canInteract() || Boolean(busy())}>
-        <label><span>{t('name')}</span><Input value={draft().name} onInput={event => { const name = event.currentTarget.value; setDraft(previous => ({ ...previous, name, id: !editing() && (!previous.id || previous.id === serverID(previous.name)) ? serverID(name) : previous.id })); }} /></label>
-        <label><span>{t('identifier')}</span><Input value={draft().id} disabled={Boolean(editing())} onInput={event => field('id', event.currentTarget.value)} /></label>
         <label><span>{t('transport')}</span><Select value={draft().transport} onChange={value => { if (value === 'stdio' || value === 'http') setDraft(previous => ({ ...previous, transport: value, credentials: '' })); }} options={[{ value: 'http', label: t('remote') }, { value: 'stdio', label: t('local') }]} /></label>
-        <Show when={draft().transport === 'http'} fallback={<><label><span>{t('command')}</span><Input value={draft().command} onInput={event => field('command', event.currentTarget.value)} /></label><label><span>{t('arguments')}</span><textarea class="flower-extension-control" rows={3} value={draft().arguments} onInput={event => field('arguments', event.currentTarget.value)} spellcheck={false} /><small>{t('argumentsHint')}</small></label></>}><label><span>{t('endpoint')}</span><Input type="url" value={draft().url} onInput={event => field('url', event.currentTarget.value)} /></label></Show>
-        <details class="flower-extension-details"><summary>{t('advanced')}</summary><label><span>{t(draft().transport === 'http' ? 'headers' : 'environment')}</span><textarea class="flower-extension-control" aria-label={t(draft().transport === 'http' ? 'headers' : 'environment')} rows={3} value={draft().credentials} onInput={event => field('credentials', event.currentTarget.value)} autocomplete="off" spellcheck={false} /><small>{t('credentialsHint')}</small><Show when={editing()}>{server => <small>{t('stored', { keys: (draft().transport === 'http' ? server().header_keys : server().env_keys).join(', ') || '—' })}</small>}</Show></label></details>
+        <Show when={draft().transport === 'http'} fallback={<><label><span>{t('command')}</span><Input value={draft().command} onInput={event => field('command', event.currentTarget.value)} /></label><label><span>{t('arguments')}</span><textarea class="flower-extension-control" aria-label={t('arguments')} rows={3} value={draft().arguments} onInput={event => field('arguments', event.currentTarget.value)} spellcheck={false} /><small>{t('argumentsHint')}</small></label></>}><label><span>{t('endpoint')}</span><Input type="url" value={draft().url} onInput={event => field('url', event.currentTarget.value)} /></label></Show>
+        <details class="flower-extension-details" open={advanced()} onToggle={event => setAdvanced(event.currentTarget.open)}><summary>{t('advanced')}</summary><div class="flower-extension-form">
+          <label><span>{t('name')}</span><Input value={draft().name} placeholder={t('automatic')} onInput={event => field('name', event.currentTarget.value)} /></label>
+          <label><span>{t('identifier')}</span><Input value={draft().id} placeholder={t('automatic')} readOnly={Boolean(editing())} maxLength={48} spellcheck={false} onInput={event => field('id', event.currentTarget.value)} /></label>
+          <label><span>{t(draft().transport === 'http' ? 'headers' : 'environment')}</span><textarea class="flower-extension-control" aria-label={t(draft().transport === 'http' ? 'headers' : 'environment')} rows={3} value={draft().credentials} onInput={event => field('credentials', event.currentTarget.value)} autocomplete="off" spellcheck={false} /><Show when={editing()}>{server => <><small>{t('credentialsHint')}</small><small>{t('stored', { keys: (draft().transport === 'http' ? server().header_keys : server().env_keys).join(', ') || '—' })}</small></>}</Show></label>
+        </div></details>
       </fieldset>
     </Dialog>
     <ConfirmDialog open={Boolean(deleting())} onOpenChange={open => { if (!open && !busy()) setDeleting(undefined); }} title={t('deleteTitle')} confirmText={t('common.actions.delete')} cancelText={t('common.actions.cancel')} variant="destructive" loading={Boolean(busy())} onConfirm={() => void remove()}><p>{t('deleteHint', { name: deleting()?.name ?? '' })}</p><Show when={deleteError()}><p role="alert" class="flower-extension-error">{deleteError()}</p></Show></ConfirmDialog>

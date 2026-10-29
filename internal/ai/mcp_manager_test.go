@@ -323,12 +323,16 @@ func TestMCPStdioDiscoveryAndExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := MCPServerInput{ID: "stdio", Name: "Local tool", Enabled: true, Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestMCPStdioHelper$"}, Env: map[string]string{"REDEVEN_MCP_TEST_PROCESS": "1", "REDEVEN_MCP_SECRET": "configured"}}
+	input := MCPServerInput{Enabled: true, Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestMCPStdioHelper$"}, Env: map[string]string{"REDEVEN_MCP_TEST_PROCESS": "1", "REDEVEN_MCP_SECRET": "configured"}}
 	view, err := manager.Save(t.Context(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	name := manager.Tools()[0].Name
+	input.ID = view.Servers[0].ID
+	if view.Servers[0].Name != "stdio-fixture" || !mcpIDPattern.MatchString(input.ID) {
+		t.Fatalf("automatic stdio identity: %+v", view.Servers[0])
+	}
 	if _, err = manager.Check(t.Context(), input.ID, view.Servers[0].Revision); err != nil {
 		t.Fatal(err)
 	}

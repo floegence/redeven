@@ -28,7 +28,7 @@ function fixture(empty = false, count = 0) {
   if (count) servers = Array.from({ length: count }, (_, index) => ({ ...server, id: `server-${index}`, name: `Workspace ${String(index + 1).padStart(2, '0')}` }));
   const [admin, setAdmin] = createSignal(true);
   const saveMCP = vi.fn(async (input: MCPServerInput) => {
-    const next: MCPServer = { ...input, revision: input.revision + 1, header_keys: Object.keys(input.headers ?? {}), env_keys: Object.keys(input.env ?? {}), checked_at: server.checked_at, tools: server.tools };
+    const next: MCPServer = { ...input, id: input.id ?? 'mcp_generated', name: input.name ?? 'Project tools', revision: input.revision + 1, header_keys: Object.keys(input.headers ?? {}), env_keys: Object.keys(input.env ?? {}), checked_at: server.checked_at, tools: server.tools };
     servers = [...servers.filter(item => item.id !== input.id), next]; return { servers };
   });
   const deleteMCP = vi.fn(async ({ id }: { id: string }) => { servers = servers.filter(item => item.id !== id); return { servers }; });
@@ -204,21 +204,23 @@ it('creates and checks a server, preserves failed edits, and confirms removal', 
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   await page.getByRole('button', { name: 'Add server', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Project tools');
-  await expect.element(dialog.getByRole('textbox', { name: 'Server ID', exact: true })).toHaveValue('project-tools');
+  expect(document.querySelector<HTMLDetailsElement>('[role="dialog"] details')?.open).toBe(false);
   await dialog.getByRole('textbox', { name: 'Endpoint URL', exact: true }).fill('https://project.example.com/mcp');
   const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
   expectSingleInputFocus(input);
   await expect.poll(() => getComputedStyle(document.querySelector('[role="dialog"]')!).opacity).toBe('1');
   await page.screenshot({ path: '__screenshots__/flower-extensions/add-server-mobile.png' });
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Add server', exact: true }).click();
   await expect.element(page.getByRole('heading', { name: 'Project tools', exact: true })).toBeVisible();
-  expect(state.saveMCP).toHaveBeenCalledWith(expect.objectContaining({ id: 'project-tools', transport: 'http', enabled: true }));
+  expect(state.saveMCP).toHaveBeenCalledWith(expect.objectContaining({ id: undefined, name: undefined, transport: 'http', enabled: true }));
   await page.getByRole('button', { name: 'More actions: Project tools', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Check connection', exact: true }).click();
-  await expect.poll(() => state.adapter.checkMCP).toHaveBeenCalledWith({ id: 'project-tools', revision: 1 });
+  await expect.poll(() => state.adapter.checkMCP).toHaveBeenCalledWith({ id: 'mcp_generated', revision: 1 });
   await page.getByRole('button', { name: 'Edit server: Project tools', exact: true }).click();
   state.saveMCP.mockRejectedValueOnce(new Error('Connection unavailable'));
+  await dialog.getByText('Advanced', { exact: true }).click();
+  await expect.element(dialog.getByRole('textbox', { name: 'Server ID', exact: true })).toHaveAttribute('readonly');
+  await expect.element(dialog.getByRole('textbox', { name: 'Server ID', exact: true })).toHaveValue('mcp_generated');
   await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Edited tools');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect.element(dialog.getByRole('alert')).toHaveTextContent('Connection unavailable');
@@ -228,7 +230,70 @@ it('creates and checks a server, preserves failed edits, and confirms removal', 
   await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
   expect(state.deleteMCP).not.toHaveBeenCalled();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect.poll(() => state.deleteMCP).toHaveBeenCalledWith({ id: 'project-tools', revision: 1 });
+  await expect.poll(() => state.deleteMCP).toHaveBeenCalledWith({ id: 'mcp_generated', revision: 1 });
+});
+
+it.each([[1280, false, 'en-US'], [390, true, 'zh-CN'], [320, false, 'zh-TW']] as const)('keeps the MCP connection form concise at %ipx in %s %s', async (width, dark, locale) => {
+  const state = await mount(width, dark, locale);
+  const t = (key: string) => extensionI18n(locale).t(key);
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await page.getByRole('button', { name: t('add'), exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect.element(dialog.getByRole('button', { name: t('add'), exact: true })).toBeDisabled();
+  expect(document.querySelector<HTMLDetailsElement>('[role="dialog"] details')?.open).toBe(false);
+  await dialog.getByRole('textbox', { name: t('endpoint'), exact: true }).fill('https://project.example.com/mcp');
+  expect(state.saveMCP).not.toHaveBeenCalled();
+  expect(state.adapter.checkMCP).not.toHaveBeenCalled();
+  await expect.element(dialog.getByRole('button', { name: t('add'), exact: true })).toBeEnabled();
+  const element = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  await expect.poll(() => getComputedStyle(element).opacity).toBe('1');
+  expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+  await page.screenshot({ path: '__screenshots__/flower-mcp/add-' + width + '-' + locale + '.png' });
+  await dialog.getByText(t('advanced'), { exact: true }).click();
+  await expect.element(dialog.getByRole('textbox', { name: t('name'), exact: true })).toHaveAttribute('placeholder', t('automatic'));
+  await dialog.getByRole('textbox', { name: t('name'), exact: true }).fill('项目工具');
+  await dialog.getByRole('textbox', { name: t('identifier'), exact: true }).fill('docs');
+  await page.screenshot({ path: '__screenshots__/flower-mcp/advanced-' + width + '-' + locale + '.png' });
+  await dialog.getByRole('button', { name: t('add'), exact: true }).click();
+  await expect.poll(() => state.saveMCP).toHaveBeenCalledWith(expect.objectContaining({ id: 'docs', name: '项目工具' }));
+});
+
+it('retains a failed connection-only draft for retry and resets advanced options when reopened', async () => {
+  const state = await mount();
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Endpoint URL', exact: true }).fill('https://project.example.com/mcp');
+  state.saveMCP.mockRejectedValueOnce(new Error('Connection unavailable'));
+  await dialog.getByRole('button', { name: 'Add server', exact: true }).click();
+  await expect.element(dialog.getByRole('alert')).toHaveTextContent('Connection unavailable');
+  await expect.element(dialog.getByRole('textbox', { name: 'Endpoint URL', exact: true })).toHaveValue('https://project.example.com/mcp');
+  await dialog.getByRole('button', { name: 'Add server', exact: true }).click();
+  await expect.element(dialog).not.toBeInTheDocument();
+  expect(state.saveMCP).toHaveBeenCalledTimes(2);
+  expect(state.saveMCP.mock.calls[0]).toEqual(state.saveMCP.mock.calls[1]);
+  await page.getByRole('button', { name: 'Edit server: Project tools', exact: true }).click();
+  await dialog.getByText('Advanced', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  expect(document.querySelector<HTMLDetailsElement>('[role="dialog"] details')?.open).toBe(false);
+});
+
+it('adds a local command without naming it and discloses execution only for local connections', async () => {
+  const state = await mount(390, true);
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await page.getByRole('button', { name: 'Add server', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Remote HTTP', exact: true }).click();
+  await page.getByText('Local command', { exact: true }).click();
+  await expect.element(page.getByText('Remote HTTP', { exact: true })).not.toBeInTheDocument();
+  await expect.element(dialog.getByText('Saving starts this command on the environment host.', { exact: true })).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Executable', exact: true }).fill('project-mcp');
+  await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).fill('--workspace\n/project');
+  expect(state.saveMCP).not.toHaveBeenCalled();
+  await page.screenshot({ path: '__screenshots__/flower-mcp/local-390-dark.png' });
+  await dialog.getByRole('button', { name: 'Add server', exact: true }).click();
+  await expect.poll(() => state.saveMCP).toHaveBeenCalledWith(expect.objectContaining({ id: undefined, name: undefined, transport: 'stdio', command: 'project-mcp', args: ['--workspace', '/project'] }));
 });
 
 it('keeps disabled servers disabled when edited and never fills saved credentials', async () => {

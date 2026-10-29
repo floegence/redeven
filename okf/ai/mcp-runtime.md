@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Flower MCP runtime
 tags: [ai, flower, mcp, permissions]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -17,6 +17,13 @@ Standalone configuration lives at `<stateDir>/ai/mcp.json`, with schema version 
 Catalog limits are 32 servers, 128 tools per server, 32 KiB per schema, and 4 MiB total persisted configuration.
 
 Package-owned connections project from the [Agent Plugins registry](flower-agent-plugins.md). They use the same SDK/session and Floret invocation paths, with separate credentials and explicit discovery. They cannot be edited through standalone MCP writes.
+
+## Standalone identity
+Creation accepts an omitted local ID and display name. The runtime generates a cryptographically random lowercase ID with an mcp_ prefix, independently of the name or connection address; duplicate explicit IDs are conflicts, never replacements. Edits require the saved ID and revision. Missing IDs with a nonzero revision fail without creating another connection. Existing IDs and exact-ID Skill dependency matching remain unchanged.
+
+For new unnamed connections, use the HTTP hostname or local executable basename, then prefer serverInfo.title followed by serverInfo.name from the existing successful initialize exchange. Automatically selected names are trimmed, limited to 120 UTF-8 bytes without splitting a character, and reject control characters. Explicit names win. Edits with an omitted name retain the saved name, and checks never rename a connection. Disabled creation uses connection-derived names without starting a command or contacting the server.
+
+Typing or opening a form does not probe connections. Failed discovery/persistence does not create a saved identity; retry remains an explicit user action. The persisted schema and credential-preservation rules do not change.
 
 ## Presentation icons
 Save and explicit Check read `serverInfo.icons` from the existing SDK initialize result. Connection-preserving disabled edits retain icons; changed connection settings clear stale discovery.

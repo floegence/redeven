@@ -3,6 +3,7 @@ package ai
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/floegence/redeven/internal/ai/agentplugins"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -266,6 +269,12 @@ func (m *mcpManager) HasDependency(dependency SkillMCPDependency) bool {
 }
 
 func (m *mcpManager) Save(ctx context.Context, input MCPServerInput) (MCPCatalog, error) {
+	if input.ID == "" {
+		if input.Revision != 0 {
+			return MCPCatalog{}, errMCPConflict
+		}
+		input.ID = "mcp_" + strings.ToLower(rand.Text())
+	}
 	if strings.HasPrefix(input.ID, "ap_") {
 		return MCPCatalog{}, errors.New("plugin_component_managed")
 	}
@@ -285,6 +294,21 @@ func (m *mcpManager) Save(ctx context.Context, input MCPServerInput) (MCPCatalog
 	m.mu.RUnlock()
 	if (previous == nil && input.Revision != 0) || (previous != nil && input.Revision != previous.Revision) {
 		return MCPCatalog{}, errMCPConflict
+	}
+	// Resolve the display name independently of the stable local identity.
+	// Empty names on edits preserve the saved name; new connections may adopt
+	// the server's initialize metadata during the existing explicit probe.
+	automaticName := input.Name == "" && previous == nil
+	if input.Name == "" {
+		if previous != nil {
+			input.Name = previous.Name
+		} else if input.Transport == "http" {
+			if endpoint, err := url.Parse(input.URL); err == nil {
+				input.Name = mcpDisplayName(endpoint.Hostname())
+			}
+		} else if input.Transport == "stdio" {
+			input.Name = mcpDisplayName(filepath.Base(input.Command))
+		}
 	}
 	if previous != nil && previous.Transport == input.Transport {
 		if input.Headers == nil {
@@ -324,6 +348,14 @@ func (m *mcpManager) Save(ctx context.Context, input MCPServerInput) (MCPCatalog
 			return MCPCatalog{}, err
 		}
 		if initialized := session.InitializeResult(); initialized != nil && initialized.ServerInfo != nil {
+			if automaticName {
+				for _, candidate := range []string{initialized.ServerInfo.Title, initialized.ServerInfo.Name} {
+					if name := mcpDisplayName(candidate); name != "" {
+						next.Name = name
+						break
+					}
+				}
+			}
 			next.Icons = mcpCatalogIcons(probeCtx, input, initialized.ServerInfo.Icons)
 		}
 		next.CheckedAt = time.Now().UnixMilli()
@@ -361,6 +393,22 @@ func (m *mcpManager) Save(ctx context.Context, input MCPServerInput) (MCPCatalog
 		return MCPCatalog{}, err
 	}
 	return m.List(), nil
+}
+
+// Remote presentation metadata is plain text, bounded by the persisted name
+// contract. Never split UTF-8 or expose control characters in generated labels.
+func mcpDisplayName(value string) string {
+	value = strings.TrimSpace(value)
+	if !utf8.ValidString(value) || strings.ContainsFunc(value, unicode.IsControl) {
+		return ""
+	}
+	if len(value) > 120 {
+		value = value[:120]
+		for !utf8.ValidString(value) {
+			value = value[:len(value)-1]
+		}
+	}
+	return strings.TrimSpace(value)
 }
 
 func sameMCPConnection(a, b MCPServerInput) bool {
