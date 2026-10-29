@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower working directory navigation
 tags: [ui, flower, filesystem, terminal, workbench]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
@@ -18,6 +18,8 @@ The full-page header has a borderless folder/name browse button; new-conversatio
 
 ## Directory and menu ownership
 Right-click captures its row's thread/directory without loading, selecting or acknowledging it. Updates cannot retarget actions; handled child events cannot open outer menus. Copy/cancel restores valid triggers without scrolling.
+
+Conversation transcript and thread-list menus expose browsing, opening a terminal, and copying the working directory. They never expose directory Favorite or Unfavorite actions; thread pinning remains a separate conversation action. Directory favorites belong to filesystem surfaces and the directory picker.
 
 ## Destination behavior
 Activity Files reuses its singleton window/geometry; Terminal creates a new session. Workbench creates the matching widget. Request IDs, lazy loading, terminal admission and layout persistence retain ownership. Created-thread browsing includes ThreadID; menu/terminal actions require it.
@@ -36,3 +38,5 @@ Directory callbacks express product navigation, not file-action authorization or
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - ThreadID-owned   row menus retain a captured working directory across summary replacement.
 
 - `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` -   Shared accessible header and selector presentation with suffix-preserving names.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx` - Saved and unsaved paths retain navigation and thread pinning without directory-favorite actions.

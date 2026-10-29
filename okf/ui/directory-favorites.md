@@ -3,13 +3,13 @@ type: Product Contract
 title: Personal directory favorites
 tags: [filesystem, ui, storage, security, desktop, flower]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-29"
 ---
 # Summary
 
 Runtime owns one directory-favorites store. Each authenticated namespace, endpoint
 and user has an independent ordered path set and revision. Env App and Desktop
-supply this metadata to published Floe controlled pickers and product menus; the
+supply this metadata to published Floe controlled pickers and filesystem menus; the
 existing filesystem navigator remains the only path validation and selection owner.
 
 # Contract
@@ -25,6 +25,8 @@ One in-memory client per authenticated environment supplies every mounted entry.
 Initial load failure offers retry; refresh failure retains displayed paths.
 
 No separate title card, second path line or persistent favorite star occupies the sidebar.
+
+Flower exposes favorites inside its directory picker. Conversation transcript and thread-list menus do not mutate directory favorites; their directory actions follow [working directory navigation](flower-working-directory-navigation.md).
 
 ## Compatibility
 Runtime compatibility epoch 69 requires this exact authenticated resource and Desktop route allowlist. Floret APIs, domain schema, conversation lifecycle, file-operation authorization and Runtime Service protocol version remain unchanged.

@@ -3069,7 +3069,7 @@
               "storage",
               "ui"
             ],
-            "summary": "Runtime owns one directory-favorites store. Each authenticated namespace, endpoint\nand user has an independent ordered path set and revision. Env App and Desktop\nsupply this metadata to published Floe controlled pickers and product menus; the\nexisting filesystem navigator remains the only path validation and selection owner.",
+            "summary": "Runtime owns one directory-favorites store. Each authenticated namespace, endpoint\nand user has an independent ordered path set and revision. Env App and Desktop\nsupply this metadata to published Floe controlled pickers and filesystem menus; the\nexisting filesystem navigator remains the only path validation and selection owner.",
             "section_count": 2
           },
           {
@@ -24933,7 +24933,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "desktop",
           "filesystem",
@@ -24945,15 +24945,15 @@
         "title": "Personal directory favorites",
         "type": "Product Contract"
       },
-      "body_length": 1800,
-      "summary": "Runtime owns one directory-favorites store. Each authenticated namespace, endpoint\nand user has an independent ordered path set and revision. Env App and Desktop\nsupply this metadata to published Floe controlled pickers and product menus; the\nexisting filesystem navigator remains the only path validation and selection owner.",
+      "body_length": 2042,
+      "summary": "Runtime owns one directory-favorites store. Each authenticated namespace, endpoint\nand user has an independent ordered path set and revision. Env App and Desktop\nsupply this metadata to published Floe controlled pickers and filesystem menus; the\nexisting filesystem navigator remains the only path validation and selection owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Persistence and authentication\nThe Runtime opens apps/filesystem/directory-favorites.sqlite through sqliteutil before service readiness and closes it with Code App. Schema v1 is initialized transactionally; existing tables, objects and records are verified and unsupported or future schemas fail before a writable open.\n\nThere is no ten-item cap, automatic deletion, move tracking, grouping or custom naming.\n\n## Client ownership and interaction\nOne in-memory client per authenticated environment supplies every mounted entry.\n\nInitial load failure offers retry; refresh failure retains displayed paths.\n\nNo separate title card, second path line or persistent favorite star occupies the sidebar.\n\n## Compatibility\nRuntime compatibility epoch 69 requires this exact authenticated resource and Desktop route allowlist. Floret APIs, domain schema, conversation lifecycle, file-operation authorization and Runtime Service protocol version remain unchanged.",
-          "char_count": 955
+          "body": "## Persistence and authentication\nThe Runtime opens apps/filesystem/directory-favorites.sqlite through sqliteutil before service readiness and closes it with Code App. Schema v1 is initialized transactionally; existing tables, objects and records are verified and unsupported or future schemas fail before a writable open.\n\nThere is no ten-item cap, automatic deletion, move tracking, grouping or custom naming.\n\n## Client ownership and interaction\nOne in-memory client per authenticated environment supplies every mounted entry.\n\nInitial load failure offers retry; refresh failure retains displayed paths.\n\nNo separate title card, second path line or persistent favorite star occupies the sidebar.\n\nFlower exposes favorites inside its directory picker. Conversation transcript and thread-list menus do not mutate directory favorites; their directory actions follow [working directory navigation](flower-working-directory-navigation.md).\n\n## Compatibility\nRuntime compatibility epoch 69 requires this exact authenticated resource and Desktop route allowlist. Floret APIs, domain schema, conversation lifecycle, file-operation authorization and Runtime Service protocol version remain unchanged.",
+          "char_count": 1194
         },
         {
           "id": "boundaries",
@@ -24963,7 +24963,15 @@
           "char_count": 105
         }
       ],
-      "snippet": "Runtime owns one directory-favorites store. Each authenticated namespace, endpoint and user has an independent ordered path set and revision. Env App and Desktop supply this metadata to published Floe controlled pickers and product menus; t",
+      "snippet": "Runtime owns one directory-favorites store. Each authenticated namespace, endpoint and user has an independent ordered path set and revision. Env App and Desktop supply this metadata to published Floe controlled pickers and filesystem menus",
+      "links": [
+        {
+          "label": "working directory navigation",
+          "path": "ui/flower-working-directory-navigation.md",
+          "concept_id": "ui.flower-working-directory-navigation",
+          "title": "Flower working directory navigation"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -29481,7 +29489,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-29",
         "tags": [
           "filesystem",
           "flower",
@@ -29492,15 +29500,15 @@
         "title": "Flower working directory navigation",
         "type": "UI Contract"
       },
-      "body_length": 2450,
+      "body_length": 2948,
       "summary": "Flower owns draft/durable-thread directory intent; Env App owns destination navigation. Full-page controls select new draft directories or browse the current directory; the companion omits them. Menus freeze exact thread/directory targets. Activity opens Files/new Terminal; Workbench creates widgets without changing scale or injecting commands into existing shells.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "[Directory selection](filesystem-picker-navigation.md) owns validation; this contract owns entry points and destinations.\n\n## Header and new-conversation entry points\nThe full-page header has a borderless folder/name browse button; new-conversation welcome selects the draft directory without persistent full-path secondary text. Only picker confirmation remembers a validated real directory. Browsing, cancellation, suggestions and destination navigation never write it; created-thread directories remain immutable.\n\n## Directory and menu ownership\nRight-click captures its row's thread/directory without loading, selecting or acknowledging it. Updates cannot retarget actions; handled child events cannot open outer menus. Copy/cancel restores valid triggers without scrolling.\n\n## Destination behavior\nActivity Files reuses its singleton window/geometry; Terminal creates a new session. Workbench creates the matching widget. Request IDs, lazy loading, terminal admission and layout persistence retain ownership. Created-thread browsing includes ThreadID; menu/terminal actions require it.\n\n## Availability and recovery\nBrowsing and Terminal availability are separate. Disabled reasons/errors are explicit; rejected terminal paths cannot silently fall back to Home. Existing transport, process, authorization and persistence owners remain; Flower adds no queue, lifecycle mirror or retry owner.",
-          "char_count": 1397
+          "body": "[Directory selection](filesystem-picker-navigation.md) owns validation; this contract owns entry points and destinations.\n\n## Header and new-conversation entry points\nThe full-page header has a borderless folder/name browse button; new-conversation welcome selects the draft directory without persistent full-path secondary text. Only picker confirmation remembers a validated real directory. Browsing, cancellation, suggestions and destination navigation never write it; created-thread directories remain immutable.\n\n## Directory and menu ownership\nRight-click captures its row's thread/directory without loading, selecting or acknowledging it. Updates cannot retarget actions; handled child events cannot open outer menus. Copy/cancel restores valid triggers without scrolling.\n\nConversation transcript and thread-list menus expose browsing, opening a terminal, and copying the working directory. They never expose directory Favorite or Unfavorite actions; thread pinning remains a separate conversation action. Directory favorites belong to filesystem surfaces and the directory picker.\n\n## Destination behavior\nActivity Files reuses its singleton window/geometry; Terminal creates a new session. Workbench creates the matching widget. Request IDs, lazy loading, terminal admission and layout persistence retain ownership. Created-thread browsing includes ThreadID; menu/terminal actions require it.\n\n## Availability and recovery\nBrowsing and Terminal availability are separate. Disabled reasons/errors are explicit; rejected terminal paths cannot silently fall back to Home. Existing transport, process, authorization and persistence owners remain; Flower adds no queue, lifecycle mirror or retry owner.",
+          "char_count": 1707
         },
         {
           "id": "boundaries",
@@ -29520,6 +29528,11 @@
           "id": "redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx:0:shared accessible header and selector presentation with suffix-preserving names.",
           "source": "redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx",
           "description": "Shared accessible header and selector presentation with suffix-preserving names."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx:0:saved and unsaved paths retain navigation and thread pinning without directory-favorite actions.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx",
+          "description": "Saved and unsaved paths retain navigation and thread pinning without directory-favorite actions."
         }
       ],
       "snippet": "Flower owns draft/durable-thread directory intent; Env App owns destination navigation. Full-page controls select new draft directories or browse the current directory; the companion omits them. Menus freeze exact thread/directory targets. ",
@@ -29554,6 +29567,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Personal directory favorites",
+          "path": "ui/directory-favorites.md",
+          "concept_id": "ui.directory-favorites",
+          "title": "Personal directory favorites"
         }
       ]
     },
@@ -31598,5 +31617,5 @@
       ]
     }
   ],
-  "source_sha256": "5c8537a46873b36074440d31521fec24d69ec0a0c82d33bbc79cf1b5592c5ffe"
+  "source_sha256": "e871e5b3e36ee23a90ec0add930ebfb919c34ea195ebfcefe7fbe5d7da646303"
 }
