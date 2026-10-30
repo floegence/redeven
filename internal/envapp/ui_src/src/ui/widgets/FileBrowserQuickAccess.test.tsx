@@ -6,6 +6,26 @@ import { filesystemPickerEnUS } from '../../../../../flower_ui/src/i18n/filesyst
 import { FileBrowserQuickAccess } from './FileBrowserQuickAccess';
 
 describe('directory favorites sidebar', () => {
+  it('marks only the exact current shortcut, never an enclosing root', () => {
+    const [current, setCurrent] = createSignal('/Volumes/JianDisk');
+    const host = document.createElement('div');
+    const dispose = render(() => <FileBrowserQuickAccess currentPath={current()}
+      roots={[{ id: 'computer', kind: 'computer', label: 'Computer', pathAbs: '/', permissions: { read: true, write: false }, system: true }]}
+      favorites={{ paths: ['/', '/Volumes/JianDisk', '/Volumes/JianDisk/code'] }}
+      copy={{ ...filesystemPickerEnUS, selectedCount: String }} onNavigate={vi.fn()} onContextMenu={vi.fn()} />, host);
+    const selected = () => [...host.querySelectorAll('[aria-current="page"]')]
+      .map(button => button.closest('[data-file-shortcut-path]')?.getAttribute('data-file-shortcut-path'));
+    try {
+      expect(selected()).toEqual(['/Volumes/JianDisk']);
+      for (const path of ['/', '/Volumes/JianDisk/code']) {
+        setCurrent(path); expect(selected()).toEqual([path]);
+      }
+      for (const path of ['/Volumes/JianDisk/child', '']) {
+        setCurrent(path); expect(selected()).toEqual([]);
+      }
+    } finally { dispose(); }
+  });
+
   it('deduplicates roots and favorites while filtering the same ordered list by label and path', () => {
     const navigate = vi.fn();
     const host = document.createElement('div');

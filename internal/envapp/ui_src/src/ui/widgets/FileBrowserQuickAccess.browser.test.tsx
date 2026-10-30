@@ -334,3 +334,51 @@ it('keeps translated quick access usable in every shipped locale at narrow width
   }
   await i18n!.setLocalePreference('en-US');
 });
+
+
+it.each(['light', 'dark'] as const)('distinguishes hover, keyboard focus and exclusive pending selection in %s', async theme => {
+  await page.viewport(1100, 650);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  const [current, setCurrent] = createSignal('/Volumes/JianDisk');
+  const [pending, setPending] = createSignal('');
+  const host = document.createElement('div'); document.body.append(host);
+  cleanups.push(render(() => <FloeConfigProvider><LayoutProvider>
+    <div style={{ width: '240px', height: '560px' }} class="bg-sidebar p-2 text-sidebar-foreground">
+      <FileBrowserQuickAccess currentPath={current()} pendingNavigationPath={pending()}
+        roots={[
+          { id: 'home', kind: 'home', label: 'Home', pathAbs: home, permissions: { read: true, write: true }, system: true },
+          { id: 'computer', kind: 'computer', label: 'Computer', pathAbs: '/', permissions: { read: true, write: false }, system: true },
+        ]}
+        favorites={{ paths: ['/Volumes/JianDisk/code', '/Volumes/JianDisk'] }}
+        copy={{ ...filesystemPickerEnUS, selectedCount: String }} onNavigate={setPending} onContextMenu={() => {}} />
+    </div>
+  </LayoutProvider></FloeConfigProvider>, host));
+  await settle();
+  const row = (path: string) => host.querySelector<HTMLElement>('[data-file-shortcut-path="' + path + '"]')!;
+  const button = (path: string) => row(path).querySelector<HTMLButtonElement>('button')!;
+  const selected = () => [...host.querySelectorAll('[data-file-shortcut-active="true"]')].map(element => element.getAttribute('data-file-shortcut-path'));
+  const frame = () => [...host.querySelectorAll('[data-file-shortcut-path]')].map(element => element.getBoundingClientRect().toJSON());
+  const before = frame();
+  await userEvent.hover(button('/Volumes/JianDisk/code'));
+  expect(selected()).toEqual(['/Volumes/JianDisk']);
+  expect(getComputedStyle(row('/Volumes/JianDisk/code')).backgroundColor).not.toBe(getComputedStyle(row('/Volumes/JianDisk')).backgroundColor);
+  expect(getComputedStyle(row('/Volumes/JianDisk')).transitionDuration).toBe('0s');
+  await page.screenshot({ element: host, path: '../../../node_modules/.cache/files-navigation-feedback/selected-' + theme + '.png' });
+  button(home).focus();
+  await userEvent.keyboard('{ArrowDown}');
+  expect(document.activeElement).toBe(button('/'));
+  expect(selected()).toEqual(['/Volumes/JianDisk']);
+  await userEvent.keyboard('{Enter}');
+  expect(selected()).toEqual(['/']);
+  expect(button('/').getAttribute('aria-busy')).toBe('true');
+  expect(host.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
+  expect(frame()).toEqual(before);
+  expect(document.activeElement).toBe(button('/'));
+  await page.screenshot({ element: host, path: '../../../node_modules/.cache/files-navigation-feedback/pending-' + theme + '.png' });
+  setCurrent('/'); setPending('');
+  expect(selected()).toEqual(['/']);
+  expect(button('/').getAttribute('aria-current')).toBe('page');
+  expect(button('/').getAttribute('aria-busy')).not.toBe('true');
+  expect(document.activeElement).toBe(button('/'));
+  expect(frame()).toEqual(before);
+});

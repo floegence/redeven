@@ -25,6 +25,8 @@ Files uses released `parsePickerPath`/`formatPickerPath`; absolute input never g
 
 Files owns its runtime recovery presentation over published Floe controls, icons and semantic colors. A failed navigation retains the last readable directory and shows one compact, dismissible notice with a selectable full path, adjacent copy action and grouped recovery actions. If no readable directory remains, a bounded recovery card replaces the listing. Long paths wrap and whole controls reflow inside Activity and scaled Workbench viewports.
 
+Files shortcuts use the existing browse request and session cache: a visited directory presents only its own snapshot while revalidating; an uncached target retains the readable listing and reports pending intent separately. Repeated current clicks do not reload; repeated pending clicks share one request. Returning to an unverified cached path still verifies and commits it. Superseded reads release the queue immediately, and late successes or failures cannot change content, persistence or recovery. Manual path entry and hidden-segment changes still verify before committing.
+
 Runtime failures link the path input to the visible recovery description by ID instead of repeating its message under the toolbar. Syntax validation and canceled requests keep their own inline explanation. Editing clears the input's stale invalid state; it does not clear the unresolved navigation notice. Retry retains the same controls, focus and geometry through pending and repeated failure. Navigation, authorization, snapshots and persistence remain owned by the existing runtime controller.
 
 ## Creating a child directory
@@ -47,7 +49,7 @@ The published picker owns navigation and request lifetime. A validated selection
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published path parsing and formatting, absolute identity, and localized input recovery.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Single error description, retained directory, localized light/dark and narrow recovery, selectable paths, retry continuity and explicit recovery destinations.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Single error description, retained directory, localized light/dark and narrow recovery, selectable paths, retry continuity, rapid shortcut switching, cache identity, canceled reads, permission/hidden-path boundaries and explicit recovery destinations.
 
 - redeven:internal/codeapp/appserver/server_fs_mkdir_test.go — actual creation, duplicate preservation, strict requests, outside-scope and session write rejection.
 - redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryPicker.test.shared.tsx — creation, explicit confirmation, failed-name retention and canceled draft preservation.

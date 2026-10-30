@@ -488,6 +488,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               favorites={favoritePicker.directoryFavorites}
               copy={favoritePicker.copy}
               currentPath={props.currentPath}
+              pendingNavigationPath={props.pendingNavigationPath}
               initializing={props.initializing}
               onNavigate={path => props.onRootSelect?.(path)}
               onContextMenu={(event, path) => showDirectoryMenu(browser, path, event)}

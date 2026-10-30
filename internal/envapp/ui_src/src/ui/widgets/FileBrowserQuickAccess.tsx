@@ -2,10 +2,10 @@ import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button, Input, type DirectoryFavorites, type PickerCopy } from '@floegence/floe-webapp-core/ui';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { MoreHorizontal } from '@floegence/floe-webapp-core/icons';
+import { Loader2, MoreHorizontal } from '@floegence/floe-webapp-core/icons';
 import { Tooltip } from '../primitives/Tooltip';
 import { useI18n } from '../i18n';
-import { matchFilesystemRoot, type NormalizedFilesystemRoot } from '../utils/filesystemRoots';
+import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
@@ -14,6 +14,7 @@ interface FileBrowserQuickAccessProps {
   favorites?: DirectoryFavorites;
   copy: PickerCopy;
   currentPath?: string;
+  pendingNavigationPath?: string;
   initializing?: boolean;
   onNavigate: (path: string) => void;
   onContextMenu: (event: MouseEvent | KeyboardEvent, path: string) => void;
@@ -35,7 +36,7 @@ export function FileBrowserQuickAccess(props: FileBrowserQuickAccessProps) {
     const query = filter().trim().toLocaleLowerCase();
     return paths().filter(path => ((rootsByPath().get(path)?.label ?? '') + ' ' + path).toLocaleLowerCase().includes(query));
   });
-  const activeRoot = createMemo(() => matchFilesystemRoot(props.currentPath ?? '', props.roots ?? []));
+  const activePath = () => props.pendingNavigationPath || props.currentPath;
   const showFilter = () => paths().length > 5 || filter().length > 0;
 
   const focusPath = (path: string | undefined) => {
@@ -92,21 +93,27 @@ export function FileBrowserQuickAccess(props: FileBrowserQuickAccessProps) {
       style={{ height: filterHeight() === undefined ? undefined : filterHeight() + 'px' }}>
       <For each={filteredPaths()}>{path => {
         const root = () => rootsByPath().get(path);
-        const active = () => root() ? activeRoot()?.id === root()?.id : props.currentPath === path;
+        const active = () => activePath() === path;
+        const pending = () => props.pendingNavigationPath === path;
         return <div {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           data-file-shortcut-path={path}
+          data-file-shortcut-active={active()}
           data-filesystem-root-id={root()?.id} data-filesystem-root-path={root() ? path : undefined}
           data-directory-favorite-path={favoritePaths().has(path) ? path : undefined}
           onContextMenu={event => props.onContextMenu(event, path)}
-          class={cn('group flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors',
-            active() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-foreground hover:bg-sidebar-accent/60')}>
+          class={cn('group relative flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs',
+            active() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-foreground hover:bg-sidebar-accent/30')}>
+          <Show when={active()}><span aria-hidden="true" class="pointer-events-none absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" /></Show>
           <Tooltip content={path} placement="right" anchorClass="min-w-0 flex-1">
             <button ref={element => { rows.set(path, element); onCleanup(() => { rows.delete(path); }); }} type="button" title={path} aria-label={root()?.label ?? path}
-              aria-current={active() ? 'page' : undefined}
+              aria-current={active() && props.currentPath === path ? 'page' : undefined}
+              aria-busy={pending() || undefined}
               class="flex w-full min-w-0 cursor-pointer items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
               onClick={() => props.onNavigate(path)} onKeyDown={event => onRowKeyDown(event, path)}>
               <span class="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-                <FileItemIcon size={14} item={{ name: root()?.label ?? path, type: 'folder' }} class="h-3.5 w-3.5" />
+                <Show when={pending()} fallback={<FileItemIcon size={14} item={{ name: root()?.label ?? path, type: 'folder' }} class="h-3.5 w-3.5" />}>
+                  <Loader2 aria-hidden="true" class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                </Show>
               </span>
               <Show when={root()} fallback={<span class="flex min-w-0 flex-1 overflow-hidden whitespace-nowrap">
                 <span data-directory-favorite-parent class="min-w-0 truncate">{path.slice(0, path.lastIndexOf('/'))}</span>

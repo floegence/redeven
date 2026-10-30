@@ -3783,7 +3783,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         queuedDirectoryRequest = null;
         request.controller = new AbortController();
         activeDirectoryRequest = request;
-        const result = await performDirectoryNavigation(request);
+        // Retire an obsolete read immediately, even if its transport settles late.
+        // performDirectoryNavigation still fences every response before applying it.
+        const signal = request.controller.signal;
+        let cancel!: () => void;
+        const canceled = new Promise<DirectoryNavigationResult>((resolve) => {
+          cancel = () => resolve({ status: 'canceled' });
+          signal.addEventListener('abort', cancel, { once: true });
+        });
+        let result: DirectoryNavigationResult;
+        try {
+          result = await Promise.race([performDirectoryNavigation(request), canceled]);
+        } finally {
+          signal.removeEventListener('abort', cancel);
+        }
         request.resolve(result);
         activeDirectoryRequest = null;
         if (!queuedDirectoryRequest) {
@@ -3853,7 +3866,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const targetPath = normalizePath(requestedPath);
     const intent = options.intent ?? 'browse';
     const current = untrack(directoryView);
-    const desiredRequest = queuedDirectoryRequest ?? activeDirectoryRequest;
+    const desiredRequest = queuedDirectoryRequest ?? (activeDirectoryRequest?.controller?.signal.aborted ? null : activeDirectoryRequest);
 
     // The controlled FileBrowser can replay its initial path while the first
     // remote snapshot is still pending. Do not let that stale replay replace a
@@ -3866,7 +3879,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return desiredRequest?.promise ?? currentDirectoryResult();
     }
 
-    if (intent === 'browse' && current.snapshotReady && targetPath === normalizePath(current.activePath || '/')) {
+    if (desiredRequest?.targetPath === targetPath) {
+      return desiredRequest.promise;
+    }
+
+    // A displayed cache entry is not yet a verified navigation result.
+    if (intent === 'browse' && current.snapshotReady
+      && targetPath === current.activePath && targetPath === current.committedPath
+      && current.failure?.requestedPath !== targetPath) {
       if (desiredRequest && desiredRequest.targetPath !== targetPath) {
         activeDirectoryRequest?.controller?.abort();
         queuedDirectoryRequest?.resolve({ status: 'canceled' });
@@ -3874,13 +3894,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setDirectoryView((state) => ({
           ...state,
           pending: null,
+          failure: null,
         }));
       }
+      if (current.failure) setDirectoryView((state) => ({ ...state, failure: null }));
       return currentDirectoryResult();
-    }
-
-    if (desiredRequest?.targetPath === targetPath) {
-      return desiredRequest.promise;
     }
 
     presentCachedDirectory(targetPath, intent);
@@ -3914,10 +3932,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return promise;
   };
 
-  const requestManualDirectoryNavigation = async (requestedPath: string): Promise<ManualDirectoryNavigationResult> => {
+  const requestManualDirectoryNavigation = async (
+    requestedPath: string,
+    intent: 'browse' | 'verify' = 'verify',
+  ): Promise<ManualDirectoryNavigationResult> => {
     let rootPath = '';
     try {
-      rootPath = normalizePath(await resolveFsRootAbs());
+      rootPath = filesystemRoots().length > 0
+        ? normalizePath(defaultRootPath())
+        : normalizePath(await resolveFsRootAbs());
     } catch {
       return {
         status: 'transport_error',
@@ -3934,7 +3957,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const result = await requestDirectoryNavigation(normalizedRequestedPath, {
       persistEnvId: id || undefined,
       persistOnReady: true,
-      intent: 'verify',
+      intent: nextShowHidden ? 'verify' : intent,
       showHiddenOverride: nextShowHidden ? true : undefined,
     });
 
@@ -5541,7 +5564,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       showMobileSidebarButton={layout.isMobile() && hasEmbeddedWidget()}
                       onToggleSidebar={togglePageSidebar}
                       onRootSelect={(path) => {
-                        void requestManualDirectoryNavigation(path);
+                        void requestManualDirectoryNavigation(path, 'browse');
                       }}
                       pathEditRequestKey={pathEditorRequestKey()}
                       toolbarEndActions={fileBrowserToolbarEndActions()}

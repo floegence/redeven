@@ -118,6 +118,217 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
   return { host, storage, savedPaths, committedPath, enter };
 }
 
+describe('Files quick access navigation feedback', () => {
+  async function mountShortcuts(paths = [target], placement: 'activity' | 'workbench' = 'activity') {
+    releaseFavorites = bindSessionHTTP({ fetch: async () => new Response(JSON.stringify({ ok: true, data: { paths, revision: 1 } })), events: async function*() {} });
+    const f = await mountFiles(home, placement);
+    await envDirectoryFavorites(() => 'Failed')!.onRefresh!();
+    await expect.poll(() => f.host.querySelector('[data-file-shortcut-path="' + paths[0] + '"]')).not.toBeNull();
+    const shortcut = (path: string) => f.host.querySelector<HTMLButtonElement>('[data-file-shortcut-path="' + path + '"] button')!;
+    const active = () => [...f.host.querySelectorAll('[data-file-shortcut-active="true"]')].map(row => row.getAttribute('data-file-shortcut-path'));
+    return { ...f, shortcut, active };
+  }
+
+  it.each(['activity', 'workbench'] as const)('shows the latest intent immediately before an aborted response settles in %s', async placement => {
+    const f = await mountShortcuts([target], placement);
+    let release!: (value: { entries: [] }) => void;
+    const response = new Promise<{ entries: [] }>(resolve => { release = resolve; });
+    const initialList = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation((request, options) => request.path === target ? response : initialList(request, options));
+    try {
+      f.shortcut(target).click();
+      expect(f.active()).toEqual([target]);
+      await expect.poll(() => transport.list.mock.calls.some(([request]) => request.path === target)).toBe(true);
+      expect(f.active()).toEqual([target]);
+      expect(f.shortcut(target).getAttribute('aria-busy')).toBe('true');
+      expect(f.host.querySelectorAll('[data-filesystem-locations] [aria-current="page"]')).toHaveLength(0);
+      expect(f.committedPath()).toBe(home);
+      f.shortcut('/srv/project').click();
+      await expect.poll(f.committedPath).toBe('/srv/project');
+      expect(f.active()).toEqual(['/srv/project']);
+      release({ entries: [] });
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      expect(f.committedPath()).toBe('/srv/project');
+      expect(f.active()).toEqual(['/srv/project']);
+      await expect.poll(f.savedPaths).toEqual(['/srv/project']);
+    } finally { release({ entries: [] }); }
+  });
+
+  it('presents a visited shortcut immediately while revalidating its own snapshot', async () => {
+    const list = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation(async (request, options) => {
+      const result = await list(request, options);
+      return { entries: [...result.entries, { name: 'identity.txt', path: request.path + '/identity.txt', isDirectory: false }] };
+    });
+    const f = await mountShortcuts();
+    f.shortcut(target).click();
+    await expect.poll(f.committedPath).toBe(target);
+    expect(f.host.querySelector('[data-file-browser-item-path="' + target + '/identity.txt"]')).not.toBeNull();
+    let release!: (value: { entries: [] }) => void;
+    const response = new Promise<{ entries: [] }>(resolve => { release = resolve; });
+    transport.list.mockImplementation(({ path }: { path: string }) => path === home ? response : Promise.resolve({ entries: [] }));
+    try {
+      f.shortcut(home).click();
+      expect(f.active()).toEqual([home]);
+      await expect.poll(() => transport.list.mock.calls.some(([request]) => request.path === home)).toBe(true);
+      expect(f.active()).toEqual([home]);
+      expect(f.shortcut(home).getAttribute('aria-current')).toBe('page');
+      expect(f.shortcut(home).getAttribute('aria-busy')).toBe('true');
+      expect(f.committedPath()).toBe(target);
+      expect(f.host.querySelector('[data-file-browser-item-path="' + home + '/identity.txt"]')).not.toBeNull();
+      expect(f.host.querySelector('[data-file-browser-item-path="' + target + '/identity.txt"]')).toBeNull();
+      release({ entries: [] });
+      await expect.poll(f.committedPath).toBe(home);
+      expect(f.shortcut(home).getAttribute('aria-busy')).not.toBe('true');
+      await expect.poll(f.savedPaths).toEqual([home]);
+    } finally { release({ entries: [] }); }
+  });
+  it('accepts a fresh A to B to A intent before the retired A response settles', async () => {
+    const f = await mountShortcuts();
+    let rejectOld!: (reason: unknown) => void;
+    const old = new Promise<never>((_resolve, reject) => { rejectOld = reject; });
+    const initialList = transport.list.getMockImplementation()!;
+    let targetReads = 0;
+    transport.list.mockImplementation((request, options) => {
+      if (request.path === target && ++targetReads === 1) return old;
+      return initialList(request, options);
+    });
+    try {
+      f.shortcut(target).click();
+      await expect.poll(() => targetReads).toBe(1);
+      f.shortcut(home).click();
+      expect(f.active()).toEqual([home]);
+      f.shortcut(target).click();
+      expect(f.active()).toEqual([target]);
+      await expect.poll(f.committedPath).toBe(target);
+      expect(targetReads).toBe(2);
+      rejectOld({ code: 403, message: 'permission denied' });
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      expect(f.committedPath()).toBe(target);
+      expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+      await expect.poll(f.savedPaths).toEqual([target]);
+    } finally { rejectOld(new Error('Retired read')); }
+  });
+
+  it('restores the readable shortcut on failure and permits retrying the same destination', async () => {
+    const f = await mountShortcuts();
+    const initialList = transport.list.getMockImplementation()!;
+    let reject!: (reason: unknown) => void;
+    const response = new Promise<never>((_resolve, fail) => { reject = fail; });
+    transport.list.mockImplementation((request, options) => request.path === target ? response : initialList(request, options));
+    f.shortcut(target).click();
+    expect(f.active()).toEqual([target]);
+    await expect.poll(() => transport.list.mock.calls.some(([request]) => request.path === target)).toBe(true);
+    reject({ code: 403, message: 'permission denied' });
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
+    expect(f.active()).toEqual([home]);
+    expect(f.shortcut(home).getAttribute('aria-current')).toBe('page');
+    expect(f.shortcut(target).getAttribute('aria-busy')).not.toBe('true');
+    expect(f.committedPath()).toBe(home);
+    transport.list.mockImplementation(initialList);
+    f.shortcut(target).click();
+    await expect.poll(f.committedPath).toBe(target);
+    expect(f.active()).toEqual([target]);
+    expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+  });
+
+  it('reveals hidden favorite segments only after their verified navigation succeeds', async () => {
+    const hidden = home + '/.config/nested';
+    const f = await mountShortcuts([hidden]);
+    const initialList = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation((request, options) => {
+      if (request.path === home) return Promise.resolve({ entries: [{ name: '.config', path: home + '/.config', isDirectory: true }] });
+      if (request.path === home + '/.config') return Promise.resolve({ entries: [{ name: 'nested', path: hidden, isDirectory: true }] });
+      return initialList(request, options);
+    });
+    f.shortcut(hidden).click();
+    expect(f.active()).toEqual([hidden]);
+    await expect.poll(f.committedPath).toBe(hidden);
+    expect(transport.list.mock.calls.filter(([request]) => request.path.startsWith(home)).map(([request]) => request.showHidden)).toEqual([true, true, true]);
+    expect(f.shortcut(hidden).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('removes a denied cached snapshot and reports that exact destination', async () => {
+    const f = await mountShortcuts();
+    f.shortcut(target).click(); await expect.poll(f.committedPath).toBe(target);
+    f.shortcut(home).click(); await expect.poll(f.committedPath).toBe(home);
+    const initialList = transport.list.getMockImplementation()!;
+    let reject!: (reason: unknown) => void;
+    const response = new Promise<never>((_resolve, fail) => { reject = fail; });
+    transport.list.mockImplementation((request, options) => request.path === target ? response : initialList(request, options));
+    f.shortcut(target).click();
+    expect(f.shortcut(target).getAttribute('aria-current')).toBe('page');
+    await expect.poll(() => f.shortcut(target).getAttribute('aria-busy')).toBe('true');
+    reject({ code: 403, message: 'permission denied' });
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"]')?.textContent).toContain(target);
+    expect(f.host.querySelector('[data-testid="file-browser-content-scroll-region"] [data-file-browser-item-id]')).toBeNull();
+    expect(f.committedPath()).toBe(home);
+    transport.list.mockImplementation(initialList);
+    f.shortcut(target).click();
+    await expect.poll(f.committedPath).toBe(target);
+    expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+  });
+
+  it('retries a cached shortcut after a transient revalidation failure', async () => {
+    const f = await mountShortcuts();
+    f.shortcut(target).click(); await expect.poll(f.committedPath).toBe(target);
+    f.shortcut(home).click(); await expect.poll(f.committedPath).toBe(home);
+    const initialList = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation((request, options) => request.path === target ? Promise.reject(new Error('Offline')) : initialList(request, options));
+    f.shortcut(target).click();
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
+    expect(f.committedPath()).toBe(home);
+    transport.list.mockImplementation(initialList);
+    f.shortcut(target).click();
+    await expect.poll(f.committedPath).toBe(target);
+    expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+  });
+
+  it('revalidates a cached destination after its earlier read was superseded', async () => {
+    const f = await mountShortcuts();
+    f.shortcut(target).click(); await expect.poll(f.committedPath).toBe(target);
+    f.shortcut(home).click(); await expect.poll(f.committedPath).toBe(home);
+    let release!: (value: { entries: [] }) => void;
+    const response = new Promise<{ entries: [] }>(resolve => { release = resolve; });
+    const initialList = transport.list.getMockImplementation()!;
+    let reads = 0;
+    transport.list.mockImplementation((request, options) => {
+      if (request.path === '/srv/project') return response;
+      if (request.path === target && ++reads === 1) return response;
+      return initialList(request, options);
+    });
+    try {
+      f.shortcut(target).click();
+      await expect.poll(() => reads).toBe(1);
+      f.shortcut('/srv/project').click();
+      await expect.poll(() => transport.list.mock.calls.some(([request]) => request.path === '/srv/project')).toBe(true);
+      f.shortcut(target).click();
+      await expect.poll(f.committedPath).toBe(target);
+      expect(reads).toBe(2);
+      expect(f.active()).toEqual([target]);
+    } finally { release({ entries: [] }); }
+  });
+
+  it('ignores a repeated current click and coalesces repeated pending clicks', async () => {
+    const f = await mountShortcuts();
+    f.shortcut(home).click();
+    expect(transport.list).not.toHaveBeenCalled();
+    let release!: (value: { entries: [] }) => void;
+    const response = new Promise<{ entries: [] }>(resolve => { release = resolve; });
+    const initialList = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation((request, options) => request.path === target ? response : initialList(request, options));
+    try {
+      f.shortcut(target).click();
+      await expect.poll(() => transport.list.mock.calls.filter(([request]) => request.path === target).length).toBe(1);
+      for (let index = 0; index < 5; index++) f.shortcut(target).click();
+      expect(f.active()).toEqual([target]);
+      expect(transport.list.mock.calls.filter(([request]) => request.path === target)).toHaveLength(1);
+      release({ entries: [] });
+      await expect.poll(f.committedPath).toBe(target);
+    } finally { release({ entries: [] }); }
+  });
+});
+
 describe('Files directory favorites across published pickers', () => {
   it.each([
     ['en-US', 'Favorite', 'Unfavorite'],
@@ -236,7 +447,7 @@ describe('Files directory favorites across published pickers', () => {
     await expect.poll(() => transport.list.mock.calls.some(([input]) => input.path === childPath)).toBe(true);
     expect(f.committedPath()).toBe(selectedBefore);
     await page.getByRole('button',{name:'Cancel',exact:true}).click();
-    const sidebar = f.host.querySelector<HTMLElement>('section[aria-label="Favorites"]')!;
+    const sidebar = f.host.querySelector<HTMLElement>('section[aria-label="Quick access"]')!;
     sidebar.querySelector<HTMLButtonElement>('button[title="' + childPath + '"]')!.click();
     await expect.poll(f.committedPath).toBe(childPath);
   });

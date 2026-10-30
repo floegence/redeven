@@ -161,7 +161,7 @@ try {
       assert.equal(await page.getByText('This folder is empty', { exact: true }).count(), 0);
       assert.equal(await page.locator('[data-floe-reload-placeholder]').count(), 0);
       server.setFilesFailure(0);
-      await page.getByRole('button', { name: 'Retry', exact: true }).click();
+      await page.getByTestId('file-browser-navigation-failure').getByRole('button', { name: 'Retry', exact: true }).click();
       await row.waitFor();
       assert.deepEqual(errors, []);
       console.log('PASS Files empty, failed restore and explicit retry:', mode);
