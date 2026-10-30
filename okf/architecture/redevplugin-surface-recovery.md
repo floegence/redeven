@@ -48,6 +48,10 @@ must not escape into the Workbench error boundary or close sibling placements.
 
 ## User close and forced revocation
 
+When a narrow Plugin Center replaces a card with details to confirm uninstall,
+dismissal returns focus to the surviving detail heading after modal presence
+ends. The hidden card trigger is no longer a valid return destination.
+
 User close requests use the released surface request-close contract. A plugin may report unsaved work; Redeven presents one localized Floe confirmation and preserves the slot if canceled. Forced lifecycle invalidation still revokes without waiting for user consent. A successful request-close is recorded as already closed so subsequent placement disposal cannot send a second close.
 
 Management teardown may preserve the product layout while the SDK clears the document to `about:blank`, removes same-origin authority and closes the bridge. An iframe remaining in the layout is not evidence of retained application authority; a fresh authorized slot is required before reopening.

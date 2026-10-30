@@ -181,7 +181,7 @@ it('retains search, filters, selection and scroll while excluding background inp
   expect(document.activeElement).toBe(search);
 });
 
-it('returns from a narrow uninstall confirmation to visible details and preserves failed Open feedback', async () => {
+it.each(['escape', 'cancel'] as const)('returns from a narrow uninstall confirmation through %s and preserves failed Open feedback', async (dismissal) => {
   await page.viewport(1024, 768);
   const fixture = mountWorkbench();
   await fixture.enter();
@@ -198,7 +198,8 @@ it('returns from a narrow uninstall confirmation to visible details and preserve
   await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(2);
   const confirmation = [...document.querySelectorAll<HTMLElement>('[data-floe-dialog-panel]')].find((element) => element !== panel)!;
   await expect.poll(() => confirmation.contains(document.activeElement)).toBe(true);
-  await userEvent.keyboard('{Escape}');
+  if (dismissal === 'escape') await userEvent.keyboard('{Escape}');
+  else await page.elementLocator(confirmation).getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect.poll(() => confirmation.isConnected).toBe(false);
   await expect.poll(() => document.activeElement).toBe(panel.querySelector('[data-plugin-center-detail-heading]'));
   expect(panel.isConnected).toBe(true);

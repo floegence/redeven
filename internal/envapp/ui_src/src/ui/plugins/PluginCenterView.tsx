@@ -1626,6 +1626,7 @@ export function PluginCenterDetails(props: {
 }): JSX.Element {
   const i18n = useI18n();
   let detailControls: HTMLDivElement | undefined;
+  let detailHeading: HTMLHeadingElement | undefined;
   const presentation = () => {
     if (props.item?.presentation) return resolveAuthorPresentation(props.item?.presentation, i18n.locale());
     if (!props.item?.pluginInstanceID && props.marketDetail) return resolveAuthorPresentation(props.marketDetail.presentation, i18n.locale());
@@ -1669,7 +1670,7 @@ export function PluginCenterDetails(props: {
                   <X class="h-4 w-4" />
                 </button>
               </div>
-              <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} headingId={props.headingId} />
+              <PluginIdentityHeader item={item()} description headingRef={(element) => { detailHeading = element; props.detailHeadingRef?.(element); }} headingId={props.headingId} />
 
               <Show when={props.runtimeRecovery}>
                 {(recovery) => (
@@ -1743,6 +1744,7 @@ export function PluginCenterDetails(props: {
                   open={props.uninstallChoiceFor === item().pluginInstanceID}
                   pending={props.managementPending}
                   onClose={() => props.onAskUninstall('')}
+                  onDismissed={() => { if (detailHeading?.isConnected) detailHeading.focus({ preventScroll: true }); }}
                   onCommand={props.onCommand}
                 />
               </div>
@@ -2435,10 +2437,12 @@ function PluginUninstallDialog(props: {
   open: boolean;
   pending: boolean;
   onClose: () => void;
+  onDismissed: () => void;
   onCommand: (command: PluginLifecycleCommand) => void;
 }): JSX.Element {
   const i18n = useI18n();
   const [retention, setRetention] = createSignal<'keep_data' | 'delete_data'>('keep_data');
+  let wasPresent = false;
   let wasOpen = false;
   createEffect(() => {
     const open = props.open;
@@ -2457,6 +2461,13 @@ function PluginUninstallDialog(props: {
     <Dialog
       open={props.open}
       onOpenChange={(open) => { if (!open) props.onClose(); }}
+      onPresenceChange={(present) => {
+        const dismissed = wasPresent && !present;
+        wasPresent = present;
+        // The card trigger is hidden when narrow layouts show details. Return
+        // to the surviving product destination after modal isolation ends.
+        if (dismissed && !props.open) queueMicrotask(props.onDismissed);
+      }}
       title={i18n.t('uiCopy.plugin.uninstallTitle', { plugin: props.item.displayName })}
       bodyDescription={i18n.t('uiCopy.plugin.uninstallDescription')}
       footer={(
