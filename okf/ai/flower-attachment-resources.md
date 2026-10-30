@@ -3,7 +3,7 @@ type: AI Resource Contract
 title: Flower attachment resources
 tags: [ai, flower, attachments, storage, security]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -18,7 +18,9 @@ The canonical Floret `ResourceRef` is content-addressed and the display locator 
 Retention ownership does not authorize canonical reads.
 
 ## Provider Preparation
-Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. Strict UTF-8 text may instead use the bounded `attachment.read` host tool.
+Upload admission is independent of provider-native modalities. Recognized text, image and PDF bytes retain their safe canonical types; all other files, including Office containers and non-UTF-8 documents, use `application/octet-stream` with their original names and bytes. Active UTF-8 text remains `text/plain`; pasted long text must still be strict UTF-8. Size, ownership, digest, staging and retention checks are unchanged.
+
+Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. Native image/text/PDF input takes precedence when supported. Tool-capable models receive other attachments as canonical manifests: strict UTF-8 text uses bounded `attachment.read`; binary files use `attachment.materialize` and model-selected processing tools. A manifest is not extracted content or a promise that a parser is installed. Materialization retains its normal permissions. Models without either a native route or tools remain unsupported.
 
 Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state. Upload/tool-image reads search current-path public Floret windows (50 items, 128-byte previews) through one authorized subscription, correlated to each requested page and a stable leaf. They never hydrate full history or authorize from retention inventory. The internal resolved handle certifies ownership and metadata only: materialization hashes while copying, text/provider/image consumers verify their exact snapshot, and public download opens verify bytes before returning a path. Thus upload materialization does not prehash and then reread the original. Reads honor cancellation and declared-size bounds; corruption never publishes a work copy.
 
@@ -44,5 +46,6 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 - `redeven:internal/ai/threadstore/uploads.go` - Transactional idempotency, quotas, claims, and last-reference deletion are enforced in the resource store.
 
 - [Materialization and integrity tests](../../internal/ai/attachment_materialize_test.go).
+- [Opaque upload, provider-visible manifest, tool execution and restart tests](../../internal/ai/attachment_binary_test.go).
 - [Fork cuts, cleanup and last-reference tests](../../internal/ai/task_materials_test.go).
 - [Image compaction/restart qualification](../../internal/ai/tool_image_compaction_test.go).

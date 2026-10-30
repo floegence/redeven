@@ -190,7 +190,11 @@ export function flowerAttachmentRoute(
 ): FlowerAttachmentRoute {
   const canonical = mimeType.trim().toLowerCase();
   const essence = canonical.split(';', 1)[0]?.trim() ?? canonical;
-  return capability.routes[canonical] ?? capability.routes[essence] ?? 'unsupported';
+  // Before upload, browsers report format-specific (or empty) MIME types.
+  // The server stores non-native files as opaque bytes for host-tool access.
+  // An explicitly unsupported native type still takes precedence.
+  return capability.routes[canonical] ?? capability.routes[essence]
+    ?? (capability.routes['application/octet-stream'] === 'tool_read' ? 'tool_read' : 'unsupported');
 }
 
 export function flowerStagedAttachmentCompatible(

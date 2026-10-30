@@ -26,7 +26,7 @@ function canonicalRuntimeFlowerAttachmentPreviewMediaType(contentType: string | 
 
 export function runtimeFlowerMessageAttachment(response: RuntimeFlowerHTTPResponse): RuntimeFlowerMedia {
   const mimeType = canonicalRuntimeFlowerAttachmentPreviewMediaType(response.headers['content-type']);
-  if (!RUNTIME_FLOWER_ATTACHMENT_PREVIEW_EXTENSIONS.has(mimeType) || response.bytes.length > RUNTIME_FLOWER_ATTACHMENT_PREVIEW_MAX_BYTES) {
+  if ((!RUNTIME_FLOWER_ATTACHMENT_PREVIEW_EXTENSIONS.has(mimeType) && mimeType !== 'application/octet-stream') || response.bytes.length > RUNTIME_FLOWER_ATTACHMENT_PREVIEW_MAX_BYTES) {
     throw new Error('Flower returned invalid attachment media.');
   }
   return { bytes: new Uint8Array(response.bytes), mime_type: mimeType };

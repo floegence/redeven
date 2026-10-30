@@ -637,7 +637,7 @@ describe('Env local Flower surface adapter', () => {
 		await expect(adapter.createAttachmentStagingScope?.('thread-requested')).rejects.toThrow('invalid');
 	});
 
-	it('opens staged previews through an authenticated object URL without exposing credentials', async () => {
+	it.each(['text/plain', 'application/octet-stream'])('opens staged %s previews through an authenticated object URL without exposing credentials', async (mediaType) => {
 		const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 		const previousCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
 		const previousRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
@@ -659,8 +659,8 @@ describe('Env local Flower surface adapter', () => {
 			fetchMock.mockResolvedValue({
 				ok: true,
 				status: 200,
-				headers: new Headers({ 'content-type': 'text/plain' }),
-				blob: async () => new Blob(['notes'], { type: 'text/plain' }),
+				headers: new Headers({ 'content-type': mediaType }),
+				blob: async () => new Blob(['notes'], { type: mediaType }),
 			} as Response);
 			const adapter = createEnvLocalFlowerSurfaceAdapter({
 				envPublicID: 'env_a',
@@ -670,7 +670,7 @@ describe('Env local Flower surface adapter', () => {
 			await adapter.previewStagedAttachment?.({
 				attachment_id: 'upl_preview_1',
 				name: 'notes.txt',
-				mime_type: 'text/plain; charset=utf-8',
+				mime_type: mediaType,
 				size_bytes: 5,
 				digest_sha256: 'a'.repeat(64),
 				locator: 'attachment://v1/upl_preview_1/notes.txt',

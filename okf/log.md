@@ -4,6 +4,10 @@
 
 Recent pointers only; concepts own contracts/evidence and Git retains earlier entries.
 
+## 2026-10-30
+
+- Separate [upload acceptance and model-directed file processing](ai/flower-attachment-resources.md) from native provider modalities; keep opaque spreadsheets sendable in the [composer](ui/flower-composer-attachments.md), with canonical manifests, authorized materialization and restart regression coverage.
+
 ## 2026-10-29
 
 - Keep [tool diagnostics](ai/tool-permission-runtime.md) source-owned and factual; preserve patch matching/context semantics, let [result-loss continuation](ai/floret-redeven-adapter-and-projection.md) and [child attention](ai/subagent-runtime.md) return decisions to the model, and retain real/historical user requests. No domain migration, automatic replay or scenario-specific recovery rules.

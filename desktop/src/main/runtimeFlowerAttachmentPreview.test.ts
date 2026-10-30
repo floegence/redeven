@@ -29,7 +29,7 @@ function fileSystem(overrides: Partial<RuntimeFlowerAttachmentPreviewFileSystem>
 }
 
 describe('runtime Flower attachment preview', () => {
-  it.each(['image/png', 'text/plain; charset=utf-8', 'application/pdf'])('preserves preview bytes for %s across IPC', mimeType => {
+  it.each(['image/png', 'text/plain; charset=utf-8', 'application/pdf', 'application/octet-stream'])('preserves preview bytes for %s across IPC', mimeType => {
     const bytes = Buffer.from([0, 128, 255]);
     const media = runtimeFlowerMessageAttachment({ ...response(200), headers: { 'content-type': mimeType }, bytes });
     expect(media.bytes).toEqual(new Uint8Array(bytes));
@@ -95,6 +95,7 @@ describe('runtime Flower attachment preview', () => {
   it.each([
     ['text/html', '<script>active()</script>'],
     ['image/svg+xml', '<svg onload="active()"/>'],
+    ['application/octet-stream', 'opaque bytes have no native preview suffix'],
     [undefined, '<script>missing content type</script>'],
   ])('rejects non-canonical %s content without materializing an active suffix', async (contentType, body) => {
     const fs = fileSystem();

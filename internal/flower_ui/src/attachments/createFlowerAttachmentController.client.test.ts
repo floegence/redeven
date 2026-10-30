@@ -48,6 +48,22 @@ function staged(input: Readonly<{ id: string; file: File; source?: 'file' | 'lon
 }
 
 describe('createFlowerAttachmentController', () => {
+  it.each(['file', 'paste', 'drop'] as const)('keeps opaque spreadsheets ready through %s upload and model changes', async source => {
+    const file = new File([new Uint8Array([80, 75, 3, 4, 0, 255])], 'positions.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const binary = capability({ routes: { 'application/octet-stream': 'tool_read' } });
+    const upload = vi.fn(async input => ({ ...staged({ id: 'upl_spreadsheet____________', file: input.file }), mime_type: 'application/octet-stream' }));
+    const controller = createFlowerAttachmentController({ capability: binary, stagingScope, upload });
+    controller.addFiles([file], source);
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]).toMatchObject({ status: 'staged_ready', name: 'positions.xlsx', mime_type: 'application/octet-stream' });
+    controller.setCapability(capability({ model_id: 'no-tools', routes: { 'application/octet-stream': 'unsupported' } }));
+    expect(controller.snapshot().items[0]?.status).toBe('incompatible');
+    controller.setCapability(binary);
+    expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
+    expect(upload).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
   it('queues pasted Flash images until model capabilities finish loading', async () => {
     const file = new File(['image'], 'diagram.png', { type: 'image/png' });
     const flash = capability({

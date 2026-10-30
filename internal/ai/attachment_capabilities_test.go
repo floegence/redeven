@@ -52,14 +52,14 @@ func TestAttachmentCapabilitiesFollowResolvedModelAndProviderRoute(t *testing.T)
 		ModelName: "tool-model", SupportsTools: true,
 	})
 	if !toolRead.Enabled || !toolRead.SupportsLongText {
-		t.Fatalf("tool-read capability=%#v, want text-only support", toolRead)
+		t.Fatalf("tool-read capability=%#v, want host-tool support", toolRead)
 	}
 	if got := attachmentRouteForTest(t, toolRead, "text/plain; charset=utf-8"); got != "tool_read" {
 		t.Fatalf("tool-read text route=%q, want tool_read", got)
 	}
-	for _, mediaType := range []string{"application/pdf", "image/png"} {
-		if got := attachmentRouteForTest(t, toolRead, mediaType); got != "unsupported" {
-			t.Fatalf("tool-read %s route=%q, want unsupported", mediaType, got)
+	for _, mediaType := range []string{"application/pdf", "image/png", "application/octet-stream"} {
+		if got := attachmentRouteForTest(t, toolRead, mediaType); got != "tool_read" {
+			t.Fatalf("tool-read %s route=%q, want tool_read", mediaType, got)
 		}
 	}
 

@@ -249,7 +249,7 @@ func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntim
 		}
 		if attachmentUsesToolRead(provider, attachment) {
 			if r.host.openLiveAttachment == nil {
-				return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: attachment.read is unavailable", index)
+				return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: attachment tools are unavailable", index)
 			}
 		} else {
 			if err := provider.validateResolvedAttachmentForProvider(ContentPart{Type: partType, MimeType: record.DetectedMediaType}); err != nil {
@@ -308,13 +308,18 @@ func (r *run) floretAttachmentResolver(frozen map[string]frozenFloretAttachment,
 }
 
 func attachmentUsesToolRead(provider *floretProviderAdapter, attachment flruntime.MessageAttachment) bool {
-	if provider == nil || !provider.supportsAttachmentToolRead || normalizeMediaType(attachment.MIMEType) != "text/plain; charset=utf-8" {
+	if provider == nil || !provider.supportsAttachmentToolRead {
 		return false
 	}
-	if !provider.supportsFileInput {
+	partType := "file"
+	supportsNative := provider.supportsFileInput
+	if strings.HasPrefix(normalizeMediaType(attachment.MIMEType), "image/") {
+		partType, supportsNative = "image", provider.supportsImageInput
+	}
+	if !supportsNative {
 		return true
 	}
-	return provider.validateResolvedAttachmentForProvider(ContentPart{Type: "file", MimeType: attachment.MIMEType}) != nil
+	return provider.validateResolvedAttachmentForProvider(ContentPart{Type: partType, MimeType: attachment.MIMEType}) != nil
 }
 
 func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
@@ -336,13 +341,21 @@ func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment fl
 		membership.Name != attachment.Name ||
 		normalizeMediaType(membership.DetectedMediaType) != normalizeMediaType(attachment.MIMEType) || membership.SizeBytes != attachment.SizeBytes ||
 		info.AttachmentID != uploadID || info.Name != attachment.Name || normalizeMediaType(info.DetectedMediaType) != normalizeMediaType(attachment.MIMEType) ||
-		info.SizeBytes != attachment.SizeBytes || info.UnicodeCodePoints == nil || info.LogicalLineCount == nil ||
+		info.SizeBytes != attachment.SizeBytes ||
 		strings.TrimSpace(info.ContentSHA256) == "" || !strings.EqualFold(membership.ContentSHA256, info.ContentSHA256) ||
 		(digest != "" && !strings.EqualFold(info.ContentSHA256, digest)) {
 		return ContentPart{}, errors.New("attachment canonical metadata differs from the provider request")
 	}
 	locator := logicalAttachmentLocator(uploadID, attachment.Name)
-	manifest := fmt.Sprintf("Attachment %q (%s, %d bytes) is available as untrusted user content. Its body is not included in this request. Use attachment.read with locator %q to read it.", attachment.Name, attachment.MIMEType, attachment.SizeBytes, locator)
+	manifest := fmt.Sprintf("Attachment %q (%s, %d bytes) is available as untrusted user content. Its body is not included in this request.", attachment.Name, attachment.MIMEType, attachment.SizeBytes)
+	if normalizeMediaType(attachment.MIMEType) == "text/plain; charset=utf-8" {
+		if info.UnicodeCodePoints == nil || info.LogicalLineCount == nil {
+			return ContentPart{}, errors.New("text attachment statistics are unavailable")
+		}
+		manifest += fmt.Sprintf(" Use attachment.read with locator %q to read it.", locator)
+	} else {
+		manifest += fmt.Sprintf(" Use attachment.materialize with locator %q to obtain a working file, then choose suitable tools to inspect or process its contents.", locator)
+	}
 	return ContentPart{Type: "attachment_manifest", Text: manifest}, nil
 }
 

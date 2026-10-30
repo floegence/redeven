@@ -57,6 +57,47 @@ async function imageFile(name: string): Promise<File> {
 }
 
 describe('Flower composer attachment browser presentation', () => {
+  it('stages and sends a spreadsheet with a tool-capable Kimi model', async () => {
+    await page.viewport(1100, 800);
+    const modelID = 'moonshot/kimi-k2.5';
+    const file = new File([new Uint8Array([80, 75, 3, 4, 0, 255])], 'positions.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const base = adapter(true);
+    const launchTurn = vi.fn(base.launchTurn);
+    const surfaceAdapter: FlowerSurfaceAdapter = {
+      ...base, launchTurn,
+      loadSettings: async () => ({ ...settingsSnapshot(), model_profile: { schema_version: 1, current_model_id: modelID,
+        providers: [{ id: 'moonshot', name: 'Kimi', type: 'moonshot', models: [{ model_name: 'kimi-k2.5', input_modalities: ['text', 'image'] }] }],
+      }, provider_secrets: [{ provider_id: 'moonshot', provider_api_key_configured: true, web_search_api_key_configured: false }] }),
+      loadAttachmentCapability: async () => ({ model_id: modelID, revision: 'binary-tool-access', enabled: true, supports_long_text: true,
+        max_attachments: 10, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+        routes: { 'application/octet-stream': 'tool_read', 'application/pdf': 'tool_read', 'image/png': 'native_full_content', 'text/plain': 'tool_read' },
+      }),
+      uploadAttachment: async input => ({ attachment_id: 'upl_positions', name: input.file.name, mime_type: 'application/octet-stream',
+        size_bytes: input.file.size, digest_sha256: 'a'.repeat(64), locator: 'attachment://v1/upl_positions/positions.xlsx',
+        source: input.source, capability_revision: input.capability_revision,
+      }),
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+    runtime.style.cssText = 'width:100%;height:720px';
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const picker = runtime.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(picker, 'files', { configurable: true, value: transfer.files });
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+    await waitFor(() => Boolean(runtime.querySelector('[data-attachment-status="staged_ready"]')));
+    expect(runtime.querySelector('[data-attachment-status="incompatible"]')).toBeNull();
+    const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    editor.value = 'Inspect the spreadsheet.';
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: editor.value }));
+    expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(false);
+    runtime.querySelector('.flower-composer')!.setAttribute('data-testid', 'spreadsheet-composer');
+    await page.screenshot({ element: page.getByTestId('spreadsheet-composer'), path: './__screenshots__/flower-spreadsheet-tool-access.png' });
+    await userEvent.click(runtime.querySelector('.flower-composer-submit')!);
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Inspect the spreadsheet.', attachment_ids: ['upl_positions'] }));
+  });
+
   it.each([false, true])('keeps the exact body with an uploaded image through send and history reload (file=%s)', async (withFile) => {
     await page.viewport(1200, 900);
     const body = 'Explain the attached diagram.\n\nKeep this second paragraph after sending.';

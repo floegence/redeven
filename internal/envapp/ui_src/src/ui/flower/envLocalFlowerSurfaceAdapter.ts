@@ -292,6 +292,7 @@ async function loadEnvStagedAttachmentPreview(
   }
   const contentType = trim(response.headers.get('content-type')).toLowerCase();
   const safeType = contentType === 'application/pdf'
+    || contentType === 'application/octet-stream'
     || contentType === 'image/png'
     || contentType === 'image/jpeg'
     || contentType === 'image/gif'
@@ -306,7 +307,7 @@ async function loadEnvMessageAttachment(url: string, signal: AbortSignal): Promi
   const response = await fetch(messageAttachmentPath(url), await prepareLocalApiRequestInit({
     method: 'GET',
     signal,
-    headers: { Accept: 'text/plain, image/png, image/jpeg, image/gif, image/webp, application/pdf' },
+    headers: { Accept: 'text/plain, image/png, image/jpeg, image/gif, image/webp, application/pdf, application/octet-stream' },
   }));
   if (!response.ok) {
     throw new LocalApiError({

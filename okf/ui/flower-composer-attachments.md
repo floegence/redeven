@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower composer attachments
 tags: [ui, flower, attachments, composer, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -12,6 +12,8 @@ Flower owns connection-local attachment editing; host adapters authenticate stag
 # Contract
 
 Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.
+
+The capability snapshot distinguishes native input from host-tool access. A declared `application/octet-stream: tool_read` route covers browser-reported file formats and unknown types before server classification; explicit media routes take precedence. Spreadsheets and other binary files remain sendable for tool-capable models. Switching to an incompatible model retains staged bytes and switching back restores readiness without uploading again. Desktop IPC and Env App preview loaders accept canonical opaque bytes; preview availability does not decide whether a model can process the attachment.
 
 ## Connection-local editing
 Env App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.

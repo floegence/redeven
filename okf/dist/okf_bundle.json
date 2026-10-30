@@ -8898,7 +8898,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-28",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "ai",
           "attachments",
@@ -8909,15 +8909,15 @@
         "title": "Flower attachment resources",
         "type": "AI Resource Contract"
       },
-      "body_length": 4574,
+      "body_length": 5503,
       "summary": "Redeven owns bytes/metadata, authenticated owner, quotas and retention; Floret owns turn membership. Upload once, send opaque attachment_id, display attachment://v1 locators and revalidate provider resources. Never expose paths or substitute product claims for canonical membership. Owner/media/quota/membership/metadata/digest/byte failures reject only the affected reference.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Redeven threadstore product v1 stores generated attachment identity, the authenticated user hash, a server-only relative storage name, sanitized detected media metadata, exact byte size, SHA-256, optional strict UTF-8 code-point and logical-line counts, source, state, idempotency identity, and retention claims.\n\nThe canonical Floret `ResourceRef` is content-addressed and the display locator is `attachment://v1/\u003cattachment-id\u003e/\u003cencoded-name\u003e`.\n\nRetention ownership does not authorize canonical reads.\n\n## Provider Preparation\nRedeven derives one model-scoped capability snapshot from the selected provider route and model modalities. Strict UTF-8 text may instead use the bounded `attachment.read` host tool.\n\nHistorical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state. Upload/tool-image reads search current-path public Floret windows (50 items, 128-byte previews) through one authorized subscription, correlated to each requested page and a stable leaf. They never hydrate full history or authorize from retention inventory. The internal resolved handle certifies ownership and metadata only: materialization hashes while copying, text/provider/image consumers verify their exact snapshot, and public download opens verify bytes before returning a path. Thus upload materialization does not prehash and then reread the original. Reads honor cancellation and declared-size bounds; corruption never publishes a work copy.\n\n## Canonical image recovery\nFloret v7.51.1 exposes user and confirmed tool attachment descriptors through one canonical view. Upload retention recognizes tool media separately and never parses tool image references as upload records.\n\n## Local processing and lifecycle\n\nImmutable originals and mutable working copies share canonical thread references but have different lifetimes. attachment.materialize reauthorizes the execution identity and canonical attachment, requires RWX and the normal write-effect policy, then creates a unique regular work copy under the current thread scratch directory. Upload copies stream through a 32 KiB buffer with cancellation, exact size and SHA-256 validation. Image locators reuse bounded canonical image validation. Failed copies remove private staging; repeated same-name inputs never overwrite edited copies. Only the working path is returned, never the original backing path.\n\nWorking-file cleanup deletes copies, not inputs or historical images. Originals can be materialized again after cleanup, restart, compaction or parent deletion when another conversation retains them. Historical Fork inherits input references only through its canonical cut and independently copies current scratch/staging. Product settings and upload claims publish transactionally; no second admitted-message mapping is stored.\n\nThe Files panel derives input/media pages from the public Floret window interface with fresh product authorization. The last-reference inventory remains separate and includes inactive paths and queued inputs. External referenced files and delivered outputs keep their existing destinations and are never removed by conversation cleanup. Existing upload/media backup scope is unchanged; disposable task files are not added to backups.",
-          "char_count": 3263
+          "body": "Redeven threadstore product v1 stores generated attachment identity, the authenticated user hash, a server-only relative storage name, sanitized detected media metadata, exact byte size, SHA-256, optional strict UTF-8 code-point and logical-line counts, source, state, idempotency identity, and retention claims.\n\nThe canonical Floret `ResourceRef` is content-addressed and the display locator is `attachment://v1/\u003cattachment-id\u003e/\u003cencoded-name\u003e`.\n\nRetention ownership does not authorize canonical reads.\n\n## Provider Preparation\nUpload admission is independent of provider-native modalities. Recognized text, image and PDF bytes retain their safe canonical types; all other files, including Office containers and non-UTF-8 documents, use `application/octet-stream` with their original names and bytes. Active UTF-8 text remains `text/plain`; pasted long text must still be strict UTF-8. Size, ownership, digest, staging and retention checks are unchanged.\n\nRedeven derives one model-scoped capability snapshot from the selected provider route and model modalities. Native image/text/PDF input takes precedence when supported. Tool-capable models receive other attachments as canonical manifests: strict UTF-8 text uses bounded `attachment.read`; binary files use `attachment.materialize` and model-selected processing tools. A manifest is not extracted content or a promise that a parser is installed. Materialization retains its normal permissions. Models without either a native route or tools remain unsupported.\n\nHistorical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state. Upload/tool-image reads search current-path public Floret windows (50 items, 128-byte previews) through one authorized subscription, correlated to each requested page and a stable leaf. They never hydrate full history or authorize from retention inventory. The internal resolved handle certifies ownership and metadata only: materialization hashes while copying, text/provider/image consumers verify their exact snapshot, and public download opens verify bytes before returning a path. Thus upload materialization does not prehash and then reread the original. Reads honor cancellation and declared-size bounds; corruption never publishes a work copy.\n\n## Canonical image recovery\nFloret v7.51.1 exposes user and confirmed tool attachment descriptors through one canonical view. Upload retention recognizes tool media separately and never parses tool image references as upload records.\n\n## Local processing and lifecycle\n\nImmutable originals and mutable working copies share canonical thread references but have different lifetimes. attachment.materialize reauthorizes the execution identity and canonical attachment, requires RWX and the normal write-effect policy, then creates a unique regular work copy under the current thread scratch directory. Upload copies stream through a 32 KiB buffer with cancellation, exact size and SHA-256 validation. Image locators reuse bounded canonical image validation. Failed copies remove private staging; repeated same-name inputs never overwrite edited copies. Only the working path is returned, never the original backing path.\n\nWorking-file cleanup deletes copies, not inputs or historical images. Originals can be materialized again after cleanup, restart, compaction or parent deletion when another conversation retains them. Historical Fork inherits input references only through its canonical cut and independently copies current scratch/staging. Product settings and upload claims publish transactionally; no second admitted-message mapping is stored.\n\nThe Files panel derives input/media pages from the public Floret window interface with fresh product authorization. The last-reference inventory remains separate and includes inactive paths and queued inputs. External referenced files and delivered outputs keep their existing destinations and are never removed by conversation cleanup. Existing upload/media backup scope is unchanged; disposable task files are not added to backups.",
+          "char_count": 4067
         },
         {
           "id": "boundaries",
@@ -26706,7 +26706,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "accessibility",
           "attachments",
@@ -26717,15 +26717,15 @@
         "title": "Flower composer attachments",
         "type": "UI Contract"
       },
-      "body_length": 2109,
+      "body_length": 2711,
       "summary": "Flower owns connection-local attachment editing; host adapters authenticate staging, Redeven owns staged bytes/unadmitted commands and Floret owns admitted history. Select, paste, drop, retry, remove, preview and attachment-only send share one controller. Text above 50,000 Unicode code points converts only after successful staging, preserving IME and source text on failure.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.\n\n## Connection-local editing\nEnv App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.\n\n## Queued content\nExecution leaves select/paste/drop/reference controls usable. Users may add/remove/send resources; staged copies survive queue removal and canonical bytes remain immutable.\n\n## Canonical Presentation\nPreviews use authenticated `loadMessageAttachment`: Env App prepares local credentials; Desktop uses scoped Runtime IPC GET with bounded canonical-MIME bytes. Chromium coverage includes 320 CSS pixels without horizontal overflow.",
-          "char_count": 1047
+          "body": "Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.\n\nThe capability snapshot distinguishes native input from host-tool access. A declared `application/octet-stream: tool_read` route covers browser-reported file formats and unknown types before server classification; explicit media routes take precedence. Spreadsheets and other binary files remain sendable for tool-capable models. Switching to an incompatible model retains staged bytes and switching back restores readiness without uploading again. Desktop IPC and Env App preview loaders accept canonical opaque bytes; preview availability does not decide whether a model can process the attachment.\n\n## Connection-local editing\nEnv App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.\n\n## Queued content\nExecution leaves select/paste/drop/reference controls usable. Users may add/remove/send resources; staged copies survive queue removal and canonical bytes remain immutable.\n\n## Canonical Presentation\nPreviews use authenticated `loadMessageAttachment`: Env App prepares local credentials; Desktop uses scoped Runtime IPC GET with bounded canonical-MIME bytes. Chromium coverage includes 320 CSS pixels without horizontal overflow.",
+          "char_count": 1649
         },
         {
           "id": "boundaries",
@@ -31684,5 +31684,5 @@
       ]
     }
   ],
-  "source_sha256": "9d57e94311adcbe352bc40c01add9896d5cf0cb0674530a9bf0c8de1981fcbb2"
+  "source_sha256": "10870ef71c29eb615294c2bfca440a13e04d531a366d8d9c6be1e5edc568dc54"
 }

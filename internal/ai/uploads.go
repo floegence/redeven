@@ -261,7 +261,7 @@ func classifyUpload(inspector *uploadInspector, source string) (string, *int64, 
 	detected := normalizeMediaType(http.DetectContentType(inspector.head))
 	if strings.HasPrefix(detected, "text/") {
 		if points == nil {
-			return "", nil, nil, NewUploadError(UploadErrorInvalidTextEncoding, false, errors.New("text attachment is not strict UTF-8"))
+			return "application/octet-stream", nil, nil, nil
 		}
 		// Uploaded active text such as HTML or XML must never retain an executable
 		// browser media type. Text attachments have one closed canonical type.
@@ -275,7 +275,10 @@ func classifyUpload(inspector *uploadInspector, source string) (string, *int64, 
 			return "text/plain; charset=utf-8", points, lines, nil
 		}
 	}
-	return "", nil, nil, NewUploadError(UploadErrorUnsupportedMediaType, false, errors.New("attachment media type is unsupported"))
+	// Accept opaque files for model-directed processing through host tools. Do
+	// not infer an executable browser type or native model support from a name
+	// or a client-declared MIME type. The original bytes and name are retained.
+	return "application/octet-stream", nil, nil, nil
 }
 
 func uploadRequestFingerprint(req SaveUploadRequest, name string) string {
@@ -347,15 +350,15 @@ func attachmentCapabilitiesForModel(modelID string, provider config.AIProvider, 
 		unsupportedRoute = "unsupported"
 	)
 	capability = contextmodel.NormalizeCapability(capability)
-	textRoute := unsupportedRoute
-	pdfRoute := unsupportedRoute
+	toolRoute := unsupportedRoute
+	if capability.SupportsTools {
+		toolRoute = toolReadRoute
+	}
+	textRoute, pdfRoute, imageRoute := toolRoute, toolRoute, toolRoute
 	if capability.SupportsFileInput && providerSupportsNativeFileAttachments(provider, capability.ModelName) {
 		textRoute = nativeRoute
 		pdfRoute = nativeRoute
-	} else if capability.SupportsTools {
-		textRoute = toolReadRoute
 	}
-	imageRoute := unsupportedRoute
 	if capability.SupportsImageInput {
 		imageRoute = nativeRoute
 	}
@@ -367,6 +370,7 @@ func attachmentCapabilitiesForModel(modelID string, provider config.AIProvider, 
 		{MediaType: "image/jpeg", Mode: imageRoute},
 		{MediaType: "image/gif", Mode: imageRoute},
 		{MediaType: "image/webp", Mode: imageRoute},
+		{MediaType: "application/octet-stream", Mode: toolRoute},
 	}
 	out := AttachmentCapabilities{
 		ModelID: strings.TrimSpace(modelID), Enabled: textRoute != unsupportedRoute || pdfRoute != unsupportedRoute || imageRoute != unsupportedRoute,
