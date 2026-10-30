@@ -293,13 +293,6 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     ({ lineSource }) => /(?:stop-color|\bfill|\bstroke)=/u.test(lineSource),
   ),
   exception(
-    'internal/flower_ui/src/settings/providerBrandIcons.ts',
-    'brand',
-    'Provider marks retain their official authored colors.',
-    ({ value, lineSource }) => /(?:\bcolor:|\bfills:)/u.test(lineSource)
-      || ['#504af4', '#3485ff', '#6336e7', '#6f69f7'].includes(value.toLowerCase()),
-  ),
-  exception(
     'internal/envapp/ui_src/src/ui/file-preview/rendererRegistry.tsx',
     'media',
     'Video preview letterboxing stays black for faithful media presentation.',

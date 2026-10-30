@@ -11076,11 +11076,18 @@ button.flower-attachment-preview-trigger:disabled {
   font-size: var(--floe-type-body);
 }
 
-[data-flower-provider-brand] > svg,
-[data-provider-brand] > svg {
+.flower-provider-brand-icon > img,
+.flower-provider-brand-mask {
   display: block;
   width: 100%;
   height: 100%;
+}
+.flower-provider-brand-icon > img { object-fit: contain; }
+.flower-provider-brand-mask {
+  background-color: currentColor;
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
 }
 
 .flower-settings-editor-grid {

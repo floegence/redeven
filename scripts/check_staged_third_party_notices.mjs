@@ -20,11 +20,13 @@ const noticeInputs = new Set([
   'assets/container_service_icons.json',
   'assets/environment_platform_icons.json',
   'assets/flower_source_icons.json',
-  'scripts/flower_source_icon_integrity.mjs',
+  'assets/flower_provider_icons.json',
+  'scripts/flower_icon_integrity.mjs',
   'scripts/environment_platform_icon_integrity.mjs',
 ]);
 const assetRoots = [
   'internal/flower_ui/src/assets/source-icons/',
+  'internal/flower_ui/src/assets/provider-icons/',
   'desktop/src/welcome/assets/environment-platform-icons/',
   'assets/licenses/',
   'internal/envapp/ui_src/public/agent-cli-icons/',

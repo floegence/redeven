@@ -35,8 +35,8 @@ describe('AI provider preset catalog', () => {
     for (const providerType of optionTypes) {
       const brand = providerBrandForType(providerType);
       expect(brand.label).toBe(providerTypeLabel(providerType));
-      expect(brand.icon.paths?.join('') || brand.icon.svgContent || '').not.toEqual('');
-      expect(brand.icon.viewBox).not.toEqual('');
+      expect(brand.icon.src).toMatch(/^(?:data:image\/svg\+xml,|.*\/assets\/provider-icons\/)/);
+      expect(typeof brand.icon.monochrome).toBe('boolean');
     }
     expect(AI_PROVIDER_PRESET_CATALOG.kimi_code.default_base_url).toBe('https://api.kimi.com/coding/v1');
     expect(providerTypeLabel('kimi_code')).toBe('Kimi');

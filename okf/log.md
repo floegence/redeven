@@ -6,6 +6,8 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-10-30
 
+- Replace hand-authored [provider marks](ai/model-directory-and-selection.md) with unchanged, pinned theSVG assets; share rendering across both carriers and verify asset provenance and light/dark presentation.
+
 - Make [all file attachment admission](ai/flower-attachment-resources.md) independent of native modalities and tool support. Keep [composer](ui/flower-composer-attachments.md) attachments ready across model switches, remove compatibility pre-judgments, and deliver truthful manifests for unsupported native content, including historical images. Preserve authorized materialization, resource limits and integrity checks.
 
 ## 2026-10-29

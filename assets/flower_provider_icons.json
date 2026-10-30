@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/glincker/thesvg",
+    "revision": "bdfcb7cf0209c140f38afeb73ebccd432eff5c92",
+    "license_metadata_path": "src/data/icons.json"
+  },
+  "assets": [
+    {
+      "identity": "openai",
+      "label": "OpenAI",
+      "file": "openai.svg",
+      "source_path": "public/icons/openai/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "db81a8225166f02f773304ba4d8f0141343da5f43870d8b41f10bf6bc59840c8",
+      "upstream_sha256": "db81a8225166f02f773304ba4d8f0141343da5f43870d8b41f10bf6bc59840c8",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "anthropic",
+      "label": "Anthropic",
+      "file": "anthropic.svg",
+      "source_path": "public/icons/anthropic/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "1cc599f6ebce2016dc388cf84e54a52c6b13487655c7e243554d654c7bce1882",
+      "upstream_sha256": "1cc599f6ebce2016dc388cf84e54a52c6b13487655c7e243554d654c7bce1882",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "gemini",
+      "label": "Gemini",
+      "file": "gemini.svg",
+      "source_path": "public/icons/gemini/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "c11d94a9e3ecb32f67dd9350848cf3124d617680533275c672e1e6bf61ce8cd4",
+      "upstream_sha256": "c11d94a9e3ecb32f67dd9350848cf3124d617680533275c672e1e6bf61ce8cd4",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "kimi",
+      "label": "Kimi",
+      "file": "kimi.svg",
+      "source_path": "public/icons/kimi/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "0ba35ce31b57bb6db39d4e454925e39f88f46a3b52a07898bd8262c3902df7fc",
+      "upstream_sha256": "0ba35ce31b57bb6db39d4e454925e39f88f46a3b52a07898bd8262c3902df7fc",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "zdotai",
+      "label": "Z.ai",
+      "file": "zdotai.svg",
+      "source_path": "public/icons/zdotai/mono.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "234c151d64549223c628e8b1a2b053412303d390749ce44237569570006f78db",
+      "upstream_sha256": "234c151d64549223c628e8b1a2b053412303d390749ce44237569570006f78db",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "deepseek",
+      "label": "DeepSeek",
+      "file": "deepseek.svg",
+      "source_path": "public/icons/deepseek/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "360336e87a3336f60b7d2432ecdea2982537806886e20b170163fd5d3dda825b",
+      "upstream_sha256": "360336e87a3336f60b7d2432ecdea2982537806886e20b170163fd5d3dda825b",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "qwen",
+      "label": "Qwen",
+      "file": "qwen.svg",
+      "source_path": "public/icons/qwen/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "1729febe65990585b1ba96c223143f108f709f722c1d354238fd470630b51f54",
+      "upstream_sha256": "1729febe65990585b1ba96c223143f108f709f722c1d354238fd470630b51f54",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "openrouter",
+      "label": "OpenRouter",
+      "file": "openrouter.svg",
+      "source_path": "public/icons/openrouter/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "9148696e3a06d23e8fe2b743ebd3ee1173354dbd7b58d33d1ca6a40ee0018d53",
+      "upstream_sha256": "9148696e3a06d23e8fe2b743ebd3ee1173354dbd7b58d33d1ca6a40ee0018d53",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "xai",
+      "label": "xAI",
+      "file": "xai.svg",
+      "source_path": "public/icons/xai/mono.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "823bbbf2c6781192aa849f69dbaf57c8caffa21d39e79992c473dacaad2b09f5",
+      "upstream_sha256": "823bbbf2c6781192aa849f69dbaf57c8caffa21d39e79992c473dacaad2b09f5",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "groq",
+      "label": "Groq",
+      "file": "groq.svg",
+      "source_path": "public/icons/groq/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "f8b4420340ff8875a1f04ce80909325dd81b0cb78d0c7a15fd567977338ae956",
+      "upstream_sha256": "f8b4420340ff8875a1f04ce80909325dd81b0cb78d0c7a15fd567977338ae956",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "ollama",
+      "label": "Ollama",
+      "file": "ollama.svg",
+      "source_path": "public/icons/ollama/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "9c62bf0159ee96c8b58c86a732f33b002b4b3bb165ec86e8ecca51ad6a82dab6",
+      "upstream_sha256": "9c62bf0159ee96c8b58c86a732f33b002b4b3bb165ec86e8ecca51ad6a82dab6",
+      "modified": false,
+      "monochrome": true
+    }
+  ]
+}

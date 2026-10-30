@@ -10385,7 +10385,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-28",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "ai",
           "models",
@@ -10395,15 +10395,15 @@
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 2140,
+      "body_length": 2776,
       "summary": "Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. OpenRouter/Ollama discover on addition; manual refresh remains available.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.\n\nFlower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 17rem width, 20rem height cap, 24px minimum rows, 10px labels and 9px provider headings. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.\n\nA selected platform whose catalog is unavailable shows the localized model-check failure and recovery action, never the first-use setup welcome. Preserve draft and selection; explicit model-menu refresh recovers from an authoritative directory response.\n\n`LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.",
-          "char_count": 1550
+          "body": "Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.\n\nFlower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 17rem width, 20rem height cap, 24px minimum rows, 10px labels and 9px provider headings. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.\n\nThe shared Flower UI owns provider brand rendering in Desktop and Env App. Settings, provider dialogs and model selectors use unchanged, pinned theSVG assets recorded in assets/flower_provider_icons.json; checksums and licenses are verified by the third-party notice generator. Monochrome marks use the foreground color through an alpha mask, while color marks retain their original SVG bytes. Both Kimi connection types share Kimi; the legacy chatglm type displays Z.ai; custom OpenAI-compatible endpoints use the OpenAI protocol mark without asserting endpoint ownership. No host-specific SVG paths or runtime CDN requests are used.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.\n\nA selected platform whose catalog is unavailable shows the localized model-check failure and recovery action, never the first-use setup welcome. Preserve draft and selection; explicit model-menu refresh recovers from an authoritative directory response.\n\n`LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.",
+          "char_count": 2186
         },
         {
           "id": "boundaries",
@@ -31696,5 +31696,5 @@
       ]
     }
   ],
-  "source_sha256": "4c2042cabdc7df1e44b306812d9d135b03b925d8af3aa0f2c14385d9d16ba995"
+  "source_sha256": "9c251b203bbc7bb0c85d9185529471a3462cb876551e885c829d249e920aaf52"
 }
