@@ -156,6 +156,38 @@ func TestMethodAuthorizationDefersExactEffectToLocalPolicy(t *testing.T) {
 	}
 }
 
+func TestSurfaceMethodReceiverUsesReadAuthorizedSurfaceLifecycle(t *testing.T) {
+	adapter, err := newSessionAdapter(func(channelID string) (*session.Meta, bool) {
+		return &session.Meta{ChannelID: channelID, EndpointID: "env_receiver", UserPublicID: "user_receiver", CanRead: true}, true
+	}, testPermissionPolicy(t, "read_only"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := authenticatedRequest(http.MethodPost, "/_redevplugin/api/plugins/surfaces/methods", "ch_receiver")
+	sessionContext, err := adapter.Authenticate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.AuthorizeRoute(request, sessionContext, websecurity.RouteAction(host.ManagementActionSurfaceMethods), websecurity.RouteEffectMutation); err != nil {
+		t.Fatalf("read-authorized receiver route: %v", err)
+	}
+	if err := adapter.Authorize(context.Background(), host.AuthorizationRequest{
+		Session: sessionContext, Action: host.ManagementActionSurfaceMethods,
+		Target:         host.AuthorizationTarget{Kind: host.ResourceSurface, ID: "surface_receiver"},
+		RelatedTargets: []host.AuthorizationTarget{{Kind: host.ResourcePlugin, ID: "plugin_receiver"}, {Kind: host.ResourceBridgeChannel, ID: "bridge_receiver"}},
+	}); err != nil {
+		t.Fatalf("read-authorized receiver lifecycle: %v", err)
+	}
+	for _, perms := range []sessionPermissions{{}, {write: true}, {execute: true}, {admin: true}} {
+		if permissionsAllowAction(perms, host.ManagementActionSurfaceMethods) {
+			t.Fatalf("receiver accepted a session without read access: %+v", perms)
+		}
+	}
+	if decision, err := adapter.EvaluateLocalPolicy(context.Background(), sessionContext, host.PluginRef{}, manifest.MethodSpec{Effect: manifest.MethodEffectWrite}); err != nil || decision != host.PolicyDeny {
+		t.Fatalf("receiver registration granted document write access: decision=%s err=%v", decision, err)
+	}
+}
+
 func TestSharedPluginHostControlRequiresAdmin(t *testing.T) {
 	for _, action := range []host.ManagementAction{
 		host.ManagementActionStartRuntime,

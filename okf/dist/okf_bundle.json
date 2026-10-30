@@ -15896,15 +15896,15 @@
         "title": "ReDevPlugin Redeven adapters",
         "type": "Architecture Boundary"
       },
-      "body_length": 2269,
+      "body_length": 2701,
       "summary": "Redeven owns only the adapters that bind authenticated product sessions, source policy, business capabilities, and Activity or Workbench placement to released ReDevPlugin contracts. ReDevPlugin remains the authority for host protocol, package trust, runtime execution, and platform state. Adapter failures stop at the product boundary and never create copied platform state or implicit grants.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Host modules and external packages\nRedeven constructs the released Host with explicit core, official-release, runtime, connectivity, secrets, capability, and external-package modules. Redeven supplies session, authorization, web-security, trust, official release-source, observability, secret, external source, and business adapters; it never edits registry, inspection, token, lease, revoke-epoch, or plugin-data state directly.\n\nThe official signed-release module remains the stricter release-ref path.\n\n## Surfaces and interaction ownership\nThe product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.\n\nRedeven uses them for host placement behavior, never as identity, authorization, or permission evidence.\n\nA recovery presentation may explain or retry the Host snapshot, but it is not a second open gate and owns no catch-up identity state machine.\n\n## Web origin adapter\n\nRedeven derives a plugin origin only from a trusted product entry origin and the released surface origin key. Local UI and AppServer route child requests to the released Web surface handler after removing parent credentials. Desktop, Gateway and Center own the product transport and origin routing; package assets, tickets and surface bridge semantics remain upstream-owned.",
-          "char_count": 1305
+          "body": "## Host modules and external packages\nRedeven constructs the released Host with explicit core, official-release, runtime, connectivity, secrets, capability, and external-package modules. Redeven supplies session, authorization, web-security, trust, official release-source, observability, secret, external source, and business adapters; it never edits registry, inspection, token, lease, revoke-epoch, or plugin-data state directly.\n\nThe official signed-release module remains the stricter release-ref path.\n\n## Surfaces and interaction ownership\nThe product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.\n\nThe application-method receiver (`surface.methods`) uses the same read authorization as opening and preparing its surface. The receiver registers, polls, and responds only within the platform-validated surface, gateway token, bridge channel, and frame generation. Registering a receiver grants no document write access: each intent invocation still passes its declared method effect, local policy, schema, and confirmation checks.\n\nRedeven uses them for host placement behavior, never as identity, authorization, or permission evidence.\n\nA recovery presentation may explain or retry the Host snapshot, but it is not a second open gate and owns no catch-up identity state machine.\n\n## Web origin adapter\n\nRedeven derives a plugin origin only from a trusted product entry origin and the released surface origin key. Local UI and AppServer route child requests to the released Web surface handler after removing parent credentials. Desktop, Gateway and Center own the product transport and origin routing; package assets, tickets and surface bridge semantics remain upstream-owned.",
+          "char_count": 1737
         },
         {
           "id": "boundaries",
@@ -31684,5 +31684,5 @@
       ]
     }
   ],
-  "source_sha256": "ca05225baa7bc51b89cb9c59ae389341a69c0efc495d8b087e417bf15983d4f3"
+  "source_sha256": "9d57e94311adcbe352bc40c01add9896d5cf0cb0674530a9bf0c8de1981fcbb2"
 }

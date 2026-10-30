@@ -19,6 +19,8 @@ The official signed-release module remains the stricter release-ref path.
 ## Surfaces and interaction ownership
 The product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.
 
+The application-method receiver (`surface.methods`) uses the same read authorization as opening and preparing its surface. The receiver registers, polls, and responds only within the platform-validated surface, gateway token, bridge channel, and frame generation. Registering a receiver grants no document write access: each intent invocation still passes its declared method effect, local policy, schema, and confirmation checks.
+
 Redeven uses them for host placement behavior, never as identity, authorization, or permission evidence.
 
 A recovery presentation may explain or retry the Host snapshot, but it is not a second open gate and owns no catch-up identity state machine.

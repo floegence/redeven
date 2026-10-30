@@ -352,6 +352,7 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 	dataPlane := perms.read || perms.write || perms.execute || perms.admin
 	switch action {
 	case host.ManagementActionOpenSurface,
+		host.ManagementActionSurfaceMethods,
 		host.ManagementActionRevokeSessionScope,
 		host.ManagementActionFinalizeSessionScope,
 		host.ManagementActionPrepareSurface,
