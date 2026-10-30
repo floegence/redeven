@@ -3,7 +3,7 @@ type: UI Contract
 title: Redeven loading and layout continuity
 tags: [ui, startup, lifecycle, workbench]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -43,7 +43,7 @@ Loading stays inside the selected page or widget. It cannot replace an unrelated
 - `redeven:internal/envapp/ui_src/src/ui/FlowerTaskFiles.browser.test.tsx` - Pagination, equal-row identity, empty-state refresh and runtime/thread fencing.
 - `redeven:internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` - Catalog retention/source invalidation plus responsive localized extension dialogs.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceSettingsDesign.browser.test.tsx` - Draft retention, stale read rejection and initial failure recovery.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/DirectoryFavoritesSection.browser.test.tsx` - Following tree position across load, refresh, filtering and empty states.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserQuickAccess.browser.test.tsx` - Compact shortcuts, retained refresh/filter geometry and independent tree scrolling.
 - `redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx` - Fixed preview region and failed different-file retry.
 - `redeven:internal/envapp/ui_src/src/styles/tessiven-runtime-dialog-continuity.browser.test.tsx` - Library card/focus retention through delayed or failed opening.
 

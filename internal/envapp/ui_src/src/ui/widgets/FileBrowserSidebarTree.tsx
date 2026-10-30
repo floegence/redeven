@@ -1,40 +1,20 @@
 import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
-import { ChevronRight, MoreHorizontal } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon, createLongPressContextMenuHandlers, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
-import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
-import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { useI18n } from '../i18n';
-import { useEnvDirectoryFavorites } from '../services/directoryFavorites';
-import { DirectoryFavoritesSection } from './DirectoryFavoritesSection';
+import { showDirectoryMenu, isMenuKey } from './fileBrowserDirectoryMenu';
 
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
 const TREE_ROW_DEPTH_STEP = 12;
 const FILE_TREE_ROW_CLASS = 'group flex items-center rounded-md py-0.5 text-xs transition-all duration-150 ease-out';
 const FILE_TREE_ITEM_CLASS = 'flex min-w-0 flex-1 items-center gap-1 rounded py-0.5 pl-1 pr-1.5 text-left text-xs';
-const FILE_TREE_ROOT_ROW_CLASS = 'group flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors';
-const FILE_TREE_ROOT_SECTION_CLASS = 'mb-1 flex flex-col border-b border-sidebar-border/70 pb-1';
-const FILE_TREE_ROOT_LABEL_CLASS = 'px-0.5 pb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60';
 const treeRowPadding = (depth: number) => `${TREE_ROW_BASE_PADDING + Math.min(depth, MAX_VISIBLE_DEPTH) * TREE_ROW_DEPTH_STEP}px`;
 
 const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-medium leading-4 text-muted-foreground';
 const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1 py-0 text-[8px] font-medium leading-4 text-primary/80';
-
-function showDirectoryMenu(browser: ReturnType<typeof useFileBrowser>, path: string, event: MouseEvent | KeyboardEvent, item?: FileItem) {
-  event.preventDefault(); event.stopPropagation();
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  const pointer = event instanceof MouseEvent && event.type === 'contextmenu';
-  const captured = item ? {...item, path} : undefined;
-  browser.showContextMenu({
-    x: pointer ? event.clientX : rect.left, y: pointer ? event.clientY : rect.bottom,
-    items: captured ? [captured] : [], targetKind: captured ? 'item' : 'directory-background',
-    source: captured ? 'tree' : 'background', directory: {path,item:captured},
-  });
-}
-function isMenuKey(event: KeyboardEvent) { return event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10'; }
-
 function getPathSegments(path: string): string[] {
   return path.split('/').filter(Boolean);
 }
@@ -63,9 +43,6 @@ export interface FileBrowserSidebarTreeProps {
   sidebarOpen?: boolean;
   scrollContainer?: () => HTMLElement | null;
   pendingNavigationPath?: string;
-  roots?: NormalizedFilesystemRoot[];
-  currentPath?: string;
-  onRootSelect?: (path: string) => void;
   class?: string;
 }
 
@@ -224,10 +201,8 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
 export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
   const browser = useFileBrowser();
   const i18n = useI18n();
-  const favoritePicker = useEnvDirectoryFavorites();
   const rootFolders = createMemo(() => browser.files().filter((item) => item.type === 'folder'));
   const folderIndex = createMemo(() => buildFolderIndex(browser.files()));
-  const activeRoot = createMemo(() => matchFilesystemRoot(props.currentPath || browser.currentPath(), props.roots ?? []));
   const rowRefs = new Map<string, HTMLButtonElement>();
   let scrollNonce = 0;
   let pendingClickAnchor: {
@@ -357,62 +332,6 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
 
   return (
     <div class={cn('flex min-h-full flex-col', props.class)}>
-      <Show when={(props.roots?.length ?? 0) > 0 || favoritePicker.directoryFavorites}>
-        <div data-filesystem-locations class={FILE_TREE_ROOT_SECTION_CLASS}>
-          <Show when={(props.roots?.length ?? 0) > 0}><div class={FILE_TREE_ROOT_LABEL_CLASS}>{i18n.t('files.roots')}</div></Show>
-          <For each={props.roots}>
-            {(root) => {
-              const isActive = createMemo(() => activeRoot()?.id === root.id);
-              return (
-                <div
-                  {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
-                  data-filesystem-root-id={root.id}
-                  data-filesystem-root-path={root.pathAbs}
-                  onContextMenu={event => showDirectoryMenu(browser, root.pathAbs, event)}
-                  class={cn(
-                    FILE_TREE_ROOT_ROW_CLASS,
-                    isActive() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-foreground hover:bg-sidebar-accent/60',
-                  )}
-                >
-                  <button
-                    type="button"
-                    class="flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
-                    title={root.pathAbs}
-                    aria-current={isActive() ? 'page' : undefined}
-                    onClick={() => props.onRootSelect?.(root.pathAbs)}
-                    onKeyDown={event => {if (isMenuKey(event)) showDirectoryMenu(browser, root.pathAbs, event);}}
-                  >
-                    <span class="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-                      <FileItemIcon size={14} item={{ name: root.label, type: 'folder' }} class="h-3.5 w-3.5" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate">{root.label}</span>
-                  </button>
-                  <Show when={favoritePicker.directoryFavorites}><button type="button" aria-label={i18n.t('common.actions.more') + ': ' + root.pathAbs}
-                    class="shrink-0 cursor-pointer rounded p-1 text-muted-foreground hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-                    onClick={event => showDirectoryMenu(browser, root.pathAbs, event)}><MoreHorizontal class="h-3.5 w-3.5" /></button></Show>
-                  <span
-                    data-filesystem-root-write-badge={root.id}
-                    class={cn(
-                      'h-5 shrink-0 rounded-md border px-1.5 text-[8px] font-semibold leading-4 shadow-sm',
-                      root.permissions.write
-                        ? 'border-primary/35 bg-primary/[0.16] text-primary shadow-primary/10'
-                        : 'border-border/50 bg-muted/60 text-muted-foreground',
-                    )}
-                    title={i18n.t('files.rootAccessTitle', { label: root.label, mode: root.permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}
-                  >
-                    {root.permissions.write ? i18n.t('files.readWriteBadge') : i18n.t('files.readOnlyBadge')}
-                  </span>
-                </div>
-              );
-            }}
-          </For>
-          <Show when={favoritePicker.directoryFavorites}>{favorites => <DirectoryFavoritesSection
-            favorites={favorites()} copy={favoritePicker.copy} currentPath={props.currentPath || browser.currentPath()}
-            onNavigate={path => props.onRootSelect?.(path)}
-            onContextMenu={(event, path) => showDirectoryMenu(browser, path, event)}
-          />}</Show>
-        </div>
-      </Show>
       <Show
         when={rootFolders().length > 0}
         fallback={<div class="px-0.5 py-1.5 text-[11px] text-muted-foreground">{i18n.t('files.noFolders')}</div>}

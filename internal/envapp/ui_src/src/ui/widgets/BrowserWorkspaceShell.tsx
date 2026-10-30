@@ -61,8 +61,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
     >
       <div
         ref={props.bodyRef}
-        class={cn('flex h-full min-h-0 flex-col overflow-auto bg-sidebar', props.sidebarBodyClass)}
-        style={{ width: desktopOverlay() ? '100%' : `${isMobile() ? MOBILE_SIDEBAR_WIDTH : props.width ?? 240}px` }}
+        class={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar', props.sidebarBodyClass)}
       >
         <div class="sticky top-0 z-10 shrink-0 border-b border-sidebar-border bg-sidebar/95 px-2.5 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-sidebar/90">
           <div class="flex items-center gap-1.5">

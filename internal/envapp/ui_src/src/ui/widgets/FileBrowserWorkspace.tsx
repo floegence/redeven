@@ -22,6 +22,8 @@ import { Button, SegmentedControl, formatPickerPath, parsePickerPath, type Surfa
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserPathControl, type FileBrowserPathControlMode } from './FileBrowserPathControl';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
+import { FileBrowserQuickAccess } from './FileBrowserQuickAccess';
+import { showDirectoryMenu } from './fileBrowserDirectoryMenu';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
@@ -29,7 +31,6 @@ import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redev
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
-import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import { useI18n } from '../i18n';
 
 const FILE_WORKSPACE_TOOLBAR_FIELD_CLASS =
@@ -318,7 +319,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const [pathErrorDescriptionId, setPathErrorDescriptionId] = createSignal<string>();
   const [pathSubmitting, setPathSubmitting] = createSignal(false);
   const formattedCurrentPath = createMemo(() => formatPickerPath(props.currentPath, props.homePath));
-  const currentRoot = createMemo(() => matchFilesystemRoot(props.currentPath, props.roots ?? []));
+  const favoritePicker = useEnvDirectoryFavorites();
   const pathErrorDescribedBy = createMemo(() => pathError().trim() && pathErrorDescriptionId() === props.navigationFailureDescriptionId
     ? pathErrorDescriptionId() : undefined);
   const pathStatus = createMemo(() => {
@@ -478,24 +479,20 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       )}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-1.5">
-          <div class="flex min-h-[18px] items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
-            <span>{i18n.t('files.folderTree')}</span>
-            <span data-floe-reload-omit class="flex items-center gap-1">
-              <Show when={!props.initializing}>
-                <span>{currentRoot()?.label ?? i18n.t('files.compactDepth')}</span>
-              </Show>
-              <Show when={!props.initializing && currentRoot()}>
-                {(root) => (
-                  <span
-                    class="rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-semibold leading-4 text-muted-foreground"
-                    title={i18n.t('files.rootAccessTitle', { label: root().label, mode: root().permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}
-                  >
-                    {root().permissions.write ? i18n.t('files.readWriteBadge') : i18n.t('files.readOnlyBadge')}
-                  </span>
-                )}
-              </Show>
-            </span>
-          </div>
+          <Show when={(props.roots?.length ?? 0) > 0 || favoritePicker.directoryFavorites}>
+            <div class="flex min-h-[18px] items-center px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
+              {i18n.t('files.quickAccess')}
+            </div>
+            <FileBrowserQuickAccess
+              roots={props.roots}
+              favorites={favoritePicker.directoryFavorites}
+              copy={favoritePicker.copy}
+              currentPath={props.currentPath}
+              initializing={props.initializing}
+              onNavigate={path => props.onRootSelect?.(path)}
+              onContextMenu={(event, path) => showDirectoryMenu(browser, path, event)}
+            />
+          </Show>
 
           <div
             ref={(el) => {
@@ -513,9 +510,6 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
                 sidebarOpen={props.open}
                 scrollContainer={() => treeScrollEl}
                 pendingNavigationPath={props.pendingNavigationPath}
-                roots={props.roots}
-                currentPath={props.currentPath}
-                onRootSelect={props.onRootSelect}
                 class="min-h-full"
               />
             </Show>

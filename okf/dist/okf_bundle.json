@@ -25000,7 +25000,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-29",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "desktop",
           "filesystem",
@@ -25012,15 +25012,15 @@
         "title": "Personal directory favorites",
         "type": "Product Contract"
       },
-      "body_length": 2042,
+      "body_length": 3173,
       "summary": "Runtime owns one directory-favorites store. Each authenticated namespace, endpoint\nand user has an independent ordered path set and revision. Env App and Desktop\nsupply this metadata to published Floe controlled pickers and filesystem menus; the\nexisting filesystem navigator remains the only path validation and selection owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Persistence and authentication\nThe Runtime opens apps/filesystem/directory-favorites.sqlite through sqliteutil before service readiness and closes it with Code App. Schema v1 is initialized transactionally; existing tables, objects and records are verified and unsupported or future schemas fail before a writable open.\n\nThere is no ten-item cap, automatic deletion, move tracking, grouping or custom naming.\n\n## Client ownership and interaction\nOne in-memory client per authenticated environment supplies every mounted entry.\n\nInitial load failure offers retry; refresh failure retains displayed paths.\n\nNo separate title card, second path line or persistent favorite star occupies the sidebar.\n\nFlower exposes favorites inside its directory picker. Conversation transcript and thread-list menus do not mutate directory favorites; their directory actions follow [working directory navigation](flower-working-directory-navigation.md).\n\n## Compatibility\nRuntime compatibility epoch 69 requires this exact authenticated resource and Desktop route allowlist. Floret APIs, domain schema, conversation lifecycle, file-operation authorization and Runtime Service protocol version remain unchanged.",
-          "char_count": 1194
+          "body": "## Persistence and authentication\nThe Runtime opens apps/filesystem/directory-favorites.sqlite through sqliteutil before service readiness and closes it with Code App. Schema v1 is initialized transactionally; existing tables, objects and records are verified and unsupported or future schemas fail before a writable open.\n\nThere is no ten-item cap, automatic deletion, move tracking, grouping or custom naming.\n\n## Client ownership and interaction\nOne in-memory client per authenticated environment supplies every mounted entry.\n\nInitial load failure offers retry; refresh failure retains displayed paths.\n\nNo separate title card, second path line or persistent favorite star occupies the sidebar.\n\nFiles composes Home, Computer and favorites into one Quick access list, deduplicated by absolute path with authoritative root labels and permissions preserved. All entries share filtering and scrolling; roots are not pinned separately. Short lists use their natural height, capped at the smaller of 16rem and 45% of the sidebar body. The directory tree owns a separate viewport. Filtering appears above five entries, matches labels or full paths, holds the viewport height while active, and restores the previous list scroll on clear. Refresh retains rows, focus and the query. Arrow/Home/End navigation reveals only the local target, including in scaled Workbench windows. Menu invocation retains the captured directory and published focus ownership.\n\nPublished Sidebar owns the outer width; the Files/Git body fits its content box without a second fixed width or outer scroll owner.\n\nFlower exposes favorites inside its directory picker. Conversation transcript and thread-list menus do not mutate directory favorites; their directory actions follow [working directory navigation](flower-working-directory-navigation.md).\n\n## Compatibility\nRuntime compatibility epoch 69 requires this exact authenticated resource and Desktop route allowlist. Floret APIs, domain schema, conversation lifecycle, file-operation authorization and Runtime Service protocol version remain unchanged.",
+          "char_count": 2080
         },
         {
           "id": "boundaries",
@@ -30132,7 +30132,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-29",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "lifecycle",
           "startup",
@@ -30142,7 +30142,7 @@
         "title": "Redeven loading and layout continuity",
         "type": "UI Contract"
       },
-      "body_length": 4802,
+      "body_length": 4809,
       "summary": "One product presentation registry declares initial loading and reload eligibility for every built-in Activity page and Workbench widget. Modules load inside their own surface, preserving existing successful content. Data services own readiness; access/authentication changes override retention, and loading never grants permission.",
       "sections": [
         {
@@ -30182,9 +30182,9 @@
           "description": "Draft retention, stale read rejection and initial failure recovery."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/DirectoryFavoritesSection.browser.test.tsx:0:following tree position across load, refresh, filtering and empty states.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/DirectoryFavoritesSection.browser.test.tsx",
-          "description": "Following tree position across load, refresh, filtering and empty states."
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserQuickAccess.browser.test.tsx:0:compact shortcuts, retained refresh/filter geometry and independent tree scrolling.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserQuickAccess.browser.test.tsx",
+          "description": "Compact shortcuts, retained refresh/filter geometry and independent tree scrolling."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx:0:fixed preview region and failed different-file retry.",
@@ -31696,5 +31696,5 @@
       ]
     }
   ],
-  "source_sha256": "63d58e5d56647aca9d2e1ec81567da1ff604a5fb9a7c686c84b2ec7e5f80dc3f"
+  "source_sha256": "a6de69f93189ea3ff750900031d8224beaccccdf79fd6e155b43913da45cc7eb"
 }

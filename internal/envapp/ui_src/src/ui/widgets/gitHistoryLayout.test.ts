@@ -81,7 +81,7 @@ describe('browser workspace layout wiring', () => {
     const treeSrc = read('./FileBrowserSidebarTree.tsx');
 
     expect(shellSrc).toContain('sidebarBodyClass?: string;');
-    expect(shellSrc).toContain("cn('flex h-full min-h-0 flex-col overflow-auto bg-sidebar', props.sidebarBodyClass)");
+    expect(shellSrc).toContain("cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar', props.sidebarBodyClass)");
     expect(shellSrc).not.toContain('rounded-2xl border border-border/60 bg-gradient-to-b');
     expect(shellSrc).not.toContain('rounded-xl border border-border/60 bg-muted/[0.05]');
     expect(workspaceSrc).toContain('sidebarBodyClass="overflow-hidden"');
