@@ -102,6 +102,10 @@ await session.run(async () => {
       await sheets.selectOption('0'); await gridReady();
       await page.setViewportSize({ width: 390, height: 760 }); await gridReady();
       assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => element.scrollWidth <= element.clientWidth));
+      assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => {
+        const controls = [...element.querySelectorAll('button,select')];
+        return controls.every((control, index) => !index || control.getBoundingClientRect().left >= controls[index - 1].getBoundingClientRect().right);
+      }));
       await page.screenshot({ path: path.join(output, attachment ? 'attachment-xlsx-narrow.png' : 'task-xlsx-narrow.png') });
       await page.setViewportSize({ width: 1240, height: 900 }); await gridReady();
       await page.screenshot({ path: path.join(output, attachment ? 'attachment-xlsx.png' : 'task-xlsx.png') });

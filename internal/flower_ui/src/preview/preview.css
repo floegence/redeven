@@ -19,6 +19,7 @@
 .flower-rich-document section.flower-docx { margin:0; }
 
 .flower-spreadsheet-toolbar { flex-wrap:nowrap; gap:4px; padding:4px 8px; }
+.flower-spreadsheet-toolbar [role=group] { flex-shrink:0; }
 .flower-spreadsheet-toolbar .flower-spreadsheet-sheet { flex:0 1 220px; width:clamp(80px,25%,220px); min-width:64px; max-width:220px; min-height:28px; border-color:transparent; background:transparent; text-overflow:ellipsis; }
 .flower-spreadsheet-toolbar .flower-spreadsheet-sheet:hover { background:var(--muted); }
 .flower-spreadsheet-toolbar button { height:28px; min-height:28px; padding:0 6px; flex-shrink:0; }

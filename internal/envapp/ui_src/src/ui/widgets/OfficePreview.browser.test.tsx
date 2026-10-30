@@ -132,6 +132,10 @@ describe('Office and delimited preview acceptance', () => {
     const toolbar = host.querySelector<HTMLElement>('.flower-spreadsheet-toolbar')!;
     expect(toolbar.getBoundingClientRect().height, JSON.stringify([...toolbar.children].map(element => ({ tag: element.tagName, height: element.getBoundingClientRect().height, minHeight: getComputedStyle(element).minHeight })))).toBeLessThanOrEqual(40);
     expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
+    const controls = [...toolbar.querySelectorAll<HTMLElement>('button,select')];
+    for (let index = 1; index < controls.length; index++) {
+      expect(controls[index].getBoundingClientRect().left).toBeGreaterThanOrEqual(controls[index - 1].getBoundingClientRect().right);
+    }
     expect(host.querySelector('input[type=search]')).toBeNull();
     expect(host.querySelector('.flower-delimited-value')).toBeNull();
     expect(host.textContent).not.toContain(taskFilesEnUS.spreadsheetNotice);
