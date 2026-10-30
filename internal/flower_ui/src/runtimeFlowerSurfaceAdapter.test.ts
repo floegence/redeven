@@ -932,6 +932,7 @@ describe('runtime Flower surface adapter read state', () => {
   });
 
   it('passes working directory picker requests through adapter options', async () => {
+    const createWorkingDirectory = vi.fn(async (_path: string) => {});
     const getWorkingDirectoryPathContext = vi.fn(async () => ({
       agentHomePathAbs: '/Users/alice/.redeven/local-environment',
       homePathAbs: '/Users/alice',
@@ -944,10 +945,13 @@ describe('runtime Flower surface adapter read state', () => {
       isDirectory: true,
     }]);
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, {
+      createWorkingDirectory,
       getWorkingDirectoryPathContext,
       listWorkingDirectoryEntries,
     }));
 
+    await adapter.createWorkingDirectory?.('/Volumes/team/new project');
+    expect(createWorkingDirectory).toHaveBeenCalledExactlyOnceWith('/Volumes/team/new project');
     await expect(adapter.getWorkingDirectoryPathContext?.()).resolves.toEqual({
       agentHomePathAbs: '/Users/alice/.redeven/local-environment',
       homePathAbs: '/Users/alice',

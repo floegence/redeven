@@ -16,10 +16,11 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/session"
 )
 
-func newFSFileTestServer(t *testing.T, home string, meta session.Meta, policy *config.PermissionPolicy) (*Server, string) {
+func newFSFileTestServer(t *testing.T, home string, meta session.Meta, policy *config.PermissionPolicy, coordinators ...gitruntime.FilesystemMutationCoordinator) (*Server, string) {
 	t.Helper()
 
 	cfgPath := writeTestConfig(t)
@@ -40,14 +41,19 @@ func newFSFileTestServer(t *testing.T, home string, meta session.Meta, policy *c
 		t.Fatalf("newFSFileTestScope: %v", err)
 	}
 
+	var coordinator gitruntime.FilesystemMutationCoordinator
+	if len(coordinators) > 0 {
+		coordinator = coordinators[0]
+	}
 	channelID := "ch_fs_file_test"
 	srv, err := New(Options{
-		Backend:            &stubBackend{},
-		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
-		ConfigPath:         cfgPath,
-		AgentHomeDir:       home,
-		FilesystemScope:    scope,
-		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
+		Backend:                       &stubBackend{},
+		DistFS:                        fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:                    cfgPath,
+		AgentHomeDir:                  home,
+		FilesystemScope:               scope,
+		FilesystemMutationCoordinator: coordinator,
+		ResolveSessionMeta:            resolveMetaForTest(channelID, meta),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

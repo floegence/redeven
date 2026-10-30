@@ -1,3 +1,4 @@
+import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useDownloadManager } from '../downloads/DownloadContext';
 import { FlowerTaskFilePreviewContent } from '../flower/FlowerTaskFilePreviewContent';
 import { Show, createMemo, onCleanup, type JSX } from 'solid-js';
@@ -85,6 +86,7 @@ export type EnvAIPageProps = Readonly<{
 export function EnvAIPage(props: EnvAIPageProps) {
   const env = useEnvContext();
   const rpc = useRedevenRpc();
+  const protocol = useProtocol();
   const filesystemPicker = useEnvFilesystemPicker();
   const i18n = useI18n();
   const notification = useNotification();
@@ -107,6 +109,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     get envLabel() { return trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'); },
     desktopSessionTargetRoute,
     rpc,
+    workspaceClientIdentity: () => protocol.session?.(),
     settingsRevision: modelReadRevision,
     modelReadResource: env.flowerModelReadResource,
     isAvailable: () => {

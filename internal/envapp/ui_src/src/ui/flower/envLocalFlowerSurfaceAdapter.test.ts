@@ -428,6 +428,20 @@ describe('Env local Flower surface adapter', () => {
     expect(await adapter.movePinnedThread!('thread/source', input)).toEqual([{ thread_id: pin.thread_id, pinned_at_ms: 10, pin_rank: 3, settings_revision: 20 }]);
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith('/_redeven_proxy/api/ai/threads/thread%2Fsource/pin-position', expect.objectContaining({ method: 'PATCH', body: JSON.stringify(input) }));
   });
+  it('creates one directory through the write RPC and preserves rejection without retry', async () => {
+    const mkdir = vi.fn(async () => ({ success: true }));
+    const identity = {};
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_create', envLabel: 'Create', rpc: { fs: { mkdir } } as any, workspaceClientIdentity: () => identity });
+    await adapter.createWorkingDirectory!('/Volumes/team/new project');
+    expect(mkdir).toHaveBeenCalledExactlyOnceWith({ path: '/Volumes/team/new project', createParents: false });
+    mkdir.mockRejectedValueOnce({ code: 409, message: 'path already exists' });
+    await expect(adapter.createWorkingDirectory!('/Volumes/team/new project')).rejects.toMatchObject({ code: 409 });
+    expect(mkdir).toHaveBeenCalledTimes(2);
+    const readonly = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_create', envLabel: 'Create', canMutate: false, rpc: { fs: { mkdir } } as any, workspaceClientIdentity: () => identity });
+    await expect(readonly.createWorkingDirectory!('/Volumes/team/denied')).rejects.toMatchObject({ code: 403 });
+    expect(mkdir).toHaveBeenCalledTimes(2);
+  });
+
   it('passes declared roots and external absolute directory requests through unchanged', async () => {
     const context = { homePathAbs: '/Users/alice', agentHomePathAbs: '/Users/alice', defaultRootId: 'project', roots: [
       { id: 'project', label: 'Project', pathAbs: '/Volumes/team', kind: 'custom', permissions: { read: true, write: false } },

@@ -1,7 +1,26 @@
-import { describe, expect, it } from 'vitest';
-import { classifyFilesystemPathError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filesystemPicker';
+import { filesystemPickerEnUS } from '../i18n/filesystemPickerMessages';
+import { describe, expect, it, vi } from 'vitest';
+import { createFilesystemPickerDirectory, formatFilesystemPickerError, classifyFilesystemPathError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filesystemPicker';
 
 describe('runtime filesystem picker adapter', () => {
+  it('creates one child path and rejects traversal before reaching the filesystem', async () => {
+    const create = vi.fn(async (_path: string) => {});
+    await createFilesystemPickerDirectory('/', 'new project', create);
+    await createFilesystemPickerDirectory('/home/alice', '.private', create);
+    expect(create.mock.calls).toEqual([['/new project'], ['/home/alice/.private']]);
+    for (const name of ['', '.', '..', '../escape', '/absolute', 'a/b', String.fromCharCode(0)]) {
+      await expect(createFilesystemPickerDirectory('/home/alice', name, create)).rejects.toThrow();
+    }
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+  it.each([[409, 'folderExists'], [403, 'createDenied'], [400, 'folderNameInvalid'], [500, 'createFailed'], [undefined, 'createFailed']])('localizes creation status %s without retrying', async (code, key) => {
+    const create = vi.fn(async () => { throw { status: code }; });
+    let failure: unknown;
+    try { await createFilesystemPickerDirectory('/home/alice', 'project', create); } catch (error) { failure = error; }
+    const copy = { ...filesystemPickerEnUS, selectedCount: (count: number) => String(count) };
+    expect(formatFilesystemPickerError(failure, copy)).toBe(copy[key as keyof typeof copy]);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
   it('keeps system location labels current without changing the loaded context', () => {
     let copy = { home: 'Home', root: 'Root' };
     const context = mapFilesystemPickerContext({ homePathAbs: '/Users/alice', defaultRootId: 'home', roots: [

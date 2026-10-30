@@ -1,3 +1,4 @@
+import { createWorkspaceEffectRpc } from '../services/workspaceEffects';
 import { createFlowerDownloads } from '../downloads/flowerDownloads';
 import type { DownloadManager } from '../downloads/types';
 import { loadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../downloads/flowerTaskFileDownload';
@@ -89,6 +90,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envLabel: string;
   desktopSessionTargetRoute?: 'local_host' | 'remote_desktop';
   rpc: RedevenV1Rpc;
+  workspaceClientIdentity?: () => object | null | undefined;
   canMutate?: boolean;
   canManageExtensions?: () => boolean;
   settingsRevision?: () => string | number;
@@ -795,6 +797,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     },
     directoryFavorites: envDirectoryFavorites,
     getWorkingDirectoryPathContext: () => options.rpc.fs.getPathContext(),
+    createWorkingDirectory: async path => {
+      if (options.canMutate === false) throw Object.assign(new Error('Write permission denied'), { code: 403 });
+      options.signal?.throwIfAborted();
+      const identity = options.workspaceClientIdentity?.();
+      if (!identity) throw new Error('Filesystem connection unavailable');
+      const fs = createWorkspaceEffectRpc(identity, options.rpc).fs;
+      await fs.mkdir({ path, createParents: false });
+    },
     listWorkingDirectoryEntries: async (input) => {
       const response = await options.rpc.fs.list({
         path: trim(input.path),

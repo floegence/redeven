@@ -1,3 +1,4 @@
+import type { FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { DirectoryFavorites } from '@floegence/floe-webapp-core/ui';
 import { createDirectoryFavoritesClient } from '../../../../flower_ui/src/filePicker/directoryFavorites';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,8 +21,8 @@ const context = { agentHomePathAbs: home, homePathAbs: home, defaultRootId: 'hom
   { id: 'computer', label: 'Computer', pathAbs: '/', kind: 'computer', permissions: { read: true, write: false } },
 ] };
 function button(label: string) { return Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.trim() === label)!; }
-async function setup(pathContext = context, history: ReturnType<typeof thread>[] = [], favorites?: DirectoryFavorites) {
-  const a = { ...adapter(), directoryFavorites: favorites ? () => favorites : undefined, listThreads: vi.fn(async () => history), openWorkingDirectoryInFileBrowser: vi.fn(async () => undefined), getWorkingDirectoryPathContext: vi.fn(async () => pathContext), listWorkingDirectoryEntries: vi.fn(async (_input: { path: string; showHidden?: boolean }) => []) };
+async function setup(pathContext = context, history: ReturnType<typeof thread>[] = [], favorites?: DirectoryFavorites, overrides: Partial<FlowerSurfaceAdapter> = {}) {
+  const a = { ...adapter(), directoryFavorites: favorites ? () => favorites : undefined, listThreads: vi.fn(async () => history), openWorkingDirectoryInFileBrowser: vi.fn(async () => undefined), getWorkingDirectoryPathContext: vi.fn(async () => pathContext), ...overrides, listWorkingDirectoryEntries: vi.fn(overrides.listWorkingDirectoryEntries ?? (async (_input: { path: string; showHidden?: boolean }) => [])) };
   const drafts = createFlowerComposerDraftCoordinator();
   const host = renderSurfaceWithDraftCoordinator(a, drafts);
   await waitFor(() => host.querySelector<HTMLElement>('.flower-working-directory-select')?.title.includes(pathContext.roots.find((root) => root.id === pathContext.defaultRootId)!.pathAbs) === true);
@@ -45,6 +46,47 @@ async function setup(pathContext = context, history: ReturnType<typeof thread>[]
   return { a, host, open, navigate, send };
 }
 describe('Flower published absolute directory picker', () => {
+  it('creates a directory through the published picker and commits it only on selection', async () => {
+    const created = home + '/new project';
+    let exists = false;
+    const createWorkingDirectory = vi.fn(async () => { exists = true; });
+    const f = await setup(context, [], undefined, { createWorkingDirectory, listWorkingDirectoryEntries: vi.fn(async () => exists ? [{ name: 'new project', path: created, isDirectory: true }] : []) });
+    await f.open();
+    expect(button('New folder')).toBeTruthy();
+    button('New folder').click(); await flush();
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Folder name"]')!;
+    input.value = 'new project'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    button('Create').click();
+    await waitFor(() => !!document.querySelector('[data-picker-row-path="' + created + '"]'));
+    expect(createWorkingDirectory).toHaveBeenCalledExactlyOnceWith(created);
+    expect(f.host.querySelector('.flower-working-directory-select')?.getAttribute('title')).toContain(home);
+    document.querySelector<HTMLButtonElement>('[data-picker-row-path="' + created + '"]')!.click();
+    await waitFor(() => !button('Select').disabled);
+    button('Select').click(); await flush(); await f.send();
+    expect(f.a.launchTurn).toHaveBeenCalledWith(expect.objectContaining({ working_dir: created }));
+  });
+
+  it('retains a failed creation name and preserves the draft when canceled', async () => {
+    const createWorkingDirectory = vi.fn(async () => { throw { code: 403, message: 'write permission denied' }; });
+    const f = await setup(context, [], undefined, { createWorkingDirectory }); await f.open();
+    button('New folder').click(); await flush();
+    const name = document.querySelector<HTMLInputElement>('input[aria-label="Folder name"]')!;
+    name.value = 'project'; name.dispatchEvent(new InputEvent('input', { bubbles: true })); button('Create').click();
+    await waitFor(() => !!document.querySelector('[data-picker-create-folder] [role="alert"], [role="alert"]'));
+    expect(name.value).toBe('project');
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('permission to create');
+    expect(createWorkingDirectory).toHaveBeenCalledExactlyOnceWith(home + '/project');
+    document.querySelector<HTMLButtonElement>('[data-picker-create-folder] button[type=button]')!.click();
+    await flush();
+    expect(document.querySelector('[data-filesystem-picker]')).toBeTruthy();
+    button('Cancel').click(); await flush(); await f.send();
+    expect(f.a.launchTurn).toHaveBeenCalledWith(expect.objectContaining({ working_dir: home }));
+  });
+
+  it('does not offer creation when the host exposes only directory reads', async () => {
+    const f = await setup(); await f.open(); expect(button('New folder')).toBeUndefined();
+  });
+
   it('keeps favorites inside the picker without changing the draft until confirmation', async () => {
     let paths: string[] = [target]; let revision = 1;
     const client = createDirectoryFavoritesClient(async (method, path) => {

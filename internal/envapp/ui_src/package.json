@@ -35,9 +35,9 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@floegence/floe-webapp-boot": "0.86.65",
-    "@floegence/floe-webapp-core": "0.86.65",
-    "@floegence/floe-webapp-protocol": "0.86.65",
+    "@floegence/floe-webapp-boot": "0.86.68",
+    "@floegence/floe-webapp-core": "0.86.68",
+    "@floegence/floe-webapp-protocol": "0.86.68",
     "@floegence/floebrowser": "0.1.28",
     "@floegence/floeterm-terminal-web": "0.19.2",
     "@floegence/flowersec-core": "5.11.1",

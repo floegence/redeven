@@ -79,6 +79,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/fs/directory_favorites', methods: ['GET', 'PUT', 'DELETE'] },
   { path: '/_redeven_proxy/api/fs/path_context', methods: ['GET'] },
   { path: '/_redeven_proxy/api/fs/list', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/fs/mkdir', methods: ['POST'] },
   { path: '/_redeven_proxy/api/fs/file', methods: ['GET'], allowsQuery: parsed => {
     return [...parsed.searchParams.keys()].length === 2
       && parsed.searchParams.getAll('path').length === 1

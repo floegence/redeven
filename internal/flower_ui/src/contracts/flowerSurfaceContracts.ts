@@ -1815,6 +1815,8 @@ export type FlowerSurfaceAdapter = Readonly<{
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   directoryFavorites?: (failureMessage: () => string) => DirectoryFavorites | undefined;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
+  /** Create one absolute directory through the authenticated filesystem write service. */
+  createWorkingDirectory?: (path: string) => Promise<void>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
   resolveCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<Readonly<{ kind: 'file' | 'directory'; label: string; path: string }>>;
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;

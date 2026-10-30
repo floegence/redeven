@@ -41,6 +41,7 @@ import (
 	"github.com/floegence/redeven/internal/directoryfavorites"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	runtimefs "github.com/floegence/redeven/internal/fs"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
@@ -101,8 +102,9 @@ type Options struct {
 	PluginMarketDetail    func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
 	PluginMarketIcon      func(context.Context, string, string) (pluginmarket.IconAsset, error)
 	// AgentHomeDir is the canonical absolute path to the default home directory.
-	AgentHomeDir    string
-	FilesystemScope *filesystemscope.Registry
+	AgentHomeDir                  string
+	FilesystemScope               *filesystemscope.Registry
+	FilesystemMutationCoordinator gitruntime.FilesystemMutationCoordinator
 }
 
 type Backend interface {
@@ -450,7 +452,7 @@ func New(opts Options) (*Server, error) {
 		log:                   logger,
 		agentHomeDir:          scope.HomePathAbs(),
 		scope:                 scope,
-		fs:                    runtimefs.NewServiceWithScope(scope),
+		fs:                    runtimefs.NewServiceWithCoordinator(scope, opts.FilesystemMutationCoordinator),
 		backend:               opts.Backend,
 		pf:                    opts.PortForward,
 		managed:               opts.ManagedWebServices,
@@ -2816,6 +2818,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.handleFSPathContext(w, r)
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/fs/mkdir":
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return
+		}
+		g.handleFSMkdir(w, r)
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == localAPIFSListEndpointPath:

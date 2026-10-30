@@ -8,6 +8,10 @@ export type FilesystemPickerCopy = PickerCopy & Readonly<{
   hostPermissionDenied: string;
   notDirectory: string;
   connectionFailed: string;
+  folderExists: string;
+  folderNameInvalid: string;
+  createDenied: string;
+  createFailed: string;
 }>;
 
 type RuntimeRoot = PickerPathContext['roots'][number] & { kind?: string };
@@ -45,6 +49,20 @@ export function mapFilesystemPickerEntries(entries: readonly FilesystemPickerEnt
   })).sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === 'folder' ? -1 : 1);
 }
 
+class FilesystemPickerCreateError extends Error {
+  constructor(readonly failure: unknown) { super('Directory creation failed'); }
+}
+
+/** Keep creation to one child of the validated directory; hosts retain write authority. */
+export async function createFilesystemPickerDirectory(parent: string, name: string, create: (path: string) => Promise<void>): Promise<void> {
+  const child = name.trim();
+  if (!parent.startsWith('/') || parent.includes(String.fromCharCode(0)) || !child || child === '.' || child === '..' || child.includes('/') || child.includes(String.fromCharCode(0))) {
+    throw new FilesystemPickerCreateError({ code: 400 });
+  }
+  try { await create((parent === '/' ? '' : parent) + '/' + child); }
+  catch (error) { throw new FilesystemPickerCreateError(error); }
+}
+
 export type FilesystemPathFailure = 'outside_scope' | 'host_permission_denied' | 'permission_denied' | 'not_found' | 'not_directory' | 'invalid_path' | 'transport_error';
 
 /** The RPC and Desktop HTTP adapters preserve the same runtime status/message categories. */
@@ -63,6 +81,14 @@ export function classifyFilesystemPathError(error: unknown): FilesystemPathFailu
 }
 
 export function formatFilesystemPickerError(error: unknown, copy: FilesystemPickerCopy): string {
+  if (error instanceof FilesystemPickerCreateError) {
+    const failure = error.failure as { code?: number; status?: number } | undefined;
+    const code = Number(failure?.status ?? failure?.code);
+    if (code === 409) return copy.folderExists;
+    if (code === 400) return copy.folderNameInvalid;
+    if (code === 403) return copy.createDenied;
+    return copy.createFailed;
+  }
   switch (classifyFilesystemPathError(error)) {
     case 'outside_scope': return copy.outsideScope;
     case 'host_permission_denied': return copy.hostPermissionDenied;

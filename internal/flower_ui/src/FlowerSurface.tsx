@@ -290,7 +290,7 @@ import {
   type FlowerCompanionTerminalTransition,
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
-import { formatFilesystemPickerError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filePicker/filesystemPicker';
+import { createFilesystemPickerDirectory, formatFilesystemPickerError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filePicker/filesystemPicker';
 import { applyFlowerRuntimeContext, applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { threadNeedsFileActivityTargets } from './fileActivityTargets';
 import { mapFlowerActivityItem, mapFlowerGoal } from './flowerLiveMapper';
@@ -15349,6 +15349,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!props.adapter.listWorkingDirectoryEntries) throw new Error('Filesystem connection unavailable');
           return mapFilesystemPickerEntries(await props.adapter.listWorkingDirectoryEntries({ path, showHidden: options.showHidden }));
         }}
+        onCreateFolder={props.adapter.canMutate !== false && props.adapter.createWorkingDirectory
+          ? (parent, name) => createFilesystemPickerDirectory(parent, name, props.adapter.createWorkingDirectory!)
+          : undefined}
         copy={copy().filesystemPicker}
         formatError={(error) => formatFilesystemPickerError(error, copy().filesystemPicker)}
         title={copy().chat.workingDirPickerTitle}

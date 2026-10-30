@@ -1039,6 +1039,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     getWorkingDirectoryPathContext: async () => mapRuntimeWorkingDirectoryPathContext(
       await runtimeJSON<RuntimeFSPathContextResponse>(bridge, 'GET', '/_redeven_proxy/api/fs/path_context'),
     ),
+    createWorkingDirectory: async path => {
+      options.signal?.throwIfAborted();
+      await runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/fs/mkdir', { path }, undefined, options.runtimeEnvironmentID);
+    },
     listWorkingDirectoryEntries: async (input: FlowerWorkingDirectoryListInput) => mapRuntimeWorkingDirectoryList(
       await runtimeJSON<RuntimeFSListResponse>(bridge, 'POST', '/_redeven_proxy/api/fs/list', {
         path: trim(input.path),

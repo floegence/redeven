@@ -11,6 +11,13 @@ it.each(['history', 'history-item', 'history-body', 'history-release'])('allows 
   for (const extra of ['?source=other', '/child']) expect(() => runtimeFlowerPath(path + extra)).toThrow();
 });
 
+it('admits only an exact POST for directory creation', () => {
+  const path = '/_redeven_proxy/api/fs/mkdir';
+  expect(runtimeFlowerPath(path)).toBe(path);
+  for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(method === 'POST');
+  for (const suffix of ['?environment=other', '/child']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+});
+
 it('allows only exact scoped directory favorites item operations', () => {
   const path = '/_redeven_proxy/api/fs/directory_favorites';
   expect(runtimeFlowerPath(path)).toBe(path);

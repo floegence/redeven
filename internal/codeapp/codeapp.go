@@ -26,6 +26,7 @@ import (
 	"github.com/floegence/redeven/internal/directoryfavorites"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
@@ -66,9 +67,10 @@ type Options struct {
 	CodeServerPortMax int
 
 	// Env/App-level context (used by AI tools).
-	AgentHomeDir    string
-	FilesystemScope *filesystemscope.Registry
-	Shell           string
+	AgentHomeDir                  string
+	FilesystemScope               *filesystemscope.Registry
+	FilesystemMutationCoordinator gitruntime.FilesystemMutationCoordinator
+	Shell                         string
 
 	AIConfig               *config.AIConfig
 	AIWorkloadAdmission    ai.WorkloadAdmission
@@ -435,40 +437,41 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}()
 	browserRuntime, _ := opts.ComputerUseExecutor.(*ai.ComputerUseRuntime)
 	appSrv, err := appserver.New(appserver.Options{
-		ChatGPT:               chatGPT,
-		HostApplications:      hostApps,
-		RemoteDesktop:         remoteDesktop,
-		Logger:                logger,
-		DistFS:                mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
-		Backend:               svc,
-		PortForward:           pfSvc,
-		ManagedWebServices:    managedSvc,
-		ContainerResources:    containerResourceSvc,
-		AIServiceProvider:     aiReady,
-		BrowserRuntime:        browserRuntime,
-		DirectoryFavorites:    directoryFavorites,
-		Notes:                 notesSvc,
-		WorkbenchLayout:       workbenchLayoutSvc,
-		Tessiven:              tessivenSvc,
-		TessivenResources:     tessivenResources,
-		Terminal:              opts.Terminal,
-		Audit:                 opts.Audit,
-		Diagnostics:           opts.Diagnostics,
-		ResolveSessionMeta:    opts.ResolveSessionMeta,
-		AcquirePluginSession:  opts.AcquirePluginSession,
-		EndPluginSession:      opts.EndPluginSession,
-		ConfigPath:            strings.TrimSpace(opts.ConfigPath),
-		SecretsStore:          secrets,
-		PluginPlatform:        pluginIntegration.Handler(),
-		PluginWebSurface:      pluginIntegration.WebSurfaceHandler(),
-		PluginMarketSnapshot:  pluginIntegration.MarketSnapshot,
-		PluginMarketRefresh:   pluginIntegration.RefreshMarket,
-		PluginMarketSubscribe: pluginIntegration.SubscribeMarketRefresh,
-		PluginMarketDetail:    pluginIntegration.MarketDetail,
-		PluginMarketIcon:      pluginIntegration.MarketIcon,
-		AgentHomeDir:          agentHomeDir,
-		FilesystemScope:       scope,
-		ListenAddr:            "127.0.0.1:0",
+		ChatGPT:                       chatGPT,
+		HostApplications:              hostApps,
+		RemoteDesktop:                 remoteDesktop,
+		Logger:                        logger,
+		DistFS:                        mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
+		Backend:                       svc,
+		PortForward:                   pfSvc,
+		ManagedWebServices:            managedSvc,
+		ContainerResources:            containerResourceSvc,
+		AIServiceProvider:             aiReady,
+		BrowserRuntime:                browserRuntime,
+		DirectoryFavorites:            directoryFavorites,
+		Notes:                         notesSvc,
+		WorkbenchLayout:               workbenchLayoutSvc,
+		Tessiven:                      tessivenSvc,
+		TessivenResources:             tessivenResources,
+		Terminal:                      opts.Terminal,
+		Audit:                         opts.Audit,
+		Diagnostics:                   opts.Diagnostics,
+		ResolveSessionMeta:            opts.ResolveSessionMeta,
+		AcquirePluginSession:          opts.AcquirePluginSession,
+		EndPluginSession:              opts.EndPluginSession,
+		ConfigPath:                    strings.TrimSpace(opts.ConfigPath),
+		SecretsStore:                  secrets,
+		PluginPlatform:                pluginIntegration.Handler(),
+		PluginWebSurface:              pluginIntegration.WebSurfaceHandler(),
+		PluginMarketSnapshot:          pluginIntegration.MarketSnapshot,
+		PluginMarketRefresh:           pluginIntegration.RefreshMarket,
+		PluginMarketSubscribe:         pluginIntegration.SubscribeMarketRefresh,
+		PluginMarketDetail:            pluginIntegration.MarketDetail,
+		PluginMarketIcon:              pluginIntegration.MarketIcon,
+		AgentHomeDir:                  agentHomeDir,
+		FilesystemScope:               scope,
+		FilesystemMutationCoordinator: opts.FilesystemMutationCoordinator,
+		ListenAddr:                    "127.0.0.1:0",
 	})
 	if err != nil {
 		_ = pluginIntegration.Close()

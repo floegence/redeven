@@ -204,6 +204,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   directoryFavorites?: FlowerSurfaceAdapter['directoryFavorites'];
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
+  /** Create one absolute directory through the authenticated filesystem write service. */
+  createWorkingDirectory?: (path: string) => Promise<void>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
   resolveCanonicalReference?: FlowerSurfaceAdapter['resolveCanonicalReference'];
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
@@ -788,6 +790,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.directoryFavorites ? { directoryFavorites: options.directoryFavorites } : {}),
     ...(options.getWorkingDirectoryPathContext ? { getWorkingDirectoryPathContext: options.getWorkingDirectoryPathContext } : {}),
     ...(options.listWorkingDirectoryEntries ? { listWorkingDirectoryEntries: options.listWorkingDirectoryEntries } : {}),
+    ...(options.createWorkingDirectory ? { createWorkingDirectory: options.createWorkingDirectory } : {}),
     ...(options.openCanonicalReference ? { openCanonicalReference: options.openCanonicalReference } : {}),
     ...(options.resolveCanonicalReference ? { resolveCanonicalReference: options.resolveCanonicalReference } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),

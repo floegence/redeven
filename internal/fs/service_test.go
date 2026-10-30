@@ -804,3 +804,68 @@ func TestServiceServeReadFileStreamRejectsDirectoryTargets(t *testing.T) {
 		t.Fatalf("directory stream response = %#v, want directory error", plainDirResp)
 	}
 }
+
+func TestCreateDirectoryCoordinatesExactTarget(t *testing.T) {
+	home := mustEvalPath(t, t.TempDir())
+	scope, err := filesystemscope.NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator := &recordingMutationCoordinator{}
+	svc := NewServiceWithCoordinator(scope, coordinator)
+	ctx := context.WithValue(context.Background(), mutationContextKey{}, "picker")
+	target := filepath.Join(home, "new project")
+	created, err := svc.CreateDirectory(ctx, target, false)
+	if err != nil || created != target {
+		t.Fatalf("create: %s %v", created, err)
+	}
+	if coordinator.calls != 1 || coordinator.ctx != ctx || !coordinator.effect.ChangesTopology || len(coordinator.effect.Paths) != 1 || coordinator.effect.Paths[0] != target {
+		t.Fatalf("coordination: %#v", coordinator)
+	}
+	_, err = svc.CreateDirectory(ctx, target, false)
+	var rpcErr *sessionrpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != 409 {
+		t.Fatalf("duplicate: %v", err)
+	}
+	missing := filepath.Join(home, "missing", "child")
+	if _, err := svc.CreateDirectory(ctx, missing, false); err == nil {
+		t.Fatal("created missing parents")
+	}
+	if _, err := os.Stat(filepath.Dir(missing)); !os.IsNotExist(err) {
+		t.Fatalf("missing parent changed: %v", err)
+	}
+}
+
+func TestCreateDirectoryFailsClosedWithoutCoordinator(t *testing.T) {
+	home := t.TempDir()
+	svc := NewService(home)
+	target := filepath.Join(home, "blocked")
+	if _, err := svc.CreateDirectory(context.Background(), target, false); err == nil {
+		t.Fatal("missing coordinator admitted mutation")
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("target changed: %v", err)
+	}
+}
+
+func TestCreateDirectoryPreservesOperatingSystemDenial(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires an unprivileged POSIX process")
+	}
+	home := mustEvalPath(t, t.TempDir())
+	scope, err := filesystemscope.NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := filepath.Join(home, "readonly")
+	if err := os.Mkdir(parent, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(parent, 0o700)
+	svc := NewServiceWithCoordinator(scope, &recordingMutationCoordinator{})
+	_, err = svc.CreateDirectory(context.Background(), filepath.Join(parent, "denied"), false)
+	var rpcErr *sessionrpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != 403 {
+		t.Fatalf("OS denial: %v", err)
+	}
+}

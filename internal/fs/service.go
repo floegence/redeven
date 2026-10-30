@@ -228,22 +228,8 @@ func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		if meta == nil || !meta.CanWrite {
 			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		createParents := req.CreateParents != nil && *req.CreateParents
-		target, resolveErr := s.resolveTargetPath(req.Path)
-		if resolveErr != nil {
-			if errors.Is(resolveErr, filesystemscope.ErrPathOutsideScope) {
-				return nil, &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
-			}
-			if errors.Is(resolveErr, filesystemscope.ErrWriteDenied) {
-				return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
-			}
-			return nil, &sessionrpc.Error{Code: 400, Message: "invalid path"}
-		}
-		if err := s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}, func() error {
-			_, err := mkdirTargetResolved(target, createParents)
-			return err
-		}); err != nil {
-			return nil, mutationCoordinationRPCError(err)
+		if _, err := s.CreateDirectory(ctx, req.Path, req.CreateParents != nil && *req.CreateParents); err != nil {
+			return nil, err
 		}
 		return &fsMkdirResp{Success: true}, nil
 	})
@@ -461,6 +447,29 @@ func (s *Service) resolveTargetPath(path string) (string, error) {
 	return resolved.RealAbs, err
 }
 
+// CreateDirectory uses the same scope resolution and mutation coordinator for RPC and HTTP callers.
+// Callers must authenticate and require write permission before invoking it.
+func (s *Service) CreateDirectory(ctx context.Context, path string, createParents bool) (string, error) {
+	target, err := s.resolveTargetPath(path)
+	if err != nil {
+		if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
+			return "", &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
+		}
+		if errors.Is(err, filesystemscope.ErrWriteDenied) {
+			return "", &sessionrpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		return "", &sessionrpc.Error{Code: 400, Message: "invalid path"}
+	}
+	err = s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}, func() error {
+		_, err := mkdirTargetResolved(target, createParents)
+		return err
+	})
+	if err != nil {
+		return "", mutationCoordinationRPCError(err)
+	}
+	return target, nil
+}
+
 func (s *Service) mkdirTarget(path string, createParents bool) (string, error) {
 	targetPath, err := s.resolveTargetPath(path)
 	if err != nil {
@@ -479,6 +488,8 @@ func (s *Service) mkdirTarget(path string, createParents bool) (string, error) {
 func mkdirTargetResolved(targetPath string, createParents bool) (string, error) {
 	if _, err := os.Stat(targetPath); err == nil {
 		return "", &sessionrpc.Error{Code: 409, Message: "path already exists"}
+	} else if os.IsPermission(err) {
+		return "", &sessionrpc.Error{Code: 403, Message: "host filesystem permission denied"}
 	} else if !os.IsNotExist(err) {
 		return "", &sessionrpc.Error{Code: 500, Message: "failed to stat target"}
 	}
@@ -488,6 +499,9 @@ func mkdirTargetResolved(targetPath string, createParents bool) (string, error) 
 		info, err := os.Stat(parentDir)
 		if os.IsNotExist(err) {
 			return "", &sessionrpc.Error{Code: 404, Message: "parent directory not found"}
+		}
+		if os.IsPermission(err) {
+			return "", &sessionrpc.Error{Code: 403, Message: "host filesystem permission denied"}
 		}
 		if err != nil {
 			return "", &sessionrpc.Error{Code: 500, Message: "failed to stat parent directory"}
@@ -499,6 +513,9 @@ func mkdirTargetResolved(targetPath string, createParents bool) (string, error) 
 
 	if createParents {
 		if err := os.MkdirAll(targetPath, 0o755); err != nil {
+			if os.IsPermission(err) {
+				return "", &sessionrpc.Error{Code: 403, Message: "host filesystem permission denied"}
+			}
 			if os.IsExist(err) {
 				return "", &sessionrpc.Error{Code: 409, Message: "path already exists"}
 			}
@@ -508,6 +525,9 @@ func mkdirTargetResolved(targetPath string, createParents bool) (string, error) 
 	}
 
 	if err := os.Mkdir(targetPath, 0o755); err != nil {
+		if os.IsPermission(err) {
+			return "", &sessionrpc.Error{Code: 403, Message: "host filesystem permission denied"}
+		}
 		if os.IsExist(err) {
 			return "", &sessionrpc.Error{Code: 409, Message: "path already exists"}
 		}

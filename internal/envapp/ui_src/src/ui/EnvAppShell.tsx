@@ -2732,6 +2732,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
       desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
       rpc,
+      workspaceClientIdentity: () => protocol.session?.(),
       canMutate: true,
       copy: {
         currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),

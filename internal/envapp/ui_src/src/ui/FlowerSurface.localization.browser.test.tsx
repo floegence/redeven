@@ -63,6 +63,52 @@ describe('Flower complete locale presentation', () => {
     expect(dialog.textContent).not.toContain('Server home');
   });
 
+  it.each(SUPPORTED_LOCALES)('keeps directory creation usable in %s at narrow and desktop widths', async locale => {
+    const copy = localizedCopy(locale, await loadEnvAppDictionary(locale));
+    const createWorkingDirectory = vi.fn(async () => { throw { code: 409 }; });
+    const home = '/Users/alice';
+    const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [], createWorkingDirectory,
+      getWorkingDirectoryPathContext: async () => ({ agentHomePathAbs: home, homePathAbs: home, defaultRootId: 'home', roots: [{ id: 'home', kind: 'home', label: 'Home', pathAbs: home, permissions: { read: true, write: true } }] }),
+      listWorkingDirectoryEntries: async () => [],
+    }, { copy });
+    await waitFor(() => !!surface.querySelector('.flower-working-directory-select'));
+    for (const theme of ['light', 'dark']) for (const width of [1280, 390]) {
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      await page.viewport(width, 900);
+      surface.querySelector<HTMLButtonElement>('.flower-working-directory-select')!.click();
+      await waitFor(() => !!document.querySelector('[data-filesystem-picker]'));
+      await flush();
+      const modalCount = document.querySelectorAll('[aria-modal=true]').length;
+      await page.getByRole('button', { name: copy.filesystemPicker.newFolder, exact: true }).click();
+      const input = document.querySelector<HTMLInputElement>('input[aria-label="' + copy.filesystemPicker.folderName + '"]')!;
+      expect(document.activeElement).toBe(input);
+      const popup = document.querySelector<HTMLElement>('[data-floe-popover-panel]')!;
+      expect(popup.getAttribute('aria-modal')).toBe('false');
+      expect(document.querySelectorAll('[aria-modal=true]').length).toBe(modalCount);
+      expect(popup.scrollWidth).toBeLessThanOrEqual(popup.clientWidth + 1);
+      input.value = 'Existing project'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      await page.getByRole('button', { name: copy.filesystemPicker.create, exact: true }).click();
+      await waitFor(() => !!document.querySelector('[data-picker-create-folder] [role="alert"]'));
+      expect(document.querySelector('[data-picker-create-folder] [role="alert"]')?.textContent).toBe(copy.filesystemPicker.folderExists);
+      const dialog = document.querySelector<HTMLElement>('.flower-working-dir-picker')!;
+      expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+      const controls = Array.from(popup.querySelectorAll<HTMLButtonElement>('[data-picker-create-folder] button'));
+      for (const control of controls) expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+      if (locale === 'zh-CN' && theme === 'dark') {
+        await Promise.all(popup.getAnimations().map(animation => animation.finished));
+        await page.screenshot({ path: '__screenshots__/directory-picker-zh-CN-dark-' + width + '.png' });
+      }
+      popup.querySelector<HTMLButtonElement>('button[type=button]')!.click();
+      await waitFor(() => !document.querySelector('[data-picker-create-folder]'));
+      expect(document.querySelector('[data-filesystem-picker]')).toBeTruthy();
+      expect(document.activeElement?.textContent).toBe(copy.filesystemPicker.newFolder);
+      Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.trim() === copy.filesystemPicker.cancel)!.click();
+      await waitFor(() => !document.querySelector('[data-filesystem-picker]'));
+    }
+    document.documentElement.classList.remove('dark');
+    expect(createWorkingDirectory).toHaveBeenCalledTimes(4);
+  });
+
   it('updates a retained conversation when its active language changes', async () => {
     const dictionaries = { 'en-US': await loadEnvAppDictionary('en-US'), 'zh-CN': await loadEnvAppDictionary('zh-CN') };
     const [locale, setLocale] = createRoot(dispose => {

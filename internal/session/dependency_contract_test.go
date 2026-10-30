@@ -25,7 +25,7 @@ const (
 	flowersecGoVersion   = "v5.11.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
 	flowersecCoreVersion = "5.11.1"
-	floeWebappVersion    = "0.86.65"
+	floeWebappVersion    = "0.86.68"
 	floeEnvCoreVersion   = floeWebappVersion
 	floretVersion        = "v7.94.0"
 )

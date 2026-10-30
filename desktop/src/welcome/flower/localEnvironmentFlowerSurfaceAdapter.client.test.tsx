@@ -1170,6 +1170,16 @@ describe('Local Environment Flower surface adapter', () => {
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('creates a directory in the exact selected runtime without retrying the write', async () => {
+    const bridge = bridgeFor(() => ({ path: '/Volumes/team/new project' }));
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: 'env-selected' });
+    await adapter.createWorkingDirectory!('/Volumes/team/new project');
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledExactlyOnceWith({ method: 'POST', path: '/_redeven_proxy/api/fs/mkdir', body: { path: '/Volumes/team/new project' }, environment_id: 'env-selected' });
+    vi.mocked(bridge.requestRuntimeFlower).mockResolvedValueOnce({ ok: false, error: { message: 'path already exists', status: 409 }, failureKind: 'http' } as never);
+    await expect(adapter.createWorkingDirectory!('/Volumes/team/new project')).rejects.toMatchObject({ status: 409 });
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledTimes(2);
+  });
+
   it('loads working directory picker data through read-only runtime FS IPC', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
