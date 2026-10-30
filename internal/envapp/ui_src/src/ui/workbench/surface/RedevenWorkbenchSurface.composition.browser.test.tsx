@@ -69,6 +69,33 @@ it('keeps shared matte surfaces distinct under every product shell theme', async
   }
 });
 
+it('retains the subtle published dark canvas around product bodies at overview and working zoom', async () => {
+  await page.viewport(1280, 800);
+  const { host, setState } = mountComposition();
+  await expect.poll(() => host.querySelector('.workbench-widget')).toBeTruthy();
+  document.documentElement.dataset.floeShellTheme = 'porcelain-dark';
+  document.documentElement.classList.add('dark');
+  document.documentElement.classList.remove('light');
+  const rgb = (element: Element) => {
+    const context = document.createElement('canvas').getContext('2d')!;
+    context.fillStyle = getComputedStyle(element).backgroundColor;
+    context.fillRect(0, 0, 1, 1);
+    return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+  };
+  for (const surfaceStyle of ['standard', 'soft-neumorphic']) {
+    document.documentElement.dataset.floeSurfaceStyle = surfaceStyle;
+    for (const scale of [0.35, 1]) {
+      setState(current => ({ ...current, mode: 'work', selectedObject: null, viewport: { x: 0, y: 0, scale } }));
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      expect(rgb(host.querySelector('.workbench-canvas')!), `${surfaceStyle}/${scale} canvas`).toEqual([24, 24, 25]);
+      expect(rgb(host.querySelector('.redeven-workbench-body-surface')!), `${surfaceStyle}/${scale} body`).toEqual([12, 12, 13]);
+      const widget = host.querySelector<HTMLElement>('.workbench-widget')!;
+      expect(widget.getBoundingClientRect().width, `${surfaceStyle}/${scale} geometry`).toBeCloseTo(300 * scale, 0);
+      if (import.meta.env.VITE_WORKBENCH_SCREENSHOTS === '1') await page.screenshot();
+    }
+  }
+});
+
 it('saves direct edits and emoji through the localized product surface in the owning mode', async () => {
   await page.viewport(1280, 800);
   document.documentElement.dataset.floeShellTheme = 'classic-light';

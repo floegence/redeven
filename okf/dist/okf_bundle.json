@@ -1474,7 +1474,7 @@
               "protocol",
               "ui"
             ],
-            "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.86.68 (Env App Core v0.86.68), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
+            "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.86.69 (Env App Core v0.86.69), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
             "section_count": 2
           },
           {
@@ -12626,7 +12626,7 @@
         "type": "Frontend Contract"
       },
       "body_length": 3807,
-      "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.86.68 (Env App Core v0.86.68), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
+      "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.86.69 (Env App Core v0.86.69), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
       "sections": [
         {
           "id": "contract",
@@ -12655,7 +12655,7 @@
           "description": "Published source adapters retain navigation grants, user ownership and shared debugger identity."
         }
       ],
-      "snippet": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell. Pins are Floe Webapp Boot, Core, and Protocol v0.86.68 (Env App Core v0.86.6",
+      "snippet": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell. Pins are Floe Webapp Boot, Core, and Protocol v0.86.69 (Env App Core v0.86.6",
       "links": [
         {
           "label": "layout stability",
@@ -31319,7 +31319,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "composition",
           "editing",
@@ -31330,15 +31330,15 @@
         "title": "Workbench composition surfaces and editing",
         "type": "UI Contract"
       },
-      "body_length": 1754,
+      "body_length": 2236,
       "summary": "Published Floe owns composition rendering, direct editing, materials and anchored tools; Redeven owns localization, defaults and layout persistence. Native caret, selection and IME remain intact, with optional empty region names. Save/reopen preserves content, color, geometry and material; failed upgrades retain the prior supported layout.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Surfaces and tools\nPublished matte palettes own canvas/widget/header/selection colors across themes. Product adapters add no competing palette, preview or drag engine; adjacent-node changes retain responsive action geometry.\n\n## Editing\nPristine runtimes receive one English welcome canvas: two editable notes beside Files, Terminal and Monitoring in three unnamed regions. Existing layouts, including intentionally empty advanced revisions, never reseed. Published controls own placeholders; locale changes update copy.\n\n## Persistence\n`workbench_layout_runtime` schema v6 appends sticky-note title through contiguous 5→6 migration. Handlers use current schema; material equality changes trigger persistence.",
-          "char_count": 712
+          "body": "## Surfaces and tools\nPublished matte palettes own canvas/widget/header/selection colors across themes. Product adapters add no competing palette, preview or drag engine; adjacent-node changes retain responsive action geometry.\n\nThe published dark canvas uses a 0.21 OKLCH lightness floor. Porcelain Dark\nrenders #181819 around the retained #0C0C0D product body, including overview\nzoom. Widget headers, borders, shadows, grid and light canvases retain their\nexisting palette and geometry.\n\n## Editing\nPristine runtimes receive one English welcome canvas: two editable notes beside Files, Terminal and Monitoring in three unnamed regions. Existing layouts, including intentionally empty advanced revisions, never reseed. Published controls own placeholders; locale changes update copy.\n\n## Persistence\n`workbench_layout_runtime` schema v6 appends sticky-note title through contiguous 5→6 migration. Handlers use current schema; material equality changes trigger persistence.",
+          "char_count": 974
         },
         {
           "id": "boundaries",
@@ -31349,6 +31349,11 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx:0:published canvas/body colors at 35% and 100% zoom, shell palettes, localized editing and accessibility.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx",
+          "description": "Published canvas/body colors at 35% and 100% zoom, shell palettes, localized editing and accessibility."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts:0:english first-run content, non-overlapping region placement, and complete-scene laptop framing.",
           "source": "redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts",
@@ -31701,5 +31706,5 @@
       ]
     }
   ],
-  "source_sha256": "e4abf52124c8c08a365b8d1e1dec2d1ba647a9e42ded1629933653a1f36ded26"
+  "source_sha256": "0fe05ed31ce3cb844169b5a9a104e5e2659b4fba44b8615605d8643dac11b407"
 }
