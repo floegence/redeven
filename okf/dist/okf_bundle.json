@@ -15448,7 +15448,7 @@
         "title": "Plugin platform integration",
         "type": "Architecture Contract"
       },
-      "body_length": 3051,
+      "body_length": 3049,
       "summary": "Redeven mounts released ReDevPlugin through one Go Host, HTTP namespace, Env App client and surface scope. Published Process Supervisor runs a verified product-built Linux/Darwin runtime. Redeven adds authenticated sessions, source policy, placement and business adapters; upstream owns package, state, protocol, trust and execution. Missing or unproven identities fail closed.",
       "sections": [
         {
@@ -15480,8 +15480,8 @@
           "description": "Configures the released runtime manager and fixed version."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/scripts/fixtures/plugin-web-browser.ts:1:qualifies a backend-free package through actual center and gateway routes: native modules, worker, canvas, independent surfaces, unsaved close and forced invalidation. enable with `redeven_plugin_web_qualification=1` in the existing explicit browser qualifications; this does not certify worker backend execution.",
-          "source": "redeven:internal/envapp/ui_src/scripts/fixtures/plugin-web-browser.ts",
+          "id": "redeven:internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts:1:qualifies a backend-free package through actual center and gateway routes: native modules, worker, canvas, independent surfaces, unsaved close and forced invalidation. enable with `redeven_plugin_web_qualification=1` in the existing explicit browser qualifications; this does not certify worker backend execution.",
+          "source": "redeven:internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts",
           "line": 1,
           "description": "Qualifies a backend-free package through actual Center and Gateway routes: native modules, Worker, Canvas, independent surfaces, unsaved close and forced invalidation. Enable with `REDEVEN_PLUGIN_WEB_QUALIFICATION=1` in the existing explicit browser qualifications; this does not certify Worker backend execution."
         }
@@ -31696,5 +31696,5 @@
       ]
     }
   ],
-  "source_sha256": "9e64e53a1983fd0140f56ab04611062e99cf8629982481b8e6fb5596f99128b4"
+  "source_sha256": "da54b62d04d5582e7ecfc6bedbddcf302f0786b6d6ef9153482580a7608b9519"
 }

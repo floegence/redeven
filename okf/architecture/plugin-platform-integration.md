@@ -33,4 +33,4 @@ A surface opens through the released Web SDK using an origin prepared by its pro
 
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
 
-- `redeven:internal/envapp/ui_src/scripts/fixtures/plugin-web-browser.ts:1` - Qualifies a backend-free package through actual Center and Gateway routes: native modules, Worker, Canvas, independent surfaces, unsaved close and forced invalidation. Enable with `REDEVEN_PLUGIN_WEB_QUALIFICATION=1` in the existing explicit browser qualifications; this does not certify Worker backend execution.
+- `redeven:internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts:1` - Qualifies a backend-free package through actual Center and Gateway routes: native modules, Worker, Canvas, independent surfaces, unsaved close and forced invalidation. Enable with `REDEVEN_PLUGIN_WEB_QUALIFICATION=1` in the existing explicit browser qualifications; this does not certify Worker backend execution.
