@@ -93,7 +93,7 @@ export type PluginSurfacePlacementCoordinator = Readonly<{
   ) => Promise<PluginSurfaceHost>;
   setVisible: (slot: PluginSurfaceSlot, visible: boolean) => void;
   fail: (slot: PluginSurfaceSlot, error: Error) => Promise<void>;
-  release: (slot: PluginSurfaceSlot) => Promise<void>;
+  release: (slot: PluginSurfaceSlot, options?: Readonly<{ alreadyClosed: boolean }>) => Promise<void>;
   closePlugin: (pluginInstanceID: string) => Promise<void>;
   invalidatePlugin: (pluginInstanceID: string) => Promise<void>;
   invalidateAll: () => Promise<void>;
@@ -114,6 +114,7 @@ type RegisteredPluginSurfaceSlot = {
 
 export function createPluginSurfacePlacementCoordinator(
   client: PluginPlatformClient,
+  prepareWebOrigin?: PluginOpenSurfaceInSlotOptions['prepareWebOrigin'],
 ): PluginSurfacePlacementCoordinator {
   const entries = new Map<PluginSurfaceSlot, RegisteredPluginSurfaceSlot>();
   let disposed = false;
@@ -223,6 +224,7 @@ export function createPluginSurfacePlacementCoordinator(
       try {
         const host = await client.openSurfaceInSlot(slot, request, {
           onFileExport: downloadPluginSurfaceFile,
+          prepareWebOrigin,
           ...openOptions,
           signal: entry.opening.signal,
         });
@@ -271,9 +273,13 @@ export function createPluginSurfacePlacementCoordinator(
       }
       return retire(current);
     },
-    release(slot) {
+    release(slot, options) {
       cancelledSlots.add(slot);
       const current = entries.get(slot);
+      if (current && options?.alreadyClosed) {
+        current.status = 'retiring';
+        current.closeCompleted = true;
+      }
       current?.opening.abort('plugin surface owner released');
       if (current) return retire(current);
       return disposeInactiveSlot(slot);

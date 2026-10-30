@@ -4,7 +4,7 @@ title: Plugin platform integration security
 tags: [security, plugins, permissions, local-ui]
 quality_exception: Cross-domain plugin security contract spanning authenticated identity, package provenance, execution, updates, routes, runtime isolation, and capability authority.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -51,6 +51,12 @@ Runtime descriptors bind version, target, IPC, WASM ABI, and artifact hash. Darw
 Plugin business adapters are invoked only after ReDevPlugin resolves lifecycle, permission, confirmation, lease, quota, revocation, and audit context. Product code cannot bypass that chain.
 
 Raw adapter errors, tokens, secrets, cookies, query strings, absolute paths, and complete URLs are not copied into public or durable diagnostic detail.
+
+## Plugin Web isolation
+
+Plugin documents use a distinct product-allocated origin and the published Web surface handler. Local UI and AppServer strip parent authentication before delegating child traffic. Desktop verifies the actual requesting frame origin before attaching private bridge credentials. Center binds child routes to an authenticated parent and cancels derived preparation on revocation; Gateway accepts only the expected child namespace and target.
+
+The application owns its DOM and browser rendering. These freedoms do not grant product session, filesystem, process, credential or management authority. The released platform remains responsible for asset sessions, bridge binding, permissions and revocation.
 
 # Boundaries
 

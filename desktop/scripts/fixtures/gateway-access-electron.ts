@@ -84,6 +84,11 @@ void app.whenReady().then(async () => {
     cases.push('stable logical HTTPS origin, MFA and secure HttpOnly cookie without global certificate exceptions');
     const runtimeVerification = readFileSync(path.join(output, 'runtime-browser.js'), 'utf8');
     cases.push(...await secure.window.webContents.executeJavaScript(`${runtimeVerification}\nGatewayAcceptance.verifyRuntimeServices()`));
+    if (process.env.REDEVEN_PLUGIN_WEB_QUALIFICATION === '1') {
+      const pluginBrowser = readFileSync(path.join(output, 'plugin-web.js'), 'utf8');
+      const packageBytes = readFileSync(path.join(output, 'web-application.redevplugin')).toString('base64');
+      cases.push(...await secure.window.webContents.executeJavaScript(`${pluginBrowser}\nPluginWebAcceptance.verifyPluginWebApplication(${JSON.stringify(packageBytes)}, false)`));
+    }
     const forward = await call(secure, '/_redeven_proxy/api/forwards', { target: fixture.webService, name: 'Gateway web service' });
     assert.equal(forward.status, 200);
     const forwardPath = `/pf/${forward.body.data.forward_id}/`;

@@ -6862,6 +6862,9 @@
         "committing": "Plugin-Inhalt wird geladen…"
       },
       "closingSurface": "Plugin-Oberfläche wird geschlossen...",
+      "closeUnresponsiveTitle": "Nicht reagierendes Plugin schließen?",
+      "closeUnresponsiveDescription": "Das Plugin reagiert nicht. Beim Schließen können ungespeicherte Änderungen verloren gehen.",
+      "closeAnyway": "Trotzdem schließen",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - Plugin-Inhalt für {surface}",
       "iframeUnavailable": "Das Plugin-Iframe ist nicht verfügbar.",
@@ -7006,8 +7009,8 @@
         "executionApproval": "Genehmigung",
         "updateMode": "Aktualisierungsmodus",
         "reviewHighlights": "Prüfschwerpunkte",
-        "requestedAccessTitle": "Was dieses Plugin tun kann",
-        "requestedAccessGuidance": "Prüfen Sie den unten vom Host verifizierten Zugriff. Mit Installieren werden zulässige erforderliche Berechtigungen erteilt und das Plugin aktiviert; von Richtlinien blockierter Zugriff bleibt verweigert.",
+        "requestedAccessTitle": "Zugriff",
+        "requestedAccessGuidance": "Prüfen Sie vor der Installation die angeforderten Zugriffe.",
         "requestedPermissions": "Geschützter Zugriff",
         "localProcessAccess": "Kann lokale Prozesse starten",
         "localProcessAccessGuidance": "Das Plugin kann vom Benutzer konfigurierte Programme starten und über Standard-Ein-, -Ausgabe und -Fehlerströme kommunizieren. Prüfen Sie Konfiguration und Prozessberechtigung vor dem Fortfahren.",
@@ -7070,7 +7073,7 @@
           "one": "Im vollständigen Prüfbericht ist {count} weitere Standarddeklaration verfügbar.",
           "other": "Im vollständigen Prüfbericht sind {count} weitere Standarddeklarationen verfügbar."
         },
-        "fullInspectionReport": "Vollständiger Prüfbericht",
+        "fullInspectionReport": "Paketdetails",
         "reportChanges": {
           "one": "{count} Änderung",
           "other": "{count} Änderungen"
@@ -7083,7 +7086,7 @@
         "manifestHash": "SHA-256 des Manifests",
         "entriesHash": "SHA-256 der Einträge",
         "declaredAccess": "Deklarierter Zugriff",
-        "declaredAccessGuidance": "Bei einer Erstinstallation erteilt der Host die von der Richtlinie zugelassenen erforderlichen Berechtigungen und aktiviert das Plugin. Prüfen Sie zuvor Worker-Code, externe Verbindungen, Secrets und Schreibvorgänge.",
+        "declaredAccessGuidance": "Die Installation erteilt keine Berechtigungen. Verwalten Sie den Zugriff anschließend.",
         "declaredAccessUpdateGuidance": "Bei einer Aktualisierung bleiben der vom Host verwaltete Aktivierungsstatus und bestehende Berechtigungsfreigaben erhalten, ohne dass neue hinzukommen. Prüfen Sie, was das geprüfte Paket anfordern kann – insbesondere Worker-Code, externe Verbindungen, Secrets und Schreibvorgänge.",
         "noDeclaredAccess": "Dieses Paket deklariert keine Plugin-Funktionen oder Zugriffe.",
         "reviewCarefully": "Sorgfältig prüfen",
@@ -7128,17 +7131,20 @@
         "executionApprovalPolicyApproved": "Durch Richtlinie genehmigt",
         "executionApprovalPolicyBlocked": "Durch Richtlinie blockiert",
         "confirmDigest": "Ich bestätige genau dieses geprüfte Paket und seinen deklarierten Zugriff.",
-        "confirmInstallTitle": "Installation dieses Plugin-Pakets bestätigen",
-        "confirmUpdateTitle": "Diese Plugin-Aktualisierung bestätigen",
-        "confirmReinstallTitle": "Neuinstallation genau dieses Pakets bestätigen",
-        "confirmReplaceTitle": "Ersetzen des installierten Pakets bestätigen",
-        "confirmInstallCheckedTitle": "Installation des geprüften Pakets bestätigen",
+        "confirmInstallTitle": "Ich bestätige die Installation",
+        "confirmUpdateTitle": "Ich bestätige dieses Update",
+        "confirmReinstallTitle": "Ich bestätige die Neuinstallation dieses Pakets",
+        "confirmReplaceTitle": "Ich bestätige das Ersetzen des installierten Pakets",
+        "confirmInstallCheckedTitle": "Ich bestätige dieses geprüfte Paket",
         "loadingInstallTitle": "Plugin-Informationen werden abgerufen",
         "loadingInstallDescription": "Die Paketdetails werden abgerufen und überprüft. Vor der Installation können Sie den Zugriff prüfen.",
         "confirmInstallGuidance": "Mit der Installation bestätigen Sie dieses exakte Paket und seinen deklarierten Zugriff. Der Host erteilt zulässige erforderliche Berechtigungen und aktiviert das Plugin; blockierter Zugriff wird sicher abgelehnt.",
         "confirmUpdateGuidance": "Sie bestätigen genau diese Prüfung und den deklarierten Zugriff. Der Host behält den aktuellen Aktivierungsstatus und die bestehenden Berechtigungsfreigaben bei und fügt nicht automatisch neue hinzu.",
         "currentStateRetained": "Aktueller Status bleibt erhalten",
-        "noNewPermissionGrants": "Keine neuen Berechtigungsfreigaben"
+        "noNewPermissionGrants": "Keine neuen Berechtigungsfreigaben",
+        "accessNetwork": "Verbindung zu",
+        "accessStorage": "Eigene gespeicherte Daten nutzen",
+        "accessCredential": "Gespeicherte Zugangsdaten nutzen"
       }
     },
     "pluginRuntime": {

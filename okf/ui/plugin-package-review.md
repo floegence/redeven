@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin package review
 tags: [ui, plugins, review, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -22,6 +22,18 @@ Closing completion preserves the Updates tab, clears obsolete exact selection, a
 Administrators may start installation or update from a compatible public HTTPS package URL, public GitHub repository Release with optional tag, or local `.redevplugin` file. The product submits the source and intent to the released inspection API; it never downloads remote bytes in the browser, parses the package, chooses trust state, or invents provenance.
 
 A refresh failure after a terminal install exposes only an inventory refresh recovery and never a second install action.
+
+## Concise decision surface
+
+The external review leads with Host-verified, locale-resolved author presentation, publisher and version. Package identifiers are technical evidence, not substitute product names when presentation exists. Verified identity is a quiet inline state; only unverified, blocked or revoked assessments receive a warning. The visual four-step timeline and generic introductory description are omitted; progress remains available to assistive technology.
+
+Before consent, concrete destinations, requested host permissions, credentials, processes, background activity and host-facing methods remain visible. Ordinary worker methods and plugin-owned storage operations do not become broad "delete content" permission counters. Explicitly dangerous and unknown effects remain visible regardless of route. Full declarations, diffs, source evidence, hashes and inspection binding remain under a keyboard-operable package-details disclosure.
+
+Network destinations share one access heading, with update changes marked beside the affected destination. Storage, process and background changes remain visible on their access rows. Removed declarations remain available in the full report.
+
+One short checkbox confirms the exact inspected package. Signature validity never substitutes for consent. The review cannot claim that installation or grants already occurred; completion cannot infer permission grants from enabled state. Unknown outcomes preserve the inspection identity and reconciliation behavior. Long names and translations wrap, mobile controls retain touch targets, and footer actions remain visible.
+
+External package installation does not grant permissions. Its detail copy states that access is managed after installation; the separate official-install approval flow retains its existing reviewed-permission contract.
 
 # Boundaries
 

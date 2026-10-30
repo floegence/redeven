@@ -89,6 +89,10 @@ describe.runIf(process.env.REDEVEN_GATEWAY_INTEROP === '1')('Gateway Go/Node rev
       });
       expect(await connect('public.example:443', true)).toBe(403);
       expect(await connect(`${new URL(owner.origin).hostname}:443`, false)).toBe(407);
+      const pluginHost = `${'a'.repeat(48)}.${new URL(owner.origin).hostname}`;
+      expect(await connect(`${pluginHost}:443`, true)).toBe(200);
+      expect(await connect(`other.${new URL(owner.origin).hostname}:443`, true)).toBe(403);
+      expect(await fetch(`https://${pluginHost}/app`)).toBe('plugin-resource-content');
       phase = 'streaming request';
       const streaming = https.get(new URL('/stream', owner.origin), { agent: owner.agent });
       const [stream] = await once(streaming, 'response');

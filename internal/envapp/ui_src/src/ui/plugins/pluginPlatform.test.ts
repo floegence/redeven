@@ -50,6 +50,7 @@ function createHost(id: string, order?: string[]): PluginSurfaceHost {
     surfaceInstanceId: id,
     sendLifecycle: vi.fn((event) => order?.push(`lifecycle:${event.type}`)),
     updateContext: vi.fn(),
+    requestClose: vi.fn(async () => ({ quiesce: { outcome: 'acknowledged' as const, durationMs: 1 }, revokeDurationMs: 1, totalDurationMs: 2 })),
     close: vi.fn(async () => ({
       quiesce: { outcome: 'acknowledged' as const, durationMs: 1 },
       revokeDurationMs: 1,
@@ -316,6 +317,17 @@ describe('createPluginSurfacePlacementCoordinator', () => {
       'second:close',
       'second:dispose',
     ]);
+  });
+
+  it('disposes an acknowledged user close without repeating lifecycle or revocation', async () => {
+    const order: string[] = [];
+    const slot = createSlot(order, 'closed');
+    const coordinator = createPluginSurfacePlacementCoordinator(createClient(async () => createHost('surface', order)));
+    coordinator.setVisible(slot, true);
+    await coordinator.open(slot, request);
+    await coordinator.release(slot, { alreadyClosed: true });
+    expect(order).toEqual(['lifecycle:visible', 'closed:dispose']);
+    expect(slot.close).not.toHaveBeenCalled();
   });
 
   it('retires a terminal SDK surface without publishing lifecycle to its disposed host', async () => {

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Independent Web Environment Center
 tags: [architecture, desktop, gateway, web]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -38,6 +38,12 @@ A live control connection owns each worker lease. Center loss, logout or securit
 IPC preserves bounded machine error codes so permission, capacity, compatibility and offline failures retain shared recovery semantics. Runtime responses cannot inject worker error authority. The published connection controller owns retry timing; only explicit transient Gateway admission conflicts are retryable, while denied/revoked identity and invalid proofs remain terminal.
 
 Services, editor and graphical viewers receive resource-specific origins. Parent Runtime credentials stay in the trusted proxy and never reach child browsers. Editor admission pins the running instance. Raw graphical routes cannot bypass resource-scoped Flowersec. Child responses retain authenticated Runtime framing policy so editor worker iframes work; portal framing remains denied.
+
+## Plugin application origins
+
+Center prepares and revokes plugin origins through authenticated parent-route operations. Pending preparations and active origins share bounded capacity. A concurrent preparation for the same origin is busy; failed or canceled probes release their reservation. DELETE cancels and fences an in-flight preparation so a delayed probe cannot resurrect a revoked route or overwrite a reopened generation.
+
+Each child origin retains its exact parent route and Runtime admission. Child requests cannot call Center management APIs. Gateway certificates cover the admitted child-origin namespace, and CONNECT routing validates the exact Runtime target. Desktop private transport attaches parent bridge credentials only for the trusted parent frame.
 
 # Boundaries
 

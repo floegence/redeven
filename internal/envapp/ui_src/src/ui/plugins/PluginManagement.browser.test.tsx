@@ -583,6 +583,7 @@ function browserInspection(): ExternalPluginInspection {
       workers: [],
       network: [{
         connector_id: 'github-api',
+        configurable: false, surface_access: [],
         transport: 'http',
         scope: 'user',
         destinations: ['api.github.com:443'],
@@ -620,6 +621,7 @@ function browserCoordinator(): PluginSurfacePlacementCoordinator {
         surfaceInstanceId: 'surface_browser_activity',
         sendLifecycle: () => undefined,
         updateContext: () => undefined,
+        requestClose: async () => ({ quiesce: { outcome: 'acknowledged' as const, durationMs: 0 }, revokeDurationMs: 0, totalDurationMs: 0 }),
         close: async () => ({
           quiesce: { outcome: 'acknowledged', durationMs: 0 },
           revokeDurationMs: 0,
@@ -1474,19 +1476,10 @@ describe('plugin management browser geometry and interaction', () => {
       expect(sourceTabs[index - 1].getBoundingClientRect().right)
         .toBeLessThanOrEqual(sourceTabs[index].getBoundingClientRect().left + 1);
     }
-    const segments = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-segment]'));
-    const nodes = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-node]'));
-    const track = dialog.querySelector<HTMLElement>('[data-install-progress-track]')!;
-    expect(segments).toHaveLength(4);
-    expect(nodes).toHaveLength(4);
-    expect(dialog.querySelector('[data-install-progress-current]')?.textContent).toBe('Plugin source');
-    expect(dialog.querySelector('[data-install-progress]')?.textContent).toContain('Step 1 of 4');
-    segments.forEach(expectNoHorizontalOverflow);
-    const trackRect = track.getBoundingClientRect();
-    const firstNodeRect = nodes[0].getBoundingClientRect();
-    const lastNodeRect = nodes[nodes.length - 1].getBoundingClientRect();
-    expect(Math.abs(trackRect.left - (firstNodeRect.left + firstNodeRect.width / 2))).toBeLessThanOrEqual(1);
-    expect(Math.abs(trackRect.right - (lastNodeRect.left + lastNodeRect.width / 2))).toBeLessThanOrEqual(1);
+    const progress = dialog.querySelector<HTMLElement>('[data-install-progress]')!;
+    expect(progress.textContent).toContain('Step 1 of 4');
+    expect(progress.getBoundingClientRect().height).toBeLessThanOrEqual(1);
+    expect(dialog.querySelector('[data-install-progress-track]')).toBeNull();
     if (viewport.width === 320) {
       expectTouchTargets([
         ...sourceTabs,
@@ -1495,6 +1488,45 @@ describe('plugin management browser geometry and interaction', () => {
           .filter((button) => button.getAttribute('role') !== 'tab'),
       ]);
     }
+  });
+
+  it.each([
+    { width: 1280, height: 900, theme: 'light' },
+    { width: 1280, height: 900, theme: 'dark' },
+    { width: 390, height: 844, theme: 'light' },
+    { width: 390, height: 844, theme: 'dark' },
+  ])('keeps a verified application review concise at $width px in $theme', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    document.documentElement.classList.add(viewport.theme);
+    const inspection = browserInspection();
+    inspection.signature_assessment.state = 'verified';
+    inspection.presentation = {
+      default_locale: 'en-US', locales: [{
+        locale: 'en-US', plugin_name: 'Weather', publisher_name: 'Example Publisher',
+        summary: 'Weather', description: ['Weather'], highlights: [], keywords: ['weather'], surfaces: [], settings: [],
+      }],
+    };
+    inspection.security_summary.network = ['forecast.example.com:443', 'search.example.com:443'].map((destination, index) => ({
+      connector_id: 'weather-' + index, configurable: false, surface_access: [], transport: 'http', scope: 'user',
+      destinations: [destination], auth_declared: false, tls_declared: true, method_access: [],
+    }));
+    inspection.security_summary.storage = [{ store_id: 'weather', kind: 'kv', scope: 'user', schema_version: 1, quota_bytes: 1024, method_access: [] }];
+    mountExternalDialog(async () => inspection);
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await userEvent.fill(dialog.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://plugins.example.com/weather.redevplugin');
+    dialog.querySelector<HTMLButtonElement>('[data-external-plugin-inspect]')!.click();
+    await settle();
+    expectInsideViewport(dialog, viewport);
+    expectNoHorizontalOverflow(dialog);
+    expect(dialog.querySelector('[data-external-plugin-identity]')?.textContent).toContain('Weather');
+    expect(dialog.querySelector('[data-external-plugin-identity]')?.textContent).not.toContain(inspection.plugin_id);
+    expect(dialog.querySelector('[data-external-plugin-access-summary]')?.textContent?.match(/Connect to/g)).toHaveLength(1);
+    const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    expect(report.open).toBe(false);
+    expectInsideViewport(dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!, viewport);
+    expect(dialog.getBoundingClientRect().height).toBeLessThan(viewport.height * 0.8);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
   it.each(viewportCases)('keeps the external install review contained at $width px', async (viewport) => {
@@ -1516,11 +1548,11 @@ describe('plugin management browser geometry and interaction', () => {
     expect(trustReview.textContent).toContain('Confirm this package source');
     expect(trustReview.textContent).not.toContain('Waiting for your approval');
     expect(highlights.textContent).toContain('api.github.com:443');
-    expect(highlights.textContent).toContain('What this plugin can do');
-    expect(highlights.textContent).toContain('Other access to review');
+    expect(highlights.textContent).toContain('Access');
+    expect(highlights.textContent).not.toContain('Other access to review');
     expect(highlights.textContent).not.toContain('declares no plugin capabilities or access');
     expect(report.open).toBe(false);
-    expect(document.activeElement).toBe(trustReview);
+    expect(document.activeElement).toBe(trustReview.querySelector('[data-external-plugin-review-heading]'));
     expect(footer.contains(consent)).toBe(true);
     expectInsideViewport(dialog, viewport);
     expectNoHorizontalOverflow(consent);
@@ -1559,7 +1591,7 @@ describe('plugin management browser geometry and interaction', () => {
     const reportSummary = report.querySelector<HTMLElement>('summary')!;
     const footer = dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!;
     expect(document.documentElement.lang).toBe('de-DE');
-    expect(document.activeElement).toBe(trustReview);
+    expect(document.activeElement).toBe(trustReview.querySelector('[data-external-plugin-review-heading]'));
     expectInsideViewport(dialog, viewport);
     [dialog, trustReview, highlights, report, footer].forEach(expectNoHorizontalOverflow);
 

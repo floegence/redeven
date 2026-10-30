@@ -143,7 +143,7 @@ const generatedMetricsRecord: ReDevPluginRecord = {
     presentation: { locales: { default: 'en-US' } },
     surfaces: [{
       surface_id: 'metrics.dashboard', kind: 'view', intent: 'primary',
-      label: examplePlugin.displayName, entry: 'ui/index.html',
+      label: examplePlugin.displayName, entry: 'ui/index.html', web: { root: 'ui', spa: false },
     }],
     workers: [],
     methods: [],

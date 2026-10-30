@@ -22,8 +22,8 @@ import (
 )
 
 func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("the production plugin runtime is Linux-only")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("the production plugin runtime requires Linux or macOS")
 	}
 	runtimePath := os.Getenv("REDEVEN_TEST_PLUGIN_RUNTIME")
 	packagePath := os.Getenv("REDEVEN_TEST_PLUGIN_PACKAGE")
@@ -86,6 +86,7 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 	resolved.CanRead = meta.CanRead && permissionCap.Read
 	resolved.CanWrite = meta.CanWrite && permissionCap.Write
 	ctx := sessionctx.WithContext(context.Background(), resolved)
+	ctx = context.WithValue(ctx, trustedOriginContextKey{}, "https://env.example.test")
 	target, err := runtimetarget.Current()
 	if err != nil {
 		t.Fatal(err)
@@ -144,7 +145,6 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 		SurfaceInstanceID: bootstrap.SurfaceInstanceID, ActiveFingerprint: bootstrap.ActiveFingerprint,
 		BridgeNonce: bootstrap.BridgeNonce, AssetSessionNonce: prepared.AssetSessionNonce,
 		ManagementRevision: bootstrap.ManagementRevision, RevokeEpoch: bootstrap.RevokeEpoch,
-		UIProtocolVersion: bootstrap.UIProtocolVersion,
 	}
 	gateway, err := integration.host.MintBridgeToken(ctx, host.MintBridgeTokenRequest{
 		Handshake: handshake, BridgeChannelID: bridgeChannelID,

@@ -1,5 +1,6 @@
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import { build } from 'esbuild';
+import { buildPluginWebQualification } from '../../scripts/build_plugin_web_qualification.mjs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -19,6 +20,10 @@ await session.run(async () => {
   await mkdir(output, { recursive: true });
   await rm(path.join(output, 'report.json'), { force: true });
   const runner = path.join(output, 'runner.cjs');
+  if (process.env.REDEVEN_PLUGIN_WEB_QUALIFICATION === '1') {
+    await buildPluginWebQualification(output);
+    await build({ entryPoints: [path.join(root, '../internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts')], outfile: path.join(output, 'plugin-web.js'), bundle: true, platform: 'browser', format: 'iife', globalName: 'PluginWebAcceptance' });
+  }
   await build({
     entryPoints: [path.join(root, 'scripts/fixtures/gateway-runtime-browser.ts')],
     outfile: path.join(output, 'runtime-browser.js'),

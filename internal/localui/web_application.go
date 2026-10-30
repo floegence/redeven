@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/codeapp/appserver"
+	"github.com/floegence/redeven/internal/pluginorigin"
 	"github.com/floegence/redeven/internal/webbinding"
 )
 
@@ -30,6 +31,9 @@ func (s *Server) handleWebApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	kind, id := parts[0], parts[1]
 	origin, err := webbinding.ApplicationOrigin(lease.Binding.Origin, kind, id)
+	if kind == "plugin" {
+		origin, err = pluginorigin.Child(lease.Binding.Origin, id)
+	}
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -77,6 +81,10 @@ func (s *Server) handleWebApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next = next.WithContext(lifetime)
+	if kind == "plugin" {
+		s.servePluginWebSurface(w, next, origin)
+		return
+	}
 	if kind == "cs" {
 		binding, ok := s.appServer.LocalNativeCodeSpaceBinding(w, r, id)
 		if !ok {

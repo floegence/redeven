@@ -12,7 +12,7 @@
     "icon": { "path": "assets/icon.png" },
     "locales": { "default": "en-US" }
   },
-  "surfaces": [{ "surface_id": "io.view", "kind": "view", "intent": "primary", "label": "I/O smoke", "entry": "ui/index.html", "default_size": { "width": 900, "height": 650 } }],
+  "surfaces": [{ "surface_id": "io.view", "kind": "view", "intent": "primary", "label": "I/O smoke", "entry": "ui/index.html", "web": { "root": "ui", "spa": false }, "default_size": { "width": 900, "height": 650 } }],
   "workers": [{ "worker_id": "io_worker", "artifact": "workers/io.wasm", "mode": "job", "scope": "environment", "memory_limit_bytes": 268435456 }],
   "methods": [
     {

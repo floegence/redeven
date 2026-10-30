@@ -9,6 +9,7 @@ import { AlertTriangle, Copy, Loader2, Refresh } from '@floegence/floe-webapp-co
 import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
+import { ConfirmDialog } from '../primitives/EnvAppModal';
 import type { PluginConfirmationOwner, PluginConfirmationQueue } from './PluginConfirmationQueue';
 import type { PluginSurfaceInteractionEvent, PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import { createRedevenPluginSurfaceContext, pluginSurfaceContextFingerprint } from './pluginSurfaceContext';
@@ -50,6 +51,26 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const [errorCode, setErrorCode] = createSignal('');
   const [copyState, setCopyState] = createSignal<'idle' | 'copied' | 'failed'>('idle');
   const [cleanupPending, setCleanupPending] = createSignal(false);
+  const [closeReason, setCloseReason] = createSignal<'unsaved' | 'unresponsive'>();
+  let settleCloseConfirmation: ((accepted: boolean) => void) | undefined;
+  const confirmClose = (request: { reason: 'unsaved' | 'unresponsive'; signal: AbortSignal }): Promise<boolean> => {
+    settleCloseConfirmation?.(false);
+    if (!mounted || request.signal.aborted || !props.visible || !pageVisible()) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const cancel = () => finish(false);
+      const finish = (accepted: boolean) => {
+        request.signal.removeEventListener('abort', cancel);
+        if (settleCloseConfirmation === finish) {
+          settleCloseConfirmation = undefined;
+          setCloseReason(undefined);
+        }
+        resolve(accepted);
+      };
+      settleCloseConfirmation = finish;
+      setCloseReason(request.reason);
+      request.signal.addEventListener('abort', cancel, { once: true });
+    });
+  };
   const diagnostic = () => surfaceFailureDiagnostic(errorCode(), openingFailure());
   const confirmationOwner: PluginConfirmationOwner = {
     pluginID: props.target.pluginID,
@@ -75,6 +96,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     setOpeningFailure(surfaceOpeningFeedback('details' in firstTerminalError ? firstTerminalError.details : undefined));
     setOpeningProgress(undefined);
     setLoadState('error');
+    settleCloseConfirmation?.(false);
     setErrorMessage(firstTerminalError.message || code || i18n.t('uiCopy.plugin.surfaceFailed'));
     return { error: firstTerminalError, first };
   };
@@ -98,6 +120,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       expected_management_revision: props.target.expectedManagementRevision,
     }, {
       confirm: props.confirmationQueue.createHandler(confirmationOwner),
+      confirmClose,
       onInteraction: props.onInteraction,
       onCleanupError: props.onRetirementError,
       surfaceContext: currentSurfaceContext,
@@ -148,6 +171,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
 
     onCleanup(() => {
       mounted = false;
+      settleCloseConfirmation?.(false);
       props.registerClose?.(null);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       themeObserver?.disconnect();
@@ -171,7 +195,10 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   createEffect(() => {
     const visible = props.visible && pageVisible();
     if (slot) props.coordinator.setVisible(slot, visible);
-    if (!visible) props.confirmationQueue.cancelOwner(confirmationOwner);
+    if (!visible) {
+      props.confirmationQueue.cancelOwner(confirmationOwner);
+      settleCloseConfirmation?.(false);
+    }
   });
 
   createEffect(() => {
@@ -186,16 +213,27 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const closeSurface = async () => {
     if (!slot) return false;
     if (closePromise) return closePromise;
+    const ownedSlot = slot;
+    const openedHost = host();
     closePromise = (async () => {
       setLoadState('closing');
       setErrorMessage('');
       props.confirmationQueue.cancelOwner(confirmationOwner);
       try {
-        await props.coordinator.release(slot!);
+        const requestedClose = openedHost && !firstTerminalError;
+        if (requestedClose && !await openedHost.requestClose()) {
+          if (mounted && slot === ownedSlot && !firstTerminalError) setLoadState('ready');
+          closePromise = undefined;
+          return false;
+        }
+        if (!mounted || slot !== ownedSlot) return false;
+        await props.coordinator.release(ownedSlot, { alreadyClosed: Boolean(requestedClose) });
         return true;
       } catch (error) {
-        setLoadState('error');
-        setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+        if (mounted && slot === ownedSlot) {
+          setLoadState('error');
+          setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+        }
         closePromise = undefined;
         return false;
       }
@@ -313,6 +351,16 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
           )}
         />
       </div>
+      <ConfirmDialog
+        open={closeReason() !== undefined}
+        onOpenChange={(open) => { if (!open) settleCloseConfirmation?.(false); }}
+        title={i18n.t(closeReason() === 'unresponsive' ? 'uiCopy.plugin.closeUnresponsiveTitle' : 'filePreview.discardUnsavedTitle')}
+        bodyDescription={i18n.t(closeReason() === 'unresponsive' ? 'uiCopy.plugin.closeUnresponsiveDescription' : 'filePreview.discardUnsavedDescription')}
+        confirmText={i18n.t(closeReason() === 'unresponsive' ? 'uiCopy.plugin.closeAnyway' : 'filePreview.discardChanges')}
+        cancelText={i18n.t('common.actions.cancel')}
+        variant="destructive"
+        onConfirm={() => settleCloseConfirmation?.(true)}
+      />
     </section>
   );
 }

@@ -45,20 +45,22 @@ type accessSession struct {
 	requests  int
 }
 type webAccess struct {
-	mu              sync.Mutex
-	center          *Center
-	operations      map[string]*openOperation
-	access          map[string]*accessSession
-	closed          bool
-	requests        int
-	deviceRequests  map[string]int
-	validateOrigin  func(string) error
-	connectorSocket string
-	connectorUID    int
+	mu                 sync.Mutex
+	center             *Center
+	operations         map[string]*openOperation
+	access             map[string]*accessSession
+	pluginRoutes       map[string]*accessSession
+	pluginPreparations map[string]*pluginOriginPreparation
+	closed             bool
+	requests           int
+	deviceRequests     map[string]int
+	validateOrigin     func(string) error
+	connectorSocket    string
+	connectorUID       int
 }
 
 func newWebAccess(c *Center) *webAccess {
-	return &webAccess{center: c, operations: map[string]*openOperation{}, access: map[string]*accessSession{}, deviceRequests: map[string]int{}}
+	return &webAccess{center: c, operations: map[string]*openOperation{}, access: map[string]*accessSession{}, pluginRoutes: map[string]*accessSession{}, pluginPreparations: map[string]*pluginOriginPreparation{}, deviceRequests: map[string]int{}}
 }
 func (a *webAccess) open(token, routeID, requestID string) (openOperation, error) {
 	if len(requestID) < 16 || len(requestID) > 100 {
@@ -219,6 +221,18 @@ func (a *webAccess) open(token, routeID, requestID string) (openOperation, error
 // releaseLocked removes admission capabilities immediately; a short operation
 // tombstone retains the original outcome for same-request retries.
 func (a *webAccess) releaseLocked(op *openOperation) {
+	for origin, preparation := range a.pluginPreparations {
+		if preparation.parent == op {
+			preparation.cancel()
+			delete(a.pluginPreparations, origin)
+		}
+	}
+	for origin, access := range a.pluginRoutes {
+		if access.operation == op || access.operation.parent == op {
+			access.operation.cancel()
+			delete(a.pluginRoutes, origin)
+		}
+	}
 	for key, access := range a.access {
 		if access.operation == op {
 			delete(a.access, key)
@@ -374,13 +388,17 @@ func (a *webAccess) finish(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, destination, http.StatusSeeOther)
 }
 func (a *webAccess) serve(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(accessCookie)
-	if err != nil {
-		http.Error(w, "CENTER_ACCESS_REQUIRED", http.StatusUnauthorized)
-		return
-	}
 	a.mu.Lock()
-	access := a.access[digest(cookie.Value)]
+	access := a.pluginRoutes["https://"+r.Host]
+	if access == nil {
+		cookie, err := r.Cookie(accessCookie)
+		if err != nil {
+			a.mu.Unlock()
+			http.Error(w, "CENTER_ACCESS_REQUIRED", http.StatusUnauthorized)
+			return
+		}
+		access = a.access[digest(cookie.Value)]
+	}
 	if access == nil || access.ctx.Err() != nil || access.operation.route.Origin != "https://"+r.Host {
 		a.mu.Unlock()
 		http.Error(w, "CENTER_ACCESS_EXPIRED", http.StatusUnauthorized)
@@ -407,9 +425,17 @@ func (a *webAccess) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		a.mu.Unlock()
 	}()
-	if _, err = a.center.Session(op.session); err != nil {
+	if _, err := a.center.Session(op.session); err != nil {
 		op.cancel()
 		http.Error(w, "CENTER_ACCESS_EXPIRED", http.StatusUnauthorized)
+		return
+	}
+	if op.appKind == "plugin" && strings.HasPrefix(r.URL.Path, "/__center/") {
+		http.Error(w, "CENTER_ORIGIN_DENIED", http.StatusForbidden)
+		return
+	}
+	if r.URL.Path == "/__center/plugin-origins" {
+		a.pluginOrigin(w, r, op)
 		return
 	}
 	if r.URL.Path == "/__center/applications" {

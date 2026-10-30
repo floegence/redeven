@@ -7,10 +7,9 @@ export const surfaceOpeningStageKeys = {
   connecting: 'uiCopy.plugin.openingStages.connecting',
   authorizing: 'uiCopy.plugin.openingStages.authorizing',
   initializing: 'uiCopy.plugin.openingStages.initializing',
-  committing: 'uiCopy.plugin.openingStages.committing',
 } as const satisfies Record<PluginSurfaceOpeningStage, string>;
 
-const milestones: ReadonlySet<string> = new Set<PluginSurfaceOpeningMilestone>(['frame_load', 'prepare', 'port_ack', 'token', 'renderer_ready', 'worker_ready', 'first_commit']);
+const milestones: ReadonlySet<string> = new Set<PluginSurfaceOpeningMilestone>(['prepare', 'origin', 'entry_ready', 'port_ack', 'token', 'app_ready']);
 
 export type SurfaceOpeningFeedback = Readonly<Pick<PluginSurfaceOpeningProgress, 'stage' | 'elapsedMs' | 'stageElapsedMs'>> & Readonly<{
   pendingMilestones: readonly PluginSurfaceOpeningMilestone[];

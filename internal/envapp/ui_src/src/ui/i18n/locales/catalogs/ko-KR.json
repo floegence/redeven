@@ -6862,6 +6862,9 @@
         "committing": "플러그인 콘텐츠 불러오는 중…"
       },
       "closingSurface": "플러그인 화면 닫는 중...",
+      "closeUnresponsiveTitle": "응답하지 않는 플러그인을 닫을까요?",
+      "closeUnresponsiveDescription": "플러그인이 응답하지 않습니다. 닫으면 저장하지 않은 변경 사항이 사라질 수 있습니다.",
+      "closeAnyway": "닫기",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - {surface} 플러그인 콘텐츠",
       "iframeUnavailable": "플러그인 iframe 창을 사용할 수 없습니다.",
@@ -7006,8 +7009,8 @@
         "executionApproval": "승인",
         "updateMode": "업데이트 방식",
         "reviewHighlights": "주요 검토 항목",
-        "requestedAccessTitle": "이 플러그인이 할 수 있는 작업",
-        "requestedAccessGuidance": "아래의 Host 검증 접근 범위를 확인하세요. 설치를 확정하면 허용된 필수 권한을 부여하고 플러그인을 활성화하며, 정책으로 차단된 접근은 허용하지 않습니다.",
+        "requestedAccessTitle": "접근 권한",
+        "requestedAccessGuidance": "설치 전에 요청된 접근 권한을 확인하세요.",
         "requestedPermissions": "보호된 접근",
         "localProcessAccess": "로컬 프로세스를 시작할 수 있음",
         "localProcessAccessGuidance": "플러그인은 사용자가 구성한 실행 파일을 시작하고 표준 입력·출력·오류 스트림으로 통신할 수 있습니다. 계속하기 전에 구성과 프로세스 권한을 검토하세요.",
@@ -7067,7 +7070,7 @@
         "additionalDeclarations": {
           "other": "추가 표준 선언 {count}개는 전체 검사 보고서에서 확인할 수 있습니다."
         },
-        "fullInspectionReport": "전체 검사 보고서",
+        "fullInspectionReport": "패키지 세부 정보",
         "reportChanges": {
           "other": "변경 {count}건"
         },
@@ -7079,7 +7082,7 @@
         "manifestHash": "매니페스트 SHA-256",
         "entriesHash": "항목 SHA-256",
         "declaredAccess": "선언된 접근 범위",
-        "declaredAccessGuidance": "새로 설치하면 Host 정책이 허용한 필수 권한을 부여하고 플러그인을 활성화합니다. 계속하기 전에 워커 코드, 외부 연결, 비밀 정보, 쓰기 작업을 확인하세요.",
+        "declaredAccessGuidance": "설치만으로 권한이 부여되지는 않습니다. 설치 후 접근 권한을 관리할 수 있습니다.",
         "declaredAccessUpdateGuidance": "업데이트하면 Host가 관리하는 활성화 상태와 기존 권한 부여가 유지되며 새 권한은 추가되지 않습니다. 검사된 패키지가 요청할 수 있는 기능, 특히 워커 코드, 외부 연결, 비밀 정보, 쓰기 작업을 확인하세요.",
         "noDeclaredAccess": "이 패키지는 플러그인 기능이나 접근 권한을 선언하지 않습니다.",
         "reviewCarefully": "주의 깊게 검토",
@@ -7124,17 +7127,20 @@
         "executionApprovalPolicyApproved": "정책에 의해 승인됨",
         "executionApprovalPolicyBlocked": "정책에 의해 차단됨",
         "confirmDigest": "검사된 바로 이 패키지와 이 패키지가 선언한 접근 범위를 승인합니다.",
-        "confirmInstallTitle": "이 플러그인 패키지 설치 확인",
-        "confirmUpdateTitle": "이 플러그인 업데이트 확인",
-        "confirmReinstallTitle": "바로 이 패키지 재설치 확인",
-        "confirmReplaceTitle": "설치된 패키지 교체 확인",
-        "confirmInstallCheckedTitle": "검사된 패키지 설치 확인",
+        "confirmInstallTitle": "설치를 확인합니다",
+        "confirmUpdateTitle": "이 업데이트를 승인합니다",
+        "confirmReinstallTitle": "이 패키지 재설치를 승인합니다",
+        "confirmReplaceTitle": "설치된 패키지 교체를 승인합니다",
+        "confirmInstallCheckedTitle": "검토한 이 패키지를 승인합니다",
         "loadingInstallTitle": "플러그인 정보 가져오는 중",
         "loadingInstallDescription": "패키지 세부 정보를 가져와 확인하고 있습니다. 완료되면 설치 전에 접근 범위를 검토할 수 있습니다.",
         "confirmInstallGuidance": "설치하면 이 정확한 패키지와 선언된 접근 범위를 승인합니다. Host는 허용된 필수 권한을 부여하고 플러그인을 활성화하며, 정책으로 차단된 접근은 안전하게 거부합니다.",
         "confirmUpdateGuidance": "바로 이 검사 결과와 선언된 접근 범위를 확인합니다. Host는 현재 활성화 상태와 기존 권한 부여를 유지하며 새 권한을 자동으로 부여하지 않습니다.",
         "currentStateRetained": "현재 상태 유지",
-        "noNewPermissionGrants": "새 권한 부여 없음"
+        "noNewPermissionGrants": "새 권한 부여 없음",
+        "accessNetwork": "연결 대상",
+        "accessStorage": "플러그인 자체 저장 데이터 사용",
+        "accessCredential": "저장된 인증 정보 사용"
       }
     },
     "pluginRuntime": {

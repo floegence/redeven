@@ -47,6 +47,7 @@ type pluginMarketService interface {
 
 type Integration struct {
 	handler                http.Handler
+	webHandler             http.Handler
 	host                   *host.Host
 	runtimeAuthority       *RuntimeProcessAuthority
 	marketSnapshot         *pluginmarket.Snapshot
@@ -211,6 +212,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		Release: releaseModule,
 		Runtime: runtimeModule,
 		IO:      ioModule,
+		Web:     &host.WebModule{Origins: surfaceOriginAdapter{}},
 		Connectivity: &host.ConnectivityModule{
 			Broker:          connectivityBroker,
 			NetworkExecutor: networkExecutor,
@@ -241,8 +243,15 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		closeOnError()
 		return nil, err
 	}
+	webHandler, err := httpadapter.NewWebSurfaceHandler(h, trustedWebSurfaceOrigin)
+	if err != nil {
+		_ = h.Close()
+		closeOnError()
+		return nil, err
+	}
 	integration := &Integration{
 		handler:          handler,
+		webHandler:       webHandler,
 		host:             h,
 		runtimeAuthority: opts.RuntimeAuthority,
 		marketSnapshot:   marketSnapshot,

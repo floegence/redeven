@@ -6862,6 +6862,9 @@
         "committing": "正在載入外掛程式內容…"
       },
       "closingSurface": "正在關閉外掛程式介面...",
+      "closeUnresponsiveTitle": "關閉沒有回應的外掛程式？",
+      "closeUnresponsiveDescription": "外掛程式目前沒有回應。關閉後可能遺失尚未儲存的變更。",
+      "closeAnyway": "仍要關閉",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - {surface} 外掛程式內容",
       "iframeUnavailable": "外掛程式 iframe 視窗無法使用。",
@@ -7006,8 +7009,8 @@
         "executionApproval": "核准狀態",
         "updateMode": "更新方式",
         "reviewHighlights": "檢閱重點",
-        "requestedAccessTitle": "此外掛程式可以做什麼",
-        "requestedAccessGuidance": "請檢視下方經 Host 驗證的存取範圍。確認安裝後會授予原則允許的必要權限並啟用外掛程式；被原則阻擋的權限不會授予。",
+        "requestedAccessTitle": "存取範圍",
+        "requestedAccessGuidance": "安裝前請查看所需的存取範圍。",
         "requestedPermissions": "受保護的存取",
         "localProcessAccess": "可以啟動本機程序",
         "localProcessAccessGuidance": "外掛程式可以啟動由使用者設定的可執行檔，並透過標準輸入、輸出與錯誤串流通訊。繼續前請檢查外掛程式設定與程序權限。",
@@ -7067,7 +7070,7 @@
         "additionalDeclarations": {
           "other": "完整檢查報告中另有 {count} 項一般宣告。"
         },
-        "fullInspectionReport": "完整檢查報告",
+        "fullInspectionReport": "外掛程式套件詳情",
         "reportChanges": {
           "other": "{count} 項變更"
         },
@@ -7079,7 +7082,7 @@
         "manifestHash": "資訊清單 SHA-256",
         "entriesHash": "套件項目 SHA-256",
         "declaredAccess": "宣告的存取範圍",
-        "declaredAccessGuidance": "全新安裝會授予 Host 原則允許的必要權限並啟用外掛程式。繼續前請檢閱其工作程序程式碼、外部連線、機密資訊與寫入操作。",
+        "declaredAccessGuidance": "安裝不會授予權限，可在安裝後管理存取權限。",
         "declaredAccessUpdateGuidance": "更新會保留由主機管理的啟用狀態與既有權限，不會授予新權限。請檢閱已檢查的套件可能要求的存取範圍，尤其是工作程序程式碼、外部連線、機密資訊與寫入操作。",
         "noDeclaredAccess": "此套件未宣告任何外掛程式功能或存取權限。",
         "reviewCarefully": "請仔細檢閱",
@@ -7124,17 +7127,20 @@
         "executionApprovalPolicyApproved": "已由政策核准",
         "executionApprovalPolicyBlocked": "已被政策封鎖",
         "confirmDigest": "我核准本次所檢閱的確切套件，以及其宣告的存取範圍。",
-        "confirmInstallTitle": "確認安裝此外掛程式套件",
-        "confirmUpdateTitle": "確認此外掛程式更新",
-        "confirmReinstallTitle": "確認重新安裝這個確切套件",
+        "confirmInstallTitle": "確認安裝此外掛",
+        "confirmUpdateTitle": "確認此次更新",
+        "confirmReinstallTitle": "確認重新安裝此套件",
         "confirmReplaceTitle": "確認取代已安裝的套件",
-        "confirmInstallCheckedTitle": "確認安裝已檢查的套件",
+        "confirmInstallCheckedTitle": "確認此已檢查的套件",
         "loadingInstallTitle": "正在取得外掛程式資訊",
         "loadingInstallDescription": "正在取得並驗證套件資訊。完成後，你可以先檢視存取權限，再決定是否安裝。",
         "confirmInstallGuidance": "安裝即確認此確切套件及其宣告的存取範圍。Host 會授予原則允許的必要權限並啟用外掛程式；原則阻擋的存取將安全失敗。",
         "confirmUpdateGuidance": "您正在確認這次確切的檢查結果及其宣告的存取範圍。主機會保留目前的啟用狀態與既有權限，且不會自動授予新權限。",
         "currentStateRetained": "保留目前狀態",
-        "noNewPermissionGrants": "未授予新權限"
+        "noNewPermissionGrants": "未授予新權限",
+        "accessNetwork": "連線服務",
+        "accessStorage": "使用外掛程式自身的資料",
+        "accessCredential": "使用已儲存的憑證"
       }
     },
     "pluginRuntime": {

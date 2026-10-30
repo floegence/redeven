@@ -271,7 +271,7 @@ func issueClientCertificate(endpoint Endpoint, csrPEM, memberID string) (string,
 	return certPEM(raw), digest(raw), expires.UnixMilli(), nil
 }
 
-// NewServiceCertificate creates only the fixed application origin. It never
+// NewServiceCertificate binds the Runtime and its isolated plugin origins. It never
 // exposes a machine hostname, private management endpoint or routable address.
 func NewServiceCertificate(runtimeID string) (gp.MemberService, string, error) {
 	if !validID(runtimeID) {
@@ -291,8 +291,9 @@ func NewServiceCertificate(runtimeID string) (gp.MemberService, string, error) {
 	expires := now.AddDate(0, 3, 0).Truncate(time.Second)
 	// This self-signed identity is the trust anchor of one isolated application
 	// session. BoringSSL requires explicit CA constraints for an anchor; Desktop
-	// still pins the exact certificate and permits only this logical hostname.
-	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "Redeven Runtime application"}, DNSNames: []string{u.Hostname()}, NotBefore: now.Add(-time.Minute), NotAfter: expires, BasicConstraintsValid: true, IsCA: true, MaxPathLenZero: true, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	// still pins the exact certificate and admits only the parent or a platform
+	// origin key beneath this Runtime, never arbitrary wildcard destinations.
+	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "Redeven Runtime application"}, DNSNames: []string{u.Hostname(), "*." + u.Hostname()}, NotBefore: now.Add(-time.Minute), NotAfter: expires, BasicConstraintsValid: true, IsCA: true, MaxPathLenZero: true, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 	raw, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
 		return gp.MemberService{}, "", err

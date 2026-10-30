@@ -94,6 +94,7 @@ type Options struct {
 	SecretsStore *settings.SecretsStore
 	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
 	PluginPlatform        http.Handler
+	PluginWebSurface      http.Handler
 	PluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
 	PluginMarketRefresh   func(context.Context) (pluginmarket.Snapshot, error)
 	PluginMarketSubscribe func(context.Context, int64) ([]pluginmarket.RefreshEvent, <-chan pluginmarket.RefreshEvent, error)
@@ -269,6 +270,7 @@ type Server struct {
 	secrets               *settings.SecretsStore
 	chatGPT               *chatgpt.Client
 	pluginPlatform        http.Handler
+	pluginWebSurface      http.Handler
 	pluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
 	pluginMarketRefresh   func(context.Context) (pluginmarket.Snapshot, error)
 	pluginMarketSubscribe func(context.Context, int64) ([]pluginmarket.RefreshEvent, <-chan pluginmarket.RefreshEvent, error)
@@ -474,6 +476,7 @@ func New(opts Options) (*Server, error) {
 		secrets:               secrets,
 		chatGPT:               chatGPTClient,
 		pluginPlatform:        opts.PluginPlatform,
+		pluginWebSurface:      opts.PluginWebSurface,
 		pluginMarketSnapshot:  opts.PluginMarketSnapshot,
 		pluginMarketRefresh:   opts.PluginMarketRefresh,
 		pluginMarketSubscribe: opts.PluginMarketSubscribe,

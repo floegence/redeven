@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from '../desktop/node_modules/esbuild/lib/main.js';
+import { buildPluginWebQualification } from './build_plugin_web_qualification.mjs';
 import { chromium, firefox, webkit } from '../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -578,6 +579,12 @@ try {
   if (reportDir) await mkdir(reportDir, { recursive: true, mode: 0o700 });
   const bundled = path.join(temporary, 'runtime.js');
   await build({ entryPoints: [path.join(root, 'internal/envapp/ui_src/scripts/fixtures/web-entry-browser.ts')], outfile: bundled, bundle: true, platform: 'browser', format: 'iife', globalName: 'GatewayAcceptance' });
+  let pluginPackage;
+  const pluginBrowser = path.join(temporary, 'plugin-web.js');
+  if (process.env.REDEVEN_PLUGIN_WEB_QUALIFICATION === '1') {
+    pluginPackage = (await readFile(await buildPluginWebQualification(temporary))).toString('base64');
+    await build({ entryPoints: [path.join(root, 'internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts')], outfile: pluginBrowser, bundle: true, platform: 'browser', format: 'iife', globalName: 'PluginWebAcceptance' });
+  }
   browser = await browserType.launch({ headless: process.env.REDEVEN_CENTER_HEADED !== '1', ...(process.env.REDEVEN_CENTER_BROWSER_CHANNEL ? {channel:process.env.REDEVEN_CENTER_BROWSER_CHANNEL} : {}) });
   report.channel = process.env.REDEVEN_CENTER_BROWSER_CHANNEL ?? 'bundled';
   report.externalHost = fixture.externalHost ?? null;
@@ -762,6 +769,10 @@ try {
     await environment.reload({ waitUntil: 'domcontentloaded' });
     await until(async () => await runtimeStatus(environment) === 200, 'Reload lost valid Runtime session');
     await verifyRuntimeWorkspace(environment, index === 0);
+    if (index === 0 && pluginPackage) {
+      await environment.addScriptTag({ path: pluginBrowser });
+      report.cases.push({ scope: 'Center native plugin routing', assertions: await environment.evaluate(bytes => PluginWebAcceptance.verifyPluginWebApplication(bytes, true), pluginPackage) });
+    }
     if (index === 0 && process.env.REDEVEN_CENTER_PERMISSIONS === '1') await verifyDeniedClipboardManualInput(environment, context, bundled);
     if (index === 0 && process.env.REDEVEN_CENTER_UPLOADS === '1') {
       await environment.addScriptTag({ path: bundled });

@@ -26,8 +26,7 @@ export default defineConfig({
     rollupOptions: {
       input: fileURLToPath(new URL('./ui/app.js', import.meta.url)),
       output: {
-        format: 'iife',
-        name: 'ReDevPluginIOSmoke',
+        format: 'es',
         entryFileNames: 'assets/app.js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name][extname]',

@@ -32,6 +32,8 @@ export type DesktopPrivateBridgeRequestScope = Readonly<{
   tessivenSource?: string;
   verifiedLocalHost?: boolean;
   trustedEnvAppFrame?: boolean;
+  // Omitted only for requests created directly by the main process.
+  requestingFrameURL?: string;
 }>;
 
 export function desktopPrivateBridgeRequestHeaders(
@@ -42,7 +44,7 @@ export function desktopPrivateBridgeRequestHeaders(
   scope: DesktopPrivateBridgeRequestScope = {},
 ): DesktopRequestHeaders {
   requestHeaders = Object.fromEntries(Object.entries(requestHeaders).filter(
-    ([name]) => !['x-redeven-tessiven-source', 'x-redeven-host-access'].includes(name.toLowerCase()),
+    ([name]) => !['x-redeven-tessiven-source', 'x-redeven-host-access', DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER.toLowerCase()].includes(name.toLowerCase()),
   ));
   if (transport.kind !== 'native_local_bridge' && transport.kind !== 'placement_bridge') {
     return requestHeaders;
@@ -57,6 +59,10 @@ export function desktopPrivateBridgeRequestHeaders(
     const privateProtocol = request.protocol === 'http:' || request.protocol === 'ws:';
     const webServiceForwardID = String(scope.webServiceForwardID ?? '').trim().toLowerCase();
     const expectedHostname = webServiceForwardID && !scope.graphicalWindow ? `pf-${webServiceForwardID}.localhost` : allowed.hostname;
+    if (scope.requestingFrameURL !== undefined) {
+      const frame = new URL(scope.requestingFrameURL);
+      if (frame.protocol !== allowed.protocol || frame.hostname !== expectedHostname || frame.port !== allowed.port) return requestHeaders;
+    }
     if (scope.graphicalWindow && webServiceForwardID && !(
       request.pathname.startsWith(`/pf/${webServiceForwardID}/`)
       || request.pathname === '/flowersec/v3/direct'

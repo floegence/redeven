@@ -357,7 +357,6 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionPrepareSurface,
 		host.ManagementActionMintBridgeToken,
 		host.ManagementActionDisposeSurface,
-		host.ManagementActionReadSurfaceAsset,
 		host.ManagementActionListIntents,
 		host.ManagementActionListPlugins,
 		host.ManagementActionListFeatures,

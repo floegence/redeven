@@ -460,6 +460,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ConfigPath:            strings.TrimSpace(opts.ConfigPath),
 		SecretsStore:          secrets,
 		PluginPlatform:        pluginIntegration.Handler(),
+		PluginWebSurface:      pluginIntegration.WebSurfaceHandler(),
 		PluginMarketSnapshot:  pluginIntegration.MarketSnapshot,
 		PluginMarketRefresh:   pluginIntegration.RefreshMarket,
 		PluginMarketSubscribe: pluginIntegration.SubscribeMarketRefresh,

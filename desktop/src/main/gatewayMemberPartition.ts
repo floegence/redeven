@@ -1,6 +1,7 @@
 import { app, type Session } from 'electron';
 import crypto from 'node:crypto';
 import type { GatewayMemberTransport } from './gatewayMemberTransport';
+import { isGatewayApplicationHostname } from './pluginOrigin';
 
 const gatewayMemberCredentials = new Map<number, { token: string; partitions: Set<Session> }>();
 app.on('login', (event, webContents, _request, authInfo, callback) => {
@@ -21,7 +22,8 @@ export async function prepareGatewayMemberPartition(webSession: Session, proxy: 
       const expected = proxy.service;
       const certificate = new crypto.X509Certificate(request.certificate.data);
       const fingerprint = crypto.createHash('sha256').update(certificate.raw).digest('hex');
-      callback(request.hostname === new URL(expected.origin).hostname
+      callback(isGatewayApplicationHostname(new URL(expected.origin).hostname, request.hostname)
+        && certificate.checkHost(request.hostname) !== undefined
         && fingerprint === expected.certificate_sha256 && expected.expires_at_unix_ms > Date.now() ? 0 : -2);
     } catch { callback(-2); }
   });

@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/v5/controlplane"
 	"github.com/floegence/redeven/internal/gatewayflow"
 	gm "github.com/floegence/redeven/internal/gatewaymembership"
+	"github.com/floegence/redeven/internal/pluginorigin"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
@@ -118,6 +119,10 @@ func run() error {
 			return gm.RuntimeApplication{WebSocketHandler: applicationAcceptor.Handler(), Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 				w.Header().Set("X-Content-Type-Options", "nosniff")
+				if r.TLS != nil && pluginorigin.IsChild(origin, "https://"+r.Host) {
+					_, _ = io.WriteString(w, "plugin-resource-content")
+					return
+				}
 				if r.TLS == nil || "https://"+r.Host != origin {
 					http.Error(w, "wrong authority", http.StatusForbidden)
 					return

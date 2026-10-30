@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/floegence/redeven/internal/gatewaymembership"
+	"github.com/floegence/redeven/internal/pluginorigin"
 )
 
 type gatewayMemberOriginKey struct{}
@@ -81,6 +82,10 @@ func (s *Server) gatewayMemberApplication(origin string) gatewaymembership.Runti
 			return true
 		},
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.TLS != nil && pluginorigin.IsChild(origin, "https://"+r.Host) {
+				s.servePluginWebSurface(w, r, "https://"+r.Host)
+				return
+			}
 			w.Header().Set("X-Redeven-Web-Entry", "center-v1")
 			if !bindOrigin(r) {
 				http.Error(w, "Invalid member authority", http.StatusMisdirectedRequest)

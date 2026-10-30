@@ -3,9 +3,13 @@ package gatewaymembership
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,7 +67,7 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 			return flowersec.ArtifactLease{}, memberSourceError(err)
 		}
 	}
-	if r.PendingRotation != nil || time.Until(time.UnixMilli(r.ClientExpiresAtUnixMS)) < 30*24*time.Hour || time.Until(time.UnixMilli(r.Service.ExpiresAtUnixMS)) < 30*24*time.Hour {
+	if runtimeServiceNeedsRotation(r) {
 		if err := r.Rotate(ctx, s.persist); err != nil {
 			return flowersec.ArtifactLease{}, memberSourceError(err)
 		}
@@ -149,10 +153,26 @@ func (s *runtimeSource) renew(ctx context.Context) error {
 	if r.PendingJoin != nil || r.PendingEndpointUpdate != nil || r.Leaving {
 		return nil
 	}
-	if r.PendingRotation != nil || time.Until(time.UnixMilli(r.ClientExpiresAtUnixMS)) < 30*24*time.Hour || time.Until(time.UnixMilli(r.Service.ExpiresAtUnixMS)) < 30*24*time.Hour {
+	if runtimeServiceNeedsRotation(r) {
 		return r.Rotate(ctx, s.persist)
 	}
 	return nil
+}
+
+func runtimeServiceNeedsRotation(r *RuntimeConfig) bool {
+	if r.PendingRotation != nil || time.Until(time.UnixMilli(r.ClientExpiresAtUnixMS)) < 30*24*time.Hour || time.Until(time.UnixMilli(r.Service.ExpiresAtUnixMS)) < 30*24*time.Hour {
+		return true
+	}
+	block, _ := pem.Decode([]byte(r.Service.CertificatePEM))
+	if block == nil {
+		return true
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return true
+	}
+	origin, err := url.Parse(r.Service.Origin)
+	return err != nil || certificate.VerifyHostname(strings.Repeat("0", 48)+"."+origin.Hostname()) != nil
 }
 
 func NewRuntimeConnection(current func() *RuntimeConfig, persist func(*RuntimeConfig) error) (*RuntimeConnection, error) {

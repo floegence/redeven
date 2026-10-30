@@ -3,7 +3,7 @@ type: Architecture Boundary
 title: ReDevPlugin Redeven adapters
 tags: [architecture, plugins, adapters, ui]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -22,6 +22,10 @@ The product Shell owns one released `PluginPlatformClient`, authenticated transp
 Redeven uses them for host placement behavior, never as identity, authorization, or permission evidence.
 
 A recovery presentation may explain or retry the Host snapshot, but it is not a second open gate and owns no catch-up identity state machine.
+
+## Web origin adapter
+
+Redeven derives a plugin origin only from a trusted product entry origin and the released surface origin key. Local UI and AppServer route child requests to the released Web surface handler after removing parent credentials. Desktop, Gateway and Center own the product transport and origin routing; package assets, tickets and surface bridge semantics remain upstream-owned.
 
 # Boundaries
 

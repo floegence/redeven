@@ -6862,6 +6862,9 @@
         "committing": "プラグインのコンテンツを読み込み中…"
       },
       "closingSurface": "プラグインサーフェスを閉じています...",
+      "closeUnresponsiveTitle": "応答しないプラグインを閉じますか？",
+      "closeUnresponsiveDescription": "プラグインが応答していません。閉じると、未保存の変更が失われる可能性があります。",
+      "closeAnyway": "閉じる",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - {surface} のプラグインコンテンツ",
       "iframeUnavailable": "プラグイン iframe ウィンドウは使用できません。",
@@ -7006,8 +7009,8 @@
         "executionApproval": "承認",
         "updateMode": "更新モード",
         "reviewHighlights": "確認すべきポイント",
-        "requestedAccessTitle": "このプラグインでできること",
-        "requestedAccessGuidance": "以下の Host 検証済みアクセスを確認してください。インストールを確定すると、許可された必須権限が付与されてプラグインが有効になります。ポリシーでブロックされたアクセスは許可されません。",
+        "requestedAccessTitle": "アクセス",
+        "requestedAccessGuidance": "インストール前に必要なアクセスを確認してください。",
         "requestedPermissions": "保護されたアクセス",
         "localProcessAccess": "ローカルプロセスを起動できます",
         "localProcessAccessGuidance": "プラグインはユーザーが設定した実行ファイルを起動し、標準入力・出力・エラーのストリームで通信できます。続行する前に設定とプロセス権限を確認してください。",
@@ -7067,7 +7070,7 @@
         "additionalDeclarations": {
           "other": "その他の標準的な宣言 {count} 件は、詳細な検査レポートで確認できます。"
         },
-        "fullInspectionReport": "詳細な検査レポート",
+        "fullInspectionReport": "パッケージの詳細",
         "reportChanges": {
           "other": "{count} 件の変更"
         },
@@ -7079,7 +7082,7 @@
         "manifestHash": "マニフェストの SHA-256",
         "entriesHash": "エントリの SHA-256",
         "declaredAccess": "宣言されたアクセス範囲",
-        "declaredAccessGuidance": "新規インストールでは、Host ポリシーで許可された必須権限が付与され、プラグインが有効になります。続行前にワーカーコード、外部接続、シークレット、書き込み操作を確認してください。",
+        "declaredAccessGuidance": "インストールでは権限は付与されません。インストール後にアクセス権限を管理できます。",
         "declaredAccessUpdateGuidance": "更新では、Host が管理する有効状態と既存の権限付与を維持し、新たな権限は付与しません。検査済みパッケージが要求する可能性のある機能、特にワーカーコード、外部接続、シークレット、書き込み操作を確認してください。",
         "noDeclaredAccess": "このパッケージは、プラグインの機能やアクセスを宣言していません。",
         "reviewCarefully": "要確認",
@@ -7124,17 +7127,20 @@
         "executionApprovalPolicyApproved": "ポリシーにより承認済み",
         "executionApprovalPolicyBlocked": "ポリシーによりブロック",
         "confirmDigest": "検査済みのこのパッケージそのものと、そのパッケージが宣言するアクセス範囲を承認します。",
-        "confirmInstallTitle": "このプラグインパッケージのインストールを確認",
-        "confirmUpdateTitle": "このプラグイン更新を確認",
-        "confirmReinstallTitle": "このパッケージそのものの再インストールを確認",
-        "confirmReplaceTitle": "インストール済みパッケージの置き換えを確認",
-        "confirmInstallCheckedTitle": "検査済みパッケージのインストールを確認",
+        "confirmInstallTitle": "インストールを確認しました",
+        "confirmUpdateTitle": "この更新を承認する",
+        "confirmReinstallTitle": "このパッケージの再インストールを承認する",
+        "confirmReplaceTitle": "インストール済みパッケージの置き換えを承認する",
+        "confirmInstallCheckedTitle": "この確認済みパッケージを承認する",
         "loadingInstallTitle": "プラグイン情報を取得しています",
         "loadingInstallDescription": "パッケージの詳細を取得して検証しています。完了後、インストール前にアクセス範囲を確認できます。",
         "confirmInstallGuidance": "インストールすると、この正確なパッケージと宣言済みアクセスを承認します。Host は許可された必須権限を付与してプラグインを有効にし、ポリシーでブロックされたアクセスは安全に拒否します。",
         "confirmUpdateGuidance": "この検査結果そのものと、宣言されたアクセス範囲を確認します。Host は現在の有効状態と既存の権限付与を維持し、新しい権限を自動的に付与しません。",
         "currentStateRetained": "現在の状態を維持",
-        "noNewPermissionGrants": "新しい権限付与なし"
+        "noNewPermissionGrants": "新しい権限付与なし",
+        "accessNetwork": "接続先",
+        "accessStorage": "プラグイン自身の保存データを使用",
+        "accessCredential": "保存済みの認証情報を使用"
       }
     },
     "pluginRuntime": {

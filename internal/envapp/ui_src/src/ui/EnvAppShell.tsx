@@ -1,4 +1,5 @@
 import { installCenterEntryActivity } from './services/centerEntryActivity';
+import { prepareCenterPluginOrigin } from './services/pluginWebOrigin';
 import { createFlowerPageContextRegistry, flowerPageContextSnapshot, type FlowerPageContextRegistrar } from './flower/flowerPageContext';
 import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
@@ -650,7 +651,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       })();
     },
   });
-  const pluginSurfaceCoordinator = createPluginSurfacePlacementCoordinator(pluginPlatform.client);
+  const pluginSurfaceCoordinator = createPluginSurfacePlacementCoordinator(pluginPlatform.client, async (request) => {
+    if (localRuntime()?.web_entry === 'center-v1') await prepareCenterPluginOrigin(request);
+  });
   const pluginLifecycle = createPluginLifecycleAPI(pluginPlatform.client);
   let pluginInstallCoordinator: PluginInstallCoordinator | undefined;
   const performEndPluginSession = async (): Promise<boolean> => {

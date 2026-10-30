@@ -48,6 +48,7 @@ function createHost(): PluginSurfaceHost {
     surfaceInstanceId: 'surface_instance_1',
     sendLifecycle: vi.fn(),
     updateContext: vi.fn(),
+    requestClose: vi.fn(async () => ({ quiesce: { outcome: 'acknowledged' as const, durationMs: 1 }, revokeDurationMs: 1, totalDurationMs: 2 })),
     close: vi.fn(async () => ({
       quiesce: { outcome: 'acknowledged' as const, durationMs: 1 },
       revokeDurationMs: 1,
@@ -92,7 +93,7 @@ async function flushAsync(): Promise<void> {
 describe('PluginSurfaceBody', () => {
   const progress = {
     phase: 'opening' as const, stage: 'initializing' as const,
-    elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['worker_ready'],
+    elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['app_ready'],
   } satisfies PluginSurfaceOpeningProgress;
 
   it('shows delayed SDK progress, then removes it without replacing a ready surface', async () => {
@@ -108,9 +109,9 @@ describe('PluginSurfaceBody', () => {
     expect(mount.querySelector('[data-plugin-surface-opening]')).toBeNull();
     options.onOpeningProgress?.(progress);
     expect(mount.querySelector('[role="status"]')?.textContent).toContain('Starting plugin');
-    const committing = { ...progress, stage: 'committing' as const, pendingMilestones: ['first_commit'] } satisfies PluginSurfaceOpeningProgress;
+    const committing = { ...progress, stage: 'connecting' as const, pendingMilestones: ['entry_ready'] } satisfies PluginSurfaceOpeningProgress;
     options.onOpeningProgress?.(committing);
-    expect(mount.querySelector('[role="status"]')?.textContent).toContain('Loading plugin content');
+    expect(mount.querySelector('[role="status"]')?.textContent).toContain('Connecting plugin');
     resolveOpen(host);
     await flushAsync();
     options.onOpeningProgress?.(progress);
@@ -140,7 +141,7 @@ describe('PluginSurfaceBody', () => {
     await flushAsync();
     const copied = JSON.parse(writeText.mock.calls[0]![0]);
     expect(copied).toEqual({ error_code: 'PLUGIN_BRIDGE_TIMEOUT', opening: {
-      stage: 'initializing', elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['worker_ready'],
+      stage: 'initializing', elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['app_ready'],
     } });
     expect(mount.textContent).toContain('Copied');
     writeText.mockRejectedValueOnce(new Error('clipboard unavailable'));
@@ -425,6 +426,24 @@ describe('PluginSurfaceBody', () => {
     await expect(closing).resolves.toBe(true);
   });
 
+  it('retains the ready surface when the application declines closure and allows a later attempt', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    vi.mocked(host.requestClose).mockResolvedValueOnce(undefined);
+    const coordinator = createCoordinator(host);
+    const closeRegistration: { current: (() => Promise<boolean>) | null } = { current: null };
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible registerClose={(close) => { closeRegistration.current = close; }} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    await expect(closeRegistration.current!()).resolves.toBe(false);
+    expect(coordinator.release).not.toHaveBeenCalled();
+    expect(mount.querySelector('[data-plugin-surface-host]')?.getAttribute('aria-busy')).toBe('false');
+    await expect(closeRegistration.current!()).resolves.toBe(true);
+    expect(host.requestClose).toHaveBeenCalledTimes(2);
+    expect(coordinator.release).toHaveBeenCalledOnce();
+  });
+
   it('keeps the placement open and exposes the retirement error when close fails', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -446,6 +465,45 @@ describe('PluginSurfaceBody', () => {
 
     await expect(closeRegistration.current?.()).resolves.toBe(false);
     expect(mount.querySelector('[role="alert"]')?.textContent).toContain('server revoke failed');
+  });
+
+  it.each(['unsaved', 'unresponsive'] as const)('confirms %s closure through the host dialog', async (reason) => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    const confirm = vi.mocked(coordinator.open).mock.calls[0]![2]!.confirmClose!;
+    const decision = confirm({ reason, signal: new AbortController().signal });
+    await flushAsync();
+    const dialog = document.body.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain(reason === 'unsaved' ? 'Discard unsaved changes?' : 'Close the unresponsive plugin?');
+    const label = reason === 'unsaved' ? 'Discard changes' : 'Close anyway';
+    const button = [...dialog.querySelectorAll('button')].find((element) => element.textContent?.trim() === label)!;
+    button.click();
+    await expect(decision).resolves.toBe(true);
+    expect(coordinator.release).not.toHaveBeenCalled();
+  });
+
+  it('cancels close confirmation on SDK invalidation and unmount', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    const confirm = vi.mocked(coordinator.open).mock.calls[0]![2]!.confirmClose!;
+    const controller = new AbortController();
+    const first = confirm({ reason: 'unsaved', signal: controller.signal });
+    controller.abort();
+    await expect(first).resolves.toBe(false);
+    const second = confirm({ reason: 'unresponsive', signal: new AbortController().signal });
+    dispose();
+    dispose = undefined;
+    await expect(second).resolves.toBe(false);
+    expect(coordinator.release).toHaveBeenCalledOnce();
   });
 
   it('cancels pending confirmations and releases the owned slot on unmount', async () => {
@@ -504,6 +562,8 @@ describe('PluginSurfaceBody', () => {
 
     const first = closeRegistration.current!();
     const second = closeRegistration.current!();
+    await Promise.resolve();
+    expect(host.requestClose).toHaveBeenCalledOnce();
     expect(coordinator.release).toHaveBeenCalledTimes(1);
     resolveRelease();
     await expect(Promise.all([first, second])).resolves.toEqual([true, true]);

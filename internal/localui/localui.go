@@ -278,6 +278,10 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			http.Error(w, "invalid Local UI request", http.StatusBadRequest)
 			return
 		}
+		if origin, ok := desktopPluginWebOrigin(r.Host); ok {
+			s.servePluginWebSurface(w, r, origin)
+			return
+		}
 		forwardID, portForwardOrigin := desktopBridgePortForwardAuthority(r.Host)
 		bridgeAuthority := ""
 		if !portForwardOrigin {

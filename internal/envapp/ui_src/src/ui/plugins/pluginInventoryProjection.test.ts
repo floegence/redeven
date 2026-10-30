@@ -75,7 +75,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
           kind: 'view',
           intent: 'primary',
           label: examplePlugin.displayName,
-          entry: 'ui/index.html',
+          entry: 'ui/index.html', web: { root: 'ui', spa: false },
         },
       ],
       workers: [],

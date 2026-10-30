@@ -1113,7 +1113,7 @@ function OfficialPluginInstallDialog(props: {
     ? i18n.t('uiCopy.plugin.installOperation.installingTitle', { plugin: props.item?.displayName ?? '' })
     : props.installed
       ? i18n.t('uiCopy.plugin.installOperation.complete')
-      : i18n.t('uiCopy.plugin.external.confirmInstallTitle');
+      : i18n.t('uiCopy.plugin.external.confirmInstall');
   return (
     <Dialog
       open={Boolean(props.item)}

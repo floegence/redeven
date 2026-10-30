@@ -15426,7 +15426,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "architecture",
           "local-ui",
@@ -15436,15 +15436,15 @@
         "title": "Plugin platform integration",
         "type": "Architecture Contract"
       },
-      "body_length": 2241,
+      "body_length": 3051,
       "summary": "Redeven mounts released ReDevPlugin through one Go Host, HTTP namespace, Env App client and surface scope. Published Process Supervisor runs a verified product-built Linux/Darwin runtime. Redeven adds authenticated sessions, source policy, placement and business adapters; upstream owns package, state, protocol, trust and execution. Missing or unproven identities fail closed.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- `internal/redevpluginintegration` passes an explicit state root and core, official-release, runtime, connectivity, secret, capability and external-package modules. External sources use bounded public HTTPS, GitHub Release resolution and upstream signature assessment.\n- Session close uses the released durable four-hash coordinator; remove authentication only after exact drain acknowledgement. Process-local connection generations cancel replaced waits and reject late credentials.\n- Shutdown closes Local UI admission/hijacked transports, cancels Agent sessions, drains request leases/handlers, then invokes idempotent Host teardown.\n- [Package lifecycle](redevplugin-package-lifecycle.md), [process sessions](plugin-process-sessions.md), [background entries](plugin-background-entries.md) and [surface recovery](redevplugin-surface-recovery.md) own their detailed contracts.\n- Runtime binds the canonical sibling executable, target, released IPC/WASM ABI, exact product build, lease replay storage and limits. [Native container resources](container-resources-capability.md) owns the separate product container capability.\n- Activity targets receive fresh SDK slots in stable Shell-root windows; responsive chrome cannot remount/adopt iframes. Workbench uses projected plugin widgets. Lost close responses reconcile through exact-surface authority; disposal alone is not revocation.",
-          "char_count": 1386
+          "body": "- `internal/redevpluginintegration` passes an explicit state root and core, official-release, runtime, connectivity, secret, capability and external-package modules. External sources use bounded public HTTPS, GitHub Release resolution and upstream signature assessment.\n- Session close uses the released durable four-hash coordinator; remove authentication only after exact drain acknowledgement. Process-local connection generations cancel replaced waits and reject late credentials.\n- Shutdown closes Local UI admission/hijacked transports, cancels Agent sessions, drains request leases/handlers, then invokes idempotent Host teardown.\n- [Package lifecycle](redevplugin-package-lifecycle.md), [process sessions](plugin-process-sessions.md), [background entries](plugin-background-entries.md) and [surface recovery](redevplugin-surface-recovery.md) own their detailed contracts.\n- Runtime binds the canonical sibling executable, target, released IPC/WASM ABI, exact product build, lease replay storage and limits. [Native container resources](container-resources-capability.md) owns the separate product container capability.\n- Activity targets receive fresh SDK slots in stable Shell-root windows; responsive chrome cannot remount/adopt iframes. Workbench uses projected plugin widgets. Lost close responses reconcile through exact-surface authority; disposal alone is not revocation.\n\n## Ordinary Web placement\n\nA surface opens through the released Web SDK using an origin prepared by its product transport. The same package can use browser-native HTML, CSS, ES modules, Canvas and WebGL without a product renderer. Each simultaneous placement owns its own iframe and slot. Desktop and browser child-origin requests cannot access product management routes or borrow the parent's private bridge token.",
+          "char_count": 1803
         },
         {
           "id": "boundaries",
@@ -15466,6 +15466,12 @@
           "source": "redeven:internal/redevpluginintegration/runtime_module.go",
           "line": 1,
           "description": "Configures the released runtime manager and fixed version."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/scripts/fixtures/plugin-web-browser.ts:1:qualifies a backend-free package through actual center and gateway routes: native modules, worker, canvas, independent surfaces, unsaved close and forced invalidation. enable with `redeven_plugin_web_qualification=1` in the existing explicit browser qualifications; this does not certify worker backend execution.",
+          "source": "redeven:internal/envapp/ui_src/scripts/fixtures/plugin-web-browser.ts",
+          "line": 1,
+          "description": "Qualifies a backend-free package through actual Center and Gateway routes: native modules, Worker, Canvas, independent surfaces, unsaved close and forced invalidation. Enable with `REDEVEN_PLUGIN_WEB_QUALIFICATION=1` in the existing explicit browser qualifications; this does not certify Worker backend execution."
         }
       ],
       "snippet": "Redeven mounts released ReDevPlugin through one Go Host, HTTP namespace, Env App client and surface scope. Published Process Supervisor runs a verified product-built Linux/Darwin runtime. Redeven adds authenticated sessions, source policy, ",
@@ -15702,7 +15708,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "architecture",
           "dependencies",
@@ -15712,15 +15718,15 @@
         "title": "ReDevPlugin host integration boundary",
         "type": "Architecture Boundary"
       },
-      "body_length": 1608,
+      "body_length": 2058,
       "summary": "Redeven consumes the coordinated published ReDevPlugin Go, npm, Rust and machine-contract artifacts without forking platform mechanics. It owns session mapping, source policy/review, placement, product runtime builds and business adapters. Missing/unverifiable identity, lifecycle, interaction, package or runtime contracts fail closed without local compatibility or sibling-source fallback.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Upstream owns validation/hashes/trust, inspection and registry state, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secret brokers, supervision/IPC/WASM, quotas/revocation, control storage, generated clients/errors/schemas and release metadata.\n- Go/npm/runtime/machine artifacts form one coordinated release; frontend cannot downgrade independently. Current pins live in manifests and are checked by the dependency-contract test.\n- Local bootstrap keeps its bounded credential admission before session readiness. [Package lifecycle](redevplugin-package-lifecycle.md) owns inspection/install/cache/readiness; [Redeven adapters](redevplugin-redeven-adapters.md) owns host modules and presentation.",
-          "char_count": 761
+          "body": "- Upstream owns validation/hashes/trust, inspection and registry state, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secret brokers, supervision/IPC/WASM, quotas/revocation, control storage, generated clients/errors/schemas and release metadata.\n- Go/npm/runtime/machine artifacts form one coordinated release; frontend cannot downgrade independently. Current pins live in manifests and are checked by the dependency-contract test.\n- Local bootstrap keeps its bounded credential admission before session readiness. [Package lifecycle](redevplugin-package-lifecycle.md) owns inspection/install/cache/readiness; [Redeven adapters](redevplugin-redeven-adapters.md) owns host modules and presentation.\n\n## Ordinary Web surfaces\n\nThe released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.",
+          "char_count": 1211
         },
         {
           "id": "boundaries",
@@ -15880,7 +15886,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "adapters",
           "architecture",
@@ -15890,15 +15896,15 @@
         "title": "ReDevPlugin Redeven adapters",
         "type": "Architecture Boundary"
       },
-      "body_length": 1870,
+      "body_length": 2269,
       "summary": "Redeven owns only the adapters that bind authenticated product sessions, source policy, business capabilities, and Activity or Workbench placement to released ReDevPlugin contracts. ReDevPlugin remains the authority for host protocol, package trust, runtime execution, and platform state. Adapter failures stop at the product boundary and never create copied platform state or implicit grants.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Host modules and external packages\nRedeven constructs the released Host with explicit core, official-release, runtime, connectivity, secrets, capability, and external-package modules. Redeven supplies session, authorization, web-security, trust, official release-source, observability, secret, external source, and business adapters; it never edits registry, inspection, token, lease, revoke-epoch, or plugin-data state directly.\n\nThe official signed-release module remains the stricter release-ref path.\n\n## Surfaces and interaction ownership\nThe product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.\n\nRedeven uses them for host placement behavior, never as identity, authorization, or permission evidence.\n\nA recovery presentation may explain or retry the Host snapshot, but it is not a second open gate and owns no catch-up identity state machine.",
-          "char_count": 906
+          "body": "## Host modules and external packages\nRedeven constructs the released Host with explicit core, official-release, runtime, connectivity, secrets, capability, and external-package modules. Redeven supplies session, authorization, web-security, trust, official release-source, observability, secret, external source, and business adapters; it never edits registry, inspection, token, lease, revoke-epoch, or plugin-data state directly.\n\nThe official signed-release module remains the stricter release-ref path.\n\n## Surfaces and interaction ownership\nThe product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.\n\nRedeven uses them for host placement behavior, never as identity, authorization, or permission evidence.\n\nA recovery presentation may explain or retry the Host snapshot, but it is not a second open gate and owns no catch-up identity state machine.\n\n## Web origin adapter\n\nRedeven derives a plugin origin only from a trusted product entry origin and the released surface origin key. Local UI and AppServer route child requests to the released Web surface handler after removing parent credentials. Desktop, Gateway and Center own the product transport and origin routing; package assets, tickets and surface bridge semantics remain upstream-owned.",
+          "char_count": 1305
         },
         {
           "id": "boundaries",
@@ -15964,7 +15970,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "architecture",
           "plugins",
@@ -15974,15 +15980,15 @@
         "title": "Plugin surface recovery and permissions",
         "type": "Architecture Contract"
       },
-      "body_length": 1472,
+      "body_length": 2191,
       "summary": "Env App owns one authenticated plugin client, one shared scope, and one installation observer. ReDevPlugin remains the authority for inventory, Executions, Events, permissions, revocation, and runtime recovery. Closing or reconnecting a panel preserves the exact request identity and authoritative outcome; a product refresh never becomes a second mutation or recovery lifecycle.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Env App inventory and permissions\nEnv App owns one authenticated fetch adapter, one released client, one shared scope, and one placement coordinator. Every mutation carries its current management and applicable policy/revoke revisions; committed and unknown management outcomes rely on Host revocation followed by the SDK's scope teardown, then refresh state without a second slot-close path or blind mutation retry.\n\nGeneric review and confirmation copy names the exact permission id instead of substituting an official-plugin label.",
-          "char_count": 537
+          "body": "## Env App inventory and permissions\nEnv App owns one authenticated fetch adapter, one released client, one shared scope, and one placement coordinator. Every mutation carries its current management and applicable policy/revoke revisions; committed and unknown management outcomes rely on Host revocation followed by the SDK's scope teardown, then refresh state without a second slot-close path or blind mutation retry.\n\nGeneric review and confirmation copy names the exact permission id instead of substituting an official-plugin label.\n\n## User close and forced revocation\n\nUser close requests use the released surface request-close contract. A plugin may report unsaved work; Redeven presents one localized Floe confirmation and preserves the slot if canceled. Forced lifecycle invalidation still revokes without waiting for user consent. A successful request-close is recorded as already closed so subsequent placement disposal cannot send a second close.\n\nManagement teardown may preserve the product layout while the SDK clears the document to `about:blank`, removes same-origin authority and closes the bridge. An iframe remaining in the layout is not evidence of retained application authority; a fresh authorized slot is required before reopening.",
+          "char_count": 1256
         },
         {
           "id": "boundaries",
@@ -17573,7 +17579,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-28",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "architecture",
           "desktop",
@@ -17583,15 +17589,15 @@
         "title": "Independent Web Environment Center",
         "type": "Architecture Contract"
       },
-      "body_length": 5491,
+      "body_length": 6263,
       "summary": "Desktop combines an environment center with its existing local Runtime lifecycle. Web Center deploys independently; Runtime never requires Center or Desktop to start. Both hosts share Contracts/Core/Controller/UI. Web Center has one administrator, with no registration, users, roles, organizations or user ACL service.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Shared behavior and host ownership\n\n`desktop/src/envcenter` owns exact route identity, search/filter, failure/recovery classification, operation ordering, cancellation and Gateway list presentation. Desktop's adapter invokes its existing main-process lifecycle/window owner; Web invokes Center HTTP and browser tabs. Shared modules cannot import Electron, Node filesystem APIs or Web authentication.\n\nDesktop does not contact Center, acquire Center credentials, or change Welcome layout, default navigation, local preparation preferences or shutdown ownership. Host configuration/secrets do not synchronize automatically. Go DTOs generate TypeScript and JSON schema through `cmd/center-contracts`, including enum/integer bounds.\n\nLabels/hostnames grant no trust. Directory revisions and operation sequences reject stale observations. A canceled pending tab cannot navigate after delayed completion; cancellation preserves an already-open route owner. Refresh reads authority instead of creating another intent.\n\n## Server entry\n\nPortal, each Env and each child application use distinct HTTPS origins on the same registrable domain and port. TLS covers all origins. Browser bookmarks remain explicitly direct links.\n\nBinding descriptor copy is a browser capability, not a network operation. Clipboard denial or absence produces local, localized manual-copy guidance without discarding the descriptor or changing authorization. Keyboard-accessible text selection remains available, and success is announced only after the browser confirms the write.\n\nCenter pairs as an access-only Gateway client after fingerprint confirmation. Runtime consent is independently persisted by `redeven web-binding apply --stdin --yes`. Binding pins Runtime ID, exact origin, client SPKI, application scope and revision. Published Flowersec carries mutually authenticated TLS 1.3 to the signed, pinned Runtime service. The target needs no inbound application TCP listener.\n\nEach operation belongs to one administrator device and route. Browser nonce, exact origins, bounded redemption and a single-use code complete handoff. Same-request response-loss retry recovers one outcome. Host-only cookies do not replace Runtime password/MFA. Logout, security changes and source/route revocation cancel derived admissions/streams.\n\n## Runtime and child applications\n\n`internal/webbinding` owns durable consent; `internal/webconnector` composes pinned TLS; `internal/environmentcenter` owns administrator authority, directory and proxy admission. Deployed Center requires a separate state-free Connector process through a local Unix socket. Both peers verify the configured OS UID before exchanging credentials. Only admitted route credentials enter worker memory; administrator state, factors and master key remain with Center. Embedded protocol tests may use the direct adapter; deployed services never silently fall back.\n\nA live control connection owns each worker lease. Center loss, logout or security revocation closes it and every derived stream. Connector restart loses leases; only a still-valid Center admission may establish a fresh lease on the next request. Business HTTP requests are never replayed by this owner. Systemd and Compose use distinct unprivileged identities and deny Connector access to Center state/TLS-key mounts.\n\nIPC preserves bounded machine error codes so permission, capacity, compatibility and offline failures retain shared recovery semantics. Runtime responses cannot inject worker error authority. The published connection controller owns retry timing; only explicit transient Gateway admission conflicts are retryable, while denied/revoked identity and invalid proofs remain terminal.\n\nServices, editor and graphical viewers receive resource-specific origins. Parent Runtime credentials stay in the trusted proxy and never reach child browsers. Editor admission pins the running instance. Raw graphical routes cannot bypass resource-scoped Flowersec. Child responses retain authenticated Runtime framing policy so editor worker iframes work; portal framing remains denied.",
-          "char_count": 4085
+          "body": "## Shared behavior and host ownership\n\n`desktop/src/envcenter` owns exact route identity, search/filter, failure/recovery classification, operation ordering, cancellation and Gateway list presentation. Desktop's adapter invokes its existing main-process lifecycle/window owner; Web invokes Center HTTP and browser tabs. Shared modules cannot import Electron, Node filesystem APIs or Web authentication.\n\nDesktop does not contact Center, acquire Center credentials, or change Welcome layout, default navigation, local preparation preferences or shutdown ownership. Host configuration/secrets do not synchronize automatically. Go DTOs generate TypeScript and JSON schema through `cmd/center-contracts`, including enum/integer bounds.\n\nLabels/hostnames grant no trust. Directory revisions and operation sequences reject stale observations. A canceled pending tab cannot navigate after delayed completion; cancellation preserves an already-open route owner. Refresh reads authority instead of creating another intent.\n\n## Server entry\n\nPortal, each Env and each child application use distinct HTTPS origins on the same registrable domain and port. TLS covers all origins. Browser bookmarks remain explicitly direct links.\n\nBinding descriptor copy is a browser capability, not a network operation. Clipboard denial or absence produces local, localized manual-copy guidance without discarding the descriptor or changing authorization. Keyboard-accessible text selection remains available, and success is announced only after the browser confirms the write.\n\nCenter pairs as an access-only Gateway client after fingerprint confirmation. Runtime consent is independently persisted by `redeven web-binding apply --stdin --yes`. Binding pins Runtime ID, exact origin, client SPKI, application scope and revision. Published Flowersec carries mutually authenticated TLS 1.3 to the signed, pinned Runtime service. The target needs no inbound application TCP listener.\n\nEach operation belongs to one administrator device and route. Browser nonce, exact origins, bounded redemption and a single-use code complete handoff. Same-request response-loss retry recovers one outcome. Host-only cookies do not replace Runtime password/MFA. Logout, security changes and source/route revocation cancel derived admissions/streams.\n\n## Runtime and child applications\n\n`internal/webbinding` owns durable consent; `internal/webconnector` composes pinned TLS; `internal/environmentcenter` owns administrator authority, directory and proxy admission. Deployed Center requires a separate state-free Connector process through a local Unix socket. Both peers verify the configured OS UID before exchanging credentials. Only admitted route credentials enter worker memory; administrator state, factors and master key remain with Center. Embedded protocol tests may use the direct adapter; deployed services never silently fall back.\n\nA live control connection owns each worker lease. Center loss, logout or security revocation closes it and every derived stream. Connector restart loses leases; only a still-valid Center admission may establish a fresh lease on the next request. Business HTTP requests are never replayed by this owner. Systemd and Compose use distinct unprivileged identities and deny Connector access to Center state/TLS-key mounts.\n\nIPC preserves bounded machine error codes so permission, capacity, compatibility and offline failures retain shared recovery semantics. Runtime responses cannot inject worker error authority. The published connection controller owns retry timing; only explicit transient Gateway admission conflicts are retryable, while denied/revoked identity and invalid proofs remain terminal.\n\nServices, editor and graphical viewers receive resource-specific origins. Parent Runtime credentials stay in the trusted proxy and never reach child browsers. Editor admission pins the running instance. Raw graphical routes cannot bypass resource-scoped Flowersec. Child responses retain authenticated Runtime framing policy so editor worker iframes work; portal framing remains denied.\n\n## Plugin application origins\n\nCenter prepares and revokes plugin origins through authenticated parent-route operations. Pending preparations and active origins share bounded capacity. A concurrent preparation for the same origin is busy; failed or canceled probes release their reservation. DELETE cancels and fences an in-flight preparation so a delayed probe cannot resurrect a revoked route or overwrite a reopened generation.\n\nEach child origin retains its exact parent route and Runtime admission. Child requests cannot call Center management APIs. Gateway certificates cover the admitted child-origin namespace, and CONNECT routing validates the exact Runtime target. Desktop private transport attaches parent bridge credentials only for the trusted parent frame.",
+          "char_count": 4857
         },
         {
           "id": "boundaries",
@@ -24253,7 +24259,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Cross-domain plugin security contract spanning authenticated identity, package provenance, execution, updates, routes, runtime isolation, and capability authority.",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "local-ui",
           "permissions",
@@ -24263,15 +24269,15 @@
         "title": "Plugin platform integration security",
         "type": "Security Contract"
       },
-      "body_length": 4003,
+      "body_length": 4729,
       "summary": "ReDevPlugin receives authenticated host identity/source policy, never browser-claimed ownership/trust. HTTP checks auth, origin, CSRF and closed-action policy; direct calls check owner/action/resource. Package provenance, signature, execution approval, update eligibility and permission are independent. Integrity, runtime identity or scope mismatch fails closed.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Local process boundary\nThe `process.local` permission is an explicit high-risk grant and method-level Process Broker access is checked again for every Worker invocation. The Host does not inherit the complete Redeven environment and never injects session cookies, plugin tokens, or Host credentials.\n\nSee [Plugin process sessions](../architecture/plugin-process-sessions.md) for the lifecycle contract.\n\n## Authenticated session boundary\nThe session resolver accepts only a Redeven channel id whose stored metadata has exact non-empty channel, user, and environment identities.\n\nThe bounded session cache is keyed by owner-session hash and accepts a hit only when all four hashes match.\n\nGuessed owner sweeps and local teardown registries are prohibited.\n\n## HTTP and direct authorization\nThe canonical route is `/_redevplugin/api/plugins`.\n\nMethod effect is resolved before local policy clamps it, while shared runtime management remains admin-only.\n\n## Permission management projection\nPlugin Center reads active grants and explicit plugin security policies through released ReDevPlugin APIs. It never writes registry tables, invents a default grant for a catalog plugin, or treats catalog identity as permission.\n\nIts actual trust badge remains unchanged; only verified catalog trust may receive the `Official` trust badge.\n\n## Package admission and trust\nThe retained release install/update path accepts only the exact source policy, revocation evidence, publisher, plugin, version, signed release metadata, package hashes, and Host requirement. Browser-supplied trust state, arbitrary package bytes, rollback, unknown publishers, invalid or revoked signatures, and invented fetch provenance are denied.\n\nRedeven does not add a new authorization workflow; the existing official release-ref verification remains unchanged.\n\n## Capability confirmation plans\nReDevPlugin validates a capability preflight result against the Host-known capability response schema before it becomes a confirmation plan. Values in the reserved `redevplugin.capability.risk_plan.*` namespace must match the strict v1 risk-plan contract; an unknown or malformed reserved version fails closed instead of falling back to a generic object.\n\nReplacing or replaying any of those values requires a new confirmation.\n\n## Runtime trust\nRuntime descriptors bind version, target, IPC, WASM ABI, and artifact hash. Darwin release bytes receive their Developer ID signature before the product digest and Sigstore evidence, and later Desktop signing must preserve that exact nested executable. Startup must not hash the field binary and accept that value as its own trust anchor.\n\n## Business adapter and observability boundary\nPlugin business adapters are invoked only after ReDevPlugin resolves lifecycle, permission, confirmation, lease, quota, revocation, and audit context. Product code cannot bypass that chain.\n\nRaw adapter errors, tokens, secrets, cookies, query strings, absolute paths, and complete URLs are not copied into public or durable diagnostic detail.",
-          "char_count": 3038
+          "body": "## Local process boundary\nThe `process.local` permission is an explicit high-risk grant and method-level Process Broker access is checked again for every Worker invocation. The Host does not inherit the complete Redeven environment and never injects session cookies, plugin tokens, or Host credentials.\n\nSee [Plugin process sessions](../architecture/plugin-process-sessions.md) for the lifecycle contract.\n\n## Authenticated session boundary\nThe session resolver accepts only a Redeven channel id whose stored metadata has exact non-empty channel, user, and environment identities.\n\nThe bounded session cache is keyed by owner-session hash and accepts a hit only when all four hashes match.\n\nGuessed owner sweeps and local teardown registries are prohibited.\n\n## HTTP and direct authorization\nThe canonical route is `/_redevplugin/api/plugins`.\n\nMethod effect is resolved before local policy clamps it, while shared runtime management remains admin-only.\n\n## Permission management projection\nPlugin Center reads active grants and explicit plugin security policies through released ReDevPlugin APIs. It never writes registry tables, invents a default grant for a catalog plugin, or treats catalog identity as permission.\n\nIts actual trust badge remains unchanged; only verified catalog trust may receive the `Official` trust badge.\n\n## Package admission and trust\nThe retained release install/update path accepts only the exact source policy, revocation evidence, publisher, plugin, version, signed release metadata, package hashes, and Host requirement. Browser-supplied trust state, arbitrary package bytes, rollback, unknown publishers, invalid or revoked signatures, and invented fetch provenance are denied.\n\nRedeven does not add a new authorization workflow; the existing official release-ref verification remains unchanged.\n\n## Capability confirmation plans\nReDevPlugin validates a capability preflight result against the Host-known capability response schema before it becomes a confirmation plan. Values in the reserved `redevplugin.capability.risk_plan.*` namespace must match the strict v1 risk-plan contract; an unknown or malformed reserved version fails closed instead of falling back to a generic object.\n\nReplacing or replaying any of those values requires a new confirmation.\n\n## Runtime trust\nRuntime descriptors bind version, target, IPC, WASM ABI, and artifact hash. Darwin release bytes receive their Developer ID signature before the product digest and Sigstore evidence, and later Desktop signing must preserve that exact nested executable. Startup must not hash the field binary and accept that value as its own trust anchor.\n\n## Business adapter and observability boundary\nPlugin business adapters are invoked only after ReDevPlugin resolves lifecycle, permission, confirmation, lease, quota, revocation, and audit context. Product code cannot bypass that chain.\n\nRaw adapter errors, tokens, secrets, cookies, query strings, absolute paths, and complete URLs are not copied into public or durable diagnostic detail.\n\n## Plugin Web isolation\n\nPlugin documents use a distinct product-allocated origin and the published Web surface handler. Local UI and AppServer strip parent authentication before delegating child traffic. Desktop verifies the actual requesting frame origin before attaching private bridge credentials. Center binds child routes to an authenticated parent and cancels derived preparation on revocation; Gateway accepts only the expected child namespace and target.\n\nThe application owns its DOM and browser rendering. These freedoms do not grant product session, filesystem, process, credential or management authority. The released platform remains responsible for asset sessions, bridge binding, permissions and revocation.",
+          "char_count": 3764
         },
         {
           "id": "boundaries",
@@ -30465,7 +30471,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-30",
         "tags": [
           "lifecycle",
           "plugins",
@@ -30475,15 +30481,15 @@
         "title": "Plugin package review",
         "type": "UI Contract"
       },
-      "body_length": 1992,
+      "body_length": 3839,
       "summary": "ReDevPlugin owns package inspection, validation, and atomic lifecycle mutation. Redeven presents the exact candidate, source evidence, permissions, and confirmation before submitting through released APIs. Cancellation affects only pre-submit inspection. Unknown mutation outcomes require inventory reconciliation instead of resubmission. Updates retain saved components and use fresh authorized slots after reconciliation; only confirmed uninstall removes their placement.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Update review and confirmation\nPlugin Center's Updates card and inspector expose one primary `Review update` action.\n\nOpening it creates an exact update intent, shows the loading review in the same interaction, and never submits a mutation, changes tabs, or replaces the current selection.\n\nClosing completion preserves the Updates tab, clears obsolete exact selection, and shows an `All plugins are up to date` success state when no updates remain.\n\n## External package review\nAdministrators may start installation or update from a compatible public HTTPS package URL, public GitHub repository Release with optional tag, or local `.redevplugin` file. The product submits the source and intent to the released inspection API; it never downloads remote bytes in the browser, parses the package, chooses trust state, or invents provenance.\n\nA refresh failure after a terminal install exposes only an inventory refresh recovery and never a second install action.",
-          "char_count": 962
+          "body": "## Update review and confirmation\nPlugin Center's Updates card and inspector expose one primary `Review update` action.\n\nOpening it creates an exact update intent, shows the loading review in the same interaction, and never submits a mutation, changes tabs, or replaces the current selection.\n\nClosing completion preserves the Updates tab, clears obsolete exact selection, and shows an `All plugins are up to date` success state when no updates remain.\n\n## External package review\nAdministrators may start installation or update from a compatible public HTTPS package URL, public GitHub repository Release with optional tag, or local `.redevplugin` file. The product submits the source and intent to the released inspection API; it never downloads remote bytes in the browser, parses the package, chooses trust state, or invents provenance.\n\nA refresh failure after a terminal install exposes only an inventory refresh recovery and never a second install action.\n\n## Concise decision surface\n\nThe external review leads with Host-verified, locale-resolved author presentation, publisher and version. Package identifiers are technical evidence, not substitute product names when presentation exists. Verified identity is a quiet inline state; only unverified, blocked or revoked assessments receive a warning. The visual four-step timeline and generic introductory description are omitted; progress remains available to assistive technology.\n\nBefore consent, concrete destinations, requested host permissions, credentials, processes, background activity and host-facing methods remain visible. Ordinary worker methods and plugin-owned storage operations do not become broad \"delete content\" permission counters. Explicitly dangerous and unknown effects remain visible regardless of route. Full declarations, diffs, source evidence, hashes and inspection binding remain under a keyboard-operable package-details disclosure.\n\nNetwork destinations share one access heading, with update changes marked beside the affected destination. Storage, process and background changes remain visible on their access rows. Removed declarations remain available in the full report.\n\nOne short checkbox confirms the exact inspected package. Signature validity never substitutes for consent. The review cannot claim that installation or grants already occurred; completion cannot infer permission grants from enabled state. Unknown outcomes preserve the inspection identity and reconciliation behavior. Long names and translations wrap, mobile controls retain touch targets, and footer actions remain visible.\n\nExternal package installation does not grant permissions. Its detail copy states that access is managed after installation; the separate official-install approval flow retains its existing reviewed-permission contract.",
+          "char_count": 2809
         },
         {
           "id": "boundaries",
@@ -31678,5 +31684,5 @@
       ]
     }
   ],
-  "source_sha256": "924b8a4a024c858a382ce0edacccfb0cdccefa24d2ff22bc85eaa9751480d8e8"
+  "source_sha256": "ca05225baa7bc51b89cb9c59ae389341a69c0efc495d8b087e417bf15983d4f3"
 }

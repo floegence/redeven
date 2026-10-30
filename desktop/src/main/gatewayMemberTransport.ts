@@ -2,6 +2,7 @@ import http from 'node:http';
 import type net from 'node:net';
 import { randomBytes, timingSafeEqual, createHash, X509Certificate, createPublicKey, verify } from 'node:crypto';
 import type { Duplex } from 'node:stream';
+import { isGatewayApplicationHostname } from './pluginOrigin';
 import {
   createArtifactLease, parseArtifact, createByteStreamDuplex,
   createConnectionController, createConnectionPathAgent,
@@ -140,7 +141,7 @@ export async function createGatewayMemberTransport(options: Readonly<{
     const trustedService: GatewayMemberService = service;
     const host = new URL(trustedService.origin).hostname;
     const connectionPath: NodeConnectionPath = { connect: async ({ hostname, port, signal: requestSignal }) => {
-      if (hostname !== host || port !== 443 || signal.aborted) throw new Error('Gateway member target denied.');
+      if (!isGatewayApplicationHostname(host, hostname) || port !== 443 || signal.aborted) throw new Error('Gateway member target denied.');
       const operationSignal = AbortSignal.any([signal, requestSignal]);
       const session = await controller.waitForSession({ signal: operationSignal });
       acceptService(await options.refreshService(operationSignal));
@@ -165,10 +166,11 @@ export async function createGatewayMemberTransport(options: Readonly<{
       if (actual.length !== authorization.length || !timingSafeEqual(actual, authorization)) {
         socket.end('HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="Redeven Gateway"\r\nContent-Length: 0\r\n\r\n'); return;
       }
-      if (request.url !== `${host}:443`) { socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); return; }
+      const target = request.url?.endsWith(':443') ? request.url.slice(0, -4) : '';
+      if (!isGatewayApplicationHostname(host, target)) { socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); return; }
       const requestLifetime = new AbortController();
       socket.once('close', () => requestLifetime.abort());
-      void connectionPath.connect({ hostname: host, port: 443, signal: requestLifetime.signal }).then(remote => {
+      void connectionPath.connect({ hostname: target, port: 443, signal: requestLifetime.signal }).then(remote => {
         if (socket.destroyed) { remote.destroy(); return; }
         socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
         if (head.length) remote.write(head);

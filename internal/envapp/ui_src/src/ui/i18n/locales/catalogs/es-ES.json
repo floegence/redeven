@@ -6862,6 +6862,9 @@
         "committing": "Cargando el contenido del plugin…"
       },
       "closingSurface": "Cerrando la vista del plugin...",
+      "closeUnresponsiveTitle": "¿Cerrar el plugin que no responde?",
+      "closeUnresponsiveDescription": "El plugin no responde. Si lo cierras, podrías perder los cambios sin guardar.",
+      "closeAnyway": "Cerrar de todos modos",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - contenido del plugin en {surface}",
       "iframeUnavailable": "La ventana iframe del plugin no está disponible.",
@@ -7006,8 +7009,8 @@
         "executionApproval": "Aprobación",
         "updateMode": "Modo de actualización",
         "reviewHighlights": "Aspectos clave de la revisión",
-        "requestedAccessTitle": "Qué puede hacer este plugin",
-        "requestedAccessGuidance": "Revisa el acceso verificado por el Host. Al confirmar Instalar se conceden los permisos necesarios permitidos y se habilita el plugin; el acceso bloqueado por la política sigue denegado.",
+        "requestedAccessTitle": "Acceso",
+        "requestedAccessGuidance": "Revisa el acceso solicitado antes de instalar.",
         "requestedPermissions": "Acceso protegido",
         "localProcessAccess": "Puede iniciar procesos locales",
         "localProcessAccessGuidance": "El plugin puede iniciar ejecutables configurados por el usuario y comunicarse mediante los flujos estándar de entrada, salida y error. Revisa su configuración y el permiso de procesos antes de continuar.",
@@ -7070,7 +7073,7 @@
           "one": "Hay {count} declaración estándar adicional disponible en el informe completo.",
           "other": "Hay {count} declaraciones estándar adicionales disponibles en el informe completo."
         },
-        "fullInspectionReport": "Informe de inspección completo",
+        "fullInspectionReport": "Detalles del paquete",
         "reportChanges": {
           "one": "{count} cambio",
           "other": "{count} cambios"
@@ -7083,7 +7086,7 @@
         "manifestHash": "SHA-256 del manifiesto",
         "entriesHash": "SHA-256 de las entradas",
         "declaredAccess": "Acceso declarado",
-        "declaredAccessGuidance": "Una instalación nueva concede los permisos necesarios permitidos por la política del Host y habilita el plugin. Revisa antes el código de procesos, las conexiones externas, los secretos y las operaciones de escritura.",
+        "declaredAccessGuidance": "La instalación no concede permisos. Gestiona el acceso después de instalar.",
         "declaredAccessUpdateGuidance": "Una actualización conserva el estado de activación gestionado por el host y los permisos existentes, sin conceder otros nuevos. Revisa qué puede solicitar el paquete inspeccionado, especialmente código de procesos de trabajo, conexiones externas, secretos y operaciones de escritura.",
         "noDeclaredAccess": "Este paquete no declara capacidades ni accesos del plugin.",
         "reviewCarefully": "Revisar con atención",
@@ -7128,17 +7131,20 @@
         "executionApprovalPolicyApproved": "Aprobado por la política",
         "executionApprovalPolicyBlocked": "Bloqueado por la política",
         "confirmDigest": "Apruebo este paquete concreto, tal como se ha inspeccionado, y el acceso que declara.",
-        "confirmInstallTitle": "Confirmar la instalación de este paquete de plugin",
-        "confirmUpdateTitle": "Confirmar esta actualización del plugin",
-        "confirmReinstallTitle": "Confirmar la reinstalación de este paquete concreto",
-        "confirmReplaceTitle": "Confirmar el reemplazo del paquete instalado",
-        "confirmInstallCheckedTitle": "Confirmar la instalación del paquete inspeccionado",
+        "confirmInstallTitle": "Confirmo la instalación",
+        "confirmUpdateTitle": "Apruebo esta actualización",
+        "confirmReinstallTitle": "Apruebo reinstalar este paquete",
+        "confirmReplaceTitle": "Apruebo reemplazar el paquete instalado",
+        "confirmInstallCheckedTitle": "Apruebo este paquete revisado",
         "loadingInstallTitle": "Obteniendo información del plugin",
         "loadingInstallDescription": "Estamos obteniendo y verificando los detalles del paquete. Podrás revisar su acceso antes de instalarlo.",
         "confirmInstallGuidance": "Instalar confirma este paquete exacto y su acceso declarado. El Host concede los permisos necesarios permitidos y habilita el plugin; el acceso bloqueado por la política se rechaza de forma segura.",
         "confirmUpdateGuidance": "Estás confirmando esta inspección concreta y el acceso declarado. El host conserva el estado de activación actual y los permisos existentes, y no concede ninguno nuevo automáticamente.",
         "currentStateRetained": "Se conserva el estado actual",
-        "noNewPermissionGrants": "Sin permisos nuevos"
+        "noNewPermissionGrants": "Sin permisos nuevos",
+        "accessNetwork": "Conectarse a",
+        "accessStorage": "Usar sus propios datos guardados",
+        "accessCredential": "Usar credenciales guardadas"
       }
     },
     "pluginRuntime": {

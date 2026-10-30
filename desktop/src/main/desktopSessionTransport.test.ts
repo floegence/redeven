@@ -198,6 +198,19 @@ describe('shouldFailDesktopSessionMainDocument', () => {
 });
 
 describe('desktopPrivateBridgeRequestHeaders', () => {
+  it('never sends private credentials to plugin origins or on plugin frame requests', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    const pluginURL = `http://${'a'.repeat(48)}.localhost:43123/index.html`;
+    const forged = { 'x-redeven-desktop-bridge-token': 'forged', Accept: '*/*' };
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, pluginURL, forged)).toEqual({ Accept: '*/*' });
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup,
+      'http://127.0.0.1:43123/api/local/runtime', forged, { requestingFrameURL: pluginURL }))
+      .toEqual({ Accept: '*/*' });
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup,
+      'http://127.0.0.1:43123/api/local/runtime', {}, { requestingFrameURL: transport.entryURL }))
+      .toEqual({ 'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token });
+  });
+
   it('limits graphical windows to the numeric carrier and their own bootstrap', () => {
     const transport = resolveDesktopSessionTransport(localTarget, localStartup);
     const scope = { webServiceForwardID: 'owned', graphicalWindow: true };
