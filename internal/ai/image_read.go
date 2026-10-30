@@ -279,7 +279,7 @@ func (r *run) resolveFloretToolMedia(ctx context.Context, attachment flprovider.
 		if err != nil {
 			return ContentPart{}, err
 		}
-		return attachmentManifestPart(canonical, locator, r.attachmentToolReadEnabled), nil
+		return attachmentManifestPart(canonical, locator), nil
 	}
 	return ContentPart{Type: "image", Text: attachment.Name, MimeType: descriptor.MIMEType, FileURI: "data:" + descriptor.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(body)}, nil
 }

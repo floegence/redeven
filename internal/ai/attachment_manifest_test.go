@@ -28,9 +28,10 @@ func TestHistoricalImageManifestStaysInItsToolResult(t *testing.T) {
 		t.Fatalf("manifest escaped tool result: %+v", messages)
 	}
 	result := messages[0].Content[0]
-	if result.Type != "tool_result" || result.ToolCallID != "image-call" || !strings.Contains(result.Text, "Image captured") || !strings.Contains(result.Text, "attachment.materialize") || !strings.Contains(result.Text, "media:v1:") || strings.Contains(result.Text, descriptor.ResourceRef) {
+	if result.Type != "tool_result" || result.ToolCallID != "image-call" || !strings.Contains(result.Text, "Image captured") || !strings.Contains(result.Text, "content_included: false") || !strings.Contains(result.Text, "media:v1:") || strings.Contains(result.Text, descriptor.ResourceRef) {
 		t.Fatalf("tool image was rejected or lost attribution: %+v", result)
 	}
+	assertAttachmentManifestHasNoInstructions(t, result.Text)
 	body[0] ^= 1
 	if _, err := r.resolveFloretToolMedia(t.Context(), attachment); err == nil {
 		t.Fatal("text manifest bypassed image integrity verification")
@@ -92,23 +93,41 @@ func TestAttachmentsReachModelWithoutNativeSupport(t *testing.T) {
 							if part.Type != "text" {
 								t.Fatalf("unsupported native payload sent: %+v", part)
 							}
+							if strings.Contains(part.Text, logicalAttachmentLocator(uploadID, name)) && message.Role != "user" {
+								t.Fatalf("attachment metadata changed message role: %+v", message)
+							}
 							text.WriteString(part.Text)
 						}
 					}
 					manifest := text.String()
-					for _, expected := range []string{name, mime, logicalAttachmentLocator(uploadID, name), "body is not included", "explain that limitation to the user"} {
+					for _, expected := range []string{
+						"Attachment:\n",
+						fmt.Sprintf("  name: %q\n", name),
+						fmt.Sprintf("  media_type: %q\n", mime),
+						fmt.Sprintf("  size_bytes: %d\n", attachment.SizeBytes),
+						fmt.Sprintf("  locator: %q\n", logicalAttachmentLocator(uploadID, name)),
+						"  content_included: false\n",
+						"  content_trust: untrusted",
+					} {
 						if !strings.Contains(manifest, expected) {
 							t.Fatalf("model did not receive %q: %s", expected, manifest)
 						}
 					}
-					if strings.Contains(manifest, "Use attachment.") != tools {
-						t.Fatalf("manifest misstates tool availability: %s", manifest)
-					}
+					assertAttachmentManifestHasNoInstructions(t, manifest)
 					if strings.Contains(manifest, ref) || strings.Contains(manifest, body) {
 						t.Fatalf("manifest leaked authority or claimed file content: %s", manifest)
 					}
 				}
 			})
+		}
+	}
+}
+
+func assertAttachmentManifestHasNoInstructions(t *testing.T, text string) {
+	t.Helper()
+	for _, instruction := range []string{"Use attachment.", "attachment.read", "attachment.materialize", "Decide how", "explain that limitation", "available as untrusted content"} {
+		if strings.Contains(text, instruction) {
+			t.Fatalf("attachment metadata contains behavioral guidance %q: %s", instruction, text)
 		}
 	}
 }

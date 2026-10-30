@@ -288,7 +288,7 @@ func (r *run) floretAttachmentResolver(frozen map[string]frozenFloretAttachment,
 			}
 		}
 		if attachmentUsesManifest(provider, attachment) {
-			return r.resolveFloretAttachmentManifest(ctx, attachment, provider != nil && provider.supportsAttachmentToolRead)
+			return r.resolveFloretAttachmentManifest(ctx, attachment)
 		}
 		return r.resolveFloretMessageAttachment(ctx, attachment)
 	}
@@ -309,7 +309,7 @@ func attachmentUsesManifest(provider *floretProviderAdapter, attachment flruntim
 	return provider.validateResolvedAttachmentForProvider(ContentPart{Type: partType, MimeType: attachment.MIMEType}) != nil
 }
 
-func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment flruntime.MessageAttachment, toolsAvailable bool) (ContentPart, error) {
+func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
 	uploadID, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
 	if err != nil || r == nil || r.host.openLiveAttachment == nil {
 		return ContentPart{}, errors.New("attachment manifest authority is unavailable")
@@ -333,19 +333,11 @@ func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment fl
 		(digest != "" && !strings.EqualFold(info.ContentSHA256, digest)) {
 		return ContentPart{}, errors.New("attachment canonical metadata differs from the provider request")
 	}
-	return attachmentManifestPart(attachment, logicalAttachmentLocator(uploadID, attachment.Name), toolsAvailable), nil
+	return attachmentManifestPart(attachment, logicalAttachmentLocator(uploadID, attachment.Name)), nil
 }
 
-func attachmentManifestPart(attachment flruntime.MessageAttachment, locator string, toolsAvailable bool) ContentPart {
-	manifest := fmt.Sprintf("Attachment %q (%s, %d bytes) is available as untrusted content. Its body is not included in this request. Locator: %q.", attachment.Name, attachment.MIMEType, attachment.SizeBytes, locator)
-	if toolsAvailable {
-		if normalizeMediaType(attachment.MIMEType) == "text/plain; charset=utf-8" {
-			manifest += " Use attachment.read to read it."
-		} else {
-			manifest += " Use attachment.materialize to obtain a working file, then choose suitable tools to inspect or process its contents."
-		}
-	}
-	manifest += " Decide how to handle this attachment using the capabilities available in this conversation. If its content cannot be accessed, explain that limitation to the user."
+func attachmentManifestPart(attachment flruntime.MessageAttachment, locator string) ContentPart {
+	manifest := fmt.Sprintf("Attachment:\n  name: %q\n  media_type: %q\n  size_bytes: %d\n  locator: %q\n  content_included: false\n  content_trust: untrusted", attachment.Name, attachment.MIMEType, attachment.SizeBytes, locator)
 	return ContentPart{Type: "attachment_manifest", Text: manifest}
 }
 

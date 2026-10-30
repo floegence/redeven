@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -56,8 +57,24 @@ func TestOpaqueAttachmentUploadToModelToolExecutionAndRestart(t *testing.T) {
 			return
 		}
 		input, _ := json.Marshal(body["input"])
-		if !bytes.Contains(input, []byte(locator.Load().(string))) || !bytes.Contains(input, []byte("attachment.materialize")) {
-			t.Error("provider request omitted the attachment locator or processing instructions")
+		if !bytes.Contains(input, []byte(locator.Load().(string))) || !bytes.Contains(input, []byte("content_included: false")) {
+			t.Error("provider request omitted attachment metadata")
+		}
+		for _, instruction := range []string{"Use attachment.materialize", "Decide how to handle this attachment", "explain that limitation to the user"} {
+			if bytes.Contains(input, []byte(instruction)) {
+				t.Errorf("provider input contains redundant attachment guidance: %s", instruction)
+			}
+		}
+		var materializeDefined bool
+		for _, raw := range tools {
+			definition, _ := raw.(map[string]any)
+			if definition["name"] == "attachment_materialize" {
+				description, _ := definition["description"].(string)
+				materializeDefined = strings.Contains(description, "locator") && strings.Contains(description, "work file")
+			}
+		}
+		if !materializeDefined {
+			t.Error("provider tool schema omitted attachment access guidance")
 		}
 		if bytes.Contains(input, []byte("input_file")) || bytes.Contains(input, []byte("base64,")) {
 			t.Error("opaque bytes were sent as native file input")
