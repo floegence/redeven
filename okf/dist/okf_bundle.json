@@ -25597,7 +25597,7 @@
         "title": "File preview viewport and rendering",
         "type": "UI Contract"
       },
-      "body_length": 5926,
+      "body_length": 6233,
       "summary": "Redeven owns preview modes, identity, and renderer lifetimes; published Floe owns sizing, PDF layers, and static PPTX. Documents/images initially fit, including enlargement. Resize updates automatic fit, preserving manual zoom. PDF/PPTX pages have one rendering owner. Stale work cannot replace current content; cancellation is neutral and failures stay local/retryable. HTML uses published isolation; source editing is explicit and incomplete HTML never executes.",
       "sections": [
         {
@@ -31701,5 +31701,5 @@
       ]
     }
   ],
-  "source_sha256": "71a84138b31850ae70484fada80bf968427ee727bb61445f7e3294b61381a62a"
+  "source_sha256": "0fae63e5964ccb0760c36f93a11b79e866d2953d7de37cbca1efde644950a291"
 }
