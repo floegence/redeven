@@ -167,6 +167,7 @@ const pluginLayoutMocks = vi.hoisted(() => ({
 vi.mock('./services/workbenchLayoutApi', () => pluginLayoutMocks);
 const workbenchPluginSurfaceState = vi.hoisted(() => ({
   host: null as any,
+  readSurface: false,
   open: vi.fn(async () => undefined),
   close: vi.fn(async () => undefined),
   releasePlugin: vi.fn(async () => undefined),
@@ -1203,6 +1204,9 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
     onCleanup(() => props.registerPluginSurfaceController?.(null));
     return (
       <MockDisplayModeSurface testId="workbench-page">
+        <Show when={workbenchPluginSurfaceState.readSurface}>
+          <span data-plugin-resolution>{props.pluginSurfaceHost.resolveSurface(examplePluginProjection('enabled').items[0].defaultLaunchTarget).status}</span>
+        </Show>
         <For each={props.dockActions ?? []}>
           {(action: any) => (
             <button
@@ -6489,6 +6493,33 @@ describe('EnvAppShell remote access gate', () => {
       expect(workbenchPluginSurfaceState.host.resolveSurface(target).target.expectedManagementRevision).toBe(13);
       expect(pluginLifecycleMocks.execute).not.toHaveBeenCalled();
     } finally { dispose(); }
+  }, 10000);
+
+  it('keeps the workbench connected during a pending surface inventory refresh', async () => {
+    workbenchPluginSurfaceState.readSurface = true;
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    const read = deferred<PluginInventoryProjection>();
+    try {
+      await flushUntil(() => Boolean(workbenchPluginSurfaceState.host), 60);
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      const workbench = host.querySelector('[data-testid="workbench-page"]');
+      expect(workbench?.isConnected).toBe(true);
+      pluginLifecycleMocks.loadInventoryProjection.mockReturnValueOnce(read.promise);
+      const refresh = workbenchPluginSurfaceState.host.refreshInventory();
+      await flushAsync();
+      expect(workbench?.isConnected).toBe(true);
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBe(workbench);
+      read.resolve(projection);
+      expect(await refresh).toBe(true);
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBe(workbench);
+    } finally { read.resolve(projection); dispose(); workbenchPluginSurfaceState.readSurface = false; }
   }, 10000);
 
   it('discards a surface inventory refresh when the authenticated owner is replaced', async () => {

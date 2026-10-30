@@ -36,6 +36,10 @@ Plugin Center as well as surface placement; refresh does not remove layout,
 replay Agent/file writes, or revoke sibling surfaces. A failed inventory read
 retains a healthy cached lease; it is not evidence of revocation. The failed
 surface still requires a successful authoritative read before retrying.
+The projection reads the resource's latest owner-bound snapshot during refresh
+so background inventory requests never suspend and detach the Workbench DOM.
+Detaching an iframe would reload its already-consumed entry ticket and destroy
+otherwise valid sibling application state.
 
 Visibility and theme/context delivery can race with SDK retirement or document
 navigation. A synchronous delivery failure enters the same first-error path

@@ -1530,7 +1530,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
   const pluginInventoryProjection = () => {
     const owner = pluginInventorySource();
-    const state = pluginInventorySessionState();
+    // A background read must not detach live iframe documents through the
+    // Workbench Suspense boundary. Authority still binds the current owner.
+    const state = pluginInventorySessionState.latest;
     return owner && state?.owner === owner ? state.projection : undefined;
   };
   const pluginInventoryError = () => {
