@@ -1,4 +1,4 @@
-import { For, Show, Suspense, lazy, type JSX } from 'solid-js';
+import { Show, Suspense, lazy, type JSX } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import type { FilePreviewDescriptor, FilePreviewSurface, PreviewMode } from '../utils/filePreview';
@@ -14,6 +14,7 @@ import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
 import { ImagePreviewPane } from '../widgets/ImagePreviewPane';
 import { useI18n } from '../i18n';
 import { DelimitedTextPreview, delimitedFormat } from '../../../../../flower_ui/src/preview/DelimitedTextPreview';
+import { SpreadsheetPreview } from '../../../../../flower_ui/src/preview/SpreadsheetPreview';
 import { taskFilesEnUS, type TaskFilesCopy } from '../../../../../flower_ui/src/taskFilesCopy';
 
 export type RedevenFilePreviewRendererId =
@@ -51,8 +52,6 @@ export type RedevenFilePreviewRenderProps = Readonly<{
   bytes?: Uint8Array<ArrayBuffer> | null;
   truncated?: boolean;
   loading?: boolean;
-  xlsxSheetName?: string;
-  xlsxRows?: string[][];
   onDraftChange?: (value: string) => void;
   onSelectionChange?: (selectionText: string) => void;
 }>;
@@ -131,34 +130,10 @@ function renderAudioPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 
 function renderSpreadsheetPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
-  return (
-    <div class={`p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
-      <Show when={props.xlsxSheetName}>
-        <div class="mb-2 text-[11px] text-muted-foreground">{i18n.t('uiCopy.preview.sheetLabel')} {props.xlsxSheetName}</div>
-      </Show>
-
-      <p class="mb-2 text-[11px] text-muted-foreground">{i18n.t('flowerSurface.taskFiles.basicSpreadsheet')}</p>
-      <div class="overflow-auto rounded-md border border-border">
-        <table class="w-full text-xs">
-          <tbody>
-            <For each={props.xlsxRows ?? []}>
-              {(row) => (
-                <tr class="border-b border-border last:border-b-0">
-                  <For each={row}>
-                    {(cell) => (
-                      <td class="border-r border-border px-2 py-1 align-top whitespace-pre-wrap break-words last:border-r-0">
-                        {cell}
-                      </td>
-                    )}
-                  </For>
-                </tr>
-              )}
-            </For>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  const copy = () => Object.fromEntries(Object.keys(taskFilesEnUS).map(key => [key, i18n.t(('flowerSurface.taskFiles.' + key) as Parameters<typeof i18n.t>[0])])) as TaskFilesCopy;
+  return <div class="h-full min-h-0 overflow-hidden" classList={{ 'redeven-file-preview-surface-window': props.surface === 'window' }}><Show when={props.bytes} fallback={<div role="alert">{copy().previewFailed}</div>}>{bytes =>
+    <SpreadsheetPreview bytes={bytes()} format="xlsx" copy={copy()} allowLocalWheel={props.allowLocalWheel} />
+  }</Show></div>;
 }
 
 function renderUnavailablePreview(props: RedevenFilePreviewRenderProps): JSX.Element {

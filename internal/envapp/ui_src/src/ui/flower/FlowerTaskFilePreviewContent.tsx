@@ -4,14 +4,13 @@ import { FileMarkdown } from '../file-markdown/FileMarkdown';
 import { useMarkdownPreviewPreferences } from '../services/markdownPreviewPreferences';
 import { FilePreviewContent } from '../widgets/FilePreviewContent';
 import { describeFilePreview, getExtDot, isLikelyTextContent, isTextFilePreview, mimeFromExtDot, type FilePreviewDescriptor } from '../utils/filePreview';
-import { readSpreadsheetPreview } from '../../../../../flower_ui/src/preview/readSpreadsheetPreview';
 import { useI18n } from '../i18n';
 
 /** Env App retains its rich report renderers inside the shared dialog-owned preview. */
 export function FlowerTaskFilePreviewContent(props: FlowerTaskFilePreviewContentProps) {
   const i18n = useI18n();
   const markdown = useMarkdownPreviewPreferences();
-  const [content, setContent] = createSignal<{ descriptor: FilePreviewDescriptor; bytes: Uint8Array<ArrayBuffer>; text: string; url: string; rows?: string[][]; sheet?: string }>();
+  const [content, setContent] = createSignal<{ descriptor: FilePreviewDescriptor; bytes: Uint8Array<ArrayBuffer>; text: string; url: string }>();
   const [failed, setFailed] = createSignal(false);
   createEffect(() => {
     const blob = props.blob, name = props.name, mime = props.mime;
@@ -28,28 +27,22 @@ export function FlowerTaskFilePreviewContent(props: FlowerTaskFilePreviewContent
         else if (mime.startsWith('text/') || isLikelyTextContent(bytes)) descriptor = { mode: 'text', textPresentation: 'plain', wrapText: true };
       }
       const text = isTextFilePreview(descriptor) ? new TextDecoder().decode(bytes) : '';
-      let rows: string[][] | undefined, sheet: string | undefined;
-      if (descriptor.mode === 'xlsx') {
-        const value = await readSpreadsheetPreview(bytes);
-        if (!active) return;
-        if (!value) throw new Error('No worksheet');
-        rows = value.rows; sheet = value.sheetName;
-      }
       if (!active) return;
       url = URL.createObjectURL(new Blob([bytes], { type: mime || mimeFromExtDot(getExtDot(name)) || 'application/octet-stream' }));
-      setContent({ descriptor, bytes, text, url, rows, sheet });
+      setContent({ descriptor, bytes, text, url });
     })().catch(() => { if (active) setFailed(true); });
     onCleanup(() => { active = false; if (url) URL.revokeObjectURL(url); });
   });
+  const renderFailed = () => <div class="flower-task-preview-state" role="alert">{i18n.t('flowerSurface.taskFiles.previewFailed')}</div>;
   const unavailable = () => <div class="flower-task-preview-state" role="alert">{i18n.t('flowerSurface.taskFiles.unsupported')}</div>;
-  return <ErrorBoundary fallback={unavailable}>
-    <Show when={!failed()} fallback={unavailable()}>
+  return <ErrorBoundary fallback={renderFailed}>
+    <Show when={!failed()} fallback={renderFailed()}>
       <Show when={content()} fallback={<div class="flower-task-preview-state" role="status">{i18n.t('flowerSurface.taskFiles.loading')}</div>}>{value =>
         <Show when={value().descriptor.mode !== 'binary' && value().descriptor.mode !== 'unsupported'} fallback={unavailable()}>
           <Show when={value().descriptor.mode === 'markdown'} fallback={
             <FilePreviewContent surface="window" showHeader={false} item={{ id: props.name, name: props.name, path: props.path ?? props.name, type: 'file', size: props.blob.size }}
               descriptor={value().descriptor} text={value().text} bytes={value().bytes} objectUrl={value().url} resourceUrl={value().url}
-              xlsxRows={value().rows} xlsxSheetName={value().sheet} onRenderError={() => setFailed(true)} onResourceError={() => setFailed(true)} />
+              onRenderError={() => setFailed(true)} onResourceError={() => setFailed(true)} />
           }>
             <div class="flower-task-preview-markdown" data-floe-scroll-viewport>
               <FileMarkdown content={value().text} filePath={props.path} showToc tocPresentation="drawer"

@@ -48,8 +48,6 @@ export interface FilePreviewPanelProps {
   onOpenParent?: () => void | Promise<void>;
   onRenderError?: (path: string, message?: string) => void;
   onResourceError?: (path:string,source:string) => void;
-  xlsxSheetName?: string;
-  xlsxRows?: string[][];
   onRetry?: () => void;
   onCopyPath?: () => boolean | Promise<boolean>;
   onDownload?: () => void;
@@ -107,8 +105,6 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             onResourceError={props.onResourceError}
             onRenderError={props.onRenderError}
             onRetry={props.onRetry}
-            xlsxSheetName={props.xlsxSheetName}
-            xlsxRows={props.xlsxRows}
             onCopyPath={props.onCopyPath}
             onStartEdit={props.onStartEdit}
             onDraftChange={props.onDraftChange}

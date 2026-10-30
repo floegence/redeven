@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DelimitedTextPreview } from '../../../../../flower_ui/src/preview/DelimitedTextPreview';
 import { taskFilesEnUS } from '../../../../../flower_ui/src/taskFilesCopy';
 const state = vi.hoisted(() => ({ viewers: [] as Array<{ load: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn>; resolve: () => void; reject: (error: Error) => void }> }));
-vi.mock('@silurus/ooxml/xlsx', () => ({ XlsxSheetViewer: class {
+vi.mock('@silurus/ooxml/xlsx', () => ({ XlsxWorkbook: {}, XlsxSheetViewer: class {
   resolve!: () => void; reject!: (error: Error) => void;
   load = vi.fn(() => new Promise<void>((resolve, reject) => { this.resolve = resolve; this.reject = reject; }));
+  sheetCount = 1; sheetIndex = 0; sheetNames = ['Sheet1'];
   destroy = vi.fn(); relayout = vi.fn(async () => {}); getScale = () => 1;
   constructor() { state.viewers.push(this); }
 } }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: Record<string, unknown>) => <button {...props} /> }));
+vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: Record<string, unknown>) => <button {...props} />, Popover: (props: any) => <>{props.trigger}<Show when={props.open}>{props.children}</Show></> }));
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); state.viewers.length = 0; vi.unstubAllGlobals(); });
 function mount() {

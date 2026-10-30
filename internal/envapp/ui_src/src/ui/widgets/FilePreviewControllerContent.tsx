@@ -32,8 +32,6 @@ export function FilePreviewControllerContent(props: FilePreviewControllerContent
       onRenderError={props.controller.reportRenderError}
       onResourceError={(path,source) => void props.controller.reportResourceError(path,source)}
       onOpenParent={props.onOpenParent}
-      xlsxSheetName={props.controller.xlsxSheetName()}
-      xlsxRows={props.controller.xlsxRows()}
       onCopyPath={props.onCopyPath}
       showHeader={props.showHeader}
       contentRef={props.contentRef}

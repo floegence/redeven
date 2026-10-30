@@ -54,8 +54,6 @@ describe('FilePreviewControllerContent', () => {
       errorType: () => undefined,
       retry: vi.fn(async () => undefined),
       reportResourceError: vi.fn(async () => undefined),
-      xlsxSheetName: () => '',
-      xlsxRows: () => [],
       openPreview: vi.fn(async () => undefined),
       closePreview: vi.fn(),
       handleOpenChange: vi.fn(),

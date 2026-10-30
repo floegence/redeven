@@ -51,7 +51,6 @@ export default defineConfig({
   }, solid({ babel: { compact: true } }), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
   resolve: {
     alias: [
-      { find: /^exceljs$/, replacement: path.resolve(import.meta.dirname, 'node_modules/exceljs/dist/exceljs.min.js') },
       { find: /^docx-preview$/, replacement: path.resolve(import.meta.dirname, 'node_modules/docx-preview/dist/docx-preview.mjs') },
       { find: /^@silurus\/ooxml\/xlsx$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@silurus/ooxml/dist/xlsx.mjs') },
       { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },

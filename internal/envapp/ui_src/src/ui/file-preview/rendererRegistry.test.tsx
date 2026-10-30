@@ -35,6 +35,10 @@ vi.mock('../widgets/DocxPreviewPane', () => ({
   ),
 }));
 
+vi.mock('../../../../../flower_ui/src/preview/SpreadsheetPreview', () => ({
+  SpreadsheetPreview: (props: { bytes: Uint8Array; format: string }) => <div data-testid="xlsx-renderer">{props.format}:{props.bytes.length}</div>,
+}));
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.restoreAllMocks();
@@ -115,8 +119,7 @@ describe('Redeven file preview renderer registry', () => {
         })}
         {renderRedevenFilePreviewBody({
           descriptor: { mode: 'xlsx' },
-          xlsxSheetName: 'Sheet1',
-          xlsxRows: [['A1', 'B1']],
+          bytes: new Uint8Array([1, 2, 3, 4]),
         })}
         {renderRedevenFilePreviewBody({
           descriptor: { mode: 'unsupported' },
@@ -129,8 +132,7 @@ describe('Redeven file preview renderer registry', () => {
     expect(host.querySelector('[data-testid="markdown-renderer"]')?.textContent).toContain('/workspace/README.md');
     await vi.waitFor(() => expect(host.querySelector('[data-testid="pdf-renderer"]')?.textContent).toBe('3'));
     expect(host.querySelector('[data-testid="docx-renderer"]')?.textContent).toBe('2');
-    expect(host.textContent).toContain('Sheet: Sheet1');
-    expect(host.textContent).toContain('A1');
+    expect(host.querySelector('[data-testid="xlsx-renderer"]')?.textContent).toBe('xlsx:4');
     expect(host.textContent).toContain(i18n.t('filePreview.errorUnsupportedTitle'));
     expect(host.textContent).toContain(i18n.t('filePreview.errorUnsupportedDescription'));
     expect(host.textContent).toContain(i18n.t('filePreview.technicalDetails'));
@@ -182,7 +184,7 @@ describe('Redeven file preview renderer registry', () => {
         {renderRedevenFilePreviewBody({ descriptor: { mode: 'image' }, surface: 'window' })}
         {renderRedevenFilePreviewBody({ descriptor: { mode: 'video' }, surface: 'window' })}
         {renderRedevenFilePreviewBody({ descriptor: { mode: 'audio' }, surface: 'window' })}
-        {renderRedevenFilePreviewBody({ descriptor: { mode: 'xlsx' }, surface: 'window', xlsxRows: [['A1']] })}
+        {renderRedevenFilePreviewBody({ descriptor: { mode: 'xlsx' }, surface: 'window', bytes: new Uint8Array([1]) })}
       </>
     ), host);
 

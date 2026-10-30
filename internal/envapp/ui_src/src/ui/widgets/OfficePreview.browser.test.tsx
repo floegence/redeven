@@ -16,6 +16,8 @@ import { FilePreviewContent } from './FilePreviewContent';
 import { FlowerTaskFilePreviewContent } from '../flower/FlowerTaskFilePreviewContent';
 import { I18nProvider } from '../i18n';
 import docxURL from './__fixtures__/preview-pages.docx?url';
+import xlsxURL from './__fixtures__/preview-workbook.xlsx?url';
+import { SpreadsheetPreview } from '../../../../../flower_ui/src/preview/SpreadsheetPreview';
 import pptxURL from './__fixtures__/preview-pages.pptx?url';
 
 const disposers: Array<() => void> = [];
@@ -38,9 +40,10 @@ async function gridReady(host: HTMLElement) {
   }, { timeout: 8000 });
 }
 async function find(host: HTMLElement, value: string) {
-  const input = host.querySelector<HTMLInputElement>('input[type=search]')!;
+  if (!document.querySelector('input[type=search]')) await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Find"]')!);
+  const input = document.querySelector<HTMLInputElement>('input[type=search]')!;
   await userEvent.fill(input, value); await userEvent.keyboard('{Enter}');
-  await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('1'));
+  await vi.waitFor(() => expect(document.querySelector('output')?.textContent).toBe('1'));
 }
 describe('Office and delimited preview acceptance', () => {
   it('preserves literal CSV values, searches, zooms and offers source at narrow widths', async () => {
@@ -94,27 +97,79 @@ describe('Office and delimited preview acceptance', () => {
     mount(() => <FlowerAttachmentPreviewWindow source={source} copy={taskFilesEnUS} loadingLabel={taskFilesEnUS.loading} unavailableLabel={taskFilesEnUS.unsupported} onClose={() => {}} />);
     await gridReady(document.body);
   });
-  it('renders the same XLSX snapshot in desktop and Env adapters with an explicit basic-view limit', async () => {
-    const { default: ExcelJS } = await import('exceljs');
-    const book = new ExcelJS.Workbook();
-    book.addWorksheet('Identity').addRow(['00123', '12345678901234567890', { formula: '1+2', result: 3 }]);
-    const blob = new Blob([await book.xlsx.writeBuffer()]);
+  it('uses the published XLSX renderer in Desktop and Env with styles, all visible sheets and no legacy limits', async () => {
+    const blob = await (await fetch(xlsxURL)).blob();
     const props = { name: 'identity.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', blob };
-    const host = mount(() => <FlowerRichFilePreview {...props} copy={taskFilesEnUS} />);
-    await vi.waitFor(() => expect(host.querySelector('td')?.textContent).toBe('00123'));
-    expect(host.textContent).toContain('Basic preview');
-    disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren();
-    const env = mount(() => <I18nProvider><FlowerTaskFilePreviewContent {...props} /></I18nProvider>);
-    await vi.waitFor(() => expect(env.querySelector('td')?.textContent).toBe('00123'));
-    expect(env.textContent).toContain('12345678901234567890');
-    expect(env.textContent).toContain('Basic preview');
+    for (const env of [false, true]) {
+      const host = mount(() => env ? <I18nProvider><FlowerTaskFilePreviewContent {...props} /></I18nProvider> : <FlowerRichFilePreview {...props} copy={taskFilesEnUS} />);
+      await gridReady(host);
+      expect(host.querySelector('table')).toBeNull();
+      expect(host.querySelector('[aria-label="Text encoding"]')).toBeNull();
+      expect(host.textContent).not.toContain('Basic preview');
+      const sheets = host.querySelector<HTMLSelectElement>('[aria-label="Worksheet"]')!;
+      expect([...sheets.options].map(option => option.text)).toEqual(['Identity', 'Notes']);
+      for (const value of ['00123', '12345678901234567890', 'Beyond legacy limits']) await find(host, value);
+      await userEvent.selectOptions(sheets, '2'); await gridReady(host);
+      await find(host, 'Commented cell');
+      await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!);
+      expect(host.querySelector('[aria-label="Actual size"]')?.textContent).toBe('110%');
+      await userEvent.selectOptions(sheets, '0'); await gridReady(host);
+      disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren();
+    }
   });
-  it('keeps wheel ownership local only for the selected Workbench widget', async () => {
+  it('reports corrupt XLSX input and recovers when a different workbook arrives', async () => {
+    const [data, setData] = createSignal(new Uint8Array([1, 2, 3]));
+    const host = mount(() => <SpreadsheetPreview bytes={data()} format="xlsx" copy={taskFilesEnUS} />);
+    await vi.waitFor(() => expect(host.querySelector('[role=alert]')?.textContent).toContain(taskFilesEnUS.previewFailed));
+    setData(new Uint8Array(await (await fetch(xlsxURL)).arrayBuffer()));
+    await gridReady(host); await find(host, '00123');
+  });
+  it('keeps XLSX controls in one row and opens search and details only on demand', async () => {
+    await page.viewport(320, 760);
+    const data = new Uint8Array(await (await fetch(xlsxURL)).arrayBuffer());
+    const host = mount(() => <SpreadsheetPreview bytes={data} format="xlsx" copy={taskFilesEnUS} />, 304);
+    await gridReady(host);
+    const toolbar = host.querySelector<HTMLElement>('.flower-spreadsheet-toolbar')!;
+    expect(toolbar.getBoundingClientRect().height, JSON.stringify([...toolbar.children].map(element => ({ tag: element.tagName, height: element.getBoundingClientRect().height, minHeight: getComputedStyle(element).minHeight })))).toBeLessThanOrEqual(40);
+    expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
+    expect(host.querySelector('input[type=search]')).toBeNull();
+    expect(host.querySelector('.flower-delimited-value')).toBeNull();
+    expect(host.textContent).not.toContain(taskFilesEnUS.spreadsheetNotice);
+    const findButton = host.querySelector<HTMLButtonElement>('[aria-label="Find"]')!;
+    findButton.focus();
+    await userEvent.keyboard('{Control>}f{/Control}');
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute('type')).toBe('search'));
+    const panel = document.querySelector<HTMLElement>('[data-floe-popover-panel]')!;
+    await vi.waitFor(() => {
+      const box = panel.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(320);
+    });
+    await find(host, '00123');
+    await userEvent.keyboard('{Escape}');
+    await vi.waitFor(() => expect(document.querySelector('[data-floe-popover-panel]')).toBeNull());
+    expect(document.activeElement).toBe(findButton);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Preview information"]')!);
+    await vi.waitFor(() => expect(document.querySelector('[data-floe-popover-panel]')?.textContent).toContain(taskFilesEnUS.spreadsheetNotice));
+    await userEvent.keyboard('{Escape}');
+    await gridReady(host);
+    await page.viewport(1280, 900);
+  });
+  it('renders the optional reported workbook through the Env task-file entry', async () => {
+    const input = await (commands as unknown as { readOfficeAcceptanceWorkbook: () => Promise<{ bytes: number[]; name: string } | null> }).readOfficeAcceptanceWorkbook();
+    if (!input) return;
+    const host = mount(() => <I18nProvider><FlowerTaskFilePreviewContent name={input.name} blob={new Blob([new Uint8Array(input.bytes)])} mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" /></I18nProvider>);
+    await gridReady(host);
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="Worksheet"]')!;
+    expect(select.options.length).toBeGreaterThan(0);
+    for (const option of [...select.options]) { await userEvent.selectOptions(select, option.value); await gridReady(host); }
+  });
+  it.each(['csv', 'xlsx'] as const)('keeps %s wheel ownership local only for the selected Workbench widget', async format => {
     await page.viewport(1400, 1000);
-    const longBytes = new TextEncoder().encode(Array.from({ length: 500 }, (_, n) => 'row' + n + ',00123').join('\n'));
+    const longBytes = format === 'xlsx' ? new Uint8Array(await (await fetch(xlsxURL)).arrayBuffer()) : new TextEncoder().encode(Array.from({ length: 500 }, (_, n) => 'row' + n + ',00123').join('\n'));
     const definitions: WorkbenchWidgetDefinition[] = [{ type: 'test.csv', label: 'CSV', defaultTitle: 'CSV', icon: () => null,
       defaultSize: { width: 700, height: 480 }, renderMode: 'projected_surface',
-      body: props => <FilePreviewContent descriptor={{ mode: 'text' }} item={{ id: 'csv', name: 'long.csv', path: '/long.csv', type: 'file' }} showHeader={false} bytes={longBytes} allowLocalWheel={props.selected === true} />,
+      body: props => <FilePreviewContent descriptor={{ mode: format === 'xlsx' ? 'xlsx' : 'text' }} item={{ id: format, name: 'long.' + format, path: '/long.' + format, type: 'file' }} showHeader={false} bytes={longBytes} allowLocalWheel={props.selected === true} />,
     }];
     const [state, setState] = createSignal<WorkbenchState>({ ...createDefaultWorkbenchState(definitions), mode: 'work',
       viewport: { x: 0, y: 0, scale: 1 }, widgets: [{ id: 'preview', type: 'test.csv', title: 'CSV', x: 30, y: 30, width: 700, height: 480, z_index: 1, created_at_unix_ms: 1 }],

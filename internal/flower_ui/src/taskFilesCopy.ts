@@ -1,6 +1,8 @@
 export const taskFilesEnUS = {
   fitWindow: 'Fit to window',
-  basicSpreadsheet: "Basic preview · first sheet, up to 200 rows and 50 columns; formatting is not preserved",
+  previewInfo: 'Preview information',
+  worksheet: 'Worksheet',
+  spreadsheetNotice: 'Preview may differ from Excel; formulas use saved results.',
   previousPage: "Previous slide",
   nextPage: "Next slide",
   presentationIncomplete: "Some content or external resources could not be displayed.",

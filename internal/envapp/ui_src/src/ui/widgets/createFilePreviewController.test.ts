@@ -71,6 +71,25 @@ describe('createFilePreviewController', () => {
     } finally { dispose(); }
   });
 
+  it.each([false, true])('passes original XLSX bytes to the renderer without parsing (%s)', async truncated => {
+    const file = { id: '/book.xlsx', name: 'book.xlsx', path: '/book.xlsx', type: 'file' } satisfies FileItem;
+    // Deliberately not parseable: transport must not own the workbook parser.
+    const data = 'PK workbook bytes with comments';
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel(data, truncated));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => true });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      expect(controller.descriptor().mode).toBe(truncated ? 'unsupported' : 'xlsx');
+      expect(Array.from(controller.bytes()!)).toEqual(Array.from(new TextEncoder().encode(data)));
+      expect(controller.error()).toBeNull();
+      expect(controller.canEdit()).toBe(false);
+    } finally { dispose(); }
+  });
+
   it('retains presentation references only until the mounted preview releases them', async () => {
     const file = { id: '/report.html', name: 'report.html', path: '/report.html', type: 'file' } satisfies FileItem;
     openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('<h1>Report</h1>'));

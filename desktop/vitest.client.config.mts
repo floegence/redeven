@@ -8,7 +8,6 @@ export default defineConfig({
   resolve: {
     conditions: ['browser'], dedupe: ['solid-js'],
     alias: [
-      { find: /^exceljs$/, replacement: fileURLToPath(new URL('./node_modules/exceljs/dist/exceljs.min.js', import.meta.url)) },
       { find: /^docx-preview$/, replacement: fileURLToPath(new URL('./node_modules/docx-preview/dist/docx-preview.mjs', import.meta.url)) },
       { find: /^@silurus\/ooxml\/xlsx$/, replacement: fileURLToPath(new URL('./node_modules/@silurus/ooxml/dist/xlsx.mjs', import.meta.url)) },
       { find: /^lucide-solid$/, replacement: fileURLToPath(new URL('./node_modules/lucide-solid/dist/source/lucide-solid.jsx', import.meta.url)) },

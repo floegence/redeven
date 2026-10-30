@@ -97,7 +97,6 @@ export default mergeConfig(viteConfig, defineConfig({
       'axe-core',
       'docx-preview',
       'dompurify',
-      'exceljs',
       'katex',
       'marked',
       'marked-footnote',
@@ -129,6 +128,12 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        readOfficeAcceptanceWorkbook: async () => {
+          const file = process.env.REDEVEN_ACCEPTANCE_XLSX;
+          if (!file) return null;
+          const bytes = await readFile(file);
+          return { bytes: [...bytes], name: path.basename(file) };
+        },
         dragStreamingPreview: async ({ page }, ending: 'release' | 'cancel' | 'blur') => {
           const frame = await frameForSelector(page, '[data-test-streaming-preview]');
           const handle = frame.locator('[data-floe-floating-window-titlebar] h2');

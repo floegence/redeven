@@ -43,8 +43,6 @@ const filePreviewController = {
   truncated: () => false,
   loading: () => false,
   error: () => null,
-  xlsxSheetName: () => '',
-  xlsxRows: () => [],
 };
 
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({

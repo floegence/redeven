@@ -1,4 +1,3 @@
-import { readSpreadsheetPreview } from '../../../../../flower_ui/src/preview/readSpreadsheetPreview';
 import { type Accessor, batch, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { Session } from '@floegence/flowersec-core';
@@ -75,8 +74,6 @@ export interface FilePreviewController {
   retry: () => Promise<void>;
   reportResourceError: (path: string, source: string) => Promise<void>;
   reportRenderError: (path: string, message?: string) => void;
-  xlsxSheetName: Accessor<string>;
-  xlsxRows: Accessor<string[][]>;
   openPreview: (item: FileItem) => Promise<void>;
   closePreview: () => void;
   retainContent: () => () => void;
@@ -119,8 +116,6 @@ export function createFilePreviewController(params: {
   const [previewError, setPreviewError] = createSignal<string | null>(null);
   const [previewErrorType, setPreviewErrorType] = createSignal<FilePreviewErrorType>();
   let mediaErrorController: AbortController | undefined;
-  const [xlsxSheetName, setXlsxSheetName] = createSignal('');
-  const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
   const [pendingConnectionLoad, setPendingConnectionLoad] = createSignal<PendingConnectionPreviewLoad | null>(null);
 
   const presentations = new Set<symbol>();
@@ -179,8 +174,6 @@ export function createFilePreviewController(params: {
     setPreviewMessage('');
     setPreviewTruncated(false);
     setPreviewError(null);
-    setXlsxRows([]);
-    setXlsxSheetName('');
     setPreviewLoading(false);
     resetEditorState();
   };
@@ -434,15 +427,6 @@ export function createFilePreviewController(params: {
           return;
         }
 
-        const value = await readSpreadsheetPreview(bytes);
-        if (seq !== previewReqSeq) return;
-        if (!value) {
-          setPreviewDescriptor({ mode: 'unsupported' });
-          setPreviewMessage('No worksheet found in this file.');
-          return;
-        }
-        setXlsxSheetName(value.sheetName);
-        setXlsxRows(value.rows);
         return;
       }
 
@@ -713,8 +697,6 @@ export function createFilePreviewController(params: {
     retry,
     reportResourceError,
     reportRenderError,
-    xlsxSheetName,
-    xlsxRows,
     openPreview,
     closePreview,
     retainContent,

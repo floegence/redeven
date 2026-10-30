@@ -41,8 +41,6 @@ export interface FilePreviewContentProps {
   onOpenParent?: () => void | Promise<void>;
   onRenderError?: (path: string, message?: string) => void;
   onResourceError?: (path:string,source:string) => void;
-  xlsxSheetName?: string;
-  xlsxRows?: string[][];
   onCopyPath?: () => boolean | Promise<boolean>;
   contentRef?: (element: HTMLDivElement) => void;
   onStartEdit?: () => void;
@@ -60,7 +58,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const showHeader = () => props.showHeader !== false;
-  const ownsViewport = createMemo(() => ['pdf', 'docx', 'pptx', 'image', 'video', 'audio', 'text', 'markdown', 'html'].includes(props.descriptor.mode));
+  const ownsViewport = createMemo(() => ['pdf', 'docx', 'pptx', 'xlsx', 'image', 'video', 'audio', 'text', 'markdown', 'html'].includes(props.descriptor.mode));
   let previewContentEl: HTMLDivElement | undefined;
 
   return (

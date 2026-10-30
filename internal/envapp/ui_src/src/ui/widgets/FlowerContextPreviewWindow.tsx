@@ -20,8 +20,6 @@ export type FlowerContextPreviewState = Readonly<{
   truncated?: boolean;
   loading?: boolean;
   error?: string | null;
-  xlsxSheetName?: string;
-  xlsxRows?: string[][];
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
@@ -98,8 +96,6 @@ export function FlowerContextPreviewWindow(props: { preview: FlowerContextPrevie
                 truncated={preview().truncated}
                 loading={preview().loading}
                 error={preview().error}
-                xlsxSheetName={preview().xlsxSheetName}
-                xlsxRows={preview().xlsxRows}
               />
             )}
           </Show>

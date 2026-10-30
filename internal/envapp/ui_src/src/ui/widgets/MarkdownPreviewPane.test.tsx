@@ -65,8 +65,6 @@ function createPreviewContext(openPreview: FilePreviewContextValue['openPreview'
       retry: vi.fn(async () => undefined),
       reportResourceError: vi.fn(async () => undefined),
       reportRenderError: vi.fn(),
-      xlsxSheetName: empty,
-      xlsxRows: () => [],
       openPreview: vi.fn(async () => undefined),
       closePreview: vi.fn(),
       retainContent: vi.fn(() => vi.fn()),

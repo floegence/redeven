@@ -124,8 +124,6 @@ vi.mock('../widgets/createFilePreviewController', () => ({
     truncated: () => false,
     loading: () => false,
     error: () => null,
-    xlsxSheetName: () => '',
-    xlsxRows: () => [],
     openPreview: controllerStore.openPreview,
     closePreview: vi.fn(),
     handleOpenChange: controllerStore.handleOpenChange,

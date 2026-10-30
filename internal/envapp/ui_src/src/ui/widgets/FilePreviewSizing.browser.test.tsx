@@ -207,7 +207,7 @@ describe('File preview sizing with real renderers', () => {
 
   it.each(['video', 'audio', 'xlsx', 'text', 'markdown'] as const)('keeps %s previews inside short containers', async mode => {
     const host = mount(() => <FilePreviewContent showHeader={false} descriptor={{ mode, textPresentation: 'plain', wrapText: true }}
-      text={'Preview content\n'.repeat(100)} xlsxRows={Array.from({ length: 100 }, () => ['Cell', 'Value'])} />, 380, 180);
+      text={'Preview content\n'.repeat(100)} bytes={new Uint8Array([1, 2, 3])} />, 380, 180);
     await vi.waitFor(() => expect(host.textContent || host.querySelector('video,audio')).toBeTruthy());
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
     expect(host.scrollHeight).toBeLessThanOrEqual(host.clientHeight + 1);

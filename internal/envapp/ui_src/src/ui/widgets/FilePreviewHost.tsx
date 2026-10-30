@@ -114,8 +114,6 @@ export function FilePreviewHost() {
       onRenderError={filePreview.controller.reportRenderError}
       onResourceError={(path,source) => void filePreview.controller.reportResourceError(path,source)}
       onOpenParent={() => env.openFileBrowserAtPath(dirnameAbsolute(filePreview.controller.item()?.path ?? ''),{openStrategy:'focus_latest_or_create'})}
-      xlsxSheetName={filePreview.controller.xlsxSheetName()}
-      xlsxRows={filePreview.controller.xlsxRows()}
       onCopyPath={handleCopyPath}
       onDownload={handleDownload}
       onAskFlower={handleAskFlower}

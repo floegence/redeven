@@ -492,8 +492,6 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
         onRenderError={controller.reportRenderError}
       onResourceError={(path,source) => void controller.reportResourceError(path,source)}
         onOpenParent={() => env.openFileBrowserAtPath(dirnameAbsolute(controller.item()?.path ?? ''),{openStrategy:'focus_latest_or_create'})}
-        xlsxSheetName={controller.xlsxSheetName()}
-        xlsxRows={controller.xlsxRows()}
         onCopyPath={handleCopyPath}
         onDownload={handleDownload}
         onAskFlower={handleAskFlower}

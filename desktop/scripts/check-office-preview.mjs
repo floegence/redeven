@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,7 +7,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'vite';
 import electron from 'electron';
-import ExcelJS from 'exceljs';
 import { _electron } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import welcomeConfig from '../vite.welcome.config.mjs';
@@ -46,6 +46,7 @@ await session.run(async () => {
     assert.equal(await page.locator('[role=alert]').count(), 0);
   };
   const find = async value => {
+    if (await page.getByRole('searchbox').count() === 0) await page.getByRole('button', { name: 'Find', exact: true }).click();
     await page.getByRole('searchbox').fill(value);
     await page.getByRole('searchbox').press('Enter');
     await page.waitForFunction(() => document.querySelector('output')?.textContent === '1');
@@ -82,12 +83,42 @@ await session.run(async () => {
     assert.ok(await page.locator('.flower-delimited-toolbar').evaluate(element => element.scrollWidth <= element.clientWidth));
     await page.setViewportSize({ width: 1240, height: 900 }); await gridReady();
     report.checks.push('GB18030 and responsive mount');
-    const book = new ExcelJS.Workbook(); book.addWorksheet('Identity').addRow(['00123', '12345678901234567890', { formula: '1+2', result: 3 }]);
-    await open('identity.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', new Uint8Array(await book.xlsx.writeBuffer()));
-    await page.getByText('00123', { exact: true }).waitFor();
-    assert.match(await page.locator('.flower-rich-notice').textContent(), /Basic preview/);
-    report.checks.push('basic XLSX identity and limitation notice');
     const fixtures = path.join(root, 'internal/envapp/ui_src/src/ui/widgets/__fixtures__');
+    const workbook = await readFile(path.join(fixtures, 'preview-workbook.xlsx'));
+    for (const attachment of [false, true]) {
+      await open('identity.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', workbook, attachment); await gridReady();
+      assert.equal(await page.locator('table').count(), 0);
+      const sheets = page.getByRole('combobox', { name: 'Worksheet', exact: true });
+      assert.deepEqual(await sheets.locator('option').allTextContents(), ['Identity', 'Notes']);
+      assert.equal(await page.getByRole('searchbox').count(), 0);
+      assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => element.getBoundingClientRect().height <= 40));
+      for (const value of ['00123', '12345678901234567890', 'Beyond legacy limits']) await find(value);
+      await page.getByRole('searchbox').press('Escape');
+      await page.getByRole('searchbox').waitFor({ state: 'detached' });
+      await gridReady();
+      await sheets.selectOption('2'); await gridReady(); await find('Commented cell');
+      await page.getByRole('searchbox').press('Escape');
+      await page.getByRole('searchbox').waitFor({ state: 'detached' });
+      await sheets.selectOption('0'); await gridReady();
+      await page.setViewportSize({ width: 390, height: 760 }); await gridReady();
+      assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => element.scrollWidth <= element.clientWidth));
+      await page.screenshot({ path: path.join(output, attachment ? 'attachment-xlsx-narrow.png' : 'task-xlsx-narrow.png') });
+      await page.setViewportSize({ width: 1240, height: 900 }); await gridReady();
+      await page.screenshot({ path: path.join(output, attachment ? 'attachment-xlsx.png' : 'task-xlsx.png') });
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.querySelector('.flower-delimited-preview'));
+    }
+    report.checks.push('OOXML XLSX task/attachment, visible worksheets, nested comments, styles and values beyond legacy limits');
+    if (process.env.REDEVEN_ACCEPTANCE_XLSX) {
+      const original = await readFile(process.env.REDEVEN_ACCEPTANCE_XLSX);
+      await open(path.basename(process.env.REDEVEN_ACCEPTANCE_XLSX), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', original); await gridReady();
+      const sheets = page.getByRole('combobox', { name: 'Worksheet', exact: true });
+      const indices = await sheets.locator('option').evaluateAll(options => options.map(option => option.value));
+      for (const index of indices) { await sheets.selectOption(index); await gridReady(); await page.screenshot({ path: path.join(output, 'original-sheet-' + index + '.png') }); }
+      await page.screenshot({ path: path.join(output, 'original-xlsx.png') });
+      report.originalWorkbook = { sha256: createHash('sha256').update(original).digest('hex'), visibleSheets: indices.length };
+      report.checks.push('Original workbook: ' + indices.length + ' visible worksheets rendered');
+    }
     await open('pages.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', await readFile(path.join(fixtures, 'preview-pages.docx')));
     await page.locator('section.flower-docx').first().waitFor();
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();

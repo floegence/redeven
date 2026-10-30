@@ -1,4 +1,3 @@
-import { readSpreadsheetPreview as resolveSpreadsheetPreview } from '../../../../../flower_ui/src/preview/readSpreadsheetPreview';
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
@@ -341,24 +340,12 @@ async function buildFileLikeContextPreview(params: {
         helper: helperParts.join(' ') || undefined,
       });
     }
-    const spreadsheetPreview = await resolveSpreadsheetPreview(params.bytes);
-    if (!spreadsheetPreview) {
-      return contextPreviewStateForMessage({
-        title: params.title,
-        subtitle: params.subtitle,
-        item: params.item,
-        message: params.copy.t('flowerTurnLauncher.preview.noWorksheetFound'),
-        helper: helperParts.join(' ') || undefined,
-      });
-    }
     return {
       title: params.title,
       subtitle: params.subtitle,
       item: params.item,
       descriptor,
       bytes: params.bytes,
-      xlsxSheetName: spreadsheetPreview.sheetName,
-      xlsxRows: spreadsheetPreview.rows,
       helper: helperParts.join(' ') || undefined,
       actionLabel: params.actionLabel,
       onAction: params.onAction,

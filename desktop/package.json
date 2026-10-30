@@ -129,8 +129,7 @@
     "vite-plugin-solid": "^2.11.10",
     "vitest": "^4.1.12",
     "@silurus/ooxml": "0.89.7",
-    "docx-preview": "0.3.6",
-    "exceljs": "4.4.0"
+    "docx-preview": "0.3.6"
   },
   "dependencies": {
     "@floegence/floe-webapp-boot": "0.86.68",

@@ -54,7 +54,6 @@
     "@solidjs/router": "^0.15.3",
     "docx-preview": "^0.3.6",
     "dompurify": "^3.4.17",
-    "exceljs": "^4.4.0",
     "katex": "0.18.10",
     "lucide-solid": "1.17.0",
     "marked": "^17.0.2",

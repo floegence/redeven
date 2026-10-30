@@ -14,7 +14,6 @@ export default defineConfig({
   publicDir: false,
   resolve: {
     alias: [
-      { find: /^exceljs$/, replacement: path.resolve(desktopDir, 'node_modules/exceljs/dist/exceljs.min.js') },
       { find: /^docx-preview$/, replacement: path.resolve(desktopDir, 'node_modules/docx-preview/dist/docx-preview.mjs') },
       { find: /^@silurus\/ooxml\/xlsx$/, replacement: path.resolve(desktopDir, 'node_modules/@silurus/ooxml/dist/xlsx.mjs') },
       { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(desktopDir, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },
