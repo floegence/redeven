@@ -199,6 +199,12 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 func (s *Server) networkHandler() http.Handler {
 	next := s.handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r != nil {
+			if origin, ok := s.publicPluginWebOrigin(r.Host); ok {
+				s.servePluginWebSurface(w, r, origin)
+				return
+			}
+		}
 		if r == nil || !s.isAllowedPublicAuthority(r.Host) {
 			http.Error(w, "invalid Local UI authority", http.StatusMisdirectedRequest)
 			return

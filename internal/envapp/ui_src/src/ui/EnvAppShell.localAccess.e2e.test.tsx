@@ -6462,4 +6462,77 @@ describe('EnvAppShell remote access gate', () => {
       dispose();
     }
   });
+  it('refreshes external lifecycle changes and avoids enabling an already enabled plugin', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const enabled = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(enabled);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(workbenchPluginSurfaceState.host), 60);
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      const target = enabled.items[0].defaultLaunchTarget!;
+      const disabled = examplePluginProjection('disabled');
+      pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(disabled);
+      expect(await workbenchPluginSurfaceState.host.refreshInventory()).toBe(true);
+      const resolution = workbenchPluginSurfaceState.host.resolveSurface(target);
+      expect(resolution.status).toBe('disabled');
+      const newer = { items: enabled.items.map((item: any) => ({ ...item, managementRevision: 13,
+        defaultLaunchTarget: { ...item.defaultLaunchTarget, expectedManagementRevision: 13 } })) };
+      pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(newer);
+      pluginLifecycleMocks.execute.mockClear();
+      resolution.action.run();
+      await flushUntil(() => workbenchPluginSurfaceState.host.resolveSurface(target).status === 'ready');
+      expect(workbenchPluginSurfaceState.host.resolveSurface(target).target.expectedManagementRevision).toBe(13);
+      expect(pluginLifecycleMocks.execute).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  }, 10000);
+
+  it('discards a surface inventory refresh when the authenticated owner is replaced', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(workbenchPluginSurfaceState.host), 60);
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      const read = deferred<PluginInventoryProjection>();
+      pluginLifecycleMocks.loadInventoryProjection.mockReturnValueOnce(read.promise);
+      const refresh = workbenchPluginSurfaceState.host.refreshInventory();
+      await flushAsync();
+      publishProtocolSnapshot({ state: 'closed', attempt: 1 });
+      publishProtocolConnected();
+      read.resolve(projection);
+      expect(await refresh).toBe(false);
+      expect(pluginLifecycleMocks.execute).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  }, 10000);
+
+  it('refuses stale surface retries when authoritative inventory cannot be refreshed', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(workbenchPluginSurfaceState.host), 60);
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      pluginLifecycleMocks.loadInventoryProjection.mockRejectedValue(new Error('offline'));
+      expect(await workbenchPluginSurfaceState.host.refreshInventory()).toBe(false);
+      expect(pluginLifecycleMocks.execute).not.toHaveBeenCalled();
+      // A failed read cannot revoke another container's still-valid lease.
+      expect(workbenchPluginSurfaceState.host.resolveSurface(examplePluginProjection('enabled').items[0].defaultLaunchTarget).status).toBe('ready');
+    } finally { dispose(); }
+  }, 10000);
+
+
 });

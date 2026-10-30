@@ -100,6 +100,47 @@ func TestDesktopPluginResourceRouteStripsHostAuthority(t *testing.T) {
 	if response.Header().Get("X-Frame-Options") != "" || response.Header().Get("Content-Security-Policy") != "frame-ancestors http://127.0.0.1:24000" {
 		t.Fatal("parent embedding policy replaced platform policy")
 	}
+	s.protocol = "http"
+	s.publicAccess.authorities = map[string]struct{}{"127.0.0.1:24000": {}}
+	called = false
+	response = httptest.NewRecorder()
+	s.networkHandler().ServeHTTP(response, req)
+	if !called || response.Code != http.StatusNoContent {
+		t.Fatalf("public loopback resource handler: called=%t status=%d", called, response.Code)
+	}
+	if response.Header().Get("X-Frame-Options") != "" || response.Header().Get("Content-Security-Policy") != "frame-ancestors http://127.0.0.1:24000" {
+		t.Fatal("public parent embedding policy replaced platform policy")
+	}
+}
+
+func TestPublicPluginOriginRequiresCurrentLoopbackListener(t *testing.T) {
+	child := strings.Repeat("b", 48) + ".localhost:24000"
+	for _, tc := range []struct {
+		name, protocol, parent, authority string
+		want                              int
+	}{
+		{"ipv4", "http", "127.0.0.1:24000", child, http.StatusNotFound},
+		{"localhost", "http", "localhost:24000", child, http.StatusNotFound},
+		{"ipv6", "http", "[::1]:24000", child, http.StatusNotFound},
+		{"wrong port", "http", "127.0.0.1:24001", child, http.StatusMisdirectedRequest},
+		{"network only", "http", "192.0.2.1:24000", child, http.StatusMisdirectedRequest},
+		{"tls has no localhost certificate", "https", "127.0.0.1:24000", child, http.StatusMisdirectedRequest},
+		{"unrelated hostname", "http", "127.0.0.1:24000", strings.Repeat("b", 48) + ".localhost.evil:24000", http.StatusMisdirectedRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestServer(t, nil)
+			s.protocol = tc.protocol
+			s.publicAccess.authorities = map[string]struct{}{tc.parent: {}}
+			for _, path := range []string{"/_redevplugin_web/bootstrap", "/api/local/runtime", "/_redevplugin/api/plugins/catalog/query", "/flowersec/v3/direct"} {
+				req := httptest.NewRequest(http.MethodGet, "http://"+tc.authority+path, nil)
+				response := httptest.NewRecorder()
+				s.networkHandler().ServeHTTP(response, req)
+				if response.Code != tc.want {
+					t.Fatalf("%s status=%d, want %d", path, response.Code, tc.want)
+				}
+			}
+		})
+	}
 }
 
 func TestDesktopPluginOriginRequiresExactAuthority(t *testing.T) {

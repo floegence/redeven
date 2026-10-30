@@ -22,6 +22,7 @@ export type PluginSurfaceBodyProps = {
   confirmationQueue: PluginConfirmationQueue;
   target: PluginSurfaceLaunchTarget;
   visible: boolean;
+  refreshInventory?: () => Promise<boolean>;
   registerClose?: (close: (() => Promise<boolean>) | null) => void;
   onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
   onRetirementError: (error: unknown) => void;
@@ -98,7 +99,22 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     setLoadState('error');
     settleCloseConfirmation?.(false);
     setErrorMessage(firstTerminalError.message || code || i18n.t('uiCopy.plugin.surfaceFailed'));
+    if (first) void Promise.resolve().then(() => {
+      if (mounted && slot === ownedSlot) return props.refreshInventory?.();
+    }).catch(() => undefined);
     return { error: firstTerminalError, first };
+  };
+
+  const failSurface = (ownedSlot: PluginSurfaceSlot, error: unknown) => {
+    const terminal = recordTerminalError(ownedSlot, error);
+    if (terminal?.first) void props.coordinator.fail(ownedSlot, terminal.error).catch(props.onRetirementError);
+  };
+
+  const publishContext = () => {
+    const ownedSlot = slot;
+    if (!ownedSlot || firstTerminalError) return;
+    try { host()?.updateContext(currentSurfaceContext); }
+    catch (error) { failSurface(ownedSlot, error); }
   };
 
   const openFreshSurface = () => {
@@ -129,9 +145,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
         setOpeningProgress(surfaceOpeningFeedback(progress));
       },
       onError(error) {
-        const terminal = recordTerminalError(ownedSlot, error);
-        if (!terminal?.first) return;
-        void props.coordinator.fail(ownedSlot, terminal.error).catch(props.onRetirementError);
+        failSurface(ownedSlot, error);
       },
     }).then((openedHost) => {
       if (!mounted || slot !== ownedSlot || firstTerminalError) return;
@@ -158,7 +172,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       surfaceContextRevision += 1;
       currentSurfaceContext = { ...candidate, revision: surfaceContextRevision };
       currentSurfaceContextFingerprint = fingerprint;
-      host()?.updateContext(currentSurfaceContext);
+      publishContext();
     };
     if (typeof MutationObserver === 'function') {
       themeObserver = new MutationObserver(refreshSurfaceContext);
@@ -189,12 +203,16 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     surfaceContextRevision += 1;
     currentSurfaceContext = { ...candidate, revision: surfaceContextRevision };
     currentSurfaceContextFingerprint = fingerprint;
-    host()?.updateContext(currentSurfaceContext);
+    publishContext();
   });
 
   createEffect(() => {
     const visible = props.visible && pageVisible();
-    if (slot) props.coordinator.setVisible(slot, visible);
+    const ownedSlot = slot;
+    if (ownedSlot && !firstTerminalError) {
+      try { props.coordinator.setVisible(ownedSlot, visible); }
+      catch (error) { failSurface(ownedSlot, error); }
+    }
     if (!visible) {
       props.confirmationQueue.cancelOwner(confirmationOwner);
       settleCloseConfirmation?.(false);
@@ -249,12 +267,25 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     try {
       await props.coordinator.release(failedSlot);
       if (!mounted || slot !== failedSlot) return;
+    } catch (error) {
+      if (mounted && slot === failedSlot) {
+        setCleanupPending(true);
+        props.onRetirementError(error);
+        setRetrying(false);
+      }
+      return;
+    }
+    try {
+      setCleanupPending(false);
+      const refreshed = props.refreshInventory ? await props.refreshInventory() : true;
+      // A changed revision is owned by the container's keyed lease. Its old
+      // retry must not create a second slot after the replacement mounts.
+      if (!refreshed || !mounted || slot !== failedSlot) return;
       slot = undefined;
       openFreshSurface();
-    } catch (error) {
-      if (!mounted || slot !== failedSlot) return;
-      setCleanupPending(true);
-      props.onRetirementError(error);
+    } catch {
+      // The shared inventory presents the read failure. Keep this surface's
+      // first error and never reopen from its stale target.
     } finally {
       if (mounted) setRetrying(false);
     }

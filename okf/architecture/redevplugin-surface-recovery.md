@@ -16,6 +16,32 @@ Env App owns one authenticated fetch adapter, one released client, one shared sc
 
 Generic review and confirmation copy names the exact permission id instead of substituting an official-plugin label.
 
+## External lifecycle changes
+
+Each surface's first terminal error refreshes the shared owner-scoped inventory
+once. It does not replay an execution or automatically retry the same revision.
+A user retry retires the failed slot, awaits an authoritative inventory read,
+and opens only while the original component and authenticated owner remain
+current. Failed reads never authorize reopening from a cached revision.
+
+The product container's keyed lease owns replacement when management revision
+or generation changes. The retired component cannot open a duplicate slot after
+that replacement. Disabled plugins remain disabled; their explicit Enable
+action first refreshes inventory and writes only if the current instance is
+still disabled, using its current revision. If another client already enabled
+it, the refreshed inventory restores the container without a second mutation.
+
+Workbench and Activity use the same refresh callback. Shared inventory updates
+Plugin Center as well as surface placement; refresh does not remove layout,
+replay Agent/file writes, or revoke sibling surfaces. A failed inventory read
+retains a healthy cached lease; it is not evidence of revocation. The failed
+surface still requires a successful authoritative read before retrying.
+
+Visibility and theme/context delivery can race with SDK retirement or document
+navigation. A synchronous delivery failure enters the same first-error path
+for that exact slot, refreshes inventory once, and retires through the SDK. It
+must not escape into the Workbench error boundary or close sibling placements.
+
 ## User close and forced revocation
 
 User close requests use the released surface request-close contract. A plugin may report unsaved work; Redeven presents one localized Floe confirmation and preserves the slot if canceled. Forced lifecycle invalidation still revokes without waiting for user consent. A successful request-close is recorded as already closed so subsequent placement disposal cannot send a second close.

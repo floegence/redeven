@@ -6,8 +6,25 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/floegence/redeven/internal/pluginorigin"
 	"github.com/floegence/redeven/internal/sessionhop"
 )
+
+// Public loopback children select only the platform resource handler. The
+// current parent listener and exact port must still exist; this does not add a
+// management authority or grant a parent session to the child.
+func (s *Server) publicPluginWebOrigin(authority string) (string, bool) {
+	if s.protocol != "http" {
+		return "", false
+	}
+	origin := "http://" + authority
+	for parent := range s.publicAccessSnapshot().authorities {
+		if pluginorigin.IsChild("http://"+publicURLAuthority(parent, "http"), origin) {
+			return origin, true
+		}
+	}
+	return "", false
+}
 
 // The private listener also serves distinct plugin origins. Recognizing an
 // origin only selects the resource handler; it grants no management authority.

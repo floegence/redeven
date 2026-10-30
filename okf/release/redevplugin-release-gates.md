@@ -13,7 +13,7 @@ Admit only the coordinated published ReDevPlugin release, binding artifacts to t
 
 ## Published source and trust
 
-Consume manifest-pinned v3.0.37. Boundary scans reject sibling wiring, Go workspace/replace, npm links, copied runtimes/contracts, Rust paths and duplicate platform-core; exclude generated output/dependencies and fail on scanner errors. Do not commit plugin packages/parallel catalog. Validated latest-only market snapshots choose immutable transport; ReDevPlugin verifies retrieval. Metadata is not trust.
+Consume manifest-pinned v3.8.0. Boundary scans reject sibling wiring, Go workspace/replace, npm links, copied runtimes/contracts, Rust paths and duplicate platform-core; exclude generated output/dependencies and fail on scanner errors. Do not commit plugin packages/parallel catalog. Validated latest-only market snapshots choose immutable transport; ReDevPlugin verifies retrieval. Metadata is not trust.
 
 Require exactly one upstream platform-release-manifest.json. Bind tag/source/workflow/attestation; independently verify Go proxy/SumDB h1/go.mod, both npm SHA-512 integrities/provenance, runtime/worker crates.io checksums/Cargo VCS, manifest version/closed coordinate order/contract-set hash. Extra assets/partial publication/local or mutable identities/registry mismatches fail before construction.
 

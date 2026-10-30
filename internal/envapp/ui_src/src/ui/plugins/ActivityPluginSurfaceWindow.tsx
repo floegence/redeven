@@ -18,6 +18,7 @@ export type ActivityPluginSurfaceWindowProps = {
   instanceID: string;
   target: PluginSurfaceLaunchTarget;
   resolveSurface?: PluginSurfaceResolver;
+  refreshInventory?: () => Promise<boolean>;
   coordinator: PluginSurfacePlacementCoordinator;
   confirmationQueue: PluginConfirmationQueue;
   visible: boolean;
@@ -310,7 +311,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         class="fixed h-px w-px overflow-hidden opacity-0"
         onFocus={() => focusWindowBoundary('last')}
       />
-      <PluginSurfaceContainer resolveSurface={props.resolveSurface}
+      <PluginSurfaceContainer resolveSurface={props.resolveSurface} refreshInventory={props.refreshInventory}
         coordinator={props.coordinator}
         confirmationQueue={props.confirmationQueue}
         target={props.target}

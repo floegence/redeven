@@ -29,6 +29,11 @@ A recovery presentation may explain or retry the Host snapshot, but it is not a 
 
 Redeven derives a plugin origin only from a trusted product entry origin and the released surface origin key. Local UI and AppServer route child requests to the released Web surface handler after removing parent credentials. Desktop, Gateway and Center own the product transport and origin routing; package assets, tickets and surface bridge semantics remain upstream-owned.
 
+Ordinary HTTP loopback Local UI uses the same isolated resource handler as
+Desktop. Its child authority must derive from a current public loopback parent
+on the exact listener port. This is a resource route, not an additional public
+management authority or a private-bridge fallback.
+
 # Boundaries
 
 These adapters map product identity and presentation into released ReDevPlugin APIs. Package and runtime ownership remains in [ReDevPlugin host integration boundary](redevplugin-boundary.md) and [Plugin package and runtime lifecycle](redevplugin-package-lifecycle.md).

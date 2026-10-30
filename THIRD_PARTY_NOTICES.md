@@ -2775,7 +2775,7 @@ SOFTWARE.
 | github.com/floegence/floret/v7 | v7.95.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.95.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.7.0 | Floegence first-party versioned Managed Service template catalog. |
-| github.com/floegence/redevplugin/v3 | v3.7.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.7.3 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin/v3 | v3.8.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.8.0 | Floegence first-party dependency. |
 | github.com/flynn/noise | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/flynn/noise@v1.1.0 | Detected from LICENSE. |
 | github.com/go-chi/chi/v5 | v5.5.0 | MIT | Runtime | https://pkg.go.dev/github.com/go-chi/chi/v5@v5.5.0 | Detected from LICENSE. |
 | github.com/go-jose/go-jose/v4 | v4.1.6 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-jose/go-jose/v4@v4.1.6 | Detected from LICENSE. |
@@ -3058,8 +3058,8 @@ SOFTWARE.
 | @floegence/flowersec-node-native-linux-x64-gnu | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.11.1 |  |
 | @floegence/flowersec-node-native | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.11.1 |  |
 | @floegence/redeven-service-templates | 0.7.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.7.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.7.0 source release. The SDK manifest omits its license field. |
-| @floegence/redevplugin-contracts | 3.7.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.7.3 |  |
-| @floegence/redevplugin-ui | 3.7.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.7.3 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 3.8.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.8.0 |  |
+| @floegence/redevplugin-ui | 3.8.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.8.0 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/ibm-plex-mono | 5.3.0 | OFL-1.1 | Env App UI | https://www.npmjs.com/package/%40fontsource%2Fibm-plex-mono/v/5.3.0 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
@@ -3741,6 +3741,7 @@ SOFTWARE.
 | react-dom | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react-dom/v/18.3.1 |  |
 | react | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react/v/18.3.1 |  |
 | react | 19.2.8 | MIT | Desktop shell | https://www.npmjs.com/package/react/v/19.2.8 | License verified from the exact registry package manifest. |
+| react | 19.3.1 | MIT | Desktop shell | https://www.npmjs.com/package/react/v/19.3.1 |  |
 | read-binary-file-arch | 1.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/read-binary-file-arch/v/1.0.6 |  |
 | readable-stream | 2.3.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/readable-stream/v/2.3.8 |  |
 | regex-recursion | 6.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/regex-recursion/v/6.0.2 |  |

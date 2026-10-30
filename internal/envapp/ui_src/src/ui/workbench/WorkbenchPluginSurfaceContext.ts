@@ -19,6 +19,7 @@ export type WorkbenchPluginSurfaceContextValue = Readonly<{
   workbenchVisible: Accessor<boolean>;
   resolveTarget: (target: PluginSurfaceLaunchTarget) => PluginSurfaceLaunchTarget | null;
   resolveSurface?: PluginSurfaceResolver;
+  refreshInventory?: () => Promise<boolean>;
   onOpenPluginDetails: (inventoryKey: string) => void;
   onRetirementError: (error: unknown) => void;
 }>;

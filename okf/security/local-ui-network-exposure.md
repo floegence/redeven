@@ -3,7 +3,7 @@ type: Security Contract
 title: Local UI network exposure
 tags: [security, local-ui, desktop, env-app, flowersec]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -16,6 +16,12 @@ New Runtime endpoints explicitly use HTTP localhost:23998; network exposure reta
 
 ## Listener and origin boundary
 The public listener accepts only canonical authorities derived from its actual bound addresses.
+An HTTP loopback listener also routes the exact plugin child origins derived
+from its current parent authority and port exclusively to ReDevPlugin's Web
+resource handler. Child routing strips parent credentials and never enters
+Local UI management. A removed parent, different port, network-only address,
+or HTTPS listener cannot use this loopback resource route. The platform still
+validates each asset session, origin, ticket, and surface lifetime.
 
 Its isolated `flowersec-private-loopback/1` profile is unchanged and cannot authorize public clients.
 

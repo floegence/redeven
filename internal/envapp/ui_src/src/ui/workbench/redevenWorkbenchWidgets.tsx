@@ -173,6 +173,7 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
         <Show when={pluginHost}>
           {(host) => <PluginSurfaceContainer
             coordinator={host().coordinator} confirmationQueue={host().confirmationQueue}
+            refreshInventory={host().refreshInventory}
             target={{ pluginID: persisted().plugin_id, pluginInstanceID: persisted().plugin_instance_id,
               surfaceID: persisted().surface_id, displayName: persisted().display_name,
               expectedManagementRevision: persisted().expected_management_revision }}

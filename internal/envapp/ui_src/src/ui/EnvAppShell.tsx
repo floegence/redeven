@@ -1544,9 +1544,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     && pluginInventorySessionState.loading
   );
   const refetchPluginInventory = async () => {
+    const owner = pluginInventorySource();
+    if (!owner) return undefined;
     const state = await refetchPluginInventorySession();
-    return !pluginInventoryError() && state?.owner === pluginInventorySource() ? state.projection : undefined;
+    return pluginInventorySource() === owner && !pluginInventoryError() && state?.owner === owner ? state.projection : undefined;
   };
+  const refreshPluginSurfaceInventory = async (): Promise<boolean> => Boolean(await refetchPluginInventory());
   const synchronizePluginInventoryForMarket = (result: PluginMarketCatalogResult): Promise<void> => {
     const requestedOwner = pluginInventorySource();
     const synchronize = async () => {
@@ -1844,6 +1847,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         return (
           <ActivityPluginSurfacePage
             resolveSurface={resolvePluginSurface}
+            refreshInventory={refreshPluginSurfaceInventory}
             coordinator={pluginSurfaceCoordinator}
             confirmationQueue={pluginConfirmationQueue}
             target={runtime.target}
@@ -1949,6 +1953,16 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     };
   };
 
+  const enableCurrentPluginSurface = async (target: PluginSurfaceLaunchTarget): Promise<void> => {
+    const owner = pluginInventorySource();
+    const projection = await refetchPluginInventory();
+    if (!owner || pluginInventorySource() !== owner || !projection || !canAdmin()) return;
+    const item = projection.items.find((entry) => entry.pluginInstanceID === target.pluginInstanceID && entry.pluginID === target.pluginID);
+    if (item?.lifecycleState !== 'disabled' || item.managementRevision === undefined) return;
+    await handlePluginCenterCommand({ type: 'enable', pluginInstanceID: item.pluginInstanceID!,
+      expectedManagementRevision: item.managementRevision }, new AbortController().signal);
+  };
+
   const resolvePluginSurface = (target: PluginSurfaceLaunchTarget): PluginSurfaceResolution => {
     const id = target.pluginInstanceID;
     const item = pluginInventoryProjection()?.items.find((entry) => entry.pluginInstanceID === id && entry.pluginID === target.pluginID);
@@ -1965,11 +1979,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (!currentTarget && pluginRuntimeRecoveryByInstanceID()[id]?.state === 'failed') return { target: null, generation, status: 'runtimeFailed',
       action: canAdmin() ? { label: 'retry', run: () => retryPluginRuntimeRecovery(id) } : details };
     if (item?.lifecycleState === 'disabled') return { target: null, generation, status: 'disabled', action: canAdmin()
-      ? { label: 'enable', run: () => void handlePluginCenterCommand({ type: 'enable', pluginInstanceID: id, expectedManagementRevision: item.managementRevision! }, new AbortController().signal).catch(reportPluginNavigationFailure) }
+      ? { label: 'enable', run: () => void enableCurrentPluginSurface(target).catch(reportPluginNavigationFailure) }
       : undefined };
     if (item?.authorization?.permissions.some((permission) => permission.blockedToOpen)) return { target: null, generation, status: 'permission', action: canAdmin() ? { ...details, label: 'permissions' } : undefined };
     if (item?.declaredSurfaceIDs && !item.declaredSurfaceIDs.includes(target.surfaceID)) return { target: null, generation, status: 'surfaceMissing', action: details };
-    if (pluginInventoryError() || !item) return { target: null, generation, status: pluginInventoryInitialPending() ? 'loading' : 'unavailable',
+    if (!item || (pluginInventoryError() && !currentTarget)) return { target: null, generation, status: pluginInventoryInitialPending() ? 'loading' : 'unavailable',
       action: { label: 'retry', run: () => void refetchPluginInventory() } };
     if (!currentTarget) return { target: null, generation, status: 'unavailable', action: details };
     return { target: currentTarget, generation, status: 'ready' };
@@ -5171,6 +5185,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
               workbenchVisible: () => viewMode() === 'workbench' && !workbenchPluginCenterBlocking(),
               resolveTarget: resolveCurrentPluginSurfaceTarget,
               resolveSurface: resolvePluginSurface,
+              refreshInventory: refreshPluginSurfaceInventory,
               onOpenPluginDetails: (inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure),
               onRetirementError: reportPluginSurfaceRetirementError,
             }}
@@ -5302,6 +5317,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         {(window, index) => (
           <ActivityPluginSurfaceWindow
             resolveSurface={resolvePluginSurface}
+            refreshInventory={refreshPluginSurfaceInventory}
             instanceID={window.instanceID}
             target={window.target()}
             coordinator={pluginSurfaceCoordinator}

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PluginConfirmationQueue } from './PluginConfirmationQueue';
 import { PluginSurfaceBody } from './PluginSurfaceFrame';
+import { PluginSurfaceContainer, type PluginSurfaceResolution } from './PluginSurfaceContainer';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
@@ -91,6 +92,31 @@ async function flushAsync(): Promise<void> {
 }
 
 describe('PluginSurfaceBody', () => {
+  it.each(['visibility', 'context'] as const)('contains %s delivery errors within the affected surface', async (delivery) => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    const refreshInventory = vi.fn(async () => true);
+    const [visible, setVisible] = createSignal(true);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible={visible()} refreshInventory={refreshInventory} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    const failure = new Error('surface became unavailable during presentation');
+    if (delivery === 'visibility') {
+      vi.mocked(coordinator.setVisible).mockImplementation(() => { throw failure; });
+      expect(() => setVisible(false)).not.toThrow();
+    } else {
+      vi.mocked(host.updateContext).mockImplementation(() => { throw failure; });
+      document.documentElement.classList.add('dark');
+    }
+    await flushAsync();
+    expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).toContain(failure.message);
+    expect(coordinator.fail).toHaveBeenCalledOnce();
+    expect(refreshInventory).toHaveBeenCalledOnce();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+  });
+
   const progress = {
     phase: 'opening' as const, stage: 'initializing' as const,
     elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['app_ready'],
@@ -662,4 +688,93 @@ describe('PluginSurfaceBody', () => {
     expect(coordinator.open).toHaveBeenCalledTimes(2);
     expect(mount.querySelector('[data-plugin-surface-error]')).toBeNull();
   });
+
+  it('refreshes inventory once for repeated terminal errors without reopening', async () => {
+    const mount = document.createElement('div'); document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    let rejectOpen!: (error: Error) => void;
+    vi.mocked(coordinator.open).mockImplementation(() => new Promise((_resolve, reject) => { rejectOpen = reject; }));
+    const refreshInventory = vi.fn(async () => true);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible refreshInventory={refreshInventory} onRetirementError={vi.fn()} />, mount);
+    const onError = vi.mocked(coordinator.open).mock.calls[0]![2]!.onError!;
+    const failure = Object.assign(new Error('revoked'), { errorCode: 'PLUGIN_BRIDGE_DISPOSED' }) as PluginBridgeError;
+    onError(failure); onError(failure); rejectOpen(failure);
+    await flushAsync();
+    expect(refreshInventory).toHaveBeenCalledOnce();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(coordinator.fail).toHaveBeenCalledOnce();
+  });
+
+  it('waits for authoritative inventory after retirement before opening a fresh slot', async () => {
+    const mount = document.createElement('div'); document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    vi.mocked(coordinator.open).mockRejectedValueOnce(new Error('revoked'));
+    let finishRefresh!: (value: boolean) => void;
+    const refreshInventory = vi.fn(async () => true).mockImplementationOnce(async () => true)
+      .mockImplementationOnce(() => new Promise<boolean>((resolve) => { finishRefresh = resolve; }));
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible refreshInventory={refreshInventory} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    (mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(coordinator.release).toHaveBeenCalledOnce();
+    expect(refreshInventory).toHaveBeenCalledTimes(2);
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    finishRefresh(true); await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['unavailable', 'rejected'] as const)('does not reuse a stale revision when inventory is %s', async (outcome) => {
+    const mount = document.createElement('div'); document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    vi.mocked(coordinator.open).mockRejectedValueOnce(new Error('revoked'));
+    const refreshInventory = vi.fn(async () => true).mockResolvedValueOnce(true);
+    if (outcome === 'unavailable') refreshInventory.mockResolvedValueOnce(false);
+    else refreshInventory.mockRejectedValueOnce(new Error('inventory unavailable'));
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible refreshInventory={refreshInventory} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    (mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).toContain('revoked');
+  });
+
+  it('lets the container alone replace a lease after refreshed revision changes', async () => {
+    const mount = document.createElement('div'); document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    vi.mocked(coordinator.open).mockRejectedValueOnce(new Error('revoked'));
+    const nextTarget = { ...target, expectedManagementRevision: 9 };
+    const [resolution, setResolution] = createSignal<PluginSurfaceResolution>({ target, generation: 0, status: 'ready' });
+    const refreshInventory = vi.fn(async () => true).mockResolvedValueOnce(true).mockImplementationOnce(async () => {
+      setResolution({ target: nextTarget, generation: 0, status: 'ready' }); return true;
+    });
+    dispose = render(() => <PluginSurfaceContainer coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} resolveSurface={resolution} visible refreshInventory={refreshInventory} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    (mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(coordinator.open).mock.calls[1]![1].expected_management_revision).toBe(9);
+  });
+
+  it('discards an inventory result after the owning component is retired', async () => {
+    const mount = document.createElement('div'); document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    vi.mocked(coordinator.open).mockRejectedValueOnce(new Error('revoked'));
+    let finishRefresh!: (value: boolean) => void;
+    const refreshInventory = vi.fn(async () => true).mockResolvedValueOnce(true)
+      .mockImplementationOnce(() => new Promise<boolean>((resolve) => { finishRefresh = resolve; }));
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible refreshInventory={refreshInventory} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    (mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(refreshInventory).toHaveBeenCalledTimes(2);
+    dispose!(); dispose = undefined;
+    finishRefresh(true); await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+  });
+
 });

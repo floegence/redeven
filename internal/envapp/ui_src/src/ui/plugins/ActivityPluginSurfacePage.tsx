@@ -8,6 +8,7 @@ import { PluginSurfaceContainer, type PluginSurfaceResolver } from './PluginSurf
 
 export type ActivityPluginSurfacePageProps = Readonly<{
   resolveSurface?: PluginSurfaceResolver;
+  refreshInventory?: () => Promise<boolean>;
   coordinator: PluginSurfacePlacementCoordinator;
   confirmationQueue: PluginConfirmationQueue;
   target: Accessor<PluginSurfaceLaunchTarget | null>;
@@ -23,7 +24,7 @@ export function ActivityPluginSurfacePage(props: ActivityPluginSurfacePageProps)
     <div class="h-full min-h-0 w-full" data-activity-plugin-surface-page>
       <Show when={props.target()} keyed>
         {(target) => (
-          <PluginSurfaceContainer resolveSurface={props.resolveSurface}
+          <PluginSurfaceContainer resolveSurface={props.resolveSurface} refreshInventory={props.refreshInventory}
             coordinator={props.coordinator}
             confirmationQueue={props.confirmationQueue}
             target={target}
