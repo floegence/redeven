@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { render } from 'solid-js/web';
-import { createSignal, Show } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DelimitedTextPreview } from '../../../../../flower_ui/src/preview/DelimitedTextPreview';
 import { taskFilesEnUS } from '../../../../../flower_ui/src/taskFilesCopy';
@@ -12,7 +12,7 @@ vi.mock('@silurus/ooxml/xlsx', () => ({ XlsxWorkbook: {}, XlsxSheetViewer: class
   destroy = vi.fn(); relayout = vi.fn(async () => {}); getScale = () => 1;
   constructor() { state.viewers.push(this); }
 } }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: Record<string, unknown>) => <button {...props} />, Popover: (props: any) => <>{props.trigger}<Show when={props.open}>{props.children}</Show></> }));
+vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: Record<string, unknown>) => <button {...props} />, SurfaceFloatingLayer: (props: any) => <div>{props.children}</div> }));
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); state.viewers.length = 0; vi.unstubAllGlobals(); });
 function mount() {

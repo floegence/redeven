@@ -24,7 +24,6 @@
 .flower-spreadsheet-toolbar button { height:28px; min-height:28px; padding:0 6px; flex-shrink:0; }
 .flower-spreadsheet-toolbar .flower-spreadsheet-icon { width:28px; padding:0; }
 .flower-spreadsheet-selection { flex:1; min-width:0; overflow:hidden; }
-.flower-spreadsheet-selection [data-floe-popover], .flower-spreadsheet-selection [data-floe-popover-trigger] { display:flex; width:100%; min-width:0; }
 .flower-spreadsheet-popover { width:360px; min-width:0; }
 .flower-spreadsheet-selection .flower-delimited-value { display:block; width:100%; padding:0 6px; border:0; background:transparent; color:var(--muted-foreground); text-align:start; cursor:pointer; }
 .flower-spreadsheet-selection .flower-delimited-value:hover { color:var(--foreground); }

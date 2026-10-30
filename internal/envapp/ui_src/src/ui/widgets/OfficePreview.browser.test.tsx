@@ -139,7 +139,7 @@ describe('Office and delimited preview acceptance', () => {
     findButton.focus();
     await userEvent.keyboard('{Control>}f{/Control}');
     await vi.waitFor(() => expect(document.activeElement?.getAttribute('type')).toBe('search'));
-    const panel = document.querySelector<HTMLElement>('[data-floe-popover-panel]')!;
+    const panel = document.querySelector<HTMLElement>('[data-spreadsheet-panel]')!;
     await vi.waitFor(() => {
       const box = panel.getBoundingClientRect();
       expect(box.left).toBeGreaterThanOrEqual(0);
@@ -147,10 +147,10 @@ describe('Office and delimited preview acceptance', () => {
     });
     await find(host, '00123');
     await userEvent.keyboard('{Escape}');
-    await vi.waitFor(() => expect(document.querySelector('[data-floe-popover-panel]')).toBeNull());
-    expect(document.activeElement).toBe(findButton);
+    await vi.waitFor(() => expect(document.querySelector('[data-spreadsheet-panel]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(findButton));
     await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Preview information"]')!);
-    await vi.waitFor(() => expect(document.querySelector('[data-floe-popover-panel]')?.textContent).toContain(taskFilesEnUS.spreadsheetNotice));
+    await vi.waitFor(() => expect(document.querySelector('[data-spreadsheet-panel]')?.textContent).toContain(taskFilesEnUS.spreadsheetNotice));
     await userEvent.keyboard('{Escape}');
     await gridReady(host);
     await page.viewport(1280, 900);
@@ -163,6 +163,20 @@ describe('Office and delimited preview acceptance', () => {
     const select = host.querySelector<HTMLSelectElement>('[aria-label="Worksheet"]')!;
     expect(select.options.length).toBeGreaterThan(0);
     for (const option of [...select.options]) { await userEvent.selectOptions(select, option.value); await gridReady(host); }
+  });
+  it.each([false, true])('dismisses XLSX search before closing its window (attachment %s)', async attachment => {
+    await page.viewport(1280, 900);
+    const blob = await (await fetch(xlsxURL)).blob();
+    const close = vi.fn();
+    const source = { id: 'xlsx', name: 'identity.xlsx', mimeType: 'application/octet-stream', load: async () => blob };
+    mount(() => attachment ? <FlowerAttachmentPreviewWindow source={source} copy={taskFilesEnUS} loadingLabel={taskFilesEnUS.loading} unavailableLabel={taskFilesEnUS.unsupported} onClose={close} /> : <FlowerTaskFilePreview source={source} copy={taskFilesEnUS} onClose={close} downloading={false} />);
+    await gridReady(document.body);
+    await find(document.body, '00123');
+    await userEvent.keyboard('{Escape}');
+    await vi.waitFor(() => expect(document.querySelector('[data-spreadsheet-panel]')).toBeNull());
+    expect(close).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Escape}');
+    expect(close).toHaveBeenCalledOnce();
   });
   it.each(['csv', 'xlsx'] as const)('keeps %s wheel ownership local only for the selected Workbench widget', async format => {
     await page.viewport(1400, 1000);

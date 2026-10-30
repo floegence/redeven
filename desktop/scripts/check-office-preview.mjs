@@ -94,11 +94,11 @@ await session.run(async () => {
       assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => element.getBoundingClientRect().height <= 40));
       for (const value of ['00123', '12345678901234567890', 'Beyond legacy limits']) await find(value);
       await page.getByRole('searchbox').press('Escape');
-      await page.getByRole('searchbox').waitFor({ state: 'detached' });
+      await page.locator('[data-spreadsheet-panel]').waitFor({ state: 'detached' });
       await gridReady();
       await sheets.selectOption('2'); await gridReady(); await find('Commented cell');
       await page.getByRole('searchbox').press('Escape');
-      await page.getByRole('searchbox').waitFor({ state: 'detached' });
+      await page.locator('[data-spreadsheet-panel]').waitFor({ state: 'detached' });
       await sheets.selectOption('0'); await gridReady();
       await page.setViewportSize({ width: 390, height: 760 }); await gridReady();
       assert.ok(await page.locator('.flower-spreadsheet-toolbar').evaluate(element => element.scrollWidth <= element.clientWidth));

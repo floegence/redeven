@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { render } from 'solid-js/web';
-import { createSignal, Show } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpreadsheetPreview } from '../../../../../flower_ui/src/preview/SpreadsheetPreview';
 import { taskFilesEnUS } from '../../../../../flower_ui/src/taskFilesCopy';
 
 const engine = vi.hoisted(() => ({ load: vi.fn(), fromWorkbook: vi.fn() }));
 vi.mock('@silurus/ooxml/xlsx', () => ({ XlsxWorkbook: { load: engine.load }, XlsxSheetViewer: { fromWorkbook: engine.fromWorkbook } }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: Record<string, unknown>) => <button {...props} />, Popover: (props: any) => <>{props.trigger}<Show when={props.open}>{props.children}</Show></> }));
+vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: Record<string, unknown>) => <button {...props} />, SurfaceFloatingLayer: (props: any) => <div>{props.children}</div> }));
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); dispose = undefined; document.body.replaceChildren(); vi.resetAllMocks(); });
 function fixture() {

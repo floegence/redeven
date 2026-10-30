@@ -1,7 +1,8 @@
 import './preview.css';
 import { For, Show, createEffect, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { Search, Info, ChevronDown, X } from '@floegence/floe-webapp-core/icons';
-import { Button, Popover } from '@floegence/floe-webapp-core/ui';
+import { useOverlayMask } from '@floegence/floe-webapp-core';
+import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import type { XlsxSheetViewer, XlsxWorkbook } from '@silurus/ooxml/xlsx';
 import type { TaskFilesCopy } from '../taskFilesCopy';
 
@@ -16,14 +17,33 @@ export function SpreadsheetPreview(props: {
   const [ready, setReady] = createSignal(false);
   const [failed, setFailed] = createSignal(false);
   const [scale, setScale] = createSignal(1);
-  const [searchOpen, setSearchOpen] = createSignal(false);
+  const [panel, setPanel] = createSignal<'find' | 'info' | 'selection'>();
+  const [panelPosition, setPanelPosition] = createSignal({ x: 0, y: 0 });
+  const [panelWidth, setPanelWidth] = createSignal(360);
+  let panelRoot: HTMLDivElement | undefined;
+  let panelAnchor: HTMLElement | undefined;
   let searchInput: HTMLInputElement | undefined;
   let searchButton: HTMLButtonElement | undefined;
-  const changeSearchOpen = (open: boolean) => {
-    const restoreFocus = !open && searchInput?.closest('[data-floe-popover-panel]')?.contains(document.activeElement);
-    setSearchOpen(open);
-    if (restoreFocus) searchButton?.focus();
+  const closePanel = () => setPanel(undefined);
+  const positionPanel = () => {
+    if (!panelAnchor) return;
+    const bounds = panelAnchor.getBoundingClientRect();
+    const width = Math.min(panel() === 'info' ? 280 : 360, window.innerWidth - 24);
+    setPanelWidth(width); setPanelPosition({ x: bounds.right - width, y: bounds.bottom + 6 });
   };
+  const openPanel = (kind: 'find' | 'info' | 'selection', anchor: HTMLElement) => {
+    if (panel() === kind) { closePanel(); return; }
+    panelAnchor = anchor; setPanel(kind); positionPanel();
+  };
+  useOverlayMask({ open: () => !!panel(), root: () => panelRoot, onClose: closePanel, onInteractOutside: closePanel,
+    containsTarget: target => target instanceof Node && !!(panelRoot?.contains(target) || panelAnchor?.contains(target)),
+    lockBodyScroll: false, trapFocus: false, blockHotkeys: false, closeOnEscape: 'inside', escapeKeyPhase: 'capture',
+    autoFocus: false, restoreFocus: true });
+  createEffect(() => {
+    if (!panel()) return;
+    window.addEventListener('resize', positionPanel); window.addEventListener('scroll', positionPanel, true);
+    onCleanup(() => { window.removeEventListener('resize', positionPanel); window.removeEventListener('scroll', positionPanel, true); });
+  });
   const [query, setQuery] = createSignal('');
   const [matches, setMatches] = createSignal<number>();
   const [sheets, setSheets] = createSignal<Array<{ name: string; index: number }>>([]);
@@ -37,7 +57,7 @@ export function SpreadsheetPreview(props: {
   let searchRequest = 0;
   const encodings = ['utf-8', 'gb18030', 'utf-16le', 'utf-16be', 'windows-1252'] as const;
   const encodingLabels = ['UTF-8', 'GB18030', 'UTF-16 LE', 'UTF-16 BE', 'Windows-1252'] as const;
-  createEffect(on(() => props.bytes, () => { setSource(false); setEncoding('utf-8'); setQuery(''); setSearchOpen(false); }));
+  createEffect(on(() => props.bytes, () => { setSource(false); setEncoding('utf-8'); setQuery(''); closePanel(); }));
   createEffect(on(() => [props.bytes, props.format, encoding(), showSource(), revision()] as const, ([bytes, format, codec, textMode]) => {
     setReady(false); setFailed(false); setMatches(undefined); setSelection(''); setSheets([]); setSheetIndex(0);
     if (textMode) return;
@@ -129,11 +149,11 @@ export function SpreadsheetPreview(props: {
     <Button size="sm" variant="ghost" aria-label={props.copy.findText} title={props.copy.findText} disabled={!ready()} onClick={() => void search()}><Search class="size-3.5" aria-hidden="true" /></Button>
     <Button size="sm" variant="ghost" aria-label={props.copy.nextMatch} title={props.copy.nextMatch} disabled={!matches()} onClick={() => void nextMatch()}><ChevronDown class="size-3.5" aria-hidden="true" /></Button>
     <Show when={matches() !== undefined}><output aria-live="polite">{matches()}</output></Show>
-    <Show when={isWorkbook()}><Button size="sm" variant="ghost" aria-label={props.copy.close} title={props.copy.close} onClick={() => changeSearchOpen(false)}><X class="size-3.5" aria-hidden="true" /></Button></Show>
+    <Show when={isWorkbook()}><Button size="sm" variant="ghost" aria-label={props.copy.close} title={props.copy.close} onClick={closePanel}><X class="size-3.5" aria-hidden="true" /></Button></Show>
   </div>;
   return <div class="flower-delimited-preview" data-spreadsheet-format={props.format} onKeyDown={event => {
     if (isWorkbook() && ready() && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-      event.preventDefault(); event.stopPropagation(); setSearchOpen(true); searchInput?.focus();
+      event.preventDefault(); event.stopPropagation(); if (panel() !== 'find' && searchButton) openPanel('find', searchButton); else searchInput?.focus();
     }
   }}>
     <div class="flower-delimited-toolbar" classList={{ 'flower-spreadsheet-toolbar': isWorkbook() }}>
@@ -150,27 +170,26 @@ export function SpreadsheetPreview(props: {
         </select></Show>
         <Show when={isWorkbook()} fallback={searchControls()}>
           <div class="flower-spreadsheet-selection">
-            <Show when={selection()}><Popover placement="bottom-start" class="flower-spreadsheet-popover" ariaLabel={props.copy.cellValue}
-              trigger={<button type="button" class="flower-delimited-value" aria-label={props.copy.cellValue} title={selection()}>{selection()}</button>}>
-              <div class="flower-spreadsheet-detail">{selection()}</div>
-            </Popover></Show>
+            <Show when={selection()}><button type="button" class="flower-delimited-value" aria-label={props.copy.cellValue} title={selection()} aria-haspopup="dialog" aria-expanded={panel() === 'selection'} onClick={event => openPanel('selection', event.currentTarget)}>{selection()}</button></Show>
           </div>
-          <Popover placement="bottom-end" class="flower-spreadsheet-popover" ariaLabel={props.copy.findText} open={searchOpen()} onOpenChange={changeSearchOpen}
-            trigger={<Button ref={searchButton} size="sm" variant="ghost" class="flower-spreadsheet-icon" aria-label={props.copy.findText} title={props.copy.findText} disabled={!ready()}><Search class="size-3.5" aria-hidden="true" /></Button>}>
-            <div class="flower-spreadsheet-find">{searchControls()}</div>
-          </Popover>
+          <Button ref={searchButton} size="sm" variant="ghost" class="flower-spreadsheet-icon" aria-label={props.copy.findText} title={props.copy.findText} aria-haspopup="dialog" aria-expanded={panel() === 'find'} disabled={!ready()} onClick={event => openPanel('find', event.currentTarget)}><Search class="size-3.5" aria-hidden="true" /></Button>
         </Show>
         <div role="group" aria-label={props.copy.zoom}>
           <Button size="sm" variant="ghost" aria-label={props.copy.zoomOut} title={props.copy.zoomOut} disabled={!ready() || scale() <= 0.25} onClick={() => viewer?.setScale(Math.max(0.25, scale() - 0.1))}>−</Button>
           <Button size="sm" variant="ghost" aria-label={props.copy.resetZoom} title={props.copy.resetZoom} disabled={!ready()} onClick={() => viewer?.setScale(1)}>{Math.round(scale() * 100)}%</Button>
           <Button size="sm" variant="ghost" aria-label={props.copy.zoomIn} title={props.copy.zoomIn} disabled={!ready() || scale() >= 3} onClick={() => viewer?.setScale(Math.min(3, scale() + 0.1))}>+</Button>
         </div>
-        <Show when={isWorkbook()}><Popover placement="bottom-end" width={280} ariaLabel={props.copy.previewInfo}
-          trigger={<Button size="sm" variant="ghost" class="flower-spreadsheet-icon" aria-label={props.copy.previewInfo} title={props.copy.previewInfo}><Info class="size-3.5" aria-hidden="true" /></Button>}>
-          <div class="flower-spreadsheet-detail">{props.copy.spreadsheetNotice}</div>
-        </Popover></Show>
+        <Show when={isWorkbook()}><Button size="sm" variant="ghost" class="flower-spreadsheet-icon" aria-label={props.copy.previewInfo} title={props.copy.previewInfo} aria-haspopup="dialog" aria-expanded={panel() === 'info'} onClick={event => openPanel('info', event.currentTarget)}><Info class="size-3.5" aria-hidden="true" /></Button></Show>
       </Show>
     </div>
+    <Show when={panel()}><SurfaceFloatingLayer owner={panelAnchor} position={panelPosition()} estimatedSize={{ width: panelWidth(), height: panel() === 'find' ? 44 : 120 }}
+      layerRef={element => { panelRoot = element; queueMicrotask(() => { if (element.isConnected && panel() !== 'find') element.focus(); }); }} role="dialog" aria-modal="false" tabindex={-1} data-spreadsheet-panel
+      aria-label={panel() === 'find' ? props.copy.findText : panel() === 'info' ? props.copy.previewInfo : props.copy.cellValue}
+      class="flower-spreadsheet-popover bg-popover text-popover-foreground rounded-panel border border-[var(--floe-line)] shadow-[var(--floe-window-shadow)]" style={{ width: panelWidth() + 'px' }}>
+      <Show when={panel() === 'find'} fallback={<div class="flower-spreadsheet-detail">{panel() === 'info' ? props.copy.spreadsheetNotice : selection()}</div>}>
+        <div class="flower-spreadsheet-find">{searchControls()}</div>
+      </Show>
+    </SurfaceFloatingLayer></Show>
     <Show when={showSource()}>{props.source}</Show>
     <Show when={!showSource() && !isWorkbook()}>
       <div class="flower-delimited-value" aria-label={props.copy.cellValue} title={selection()}>{selection() || ' '}</div>
