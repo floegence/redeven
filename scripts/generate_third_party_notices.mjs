@@ -909,6 +909,23 @@ ${license.toString('utf8').trim()}
 \`\`\``;
 }
 
+function renderDelimitedPreviewNotices() {
+  const roots = ['internal/envapp/ui_src', 'desktop'].map(directory => path.join(repoRoot, directory, 'node_modules/@silurus/ooxml'));
+  const hashes = {
+    LICENSE: 'c5ef721b35150df22732e27fd72224e61a87e0887fcd2505abe90c056ae053bb',
+    'THIRD_PARTY_NOTICES.md': '6249ce711bb035df5a0c18eaffa4cb01e939c3c886a3397922f410172ce2ae52',
+  };
+  for (const root of roots) {
+    if (JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version !== '0.89.7') throw new Error('Review the new delimited preview renderer release.');
+    for (const [file, expected] of Object.entries(hashes)) {
+      if (crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex') !== expected) throw new Error('Delimited preview notice changed: ' + file);
+    }
+  }
+  return ['## Delimited Text Preview Licenses', '',
+    'CSV/TSV previews use the unmodified official @silurus/ooxml 0.89.7 XLSX entry. Redeven does not ship its optional math, map or legacy entries. The complete upstream notice is retained for provenance; it also describes optional components outside this build.', '',
+    ...Object.keys(hashes).flatMap(file => ['### ' + file, '', '~~~~text', fs.readFileSync(path.join(roots[0], file), 'utf8').trim(), '~~~~', ''])].join('\n');
+}
+
 function renderPptxNotices() {
   const coreRoot = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core');
   const core = JSON.parse(fs.readFileSync(path.join(coreRoot, 'package.json'), 'utf8'));
@@ -1161,6 +1178,8 @@ ${renderELKNotices()}
 ${renderLibavoidNotices()}
 
 ${renderPptxNotices()}
+
+${renderDelimitedPreviewNotices()}
 
 ## License Policy Guard
 

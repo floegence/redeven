@@ -6591,7 +6591,22 @@
       "previewFailed": "Impossible de prévisualiser ce fichier. Réessayez ou téléchargez-le.",
       "unsupported": "Aperçu indisponible pour ce fichier. Vous pouvez le télécharger.",
       "copyCode": "Copier le code",
-      "copied": "Copié"
+      "copied": "Copié",
+      "grid": "Tableau",
+      "sourceText": "Source",
+      "encoding": "Encodage du texte",
+      "findText": "Rechercher",
+      "nextMatch": "Suivant",
+      "zoom": "Zoom",
+      "zoomOut": "Réduire",
+      "zoomIn": "Agrandir",
+      "resetZoom": "Taille réelle",
+      "cellValue": "Valeur de la cellule sélectionnée",
+      "basicSpreadsheet": "Aperçu simple · première feuille, jusqu’à 200 lignes et 50 colonnes ; mise en forme non conservée",
+      "previousPage": "Diapositive précédente",
+      "nextPage": "Diapositive suivante",
+      "presentationIncomplete": "Certains contenus ou ressources externes n’ont pas pu être affichés.",
+      "fitWindow": "Adapter à la fenêtre"
     }
   },
   "uiCopy": {

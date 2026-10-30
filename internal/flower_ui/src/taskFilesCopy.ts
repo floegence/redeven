@@ -1,4 +1,21 @@
 export const taskFilesEnUS = {
+  fitWindow: 'Fit to window',
+  basicSpreadsheet: "Basic preview · first sheet, up to 200 rows and 50 columns; formatting is not preserved",
+  previousPage: "Previous slide",
+  nextPage: "Next slide",
+  presentationIncomplete: "Some content or external resources could not be displayed.",
+
+  grid: "Table",
+  sourceText: "Source",
+  encoding: "Text encoding",
+  findText: "Find",
+  nextMatch: "Next",
+  zoom: "Zoom",
+  zoomOut: "Zoom out",
+  zoomIn: "Zoom in",
+  resetZoom: "Actual size",
+  cellValue: "Selected cell value",
+
   title: 'Conversation files',
   files: 'Files',
   process: 'Process files',

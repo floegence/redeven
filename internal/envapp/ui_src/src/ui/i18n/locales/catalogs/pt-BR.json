@@ -6591,7 +6591,22 @@
       "previewFailed": "Não foi possível visualizar o arquivo. Tente novamente ou baixe-o.",
       "unsupported": "A prévia deste arquivo não está disponível. Você pode baixá-lo.",
       "copyCode": "Copiar código",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "grid": "Tabela",
+      "sourceText": "Fonte",
+      "encoding": "Codificação do texto",
+      "findText": "Buscar",
+      "nextMatch": "Próximo",
+      "zoom": "Zoom",
+      "zoomOut": "Reduzir",
+      "zoomIn": "Ampliar",
+      "resetZoom": "Tamanho real",
+      "cellValue": "Valor da célula selecionada",
+      "basicSpreadsheet": "Prévia básica · primeira planilha, até 200 linhas e 50 colunas; sem a formatação original",
+      "previousPage": "Slide anterior",
+      "nextPage": "Próximo slide",
+      "presentationIncomplete": "Alguns conteúdos ou recursos externos não puderam ser exibidos.",
+      "fitWindow": "Ajustar à janela"
     }
   },
   "uiCopy": {

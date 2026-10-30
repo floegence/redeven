@@ -126,7 +126,7 @@ vi.mock('../utils/fileStreamReader', () => fileStreamReaderMock);
 
 vi.mock('./FilePreviewContent', () => ({
   FilePreviewContent: (props: any) => (
-    <div data-testid="file-preview-content" data-preview-mode={props.descriptor.mode}>
+    <div data-testid="file-preview-content" data-preview-mode={props.descriptor.mode} data-preview-bytes={props.bytes ? JSON.stringify([...props.bytes]) : undefined} data-preview-truncated={String(!!props.truncated)}>
       <div>{props.item?.path}</div>
       <div>{props.text}</div>
       <div>{props.message}</div>
@@ -962,6 +962,20 @@ describe('FlowerTurnLauncherWindow', () => {
       host.querySelector<HTMLButtonElement>('button[aria-label="Preview attached snapshot for report.html"]')!.click();
       await vi.waitFor(() => expect(host.querySelector('[data-preview-mode]')?.getAttribute('data-preview-mode')).toBe(oversized ? 'unsupported' : 'html'));
       expect(host.textContent).toContain(oversized ? 'This document is too large to preview.' : source);
+    } finally { dispose(); }
+  });
+
+  it.each([false, true])('retains original CSV snapshot bytes and source truncation (truncated: %s)', async truncated => {
+    const host = document.createElement('div'); document.body.append(host);
+    const source = truncated ? new TextEncoder().encode('x'.repeat(120001)) : new Uint8Array([0xc4, 0xe3, 0xba, 0xc3, 44, 48, 48, 49]);
+    const attachment = setFlowerTurnLauncherAttachmentSourcePath(new File([source], 'encoded.csv', { type: 'text/csv' }), '/workspace/encoded.csv');
+    const dispose = render(() => <FlowerTurnLauncherWindow open intent={{ ...baseIntent, source_surface: 'file_browser',
+      context_items: [{ kind: 'file_path', path: '/workspace/encoded.csv', is_directory: false }], pending_attachments: [attachment],
+    }} onClose={() => undefined} onSubmit={async () => undefined} />, host);
+    try {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Preview attached snapshot for encoded.csv"]')!.click();
+      await vi.waitFor(() => expect(host.querySelector('[data-preview-bytes]')?.getAttribute('data-preview-bytes')).toBe(JSON.stringify([...source])));
+      expect(host.querySelector('[data-preview-truncated]')?.getAttribute('data-preview-truncated')).toBe(String(truncated));
     } finally { dispose(); }
   });
 

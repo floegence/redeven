@@ -1,6 +1,10 @@
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { Component } from 'solid-js';
-import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import type { FlowerTaskFilePreviewContentProps } from '../FlowerTaskFilePreview';
+import { lazy, Suspense, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { isRichFilePreview } from '../preview/previewKinds';
+import type { TaskFilesCopy } from '../taskFilesCopy';
+const FlowerRichFilePreview = lazy(() => import('../preview/FlowerRichFilePreview').then(module => ({ default: module.FlowerRichFilePreview })));
 import { cn } from '@floegence/floe-webapp-core';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
@@ -13,6 +17,8 @@ export type FlowerAttachmentPreviewSource = Readonly<{
 
 type FlowerAttachmentPreviewWindowProps = Readonly<{
   source: FlowerAttachmentPreviewSource | null;
+  renderContent?: Component<FlowerTaskFilePreviewContentProps>;
+  copy: TaskFilesCopy;
   zIndex?: number;
   loadingLabel: string;
   unavailableLabel: string;
@@ -57,6 +63,7 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
   const [resolvedMimeType, setResolvedMimeType] = createSignal('');
   const [objectURL, setObjectURL] = createSignal('');
   const [text, setText] = createSignal('');
+  const [blob, setBlob] = createSignal<Blob>();
   let activeObjectURL = '';
 
   const clearContent = () => {
@@ -64,6 +71,7 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
     activeObjectURL = '';
     setObjectURL('');
     setText('');
+    setBlob(undefined);
     setResolvedMimeType('');
     setError('');
   };
@@ -81,7 +89,8 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
       if (controller.signal.aborted) return;
       const mimeType = mimeEssence(blob.type) || mimeEssence(source.mimeType);
       setResolvedMimeType(mimeType);
-      if (previewKind(mimeType) === 'text') {
+      setBlob(blob);
+      if (previewKind(mimeType) === 'text' && !isRichFilePreview(source.name)) {
         const content = await blob.text();
         if (controller.signal.aborted) return;
         setText(content);
@@ -126,6 +135,12 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
                   <span>{props.unavailableLabel}</span>
                 </div>
               )}>
+                <Match when={props.renderContent && blob() && isRichFilePreview(props.source!.name)}>
+                  <Show when={props.renderContent}>{Content => { const Renderer = Content(); return <Renderer name={props.source!.name} mime={resolvedMimeType()} blob={blob()!} />; }}</Show>
+                </Match>
+                <Match when={blob() && isRichFilePreview(props.source!.name)}>
+                  <Suspense fallback={<div class="flower-attachment-preview-state">{props.loadingLabel}</div>}><FlowerRichFilePreview name={props.source!.name} mime={resolvedMimeType()} blob={blob()!} copy={props.copy} /></Suspense>
+                </Match>
                 <Match when={kind() === 'image' && objectURL()}>
                   <img class="flower-attachment-preview-image" src={objectURL()} alt={props.source!.name} />
                 </Match>

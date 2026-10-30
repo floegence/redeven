@@ -14867,6 +14867,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )}</Show>
       <FlowerAttachmentPreviewWindow
         source={attachmentPreview()}
+        copy={copy().taskFiles}
+        renderContent={props.renderTaskFilePreviewContent}
         zIndex={FLOWER_SURFACE_LAYER.attachmentPreview}
         loadingLabel={attachmentCopy().uploading}
         unavailableLabel={copy().chat.media.unavailable}

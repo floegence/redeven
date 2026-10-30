@@ -6591,7 +6591,22 @@
       "previewFailed": "ファイルをプレビューできません。再試行するかダウンロードしてください。",
       "unsupported": "このファイルはプレビューできません。ダウンロードして確認できます。",
       "copyCode": "コードをコピー",
-      "copied": "コピー済み"
+      "copied": "コピー済み",
+      "grid": "表",
+      "sourceText": "ソース",
+      "encoding": "文字コード",
+      "findText": "検索",
+      "nextMatch": "次へ",
+      "zoom": "ズーム",
+      "zoomOut": "縮小",
+      "zoomIn": "拡大",
+      "resetZoom": "実際のサイズ",
+      "cellValue": "選択したセルの値",
+      "basicSpreadsheet": "簡易プレビュー · 最初のシート、最大200行・50列。書式は保持されません",
+      "previousPage": "前のスライド",
+      "nextPage": "次のスライド",
+      "presentationIncomplete": "一部の内容や外部リソースを表示できません。",
+      "fitWindow": "ウィンドウに合わせる"
     }
   },
   "uiCopy": {

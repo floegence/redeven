@@ -1727,7 +1727,22 @@
       "previewFailed": "无法预览此文件，请重试或下载。",
       "unsupported": "此文件暂不支持预览，可以下载查看。",
       "copyCode": "复制代码",
-      "copied": "已复制"
+      "copied": "已复制",
+      "grid": "表格",
+      "sourceText": "源码",
+      "encoding": "文本编码",
+      "findText": "查找",
+      "nextMatch": "下一个",
+      "zoom": "缩放",
+      "zoomOut": "缩小",
+      "zoomIn": "放大",
+      "resetZoom": "实际大小",
+      "cellValue": "所选单元格值",
+      "basicSpreadsheet": "基础预览 · 仅首张工作表，最多 200 行、50 列，不保留原始格式",
+      "previousPage": "上一张幻灯片",
+      "nextPage": "下一张幻灯片",
+      "presentationIncomplete": "部分内容或外部资源无法显示。",
+      "fitWindow": "适合窗口"
     }
   },
   "common": {

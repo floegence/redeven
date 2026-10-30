@@ -1579,6 +1579,21 @@
     "unavailable": "Unavailable",
     "busy": "Temporary files cannot be cleaned while this conversation or its processes are active.",
     "warning": "Application state is inside this workspace. Move it outside the project to keep intermediate files separate.",
-    "truncated": "Only the first 200 temporary files are shown."
+    "truncated": "Only the first 200 temporary files are shown.",
+    "grid": "Table",
+    "sourceText": "Source",
+    "encoding": "Text encoding",
+    "findText": "Find",
+    "nextMatch": "Next",
+    "zoom": "Zoom",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "resetZoom": "Actual size",
+    "cellValue": "Selected cell value",
+    "basicSpreadsheet": "Basic preview · first sheet, up to 200 rows and 50 columns; formatting is not preserved",
+    "previousPage": "Previous slide",
+    "nextPage": "Next slide",
+    "presentationIncomplete": "Some content or external resources could not be displayed.",
+    "fitWindow": "Fit to window"
   }
 }

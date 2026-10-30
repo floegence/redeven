@@ -4,6 +4,7 @@ import { FileMarkdown } from '../file-markdown/FileMarkdown';
 import { useMarkdownPreviewPreferences } from '../services/markdownPreviewPreferences';
 import { FilePreviewContent } from '../widgets/FilePreviewContent';
 import { describeFilePreview, getExtDot, isLikelyTextContent, isTextFilePreview, mimeFromExtDot, type FilePreviewDescriptor } from '../utils/filePreview';
+import { readSpreadsheetPreview } from '../../../../../flower_ui/src/preview/readSpreadsheetPreview';
 import { useI18n } from '../i18n';
 
 /** Env App retains its rich report renderers inside the shared dialog-owned preview. */
@@ -29,14 +30,10 @@ export function FlowerTaskFilePreviewContent(props: FlowerTaskFilePreviewContent
       const text = isTextFilePreview(descriptor) ? new TextDecoder().decode(bytes) : '';
       let rows: string[][] | undefined, sheet: string | undefined;
       if (descriptor.mode === 'xlsx') {
-        const { default: ExcelJS } = await import('exceljs');
+        const value = await readSpreadsheetPreview(bytes);
         if (!active) return;
-        const book = new ExcelJS.Workbook(); await book.xlsx.load(bytes.buffer);
-        const worksheet = book.worksheets[0];
-        if (!worksheet) throw new Error('No worksheet');
-        sheet = worksheet.name;
-        rows = Array.from({ length: Math.min(worksheet.rowCount, 200) }, (_, row) =>
-          Array.from({ length: Math.min(worksheet.columnCount, 50) }, (_, col) => worksheet.getCell(row + 1, col + 1).text));
+        if (!value) throw new Error('No worksheet');
+        rows = value.rows; sheet = value.sheetName;
       }
       if (!active) return;
       url = URL.createObjectURL(new Blob([bytes], { type: mime || mimeFromExtDot(getExtDot(name)) || 'application/octet-stream' }));

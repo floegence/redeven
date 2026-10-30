@@ -87,6 +87,9 @@ importers:
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
+      '@silurus/ooxml':
+        specifier: 0.89.7
+        version: 0.89.7
       '@solidjs/router':
         specifier: ^0.15.3
         version: 0.15.4(solid-js@1.9.17)
@@ -975,6 +978,9 @@ packages:
 
   '@shikijs/vscode-textmate@10.0.2':
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
+
+  '@silurus/ooxml@0.89.7':
+    resolution: {integrity: sha512-GZGQRiPjOqlWjqPv4DE1etTgdHt9walWvuONn0eWcdgMDEMSBA/SV/tPOFoIWTTcMxPb7JnYGkg66Z64lu4p9w==}
 
   '@solid-primitives/props@3.2.3':
     resolution: {integrity: sha512-XzG6en9gSFwmvbKcATm2BxL63HegZ+BAG5fmHi8jyBppQHcaths7ffz+6vYvwYy3nlgLa20ufJLj7tst+PcHFA==}
@@ -3699,6 +3705,8 @@ snapshots:
       '@types/hast': 3.0.4
 
   '@shikijs/vscode-textmate@10.0.2': {}
+
+  '@silurus/ooxml@0.89.7': {}
 
   '@solid-primitives/props@3.2.3(solid-js@1.9.17)':
     dependencies:

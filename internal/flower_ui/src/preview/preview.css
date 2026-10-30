@@ -1,0 +1,21 @@
+.flower-delimited-preview { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; overflow:hidden; color:var(--foreground); }
+.flower-delimited-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; padding:6px 8px; border-bottom:1px solid var(--border); flex:none; }
+.flower-delimited-toolbar [role=group], .flower-delimited-search { display:flex; align-items:center; gap:2px; min-width:0; }
+.flower-delimited-search { flex:1 1 200px; }
+.flower-delimited-toolbar input, .flower-delimited-toolbar select { min-width:0; height:28px; border:1px solid var(--border); border-radius:4px; background:var(--background); color:var(--foreground); font-size:12px; padding:2px 6px; }
+.flower-delimited-toolbar input { width:100%; }
+.flower-delimited-toolbar select { max-width:140px; }
+.flower-delimited-toolbar output { min-width:2ch; font-size:12px; }
+.flower-delimited-value { padding:4px 10px; font-size:12px; border-bottom:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-height:26px; flex:none; user-select:text; }
+.flower-delimited-body { position:relative; flex:1; min-height:0; min-width:0; overflow:hidden; }
+.flower-delimited-canvas { position:absolute; inset:0; overflow:hidden; background:white; }
+.flower-delimited-state { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:8px; padding:20px; background:var(--background); font-size:12px; }
+.flower-delimited-source { flex:1; min-height:0; overflow:auto; white-space:pre; font-family:monospace; font-size:12px; padding:12px; user-select:text; }
+.flower-rich-preview { width:100%; height:100%; min-height:0; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.flower-rich-scroll { flex:1; min-height:0; overflow:auto; padding:12px; user-select:text; }
+.flower-basic-table { border-collapse:collapse; font-size:12px; }
+.flower-basic-table td { border:1px solid var(--border); padding:4px 8px; white-space:pre-wrap; min-width:60px; vertical-align:top; }
+.flower-rich-notice { padding:6px 10px; flex:none; font-size:12px; color:var(--muted-foreground); border-bottom:1px solid var(--border); }
+.flower-rich-document { width:max-content; min-width:0; margin:auto; transform-origin:top left; }
+.flower-rich-document .flower-docx-wrapper { padding:0; background:transparent; gap:16px; }
+.flower-rich-document section.flower-docx { margin:0; }

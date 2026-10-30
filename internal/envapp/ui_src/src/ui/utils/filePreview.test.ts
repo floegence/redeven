@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { describeFilePreview, mimeFromExtDot, previewModeByName } from './filePreview';
 
 describe('describeFilePreview', () => {
+  it('does not pass legacy Office binaries to OOXML parsers', () => {
+    for (const name of ['legacy.xls', 'legacy.doc', 'legacy.ppt']) expect(describeFilePreview(name).mode).toBe('unsupported');
+  });
   it.each(['report.html', 'report.htm', 'report.xhtml', '/workspace/REPORT.HTML', 'C:\\reports\\REPORT.HTM'])(
     'opens %s as an HTML page with source-editing metadata', (name) => {
       expect(describeFilePreview(name)).toEqual({
@@ -109,7 +112,7 @@ describe('describeFilePreview', () => {
     expect(previewModeByName('diagram.png')).toBe('image');
     expect(previewModeByName('slides.pdf')).toBe('pdf');
     expect(previewModeByName('slides.PPTX')).toBe('pptx');
-    expect(previewModeByName('slides.ppt')).toBe('binary');
+    expect(previewModeByName('slides.ppt')).toBe('unsupported');
     expect(mimeFromExtDot('.pptx')).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation');
     expect(previewModeByName('sheet.xlsx')).toBe('xlsx');
     expect(previewModeByName('archive.bin')).toBe('binary');

@@ -1,9 +1,11 @@
-import { createEffect, createSignal, onCleanup, Show, type Component } from 'solid-js';
+import { lazy, Suspense, createEffect, createSignal, onCleanup, Show, type Component } from 'solid-js';
 import { SandboxedHtmlFrame } from '@floegence/floe-webapp-core/html-preview';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { ArrowLeft, Download, Refresh } from '@floegence/floe-webapp-core/icons';
 import type { FlowerAttachmentPreviewSource } from './attachments/FlowerAttachmentPreviewWindow';
+import { isRichFilePreview } from './preview/previewKinds';
+const FlowerRichFilePreview = lazy(() => import('./preview/FlowerRichFilePreview').then(module => ({ default: module.FlowerRichFilePreview })));
 import type { TaskFilesCopy } from './taskFilesCopy';
 
 export type FlowerTaskFilePreviewContentProps = { name: string; path?: string; mime: string; blob: Blob };
@@ -43,7 +45,7 @@ export function FlowerTaskFilePreview(props: {
       <Button variant="ghost" size="sm" icon={Refresh} onClick={() => setRevision(value => value + 1)}>{props.copy.retry}</Button></div>}>
       <Show when={blob()} fallback={<div class="flower-task-preview-state" role="status">{props.copy.loading}</div>}>{value =>
         <Show when={props.renderContent} fallback={
-          <Show when={mime().startsWith('image/')} fallback={
+          <Show when={isRichFilePreview(props.source.name)} fallback={<Show when={mime().startsWith('image/')} fallback={
             <Show when={mime() === 'application/pdf'} fallback={
               <Show when={mime().startsWith('text/')} fallback={<div class="flower-task-preview-state">{props.copy.unsupported}</div>}>
                 <Show when={mime().split(';')[0] === 'text/html'} fallback={
@@ -54,7 +56,7 @@ export function FlowerTaskFilePreview(props: {
                   labels={{ linkUnavailable: props.copy.unavailable, anchorUnavailable: props.copy.unavailable }} /></Show>
               </Show>
             }><object class="flower-attachment-preview-document" data={url()} type="application/pdf">{props.copy.unsupported}</object></Show>
-          }><img class="flower-attachment-preview-image" src={url()} alt={props.source.name} /></Show>
+          }><img class="flower-attachment-preview-image" src={url()} alt={props.source.name} /></Show>}><Suspense fallback={<div class="flower-task-preview-state">{props.copy.loading}</div>}><FlowerRichFilePreview name={props.source.name} path={props.source.path} mime={mime()} blob={value()} copy={props.copy} /></Suspense></Show>
         }>{Content => { const Renderer = Content(); return <Renderer name={props.source.name} path={props.source.path} mime={mime()} blob={value()} />; }}</Show>
       }</Show>
     </Show>

@@ -34,6 +34,15 @@
       ],
       "lucide-solid": [
         "node_modules/lucide-solid"
+      ],
+      "@silurus/ooxml/*": [
+        "node_modules/@silurus/ooxml/dist/types/*"
+      ],
+      "exceljs": [
+        "node_modules/exceljs"
+      ],
+      "docx-preview": [
+        "node_modules/docx-preview"
       ]
     },
     "jsx": "preserve",

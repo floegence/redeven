@@ -51,8 +51,11 @@ export default defineConfig({
   }, solid({ babel: { compact: true } }), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
   resolve: {
     alias: [
+      { find: /^exceljs$/, replacement: path.resolve(import.meta.dirname, 'node_modules/exceljs/dist/exceljs.min.js') },
+      { find: /^docx-preview$/, replacement: path.resolve(import.meta.dirname, 'node_modules/docx-preview/dist/docx-preview.mjs') },
+      { find: /^@silurus\/ooxml\/xlsx$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@silurus/ooxml/dist/xlsx.mjs') },
       { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|html-preview|icons|layout|loading|markdown|ui)$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|html-preview|icons|layout|loading|markdown|pptx|ui)$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
       { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(import.meta.dirname, 'node_modules/@floegence/floe-webapp-core/dist/index.js') },
       { find: /^lucide-solid$/, replacement: path.resolve(import.meta.dirname, 'node_modules/lucide-solid/dist/esm/lucide-solid.mjs') },
       { find: /^marked$/, replacement: path.resolve(import.meta.dirname, 'node_modules/marked/lib/marked.esm.js') },

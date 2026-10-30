@@ -13,6 +13,8 @@ const PdfPreviewPane = lazy(() => import('../widgets/PdfPreviewPane').then(modul
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
 import { ImagePreviewPane } from '../widgets/ImagePreviewPane';
 import { useI18n } from '../i18n';
+import { DelimitedTextPreview, delimitedFormat } from '../../../../../flower_ui/src/preview/DelimitedTextPreview';
+import { taskFilesEnUS, type TaskFilesCopy } from '../../../../../flower_ui/src/taskFilesCopy';
 
 export type RedevenFilePreviewRendererId =
   | 'text'
@@ -77,19 +79,16 @@ function renderMarkdownPreview(props: RedevenFilePreviewRenderProps): JSX.Elemen
 }
 
 function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
-  return (
-    <TextFilePreviewPane
-      path={props.item?.path ?? 'preview.txt'}
-      descriptor={props.descriptor}
-      text={props.text ?? ''}
-      draftText={props.draftText ?? props.text ?? ''}
-      truncated={props.truncated}
-      editing={props.editing}
-      onDraftChange={props.onDraftChange}
-      onSelectionChange={props.onSelectionChange}
-      surface={props.surface}
-    />
-  );
+  const i18n = useI18n();
+  const format = () => delimitedFormat(props.item?.name ?? props.item?.path ?? '');
+  const copy = () => Object.fromEntries(Object.keys(taskFilesEnUS).map(key => [key, i18n.t(('flowerSurface.taskFiles.' + key) as Parameters<typeof i18n.t>[0])])) as TaskFilesCopy;
+  const source = () => <TextFilePreviewPane path={props.item?.path ?? 'preview.txt'} descriptor={props.descriptor}
+    text={props.text ?? ''} draftText={props.draftText ?? props.text ?? ''} truncated={props.truncated}
+    editing={props.editing} onDraftChange={props.onDraftChange} onSelectionChange={props.onSelectionChange} surface={props.surface} />;
+  return <Show when={props.bytes && format()} fallback={source()}>{kind =>
+    <DelimitedTextPreview bytes={props.bytes!} format={kind()} copy={copy()}
+      source={source()} editing={props.editing} truncated={props.truncated} allowLocalWheel={props.allowLocalWheel} />
+  }</Show>;
 }
 
 function renderImagePreview(props: RedevenFilePreviewRenderProps): JSX.Element {
@@ -138,6 +137,7 @@ function renderSpreadsheetPreview(props: RedevenFilePreviewRenderProps): JSX.Ele
         <div class="mb-2 text-[11px] text-muted-foreground">{i18n.t('uiCopy.preview.sheetLabel')} {props.xlsxSheetName}</div>
       </Show>
 
+      <p class="mb-2 text-[11px] text-muted-foreground">{i18n.t('flowerSurface.taskFiles.basicSpreadsheet')}</p>
       <div class="overflow-auto rounded-md border border-border">
         <table class="w-full text-xs">
           <tbody>

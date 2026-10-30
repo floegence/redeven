@@ -1,3 +1,4 @@
+import { readSpreadsheetPreview } from '../../../../../flower_ui/src/preview/readSpreadsheetPreview';
 import { type Accessor, batch, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { Session } from '@floegence/flowersec-core';
@@ -433,65 +434,15 @@ export function createFilePreviewController(params: {
           return;
         }
 
-        const module = await import('exceljs');
+        const value = await readSpreadsheetPreview(bytes);
         if (seq !== previewReqSeq) return;
-
-        const ExcelJS: any = module.default ?? module;
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(bytes.buffer);
-        if (seq !== previewReqSeq) return;
-
-        const worksheet = workbook.worksheets?.[0] ?? workbook.getWorksheet?.(1);
-        if (!worksheet) {
+        if (!value) {
           setPreviewDescriptor({ mode: 'unsupported' });
           setPreviewMessage('No worksheet found in this file.');
           return;
         }
-
-        const cellToText = (value: unknown): string => {
-          if (value == null) return '';
-          if (typeof value === 'string') return value;
-          if (typeof value === 'number') return String(value);
-          if (typeof value === 'boolean') return value ? 'true' : 'false';
-          if (value instanceof Date) return value.toISOString();
-          if (typeof value === 'object') {
-            const maybeCell = value as any;
-            if (typeof maybeCell.text === 'string') return maybeCell.text;
-            if (Array.isArray(maybeCell.richText)) {
-              return maybeCell.richText.map((part: any) => String(part?.text ?? '')).join('');
-            }
-            if (maybeCell.result != null) return cellToText(maybeCell.result);
-            if (typeof maybeCell.formula === 'string' && maybeCell.result != null) {
-              return `${maybeCell.formula} = ${cellToText(maybeCell.result)}`;
-            }
-            try {
-              return JSON.stringify(maybeCell);
-            } catch {
-              return String(maybeCell);
-            }
-          }
-          return String(value);
-        };
-
-        const rows: string[][] = [];
-        const maxRows = 200;
-        const maxCols = 50;
-        const rowCount = typeof worksheet.rowCount === 'number' ? worksheet.rowCount : 0;
-        const takeRows = Math.min(rowCount || maxRows, maxRows);
-
-        for (let rowIndex = 1; rowIndex <= takeRows; rowIndex += 1) {
-          const row = worksheet.getRow?.(rowIndex);
-          if (!row) continue;
-          const nextRow: string[] = [];
-          for (let colIndex = 1; colIndex <= maxCols; colIndex += 1) {
-            const cell = row.getCell?.(colIndex);
-            nextRow.push(cellToText(cell?.value));
-          }
-          rows.push(nextRow);
-        }
-
-        setXlsxSheetName(String(worksheet.name ?? 'Sheet1'));
-        setXlsxRows(rows);
+        setXlsxSheetName(value.sheetName);
+        setXlsxRows(value.rows);
         return;
       }
 

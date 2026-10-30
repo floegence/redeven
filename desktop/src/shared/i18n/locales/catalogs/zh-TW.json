@@ -1727,7 +1727,22 @@
       "previewFailed": "無法預覽此檔案，請重試或下載。",
       "unsupported": "此檔案暫不支援預覽，可以下載查看。",
       "copyCode": "複製程式碼",
-      "copied": "已複製"
+      "copied": "已複製",
+      "grid": "表格",
+      "sourceText": "原始碼",
+      "encoding": "文字編碼",
+      "findText": "尋找",
+      "nextMatch": "下一個",
+      "zoom": "縮放",
+      "zoomOut": "縮小",
+      "zoomIn": "放大",
+      "resetZoom": "實際大小",
+      "cellValue": "所選儲存格值",
+      "basicSpreadsheet": "基本預覽 · 僅第一張工作表，最多 200 列、50 欄，不保留原始格式",
+      "previousPage": "上一張投影片",
+      "nextPage": "下一張投影片",
+      "presentationIncomplete": "部分內容或外部資源無法顯示。",
+      "fitWindow": "符合視窗"
     }
   },
   "common": {

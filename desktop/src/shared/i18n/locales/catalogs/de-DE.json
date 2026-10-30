@@ -1727,7 +1727,22 @@
       "previewFailed": "Die Dateivorschau ist fehlgeschlagen. Erneut versuchen oder herunterladen.",
       "unsupported": "Für diese Datei ist keine Vorschau verfügbar. Sie können sie herunterladen.",
       "copyCode": "Code kopieren",
-      "copied": "Kopiert"
+      "copied": "Kopiert",
+      "grid": "Tabelle",
+      "sourceText": "Quelltext",
+      "encoding": "Zeichenkodierung",
+      "findText": "Suchen",
+      "nextMatch": "Weiter",
+      "zoom": "Zoom",
+      "zoomOut": "Verkleinern",
+      "zoomIn": "Vergrößern",
+      "resetZoom": "Originalgröße",
+      "cellValue": "Wert der ausgewählten Zelle",
+      "basicSpreadsheet": "Einfache Vorschau · erstes Blatt, höchstens 200 Zeilen und 50 Spalten; ohne Originalformatierung",
+      "previousPage": "Vorherige Folie",
+      "nextPage": "Nächste Folie",
+      "presentationIncomplete": "Einige Inhalte oder externe Ressourcen konnten nicht angezeigt werden.",
+      "fitWindow": "An Fenster anpassen"
     }
   },
   "common": {

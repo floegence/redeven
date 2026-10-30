@@ -1727,7 +1727,22 @@
       "previewFailed": "No se pudo previsualizar el archivo. Reinténtalo o descárgalo.",
       "unsupported": "Este archivo no admite vista previa. Puedes descargarlo.",
       "copyCode": "Copiar código",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "grid": "Tabla",
+      "sourceText": "Código fuente",
+      "encoding": "Codificación del texto",
+      "findText": "Buscar",
+      "nextMatch": "Siguiente",
+      "zoom": "Zoom",
+      "zoomOut": "Alejar",
+      "zoomIn": "Acercar",
+      "resetZoom": "Tamaño real",
+      "cellValue": "Valor de la celda seleccionada",
+      "basicSpreadsheet": "Vista básica · primera hoja, hasta 200 filas y 50 columnas; sin formato original",
+      "previousPage": "Diapositiva anterior",
+      "nextPage": "Diapositiva siguiente",
+      "presentationIncomplete": "No se pudieron mostrar algunos contenidos o recursos externos.",
+      "fitWindow": "Ajustar a la ventana"
     }
   },
   "common": {

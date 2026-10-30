@@ -1,0 +1,143 @@
+import '../../index.css';
+import '../../../../../flower_ui/src/styles/flower.css';
+import { render } from 'solid-js/web';
+import { createSignal, type JSX } from 'solid-js';
+import { commands, page, userEvent } from 'vitest/browser';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DelimitedTextPreview } from '../../../../../flower_ui/src/preview/DelimitedTextPreview';
+import { FlowerRichFilePreview } from '../../../../../flower_ui/src/preview/FlowerRichFilePreview';
+import { FlowerTaskFilePreview } from '../../../../../flower_ui/src/FlowerTaskFilePreview';
+import { FlowerAttachmentPreviewWindow } from '../../../../../flower_ui/src/attachments/FlowerAttachmentPreviewWindow';
+import { taskFilesEnUS } from '../../../../../flower_ui/src/taskFilesCopy';
+import { FloeConfigProvider, LayoutProvider, ThemeProvider } from '@floegence/floe-webapp-core';
+import { createDefaultWorkbenchState, type WorkbenchState, type WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
+import { RedevenWorkbenchSurface } from '../workbench/surface/RedevenWorkbenchSurface';
+import { FilePreviewContent } from './FilePreviewContent';
+import { FlowerTaskFilePreviewContent } from '../flower/FlowerTaskFilePreviewContent';
+import { I18nProvider } from '../i18n';
+import docxURL from './__fixtures__/preview-pages.docx?url';
+import pptxURL from './__fixtures__/preview-pages.pptx?url';
+
+const disposers: Array<() => void> = [];
+afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren(); });
+function mount(view: () => JSX.Element, width = 800) {
+  const host = document.createElement('div');
+  Object.assign(host.style, { width: width + 'px', height: '600px' });
+  document.body.append(host); disposers.push(render(view, host)); return host;
+}
+const csv = '\ufeffname,id,expression,notes\r\n中文,00123,"=SUM(1,2)","line one\nline two"\r\nBeta,12345678901234567890,text,"comma,quote"';
+const bytes = new TextEncoder().encode(csv);
+async function gridReady(host: HTMLElement) {
+  await vi.waitFor(() => {
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')?.disabled).toBe(false);
+    const canvas = host.querySelector('canvas'); expect(canvas!.width).toBeGreaterThan(0);
+    const holder = host.querySelector('.flower-delimited-canvas')!;
+    expect(canvas!.getBoundingClientRect().width).toBeGreaterThan(holder.clientWidth - 25);
+    expect(canvas!.getBoundingClientRect().height).toBeGreaterThan(holder.clientHeight - 25);
+  }, { timeout: 8000 });
+}
+async function find(host: HTMLElement, value: string) {
+  const input = host.querySelector<HTMLInputElement>('input[type=search]')!;
+  await userEvent.fill(input, value); await userEvent.keyboard('{Enter}');
+  await vi.waitFor(() => expect(host.querySelector('output')?.textContent).toBe('1'));
+}
+describe('Office and delimited preview acceptance', () => {
+  it('preserves literal CSV values, searches, zooms and offers source at narrow widths', async () => {
+    await page.viewport(1280, 900);
+    const host = mount(() => <DelimitedTextPreview bytes={bytes} format="csv" copy={taskFilesEnUS} source={<pre>{csv}</pre>} />);
+    await gridReady(host);
+    for (const value of ['00123', '12345678901234567890', '=SUM(1,2)', '中文']) await find(host, value);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!);
+    await vi.waitFor(() => expect(host.querySelector('[aria-label="Actual size"]')?.textContent).toBe('110%'));
+    for (const width of [390, 320]) {
+      host.style.width = width + 'px';
+      await vi.waitFor(() => expect(host.scrollWidth).toBeLessThanOrEqual(width));
+      for (const control of host.querySelectorAll<HTMLElement>('button,input,select')) {
+        const box = control.getBoundingClientRect(), bounds = host.getBoundingClientRect();
+        expect(box.right).toBeLessThanOrEqual(bounds.right + 1);
+      }
+    }
+    await userEvent.click(page.getByRole('button', { name: 'Source', exact: true }));
+    expect(host.querySelector('pre')?.textContent).toBe(csv.replaceAll('\r\n', '\n'));
+    expect(host.querySelector('canvas')).toBeNull();
+    await userEvent.click(page.getByRole('button', { name: 'Table', exact: true }));
+    await gridReady(host);
+  });
+  it('switches source bytes and uses TSV without leaking prior results', async () => {
+    const [data, setData] = createSignal(bytes);
+    const [kind, setKind] = createSignal<'csv' | 'tsv'>('csv');
+    const host = mount(() => <DelimitedTextPreview bytes={data()} format={kind()} copy={taskFilesEnUS} source={<pre />} />);
+    await gridReady(host); setKind('tsv'); setData(new TextEncoder().encode('name\tid\nReplacement\t0007'));
+    await gridReady(host); await find(host, '0007');
+    expect(host.textContent).not.toContain('Could not preview');
+  });
+  it('renders DOCX and every PPTX page through the shared desktop path', async () => {
+    const docx = await (await fetch(docxURL)).blob();
+    const pptx = await (await fetch(pptxURL)).blob();
+    const [document, setDocument] = createSignal({ name: 'pages.docx', blob: docx });
+    const host = mount(() => <FlowerRichFilePreview {...document()} mime="application/octet-stream" copy={taskFilesEnUS} />);
+    await vi.waitFor(() => expect(host.querySelectorAll('section.flower-docx').length).toBeGreaterThan(0), { timeout: 15000 });
+    await vi.waitFor(() => expect(host.querySelector('[aria-label="Actual size"]')?.textContent).not.toBe('--'));
+    setDocument({ name: 'slides.pptx', blob: pptx });
+    await vi.waitFor(() => expect(host.querySelector('[aria-label="Next slide"]')).toBeTruthy(), { timeout: 15000 });
+    expect(host.querySelector('[role=alert]')).toBeNull();
+    const next = host.querySelector<HTMLButtonElement>('[aria-label="Next slide"]')!;
+    while (!next.disabled) { await userEvent.click(next); await new Promise(resolve => setTimeout(resolve, 80)); expect(host.querySelector('[role=alert]')).toBeNull(); }
+    expect(host.querySelector('.flower-rich-scroll')?.children.length).toBeGreaterThan(0);
+  });
+  it('loads CSV through both task-file and attachment windows', async () => {
+    const source = { id: 'csv', name: 'literal.csv', mimeType: 'text/csv', load: async () => new Blob([bytes], { type: 'text/csv' }) };
+    mount(() => <FlowerTaskFilePreview source={source} copy={taskFilesEnUS} onClose={() => {}} downloading={false} />);
+    await gridReady(document.body);
+    disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren();
+    mount(() => <FlowerAttachmentPreviewWindow source={source} copy={taskFilesEnUS} loadingLabel={taskFilesEnUS.loading} unavailableLabel={taskFilesEnUS.unsupported} onClose={() => {}} />);
+    await gridReady(document.body);
+  });
+  it('renders the same XLSX snapshot in desktop and Env adapters with an explicit basic-view limit', async () => {
+    const { default: ExcelJS } = await import('exceljs');
+    const book = new ExcelJS.Workbook();
+    book.addWorksheet('Identity').addRow(['00123', '12345678901234567890', { formula: '1+2', result: 3 }]);
+    const blob = new Blob([await book.xlsx.writeBuffer()]);
+    const props = { name: 'identity.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', blob };
+    const host = mount(() => <FlowerRichFilePreview {...props} copy={taskFilesEnUS} />);
+    await vi.waitFor(() => expect(host.querySelector('td')?.textContent).toBe('00123'));
+    expect(host.textContent).toContain('Basic preview');
+    disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren();
+    const env = mount(() => <I18nProvider><FlowerTaskFilePreviewContent {...props} /></I18nProvider>);
+    await vi.waitFor(() => expect(env.querySelector('td')?.textContent).toBe('00123'));
+    expect(env.textContent).toContain('12345678901234567890');
+    expect(env.textContent).toContain('Basic preview');
+  });
+  it('keeps wheel ownership local only for the selected Workbench widget', async () => {
+    await page.viewport(1400, 1000);
+    const longBytes = new TextEncoder().encode(Array.from({ length: 500 }, (_, n) => 'row' + n + ',00123').join('\n'));
+    const definitions: WorkbenchWidgetDefinition[] = [{ type: 'test.csv', label: 'CSV', defaultTitle: 'CSV', icon: () => null,
+      defaultSize: { width: 700, height: 480 }, renderMode: 'projected_surface',
+      body: props => <FilePreviewContent descriptor={{ mode: 'text' }} item={{ id: 'csv', name: 'long.csv', path: '/long.csv', type: 'file' }} showHeader={false} bytes={longBytes} allowLocalWheel={props.selected === true} />,
+    }];
+    const [state, setState] = createSignal<WorkbenchState>({ ...createDefaultWorkbenchState(definitions), mode: 'work',
+      viewport: { x: 0, y: 0, scale: 1 }, widgets: [{ id: 'preview', type: 'test.csv', title: 'CSV', x: 30, y: 30, width: 700, height: 480, z_index: 1, created_at_unix_ms: 1 }],
+      selectedWidgetId: 'preview', selectedObject: { kind: 'widget', id: 'preview' },
+    });
+    const host = mount(() => <FloeConfigProvider config={{ storage: { enabled: false } }}><ThemeProvider><LayoutProvider><I18nProvider><RedevenWorkbenchSurface state={state} setState={setState} widgetDefinitions={definitions} /></I18nProvider></LayoutProvider></ThemeProvider></FloeConfigProvider>, 1300);
+    await gridReady(host);
+    const scroll = host.querySelector<HTMLElement>('.flower-delimited-canvas [data-redeven-workbench-wheel-role]')!;
+    expect(scroll).toBeTruthy();
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector?: string; deltaY: number }) => Promise<{ before: number; after: number }> };
+    const selected = await wheel.wheelScrollRegion({ regionSelector: '.flower-delimited-canvas [data-redeven-workbench-wheel-role]', deltaY: 180 });
+    expect(selected.after).toBeGreaterThan(selected.before); expect(state().viewport.scale).toBe(1);
+    setState(value => ({ ...value, selectedWidgetId: null, selectedObject: null }));
+    const top = scroll.scrollTop;
+    await wheel.wheelScrollRegion({ regionSelector: '.flower-delimited-body', deltaY: -100 });
+    expect(scroll.scrollTop).toBe(top);
+    expect(host.querySelector('.flower-delimited-canvas')?.hasAttribute('inert')).toBe(true);
+  });
+  it('uses the selected encoding for GB18030 bytes', async () => {
+    const data = new Uint8Array([0xc4, 0xe3, 0xba, 0xc3, 44, 48, 48, 49]);
+    const host = mount(() => <DelimitedTextPreview bytes={data} format="csv" copy={taskFilesEnUS} source={<pre />} />);
+    await userEvent.selectOptions(host.querySelector('select')!, 'gb18030');
+    await gridReady(host); await find(host, '你好');
+  });
+
+});

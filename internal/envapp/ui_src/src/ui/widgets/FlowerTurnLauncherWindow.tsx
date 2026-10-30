@@ -1,3 +1,4 @@
+import { readSpreadsheetPreview as resolveSpreadsheetPreview } from '../../../../../flower_ui/src/preview/readSpreadsheetPreview';
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
@@ -166,52 +167,6 @@ async function readBlobBytes(blob: Blob): Promise<Uint8Array<ArrayBuffer>> {
   return new Uint8Array(await new Response(blob).arrayBuffer()) as Uint8Array<ArrayBuffer>;
 }
 
-async function resolveSpreadsheetPreview(bytes: Uint8Array<ArrayBuffer>): Promise<{ sheetName: string; rows: string[][] } | null> {
-  const module = await import('exceljs');
-  const ExcelJS: any = module.default ?? module;
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(bytes.buffer);
-  const worksheet = workbook.worksheets?.[0] ?? workbook.getWorksheet?.(1);
-  if (!worksheet) return null;
-
-  const cellToText = (value: unknown): string => {
-    if (value == null) return '';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    if (value instanceof Date) return value.toISOString();
-    if (typeof value === 'object') {
-      const maybeCell = value as any;
-      if (typeof maybeCell.text === 'string') return maybeCell.text;
-      if (Array.isArray(maybeCell.richText)) {
-        return maybeCell.richText.map((part: any) => String(part?.text ?? '')).join('');
-      }
-      if (maybeCell.result != null) return cellToText(maybeCell.result);
-      try {
-        return JSON.stringify(maybeCell);
-      } catch {
-        return String(maybeCell);
-      }
-    }
-    return String(value);
-  };
-
-  const rows: string[][] = [];
-  const takeRows = Math.min(typeof worksheet.rowCount === 'number' ? worksheet.rowCount : 200, 200);
-  for (let rowIndex = 1; rowIndex <= takeRows; rowIndex += 1) {
-    const row = worksheet.getRow?.(rowIndex);
-    if (!row) continue;
-    const nextRow: string[] = [];
-    for (let colIndex = 1; colIndex <= 50; colIndex += 1) {
-      nextRow.push(cellToText(row.getCell?.(colIndex)?.value));
-    }
-    rows.push(nextRow);
-  }
-
-  return {
-    sheetName: String(worksheet.name ?? 'Sheet1'),
-    rows,
-  };
-}
 
 function contextPreviewStateForText(params: {
   title: string;
@@ -316,7 +271,7 @@ async function buildFileLikeContextPreview(params: {
     const preview = trimPreviewBody(new TextDecoder('utf-8', { fatal: false }).decode(params.bytes));
     if (truncated) helperParts.push(params.copy.t('flowerTurnLauncher.preview.showingPartialContent'));
     if (preview.truncated) helperParts.push(params.copy.t('flowerTurnLauncher.preview.showingFirstContentPart'));
-    return contextPreviewStateForText({
+    return { ...contextPreviewStateForText({
       title: params.title,
       subtitle: params.subtitle,
       item: params.item,
@@ -324,7 +279,7 @@ async function buildFileLikeContextPreview(params: {
       helper: helperParts.join(' ') || undefined,
       actionLabel: params.actionLabel,
       onAction: params.onAction,
-    });
+    }), bytes: params.bytes, truncated: truncated || preview.truncated };
   }
 
   if (descriptor.mode === 'image') {
@@ -352,7 +307,7 @@ async function buildFileLikeContextPreview(params: {
     };
   }
 
-  if (descriptor.mode === 'pdf' || descriptor.mode === 'docx') {
+  if (descriptor.mode === 'pdf' || descriptor.mode === 'docx' || descriptor.mode === 'pptx') {
     if (truncated) {
       return contextPreviewStateForMessage({
         title: params.title,
