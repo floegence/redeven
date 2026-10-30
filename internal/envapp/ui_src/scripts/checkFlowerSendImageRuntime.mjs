@@ -257,14 +257,14 @@ try {
   assert(imageRef); await media(imageRef, imageThread);
   const foreign = await createThread('Qualification foreign');
   assert.equal((await fetch(new URL(`${threadRoute(foreign)}/tool-media/${imageRef.slice('image://'.length)}`, origin))).status, 404);
-  const incompatible = await fetch(new URL(threadRoute(imageThread), origin), { method: 'PATCH', headers: { 'Content-Type': 'application/json', Origin: new URL(origin).origin }, body: JSON.stringify({ model_id: 'fixture/text-only' }) });
-  assert.equal(incompatible.status, 409); assert.equal((await incompatible.json()).error_code, 'thread_image_model_unsupported');
+  await api(threadRoute(imageThread), 'PATCH', { model_id: 'fixture/text-only' });
+  await api(threadRoute(imageThread), 'PATCH', { model_id: model });
   await rm(path.join(workspace, 'source.png')); await stop(); await start(binary);
   const fork = await api(`${threadRoute(imageThread)}/fork`, 'POST', { client_request_id: 'qualification-fork', title: 'Qualification image fork' });
   const forkID = fork.thread.thread_id;
   await api(threadRoute(imageThread), 'DELETE'); await media(imageRef, forkID);
   await send(forkID, 'QUALIFY_FOLLOWUP: describe the original image again.'); await idle(forkID);
-  report.scenarios.push('native-image-authorized-preview-model-guard-source-deletion-restart-fork');
+  report.scenarios.push('native-image-authorized-preview-model-switch-source-deletion-restart-fork');
   const target = await createThread('Qualification fixed performance target');
   await send(target, 'QUALIFY_LARGE_HISTORY');
   const large = await idle(target); report.large_current_bytes = Buffer.byteLength(JSON.stringify(large.current));

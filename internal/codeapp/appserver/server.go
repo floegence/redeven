@@ -5599,14 +5599,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
-					} else if errors.Is(err, ai.ErrThreadBusy) || errors.Is(err, ai.ErrThreadImageModelUnsupported) {
+					} else if errors.Is(err, ai.ErrThreadBusy) {
 						status = http.StatusConflict
 					}
-					code := ""
-					if errors.Is(err, ai.ErrThreadImageModelUnsupported) {
-						code = "thread_image_model_unsupported"
-					}
-					writeJSON(w, status, apiResp{OK: false, ErrorCode: code, Error: err.Error()})
+					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return
 				}
 			}

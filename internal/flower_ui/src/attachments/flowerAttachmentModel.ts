@@ -36,7 +36,7 @@ export function normalizeFlowerAttachmentCapability(raw: unknown): FlowerAttachm
       const record = entry as Readonly<{ media_type?: unknown; mode?: unknown }>;
       const mediaType = String(record.media_type ?? '').trim().toLowerCase();
       const mode = String(record.mode ?? '').trim();
-      if (!mediaType || (mode !== 'native_full_content' && mode !== 'tool_read' && mode !== 'unsupported')) continue;
+      if (!mediaType || (mode !== 'native_full_content' && mode !== 'tool_read' && mode !== 'attachment_manifest' && mode !== 'unsupported')) continue;
       routes[mediaType] = mode;
     }
   }
@@ -182,28 +182,6 @@ export function normalizeFlowerUploadProgress(
   const total = Math.floor(Number(progress.total));
   if (!Number.isFinite(total) || total < 0 || loaded > total) return null;
   return { attempt_id: progress.attempt_id, loaded, total, indeterminate: false };
-}
-
-export function flowerAttachmentRoute(
-  capability: FlowerAttachmentCapability,
-  mimeType: string,
-): FlowerAttachmentRoute {
-  const canonical = mimeType.trim().toLowerCase();
-  const essence = canonical.split(';', 1)[0]?.trim() ?? canonical;
-  // Before upload, browsers report format-specific (or empty) MIME types.
-  // The server stores non-native files as opaque bytes for host-tool access.
-  // An explicitly unsupported native type still takes precedence.
-  return capability.routes[canonical] ?? capability.routes[essence]
-    ?? (capability.routes['application/octet-stream'] === 'tool_read' ? 'tool_read' : 'unsupported');
-}
-
-export function flowerStagedAttachmentCompatible(
-  capability: FlowerAttachmentCapability,
-  attachment: FlowerStagedAttachment,
-): boolean {
-  return capability.enabled
-    && capability.revision === attachment.capability_revision
-    && flowerAttachmentRoute(capability, attachment.mime_type) !== 'unsupported';
 }
 
 export function flowerAttachmentIDs(

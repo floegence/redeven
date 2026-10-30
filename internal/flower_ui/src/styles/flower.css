@@ -2768,21 +2768,6 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.flower-model-menu-attachment-status {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.25rem;
-  margin-top: 0.125rem;
-  color: var(--muted-foreground);
-  font-size: 0.625rem;
-  line-height: 1.35;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.flower-model-menu-attachment-status[data-state='unsupported'],
-.flower-model-menu-attachment-status[data-state='unavailable'] { color: var(--redeven-status-warning-foreground, var(--muted-foreground)); }
-.flower-model-menu-attachment-status-icon { width: 0.6875rem; height: 0.6875rem; flex: 0 0 auto; }
 .flower-model-menu-selection {
   display: inline-flex;
   width: 0.75rem;

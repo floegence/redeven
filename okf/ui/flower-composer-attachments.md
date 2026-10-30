@@ -13,7 +13,7 @@ Flower owns connection-local attachment editing; host adapters authenticate stag
 
 Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.
 
-The capability snapshot distinguishes native input from host-tool access. A declared `application/octet-stream: tool_read` route covers browser-reported file formats and unknown types before server classification; explicit media routes take precedence. Spreadsheets and other binary files remain sendable for tool-capable models. Switching to an incompatible model retains staged bytes and switching back restores readiness without uploading again. Desktop IPC and Env App preview loaders accept canonical opaque bytes; preview availability does not decide whether a model can process the attachment.
+All file types remain selectable and sendable regardless of model modalities or tool support. Upload limits and transport readiness remain authoritative; presentation routes never mark staged files incompatible. Model changes, revision changes and capability refreshes preserve staged readiness without uploading again. The model menu does not pre-judge attachment support or poll each model for attachment compatibility. Desktop IPC and Env App preview loaders accept canonical opaque bytes; preview availability does not decide whether a file can be sent. Models receive native content when supported or an honest attachment manifest and choose how to process it.
 
 ## Connection-local editing
 Env App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.
@@ -32,6 +32,6 @@ Canonical timeline projection does not fall back to a staged client snapshot whe
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Unicode, selection, capability, route, and staged-identity helpers define shared semantics.
+- `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Unicode, selection, upload-limit normalization and attachment-identity helpers define shared semantics.
 
 - `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - The accessible attachment lane presents bounded item states and icon actions.

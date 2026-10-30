@@ -72,7 +72,6 @@ function itemStatus(item: FlowerAttachmentItem, copy: FlowerAttachmentLaneCopy):
     case 'queued': return copy.queued;
     case 'uploading': return copy.uploading;
     case 'staged_ready': return copy.ready;
-    case 'incompatible': return copy.incompatible;
     case 'reselect_required': return copy.reselectRequired;
     case 'validation_error':
     case 'upload_error': return copy.failed;

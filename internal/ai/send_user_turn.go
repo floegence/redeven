@@ -569,7 +569,7 @@ func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Me
 		}
 		stagingScope = &scope
 	}
-	input, uploadIDs, attachmentPolicy, err := s.prepareInputAttachmentClaimPolicy(ctx, meta, owner, stagingScope, strings.TrimSpace(modelID), input)
+	input, uploadIDs, attachmentPolicy, err := s.prepareInputAttachmentClaimPolicy(ctx, owner, stagingScope, input)
 	if err != nil {
 		return preparedUserTurn{}, input, err
 	}

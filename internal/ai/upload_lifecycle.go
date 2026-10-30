@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
-	"github.com/floegence/redeven/internal/session"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,13 +91,11 @@ func (s *Service) normalizeInputAttachments(ctx context.Context, owner UploadOwn
 
 func (s *Service) prepareInputAttachmentClaimPolicy(
 	ctx context.Context,
-	meta *session.Meta,
 	owner UploadOwner,
 	stagingScope *threadstore.UploadStagingScope,
-	modelID string,
 	input RunInput,
 ) (RunInput, []string, threadstore.AttachmentClaimPolicy, error) {
-	contract := threadstore.AttachmentClaimPolicy{OwnerUserHash: owner.OwnerUserHash}
+	contract := threadstore.AttachmentClaimPolicy{OwnerUserHash: owner.OwnerUserHash, MaxCount: threadstore.AttachmentClaimPolicyMaxCount, MaxTurnBytes: threadstore.AttachmentClaimPolicyMaxTurnBytes}
 	if len(input.Attachments) > threadstore.AttachmentClaimPolicyMaxCount {
 		return input, nil, contract, errors.New("attachment count exceeds turn limit")
 	}
@@ -125,35 +122,13 @@ func (s *Service) prepareInputAttachmentClaimPolicy(
 	if err != nil {
 		return input, nil, contract, err
 	}
-	capability := s.AttachmentCapabilitiesForSession(ctxOrBackground(ctx), meta, strings.TrimSpace(modelID))
-	contract.CapabilityRevision = capability.Revision
-	contract.MaxCount = capability.MaxCount
-	contract.MaxTurnBytes = capability.MaxTurnBytes
-	contract.SupportsLongText = capability.SupportsLongText
-	contract.Routes = make(map[string]string, len(capability.MediaTypes))
-	for _, route := range capability.MediaTypes {
-		contract.Routes[strings.ToLower(strings.TrimSpace(route.MediaType))] = strings.TrimSpace(route.Mode)
-	}
-	if capability.MaxCount != threadstore.AttachmentClaimPolicyMaxCount || capability.MaxTurnBytes != threadstore.AttachmentClaimPolicyMaxTurnBytes {
-		return input, nil, contract, errors.New("invalid attachment admission capability")
-	}
-	if len(uploadIDs) == 0 {
-		return normalized, uploadIDs, contract, nil
-	}
-	if strings.TrimSpace(capability.ModelID) != strings.TrimSpace(modelID) {
-		return input, nil, contract, errors.New("attachment model capability changed")
-	}
 	var totalBytes int64
 	for _, attachment := range normalized.Attachments {
 		info, ok := infoByID[attachment.AttachmentID]
-		if !ok || info.Size < 0 || info.Size > capability.MaxTurnBytes-totalBytes {
+		if !ok || info.Size < 0 || info.Size > contract.MaxTurnBytes-totalBytes {
 			return input, nil, contract, errors.New("attachment bytes exceed turn limit")
 		}
 		totalBytes += info.Size
-		route := contract.Routes[strings.ToLower(strings.TrimSpace(info.MimeType))]
-		if route != "native_full_content" && route != "tool_read" {
-			return input, nil, contract, errors.New("attachment media route is unsupported for model")
-		}
 	}
 	return normalized, uploadIDs, contract, nil
 }

@@ -34,7 +34,7 @@ func TestQueuedContentEditClaimsResourcesAndReplaysAfterDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, name := "EDIT_ATTACHMENT_BODY\n", "new.txt"
+	body, name := "\x00\xffEDIT_ATTACHMENT_BODY\n", "new.unknown"
 	upload, err := svc.SaveUpload(t.Context(), SaveUploadRequest{Owner: owner, StagingScopeID: scope.StagingScopeID, StagingCapability: scope.Capability, Reader: strings.NewReader(body), DisplayName: name, UploadRequestID: "queue-edit-upload", ExpectedContentSHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(body))), ExpectedSizeBytes: int64(len(body)), DisplayNameSHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(name)))})
 	if err != nil {
 		t.Fatal(err)

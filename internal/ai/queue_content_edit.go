@@ -226,9 +226,6 @@ func (s *Service) editQueuedContent(ctx context.Context, meta *session.Meta, thr
 	var bytes int64
 	for _, attachment := range retained {
 		bytes += attachment.SizeBytes
-		if route := capability.Routes[normalizeMediaType(attachment.MIMEType)]; route != "native_full_content" && route != "tool_read" {
-			return flruntime.ThreadView{}, errors.New("attachment media route is unsupported for model")
-		}
 	}
 	for _, attachment := range input.Attachments {
 		record, err := s.threadsDB.GetUpload(ctx, meta.EndpointID, attachment.AttachmentID)

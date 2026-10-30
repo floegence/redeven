@@ -11,7 +11,6 @@ import type {
 import {
   FLOWER_ATTACHMENT_UPLOAD_CONCURRENCY,
   FLOWER_LONG_TEXT_MIME_TYPE,
-  flowerStagedAttachmentCompatible,
   inspectFlowerText,
   normalizeFlowerUploadProgress,
 } from './flowerAttachmentModel';
@@ -24,7 +23,6 @@ export type FlowerAttachmentItemStatus =
   | 'staged_ready'
   | 'validation_error'
   | 'upload_error'
-  | 'incompatible'
   | 'reselect_required';
 
 export type FlowerAttachmentErrorCode =
@@ -330,9 +328,7 @@ export function createFlowerAttachmentController(
             invalidateAttempt(current);
             current.attempt_id = attemptID;
             applyStagedMetadata(current, staged);
-            current.status = flowerStagedAttachmentCompatible(capability ?? uploadCapability, staged)
-              ? 'staged_ready'
-              : 'incompatible';
+            current.status = 'staged_ready';
             current.error_code = undefined;
             return;
           }
@@ -340,9 +336,7 @@ export function createFlowerAttachmentController(
           return;
         }
         applyStagedMetadata(item, staged);
-        item.status = flowerStagedAttachmentCompatible(capability ?? uploadCapability, staged)
-          ? 'staged_ready'
-          : 'incompatible';
+        item.status = 'staged_ready';
       }).catch((error: unknown) => {
         if (item.attempt_id !== attemptID || item.status !== 'uploading') return;
         const failure = uploadFailure(error);
@@ -438,9 +432,7 @@ export function createFlowerAttachmentController(
       capabilityUnavailable = false;
       for (const item of items) {
         if (!item.staged) continue;
-        item.status = next && flowerStagedAttachmentCompatible(next, item.staged)
-          ? 'staged_ready'
-          : 'incompatible';
+        item.status = 'staged_ready';
       }
       emit();
       pump();
@@ -513,11 +505,7 @@ export function createFlowerAttachmentController(
             : staged?.text_stats
               ? { ...staged.text_stats }
               : undefined,
-          status: draftItem.admitted ? 'staged_ready' : live?.status ?? (staged && capability && flowerStagedAttachmentCompatible(capability, staged)
-            ? 'staged_ready'
-            : staged
-              ? 'incompatible'
-              : 'reselect_required'),
+          status: draftItem.admitted ? 'staged_ready' : live?.status ?? (staged ? 'staged_ready' : 'reselect_required'),
           loaded_bytes: live?.loaded_bytes ?? staged?.size_bytes ?? 0,
           total_bytes: live?.total_bytes ?? staged?.size_bytes,
           progress_indeterminate: live?.progress_indeterminate ?? false,

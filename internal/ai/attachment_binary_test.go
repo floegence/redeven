@@ -171,17 +171,17 @@ func TestOpaqueUploadsPreserveStrictTextAndNativeRoutes(t *testing.T) {
 	}
 	adapter := newFloretProviderAdapter(nil, "openai", "model", ProviderControls{}, TurnBudgets{}, "", withFloretAttachmentResolver(nil, true, true), withFloretAttachmentToolRead(true))
 	for _, media := range []string{"image/png", "application/pdf", "text/plain; charset=utf-8"} {
-		if attachmentUsesToolRead(adapter, flruntime.MessageAttachment{MIMEType: media}) {
+		if attachmentUsesManifest(adapter, flruntime.MessageAttachment{MIMEType: media}) {
 			t.Errorf("native route changed for %s", media)
 		}
 	}
 	for _, provider := range []*floretProviderAdapter{nil, {supportsFileInput: true}} {
-		if attachmentUsesToolRead(provider, flruntime.MessageAttachment{MIMEType: "application/octet-stream"}) {
-			t.Fatal("tool access invented without tool support")
+		if !attachmentUsesManifest(provider, flruntime.MessageAttachment{MIMEType: "application/octet-stream"}) {
+			t.Fatal("attachment manifest blocked without tool support")
 		}
 	}
 	capability := attachmentCapabilitiesForModel("no-tools", config.AIProvider{Type: "openai"}, contextmodel.ModelCapability{SupportsFileInput: true})
-	if got := attachmentRouteForTest(t, capability, "application/octet-stream"); got != "unsupported" {
+	if got := attachmentRouteForTest(t, capability, "application/octet-stream"); got != "attachment_manifest" {
 		t.Fatal(got)
 	}
 }
@@ -218,7 +218,7 @@ func TestToolCapableModelsAcceptOpaqueAttachments(t *testing.T) {
 			}
 			adapter := newFloretProviderAdapter(nil, providerType, "model", ProviderControls{}, TurnBudgets{}, "", withFloretAttachmentToolRead(true))
 			for _, mediaType := range []string{"application/octet-stream", "application/pdf", "image/png"} {
-				if !attachmentUsesToolRead(adapter, flruntime.MessageAttachment{MIMEType: mediaType}) {
+				if !attachmentUsesManifest(adapter, flruntime.MessageAttachment{MIMEType: mediaType}) {
 					t.Errorf("no tool route for %s", mediaType)
 				}
 			}

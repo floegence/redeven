@@ -1156,9 +1156,6 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if currentModelID == modelID {
 		return nil
 	}
-	if err := s.validateThreadImageModel(ctx, threadID, modelID, cfg); err != nil {
-		return err
-	}
 
 	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, meta, modelID)
 	if err != nil {

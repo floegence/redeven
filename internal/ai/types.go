@@ -435,6 +435,8 @@ type AttachmentMediaTypeCapability struct {
 	Mode      string `json:"mode"`
 }
 
+// AttachmentCapabilities reports upload limits and provider presentation routes.
+// Model modalities and tools never decide whether an attachment can be admitted.
 type AttachmentCapabilities struct {
 	Revision         string                          `json:"revision"`
 	ModelID          string                          `json:"model_id"`

@@ -7,7 +7,6 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
-	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -51,41 +50,4 @@ func (s *Service) ResolveToolImageForThread(ctx context.Context, meta *session.M
 		return nil, "", err
 	}
 	return snapshot.Body, snapshot.Attachment.MIMEType, nil
-}
-
-func (s *Service) validateThreadImageModel(ctx context.Context, threadID, modelID string, cfg *config.AIConfig) error {
-	supportsImages := false
-	if provider, model, ok := cfg.ProviderModelByID(modelID); ok {
-		supportsImages = model.SupportsImageInput()
-		if s.capabilityResolver != nil {
-			resolved, err := s.capabilityResolver.Resolve(ctx, provider, modelID)
-			if err != nil {
-				return err
-			}
-			supportsImages = resolved.SupportsImageInput
-		}
-	} else if isDesktopModelSourceModelID(modelID) {
-		model, ok, err := s.desktopModelSourceModel(ctx, modelID)
-		if err != nil {
-			return err
-		}
-		if ok {
-			supportsImages = desktopModelSourceModelCapability(model).SupportsImageInput
-		}
-	}
-	if supportsImages {
-		return nil
-	}
-	current, err := s.readCanonicalThreadState(ctx, threadID)
-	if err != nil {
-		return err
-	}
-	for _, item := range current.Items {
-		for _, attachment := range item.Attachments {
-			if strings.HasPrefix(attachment.MIMEType, "image/") {
-				return ErrThreadImageModelUnsupported
-			}
-		}
-	}
-	return nil
 }

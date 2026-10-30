@@ -28,8 +28,6 @@ import (
 
 const maxImageReadBytes = 10 << 20
 
-var ErrThreadImageModelUnsupported = errors.New("this thread contains images; select an image-capable model")
-
 var imageSnapshotResourcePattern = regexp.MustCompile(`^image://[a-f0-9]{64}/(?:png|jpeg|webp|gif)$`)
 
 func isToolMediaRef(ref string) bool {
@@ -254,9 +252,6 @@ func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID stri
 }
 
 func (r *run) resolveFloretToolMedia(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
-	if !r.supportsImageInput {
-		return ContentPart{}, errors.New("model does not support the image retained in this thread; select an image-capable model")
-	}
 	var body []byte
 	var err error
 	if r.host.readToolMedia != nil {
@@ -277,6 +272,14 @@ func (r *run) resolveFloretToolMedia(ctx context.Context, attachment flprovider.
 	sum := sha256.Sum256(body)
 	if hex.EncodeToString(sum[:]) != descriptor.SHA256 {
 		return ContentPart{}, errors.New("canonical tool image content changed")
+	}
+	if !r.supportsImageInput {
+		canonical := runtimeAttachmentFromProvider(attachment)
+		locator, err := canonical.Locator()
+		if err != nil {
+			return ContentPart{}, err
+		}
+		return attachmentManifestPart(canonical, locator, r.attachmentToolReadEnabled), nil
 	}
 	return ContentPart{Type: "image", Text: attachment.Name, MimeType: descriptor.MIMEType, FileURI: "data:" + descriptor.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(body)}, nil
 }

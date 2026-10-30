@@ -56,9 +56,22 @@ describe('createFlowerAttachmentController', () => {
     controller.addFiles([file], source);
     await controller.waitForIdle();
     expect(controller.snapshot().items[0]).toMatchObject({ status: 'staged_ready', name: 'positions.xlsx', mime_type: 'application/octet-stream' });
-    controller.setCapability(capability({ model_id: 'no-tools', routes: { 'application/octet-stream': 'unsupported' } }));
-    expect(controller.snapshot().items[0]?.status).toBe('incompatible');
+    controller.setCapability(capability({ model_id: 'no-tools', revision: 'different-model', routes: { 'application/octet-stream': 'unsupported' } }));
+    expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
+    controller.setCapability(null);
+    expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
     controller.setCapability(binary);
+    expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
+    expect(upload).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
+  it.each(['image/png', 'application/unknown', 'audio/wav', 'video/mp4', ''])('accepts %s without native or tool support', async mime => {
+    const file = new File([new Uint8Array([0, 255, 1])], 'user-attachment', { type: mime });
+    const upload = vi.fn(async input => staged({ id: 'upl_any_file', file: input.file }));
+    const controller = createFlowerAttachmentController({ capability: capability({ routes: {}, revision: 'no-native-or-tools' }), stagingScope, upload });
+    controller.addFiles([file], 'file');
+    await controller.waitForIdle();
     expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
     expect(upload).toHaveBeenCalledOnce();
     controller.dispose();

@@ -259,8 +259,11 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			if _, _, err := svc.ResolveToolImageForThread(t.Context(), &foreign, thread.ThreadID, ref); err == nil {
 				t.Fatal("cross-endpoint snapshot opened")
 			}
-			if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, tc.provider+"/text-only"); !errors.Is(err, ErrThreadImageModelUnsupported) {
-				t.Fatalf("incompatible model=%v", err)
+			if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, tc.provider+"/text-only"); err != nil {
+				t.Fatalf("text-only model switch=%v", err)
+			}
+			if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, tc.provider+"/"+vision.ModelName); err != nil {
+				t.Fatal(err)
 			}
 			if err := os.Remove(source); err != nil {
 				t.Fatal(err)

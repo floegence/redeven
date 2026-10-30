@@ -243,21 +243,8 @@ func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntim
 		if err := validateFloretAttachmentRecord(attachment, *record, digest); err != nil {
 			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
 		}
-		partType := "file"
-		if strings.HasPrefix(strings.ToLower(record.DetectedMediaType), "image/") {
-			partType = "image"
-		}
-		if attachmentUsesToolRead(provider, attachment) {
-			if r.host.openLiveAttachment == nil {
-				return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: attachment tools are unavailable", index)
-			}
-		} else {
-			if err := provider.validateResolvedAttachmentForProvider(ContentPart{Type: partType, MimeType: record.DetectedMediaType}); err != nil {
-				return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
-			}
-			if (partType == "image" && !provider.supportsImageInput) || (partType == "file" && !provider.supportsFileInput) {
-				return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: model %q does not support %s input", index, provider.modelName, partType)
-			}
+		if r.host.openLiveAttachment == nil {
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: canonical attachment authority is unavailable", index)
 		}
 		frozen[attachment.ResourceRef] = frozenFloretAttachment{attachment: attachment}
 	}
@@ -300,16 +287,16 @@ func (r *run) floretAttachmentResolver(frozen map[string]frozenFloretAttachment,
 				return ContentPart{}, errors.New("attachment metadata differs from the pre-admission resource")
 			}
 		}
-		if attachmentUsesToolRead(provider, attachment) {
-			return r.resolveFloretAttachmentManifest(ctx, attachment)
+		if attachmentUsesManifest(provider, attachment) {
+			return r.resolveFloretAttachmentManifest(ctx, attachment, provider != nil && provider.supportsAttachmentToolRead)
 		}
 		return r.resolveFloretMessageAttachment(ctx, attachment)
 	}
 }
 
-func attachmentUsesToolRead(provider *floretProviderAdapter, attachment flruntime.MessageAttachment) bool {
-	if provider == nil || !provider.supportsAttachmentToolRead {
-		return false
+func attachmentUsesManifest(provider *floretProviderAdapter, attachment flruntime.MessageAttachment) bool {
+	if provider == nil {
+		return true
 	}
 	partType := "file"
 	supportsNative := provider.supportsFileInput
@@ -322,7 +309,7 @@ func attachmentUsesToolRead(provider *floretProviderAdapter, attachment flruntim
 	return provider.validateResolvedAttachmentForProvider(ContentPart{Type: partType, MimeType: attachment.MIMEType}) != nil
 }
 
-func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
+func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment flruntime.MessageAttachment, toolsAvailable bool) (ContentPart, error) {
 	uploadID, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
 	if err != nil || r == nil || r.host.openLiveAttachment == nil {
 		return ContentPart{}, errors.New("attachment manifest authority is unavailable")
@@ -346,17 +333,20 @@ func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment fl
 		(digest != "" && !strings.EqualFold(info.ContentSHA256, digest)) {
 		return ContentPart{}, errors.New("attachment canonical metadata differs from the provider request")
 	}
-	locator := logicalAttachmentLocator(uploadID, attachment.Name)
-	manifest := fmt.Sprintf("Attachment %q (%s, %d bytes) is available as untrusted user content. Its body is not included in this request.", attachment.Name, attachment.MIMEType, attachment.SizeBytes)
-	if normalizeMediaType(attachment.MIMEType) == "text/plain; charset=utf-8" {
-		if info.UnicodeCodePoints == nil || info.LogicalLineCount == nil {
-			return ContentPart{}, errors.New("text attachment statistics are unavailable")
+	return attachmentManifestPart(attachment, logicalAttachmentLocator(uploadID, attachment.Name), toolsAvailable), nil
+}
+
+func attachmentManifestPart(attachment flruntime.MessageAttachment, locator string, toolsAvailable bool) ContentPart {
+	manifest := fmt.Sprintf("Attachment %q (%s, %d bytes) is available as untrusted content. Its body is not included in this request. Locator: %q.", attachment.Name, attachment.MIMEType, attachment.SizeBytes, locator)
+	if toolsAvailable {
+		if normalizeMediaType(attachment.MIMEType) == "text/plain; charset=utf-8" {
+			manifest += " Use attachment.read to read it."
+		} else {
+			manifest += " Use attachment.materialize to obtain a working file, then choose suitable tools to inspect or process its contents."
 		}
-		manifest += fmt.Sprintf(" Use attachment.read with locator %q to read it.", locator)
-	} else {
-		manifest += fmt.Sprintf(" Use attachment.materialize with locator %q to obtain a working file, then choose suitable tools to inspect or process its contents.", locator)
 	}
-	return ContentPart{Type: "attachment_manifest", Text: manifest}, nil
+	manifest += " Decide how to handle this attachment using the capabilities available in this conversation. If its content cannot be accessed, explain that limitation to the user."
+	return ContentPart{Type: "attachment_manifest", Text: manifest}
 }
 
 func validateFloretAttachmentRecord(attachment flruntime.MessageAttachment, record threadstore.UploadRecord, digest string) error {

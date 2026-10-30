@@ -275,7 +275,7 @@ func classifyUpload(inspector *uploadInspector, source string) (string, *int64, 
 			return "text/plain; charset=utf-8", points, lines, nil
 		}
 	}
-	// Accept opaque files for model-directed processing through host tools. Do
+	// Accept every file independently of model modalities or tool support. Do
 	// not infer an executable browser type or native model support from a name
 	// or a client-declared MIME type. The original bytes and name are retained.
 	return "application/octet-stream", nil, nil, nil
@@ -345,12 +345,12 @@ func (s *Service) AttachmentCapabilitiesForSession(ctx context.Context, meta *se
 
 func attachmentCapabilitiesForModel(modelID string, provider config.AIProvider, capability contextmodel.ModelCapability) AttachmentCapabilities {
 	const (
-		nativeRoute      = "native_full_content"
-		toolReadRoute    = "tool_read"
-		unsupportedRoute = "unsupported"
+		nativeRoute   = "native_full_content"
+		toolReadRoute = "tool_read"
+		manifestRoute = "attachment_manifest"
 	)
 	capability = contextmodel.NormalizeCapability(capability)
-	toolRoute := unsupportedRoute
+	toolRoute := manifestRoute
 	if capability.SupportsTools {
 		toolRoute = toolReadRoute
 	}
@@ -373,9 +373,9 @@ func attachmentCapabilitiesForModel(modelID string, provider config.AIProvider, 
 		{MediaType: "application/octet-stream", Mode: toolRoute},
 	}
 	out := AttachmentCapabilities{
-		ModelID: strings.TrimSpace(modelID), Enabled: textRoute != unsupportedRoute || pdfRoute != unsupportedRoute || imageRoute != unsupportedRoute,
+		ModelID: strings.TrimSpace(modelID), Enabled: true,
 		MaxCount: 10, MaxItemBytes: 10 << 20, MaxTurnBytes: 25 << 20,
-		MediaTypes: mediaTypes, SupportsLongText: textRoute != unsupportedRoute,
+		MediaTypes: mediaTypes, SupportsLongText: true,
 	}
 	revisionPayload, _ := json.Marshal(struct {
 		Version string                 `json:"version"`

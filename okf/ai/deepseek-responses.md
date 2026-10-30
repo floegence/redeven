@@ -19,7 +19,7 @@ Each request sends full input history. The route never sends `messages`, `enable
 Floret owns public-URL checks, cancellation, redirect restrictions, response limits, sanitization and tool Activity.
 
 ## Model-specific image input
-DeepSeek Vision is enabled by the selected model's `input_modalities`, just like vision models on other providers. Text-only models reject images.
+DeepSeek Vision is enabled by the selected model's `input_modalities`, just like vision models on other providers. Text-only models receive image attachment manifests for model-directed processing; native image content is rendered only when supported.
 
 Redeven passes opaque state through without interpreting it or maintaining an image/history mirror.
 

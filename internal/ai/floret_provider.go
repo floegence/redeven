@@ -644,7 +644,11 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 				if strings.TrimSpace(part.Text) == "" {
 					return nil, errors.New("attachment resolver returned an empty attachment manifest")
 				}
-				parts = append(parts, ContentPart{Type: "text", Text: part.Text})
+				if msg.ToolResult != nil {
+					imageNotices = append(imageNotices, part.Text)
+				} else {
+					parts = append(parts, ContentPart{Type: "text", Text: part.Text})
+				}
 				continue
 			}
 			if isModelImagePart(part) {

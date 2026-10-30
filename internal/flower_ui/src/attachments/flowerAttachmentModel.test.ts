@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FLOWER_INLINE_TEXT_CODE_POINT_LIMIT,
   decideFlowerTextPaste,
-  flowerAttachmentRoute,
+  normalizeFlowerAttachmentCapability,
   flowerStringHasIsolatedSurrogate,
   inspectFlowerText,
   normalizeFlowerUploadProgress,
@@ -11,18 +11,12 @@ import {
 } from './flowerAttachmentModel';
 
 describe('flowerAttachmentModel', () => {
-  it('uses declared opaque tool access for browser file types while respecting explicit routes', () => {
-    const capability = {
-      model_id: 'moonshot/kimi', revision: 'opaque', enabled: true, supports_long_text: true,
-      max_attachments: 10, max_file_size_bytes: 1000, max_total_size_bytes: 10000,
-      routes: { 'application/octet-stream': 'tool_read', 'image/png': 'native_full_content', 'image/gif': 'unsupported' },
-    } as const;
-    for (const mime of ['', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip']) {
-      expect(flowerAttachmentRoute(capability, mime)).toBe('tool_read');
-      expect(flowerAttachmentRoute({ ...capability, routes: {} }, mime)).toBe('unsupported');
-    }
-    expect(flowerAttachmentRoute(capability, 'image/png')).toBe('native_full_content');
-    expect(flowerAttachmentRoute(capability, 'image/gif')).toBe('unsupported');
+  it('keeps presentation routes separate from upload limits', () => {
+    expect(normalizeFlowerAttachmentCapability({
+      model_id: 'text-only', revision: 'manifest', enabled: true, supports_long_text: true,
+      max_count: 10, max_item_bytes: 1000, max_turn_bytes: 10000,
+      media_types: [{ media_type: 'application/octet-stream', mode: 'attachment_manifest' }],
+    })).toMatchObject({ enabled: true, supports_long_text: true, routes: { 'application/octet-stream': 'attachment_manifest' } });
   });
 
   it('counts Unicode code points without splitting surrogate pairs', () => {

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-30"
 ---
 # Summary
 
-Redeven owns bytes/metadata, authenticated owner, quotas and retention; Floret owns turn membership. Upload once, send opaque attachment_id, display attachment://v1 locators and revalidate provider resources. Never expose paths or substitute product claims for canonical membership. Owner/media/quota/membership/metadata/digest/byte failures reject only the affected reference.
+Redeven owns bytes/metadata, authenticated owner, quotas and retention; Floret owns turn membership. Upload once, send opaque attachment_id, display attachment://v1 locators and revalidate provider resources. Never expose paths or substitute product claims for canonical membership. Owner/quota/membership/metadata/digest/byte failures reject only the affected reference.
 
 # Contract
 
@@ -20,7 +20,9 @@ Retention ownership does not authorize canonical reads.
 ## Provider Preparation
 Upload admission is independent of provider-native modalities. Recognized text, image and PDF bytes retain their safe canonical types; all other files, including Office containers and non-UTF-8 documents, use `application/octet-stream` with their original names and bytes. Active UTF-8 text remains `text/plain`; pasted long text must still be strict UTF-8. Size, ownership, digest, staging and retention checks are unchanged.
 
-Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. Native image/text/PDF input takes precedence when supported. Tool-capable models receive other attachments as canonical manifests: strict UTF-8 text uses bounded `attachment.read`; binary files use `attachment.materialize` and model-selected processing tools. A manifest is not extracted content or a promise that a parser is installed. Materialization retains its normal permissions. Models without either a native route or tools remain unsupported.
+Every file is admitted independently of model modalities and tool support. Admission and queue edits enforce resource ownership, staging, count and byte limits, never a model-specific MIME allowlist. The capability snapshot describes presentation only: native image/text/PDF input when supported, otherwise an attachment manifest carrying the name, safe MIME, size and logical locator. Tool-capable models receive guidance for bounded text reads or authorized materialization; models without tools still receive the manifest and decide how to respond. A manifest explicitly says the body is absent, never implies extracted content or promises an installed parser. The model chooses processing tools or explains its actual limitation.
+
+Model switching never rejects retained user attachments or tool images. Historical images unsupported by the selected model use the same manifest contract, after canonical descriptor and digest verification; native rendering remains available on capable models.
 
 Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state. Upload/tool-image reads search current-path public Floret windows (50 items, 128-byte previews) through one authorized subscription, correlated to each requested page and a stable leaf. They never hydrate full history or authorize from retention inventory. The internal resolved handle certifies ownership and metadata only: materialization hashes while copying, text/provider/image consumers verify their exact snapshot, and public download opens verify bytes before returning a path. Thus upload materialization does not prehash and then reread the original. Reads honor cancellation and declared-size bounds; corruption never publishes a work copy.
 
@@ -46,6 +48,7 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 - `redeven:internal/ai/threadstore/uploads.go` - Transactional idempotency, quotas, claims, and last-reference deletion are enforced in the resource store.
 
 - [Materialization and integrity tests](../../internal/ai/attachment_materialize_test.go).
+- [No-native/no-tools provider preparation and historical manifest tests](../../internal/ai/attachment_manifest_test.go).
 - [Opaque upload, provider-visible manifest, tool execution and restart tests](../../internal/ai/attachment_binary_test.go).
 - [Fork cuts, cleanup and last-reference tests](../../internal/ai/task_materials_test.go).
 - [Image compaction/restart qualification](../../internal/ai/tool_image_compaction_test.go).

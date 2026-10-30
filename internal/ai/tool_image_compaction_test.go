@@ -3,7 +3,6 @@ package ai
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,7 +21,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
+func TestCompactedToolMediaRemainsAvailableToTextModels(t *testing.T) {
 	attachment, _, imageBody, err := imageSnapshot(imageReadFixture(t, "png"), "history.png")
 	if err != nil {
 		t.Fatal(err)
@@ -148,9 +147,10 @@ func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
 		t.Fatalf("compaction lost original image discovery: %+v %v", retained, err)
 	}
 
-	cfg := &config.AIConfig{Providers: []config.AIProvider{{ID: "test", Type: "openai", Models: []config.AIProviderModel{{ModelName: "text", InputModalities: []string{"text"}}}}}}
-	if err := svc.validateThreadImageModel(t.Context(), created.ThreadID.String(), "test/text", cfg); !errors.Is(err, ErrThreadImageModelUnsupported) {
-		t.Fatalf("compacted tool image allowed a text model: %v", err)
+	textRun := &run{host: runHostCapabilities{readToolMedia: svc.toolMedia.read}}
+	manifest, err := textRun.resolveFloretToolMedia(t.Context(), flprovider.Attachment{ResourceRef: attachment.ResourceRef, Name: attachment.Name, MIMEType: attachment.MIMEType, SizeBytes: attachment.SizeBytes})
+	if err != nil || manifest.Type != "attachment_manifest" || !strings.Contains(manifest.Text, locator) || strings.Contains(manifest.Text, attachment.ResourceRef) {
+		t.Fatalf("text model lost compacted image manifest: %+v %v", manifest, err)
 	}
 	inventory, err := host.MediaInventory(t.Context())
 	if err != nil || !inventory.Idle || len(inventory.References) != 1 || inventory.References[0].Attachment.ResourceRef != attachment.ResourceRef {

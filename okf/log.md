@@ -6,7 +6,7 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-10-30
 
-- Separate [upload acceptance and model-directed file processing](ai/flower-attachment-resources.md) from native provider modalities; keep opaque spreadsheets sendable in the [composer](ui/flower-composer-attachments.md), with canonical manifests, authorized materialization and restart regression coverage.
+- Make [all file attachment admission](ai/flower-attachment-resources.md) independent of native modalities and tool support. Keep [composer](ui/flower-composer-attachments.md) attachments ready across model switches, remove compatibility pre-judgments, and deliver truthful manifests for unsupported native content, including historical images. Preserve authorized materialization, resource limits and integrity checks.
 
 ## 2026-10-29
 

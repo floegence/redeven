@@ -86,7 +86,6 @@ import {
   FLOWER_INLINE_TEXT_CODE_POINT_LIMIT,
   decideFlowerTextPaste,
   flowerAttachmentIDs,
-  flowerAttachmentRoute,
   inspectFlowerText,
   replaceFlowerTextSelection,
 } from './attachments/flowerAttachmentModel';
@@ -164,7 +163,6 @@ import type {
   FlowerThreadView,
   FlowerLiveStreamEnvelope,
   FlowerRuntimeCurrentView,
-  FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
   FlowerRunProgressPhase,
   FlowerModelSourceStatus,
@@ -1221,12 +1219,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [modelMenuPosition, setModelMenuPosition] = createSignal({ x: 0, y: 0 });
   const [modelMenuSize, setModelMenuSize] = createSignal({ width: 272, height: 320 });
   const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(320);
-  const [modelCapabilityRevision, setModelCapabilityRevision] = createSignal(0);
-  type ModelCapabilityLoadState =
-    | Readonly<{ kind: 'loading' }>
-    | Readonly<{ kind: 'ready'; capability: FlowerAttachmentCapability }>
-    | Readonly<{ kind: 'failed' }>;
-  const modelCapabilityCache = new Map<string, ModelCapabilityLoadState>();
   let modelTriggerRef: HTMLButtonElement | undefined;
   let modelMenuRef: HTMLDivElement | undefined;
   let permissionTriggerRef: HTMLButtonElement | undefined;
@@ -2528,9 +2520,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     queueMicrotask(() => modelSearchRef?.focus());
   };
   const modelErrorMessage = (error: unknown) => (
-    error && typeof error === 'object' && 'code' in error && error.code === 'thread_image_model_unsupported'
-      ? copy().settings.imageModelRequired
-      : (error instanceof FlowerRequestDeadlineError ? copy().settings.dialog.catalog.settingsSaveTimedOut : error instanceof FlowerReadDeadlineError ? copy().chat.syncTimeout : getErrorMessage(error)) || copy().settings.autoSave.saveFailed
+    (error instanceof FlowerRequestDeadlineError ? copy().settings.dialog.catalog.settingsSaveTimedOut : error instanceof FlowerReadDeadlineError ? copy().chat.syncTimeout : getErrorMessage(error)) || copy().settings.autoSave.saveFailed
   );
   const handleModelTriggerKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -8856,7 +8846,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     composerAttachmentItems().some((item) => item.status === 'staged_ready')
   ));
   const composerHasSubmissionBlockingAttachments = createMemo(() => (
-    composerAttachmentItems().some((item) => item.status !== 'staged_ready' && item.status !== 'incompatible')
+    composerAttachmentItems().some((item) => item.status !== 'staged_ready')
   ));
   const composerAttachmentCapabilityEnabled = createMemo(() => (
     currentAttachmentSnapshot().capability?.enabled === true
@@ -8884,53 +8874,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerTextOverLimit = createMemo(() => (
     (composerTextInspection()?.codePoints ?? 0) > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
   ));
-  type ModelAttachmentSupportState = 'checking' | 'supported' | 'unsupported' | 'unavailable';
-  const composerNeedsModelAttachmentSupport = createMemo(() => composerHasAttachments() || composerTextOverLimit());
-  const capabilitySupportsComposerAttachments = (capability: FlowerAttachmentCapability): boolean => {
-    const items = composerAttachmentItems();
-    if (!capability.enabled) return false;
-    if ((composerTextOverLimit() || items.some((item) => item.source === 'long_text')) && !capability.supports_long_text) {
-      return false;
-    }
-    if (items.length > capability.max_attachments) return false;
-    if (items.some((item) => item.size_bytes > capability.max_file_size_bytes)) return false;
-    if (items.reduce((total, item) => total + item.size_bytes, 0) > capability.max_total_size_bytes) return false;
-    return items.every((item) => flowerAttachmentRoute(capability, item.mime_type) !== 'unsupported');
-  };
-  const modelAttachmentSupportState = (modelID: string): ModelAttachmentSupportState | null => {
-    if (!composerNeedsModelAttachmentSupport()) return null;
-    modelCapabilityRevision();
-    const state = modelCapabilityCache.get(modelID);
-    if (!state || state.kind === 'loading') return 'checking';
-    if (state.kind === 'failed') return 'unavailable';
-    return capabilitySupportsComposerAttachments(state.capability) ? 'supported' : 'unsupported';
-  };
-  createEffect(() => {
-    const capability = currentAttachmentSnapshot().capability;
-    if (!capability?.model_id) return;
-    modelCapabilityCache.set(capability.model_id, { kind: 'ready', capability });
-    setModelCapabilityRevision((revision) => revision + 1);
-  });
-  createEffect(() => {
-    if (!modelMenuOpen() || !composerNeedsModelAttachmentSupport() || !props.adapter.loadAttachmentCapability) return;
-    for (const option of menuModelOptions().models) {
-      if (option.disabled) continue;
-      const existing = modelCapabilityCache.get(option.id);
-      if (existing?.kind === 'loading' || existing?.kind === 'ready') continue;
-      modelCapabilityCache.set(option.id, { kind: 'loading' });
-      setModelCapabilityRevision((revision) => revision + 1);
-      void props.adapter.loadAttachmentCapability(option.id).then((capability) => {
-        modelCapabilityCache.set(
-          option.id,
-          capability.model_id === option.id ? { kind: 'ready', capability } : { kind: 'failed' },
-        );
-        setModelCapabilityRevision((revision) => revision + 1);
-      }).catch(() => {
-        modelCapabilityCache.set(option.id, { kind: 'failed' });
-        setModelCapabilityRevision((revision) => revision + 1);
-      });
-    }
-  });
   const scheduleComposerSelection = (
     start: number,
     end = start,
@@ -13393,16 +13336,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const modelMenuItem = (option: ComposerModelOption) => {
     const selected = () => option.id === selectedComposerModelID();
     const unavailableReason = () => option.unavailableReason ?? (option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel);
-    const attachmentSupport = () => modelAttachmentSupportState(option.id);
-    const attachmentSupportLabel = () => {
-      switch (attachmentSupport()) {
-        case 'checking': return copy().attachments.modelSupportChecking;
-        case 'supported': return copy().attachments.modelSupported;
-        case 'unsupported': return copy().attachments.modelUnsupported;
-        case 'unavailable': return copy().attachments.modelSupportUnavailable;
-        default: return '';
-      }
-    };
     return (
       <button
         type="button"
@@ -13426,20 +13359,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </span>
         <span class="flower-model-menu-copy">
           <span class="flower-model-menu-name" title={option.label}>{option.name || option.label}</span>
-          <Show when={attachmentSupport() !== 'supported' && attachmentSupport()} keyed>
-            {(state) => (
-              <span
-                class="flower-model-menu-attachment-status"
-                data-state={state}
-                aria-label={attachmentSupportLabel()}
-              >
-                {state === 'checking' && <Clock class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
-                {state === 'unsupported' && <XCircle class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
-                {state === 'unavailable' && <AlertCircle class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
-                <span>{attachmentSupportLabel()}</span>
-              </span>
-            )}
-          </Show>
         </span>
         <Show when={option.disabled}>
           <span class="flower-model-menu-unavailable">{option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel}</span>

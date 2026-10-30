@@ -448,7 +448,7 @@ func TestQueueEditUploadClaimRetainsExactStagingOwnershipUntilSettlement(t *test
 	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, target_id, ref_kind, ref_id) VALUES(?, ?, ?, ?, ?)`, rec.EndpointID, rec.UploadID, scope.TargetID, UploadRefKindStaging, stagingUploadRefID(scope.OwnerUserHash, scope.StagingScopeID)); err != nil {
 		t.Fatal(err)
 	}
-	policy := AttachmentClaimPolicy{OwnerUserHash: rec.OwnerUserHash, CapabilityRevision: strings.Repeat("b", 64), MaxCount: AttachmentClaimPolicyMaxCount, MaxTurnBytes: AttachmentClaimPolicyMaxTurnBytes, Routes: map[string]string{"text/plain; charset=utf-8": "tool_read"}}
+	policy := AttachmentClaimPolicy{OwnerUserHash: rec.OwnerUserHash, MaxCount: AttachmentClaimPolicyMaxCount, MaxTurnBytes: AttachmentClaimPolicyMaxTurnBytes}
 	for attempt := 0; attempt < 2; attempt++ {
 		if _, err := store.GetStagingOwnedUpload(t.Context(), rec.EndpointID, rec.OwnerUserHash, scope.StagingScopeID, rec.UploadID); err != nil {
 			t.Fatalf("retry staging lookup %d: %v", attempt, err)

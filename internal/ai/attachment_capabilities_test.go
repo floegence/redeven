@@ -20,6 +20,20 @@ func attachmentRouteForTest(t *testing.T, capability AttachmentCapabilities, med
 	return ""
 }
 
+func TestEveryModelAdmitsEveryAttachment(t *testing.T) {
+	for _, model := range []contextmodel.ModelCapability{{}, {SupportsTools: true}, {SupportsImageInput: true}} {
+		capability := attachmentCapabilitiesForModel("model", config.AIProvider{Type: "openai_compatible"}, model)
+		if !capability.Enabled || !capability.SupportsLongText {
+			t.Fatalf("model capabilities blocked attachment admission: %#v", capability)
+		}
+		for _, route := range capability.MediaTypes {
+			if route.Mode == "unsupported" {
+				t.Errorf("attachment rejected before model: %#v", route)
+			}
+		}
+	}
+}
+
 func TestAttachmentCapabilitiesFollowResolvedModelAndProviderRoute(t *testing.T) {
 	t.Parallel()
 
@@ -34,15 +48,15 @@ func TestAttachmentCapabilitiesFollowResolvedModelAndProviderRoute(t *testing.T)
 	if got := attachmentRouteForTest(t, file, "application/pdf"); got != "native_full_content" {
 		t.Fatalf("PDF route=%q, want native_full_content", got)
 	}
-	if got := attachmentRouteForTest(t, file, "image/png"); got != "unsupported" {
-		t.Fatalf("image route=%q, want unsupported", got)
+	if got := attachmentRouteForTest(t, file, "image/png"); got != "attachment_manifest" {
+		t.Fatalf("image route=%q, want attachment_manifest", got)
 	}
 
 	image := attachmentCapabilitiesForModel("openai/gpt-image", config.AIProvider{Type: "openai"}, contextmodel.ModelCapability{
 		ModelName: "gpt-image", SupportsImageInput: true,
 	})
-	if !image.Enabled || image.SupportsLongText {
-		t.Fatalf("image capability=%#v, want image-only support", image)
+	if !image.Enabled || !image.SupportsLongText {
+		t.Fatalf("image capability=%#v, want universal admission with native images", image)
 	}
 	if got := attachmentRouteForTest(t, image, "image/webp"); got != "native_full_content" {
 		t.Fatalf("image route=%q, want native_full_content", got)
@@ -66,13 +80,13 @@ func TestAttachmentCapabilitiesFollowResolvedModelAndProviderRoute(t *testing.T)
 	noTools := attachmentCapabilitiesForModel("compat/no-tools", config.AIProvider{Type: "openai_compatible"}, contextmodel.ModelCapability{
 		ModelName: "no-tools",
 	})
-	if noTools.Enabled || noTools.SupportsLongText || attachmentRouteForTest(t, noTools, "text/plain; charset=utf-8") != "unsupported" {
-		t.Fatalf("no-tools capability=%#v, want disabled", noTools)
+	if !noTools.Enabled || !noTools.SupportsLongText || attachmentRouteForTest(t, noTools, "text/plain; charset=utf-8") != "attachment_manifest" {
+		t.Fatalf("no-tools capability=%#v, want universal admission", noTools)
 	}
 
 	unsupported := attachmentCapabilitiesForModel("compat/model", config.AIProvider{Type: "openai_compatible"}, fileCapability)
-	if unsupported.Enabled || unsupported.SupportsLongText {
-		t.Fatalf("unsupported route capability=%#v, want disabled", unsupported)
+	if !unsupported.Enabled || !unsupported.SupportsLongText {
+		t.Fatalf("unsupported route capability=%#v, want universal admission", unsupported)
 	}
 	if unsupported.Revision == file.Revision {
 		t.Fatal("revision did not change with the effective route matrix")
@@ -82,16 +96,16 @@ func TestAttachmentCapabilitiesFollowResolvedModelAndProviderRoute(t *testing.T)
 	}
 }
 
-func TestAttachmentCapabilitiesFailClosedForUnresolvedModel(t *testing.T) {
+func TestAttachmentAdmissionDoesNotRequireResolvedModel(t *testing.T) {
 	t.Parallel()
 
 	got := (&Service{}).AttachmentCapabilities(context.Background(), "missing/model")
-	if got.Enabled || got.SupportsLongText || got.Revision == "" {
-		t.Fatalf("unresolved capability=%#v, want stable disabled snapshot", got)
+	if !got.Enabled || !got.SupportsLongText || got.Revision == "" {
+		t.Fatalf("unresolved capability=%#v, want stable upload policy", got)
 	}
 	for _, route := range got.MediaTypes {
-		if route.Mode != "unsupported" {
-			t.Fatalf("unresolved route=%#v, want unsupported", route)
+		if route.Mode != "attachment_manifest" {
+			t.Fatalf("unresolved route=%#v, want attachment_manifest", route)
 		}
 	}
 }

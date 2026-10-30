@@ -1387,7 +1387,7 @@ export type FlowerTurnLaunchFailure = Error & Readonly<{
 
 export type FlowerAttachmentSource = 'file' | 'paste' | 'drop' | 'long_text';
 
-export type FlowerAttachmentRoute = 'native_full_content' | 'tool_read' | 'unsupported';
+export type FlowerAttachmentRoute = 'native_full_content' | 'tool_read' | 'attachment_manifest' | 'unsupported';
 
 export type FlowerAttachmentCapability = Readonly<{
   model_id: string;

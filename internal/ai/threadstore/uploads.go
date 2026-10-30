@@ -720,20 +720,16 @@ LIMIT 1
 }
 
 type AttachmentClaimPolicy struct {
-	OwnerUserHash      string
-	CapabilityRevision string
-	MaxCount           int
-	MaxTurnBytes       int64
-	SupportsLongText   bool
-	Routes             map[string]string
+	OwnerUserHash string
+	MaxCount      int
+	MaxTurnBytes  int64
 }
 
 func validateAttachmentClaimPolicyTx(ctx context.Context, tx *sql.Tx, endpointID string, uploadIDs []string, admission AttachmentClaimPolicy) error {
 	admission.OwnerUserHash = strings.ToLower(strings.TrimSpace(admission.OwnerUserHash))
-	admission.CapabilityRevision = strings.ToLower(strings.TrimSpace(admission.CapabilityRevision))
 	if admission.MaxCount != AttachmentClaimPolicyMaxCount || admission.MaxTurnBytes != AttachmentClaimPolicyMaxTurnBytes ||
-		len(admission.OwnerUserHash) != sha256.Size*2 || len(admission.CapabilityRevision) != sha256.Size*2 {
-		return errors.New("invalid attachment admission capability")
+		len(admission.OwnerUserHash) != sha256.Size*2 {
+		return errors.New("invalid attachment admission policy")
 	}
 	if len(uploadIDs) > admission.MaxCount {
 		return errors.New("attachment count exceeds turn limit")
@@ -756,11 +752,7 @@ WHERE endpoint_id = ? AND upload_id = ? AND owner_user_hash = ? AND state IN (?,
 		}
 		totalBytes += rec.SizeBytes
 		mediaType := strings.ToLower(strings.TrimSpace(rec.DetectedMediaType))
-		route := strings.TrimSpace(admission.Routes[mediaType])
-		if route != "native_full_content" && route != "tool_read" {
-			return errors.New("attachment media route is unsupported for model")
-		}
-		if rec.Source == UploadSourceLongText && (!admission.SupportsLongText || !strings.HasPrefix(mediaType, "text/plain")) {
+		if rec.Source == UploadSourceLongText && !strings.HasPrefix(mediaType, "text/plain") {
 			return ErrLongTextAttachmentRequired
 		}
 	}

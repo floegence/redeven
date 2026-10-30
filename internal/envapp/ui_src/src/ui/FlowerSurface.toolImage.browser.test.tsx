@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
 import type { FlowerSubagentDetail } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { activityItem, activityTimeline, adapter, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 beforeEach(() => page.viewport(1280, 900));
 
@@ -155,6 +155,9 @@ it.each([false, true])('retains a tool image and open preview through 300 comple
     timeline_decorations: nonempty ? [decoration] : [] };
   fixture.replace({ ...fixture.current(), view_version: fixture.current().view_version + 1 }, structuredClone(context));
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  const thinkingToggle = surface.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!;
+  if (thinkingToggle.getAttribute('aria-expanded') !== 'true') thinkingToggle.click();
+  await waitFor(() => surface.textContent?.includes('Thinking 0') === true);
   row.querySelector<HTMLButtonElement>('.chat-media-image-button')!.click();
   await waitFor(() => Boolean(document.querySelector('.chat-media-full-image')));
   const preview = document.querySelector('.chat-media-full-image');
@@ -237,7 +240,7 @@ it.each([
   expectCompactThumbnail();
 });
 
-it('retains the compatible model after an image-context rejection and allows another model', async () => {
+it('allows text and image models with retained image context', async () => {
   const base = settingsSnapshot();
   const snapshot = { ...base, model_profile: { ...base.model_profile!, providers: [{ ...base.model_profile!.providers[0], models: [
     { model_name: 'gpt-5.2', input_modalities: ['text', 'image'], context_window: 400000 },
@@ -245,11 +248,12 @@ it('retains the compatible model after an image-context rejection and allows ano
     { model_name: 'vision-next', input_modalities: ['text', 'image'], context_window: 400000 },
   ] }] } };
   const seed = thread();
+  let revision = 1;
   const setThreadModel = vi.fn(async (_id: string, modelID: string) => {
-    if (modelID === 'openai/text-only') throw Object.assign(new Error('Private backend details'), { code: 'thread_image_model_unsupported' });
-    return liveBootstrap(thread({ model_id: modelID, settings_revision: 2 }), 2);
+    revision += 1;
+    return liveBootstrap(thread({ model_id: modelID, settings_revision: revision }), revision);
   });
-  const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), setThreadModel });
+  const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, persistDefaultModel: async () => snapshot, listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), setThreadModel });
   await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"] button')));
   surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.click();
   await waitFor(() => {
@@ -261,13 +265,11 @@ it('retains the compatible model after an image-context rejection and allows ano
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('gpt-5.2') === true);
   const choose = async (name: string) => {
     surface.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!.click();
-    await waitFor(() => Boolean(document.querySelector('.flower-model-menu')));
+    await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')].some(button => button.textContent?.includes(name)));
     [...document.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')].find(button => button.textContent?.includes(name))!.click();
   };
   await choose('text-only');
-  await waitFor(() => flowerSurfaceNotifications().some(notification => notification.message.includes('image')));
-  expect(flowerSurfaceNotifications().at(-1)?.message).not.toContain('Private backend details');
-  expect(surface.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('gpt-5.2');
+  await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('text-only') === true);
   await choose('vision-next');
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('vision-next') === true);
   expect(setThreadModel).toHaveBeenCalledTimes(2);

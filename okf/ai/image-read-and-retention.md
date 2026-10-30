@@ -3,7 +3,7 @@ type: AI Media Contract
 title: Direct image reading and tool media retention
 tags: [ai, tools, images, media, security]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -29,6 +29,9 @@ remain available after model preparation.
 - Floret preserves every image in ordered summary batches; capacity failures shrink
   the same unconsumed batch. Current user images remain exact. Tokens and JSON bytes have separate
   limits; indivisible overflow fails.
+- Switching to a text model preserves all images and presents verified metadata and
+  locators through the [attachment manifest](flower-attachment-resources.md), without
+  blocking selection or claiming that the model has seen pixels.
 - toolMediaStore retains immutable images in computer/keyframes across source
   changes, Retry, restart, Fork and compaction.
 - Previews check ownership/canonical membership directly. Markdown images stay unchanged.
