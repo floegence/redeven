@@ -9,7 +9,7 @@ import { showDirectoryMenu, isMenuKey } from './fileBrowserDirectoryMenu';
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
 const TREE_ROW_DEPTH_STEP = 12;
-const FILE_TREE_ROW_CLASS = 'group flex items-center rounded-md py-0.5 text-xs transition-all duration-150 ease-out';
+const FILE_TREE_ROW_CLASS = 'group flex items-center rounded-md py-0.5 text-xs font-normal';
 const FILE_TREE_ITEM_CLASS = 'flex min-w-0 flex-1 items-center gap-1 rounded py-0.5 pl-1 pr-1.5 text-left text-xs';
 const treeRowPadding = (depth: number) => `${TREE_ROW_BASE_PADDING + Math.min(depth, MAX_VISIBLE_DEPTH) * TREE_ROW_DEPTH_STEP}px`;
 
@@ -126,7 +126,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
         {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
         class={cn(
           FILE_TREE_ROW_CLASS,
-          isCurrent() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'hover:bg-sidebar-accent/60',
+          isCurrent() ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'hover:bg-sidebar-accent/60',
           isDropTarget() && canAcceptDrop() && 'bg-primary/15 outline outline-2 outline-primary/60 shadow-sm shadow-primary/10',
           isDropTarget() && !canAcceptDrop() && 'bg-error/10 outline outline-2 outline-dashed outline-error/50',
         )}
@@ -205,6 +205,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
   const folderIndex = createMemo(() => buildFolderIndex(browser.files()));
   const rowRefs = new Map<string, HTMLButtonElement>();
   let scrollNonce = 0;
+  let revealedDestination: { path: string; container: HTMLElement } | null = null;
   let pendingClickAnchor: {
     targetPath: string;
     rowTopInContainer: number;
@@ -290,7 +291,8 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
     const nonce = scrollNonce;
 
     queueMicrotask(() => {
-      if (nonce !== scrollNonce || !sidebarOpen) return;
+      if (nonce !== scrollNonce) return;
+      if (!sidebarOpen) { revealedDestination = null; return; }
       const container = props.scrollContainer?.();
       if (!container) return;
 
@@ -305,6 +307,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
             const row = rowRefs.get(clickAnchor.targetPath);
             if (row) {
               preserveClickAnchor(container, row, clickAnchor);
+              revealedDestination = { path: currentPath, container };
               pendingClickAnchor = null;
               return;
             }
@@ -322,11 +325,18 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
         pendingClickAnchor = null;
       }
 
+      // Cached presentation, refreshed files and pending completion can all
+      // notify this effect. Reveal once, preserving subsequent user scrolling.
+      if (revealedDestination?.path === currentPath && revealedDestination.container === container) return;
       if (currentPath === '/') {
         container.scrollTop = 0;
+        revealedDestination = { path: currentPath, container };
         return;
       }
-      rowRefs.get(currentPath)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const row = rowRefs.get(currentPath);
+      if (!row) return;
+      row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      revealedDestination = { path: currentPath, container };
     });
   });
 

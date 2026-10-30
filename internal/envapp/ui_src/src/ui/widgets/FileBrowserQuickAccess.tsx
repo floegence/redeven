@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button, Input, type DirectoryFavorites, type PickerCopy } from '@floegence/floe-webapp-core/ui';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
@@ -25,6 +25,7 @@ export function FileBrowserQuickAccess(props: FileBrowserQuickAccessProps) {
   const i18n = useI18n();
   const [filter, setFilter] = createSignal('');
   const [filterHeight, setFilterHeight] = createSignal<number>();
+  const [progressPath, setProgressPath] = createSignal('');
   let viewport: HTMLDivElement | undefined;
   let input: HTMLInputElement | undefined;
   let unfilteredScrollTop = 0;
@@ -38,6 +39,16 @@ export function FileBrowserQuickAccess(props: FileBrowserQuickAccessProps) {
   });
   const activePath = () => props.pendingNavigationPath || props.currentPath;
   const showFilter = () => paths().length > 5 || filter().length > 0;
+
+  // Selection and accessibility update immediately; fast revalidation should
+  // not replace the folder icon for a single frame. Retire superseded timers.
+  createEffect(() => {
+    const path = props.pendingNavigationPath;
+    setProgressPath('');
+    if (!path) return;
+    const timer = window.setTimeout(() => setProgressPath(path), 150);
+    onCleanup(() => window.clearTimeout(timer));
+  });
 
   const focusPath = (path: string | undefined) => {
     if (!path || !viewport) return;
@@ -101,35 +112,35 @@ export function FileBrowserQuickAccess(props: FileBrowserQuickAccessProps) {
           data-filesystem-root-id={root()?.id} data-filesystem-root-path={root() ? path : undefined}
           data-directory-favorite-path={favoritePaths().has(path) ? path : undefined}
           onContextMenu={event => props.onContextMenu(event, path)}
-          class={cn('group relative flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs',
-            active() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-foreground hover:bg-sidebar-accent/30')}>
+          class={cn('group relative flex min-h-8 min-w-0 items-stretch rounded-md text-xs font-normal',
+            active() ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-foreground hover:bg-sidebar-accent/30')}>
           <Show when={active()}><span aria-hidden="true" class="pointer-events-none absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" /></Show>
-          <Tooltip content={path} placement="right" anchorClass="min-w-0 flex-1">
+          <Tooltip content={path} placement="right" anchorClass="flex min-w-0 flex-1 items-stretch">
             <button ref={element => { rows.set(path, element); onCleanup(() => { rows.delete(path); }); }} type="button" title={path} aria-label={root()?.label ?? path}
               aria-current={active() && props.currentPath === path ? 'page' : undefined}
               aria-busy={pending() || undefined}
-              class="flex w-full min-w-0 cursor-pointer items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
+              class="flex min-h-8 w-full min-w-0 cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
               onClick={() => props.onNavigate(path)} onKeyDown={event => onRowKeyDown(event, path)}>
               <span class="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-                <Show when={pending()} fallback={<FileItemIcon size={14} item={{ name: root()?.label ?? path, type: 'folder' }} class="h-3.5 w-3.5" />}>
+                <Show when={pending() && progressPath() === path} fallback={<FileItemIcon size={14} item={{ name: root()?.label ?? path, type: 'folder' }} class="h-3.5 w-3.5" />}>
                   <Loader2 aria-hidden="true" class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
                 </Show>
               </span>
-              <Show when={root()} fallback={<span class="flex min-w-0 flex-1 overflow-hidden whitespace-nowrap">
+              <Show when={root()} fallback={<span data-file-shortcut-label class="flex min-w-0 flex-1 overflow-hidden whitespace-nowrap">
                 <span data-directory-favorite-parent class="min-w-0 truncate">{path.slice(0, path.lastIndexOf('/'))}</span>
                 <span data-directory-favorite-name class="min-w-0 max-w-full shrink-0 truncate">{path.slice(path.lastIndexOf('/'))}</span>
-              </span>}>{entry => <span class="min-w-0 flex-1 truncate">{entry().label}</span>}</Show>
+              </span>}>{entry => <span data-file-shortcut-label class="min-w-0 flex-1 truncate">{entry().label}</span>}</Show>
+              <Show when={root()}>{entry => <span data-filesystem-root-write-badge={entry().id}
+                class={cn('h-5 shrink-0 rounded-md border px-1.5 text-[8px] font-semibold leading-4 shadow-sm',
+                  entry().permissions.write ? 'border-primary/35 bg-primary/[0.16] text-primary shadow-primary/10' : 'border-border/50 bg-muted/60 text-muted-foreground')}
+                title={i18n.t('files.rootAccessTitle', { label: entry().label, mode: entry().permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}>
+                {entry().permissions.write ? i18n.t('files.readWriteBadge') : i18n.t('files.readOnlyBadge')}
+              </span>}</Show>
             </button>
           </Tooltip>
           <Show when={props.favorites}><button type="button" data-directory-favorite-menu aria-label={i18n.t('common.actions.more') + ': ' + path}
-            class="shrink-0 cursor-pointer rounded p-1 text-muted-foreground hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+            class="flex min-h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-sidebar-ring"
             onClick={event => props.onContextMenu(event, path)}><MoreHorizontal class="h-3.5 w-3.5" /></button></Show>
-          <Show when={root()}>{entry => <span data-filesystem-root-write-badge={entry().id}
-            class={cn('h-5 shrink-0 rounded-md border px-1.5 text-[8px] font-semibold leading-4 shadow-sm',
-              entry().permissions.write ? 'border-primary/35 bg-primary/[0.16] text-primary shadow-primary/10' : 'border-border/50 bg-muted/60 text-muted-foreground')}
-            title={i18n.t('files.rootAccessTitle', { label: entry().label, mode: entry().permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}>
-            {entry().permissions.write ? i18n.t('files.readWriteBadge') : i18n.t('files.readOnlyBadge')}
-          </span>}</Show>
         </div>;
       }}</For>
       <Show when={!filteredPaths().length && !props.favorites?.loading && !props.favorites?.error}>

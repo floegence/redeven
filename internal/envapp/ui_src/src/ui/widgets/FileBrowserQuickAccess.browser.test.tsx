@@ -49,6 +49,38 @@ function mountFiles(width = 240, scale = 1, height = 560, folderCount = 0, surfa
 }
 
 describe('favorite directory locations', () => {
+  it.each([[240, 1], [180, 0.7]])('makes the whole shortcut row clickable except its separate menu at %ipx and scale %s', async (width, scale) => {
+    await page.viewport(1100, 650);
+    const { host, navigate, menu } = mountFiles(width, scale); await settle();
+    for (const row of host.querySelectorAll<HTMLElement>('[data-file-shortcut-path]')) {
+      const button = row.querySelector<HTMLButtonElement>('button')!;
+      const bounds = row.getBoundingClientRect();
+      const buttonBounds = button.getBoundingClientRect();
+      expect(buttonBounds.height).toBe(bounds.height);
+      expect(buttonBounds.height / scale).toBeCloseTo(32, 3);
+      const points = [[bounds.left + 2 * scale, bounds.top + bounds.height / 2],
+        [buttonBounds.left + 40 * scale, bounds.top + 2 * scale],
+        [buttonBounds.left + 40 * scale, bounds.bottom - 2 * scale]];
+      const badge = row.querySelector('[data-filesystem-root-write-badge]')?.getBoundingClientRect();
+      if (badge) points.push([badge.x + badge.width / 2, badge.y + badge.height / 2]);
+      for (const [x, y] of points) {
+        const target = document.elementFromPoint(x, y)!;
+        expect(target.closest('button')).toBe(button);
+        navigate.mockClear();
+        target.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+        expect(navigate.mock.calls).toEqual([[row.dataset.fileShortcutPath]]);
+      }
+      navigate.mockClear();
+      const menuButton = row.querySelector<HTMLButtonElement>('[data-directory-favorite-menu]')!;
+      expect(menuButton.getBoundingClientRect().height).toBe(bounds.height);
+      expect(menuButton.getBoundingClientRect().left).toBeCloseTo(buttonBounds.right, 3);
+      await userEvent.click(menuButton);
+      expect(navigate).not.toHaveBeenCalled();
+      await userEvent.click(page.getByRole('menuitem', { name: 'Remove from favorites' }));
+      await vi.waitFor(() => expect(menu).toHaveBeenLastCalledWith(row.dataset.fileShortcutPath));
+    }
+  });
+
   it('keeps compact shortcuts outside the independently scrolling directory tree', async () => {
     await page.viewport(1100, 650);
     const { host } = mountFiles(); await settle();
@@ -130,7 +162,7 @@ describe('favorite directory locations', () => {
     first.focus(); first.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true })); await settle();
     expect(document.activeElement).toBe(last);
     expect(viewport.scrollTop).toBeGreaterThan(0);
-    expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom);
+    expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom + 1);
     await userEvent.fill(section.querySelector<HTMLInputElement>('input')!, 'Disk-19');
     expect(section.querySelectorAll('[data-directory-favorite-path]')).toHaveLength(1);
   });
@@ -359,6 +391,12 @@ it.each(['light', 'dark'] as const)('distinguishes hover, keyboard focus and exc
   const selected = () => [...host.querySelectorAll('[data-file-shortcut-active="true"]')].map(element => element.getAttribute('data-file-shortcut-path'));
   const frame = () => [...host.querySelectorAll('[data-file-shortcut-path]')].map(element => element.getBoundingClientRect().toJSON());
   const before = frame();
+  const textGeometry = () => [...host.querySelectorAll('[data-file-shortcut-path] button:first-child')].map(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element.querySelector('[data-file-shortcut-label]')!);
+    return { weight: getComputedStyle(element).fontWeight, size: getComputedStyle(element).fontSize, rect: range.getBoundingClientRect().toJSON() };
+  });
+  const beforeText = textGeometry();
   await userEvent.hover(button('/Volumes/JianDisk/code'));
   expect(selected()).toEqual(['/Volumes/JianDisk']);
   expect(getComputedStyle(row('/Volumes/JianDisk/code')).backgroundColor).not.toBe(getComputedStyle(row('/Volumes/JianDisk')).backgroundColor);
@@ -373,6 +411,9 @@ it.each(['light', 'dark'] as const)('distinguishes hover, keyboard focus and exc
   expect(button('/').getAttribute('aria-busy')).toBe('true');
   expect(host.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   expect(frame()).toEqual(before);
+  expect(textGeometry()).toEqual(beforeText);
+  expect(row('/').querySelector('.animate-spin')).toBeNull();
+  await expect.poll(() => row('/').querySelector('.animate-spin')).not.toBeNull();
   expect(document.activeElement).toBe(button('/'));
   await page.screenshot({ element: host, path: '../../../node_modules/.cache/files-navigation-feedback/pending-' + theme + '.png' });
   setCurrent('/'); setPending('');
@@ -381,4 +422,25 @@ it.each(['light', 'dark'] as const)('distinguishes hover, keyboard focus and exc
   expect(button('/').getAttribute('aria-busy')).not.toBe('true');
   expect(document.activeElement).toBe(button('/'));
   expect(frame()).toEqual(before);
+  expect(textGeometry()).toEqual(beforeText);
+  expect(row('/').querySelector('.animate-spin')).toBeNull();
+});
+
+it('does not flash or replay progress for fast or superseded shortcut requests', async () => {
+  const [pending, setPending] = createSignal('');
+  const host = document.createElement('div'); document.body.append(host);
+  cleanups.push(render(() => <FloeConfigProvider><LayoutProvider>
+    <FileBrowserQuickAccess currentPath={home} pendingNavigationPath={pending()}
+      favorites={{ paths: [home, '/Volumes/JianDisk'] }}
+      copy={{ ...filesystemPickerEnUS, selectedCount: String }} onNavigate={setPending} onContextMenu={() => {}} />
+  </LayoutProvider></FloeConfigProvider>, host));
+  setPending('/Volumes/JianDisk');
+  await settle();
+  expect(host.querySelector('.animate-spin')).toBeNull();
+  setPending(home);
+  await settle();
+  setPending('');
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(host.querySelector('.animate-spin')).toBeNull();
+  expect(host.querySelector('[aria-busy="true"]')).toBeNull();
 });

@@ -12,6 +12,42 @@ const cleanups: (() => void)[] = [];
 const paint = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); document.body.replaceChildren(); });
 
+it('keeps tree typography stable and reveals a destination once across cache revalidation', async () => {
+  await page.viewport(1280, 850);
+  const host = document.createElement('div'); document.body.append(host);
+  const tree: FileItem[] = [{ id: '/workspace', name: 'workspace', path: '/workspace', type: 'folder',
+    children: Array.from({ length: 40 }, (_, index) => ({ id: '/workspace/folder-' + index, name: 'folder-' + index, path: '/workspace/folder-' + index, type: 'folder' })) }];
+  const [files, setFiles] = createSignal(tree);
+  const [path, setPath] = createSignal('/workspace');
+  const [pending, setPending] = createSignal('');
+  cleanups.push(render(() => <FloeConfigProvider><LayoutProvider><div style={{ width: '1000px', height: '560px' }}>
+    <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={files()} currentPath={path()}
+      initialPath="/workspace" pendingNavigationPath={pending()} instanceId="stable-tree-navigation" resetKey={0} width={240} open />
+  </div></LayoutProvider></FloeConfigProvider>, host));
+  await paint();
+  host.querySelector<HTMLButtonElement>('[data-tree-row-path="/workspace"]')!.parentElement!.querySelector<HTMLButtonElement>('[aria-expanded="false"]')?.click();
+  await paint();
+  const row = host.querySelector<HTMLElement>('[data-tree-row-path="/workspace/folder-30"]')!;
+  const weight = getComputedStyle(row).fontWeight;
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+  try {
+    batch(() => { setPath('/workspace/folder-30'); setPending('/workspace/folder-30'); });
+    await paint();
+    expect(getComputedStyle(row).fontWeight).toBe(weight);
+    expect(getComputedStyle(row.parentElement!).transitionDuration).toBe('0s');
+    expect(scroll).toHaveBeenCalledTimes(1);
+    const viewport = host.querySelector<HTMLElement>('[data-testid="file-tree-scroll-region"]')!;
+    expect(row.getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom);
+    viewport.scrollTop = 0;
+    setFiles(structuredClone(tree));
+    await paint();
+    setPending('');
+    await paint();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(viewport.scrollTop).toBe(0);
+  } finally { scroll.mockRestore(); }
+});
+
 describe('Files Activity navigation continuity', () => {
   it.each([1000, 640])('keeps root navigation free of permission controls at %s px', async (width) => {
     await page.viewport(1280, 850);

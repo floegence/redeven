@@ -27,6 +27,8 @@ Files owns its runtime recovery presentation over published Floe controls, icons
 
 Files shortcuts use the existing browse request and session cache: a visited directory presents only its own snapshot while revalidating; an uncached target retains the readable listing and reports pending intent separately. Repeated current clicks do not reload; repeated pending clicks share one request. Returning to an unverified cached path still verifies and commits it. Superseded reads release the queue immediately, and late successes or failures cannot change content, persistence or recovery. Manual path entry and hidden-segment changes still verify before committing.
 
+The Files tree reveals each changed destination once per visible sidebar container. Cache revalidation and pending completion do not repeat scrollIntoView or undo subsequent user scrolling. Pointer navigation retains its clicked-row anchor. Tree selection keeps fixed typography and has no layout or font-weight transition.
+
 Runtime failures link the path input to the visible recovery description by ID instead of repeating its message under the toolbar. Syntax validation and canceled requests keep their own inline explanation. Editing clears the input's stale invalid state; it does not clear the unresolved navigation notice. Retry retains the same controls, focus and geometry through pending and repeated failure. Navigation, authorization, snapshots and persistence remain owned by the existing runtime controller.
 
 ## Creating a child directory
