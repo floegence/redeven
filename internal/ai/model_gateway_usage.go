@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 
-	anthropic "github.com/anthropics/anthropic-sdk-go"
 	openai "github.com/openai/openai-go/v3"
 	oresponses "github.com/openai/openai-go/v3/responses"
 )
@@ -65,21 +64,6 @@ func turnUsageFromOpenAICompletion(usage openai.CompletionUsage) (TurnUsage, err
 		err = validateTurnUsage(out)
 	}
 	return out, err
-}
-
-func turnUsageFromAnthropic(usage anthropic.Usage) (TurnUsage, error) {
-	out := TurnUsage{
-		OutputTokensReported: usage.JSON.OutputTokens.Valid(),
-		InputTokensReported:  usage.JSON.InputTokens.Valid() || usage.InputTokens > 0,
-		InputTokenScope:      "provider_execution",
-		Available:            usage.JSON.InputTokens.Valid() || usage.JSON.OutputTokens.Valid() || usage.InputTokens > 0 || usage.OutputTokens > 0,
-		InputTokens:          usage.InputTokens, OutputTokens: usage.OutputTokens,
-		CacheReadTokens: usage.CacheReadInputTokens, CacheWriteTokens: usage.CacheCreationInputTokens,
-	}
-	if err := validateTurnUsage(out); err != nil {
-		return TurnUsage{}, err
-	}
-	return out, nil
 }
 
 func normalizedPromptUsage(totalInput, output, reasoning, cacheRead, cacheWrite int64) (TurnUsage, error) {

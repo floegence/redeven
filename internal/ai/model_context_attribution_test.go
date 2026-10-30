@@ -3,6 +3,9 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,7 +20,15 @@ func TestRenderedContextAttributionProtocols(t *testing.T) {
 		{"openrouter", "openai/gpt-4o", ""}, {"ollama", "local-model", ""}, {"qwen", "qwen-model", ""}, {"openai_compatible", "gpt-4o", ""},
 	} {
 		t.Run(tc.provider+tc.protocol, func(t *testing.T) {
-			gateway, err := newProviderAdapter(tc.provider, "https://example.invalid/v1", "test-key", nil)
+			wires := make(chan []byte, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				raw, _ := io.ReadAll(r.Body)
+				wires <- raw
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"id":"fixture","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}`)
+			}))
+			defer server.Close()
+			gateway, err := newProviderAdapter(tc.provider, server.URL+"/v1", "test-key", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -49,7 +60,15 @@ func TestRenderedContextAttributionProtocols(t *testing.T) {
 					t.Errorf("missing source %q: %+v", key, b.Details)
 				}
 			}
-			wire := prepared.(*preparedModelWire).payload
+			var wire []byte
+			if tc.provider == "anthropic" {
+				if _, err := prepared.StreamTurn(t.Context(), nil); err != nil {
+					t.Fatal(err)
+				}
+				wire = <-wires
+			} else {
+				wire = prepared.(*preparedModelWire).payload
+			}
 			estimate.Breakdown.Details.Items[0].Key = "mutated-by-consumer"
 			if reflect.DeepEqual(estimate, prepared.TokenEstimate()) {
 				t.Fatal("consumer mutation changed frozen estimate")

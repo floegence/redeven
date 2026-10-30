@@ -14,7 +14,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	anthropic "github.com/anthropics/anthropic-sdk-go"
 	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/chatgpt"
 	openai "github.com/openai/openai-go/v3"
@@ -251,13 +250,11 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 		return newProviderFailure(failure.diagnostic, errors.Join(err, failure.cause), failure.ProviderRetryAdvice())
 	}
 	d := providerFailureDiagnostic{Provider: providerType}
-	var anthropicHTTP *anthropic.Error
-	if errors.As(err, &anthropicHTTP) {
-		d = diagnosticFromBody(d, []byte(anthropicHTTP.RawJSON()))
-		d.Status = anthropicHTTP.StatusCode
-		if response == nil {
-			response = anthropicHTTP.Response
-		}
+	var native *flprovider.ProviderHTTPError
+	if errors.As(err, &native) {
+		d.Status, d.Code, d.Message = native.StatusCode, native.Code, native.Message
+		d.Shape = "standard_error"
+		return newProviderFailure(d, err, flprovider.RetryAdviceForError(err))
 	}
 	var upstream *openai.Error
 	if errors.As(err, &upstream) {

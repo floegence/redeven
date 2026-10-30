@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go/v3"
 	oresponses "github.com/openai/openai-go/v3/responses"
@@ -287,53 +286,32 @@ func TestApplyChatReasoningGLM52Effort(t *testing.T) {
 }
 
 func TestApplyAnthropicReasoningSonnetBudgetAndEffort(t *testing.T) {
-	t.Parallel()
-
-	params := anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeSonnet4_20250514,
-		MaxTokens: 2048,
-		Messages:  []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock("hello"))},
+	wire, err := anthropicWireForTest(t, ModelGatewayRequest{Model: "claude-sonnet-4-6", Budgets: TurnBudgets{MaxOutputToken: 2048}, ProviderControls: ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelMedium, BudgetTokens: 1024}, ReasoningCapability: config.AIReasoningCapabilityForModel("anthropic", "claude-sonnet-4-6")}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := applyAnthropicReasoning(&params, ProviderControls{
-		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelMedium, BudgetTokens: 1024},
-		ReasoningCapability: config.AIReasoningCapabilityForModel("anthropic", "claude-sonnet-4-6"),
-	}); err != nil {
-		t.Fatalf("applyAnthropicReasoning: %v", err)
-	}
-	payload := mustMarshalPayload(t, params)
+	payload := mustMarshalPayload(t, wire)
 	for _, want := range []string{`"budget_tokens":1024`, `"type":"enabled"`, `"output_config":{"effort":"medium"}`} {
 		if !strings.Contains(payload, want) {
-			t.Fatalf("payload missing %s: %s", want, payload)
+			t.Fatalf("missing %s: %s", want, payload)
 		}
 	}
 }
-
 func TestApplyAnthropicManualThinkingBudgetDoesNotSendToggleAsEffort(t *testing.T) {
 	capability := config.AIReasoningCapability{Kind: "budget", WireShape: "anthropic_thinking_budget_tokens", BudgetShape: "anthropic_thinking_budget_tokens", SupportedLevels: []string{"on"}, DisableSupported: true, MinBudgetTokens: 1024}
-	params := anthropic.MessageNewParams{MaxTokens: 4096}
-	if err := applyAnthropicReasoning(&params, ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOn, BudgetTokens: 1024}, ReasoningCapability: capability}); err != nil {
+	wire, err := anthropicWireForTest(t, ModelGatewayRequest{Budgets: TurnBudgets{MaxOutputToken: 4096}, ProviderControls: ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOn, BudgetTokens: 1024}, ReasoningCapability: capability}})
+	if err != nil {
 		t.Fatal(err)
 	}
-	payload := mustMarshalPayload(t, params)
+	payload := mustMarshalPayload(t, wire)
 	if !strings.Contains(payload, `"budget_tokens":1024`) || strings.Contains(payload, `"effort":"on"`) {
-		t.Fatalf("invalid manual reasoning payload: %s", payload)
+		t.Fatalf("payload=%s", payload)
 	}
 }
-
 func TestApplyAnthropicReasoningRejectsOpusBudget(t *testing.T) {
-	t.Parallel()
-
-	params := anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeOpus4_1_20250805,
-		MaxTokens: 8192,
-		Messages:  []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock("hello"))},
-	}
-	err := applyAnthropicReasoning(&params, ProviderControls{
-		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelHigh, BudgetTokens: 4096},
-		ReasoningCapability: config.AIReasoningCapabilityForModel("anthropic", "claude-opus-4-7"),
-	})
+	_, err := anthropicWireForTest(t, ModelGatewayRequest{Model: "claude-opus-4-7", Budgets: TurnBudgets{MaxOutputToken: 8192}, ProviderControls: ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh, BudgetTokens: 4096}, ReasoningCapability: config.AIReasoningCapabilityForModel("anthropic", "claude-opus-4-7")}})
 	if err == nil {
-		t.Fatalf("applyAnthropicReasoning accepted manual budget for Opus 4.7")
+		t.Fatal("accepted unsupported manual budget")
 	}
 }
 

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -19,12 +20,14 @@ import (
 )
 
 type anthropicMock struct {
-	token     string
-	responses []anthropicMockResponse
+	token          string
+	responses      []anthropicMockResponse
+	nativeThinking bool
 
 	mu               sync.Mutex
 	sawMessages      bool
 	requestToolNames []string
+	requestBodies    [][]byte
 	step             int
 }
 
@@ -74,6 +77,7 @@ func (m *anthropicMock) handle(w http.ResponseWriter, r *http.Request) {
 
 	m.mu.Lock()
 	m.sawMessages = true
+	m.requestBodies = append(m.requestBodies, bytes.Clone(body))
 	m.requestToolNames = toolNames
 	m.step++
 	step := m.step
@@ -98,25 +102,40 @@ func (m *anthropicMock) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := map[string]any{}
+	index := 0
+	if m.nativeThinking {
+		start = map[string]any{"id": "native-fixture", "role": "assistant", "usage": map[string]any{"input_tokens": 20, "cache_read_input_tokens": 80, "cache_creation_input_tokens": 0, "output_tokens": 0}}
+	}
 	writeAnthropicSSEJSON(w, f, map[string]any{
 		"type":    "message_start",
-		"message": map[string]any{},
+		"message": start,
 	})
+	if m.nativeThinking {
+		writeAnthropicSSEJSON(w, f, map[string]any{"type": "content_block_start", "index": index, "content_block": map[string]any{"type": "thinking", "thinking": ""}})
+		writeAnthropicSSEJSON(w, f, map[string]any{"type": "content_block_delta", "index": index, "delta": map[string]any{"type": "thinking_delta", "thinking": "native reasoning"}})
+		writeAnthropicSSEJSON(w, f, map[string]any{"type": "content_block_delta", "index": index, "delta": map[string]any{"type": "signature_delta", "signature": "native-signature"}})
+		writeAnthropicSSEJSON(w, f, map[string]any{"type": "content_block_stop", "index": index})
+		index++
+		writeAnthropicSSEJSON(w, f, map[string]any{"type": "content_block_start", "index": index, "content_block": map[string]any{"type": "redacted_thinking", "data": "opaque-redacted"}})
+		writeAnthropicSSEJSON(w, f, map[string]any{"type": "content_block_stop", "index": index})
+		index++
+	}
 	writeAnthropicSSEJSON(w, f, map[string]any{
 		"type":          "content_block_start",
-		"index":         0,
+		"index":         index,
 		"content_block": map[string]any{"type": "text", "text": ""},
 	})
 	if strings.TrimSpace(resp.Text) != "" {
 		writeAnthropicSSEJSON(w, f, map[string]any{
 			"type":  "content_block_delta",
-			"index": 0,
+			"index": index,
 			"delta": map[string]any{"type": "text_delta", "text": resp.Text},
 		})
 	}
 	writeAnthropicSSEJSON(w, f, map[string]any{
 		"type":  "content_block_stop",
-		"index": 0,
+		"index": index,
 	})
 	writeAnthropicSSEJSON(w, f, map[string]any{
 		"type":  "message_delta",
@@ -298,6 +317,65 @@ func TestIntegration_ModelGateway_Anthropic_Stream_Succeeds(t *testing.T) {
 	if !mock.didSeeMessages() {
 		t.Fatalf("expected Anthropic Messages API call (/messages)")
 	}
+}
+
+func TestIntegration_ModelGateway_Anthropic_CacheAndSignedHistory(t *testing.T) {
+	mock := &anthropicMock{token: "native answer", nativeThinking: true}
+	svc, meta := newAnthropicTestService(t, mock)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	thread, err := svc.CreateThread(ctx, &meta, "native history", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"native-first", "native-second"} {
+		if _, err := runTypedTurnForTest(t, ctx, svc, &meta, key, RunStartRequest{ThreadID: thread.ThreadID, Model: "anthropic/claude-3-5-sonnet-latest", Input: RunInput{Text: key}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	var cached, signed bool
+	for _, body := range mock.requestBodies {
+		markers := bytes.Count(body, []byte(`"cache_control"`))
+		if markers > 4 {
+			t.Fatal("too many cache breakpoints at the service wire boundary")
+		}
+		cached = cached || markers > 0
+		signed = signed || bytes.Contains(body, []byte(`"signature":"native-signature"`)) && bytes.Contains(body, []byte(`"data":"opaque-redacted"`))
+	}
+	if !cached || !signed {
+		t.Fatalf("service lost cache policy or durable native history: cached=%v signed=%v", cached, signed)
+	}
+	listed, err := svc.ListThreadMessages(ctx, &meta, thread.ThreadID, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reasoningShown bool
+	for _, message := range listed.Messages {
+		raw := threadMessageRawForTest(t, message)
+		if bytes.Contains(raw, []byte("native-signature")) || bytes.Contains(raw, []byte("opaque-redacted")) {
+			t.Fatal("opaque native state entered the public timeline")
+		}
+		var item struct {
+			Blocks []struct{ Type, Content string }
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			t.Fatal(err)
+		}
+		for _, block := range item.Blocks {
+			if strings.Contains(block.Content, "native reasoning") {
+				if block.Type != "thinking" {
+					t.Fatal("reasoning became ordinary assistant prose")
+				}
+				reasoningShown = true
+			}
+		}
+	}
+	if !reasoningShown {
+		t.Fatal("thinking disclosure lost its content")
+	}
+	requireAssistantTimelineTextContains(t, ctx, svc, &meta, thread.ThreadID, "native answer")
 }
 
 func TestIntegration_ModelGateway_Anthropic_LengthContinuationSucceeds(t *testing.T) {

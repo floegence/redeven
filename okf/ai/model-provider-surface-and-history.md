@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model provider surface and history
 tags: [ai, models, providers, history]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-10-30"
 ---
 # Summary
 
@@ -52,6 +52,36 @@ Flower reads persisted Activity first and otherwise uses a neutral label and ren
 
 ## Provider rendering and estimation
 Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Chat Completions, Gemini signatures, Moonshot, and Anthropic. Verified model mappings select official vocabularies; unknown models use an explicit multilingual BPE proxy. These remain estimates because server rendering can differ; Redeven adds no network preflight or calibration ledger.
+
+## Anthropic Messages
+
+Published Floret v7.95.0 owns Messages HTTP/SSE, frozen cache hints, authorized
+attachment expansion and native signed output. Flower maps model controls,
+authorized content, usage and events through the public Gateway. The retired
+Anthropic SDK path is removed. No endpoint brand or intermediary-specific logic
+selects behavior. Effective Engine reuse policy enables at most four ephemeral
+markers and independently controls opaque state. Cache-off preserves permitted
+signed history; supplemental-secret isolation clears both reuse paths.
+
+Completed native output survives ordinary continuation and restart. Manual
+Retry/Fork and compaction retain canonical facts and clear source state through
+existing Floret boundaries. Historical unsigned reasoning is never fabricated as
+signed thinking or recast as visible answer text. Native state remains opaque.
+Frozen transport retries resolve no attachments and carry the new attempt ID.
+
+Usage keeps uncached, cache-read and cache-write partitions. Request-bound input
+measurement requires complete reported partitions and excludes hosted or signed
+input the service may transform. Unsupported evidence stays an estimate rather
+than a false measured context size. Streaming failures retain reported billing
+without advancing native state. Product diagnostics preserve structured public
+HTTP errors and exact byte-limit classifications.
+
+Evidence: model_gateway_anthropic_test.go checks the final wire, usage, state
+serialization, cache-off replay, credential isolation and frozen retry identity.
+The Anthropic Service regression verifies two canonical turns preserve signed
+and redacted blocks while public timeline thinking stays separately typed.
+Existing argument-stream, attachment, cancellation and prepared-request tests
+exercise the shared route. No production thread is resumed by qualification.
 
 ## Native request measurement
 Published Floret v7.79.0 owns [native request measurement](model-request-measurement.md), frozen-prefix pressure and schema 28. Redeven maps protocol facts without a second pressure policy or measurement store.

@@ -4,14 +4,13 @@ go 1.27.3
 
 require (
 	github.com/acobaugh/osrelease v0.1.0
-	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/bodgit/sevenzip v1.6.1
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floe-native-apps v0.25.1
 	github.com/floegence/floeterm/terminal-go v0.19.2
-	github.com/floegence/floret/v7 v7.94.0
+	github.com/floegence/floret/v7 v7.95.0
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.1
 	github.com/floegence/redeven-service-templates v0.7.0
 	github.com/floegence/redevplugin/v3 v3.7.3
@@ -141,7 +140,6 @@ require (
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
-	github.com/tdewolff/parse/v2 v2.8.20 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect

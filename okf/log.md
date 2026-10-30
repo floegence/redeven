@@ -41,3 +41,5 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 - Preserve streaming follow/fold order, immediate send feedback and full Markdown; scope performance and recovery claims to tested source.
 
 - 2026-10-29: Adopt published Floret v7.94.0 aggregate image-capacity recovery, Desktop typed cause transport and localized inline history organization.
+
+- 2026-10-30: Move Anthropic Messages protocol ownership to published Floret v7.95.0; document signed history, effective caching and measured-input boundaries.

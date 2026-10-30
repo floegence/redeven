@@ -236,14 +236,13 @@ func TestOpenAIProviderToolAliases_RejectNonCanonicalTerminalName(t *testing.T) 
 }
 
 func TestBuildAnthropicTools_PreservesCanonicalDottedName(t *testing.T) {
-	t.Parallel()
-
-	tools := buildAnthropicTools([]ToolDef{{Name: "terminal.read", InputSchema: json.RawMessage(`{"type":"object"}`)}})
-	if len(tools) != 1 || tools[0].OfTool == nil {
-		t.Fatalf("tools=%#v", tools)
+	wire, err := anthropicWireForTest(t, ModelGatewayRequest{Tools: []ToolDef{{Name: "terminal.read", InputSchema: json.RawMessage(`{"type":"object"}`)}}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(tools[0].OfTool.Name); got != "terminal.read" {
-		t.Fatalf("tool name=%q, want terminal.read", got)
+	tools := wire["tools"].([]any)
+	if len(tools) != 1 || tools[0].(map[string]any)["name"] != "terminal.read" {
+		t.Fatalf("tools=%v", tools)
 	}
 }
 

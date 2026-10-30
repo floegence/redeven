@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	anthropic "github.com/anthropics/anthropic-sdk-go"
 	openai "github.com/openai/openai-go/v3"
 	oresponses "github.com/openai/openai-go/v3/responses"
 )
@@ -56,18 +55,6 @@ func TestProviderUsageNormalizationKeepsDisjointCacheBuckets(t *testing.T) {
 	}
 	assertTurnUsage(t, deepSeek, TurnUsage{OutputTokensReported: true, InputTokensReported: true, InputTokenScope: "request_input", Available: true, TotalTokensReported: true, TotalTokens: 120, OutputIncludesReasoning: true, InputTokens: 65, OutputTokens: 20, CacheReadTokens: 35})
 
-	var anthropicUsage anthropic.Usage
-	if err := json.Unmarshal([]byte(`{
-		"input_tokens":10,"output_tokens":20,
-		"cache_read_input_tokens":70,"cache_creation_input_tokens":20
-	}`), &anthropicUsage); err != nil {
-		t.Fatal(err)
-	}
-	claude, err := turnUsageFromAnthropic(anthropicUsage)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertTurnUsage(t, claude, TurnUsage{OutputTokensReported: true, InputTokensReported: true, InputTokenScope: "provider_execution", Available: true, InputTokens: 10, OutputTokens: 20, CacheReadTokens: 70, CacheWriteTokens: 20})
 }
 
 func TestProviderUsageNormalizationRejectsInvalidCacheCounts(t *testing.T) {
@@ -193,7 +180,7 @@ data: {"type":"message_start","message":{"id":"msg-usage","type":"message","role
 			if err == nil {
 				t.Fatal("unfinished response accepted")
 			}
-			assertTurnUsage(t, result.Usage, TurnUsage{OutputTokensReported: true, InputTokensReported: true, InputTokenScope: "provider_execution", Available: true, InputTokens: 60, OutputTokens: 2, CacheReadTokens: 40})
+			assertTurnUsage(t, result.Usage, TurnUsage{OutputTokensReported: true, InputTokensReported: true, InputTokenScope: "provider_execution", OutputIncludesReasoning: true, TotalTokens: 102, Available: true, InputTokens: 60, OutputTokens: 2, CacheReadTokens: 40})
 		})
 	}
 }

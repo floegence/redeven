@@ -83,7 +83,7 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		request.MaxOutputTokens = modelGatewayDefaultMaxOutputTokens
 	}
 	if state := req.PreviousState; state != nil {
-		request.PreviousState = &flprovider.State{Kind: state.Kind, ID: state.ID, Attributes: cloneStringMap(state.Attributes)}
+		request.PreviousState = &flprovider.State{ReusePolicy: state.ReusePolicy, Kind: state.Kind, ID: state.ID, Attributes: cloneStringMap(state.Attributes)}
 	}
 	for _, message := range req.Messages {
 		mapped := flprovider.Message{Role: flprovider.MessageRole(message.Role), Attribution: cloneMessageAttribution(message.Attribution)}
@@ -143,106 +143,5 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 	if err != nil {
 		return nil, err
 	}
-	return &deepSeekPreparedTurn{PreparedRequest: prepared, aliases: aliases}, nil
-}
-
-type deepSeekPreparedTurn struct {
-	flprovider.PreparedRequest
-	aliases providerToolAliases
-}
-
-func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var result ModelGatewayResult
-	aliases := p.aliases
-	stream, err := p.Stream(ctx)
-	if err != nil {
-		return result, err
-	}
-	var text, reasoning strings.Builder
-	terminal := false
-	for event := range stream {
-		if event.Err != nil {
-			return result, event.Err
-		}
-		switch event.Type {
-		case flprovider.EventDelta:
-			text.WriteString(event.Text)
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: event.Text, OutputPart: event.OutputPart})
-		case flprovider.EventReasoning:
-			reasoning.WriteString(event.Text)
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventThinkingDelta, Text: event.Text, OutputPart: event.OutputPart})
-		case flprovider.EventToolCallStart, flprovider.EventToolCallDelta, flprovider.EventToolCallEnd:
-			if call := event.ToolCallStream; call != nil {
-				kind := StreamEventToolCallStart
-				if event.Type == flprovider.EventToolCallDelta {
-					kind = StreamEventToolCallDelta
-				}
-				if event.Type == flprovider.EventToolCallEnd {
-					kind = StreamEventToolCallEnd
-				}
-				emitProviderEvent(onEvent, StreamEvent{Type: kind, Text: event.Text, OutputPart: event.OutputPart, ToolCall: &PartialToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases)}})
-			}
-		case flprovider.EventHostedToolCall, flprovider.EventHostedToolResult:
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventHostedTool, HostedToolEvent: &event})
-		case flprovider.EventToolCalls:
-			for _, call := range event.ToolCalls {
-				var args map[string]any
-				if err := json.Unmarshal([]byte(call.Args), &args); err != nil || args == nil {
-					return result, errors.New("DeepSeek returned non-object tool arguments")
-				}
-				result.ToolCalls = append(result.ToolCalls, ToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases), Args: args})
-			}
-		case flprovider.EventSources:
-			for _, source := range event.Sources {
-				result.Sources = append(result.Sources, SourceRef{Title: source.Title, URL: source.URL, StartIndex: source.StartIndex, EndIndex: source.EndIndex})
-			}
-		case flprovider.EventUsage:
-			u := event.Usage
-			result.Usage = TurnUsage{TotalTokens: u.TotalTokens, TotalTokensReported: u.TotalTokensReported, OutputIncludesReasoning: u.OutputIncludesReasoning, Available: u.Available, InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, ReasoningTokens: u.ReasoningTokens, CacheReadTokens: u.CacheReadTokens, CacheWriteTokens: u.CacheWriteTokens}
-		case flprovider.EventDone, flprovider.EventTruncated:
-			terminal = true
-			result.FinishReason = event.Reason
-			if event.Type == flprovider.EventTruncated {
-				result.FinishReason = "length"
-			}
-			if state := event.ResponseState; state != nil {
-				result.ProviderState = &ModelGatewayState{Kind: state.Kind, ID: state.ID, Attributes: cloneStringMap(state.Attributes)}
-			}
-		}
-	}
-	if !terminal {
-		if ctx.Err() != nil {
-			return result, ctx.Err()
-		}
-		return result, flprovider.WithRetryAdvice(errors.New("DeepSeek gateway closed without terminal event"), flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
-	}
-	result.Text = text.String()
-	result.Reasoning = reasoning.String()
-	return result, validateModelGatewayResult(result)
-}
-
-func (p *deepSeekPreparedTurn) replay(ctx context.Context, next flprovider.Request) (preparedModelGatewayTurn, error) {
-	replayer, ok := p.PreparedRequest.(flprovider.PreparedRequestReplay)
-	if !ok {
-		return nil, errors.New("DeepSeek request does not support frozen replay")
-	}
-	prepared, err := replayer.PrepareRetry(ctx, next)
-	if err != nil {
-		return nil, err
-	}
-	return &deepSeekPreparedTurn{PreparedRequest: prepared, aliases: p.aliases}, nil
-}
-
-func (p *deepSeekPreparedTurn) withMaxOutputTokens(ctx context.Context, limit int64) (preparedModelGatewayTurn, error) {
-	limiter, ok := p.PreparedRequest.(flprovider.PreparedRequestOutputLimiter)
-	if !ok {
-		return nil, errors.New("DeepSeek transport lacks frozen output control")
-	}
-	prepared, err := limiter.WithMaxOutputTokens(ctx, limit)
-	if err != nil {
-		return nil, err
-	}
-	return &deepSeekPreparedTurn{PreparedRequest: prepared, aliases: p.aliases}, nil
+	return &floretPreparedTurn{PreparedRequest: prepared, aliases: aliases, providerName: "deepseek"}, nil
 }

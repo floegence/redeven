@@ -160,44 +160,15 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 }
 
 func TestAnthropicTextAttachmentDoesNotSilentlyTruncate(t *testing.T) {
-	for _, body := range []string{
-		strings.Repeat("a", 40_000) + "TAIL_SENTINEL",
-		"  leading and trailing  \r\n",
-		" \t\r\n  ",
-		"第一行\r\n第二行🙂\r\n",
-	} {
-		messages, err := buildAnthropicMessages([]Message{{
-			Role: "user",
-			Content: []ContentPart{{
-				Type: "file", Text: "long.txt", MimeType: "text/plain",
-				FileURI: "data:text/plain;base64," + base64.StdEncoding.EncodeToString([]byte(body)),
-			}},
-		}})
+	for _, body := range []string{strings.Repeat("a", 40000) + "TAIL_SENTINEL", "  leading and trailing  \r\n", " \t\r\n  ", "第一行\r\n第二行🙂\r\n"} {
+		wire, err := anthropicWireForTest(t, ModelGatewayRequest{Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "file", Text: "long.txt", MimeType: "text/plain", FileURI: "data:text/plain;base64," + base64.StdEncoding.EncodeToString([]byte(body))}}}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(messages) != 1 || len(messages[0].Content) != 1 || messages[0].Content[0].OfDocument == nil || messages[0].Content[0].OfDocument.Source.OfText == nil {
-			t.Fatalf("Anthropic text attachment did not produce one plain-text document: %#v", messages)
-		}
-		if got := messages[0].Content[0].OfDocument.Source.OfText.Data; got != body {
-			t.Fatalf("Anthropic text attachment changed UTF-8 content: got %q, want %q", got, body)
-		}
-		raw, err := json.Marshal(messages)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var wire []struct {
-			Content []struct {
-				Source struct {
-					Data string `json:"data"`
-				} `json:"source"`
-			} `json:"content"`
-		}
-		if err := json.Unmarshal(raw, &wire); err != nil {
-			t.Fatal(err)
-		}
-		if len(wire) != 1 || len(wire[0].Content) != 1 || wire[0].Content[0].Source.Data != body {
-			t.Fatalf("Anthropic wire payload changed UTF-8 content: %s", raw)
+		messages := wire["messages"].([]any)
+		blocks := messages[0].(map[string]any)["content"].([]any)
+		if len(messages) != 1 || len(blocks) != 1 || blocks[0].(map[string]any)["type"] != "document" || blocks[0].(map[string]any)["source"].(map[string]any)["data"] != body {
+			t.Fatal("text document changed at HTTP boundary")
 		}
 	}
 }

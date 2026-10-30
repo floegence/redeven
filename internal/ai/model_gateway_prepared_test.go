@@ -87,7 +87,10 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 			if calls.Load() != 0 {
 				t.Fatal("preparation dispatched network work")
 			}
-			raw := bytes.Clone(prepared.(*preparedModelWire).payload)
+			var raw []byte
+			if native, ok := prepared.(*preparedModelWire); ok {
+				raw = bytes.Clone(native.payload)
+			}
 			estimate := prepared.TokenEstimate()
 			if !strings.Contains(estimate.Source, tc.source) || estimate.EstimatedInputTokens >= 2500 {
 				t.Fatalf("estimate not optimized: %+v", estimate)
@@ -107,11 +110,14 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 			if err := json.Unmarshal(actual, &final); err != nil {
 				t.Fatal(err)
 			}
-			field := prepared.(*preparedModelWire).outputField
+			field := "max_tokens"
+			if native, ok := prepared.(*preparedModelWire); ok {
+				field = native.outputField
+			}
 			if final[field] != float64(1234) {
 				t.Fatalf("final output limit: %v", final[field])
 			}
-			if !bytes.Equal(raw, actual) || prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(actual)) {
+			if (raw != nil && !bytes.Equal(raw, actual)) || prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(actual)) {
 				t.Fatal("dispatched bytes differ from prepared fingerprint")
 			}
 			if tc.protocol == "openai-responses" {

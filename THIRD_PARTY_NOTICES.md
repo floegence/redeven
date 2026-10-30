@@ -2748,7 +2748,6 @@ SOFTWARE.
 | --- | --- | --- | --- | --- | --- |
 | github.com/acobaugh/osrelease | v0.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/acobaugh/osrelease@v0.1.0 | Detected from LICENSE. |
 | github.com/andybalholm/brotli | v1.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/andybalholm/brotli@v1.2.0 | Detected from LICENSE. |
-| github.com/anthropics/anthropic-sdk-go | v1.22.1 | MIT | Runtime | https://pkg.go.dev/github.com/anthropics/anthropic-sdk-go@v1.22.1 | Detected from LICENSE. |
 | github.com/asaskevich/govalidator | v0.0.0-20230301143203-a9d515a09cc2 | MIT | Runtime | https://pkg.go.dev/github.com/asaskevich/govalidator@v0.0.0-20230301143203-a9d515a09cc2 | Detected from LICENSE. |
 | github.com/Azure/go-ansiterm | v0.0.0-20250102033503-faa5f7b0171c | MIT | Runtime | https://pkg.go.dev/github.com/Azure/go-ansiterm@v0.0.0-20250102033503-faa5f7b0171c | Detected from LICENSE. |
 | github.com/bodgit/plumbing | v1.3.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/plumbing@v1.3.0 | Detected from LICENSE. |
@@ -2773,7 +2772,7 @@ SOFTWARE.
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floe-native-apps | v0.25.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.25.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.94.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.94.0 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.95.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.95.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.7.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.7.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.7.3 | Floegence first-party dependency. |
@@ -2869,7 +2868,6 @@ SOFTWARE.
 | github.com/spf13/pflag | v1.0.10 | BSD-style | Runtime | https://pkg.go.dev/github.com/spf13/pflag@v1.0.10 | Detected from LICENSE. |
 | github.com/STARRY-S/zip | v0.2.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/STARRY-S/zip@v0.2.3 | Detected from LICENSE. |
 | github.com/syndtr/goleveldb | v1.0.1-0.20220721030215-126854af5e6d | BSD-style | Runtime | https://pkg.go.dev/github.com/syndtr/goleveldb@v1.0.1-0.20220721030215-126854af5e6d | Detected from LICENSE. |
-| github.com/tdewolff/parse/v2 | v2.8.20 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.20 | Detected from LICENSE.md. |
 | github.com/tetratelabs/wazero | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tetratelabs/wazero@v1.12.0 | Detected from LICENSE. |
 | github.com/theupdateframework/go-tuf | v0.7.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/theupdateframework/go-tuf@v0.7.0 | Detected from LICENSE. |
 | github.com/theupdateframework/go-tuf/v2 | v2.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/theupdateframework/go-tuf/v2@v2.4.2 | Detected from LICENSE. |
