@@ -3741,7 +3741,6 @@ SOFTWARE.
 | react-dom | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react-dom/v/18.3.1 |  |
 | react | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react/v/18.3.1 |  |
 | react | 19.2.8 | MIT | Desktop shell | https://www.npmjs.com/package/react/v/19.2.8 | License verified from the exact registry package manifest. |
-| react | 19.3.1 | MIT | Desktop shell | https://www.npmjs.com/package/react/v/19.3.1 |  |
 | read-binary-file-arch | 1.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/read-binary-file-arch/v/1.0.6 |  |
 | readable-stream | 2.3.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/readable-stream/v/2.3.8 |  |
 | regex-recursion | 6.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/regex-recursion/v/6.0.2 |  |
