@@ -38,6 +38,27 @@ function method(name: string, effect: string, dangerous = false, preflightOnly =
 }
 
 describe('external plugin security projection', () => {
+  it('preserves exact data-upgrade declarations and detects every relevant change', () => {
+    const upgrade = { from: [{ version: '1.0.0', shape_sha256: 'a'.repeat(64) }], method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000 };
+    const current = summary({ data_upgrade: upgrade });
+    const [row] = securityDeclarations(current, summary());
+    expect(row).toMatchObject({ key: 'data_upgrade:saved-data', change: 'added', value: upgrade });
+    expect(row.facts).toContain('from_version=1.0.0; shape_sha256=' + 'a'.repeat(64));
+    expect(row.facts).toContain('max_bytes=1048576; max_runtime_ms=3000');
+    expect(securityDeclarationIsSensitive(row)).toBe(true);
+    expect(securityDeclarations(current, current)[0].change).toBeUndefined();
+    for (const changed of [
+      { ...upgrade, method: 'data.convertAgain' },
+      { ...upgrade, from: [{ version: '1.0.0', shape_sha256: 'b'.repeat(64) }] },
+      { ...upgrade, from: [{ version: '1.1.0', shape_sha256: 'a'.repeat(64) }] },
+      { ...upgrade, max_bytes: 2097152 },
+      { ...upgrade, max_runtime_ms: 5000 },
+    ]) {
+      expect(securityDeclarations(summary({ data_upgrade: changed }), current)[0]).toMatchObject({ change: 'changed', previousFacts: row.facts });
+    }
+    expect(securityDeclarations(summary(), current)[0].change).toBe('removed');
+  });
+
   it('preserves added, changed, and removed declarations across updates', () => {
     const previous = summary({
       permissions: [

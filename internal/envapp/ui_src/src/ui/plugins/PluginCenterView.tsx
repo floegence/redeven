@@ -7,6 +7,7 @@ import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, Filter, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
+import { dataUpgradeFacts } from './externalPluginSecurityProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import type {
@@ -1301,6 +1302,15 @@ function OfficialPluginInstallDialog(props: {
                     }}
                   </For>
                 </div>
+              </Show>
+              <Show when={props.installPreview?.security_summary.data_upgrade}>
+                <section data-plugin-install-data-upgrade class="space-y-2 border-t pt-3">
+                  <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] font-medium"><RefreshIcon class="h-4 w-4 shrink-0 text-muted-foreground" />{i18n.t('uiCopy.plugin.external.dataUpgrade')}</div>
+                  <details data-plugin-install-data-upgrade-details class="group rounded-md border">
+                    <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 group-open:rotate-180" /></summary>
+                    <ul class="space-y-1 break-all border-t p-3 font-mono text-xs"><For each={dataUpgradeFacts(props.installPreview!.security_summary.data_upgrade!)}>{(fact) => <li>{fact}</li>}</For></ul>
+                  </details>
+                </section>
               </Show>
               <OfficialProcessAccessReview
                 process={props.installPreview?.security_summary.process}

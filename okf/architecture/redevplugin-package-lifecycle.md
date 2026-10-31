@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin package and runtime lifecycle
 tags: [architecture, plugins, release, runtime]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-10-31"
 ---
 # Summary
 
@@ -21,6 +21,12 @@ A GitHub source without an administrator-entered tag resolves the latest eligibl
 ReDevPlugin 3.9 owns target-filtered discovery, exact inspection, one-shot recovery commit and read-only reconciliation. The source is an uninstalled instance with compatible retained data; the target must be explicitly disabled. The Host verifies owner, publisher, plugin identity, data shape, generation, management revision and active fingerprint. Its atomic transaction swaps data references while retaining both generations. It does not restore grants, secrets or enabled state.
 
 Redeven passes published SDK DTOs unchanged. Discovery, inspection and status require environment read permission; commit requires write permission; disabling remains an admin action. An uncertain commit is never replayed. Reconciliation uses the exact inspected plan; a confirmed pending result permits a new explicit review, while unknown status remains read-only. Host restart recovery remains upstream-owned.
+
+## Plugin data upgrades
+
+ReDevPlugin 3.10 owns package-declared conversion, isolated input/output generations, quotas, cancellation, and the atomic package/data/history transaction. A converter matches an exact predecessor version and data shape. Failed or cancelled conversion keeps the old package and data; committed or unknown outcomes use the existing update reconciliation path and never trigger automatic replay. Downgrade restores the exact historical package's last data generation. The platform migrates its control store before opening it; Redeven never reads or writes that schema.
+
+Redeven consumes the verified data-upgrade declaration from the released security summary. Review presents one concise saved-data notice before approval; method, predecessor identities and resource limits remain in expandable package details. Added, changed and removed declarations use the existing security-difference projection. No second migration wizard, converter dispatcher, durable job or product-owned data copy is introduced.
 
 # Boundaries
 

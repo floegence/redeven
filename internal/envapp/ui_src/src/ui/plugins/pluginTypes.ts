@@ -102,6 +102,7 @@ export type PluginMarketInstallPreview = Readonly<{
     }>[];
     process?: PluginExternalPackageProcessSummary;
     background?: PluginExternalPackageBackgroundSummary;
+    data_upgrade?: PluginExternalPackageInspection['security_summary']['data_upgrade'];
   }>;
   release_identity_digest: string;
   manifest_sha256: string;

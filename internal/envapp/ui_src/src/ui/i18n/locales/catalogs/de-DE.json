@@ -7127,7 +7127,8 @@
           "secretRefs": "Verweist für deklarierte Vorgänge auf konfigurierte Secrets, ohne deren Werte in dieser Prüfung anzuzeigen.",
           "coreActions": "Fordert die aufgeführten Redeven-Kernaktionen mit ihren deklarierten Auswirkungen an.",
           "intents": "Stellt die aufgeführten Plugin-Aktionen für Benutzer oder andere autorisierte Produktoberflächen bereit.",
-          "surfaces": "Fügt die aufgeführten Plugin-Ansichten hinzu, die in Activity oder Workbench geöffnet werden können."
+          "surfaces": "Fügt die aufgeführten Plugin-Ansichten hinzu, die in Activity oder Workbench geöffnet werden können.",
+          "dataUpgrade": "Konvertiert die Plugin-Daten bei geeigneten Updates und bewahrt die bisherigen Daten auf."
         },
         "accessChanged": "Dieses Update ändert den deklarierten Zugriff des Plugins. Prüfen Sie vor dem Fortfahren jede hervorgehobene Deklaration.",
         "accessUnchanged": "Dieses Paket ändert den deklarierten Zugriff des Plugins nicht.",
@@ -7168,7 +7169,9 @@
         "noNewPermissionGrants": "Keine neuen Berechtigungsfreigaben",
         "accessNetwork": "Verbindung zu",
         "accessStorage": "Eigene gespeicherte Daten nutzen",
-        "accessCredential": "Gespeicherte Zugangsdaten nutzen"
+        "accessCredential": "Gespeicherte Zugangsdaten nutzen",
+        "dataUpgrade": "Gespeicherte Daten aktualisieren",
+        "dataUpgradeNotice": "Gespeicherte Daten können aktualisiert werden. Die bisherigen Daten bleiben erhalten."
       },
       "dataRecovery": {
         "title": "Gespeicherte Daten wiederherstellen",

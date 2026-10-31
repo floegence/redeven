@@ -429,7 +429,7 @@ function mountExternalDialog(
   return host;
 }
 
-function mountUpdateReviewDialog(): HTMLElement {
+function mountUpdateReviewDialog(inspection: ExternalPluginInspection = browserUpdateInspection()): HTMLElement {
   const host = fixedHost();
   disposers.push(render(() => (
     <PluginUpdateReviewDialog
@@ -437,7 +437,7 @@ function mountUpdateReviewDialog(): HTMLElement {
       item={updateDialogItem}
       canManage
       onOpenChange={() => undefined}
-      onInspect={async () => browserUpdateInspection()}
+      onInspect={async () => inspection}
       onCommitExternal={async () => unavailableCommit()}
       onOfficialUpdate={async () => undefined}
       onRefresh={() => undefined}
@@ -778,6 +778,85 @@ describe('plugin management browser geometry and interaction', () => {
     expect(getComputedStyle(icon).width).toBe('14px');
     informationAction.click();
     expect(mounted.onSelectInformation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { width: 390, height: 844, theme: 'light' },
+    { width: 390, height: 844, theme: 'dark' },
+    { width: 1180, height: 900, theme: 'light' },
+    { width: 1180, height: 900, theme: 'dark' },
+  ])('shows a concise data-upgrade declaration at $width px in $theme', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    document.documentElement.classList.add(viewport.theme);
+    const inspection = browserInspection();
+    inspection.security_summary.data_upgrade = {
+      from: [{ version: '1.0.0', shape_sha256: 'b'.repeat(64) }],
+      method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000,
+    };
+    mountExternalDialog(async () => inspection);
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await userEvent.fill(dialog.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://plugins.example.com/toolbox.redevplugin');
+    dialog.querySelector<HTMLButtonElement>('[data-external-plugin-inspect]')!.click();
+    await vi.waitFor(() => expect(dialog.querySelector('[data-external-plugin-data-upgrade]')).not.toBeNull());
+    const upgrade = dialog.querySelector<HTMLElement>('[data-external-plugin-data-upgrade]')!;
+    expect(upgrade.textContent).toBe('Upgrade saved data');
+    expect(upgrade.textContent).not.toContain('data.convert');
+    expectNoHorizontalOverflow(upgrade);
+    const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    expect(report.open).toBe(false);
+    report.querySelector('summary')!.click();
+    await settle();
+    expect(report.textContent).toContain('method=data.convert');
+    expect(report.textContent).toContain('from_version=1.0.0');
+    expect(report.textContent).toContain('max_runtime_ms=3000');
+    expectInsideViewport(dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!, viewport);
+    expectNoHorizontalOverflow(dialog);
+  });
+
+  it('shows the data conversion in the update confirmation before approval', async () => {
+    const inspection = browserUpdateInspection();
+    inspection.security_summary.data_upgrade = {
+      from: [{ version: '4.0.0', shape_sha256: 'b'.repeat(64) }],
+      method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000,
+    };
+    mountUpdateReviewDialog(inspection);
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-data-upgrade]')).not.toBeNull());
+    expect(document.querySelector('[data-plugin-update-data-upgrade]')!.textContent)
+      .toBe('Saved data may be upgraded. The previous data is retained.');
+    expect(document.querySelector<HTMLButtonElement>('[data-plugin-update-submit]')!.disabled).toBe(true);
+    const details = document.querySelector<HTMLElement>('[data-plugin-update-data-upgrade-details]')!;
+    expect(details.closest('details')!.open).toBe(false);
+    expect(details.textContent).toContain('method=data.convert');
+    expect(details.textContent).toContain('max_runtime_ms=3000');
+  });
+
+  it.each([
+    { width: 390, height: 844, theme: 'light' },
+    { width: 390, height: 844, theme: 'dark' },
+    { width: 1180, height: 900, theme: 'light' },
+    { width: 1180, height: 900, theme: 'dark' },
+  ])('contains official data-upgrade review at $width px in $theme', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    document.documentElement.classList.add(viewport.theme);
+    const catalog = OFFICIAL_PLUGIN_CATALOG_SEED[0]!;
+    const preview = catalog.installPreview!;
+    const item: PluginInventoryItem = { ...metricsItem, inventoryKey: 'catalog:upgrade', pluginInstanceID: undefined, version: undefined, managementRevision: undefined, defaultLaunchTarget: undefined, authorization: undefined, lifecycleState: 'not_installed', officialCatalog: { ...catalog, installPreview: { ...preview, security_summary: { ...preview.security_summary, process: undefined, background: undefined, data_upgrade: { from: [{ version: '1.0.0', shape_sha256: 'b'.repeat(64) }], method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000 } } } } };
+    const host = fixedHost();
+    const onCommand = vi.fn();
+    disposers.push(render(() => <PluginCenterView projection={{ items: [item] }} loading={false} canManagePlugins canOpenPluginSurfaces onRefresh={() => undefined} onCommand={onCommand} />, host));
+    await settle();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:upgrade"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-install-data-upgrade]')).not.toBeNull());
+    const review = document.querySelector<HTMLElement>('[data-plugin-install-data-upgrade]')!;
+    const details = review.querySelector<HTMLDetailsElement>('details')!;
+    expect(details.open).toBe(false);
+    details.querySelector('summary')!.click();
+    await settle();
+    expect(details.textContent).toContain('method=data.convert');
+    expectNoHorizontalOverflow(review);
+    expectInsideViewport(document.querySelector<HTMLElement>('[data-plugin-install-review-confirm]')!, viewport);
+    expect(onCommand).not.toHaveBeenCalled();
   });
 
   it('cancels and aborts an update review while update content is loading', async () => {

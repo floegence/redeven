@@ -7127,7 +7127,8 @@
           "secretRefs": "Référence les secrets configurés pour les opérations déclarées sans afficher leur valeur dans cet examen.",
           "coreActions": "Demande les actions du noyau de Redeven indiquées, avec leurs effets déclarés.",
           "intents": "Expose les actions de plugin indiquées afin qu’elles puissent être invoquées par les utilisateurs ou d’autres surfaces autorisées du produit.",
-          "surfaces": "Ajoute les vues de plugin indiquées qui peuvent s’ouvrir dans Activity ou Workbench."
+          "surfaces": "Ajoute les vues de plugin indiquées qui peuvent s’ouvrir dans Activity ou Workbench.",
+          "dataUpgrade": "Convertit les données du plugin lors des mises à jour compatibles et conserve les données précédentes."
         },
         "accessChanged": "Cette mise à jour modifie les accès déclarés par le plugin. Examinez chaque déclaration mise en évidence avant de continuer.",
         "accessUnchanged": "Ce paquet ne modifie pas les accès déclarés par le plugin.",
@@ -7168,7 +7169,9 @@
         "noNewPermissionGrants": "Aucune nouvelle autorisation accordée",
         "accessNetwork": "Se connecter à",
         "accessStorage": "Utiliser ses propres données enregistrées",
-        "accessCredential": "Utiliser les identifiants enregistrés"
+        "accessCredential": "Utiliser les identifiants enregistrés",
+        "dataUpgrade": "Mettre à niveau les données enregistrées",
+        "dataUpgradeNotice": "Les données enregistrées peuvent être mises à niveau. Les données précédentes sont conservées."
       },
       "dataRecovery": {
         "title": "Restaurer les données conservées",

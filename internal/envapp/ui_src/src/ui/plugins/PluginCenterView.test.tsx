@@ -1361,6 +1361,25 @@ describe('PluginCenterView', () => {
     expect(onCommand).toHaveBeenCalledWith(metricsInstallCommand, expect.any(AbortSignal));
   });
 
+  it('reviews an official data-upgrade declaration without starting installation', async () => {
+    const preview = metricsPlugin.officialCatalog.installPreview!;
+    const item = { ...metricsPlugin, officialCatalog: { ...metricsPlugin.officialCatalog, installPreview: { ...preview, security_summary: { ...preview.security_summary, data_upgrade: { from: [{ version: '1.0.0', shape_sha256: 'b'.repeat(64) }], method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000 } } } } };
+    const onCommand = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => <PluginCenterView projection={{ items: [item] }} loading={false} onCommand={onCommand} onRefresh={vi.fn()} canManagePlugins canOpenPluginSurfaces />, mount);
+    mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:metrics"]')!.click();
+    await Promise.resolve();
+    const review = document.querySelector<HTMLElement>('[data-plugin-install-data-upgrade]')!;
+    expect(controlText(review)).toContain('Upgrade saved data');
+    const details = review.querySelector<HTMLDetailsElement>('details')!;
+    expect(details.open).toBe(false);
+    expect(controlText(details)).toContain('method=data.convert');
+    expect(controlText(details)).toContain('from_version=1.0.0');
+    expect(controlText(details)).toContain('max_runtime_ms=3000');
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
   it('opens an actionable loading dialog immediately when the market preview is missing', async () => {
     const missingPreview = {
       ...metricsPlugin,

@@ -7123,7 +7123,8 @@
           "secretRefs": "宣言された操作で設定済みのシークレットを参照します。この確認画面にはシークレット値を表示しません。",
           "coreActions": "記載された Redeven のコア操作を、宣言された影響とともに要求します。",
           "intents": "記載されたプラグイン操作を、ユーザーまたは承認済みの他の製品画面から呼び出せるようにします。",
-          "surfaces": "Activity または Workbench で開ける、記載されたプラグイン画面を追加します。"
+          "surfaces": "Activity または Workbench で開ける、記載されたプラグイン画面を追加します。",
+          "dataUpgrade": "対応する更新時にプラグインのデータを変換し、以前のデータを保持します。"
         },
         "accessChanged": "この更新により、プラグインが宣言するアクセス範囲が変更されます。続行する前に、強調表示された各宣言を確認してください。",
         "accessUnchanged": "このパッケージでは、プラグインが宣言するアクセス範囲は変更されません。",
@@ -7164,7 +7165,9 @@
         "noNewPermissionGrants": "新しい権限付与なし",
         "accessNetwork": "接続先",
         "accessStorage": "プラグイン自身の保存データを使用",
-        "accessCredential": "保存済みの認証情報を使用"
+        "accessCredential": "保存済みの認証情報を使用",
+        "dataUpgrade": "保存データを更新",
+        "dataUpgradeNotice": "保存データが更新される場合があります。以前のデータは保持されます。"
       },
       "dataRecovery": {
         "title": "保存データを復元",

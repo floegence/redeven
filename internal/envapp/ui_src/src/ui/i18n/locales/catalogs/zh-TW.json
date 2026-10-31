@@ -7123,7 +7123,8 @@
           "secretRefs": "為宣告的操作參照已設定的機密資訊；此檢閱不會顯示機密值。",
           "coreActions": "要求所列 Redeven 核心動作及其宣告的影響。",
           "intents": "公開所列外掛程式操作，供使用者或其他已授權產品介面呼叫。",
-          "surfaces": "加入可在 Activity 或 Workbench 中開啟的外掛程式介面。"
+          "surfaces": "加入可在 Activity 或 Workbench 中開啟的外掛程式介面。",
+          "dataUpgrade": "在符合條件的更新中轉換外掛程式資料，並保留原有資料。"
         },
         "accessChanged": "此更新會變更外掛程式所宣告的存取範圍。請逐一檢閱所有醒目標示的宣告後再繼續。",
         "accessUnchanged": "此套件不會變更外掛程式宣告的存取範圍。",
@@ -7164,7 +7165,9 @@
         "noNewPermissionGrants": "未授予新權限",
         "accessNetwork": "連線服務",
         "accessStorage": "使用外掛程式自身的資料",
-        "accessCredential": "使用已儲存的憑證"
+        "accessCredential": "使用已儲存的憑證",
+        "dataUpgrade": "升級外掛程式資料",
+        "dataUpgradeNotice": "此次更新可能升級已儲存的資料，原有資料仍會保留。"
       },
       "dataRecovery": {
         "title": "還原保留資料",

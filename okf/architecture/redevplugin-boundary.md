@@ -4,7 +4,7 @@ title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
 quality_exception: Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-10-31"
 ---
 # Summary
 
@@ -23,6 +23,8 @@ The released platform owns Web application admission, package-local ES module as
 # Boundaries
 
 Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot write opaque state, mint tokens, fabricate trust or grant broker authority. Wrong, legacy, drifted, tampered or future roots fail unchanged.
+
+Plugin data conversion and exact historical data binding remain released Host responsibilities. Redeven displays verified review evidence and calls the existing update APIs; it does not interpret converter code, copy generations, migrate the platform database, or retry uncertain writes.
 
 # Evidence
 

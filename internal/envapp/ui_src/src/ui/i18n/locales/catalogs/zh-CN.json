@@ -7123,7 +7123,8 @@
           "secretRefs": "为声明的操作引用已配置的机密信息；此检查不会显示机密值。",
           "coreActions": "请求所列 Redeven 核心操作及其声明的影响。",
           "intents": "提供所列插件操作，供用户或其他已授权的产品界面调用。",
-          "surfaces": "添加可在 Activity 或 Workbench 中打开的插件界面。"
+          "surfaces": "添加可在 Activity 或 Workbench 中打开的插件界面。",
+          "dataUpgrade": "在符合条件的更新中转换插件数据，并保留原有数据。"
         },
         "accessChanged": "此次更新更改了插件声明的访问范围。继续前，请检查所有高亮显示的声明。",
         "accessUnchanged": "此插件包未更改插件声明的访问范围。",
@@ -7164,7 +7165,9 @@
         "noNewPermissionGrants": "不新增授权",
         "accessNetwork": "连接服务",
         "accessStorage": "使用插件自身的数据",
-        "accessCredential": "使用已保存的凭据"
+        "accessCredential": "使用已保存的凭据",
+        "dataUpgrade": "升级插件数据",
+        "dataUpgradeNotice": "本次更新可能升级已保存的数据，原有数据仍会保留。"
       },
       "dataRecovery": {
         "title": "恢复保留数据",

@@ -1,8 +1,16 @@
 import type { PluginExternalPackageSecuritySummary } from './pluginTypes';
 
+export function dataUpgradeFacts(upgrade: NonNullable<PluginExternalPackageSecuritySummary['data_upgrade']>): string[] {
+  return [
+    'method=' + upgrade.method,
+    ...upgrade.from.map((previous) => 'from_version=' + previous.version + '; shape_sha256=' + previous.shape_sha256),
+    'max_bytes=' + upgrade.max_bytes + '; max_runtime_ms=' + upgrade.max_runtime_ms,
+  ];
+}
+
 export type SecurityCategory = keyof Pick<
   PluginExternalPackageSecuritySummary,
-  'permissions' | 'methods' | 'capability_contracts' | 'workers' | 'process' | 'background' | 'network' | 'storage' | 'secret_refs' | 'core_actions' | 'intents' | 'surfaces'
+  'permissions' | 'methods' | 'capability_contracts' | 'workers' | 'process' | 'background' | 'data_upgrade' | 'network' | 'storage' | 'secret_refs' | 'core_actions' | 'intents' | 'surfaces'
 >;
 
 export type SecurityDeclaration = {
@@ -35,6 +43,7 @@ export const securityCategoryOrder: readonly SecurityCategory[] = [
   'capability_contracts',
   'process',
   'background',
+  'data_upgrade',
   'workers',
   'network',
   'storage',
@@ -58,6 +67,7 @@ export function securityDeclarationIsSensitive(declaration: SecurityDeclaration)
   return declaration.category === 'workers'
     || declaration.category === 'process'
     || declaration.category === 'background'
+    || declaration.category === 'data_upgrade'
     || declaration.category === 'network'
     || declaration.category === 'secret_refs'
     || declaration.category === 'core_actions';
@@ -75,6 +85,8 @@ export function securityDeclarationHighlight(declaration: SecurityDeclaration): 
     }
     case 'background':
       return (declaration.value as NonNullable<PluginExternalPackageSecuritySummary['background']>).strategy;
+    case 'data_upgrade':
+      return (declaration.value as NonNullable<PluginExternalPackageSecuritySummary['data_upgrade']>).method;
     case 'network':
       return list((declaration.value as PluginExternalPackageSecuritySummary['network'][number]).destinations);
     case 'secret_refs':
@@ -151,6 +163,10 @@ export function projectSecurityDeclarations(summary: PluginExternalPackageSecuri
     add('background', summary.background.worker_id, [
       `strategy=${summary.background.strategy}; worker_id=${summary.background.worker_id}`,
     ], summary.background);
+  }
+  if (summary.data_upgrade) {
+    const upgrade = summary.data_upgrade;
+    add('data_upgrade', 'saved-data', dataUpgradeFacts(upgrade), upgrade);
   }
   for (const value of summary.network) {
     add('network', value.connector_id, [

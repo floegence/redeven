@@ -780,7 +780,7 @@ function InspectionHighlights(props: {
   };
   const showHighlights = () => props.hasPreviousSummary || props.declarations.length === 0
     || props.summary.network.length > 0 || props.summary.storage.length > 0
-    || permissions().length > 0 || Boolean(props.summary.process) || Boolean(props.summary.background)
+    || permissions().length > 0 || Boolean(props.summary.process) || Boolean(props.summary.background) || Boolean(props.summary.data_upgrade)
     || props.summary.secret_refs.length > 0 || methods().length > 0 || props.summary.core_actions.length > 0;
   return (
     <Show when={showHighlights()}>
@@ -820,6 +820,11 @@ function InspectionHighlights(props: {
           <Show when={props.summary.process}>
             <div data-external-plugin-process-access>
               <AccessRow icon={<AlertTriangle class="h-4 w-4" />} title={i18n.t('uiCopy.plugin.external.localProcessAccess')} change={changeFor('process', 'local')} caution />
+            </div>
+          </Show>
+          <Show when={props.summary.data_upgrade}>
+            <div data-external-plugin-data-upgrade>
+              <AccessRow icon={<Package class="h-4 w-4" />} title={i18n.t('uiCopy.plugin.external.dataUpgrade')} change={changeFor('data_upgrade', 'saved-data')} />
             </div>
           </Show>
           <Show when={props.summary.background}>
@@ -1222,6 +1227,7 @@ function securityCategoryLabel(category: SecurityCategory, i18n: ReturnType<type
     capability_contracts: 'uiCopy.plugin.external.capabilityContracts',
     process: 'uiCopy.plugin.external.process',
     background: 'uiCopy.plugin.external.background',
+    data_upgrade: 'uiCopy.plugin.external.dataUpgrade',
     workers: 'uiCopy.plugin.external.workers',
     network: 'uiCopy.plugin.external.network',
     storage: 'uiCopy.plugin.external.storage',
@@ -1240,6 +1246,7 @@ function securityCategoryPurpose(category: SecurityCategory, i18n: ReturnType<ty
     capability_contracts: 'uiCopy.plugin.external.purpose.capabilityContracts',
     process: 'uiCopy.plugin.external.purpose.process',
     background: 'uiCopy.plugin.external.purpose.background',
+    data_upgrade: 'uiCopy.plugin.external.purpose.dataUpgrade',
     workers: 'uiCopy.plugin.external.purpose.workers',
     network: 'uiCopy.plugin.external.purpose.network',
     storage: 'uiCopy.plugin.external.purpose.storage',
