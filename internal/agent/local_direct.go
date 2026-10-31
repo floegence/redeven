@@ -137,8 +137,8 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	}
 	generation, err := a.activatePluginSession(metaCopy, opts.PluginCredentialHash, opts.HasPluginCredential, opts.AccessSessionID)
 	if err != nil {
-		a.removeActiveSession(channelID)
-		return err
+		a.log.Warn("plugin session unavailable; host channel remains active", "channel_id", channelID, "error", err)
+		err = nil
 	}
 	a.mu.Lock()
 	if active := a.sessions[channelID]; active != nil {
@@ -220,7 +220,7 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	if err := sessCtx.Err(); err != nil {
 		return err
 	}
-	if opts.OnPluginSessionReady != nil {
+	if generation != 0 && opts.OnPluginSessionReady != nil {
 		opts.OnPluginSessionReady()
 	}
 

@@ -6640,6 +6640,7 @@
       "loadingOfficial": "Carregando plugins...",
       "preparingFeatures": "Preparando recursos de plugins",
       "marketUnavailable": "O catálogo de plugins está indisponível. Os plugins instalados continuam disponíveis; tente novamente para verificar se há novas versões.",
+      "servicesUnavailable": "Os plugins estão indisponíveis. Os demais recursos continuam funcionando.",
       "official": "Oficial",
       "verified": "Verificado",
       "unsigned": "Não assinado",

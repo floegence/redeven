@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -225,5 +227,45 @@ func TestMarkSessionConnectedFinalizesDurableGenerationWhenSessionIsReplacedDuri
 	a.mu.Unlock()
 	if current != replacement {
 		t.Fatal("replacement cleanup removed the new active session")
+	}
+}
+
+func TestMarkSessionConnectedSurvivesPluginBindingFailure(t *testing.T) {
+	active := &activeSession{meta: session.Meta{ChannelID: "host-live"}}
+	a := &Agent{
+		log:                    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions:               map[string]*activeSession{"host-live": active},
+		pluginSessions:         newAuthenticatedPluginSessionRegistry(),
+		pluginSessionLifecycle: &failedPluginSessionLifecycle{},
+	}
+	if err := a.markSessionConnected("host-live", 1234); err != nil {
+		t.Fatalf("plugin failure blocked host channel: %v", err)
+	}
+	if active.connectedAtUnixMs != 1234 || active.pluginGeneration != 0 {
+		t.Fatalf("host channel state: %+v", active)
+	}
+	if _, release, ok := a.AcquirePluginSession("host-live"); ok {
+		release()
+		t.Fatal("failed binding granted plugin authority")
+	}
+}
+
+func TestMarkSessionConnectedSurvivesPluginBindingPanic(t *testing.T) {
+	active := &activeSession{meta: session.Meta{ChannelID: "host-live"}}
+	a := &Agent{
+		log:                    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions:               map[string]*activeSession{"host-live": active},
+		pluginSessions:         newAuthenticatedPluginSessionRegistry(),
+		pluginSessionLifecycle: &recordingPluginSessionLifecycle{onBind: func() { panic("failed plugin binding") }},
+	}
+	if err := a.markSessionConnected("host-live", 1234); err != nil {
+		t.Fatalf("plugin panic blocked host channel: %v", err)
+	}
+	if active.connectedAtUnixMs != 1234 || active.pluginGeneration != 0 {
+		t.Fatal("incorrect session state after panic")
+	}
+	if _, release, ok := a.AcquirePluginSession("host-live"); ok {
+		release()
+		t.Fatal("panicked binding granted plugin authority")
 	}
 }

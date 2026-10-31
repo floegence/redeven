@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -82,6 +83,66 @@ func (sess *acceptedNotificationSession) WaitTermination(ctx context.Context) (f
 	}
 }
 func (*acceptedNotificationSession) Close() error { return nil }
+
+type failedPluginSessionLifecycle struct {
+	recordingPluginSessionLifecycle
+}
+
+func (*failedPluginSessionLifecycle) BindPluginSessionGeneration(context.Context, *session.Meta, string, string) error {
+	return errors.New("plugin storage unavailable")
+}
+
+func TestLocalDirectSessionSurvivesPluginBindingFailure(t *testing.T) {
+	manager := terminal.NewManager("/bin/sh", t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Cleanup(manager.Cleanup)
+	peer := &recordingNotificationPeer{notifications: make(chan uint32, 4)}
+	sess := &acceptedNotificationSession{peer: peer, started: make(chan struct{}), release: make(chan struct{})}
+	a := &Agent{log: slog.New(slog.NewTextHandler(io.Discard, nil)), accessGate: accessgate.New(accessgate.Options{}), term: manager, sessions: make(map[string]*activeSession), pluginSessions: newAuthenticatedPluginSessionRegistry(), pluginSessionLifecycle: &failedPluginSessionLifecycle{}}
+	meta := &session.Meta{ChannelID: "plugin-failed-host-live", CanRead: true, CanWrite: true, CanExecute: true, FloeApp: FloeAppRedevenAgent, SessionKind: "envapp_rpc"}
+	done := make(chan error, 1)
+	ready := make(chan struct{}, 1)
+	go func() {
+		done <- a.ServeLocalDirectSession(t.Context(), sess, meta, LocalDirectSessionOptions{AccessSessionID: "direct:plugin-failed-host-live", OnPluginSessionReady: func() { ready <- struct{}{} }})
+	}()
+	select {
+	case <-sess.started:
+	case err := <-done:
+		t.Fatalf("plugin failure closed host session: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("host session did not start")
+	}
+	defer func() {
+		close(sess.release)
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("host session shutdown: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Error("host session did not finish")
+		}
+	}()
+	select {
+	case <-ready:
+		t.Fatal("failed plugin binding advertised readiness")
+	default:
+	}
+	if _, release, ok := a.AcquirePluginSession(meta.ChannelID); ok {
+		release()
+		t.Fatal("failed plugin binding granted authority")
+	}
+	if _, err := manager.CreateSession("host-survives-plugin", ""); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case id := <-peer.notifications:
+		if id != terminal.TypeID_TERMINAL_SESSIONS_CHANGED {
+			t.Fatalf("unexpected event %d", id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ordinary terminal notification failed")
+	}
+}
 
 type blockingPluginSessionLifecycle struct {
 	started chan struct{}

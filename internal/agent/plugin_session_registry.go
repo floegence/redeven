@@ -421,7 +421,13 @@ func (a *Agent) TerminalizePluginSession(generation PluginSessionGeneration) boo
 	return a != nil && a.pluginSessions != nil && a.pluginSessions.terminalize(generation)
 }
 
-func (a *Agent) activatePluginSession(meta session.Meta, credentialHash [sha256.Size]byte, hasCredential bool, accessSessionID string) (PluginSessionGeneration, error) {
+func (a *Agent) activatePluginSession(meta session.Meta, credentialHash [sha256.Size]byte, hasCredential bool, accessSessionID string) (generation PluginSessionGeneration, err error) {
+	defer func() {
+		if failure := recover(); failure != nil {
+			generation = 0
+			err = fmt.Errorf("plugin session binding panic: %v", failure)
+		}
+	}()
 	if a == nil || a.pluginSessions == nil || a.pluginSessionLifecycle == nil {
 		return 0, errors.New("plugin session lifecycle is unavailable")
 	}

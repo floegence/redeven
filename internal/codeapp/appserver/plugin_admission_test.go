@@ -38,6 +38,26 @@ func TestPluginPlatformAdmissionReleasedAfterHTTPHandler(t *testing.T) {
 	}
 }
 
+func TestPluginPlatformPanicReleasesOnlyItsAdmission(t *testing.T) {
+	srv := newDistRouteTestServer(t, fstest.MapFS{}, nil)
+	var releases atomic.Int32
+	srv.acquirePluginSession = func(id string) (*session.Meta, func(), bool) {
+		return &session.Meta{ChannelID: id}, func() { releases.Add(1) }, true
+	}
+	srv.pluginPlatform = http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("plugin request failed") })
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected net/http panic boundary")
+			}
+		}()
+		srv.servePluginPlatform(httptest.NewRecorder(), WithLocalUIEnvRoute(httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil)))
+	}()
+	if releases.Load() != 1 {
+		t.Fatal("panic leaked plugin admission and would block host channel teardown")
+	}
+}
+
 func TestPluginPlatformHijackHoldsAdmissionUntilConnectionClose(t *testing.T) {
 	t.Parallel()
 

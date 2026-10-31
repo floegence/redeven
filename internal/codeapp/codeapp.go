@@ -382,42 +382,45 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
-	pluginMarket, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
-		Origin:             strings.TrimSpace(os.Getenv("REDEVEN_PLUGIN_MARKET_ORIGIN")),
-		CachePath:          filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
-		RedevenVersion:     opts.RedevenVersion,
-		ReDevPluginVersion: redevpluginversion.CurrentPlatformVersion(),
-	})
-	if err != nil {
-		terminalLayoutCleanup()
-		_ = reg.Close()
-		_ = pfSvc.Close()
-		_ = notesSvc.Close()
-		_ = workbenchLayoutSvc.Close()
-		_ = aiReady.Close()
-		return nil, err
-	}
+	pluginIntegration, pluginErr := openPluginIntegration(ctx, func(pluginCtx context.Context) (*redevpluginintegration.Integration, error) {
+		pluginMarket, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+			Origin:             strings.TrimSpace(os.Getenv("REDEVEN_PLUGIN_MARKET_ORIGIN")),
+			CachePath:          filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
+			RedevenVersion:     opts.RedevenVersion,
+			ReDevPluginVersion: redevpluginversion.CurrentPlatformVersion(),
+		})
+		if err != nil {
+			return nil, err
+		}
 
-	pluginIntegration, err := redevpluginintegration.New(ctx, redevpluginintegration.Options{
-		StateDir:     stateAbs,
-		AgentHomeDir: agentHomeDir,
-		ResolveWorkspacePath: func(ctx context.Context, codeSpaceID string) (string, bool, error) {
-			space, err := reg.GetSpace(ctx, codeSpaceID)
-			if err != nil || space == nil {
-				return "", false, err
-			}
-			return space.WorkspacePath, true, nil
-		},
-		PermissionPolicy:     opts.PermissionPolicy,
-		RuntimePath:          strings.TrimSpace(opts.ReDevPluginRuntimePath),
-		ResolveSessionMeta:   resolvePluginPlatformSessionMeta(opts),
-		Audit:                opts.Audit,
-		Diagnostics:          opts.Diagnostics,
-		RuntimeAuthority:     opts.PluginRuntimeAuthority,
-		PluginMarket:         pluginMarket,
-		ResolveProcessSecret: opts.ResolveProcessSecret,
+		return redevpluginintegration.New(pluginCtx, redevpluginintegration.Options{
+			StateDir:     stateAbs,
+			AgentHomeDir: agentHomeDir,
+			ResolveWorkspacePath: func(ctx context.Context, codeSpaceID string) (string, bool, error) {
+				space, err := reg.GetSpace(ctx, codeSpaceID)
+				if err != nil || space == nil {
+					return "", false, err
+				}
+				return space.WorkspacePath, true, nil
+			},
+			PermissionPolicy:     opts.PermissionPolicy,
+			RuntimePath:          strings.TrimSpace(opts.ReDevPluginRuntimePath),
+			ResolveSessionMeta:   resolvePluginPlatformSessionMeta(opts),
+			Audit:                opts.Audit,
+			Diagnostics:          opts.Diagnostics,
+			RuntimeAuthority:     opts.PluginRuntimeAuthority,
+			PluginMarket:         pluginMarket,
+			ResolveProcessSecret: opts.ResolveProcessSecret,
+		})
 	})
-	if err != nil {
+	if pluginErr != nil {
+		logger.Error("plugin subsystem unavailable; core runtime remains available", "error", pluginErr)
+		if opts.Diagnostics != nil {
+			opts.Diagnostics.Append(diagnostics.Event{Scope: "plugins", Kind: "startup_failed", Message: "Plugin subsystem unavailable", Detail: map[string]any{"error": pluginErr.Error()}})
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		_ = pluginIntegration.Close()
 		terminalLayoutCleanup()
 		_ = reg.Close()
 		_ = pfSvc.Close()
@@ -461,8 +464,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		EndPluginSession:              opts.EndPluginSession,
 		ConfigPath:                    strings.TrimSpace(opts.ConfigPath),
 		SecretsStore:                  secrets,
-		PluginPlatform:                pluginIntegration.Handler(),
-		PluginWebSurface:              pluginIntegration.WebSurfaceHandler(),
+		PluginPlatform:                pluginPlatformHandler(pluginIntegration),
+		PluginWebSurface:              pluginWebSurfaceHandler(pluginIntegration),
 		PluginMarketSnapshot:          pluginIntegration.MarketSnapshot,
 		PluginMarketRefresh:           pluginIntegration.RefreshMarket,
 		PluginMarketSubscribe:         pluginIntegration.SubscribeMarketRefresh,
@@ -603,8 +606,13 @@ func (s *Service) AppServer() *appserver.Server {
 }
 
 func (s *Service) BindPluginSessionGeneration(ctx context.Context, meta *session.Meta, processGeneration, sessionGeneration string) error {
-	if s == nil || s.pluginIntegration == nil {
+	if s == nil {
 		return errors.New("plugin integration is unavailable")
+	}
+	if s.pluginIntegration == nil {
+		// The authenticated host channel survives plugin startup failure.
+		// The unavailable handler rejects every plugin operation.
+		return nil
 	}
 	generation, err := redevpluginintegration.PluginSessionGenerationFromMeta(meta, processGeneration, sessionGeneration)
 	if err != nil {
@@ -614,8 +622,11 @@ func (s *Service) BindPluginSessionGeneration(ctx context.Context, meta *session
 }
 
 func (s *Service) RecordPluginSessionTerminalIntent(ctx context.Context, meta *session.Meta, processGeneration, sessionGeneration string) error {
-	if s == nil || s.pluginIntegration == nil {
+	if s == nil {
 		return errors.New("plugin integration is unavailable")
+	}
+	if s.pluginIntegration == nil {
+		return nil
 	}
 	generation, err := redevpluginintegration.PluginSessionGenerationFromMeta(meta, processGeneration, sessionGeneration)
 	if err != nil {
@@ -625,8 +636,11 @@ func (s *Service) RecordPluginSessionTerminalIntent(ctx context.Context, meta *s
 }
 
 func (s *Service) MaintainTerminalPluginSession(ctx context.Context, meta *session.Meta, processGeneration, sessionGeneration string) error {
-	if s == nil || s.pluginIntegration == nil {
+	if s == nil {
 		return errors.New("plugin integration is unavailable")
+	}
+	if s.pluginIntegration == nil {
+		return nil
 	}
 	generation, err := redevpluginintegration.PluginSessionGenerationFromMeta(meta, processGeneration, sessionGeneration)
 	if err != nil {

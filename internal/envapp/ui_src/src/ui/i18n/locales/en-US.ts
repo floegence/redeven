@@ -702,6 +702,7 @@ export const enUS = defineDictionary({
       loadingOfficial: 'Loading plugins...',
       preparingFeatures: 'Preparing plugin features',
       marketUnavailable: 'The plugin catalog is unavailable. Installed plugins remain available; retry to check for new releases.',
+      servicesUnavailable: 'Plugins are unavailable. Other features remain available.',
       official: 'Official',
       verified: 'Verified',
       unsigned: 'Unsigned',

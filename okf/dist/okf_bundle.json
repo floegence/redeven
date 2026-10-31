@@ -15730,15 +15730,15 @@
         "title": "ReDevPlugin host integration boundary",
         "type": "Architecture Boundary"
       },
-      "body_length": 2347,
+      "body_length": 3739,
       "summary": "Redeven consumes the coordinated published ReDevPlugin Go, npm, Rust and machine-contract artifacts without forking platform mechanics. It owns session mapping, source policy/review, placement, product runtime builds and business adapters. Missing/unverifiable identity, lifecycle, interaction, package or runtime contracts fail closed without local compatibility or sibling-source fallback.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Upstream owns validation/hashes/trust, inspection and registry state, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secret brokers, supervision/IPC/WASM, quotas/revocation, control storage, generated clients/errors/schemas and release metadata.\n- Go/npm/runtime/machine artifacts form one coordinated release; frontend cannot downgrade independently. Current pins live in manifests and are checked by the dependency-contract test.\n- Local bootstrap keeps its bounded credential admission before session readiness. [Package lifecycle](redevplugin-package-lifecycle.md) owns inspection/install/cache/readiness; [Redeven adapters](redevplugin-redeven-adapters.md) owns host modules and presentation.\n\n## Ordinary Web surfaces\n\nThe released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.",
-          "char_count": 1211
+          "body": "- Upstream owns validation/hashes/trust, inspection and registry state, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secret brokers, supervision/IPC/WASM, quotas/revocation, control storage, generated clients/errors/schemas and release metadata.\n- Go/npm/runtime/machine artifacts form one coordinated release; frontend cannot downgrade independently. Current pins live in manifests and are checked by the dependency-contract test.\n- Local bootstrap keeps its bounded credential admission before session readiness. [Package lifecycle](redevplugin-package-lifecycle.md) owns inspection/install/cache/readiness; [Redeven adapters](redevplugin-redeven-adapters.md) owns host modules and presentation.\n\n## Product availability\n\nPlugin subsystem readiness is never a prerequisite for Runtime readiness or\nordinary host sessions. A plugin market, package, runtime, storage or initialization\nfailure is diagnosed locally and leaves files, terminals, Notes, Workbench and\nother non-plugin services available. An unavailable subsystem exposes the released\n`PLUGIN_RUNTIME_UNAVAILABLE` failure without dispatching plugin effects; rejected\nmutation requests report `not_committed`. Plugin Center localizes the failure\ninside its own view rather than replacing the product shell. The launcher never\nclaims an unreadable inventory is empty, and automatic subsystem failure does not\ninterrupt unrelated work with a global toast. Initialization has a ten-second\nbudget; cancellation rejects late results and closes any acquired integration.\nCaller-owned construction resources unwind on errors and recovered initialization\npanics. This boundary does not mask cancellation of the host's own startup.\n\nHost channel authentication and plugin execution admission are separate facts.\nA failed or panicked plugin generation binding grants no plugin authority and cannot close\nthe host channel. Plugin request panics release their admission while the HTTP\nserver contains the request failure. Platform storage remains opaque: isolation\nmust not delete, rewrite or silently reauthorize incompatible plugin state.\n\n## Ordinary Web surfaces\n\nThe released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.",
+          "char_count": 2603
         },
         {
           "id": "boundaries",
@@ -31716,5 +31716,5 @@
       ]
     }
   ],
-  "source_sha256": "6db5748838d21f3b5c61cf7b5646432ab9c84ba97b18b1755f65bc4b06d912e3"
+  "source_sha256": "c852add6e99f7db3c168c0f4744c4832ab3b82549d6057e17f6038d3fa2a92f7"
 }

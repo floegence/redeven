@@ -417,7 +417,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                 </For>
               </ul>
 
-              <Show when={!props.model.loading && pluginTiles().length === 0}>
+              <Show when={!props.model.loading && !props.model.errorMessage && pluginTiles().length === 0}>
                 <div class={cn('flex min-h-40 flex-col items-center justify-center text-center', PLUGIN_ENTER_MOTION_CLASS)}>
                   <Package class="h-7 w-7 text-muted-foreground" />
                   <p class="mt-3 max-w-sm text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.noInstalled')}</p>

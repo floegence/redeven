@@ -64,7 +64,7 @@ type Integration struct {
 	closers                []func() error
 }
 
-func New(ctx context.Context, opts Options) (*Integration, error) {
+func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 	if ctx == nil {
 		return nil, errors.New("context is required")
 	}
@@ -105,14 +105,19 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	root := stateAbs
 
 	var closers []func() error
-	closeOnError := func() { _ = closeAll(closers) }
+	// Keep all caller-owned resources scoped to construction, including panic
+	// unwinding to the product's plugin availability boundary.
+	defer func() {
+		if opened == nil {
+			_ = closeAll(closers)
+		}
+	}()
 	var releaseModule *host.ReleaseModule
 	var releaseProvider *officialReleaseProvider
 	var marketSnapshot *pluginmarket.Snapshot
 	if opts.PluginMarket != nil {
 		releaseStage, releaseErr := externalsource.NewStageStore(filepath.Join(root, "release-artifacts"))
 		if releaseErr != nil {
-			closeOnError()
 			return nil, releaseErr
 		}
 		closers = append(closers, releaseStage.Close)
@@ -120,7 +125,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			Stage: releaseStage, SourceID: "redeven.official-release",
 		})
 		if releaseErr != nil {
-			closeOnError()
 			return nil, releaseErr
 		}
 		// This disposable byte cache is owned and validated by ReDevPlugin. An
@@ -137,7 +141,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		}
 		releaseModule, releaseProvider, releaseErr = newOfficialReleaseModulePending(releaseFetcher, documentCache)
 		if releaseErr != nil {
-			closeOnError()
 			return nil, releaseErr
 		}
 		if snapshot, ok := opts.PluginMarket.CachedSnapshot(); ok {
@@ -150,7 +153,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 
 	observabilityStore, err := rpobservability.NewSQLiteStore(ctx, filepath.Join(root, "observability.sqlite"))
 	if err != nil {
-		closeOnError()
 		return nil, err
 	}
 	closers = append(closers, observabilityStore.Close)
@@ -158,34 +160,32 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 
 	secretStore, err := secrets.NewSQLiteStore(ctx, filepath.Join(root, "secrets.sqlite"))
 	if err != nil {
-		closeOnError()
 		return nil, err
 	}
 	closers = append(closers, secretStore.Close)
 
 	assetStore, err := pluginpkg.NewFileAssetStore(filepath.Join(root, "assets"))
 	if err != nil {
-		closeOnError()
 		return nil, err
 	}
+	assetStoreOwned := true
+	defer func() {
+		if assetStoreOwned {
+			_ = assetStore.Close()
+		}
+	}()
 	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy)
 	if err != nil {
-		_ = assetStore.Close()
-		closeOnError()
 		return nil, err
 	}
 	ioModule, err := newIOModule(opts.AgentHomeDir, sessions.resolver.cache, opts.ResolveWorkspacePath)
 	if err != nil {
-		_ = assetStore.Close()
-		closeOnError()
 		return nil, err
 	}
 	connectivityBroker := connectivity.NewMemoryBroker()
 	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
 	processSupervisor, err := newProcessSupervisor(sessions, opts.ResolveProcessSecret)
 	if err != nil {
-		_ = assetStore.Close()
-		closeOnError()
 		return nil, err
 	}
 	runtimeModule, err := newOfficialRuntimeModule(ctx, runtimeModuleDependencies{
@@ -193,10 +193,16 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		ExecutionRoot: filepath.Join(root, "runtime-exec"),
 	})
 	if err != nil {
-		_ = assetStore.Close()
-		closeOnError()
 		return nil, err
 	}
+
+	defer func() {
+		if opened == nil && runtimeModule != nil {
+			// Close only caller-owned state; the released module refuses to close
+			// a capability already transferred to a Host.
+			_, _ = runtimeModule.Close(context.Background())
+		}
+	}()
 
 	hostConfig := host.Config{
 		StateRoot: root,
@@ -228,25 +234,22 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	h, err := host.Open(ctx, hostConfig)
 	if err != nil {
-		var configErr *host.HostConfigError
-		if runtimeModule != nil && errors.As(err, &configErr) && configErr.RuntimeModuleDisposition() == host.RuntimeModuleCallerOwned {
-			_, _ = runtimeModule.Close(context.Background())
-		}
-		_ = assetStore.Close()
-		closeOnError()
 		return nil, err
 	}
 
+	assetStoreOwned = false
+	defer func() {
+		if opened == nil {
+			_ = h.Close()
+		}
+	}()
+
 	handler, err := httpadapter.NewHandler(httpadapter.Dependencies{Host: h, Guard: sessions})
 	if err != nil {
-		_ = h.Close()
-		closeOnError()
 		return nil, err
 	}
 	webHandler, err := httpadapter.NewWebSurfaceHandler(h, trustedWebSurfaceOrigin)
 	if err != nil {
-		_ = h.Close()
-		closeOnError()
 		return nil, err
 	}
 	integration := &Integration{

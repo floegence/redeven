@@ -815,6 +815,7 @@ func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request) {
 		release:        release,
 		channel:        channelID,
 	}
+	defer admissionWriter.releaseAfterServe()
 	g.pluginPlatform.ServeHTTP(admissionWriter, next)
 	admissionWriter.releaseAfterServe()
 	if isPluginSessionEndRequest(r) && admissionWriter.committedSuccess() && g.endPluginSession != nil {

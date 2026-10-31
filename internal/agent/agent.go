@@ -1806,7 +1806,7 @@ func (a *Agent) markSessionConnected(channelID string, connectedAtUnixMs int64) 
 
 	generation, err := a.activatePluginSession(meta, [32]byte{}, false, "")
 	if err != nil {
-		return err
+		a.log.Warn("plugin session unavailable; host channel remains active", "channel_id", channelID, "error", err)
 	}
 
 	a.mu.Lock()

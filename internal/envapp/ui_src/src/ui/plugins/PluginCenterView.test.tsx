@@ -1,4 +1,5 @@
 import { controlText } from '../../testSupport/controlText';
+import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
@@ -3127,6 +3128,20 @@ describe('PluginCenterView', () => {
     expect(controlText(error)).toContain('environment administrator');
     findDocumentButton('Retry').click();
     expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a subsystem failure local and hides technical startup details', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView projection={{ ...projection, items: [] }} loading={false}
+        error={new PluginPlatformRequestError('PLUGIN_RUNTIME_UNAVAILABLE', 'private control-store failure')}
+        onCommand={vi.fn()} onRefresh={vi.fn()} canManagePlugins canOpenPluginSurfaces />
+    ), mount);
+    expect(controlText(mount)).toContain('Plugins are unavailable. Other features remain available.');
+    expect(controlText(mount)).not.toContain('private control-store failure');
+    expect(controlText(mount)).not.toContain('No plugins in this view.');
+    expect(controlText(mount)).toContain('Retry');
   });
 
   it('admits one management mutation at a time and supplies an abort signal', async () => {

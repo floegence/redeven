@@ -66,7 +66,7 @@ import {
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
 import {
   EnvContext,
@@ -1726,7 +1726,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       setPluginRuntimeRecoveryComplete(true);
       setPluginRuntimeRecoveryByInstanceID({});
-      notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
+      // The inventory error stays visible in plugin surfaces without interrupting
+      // unrelated work during automatic startup recovery.
+      if (!(error instanceof PluginPlatformRequestError && error.errorCode === 'PLUGIN_RUNTIME_UNAVAILABLE')) {
+        notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
+      }
     });
   });
   const retryPluginRuntimeRecovery = (pluginInstanceID?: string) => {
@@ -1817,14 +1821,16 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     setPluginSurfacePhases({});
   });
 
-  const pluginPanelModel = createMemo(() => buildPluginPanelModel(
-    pluginInventoryProjection() ?? { items: [] },
-    pluginInventoryError() ? getErrorMessage(pluginInventoryError()) : undefined,
-    {
+  const pluginPanelModel = createMemo(() => {
+    const error = pluginInventoryError();
+    const message = error instanceof PluginPlatformRequestError && error.errorCode === 'PLUGIN_RUNTIME_UNAVAILABLE'
+      ? i18n.t('uiCopy.plugin.servicesUnavailable')
+      : error ? getErrorMessage(error) : undefined;
+    return buildPluginPanelModel(pluginInventoryProjection() ?? { items: [] }, message, {
       canOpenSurfaces: canOpenPluginSurfaces(),
       loading: pluginInventoryInitialPending(),
-    },
-  ));
+    });
+  });
   const pluginPinMenuItem = createMemo(() => {
     const inventoryKey = pluginPinMenu()?.inventoryKey;
     if (!inventoryKey) return undefined;

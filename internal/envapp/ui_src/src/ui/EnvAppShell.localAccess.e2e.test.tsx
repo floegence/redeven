@@ -2492,6 +2492,33 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('keeps a plugin subsystem failure local while the host shell remains usable', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const failure = new PluginPlatformRequestError('PLUGIN_RUNTIME_UNAVAILABLE', 'internal plugin storage failure', {}, 'not_committed');
+    pluginLifecycleMocks.loadInventoryProjection.mockRejectedValue(failure);
+    pluginLifecycleMocks.recoverEnabled.mockRejectedValue(failure);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 1, 40);
+      await flushAsync();
+      expect(notificationErrorMock).not.toHaveBeenCalled();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps?.model?.errorMessage), 40);
+      expect(pluginPanelState.lastProps.model.errorMessage).toBe('Plugins are unavailable. Other features remain available.');
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      expect(pluginCenterViewState.lastProps.error).toBe(failure);
+      expect(host.querySelector('[data-activity-id="files"]')).not.toBeNull();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps an enabled recovery failure installed and exposes retry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

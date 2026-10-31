@@ -165,6 +165,13 @@ describe('PluginPanel', () => {
     expect(dialog.textContent).not.toContain('No installed plugins yet.');
   });
 
+  it('does not claim the inventory is empty when plugin services fail', () => {
+    mountPanel({ model: buildPluginPanelModel({ items: [] }, 'Plugins are unavailable') });
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('Plugins are unavailable');
+    expect(dialog.textContent).not.toContain('No installed plugins yet.');
+  });
+
   it('stages the Activity flyout without a global backdrop', () => {
     const trigger = createTrigger();
     mountPanel({ trigger, placement: 'activity' });

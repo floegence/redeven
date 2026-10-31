@@ -1,4 +1,5 @@
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
+import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 import { FeedbackIndicator, type FeedbackIndicatorEntry, StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import './plugin-center-compact.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
@@ -360,6 +361,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const loading = createMemo(() => props.loading || Boolean(props.preparing));
   const errorMessage = createMemo(() => {
     const error = props.error ?? commandError();
+    if (error instanceof PluginPlatformRequestError && error.errorCode === 'PLUGIN_RUNTIME_UNAVAILABLE') return i18n.t('uiCopy.plugin.servicesUnavailable');
     if (error) return messageFromUnknown(error);
     return projection().marketUnavailable ? i18n.t('uiCopy.plugin.marketUnavailable') : undefined;
   });
@@ -882,7 +884,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                 />
               )}
             </For>
-            <Show when={!loading() && visibleItems().length === 0}>
+            <Show when={!loading() && !errorMessage() && visibleItems().length === 0}>
               <div class={cn('col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-[length:var(--floe-type-body)] text-muted-foreground', PLUGIN_ENTER_MOTION_CLASS)}>
                 <Show when={activeTab() === 'updates' && updateSuccess()} fallback={<Search class="h-6 w-6" />}>
                   <CheckCircle class="h-6 w-6 text-[var(--redeven-status-success-foreground)]" />

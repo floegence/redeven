@@ -6640,6 +6640,7 @@
       "loadingOfficial": "プラグインを読み込んでいます...",
       "preparingFeatures": "プラグイン機能を準備中",
       "marketUnavailable": "プラグインカタログを利用できません。インストール済みのプラグインは引き続き利用できます。新しいリリースを確認するには、もう一度お試しください。",
+      "servicesUnavailable": "プラグインを利用できません。他の機能は引き続き使用できます。",
       "official": "公式",
       "verified": "検証済み",
       "unsigned": "未署名",
