@@ -37,6 +37,18 @@ the host channel. Plugin request panics release their admission while the HTTP
 server contains the request failure. Platform storage remains opaque: isolation
 must not delete, rewrite or silently reauthorize incompatible plugin state.
 
+## Retained package history
+
+ReDevPlugin 3.11.2 owns the bounded read-only projection of signed pre-Web v9
+installation records and version history. Normal migration retains their exact
+canonical manifests, hashes, signature facts and data generations. Their current
+Host action state is incompatible; they are manageable but cannot execute or be
+enabled. A user may explicitly update the same installation to a current Web
+package without deleting its history. No VNode renderer or fabricated Web
+declaration exists. Redeven consumes released inventory and action state without
+parsing or rewriting platform-owned records. Unknown or corrupt state remains
+unchanged and unavailable only within the plugin boundary.
+
 ## Ordinary Web surfaces
 
 The released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.

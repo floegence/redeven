@@ -30,5 +30,6 @@ The platform owns durable plans, claims, authorization fencing, dispatch, cancel
 # Evidence
 
 - ReDevPlugin 3.11.0 publishes BackgroundModule.Policy, verified interval summaries and inventory status with the common Host/runtime contract.
+- ReDevPlugin 3.11.1 authorizes declared environment-private storage from an active durable interval claim without an online management session, while public management calls retain session authorization. Failed interval diagnostics use the closed platform presentation contract.
 - Redeven background_policy_adapter_test.go covers local/app effect caps, immutable policy snapshots, absent policy and cancellation without online sessions.
 - Plugin inventory/security projections and PluginManagement browser tests cover authoritative state, declaration changes, technical disclosure and narrow/light/dark layouts.
