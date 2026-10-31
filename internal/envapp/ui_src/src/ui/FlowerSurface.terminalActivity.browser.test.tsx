@@ -66,6 +66,36 @@ const rowFor = (runtime: HTMLElement, id: string) => runtime.querySelector(`[dat
 const toggleFor = (runtime: HTMLElement, id: string) => rowFor(runtime, id).querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
 
 describe('SSH terminal activity', () => {
+  it('contains an invalid process frame, stops polling, and retries only the output read', async () => {
+    const result = activityItem({ ...read(), status: 'success', payload: { operation: 'exec', command: 'inspect',
+      process_id: 'process-1', output: 'first', first_seq: 1, last_seq: 1, latest_seq: 2 } });
+    const { runtime, base } = await mount([write(), result], base => {
+      vi.mocked(base.readTerminalProcess!).mockResolvedValueOnce({ process_id: 'process-1', status: 'success',
+        output: '', first_seq: 2, last_seq: 2, latest_seq: 2, has_more: false });
+    });
+    toggleFor(runtime, 'read').click();
+    await waitFor(() => Boolean(rowFor(runtime, 'read').querySelector('.flower-activity-detail-recovery button')));
+    expect(rowFor(runtime, 'read').textContent).toContain('first');
+    expect(runtime.textContent).not.toContain('first_seq');
+    await new Promise(resolve => setTimeout(resolve, 450));
+    expect(base.readTerminalProcess).toHaveBeenCalledTimes(1);
+    expect(runtime.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+    vi.mocked(base.readTerminalProcess!).mockResolvedValueOnce({ process_id: 'process-1', status: 'success',
+      output: ' second', first_seq: 2, last_seq: 2, latest_seq: 2, has_more: false });
+    rowFor(runtime, 'read').querySelector<HTMLButtonElement>('.flower-activity-detail-recovery button')!.click();
+    await waitFor(() => rowFor(runtime, 'read').querySelector('.flower-activity-terminal-output')?.textContent === 'first second');
+    expect(vi.mocked(base.readTerminalProcess!).mock.calls.map(([request]) => request.after_seq)).toEqual([1, 1]);
+    expect(rowFor(runtime, 'read').querySelector('.flower-activity-detail-recovery')).toBeNull();
+  });
+
+  it('keeps write acknowledgements independent of hidden process output ranges', async () => {
+    const { runtime, base } = await mount([{ ...write(), payload: { ...write().payload, output: 'private echo', first_seq: 2, last_seq: 3 } }]);
+    toggleFor(runtime, 'write').click();
+    await waitFor(() => rowFor(runtime, 'write').textContent?.includes('Input sent') === true);
+    expect(runtime.textContent).not.toContain('private echo');
+    expect(runtime.querySelector('.flower-activity-detail-recovery')).toBeNull();
+    expect(base.readTerminalProcess).not.toHaveBeenCalled();
+  });
   it('drains remaining output when the canonical tool is already complete', async () => {
     const result = activityItem({ ...read(), status: 'success', payload: { operation: 'exec', command: 'inspect',
       process_id: 'process-1', output: 'first\n', first_seq: 1, last_seq: 1, latest_seq: 3, has_more: true } });

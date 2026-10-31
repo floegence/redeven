@@ -17,6 +17,7 @@ import type { FlowerConversationPreferencePatch, FlowerConversationPreferences }
 import { ParentEventRow, createParentEventReading } from './parentEvents';
 import { createStore } from 'solid-js/store';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
+import { FlowerSyncNotice } from './FlowerSyncNotice';
 import { FlowerCompanionReadiness } from './FlowerCompanionReadiness';
 import { FlowerGoalIcon } from './FlowerGoalIcon';
 import { flowerAnswerHTML, downloadFlowerAnswer } from './chat/markdown/flowerAnswerExport';
@@ -10789,7 +10790,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const terminal = createMemo(() => detailProps.block().terminal);
     const [commandExpanded, setCommandExpanded] = createSignal(false);
     const [commandCopied, setCommandCopied] = createSignal(false);
-    const [liveLastSeq, setLiveLastSeq] = createSignal(terminal().last_seq);
+    const [liveLastSeq, setLiveLastSeq] = createSignal(0);
     const [processHasMore, setProcessHasMore] = createSignal(false);
     const [liveError, setLiveError] = createSignal('');
     const outputViewport = createTerminalOutputViewportController({
@@ -10840,12 +10841,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const releaseTerminalOutput = terminalVisibleOutputStore.retain(terminalIdentity());
     onCleanup(releaseTerminalOutput);
-    const initialOutput = pendingOutput() ? terminalVisibleOutputStore.get(terminalIdentity())
-      : terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), snapshotFrame());
+    const initialOutput = terminalVisibleOutputStore.get(terminalIdentity());
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
     outputViewport.setOutput(initialOutput);
     const canReadLiveOutput = createMemo(() => (
-      (detailProps.detailActive?.() ?? true) && !pendingOutput() && !fieldHandoff() && (!deferredOutput() || fieldAtEnd()) &&
+      !liveError() && (detailProps.detailActive?.() ?? true) && !pendingOutput() && !fieldHandoff() && (!deferredOutput() || fieldAtEnd()) &&
       terminal().operation !== 'write' && terminal().operation !== 'read' &&
       !!props.adapter.readTerminalProcess &&
       detailProps.context().runID !== '' &&
@@ -10902,6 +10902,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
 
     const applyTerminalSnapshot = (snapshot: FlowerTerminalProcessSnapshot) => {
+      if (snapshot.process_id !== processID()) throw new Error('Terminal output process changed.');
       const output = terminalSnapshotOutput(snapshot);
       const mergedOutput = terminalVisibleOutputStore.appendDelta(terminalIdentity(), {
         output,
@@ -10947,6 +10948,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     };
 
+    const applyCanonicalOutput = () => {
+      if (pendingOutput() || deferredOutput() || terminal().operation === 'write') return;
+      try {
+        const canonicalOutput = terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), snapshotFrame());
+        if (canonicalOutput !== untrack(liveOutput)) setLiveOutput(canonicalOutput);
+        setLiveLastSeq(current => Math.max(current, terminal().last_seq));
+      } catch {
+        setLiveError(copy().chat.history.failed);
+      }
+    };
+    createEffect(on([terminal, liveExecutionIdentity, processID, pendingOutput, deferredOutput], applyCanonicalOutput));
+
     createEffect(on([canReadLiveOutput, liveRunID, processID, liveExecutionIdentity], ([enabled, runID, process]) => {
       if (!enabled) return;
       let disposed = false;
@@ -10970,8 +10983,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             outputViewport.setOutput(untrack(liveOutput), true);
             return;
           }
-        } catch (error) {
-          if (!disposed) setLiveError(getErrorMessage(error));
+        } catch {
+          // Optional output failures stop this reader, never the live stream.
+          if (!disposed) setLiveError(copy().chat.history.failed);
         }
         if (!disposed && canReadLiveOutput()) {
           timer = window.setTimeout(() => {
@@ -10989,14 +11003,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     }));
 
-    createEffect(on([terminal, liveExecutionIdentity, processID, pendingOutput, deferredOutput], () => {
-      if (pendingOutput() || deferredOutput()) return;
-      const canonicalOutput = terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), snapshotFrame());
-      if (canonicalOutput !== liveOutput()) {
-        setLiveOutput(canonicalOutput);
-      }
-      setLiveLastSeq((current) => Math.max(current, Math.max(0, Math.floor(terminal().last_seq))));
-    }));
+
 
     createEffect(() => {
       const status = displayStatus();
@@ -11103,7 +11110,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <p class="flower-activity-terminal-notice">{copy().chat.terminalPartialOutput}</p>
         </Show>
         <Show when={liveError()}>
-          {(error) => <p class="flower-activity-terminal-notice flower-activity-terminal-notice-error">{copy().chat.terminalLiveOutputUnavailable(error())}</p>}
+          <div class="flower-activity-detail-recovery" role="status">
+            <span>{copy().chat.history.failed}</span>
+            <Button size="sm" variant="ghost" onClick={() => batch(() => { setLiveError(''); applyCanonicalOutput(); })}>{copy().chat.handlerRetry}</Button>
+          </div>
         </Show>
       </section>
     );
@@ -11602,6 +11612,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const fieldPresentation = createActivityFieldPresentation({ reader: activityFields, item, itemID: messageID,
       threadID: () => timeline().thread_id ?? '',
+      execution: () => [timeline().run_id ?? '', timeline().turn_id ?? ''],
       active: () => visible() && ((openActivityRuns()[disclosureKey()] ?? isSavedComputerScreenshot(item()))
         || item().renderer === 'subagent' || item().renderer === 'subagent_operation' || item().tool_name === 'subagent_events'),
       connection: () => liveSyncState().connectionEpoch,
@@ -11858,7 +11869,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 )}
               >
                 <Show when={item().body_pending}>{historyBodyControl(() => timeline().thread_id ?? '', messageID)}</Show>
-                <Show when={fieldPresentation.failed()}><span role="status">{copy().chat.history.failed}</span></Show>
+                <Show when={fieldPresentation.failed()}><div class="flower-activity-detail-recovery" role="status">
+                  <span>{copy().chat.history.failed}</span>
+                  <Button size="sm" variant="ghost" disabled={fieldPresentation.loading()} onClick={fieldPresentation.retry}>{copy().chat.handlerRetry}</Button>
+                </div></Show>
                 <Show when={item().approval_state === 'rejected' && !terminalDisclosure()}>
                   <div class="flower-activity-approval-rejected-detail">
                     {copy().chat.toolApprovalRejectedDetail}
@@ -11933,10 +11947,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                 failureDetailPresent={() => presentation().detailBlocks.some(block => block.kind === 'error')}
                                 outputField={() => fieldPresentation.field('/payload/output')}
                                 outputFieldLastSeq={() => Number(fieldPresentation.sourcePayload()?.last_seq ?? 0)}
-                                pendingOutput={() => fieldPresentation.sourcePayload() === undefined
-                                  && Boolean(item().field_summary?.fields.some(field => field.path === '/payload/output' && field.kind === 'string'))}
-                                deferredOutput={() => Boolean(item().field_summary?.fields.some(field => field.path === '/payload/output'
-                                  && field.kind === 'string' && (field.bytes ?? 0) > (64 << 10)))}
+                                pendingOutput={() => fieldPresentation.sourcePayload() === undefined && Boolean(item().field_summary)}
+                                deferredOutput={() => Boolean(fieldPresentation.field('/payload/output'))}
                                 detailActive={() => visible() && open()}
                               />
                             )}
@@ -13189,16 +13201,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const workspaceSyncNotice = () => (
-    <Show when={(props.adapter.connectLiveStream && liveSyncState().status !== 'ready' && liveSyncState().status !== 'stopped') || unconfirmedStops().size > 0}>
-      <div class="flower-workspace-sync flower-chat-notice" role={liveSyncState().status === 'failed' || unconfirmedStops().size > 0 ? 'alert' : 'status'} aria-live="polite" data-flower-sync-state={liveSyncState().status}>
-        <Show when={liveSyncState().status === 'failed' || unconfirmedStops().size > 0} fallback={<FlowerThreadWave />}>
-          <AlertCircle class="size-3.5 shrink-0" aria-hidden="true" />
-        </Show>
-        <span>{liveSyncState().status === 'connecting' && !unconfirmedStops().size ? copy().chat.history.loading : workspaceSyncMessage()}</span>
-        <Show when={liveSyncState().status === 'failed' || unconfirmedStops().size > 0}>
-          <Button size="sm" variant="outline" icon={Refresh} onClick={resyncWorkspace}>{copy().chat.syncResync}</Button>
-        </Show>
-      </div>
+    <Show when={props.adapter.connectLiveStream || unconfirmedStops().size > 0}>
+      <FlowerSyncNotice state={liveSyncState()} stopUnconfirmed={unconfirmedStops().size > 0}
+        confirmed={!selectedThreadID() || !threadLoadError() && !selectedThreadDetailPending()
+          && Boolean(threadCache().views.get(selectedThreadID())?.version) && !selectedThreadSummaryNeedsDetail()}
+        message={workspaceSyncMessage()} copy={copy().chat} onResync={resyncWorkspace} />
     </Show>
   );
 

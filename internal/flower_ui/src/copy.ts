@@ -701,6 +701,13 @@ export type FlowerSurfaceCopy = Readonly<{
     syncVersion: string;
     syncCapacity: string;
     syncResync: string;
+    syncPaused: string;
+    syncWorking: string;
+    syncRestored: string;
+    syncDetails: string;
+    syncCollapse: string;
+    syncCloseDetails: string;
+    syncReadOnly: string;
     syncStatusConnecting: string;
     syncStatusReconnecting: string;
     syncStatusFailed: string;
@@ -1209,6 +1216,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     syncVersion: "Flower live updates require a matching app and runtime version. Refresh the app, or update both before resyncing.",
     syncCapacity: "Flower live update capacity is full. Close unused Flower views, then resync. Your draft is preserved.",
     syncResync: "Resync",
+    syncPaused: 'View updates paused',
+    syncWorking: 'Syncing…',
+    syncRestored: 'Sync restored',
+    syncDetails: 'Synchronization details',
+    syncCollapse: 'Minimize notice',
+    syncCloseDetails: 'Back',
+    syncReadOnly: 'Resync refreshes the conversation view without running the task again.',
     syncStatusConnecting: "Connecting live updates…",
     syncStatusReconnecting: "Reconnecting live updates…",
     syncStatusFailed: "Sync interrupted · Status unconfirmed",

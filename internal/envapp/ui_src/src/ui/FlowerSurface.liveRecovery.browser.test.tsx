@@ -76,7 +76,7 @@ function expectNoticeFits(runtime: HTMLElement): HTMLButtonElement {
   expect(notice.getAttribute('role')).toBe('alert');
   expect(notice.closest('.flower-chat-notices')).not.toBeNull();
   expect(notice.getAttribute('aria-live')).toBe('polite');
-  expect(notice.textContent).toContain('Displayed state may be outdated.');
+  expect(notice.textContent).toContain('View updates paused');
   expect(notice.scrollWidth - notice.clientWidth).toBeLessThanOrEqual(1);
   const bounds = notice.getBoundingClientRect();
   const button = resync.getBoundingClientRect();
@@ -117,7 +117,7 @@ it('supports keyboard resynchronization at narrow widths and preserves draft ref
   resync.focus();
   expect(document.activeElement).toBe(resync);
   await userEvent.keyboard('{Enter}');
-  await waitFor(() => stream.connectLiveStream.mock.calls.length === 2 && runtime.querySelector('.flower-workspace-sync') === null);
+  await waitFor(() => stream.connectLiveStream.mock.calls.length === 2 && runtime.querySelector('[data-restored="true"]') !== null);
   await waitFor(() => runtime.textContent?.includes('Recovered final answer') ?? false);
   expect(stream.attempts[0].signal.aborted).toBe(true);
   expect(stream.attempts.filter(attempt => !attempt.signal.aborted)).toHaveLength(1);

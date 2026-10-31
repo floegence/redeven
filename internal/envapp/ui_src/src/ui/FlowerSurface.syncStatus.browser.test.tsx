@@ -2,14 +2,16 @@ import '../index.css';
 import './flower-feature.css';
 
 import { afterEach, expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
+import axe from 'axe-core';
 import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import type { EnvAppTranslationKey } from './i18n';
 import { adapter, deferred, flush, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-afterEach(() => document.documentElement.classList.remove('dark'));
+const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+afterEach(async () => { document.documentElement.classList.remove('dark'); await touch.emulateTouchInput(false); });
 
 it.each([['zh-CN', 1280, true], ['en-US', 320, false], ['de-DE', 390, true]] as const)(
   'shows one floating %s loading failure with keyboard retry at %i pixels', async (locale, width, dark) => {
@@ -98,12 +100,21 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     editor.value = 'Preserved draft'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     const viewport = surface.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    await waitFor(() => viewport.getAttribute('data-flower-tail-preparing') !== 'true');
+    await new Promise(resolve => setTimeout(resolve, 350));
     const before = viewport.getBoundingClientRect();
     failure.resolve();
     await waitFor(() => Boolean(surface.querySelector('[data-flower-sync-state="failed"]')));
     const status = surface.querySelector<HTMLElement>('.flower-workspace-sync')!;
     expect(status.getAttribute('role')).toBe('alert');
+    expect(status.textContent).toContain(copy.chat.syncPaused);
+    expect(status.textContent).not.toContain(copy.chat.syncFailed);
+    const details = status.querySelector<HTMLButtonElement>('.flower-sync-details-toggle')!;
+    details.click();
     expect(status.textContent).toContain(copy.chat.syncFailed);
+    details.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(details.getAttribute('aria-expanded')).toBe('false');
     expect(status.closest('.flower-chat-notices')).not.toBeNull();
     expect(Math.abs(viewport.getBoundingClientRect().top - before.top)).toBeLessThanOrEqual(1);
     expect(Math.abs(viewport.getBoundingClientRect().height - before.height)).toBeLessThanOrEqual(1);
@@ -111,6 +122,20 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth + 1);
     expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
     expect(surface.textContent).not.toContain('private application diagnostic');
+    details.click();
+    const audit = await axe.run(status, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } });
+    expect(audit.violations).toEqual([]);
+    await touch.emulateTouchInput(true);
+    const touchBounds = viewport.getBoundingClientRect();
+    expect(details.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    status.querySelector<HTMLButtonElement>('.flower-sync-detail-actions button')!.click();
+    expect(status.getAttribute('data-collapsed')).toBe('true');
+    const compact = status.querySelector<HTMLButtonElement>('.flower-sync-compact')!;
+    expect(compact.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    compact.click();
+    expect(status.getAttribute('data-collapsed')).toBeNull();
+    expect(Math.abs(viewport.getBoundingClientRect().height - touchBounds.height)).toBeLessThanOrEqual(1);
+    await touch.emulateTouchInput(false);
     expect(surface.querySelector('[data-flower-progress-kind]')).toBeNull();
     const retry = status.querySelector<HTMLButtonElement>('button')!;
     expect(retry.getBoundingClientRect().right).toBeLessThanOrEqual(status.getBoundingClientRect().right + 1);
@@ -119,11 +144,19 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     await page.screenshot({ element: surface, path: '__screenshots__/flower-sync-status-' + locale + '.png' });
     await userEvent.keyboard('{Enter}');
     await waitFor(() => attempts === 2);
-    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toBe(copy.chat.history.loading);
-    expect(surface.querySelectorAll('.flower-workspace-sync .flower-thread-wave-bar')).toHaveLength(4);
-    expect(surface.querySelector('.flower-workspace-sync button')).toBeNull();
+    expect(surface.querySelector('.flower-sync-label')?.textContent).toBe(copy.chat.syncWorking);
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    retry.click();
+    expect(attempts).toBe(2);
     ready.resolve();
-    await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-kind]')) && !surface.querySelector('.flower-workspace-sync'));
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-kind]')) && Boolean(surface.querySelector('[data-restored="true"]')));
+    const restored = surface.querySelector<HTMLElement>('.flower-workspace-sync')!;
+    expect(restored.textContent).toContain(copy.chat.syncRestored);
+    expect(restored).toBe(status);
+    expect(document.activeElement).toBe(restored.querySelector('.flower-sync-details-toggle'));
+    editor.focus();
+    restored.dispatchEvent(new MouseEvent('mouseleave'));
+    await waitFor(() => !surface.querySelector('.flower-workspace-sync'), 5000);
     expect(surface.querySelector('.flower-model-status-sync')).toBeNull();
     expect(surface.querySelector('.flower-composer textarea')).toBe(editor);
     expect(editor.value).toBe('Preserved draft');

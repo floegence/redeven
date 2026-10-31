@@ -1,8 +1,9 @@
-import { createEffect, createSignal, onCleanup } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { FlowerActivityField, FlowerActivityItem } from './contracts/flowerSurfaceContracts';
 import type { createActivityFieldReader } from './activityFieldReader';
 import { mapFlowerActivityItem } from './flowerLiveMapper';
 import { retainEqualValue } from './presentationIdentity';
+import { replaceTerminalOutputSnapshot } from './flowerTerminalOutput';
 
 // One in-flight read completes even while this activity changes. The next
 // read coalesces those changes; unrelated thread updates never cancel it.
@@ -13,11 +14,12 @@ export function createActivityFieldPresentation(options: {
   itemID: () => string;
   active: () => boolean;
   connection: () => unknown;
+  execution?: () => readonly [string, string];
 }) {
   const [loaded, setLoaded] = createSignal<{ owner: string; value: FlowerActivityItem; fields: readonly FlowerActivityField[] }>();
   const [failed, setFailed] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
-  const owner = () => JSON.stringify([options.threadID(), options.itemID(), options.item().tool_id, options.item().renderer]);
+  const owner = () => JSON.stringify([options.threadID(), options.itemID(), options.item().tool_id, options.item().renderer, options.execution?.()]);
   let scope = new AbortController();
   let retainedOwner = '';
   let lifetime = '';
@@ -27,7 +29,7 @@ export function createActivityFieldPresentation(options: {
   let rejected = '';
   let requested: { key: string; owner: string; thread: string; id: string; item: FlowerActivityItem } | undefined;
   const read = async () => {
-    if (busy || !requested || disposed || accepted === requested.key || rejected === requested.key) return;
+    if (busy || !requested || disposed || accepted === requested.key || rejected) return;
     const request = requested;
     const item = request.item;
     const summary = item.field_summary!;
@@ -39,14 +41,31 @@ export function createActivityFieldPresentation(options: {
         .map(field => field.path.slice('/payload/'.length));
       const deferred = item.renderer === 'terminal' && summary.fields.some(field => field.path === '/payload/output'
         && field.kind === 'string' && (field.bytes ?? 0) > (64 << 10)) ? ['output'] : [];
-      const snapshot = deferred.length
-        ? await options.reader.snapshot(request.thread, request.id, '/payload', signal, 256 << 10, 128, fields.length ? fields : ['status'], deferred)
-        : undefined;
-      const payload = { ...(snapshot?.value ?? (fields.length ? await options.reader.value(request.thread, request.id, '/payload', signal, 256 << 10, 128, fields) : {})) as Record<string, unknown> };
+      const snapshot = fields.length || deferred.length
+        ? await options.reader.snapshot(request.thread, request.id, '/payload', signal, 256 << 10, 128, fields.length ? fields : ['status'], deferred.length ? deferred : undefined) : undefined;
+      signal.throwIfAborted();
+      const execution = options.execution?.();
+      if (snapshot && execution && (snapshot.run_id !== execution[0] || snapshot.turn_id !== execution[1])) {
+        throw Object.assign(new Error('Activity detail execution changed.'), { code: 'flower_activity_identity_error' });
+      }
+      const payload = { ...(snapshot?.value ?? {}) as Record<string, unknown> };
       const goal = summary.fields.some(field => field.path === '/payload/goal' && field.kind === 'object')
         ? await options.reader.snapshot(request.thread, request.id, '/payload/goal', signal, 4096, 16,
           ['operation', 'applied', 'version', 'outcome'], ['text', 'evidence']) : undefined;
-      if (goal) payload.goal = goal.value;
+      if (goal) {
+        if (execution && (goal.run_id !== execution[0] || goal.turn_id !== execution[1])) throw new Error('Activity detail execution changed.');
+        payload.goal = goal.value;
+      }
+      if (item.renderer === 'terminal' && payload.operation !== 'write') {
+        const source = snapshot?.text_fields?.find(field => field.path === '/payload/output');
+        const first = Number(payload.first_seq ?? 0), last = Number(payload.last_seq ?? 0);
+        if (source) {
+          if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last) || first < 0 || last < 0
+            || (source.bytes ? (first !== 0 || last !== 0) && (first < 1 || last < first) : first !== 0)) throw new Error('Invalid deferred terminal range.');
+        } else {
+          replaceTerminalOutputSnapshot(undefined, { output: String(payload.output ?? ''), first_seq: first, last_seq: last });
+        }
+      }
       signal.throwIfAborted();
       const mapped = mapFlowerActivityItem({ ...item, label: undefined, description: undefined, renderer: undefined, chips: undefined, target_refs: undefined, payload: undefined,
         presentation: { label: item.label, description: item.description, renderer: item.renderer, chips: item.chips, target_refs: item.target_refs, payload } });
@@ -82,11 +101,20 @@ export function createActivityFieldPresentation(options: {
     void read();
   });
   onCleanup(() => { disposed = true; scope.abort(); });
+  const presented = createMemo(() => {
+    const current = options.item();
+    const accepted = loaded();
+    if (accepted?.owner !== owner() || !current.field_summary) return current;
+    // Terminal bytes, sequence range, process identity and deferred sources
+    // belong to one atomic read. A newer summary is only a progress hint.
+    return { ...accepted.value, ...current, payload: current.renderer === 'terminal'
+      ? accepted.value.payload : { ...accepted.value.payload, ...current.payload } };
+  });
   return {
-    item: () => loaded()?.owner === owner() && options.item().field_summary ? { ...loaded()!.value, ...options.item(),
-      payload: { ...loaded()!.value.payload, ...options.item().payload } } : options.item(),
+    item: presented,
     sourcePayload: () => loaded()?.owner === owner() ? loaded()?.value.payload : undefined,
     field: (path: string) => loaded()?.owner === owner() ? loaded()?.fields.find(field => field.path === path) : undefined,
     failed, loading,
+    retry: () => { if (!disposed && options.active()) { rejected = ''; accepted = ''; void read(); } },
   };
 }

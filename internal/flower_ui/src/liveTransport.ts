@@ -165,6 +165,8 @@ export function createLiveTransport<T>(): LiveTransport<T> {
     },
     restart() {
       if (!owner || owner.stopped) return;
+      // Repeated recovery actions share the already connecting observation.
+      if (owner.attempt && (state.status === 'connecting' || state.status === 'reconnecting')) return;
       invalidate(owner);
       owner.reconnectAttempt = 0;
       connect(owner);

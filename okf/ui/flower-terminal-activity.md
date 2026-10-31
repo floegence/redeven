@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower terminal activity presentation
 tags: [ai, flower, terminal, presentation]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-31"
 ---
 # Summary
 
@@ -17,6 +17,10 @@ Floret owns the nested `ActivityItem.presentation` contract and merges results w
 The five-line independently scrolling output viewport retains its existing owner.
 
 An omitted output field is pending content, never an empty canonical frame with a nonzero first sequence. Wait for small-field hydration before polling or installing its sequence; large fields use source-bound ranges, then acknowledge their watermark before adding process deltas. Existing output and selection survive handoff.
+
+Published Floret v7.95.0 atomic activity reads own the bytes, sequence range, process identity and deferred source together. Flower never stamps a newer summary's range onto previously accepted bytes. Canonical activity status remains current independently. Check execution identity and range before publishing optional details; retain accepted output on failure. One in-flight read coalesces revisions; failure latches until explicit Retry, visibility reentry or connection change. Collapsed/offscreen rows do not read. No additional backend scan, transcript snapshot or transport contract is introduced.
+
+Malformed process output stops its local poll and exposes a localized read-only Retry without raw diagnostics; other messages and stream observation continue. Canonical stream validation still fails at its existing connection boundary. Write acknowledgements never apply hidden output frames. Equal-watermark snapshots may fill an empty frame or extend its earlier coverage, but duplicate/older snapshots cannot replace a newer live suffix.
 
 Inactive output caches have 200-entry / 8 MiB estimated-byte limits. Mounted outputs remain retained until release; frame metadata coalesces after 128 records without changing sequence checks. These cache limits do not truncate an active process output or its canonical history.
 

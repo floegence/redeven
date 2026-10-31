@@ -4411,6 +4411,7 @@
 
 .flower-model-status-indicator {
   display: inline-flex;
+  line-height: 1.25rem;
   flex-wrap: wrap;
   min-width: 0;
   align-items: center;
@@ -12611,6 +12612,40 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-chat-notice .flower-error-card { width: auto; max-width: 100%; margin: 0; padding: 0.25rem; border: 0; background: transparent; box-shadow: none; }
 .flower-chat-notice .flower-error-actions { margin-top: 0.375rem; }
 .flower-chat-notices > .flower-chat-notice:is([role='alert'], :has([role='alert'])) { color: var(--flower-reading-error); }
+
+/* One compact floating observation notice; never changes transcript geometry. */
+.flower-chat-notices > .flower-workspace-sync {
+  display: block;
+  max-width: min(100%, 24rem);
+  padding: 0;
+  border-radius: 0.875rem;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--redeven-surface-shadow-source) 12%, transparent), 0 1px 3px color-mix(in srgb, var(--redeven-surface-shadow-source) 10%, transparent);
+}
+.flower-chat-notices > .flower-workspace-sync[role='alert'] { color: var(--foreground); }
+.flower-workspace-sync[data-collapsed='true'] { align-self: flex-end; }
+.flower-sync-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem; padding: 0.3rem 0.35rem 0.3rem 0.75rem; }
+.flower-sync-label, .flower-sync-compact { display: inline-flex; align-items: center; gap: 0.45rem; }
+.flower-sync-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.flower-sync-dot { width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--muted-foreground); flex-shrink: 0; }
+.flower-workspace-sync[role='alert'] .flower-sync-dot { background: var(--flower-reading-warning); }
+.flower-workspace-sync[data-restored='true'] .flower-sync-label { color: var(--foreground); }
+.flower-sync-retry { background: var(--muted); flex-shrink: 0; }
+.flower-sync-retry[aria-disabled='true'] { opacity: 0.5; cursor: default; }
+.flower-sync-details-toggle { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; min-height: 2rem; border-radius: 0.5rem; flex-shrink: 0; }
+.flower-sync-details-toggle:hover, .flower-sync-compact:hover { background: var(--muted); }
+.flower-sync-compact { padding: 0.55rem 0.75rem; border-radius: inherit; text-align: start; }
+.flower-sync-details { padding: 0.65rem 0.85rem 0.5rem; border-top: 1px solid var(--border); color: var(--muted-foreground); }
+.flower-sync-details p { margin: 0 0 0.65rem; }
+.flower-sync-detail-actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+.flower-activity-detail-recovery { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; color: var(--muted-foreground); font-size: var(--floe-type-caption); }
+@media (pointer: coarse) {
+  .flower-sync-details-toggle { min-width: 2.75rem; min-height: 2.75rem; }
+  .flower-sync-compact { min-height: 2.75rem; }
+  .flower-workspace-sync button { min-height: 2.75rem; }
+}
+@media (forced-colors: active) { .flower-sync-dot { background: CanvasText; } }
 
 /* A collapsed companion keeps recovery floating above its single-line editor. */
 .flower-surface-companion-collapsed,

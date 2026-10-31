@@ -16,6 +16,67 @@ afterEach(() => {
 });
 
 describe('field-backed activity in the product surface', () => {
+  it.each(['', 'old output'])('keeps terminal bytes atomic across live summaries and a failed detail read: %j', async initial => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'atomic-terminal', messages: [] });
+    let value = { operation: 'read', command: 'inspect', output: initial, first_seq: initial ? 1 : 0, last_seq: initial ? 2 : 0, latest_seq: initial ? 2 : 0 };
+    const item = (version: number) => ({ id: 'tool:turn:atomic', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool' as const,
+      activity: { item_id: 'atomic', tool_id: 'atomic', tool_name: 'terminal.read', kind: 'tool', status: 'success', severity: 'normal' },
+      activity_summary: { version: 'v' + version, label: 'Inspect output', renderer: 'terminal' as const,
+        fields: Object.entries(value).map(([key, val]) => typeof val === 'string'
+          ? { path: '/payload/' + key, kind: 'string' as const, bytes: val.length }
+          : { path: '/payload/' + key, kind: 'scalar' as const, value: val }) } });
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: [item(1)] };
+    let release: (() => void) | undefined;
+    let fail = false, hold = false;
+    const loadActivityValue = vi.fn<NonNullable<FlowerSurfaceAdapter['loadActivityValue']>>(async (_thread, request) => {
+      const snapshot = { ...value };
+      if (hold) await new Promise<void>(resolve => { release = resolve; });
+      if (fail) throw new Error('Private optional detail error');
+      return { thread_id: seed.thread_id, item_id: request.item_id, turn_id: 'turn', run_id: 'run', path: request.path, value: snapshot };
+    });
+    const events: FlowerLiveStreamEnvelope[] = [];
+    let wake: (() => void) | undefined;
+    const loadHistory = vi.fn(async () => ({ current, thread: applyFlowerRuntimeCurrentView(seed, current) }));
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadActivityValue, loadHistory,
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'atomic-observer', summaries: [seed] };
+        const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
+        try { while (!signal.aborted) { const frame = events.shift(); if (frame) yield frame; else await new Promise<void>(resolve => { wake = resolve; }); } }
+        finally { signal.removeEventListener('abort', abort); }
+      },
+    }, { focusThreadRequest: { request_id: 'atomic', thread_id: seed.thread_id } });
+    root.style.height = '780px';
+    await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id="atomic"] button')));
+    const row = root.querySelector('[data-flower-activity-item-id="atomic"]')!;
+    const toggle = row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+    toggle.click();
+    await waitFor(() => loadActivityValue.mock.calls.length === 1);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    value = { ...value, output: 'complete output', first_seq: 1, last_seq: 30, latest_seq: 30 };
+    hold = true; fail = true;
+    events.push({ schema_version: 3, kind: 'thread.batch', thread_id: seed.thread_id,
+      update: { thread_id: seed.thread_id, base_version: 1, view_version: 2, facts: { activity: 'idle', queue_count: 0 },
+        items: [{ kind: 'replace', item_id: 'tool:turn:atomic', item: item(2) }] } }); wake?.();
+    await waitFor(() => loadActivityValue.mock.calls.length === 2);
+    expect(root.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+    expect(row.querySelector('.flower-activity-terminal-output')?.textContent ?? '').toBe(initial);
+    release!();
+    await waitFor(() => Boolean(row.querySelector('.flower-activity-detail-recovery button')));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(loadActivityValue).toHaveBeenCalledTimes(2);
+    expect(root.textContent).not.toContain('Private optional detail error');
+    fail = false; hold = false;
+    row.querySelector<HTMLButtonElement>('.flower-activity-detail-recovery button')!.click();
+    await waitFor(() => row.querySelector('.flower-activity-terminal-output')?.textContent === 'complete output');
+    expect(loadActivityValue).toHaveBeenCalledTimes(3);
+    expect(loadHistory).toHaveBeenCalledTimes(1);
+    expect(root.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+    expect(row.querySelector('[data-flower-disclosure-trigger]')).toBe(toggle);
+    toggle.click();
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(loadActivityValue).toHaveBeenCalledTimes(3);
+  });
   it.each([['update', 1, 'Edit panda-bicycle.html'], ['delete', 1, 'Delete panda-bicycle.html'], ['noop', 1, 'Edit panda-bicycle.html'], ['update', 2, 'Edit 2 files']] as const)('shows %s patch titles for %d files without collapsed detail requests', async (changeType, count, label) => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'patch-fields', title: 'Patch summary', messages: [] });

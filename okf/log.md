@@ -4,6 +4,10 @@
 
 Recent pointers only; concepts own contracts/evidence and Git retains earlier entries.
 
+## 2026-10-31
+
+- Keep [terminal details](ui/flower-terminal-activity.md) atomic across summary updates and isolate optional read failures. Refine [sync recovery](ui/flower-live-timeline.md) as a compact floating notice with bounded, read-only recovery and stable interaction geometry.
+
 ## 2026-10-30
 
 - Replace hand-authored [provider marks](ai/model-directory-and-selection.md) with unchanged, pinned theSVG assets; share rendering across both carriers and verify asset provenance and light/dark presentation.

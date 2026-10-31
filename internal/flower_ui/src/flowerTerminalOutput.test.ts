@@ -11,6 +11,15 @@ import {
 } from './flowerTerminalOutput';
 
 describe('terminal visible output', () => {
+  it('accepts a richer equal-watermark snapshot without losing a newer live suffix', () => {
+    const empty = { output: '', first_seq: 0, last_seq: 3, truncated: false };
+    const full = { output: 'one two three', first_seq: 1, last_seq: 3, truncated: false };
+    expect(replaceTerminalOutputSnapshot(empty, full)).toEqual(full);
+    expect(replaceTerminalOutputSnapshot({ ...full, output: 'three', first_seq: 3, truncated: true }, full)).toEqual(full);
+    const live = appendTerminalOutputDelta(full, { output: ' four', first_seq: 4, last_seq: 4 });
+    expect(replaceTerminalOutputSnapshot(live, full)).toBe(live);
+    expect(replaceTerminalOutputSnapshot(full, { ...full, output: 'conflicting duplicate' })).toBe(full);
+  });
   it('bounds inactive bytes without evicting a mounted live tail', () => {
     const store = createTerminalVisibleOutputStore(200, 1024);
     const active = { run_id: 'run', item_id: 'active' };
@@ -134,6 +143,21 @@ describe('terminal visible output', () => {
     scope.abort();
     expect(publish).toThrow();
     expect(store.get(identity)).toBe('four');
+  });
+  it('restores inline coverage after a deferred source at the same watermark', async () => {
+    const store = createTerminalVisibleOutputStore();
+    const identity = { run_id: 'run', item_id: 'tool' };
+    store.replaceSnapshot(identity, { output: 'one two', first_seq: 1, last_seq: 2 });
+    (await store.acknowledgeDeferred(identity, 2, async () => { throw new Error('No read needed.'); }, new AbortController().signal))();
+    expect(store.replaceSnapshot(identity, { output: 'one two', first_seq: 1, last_seq: 2 })).toBe('one two');
+    expect(store.appendDelta(identity, { output: ' three', first_seq: 3, last_seq: 3 })).toBe('one two three');
+  });
+  it('joins an inline source to its newer deferred live suffix without losing either', async () => {
+    const store = createTerminalVisibleOutputStore();
+    const identity = { run_id: 'run', item_id: 'tool' };
+    (await store.acknowledgeDeferred(identity, 2, async () => { throw new Error('No read needed.'); }, new AbortController().signal))();
+    store.appendDelta(identity, { output: ' three', first_seq: 3, last_seq: 3 });
+    expect(store.replaceSnapshot(identity, { output: 'one two', first_seq: 1, last_seq: 2 })).toBe('one two three');
   });
   it('rereads a partial sequence frame without guessing byte boundaries', async () => {
     const store = createTerminalVisibleOutputStore();

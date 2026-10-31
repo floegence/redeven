@@ -2,7 +2,8 @@ import { createRoot, createSignal } from 'solid-js';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createActivityFieldPresentation } from '../../../../flower_ui/src/activityFieldPresentation';
 import { createActivityFieldReader } from '../../../../flower_ui/src/activityFieldReader';
-import type { FlowerActivityItem } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerActivityValue } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { replaceTerminalOutputSnapshot } from '../../../../flower_ui/src/flowerTerminalOutput';
 
 const disposers: (() => void)[] = [];
 let warningSpy: ReturnType<typeof vi.spyOn>;
@@ -15,7 +16,7 @@ afterEach(() => {
   expect(warnings).toEqual([]);
 });
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); });
-function fixture() {
+function fixture(execution?: () => readonly [string, string]) {
   return createRoot(dispose => {
     disposers.push(dispose);
     const [active, setActive] = createSignal(true);
@@ -26,18 +27,57 @@ function fixture() {
       field_summary: { version: 'v1', renderer: 'terminal', fields: [{ path: '/payload/output', kind: 'string', bytes: 4 }] } });
     let release: (() => void) | undefined;
     let hold = false;
-    const transport = { loadActivityValue: vi.fn(async (threadID: string, input: { item_id: string; path: string }) => {
+    const transport = { loadActivityValue: vi.fn(async (threadID: string, input: { item_id: string; path: string }): Promise<FlowerActivityValue> => {
       if (hold) await new Promise<void>(resolve => { release = resolve; });
       return { thread_id: threadID, item_id: input.item_id, turn_id: 'turn', run_id: 'run', path: input.path, value: { output: 'done' } };
     }) };
     const reader = createActivityFieldReader(transport);
     disposers.push(() => reader.dispose());
-    const presentation = createActivityFieldPresentation({ reader, item, threadID: thread, itemID: () => 'tool:turn:call', active, connection });
+    const presentation = createActivityFieldPresentation({ reader, item, threadID: thread, itemID: () => 'tool:turn:call', active, connection, execution });
     return { presentation, transport, setActive, setThread, setConnection, setItem,
       hold: () => { hold = true; }, release: () => release?.() };
   });
 }
 describe('activity presentation lifetime', () => {
+  it.each(['identity', 'range'])('retains accepted output on %s failure and latches until explicit retry', async mode => {
+    const f = fixture(() => ['run', 'turn']);
+    await vi.waitFor(() => expect(f.presentation.item().payload?.output).toBe('done'));
+    f.transport.loadActivityValue.mockResolvedValueOnce({ thread_id: 'thread', item_id: 'tool:turn:call', turn_id: 'turn',
+      run_id: mode === 'identity' ? 'other-run' : 'run', path: '/payload',
+      value: mode === 'range' ? { output: '', first_seq: 1, last_seq: 3 } : { output: 'wrong execution' } });
+    f.setConnection(2);
+    await vi.waitFor(() => expect(f.presentation.failed()).toBe(true));
+    expect(f.presentation.item().payload?.output).toBe('done');
+    for (let i = 0; i < 20; i++) f.setItem(item => ({ ...item, field_summary: { ...item.field_summary!, version: 'v' + i } }));
+    expect(f.transport.loadActivityValue).toHaveBeenCalledTimes(2);
+    f.presentation.retry(); f.presentation.retry();
+    await vi.waitFor(() => expect(f.presentation.failed()).toBe(false));
+    expect(f.transport.loadActivityValue).toHaveBeenCalledTimes(3);
+    expect(f.presentation.item().payload?.output).toBe('done');
+  });
+  it.each(['', 'old output'])('retains the accepted terminal tuple while a newer read is pending: %j', async output => {
+    const f = fixture();
+    await vi.waitFor(() => expect(f.presentation.loading()).toBe(false));
+    const previous = { output, first_seq: output ? 1 : 0, last_seq: output ? 2 : 0, truncated: false, process_id: 'process', operation: 'exec' };
+    f.transport.loadActivityValue.mockResolvedValueOnce({ thread_id: 'thread', item_id: 'tool:turn:call', turn_id: 'turn', run_id: 'run', path: '/payload', value: previous });
+    const fields = Object.entries(previous).map(([name, value]) => typeof value === 'string'
+      ? { path: '/payload/' + name, kind: 'string' as const, bytes: value.length }
+      : { path: '/payload/' + name, kind: 'scalar' as const, value });
+    f.setItem(item => ({ ...item, field_summary: { ...item.field_summary!, version: 'seed', fields } }));
+    await vi.waitFor(() => expect(f.presentation.sourcePayload()?.output).toBe(output));
+    f.hold();
+    f.setItem(item => ({ ...item, payload: { first_seq: 1, last_seq: 30, latest_seq: 30, truncated: true },
+      field_summary: { ...item.field_summary!, version: 'new' } }));
+    expect(f.presentation.item().payload).toMatchObject(previous);
+    const frame = f.presentation.item().payload as typeof previous;
+    expect(() => replaceTerminalOutputSnapshot(undefined, frame)).not.toThrow();
+    const accepted = replaceTerminalOutputSnapshot(undefined, frame);
+    expect(replaceTerminalOutputSnapshot(accepted, { output: 'complete output', first_seq: 1, last_seq: 30 }).output).toBe('complete output');
+    f.setActive(false);
+    expect(f.presentation.item().payload).toMatchObject(previous);
+    f.release();
+  });
+
   it('reads Goal state atomically while retaining its large text as frozen fields', async () => {
     const value = { operation: 'review', applied: false, version: 3, outcome: 'continue' };
     const loadActivityValue = vi.fn(async (threadID: string, input: { item_id: string; path: string }) => ({
@@ -97,13 +137,14 @@ describe('activity presentation lifetime', () => {
     f.setActive(false); f.setThread('other'); f.setThread('thread');
     expect(f.presentation.item().payload?.output).toBeUndefined();
   });
-  it('retains the current status while a replacement detail read is pending', async () => {
+  it('updates canonical tool status without mixing a newer terminal payload into accepted output', async () => {
     const f = fixture();
     await vi.waitFor(() => expect(f.presentation.item().payload?.output).toBe('done'));
     f.hold();
-    f.setItem(previous => ({ ...previous, payload: { status: 'error', timed_out: true },
+    f.setItem(previous => ({ ...previous, status: 'error', payload: { status: 'error', timed_out: true },
       field_summary: { ...previous.field_summary!, version: 'v2' } }));
-    expect(f.presentation.item().payload).toEqual({ output: 'done', status: 'error', timed_out: true });
+    expect(f.presentation.item().status).toBe('error');
+    expect(f.presentation.item().payload).toEqual({ output: 'done' });
     f.release();
   });
 });

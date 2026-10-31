@@ -242,6 +242,8 @@ export function replaceTerminalOutputSnapshot(
     if (next.output.length === 0 && next.last_seq === 0) return previous;
     return next;
   }
+  if (previous && next.last_seq === previous.last_seq && next.output
+    && (!previous.output || next.first_seq < previous.first_seq)) return next;
   if (previous && next.last_seq <= previous.last_seq) return previous;
   return next;
 }
@@ -335,6 +337,17 @@ export function createTerminalVisibleOutputStore(maxEntries = 200, maxBytes = 8 
     replaceSnapshot(identity, snapshot) {
       const key = terminalVisibleOutputIdentityKey(identity);
       const prior = entries.get(key);
+      if (prior?.deferredThrough !== undefined && snapshot.output && snapshot.last_seq >= prior.deferredThrough
+        && snapshot.last_seq < prior.state.last_seq) {
+        // Restore an inline prefix using retained exact frame boundaries. Never
+        // split text by sequence arithmetic or discard a newer live suffix.
+        let state = normalizeFrame(snapshot, true);
+        for (const frame of prior.frames.filter(frame => frame.last_seq > state.last_seq)) {
+          state = appendTerminalOutputDelta(state, frame);
+        }
+        touch(key, { state, frames: [state] });
+        return state.output;
+      }
       const state = replaceTerminalOutputSnapshot(prior?.state, snapshot);
       touch(key, state === prior?.state ? prior : { state, frames: state.output ? [state] : [] });
       return state.output;
