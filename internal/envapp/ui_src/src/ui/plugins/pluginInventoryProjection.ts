@@ -186,7 +186,8 @@ function projectCatalogItem(
     officialCatalog: catalogItem,
     presentation: installed.presentation,
     externalPackage,
-    ...(processStatus ? { processStatus } : {}),
+    ...(processStatus && !(installed.background_interval && processStatus.eventType === 'plugin.background.failed') ? { processStatus } : {}),
+    ...(installed.background_interval ? { backgroundInterval: installed.background_interval } : {}),
   };
 }
 
@@ -259,7 +260,8 @@ function projectInstalledItem(
     authorization,
     presentation: installed.presentation,
     externalPackage,
-    ...(processStatus ? { processStatus } : {}),
+    ...(processStatus && !(installed.background_interval && processStatus.eventType === 'plugin.background.failed') ? { processStatus } : {}),
+    ...(installed.background_interval ? { backgroundInterval: installed.background_interval } : {}),
   };
 }
 

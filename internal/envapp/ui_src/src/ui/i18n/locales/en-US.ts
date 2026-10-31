@@ -1021,6 +1021,7 @@ export const enUS = defineDictionary({
           description: 'Allows the methods declared by the verified plugin capability contract.',
         },
       },
+      interval: {"every": "Every {interval}", "state": {"scheduled": "Scheduled", "running": "Running", "stopped": "Stopped", "blocked": "Blocked"}, "unknown": "Previous result unknown", "failed": "Previous run failed", "next": "Next run: {time}"},
       external: {
         installTitle: 'Install external plugin',
         updateTitle: 'Update {plugin}',

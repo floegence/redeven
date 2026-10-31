@@ -293,6 +293,7 @@ export type PluginInventoryItem = {
     securitySummary: PluginExternalPackageSecuritySummary;
   };
   processStatus?: PluginProcessStatus;
+  backgroundInterval?: ReDevPluginRecord['background_interval'];
 };
 
 export type PluginUpdateIntent = Readonly<{
@@ -461,6 +462,7 @@ export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentatio
   presentation?: PluginRecord['presentation'];
   presentation_sha256?: string;
   action_state?: PluginCatalogRecord['action_state'];
+  background_interval?: PluginCatalogRecord['background_interval'];
 };
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
@@ -491,10 +493,7 @@ export type PluginExternalPackageProcessSummary = Readonly<{
   method_access: readonly PluginExternalPackageProcessMethodAccessSummary[];
 }>;
 
-export type PluginExternalPackageBackgroundSummary = Readonly<{
-  strategy: 'runtime_start' | 'on_demand';
-  worker_id: string;
-}>;
+export type PluginExternalPackageBackgroundSummary = NonNullable<PluginExternalPackageInspection['security_summary']['background']>;
 
 export type PluginExternalPackageSecuritySummary = PluginExternalPackageInspection['security_summary'] & Readonly<{
   process?: PluginExternalPackageProcessSummary;

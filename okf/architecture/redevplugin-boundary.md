@@ -47,6 +47,8 @@ Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot w
 
 Plugin data conversion and exact historical data binding remain released Host responsibilities. Redeven displays verified review evidence and calls the existing update APIs; it does not interpret converter code, copy generations, migrate the platform database, or retry uncertain writes.
 
+Durable interval scheduling, claim fencing, restart recovery and unknown-outcome handling remain ReDevPlugin responsibilities. Redeven registers an environment/app permission-cap adapter and renders the released summary and inventory status. It does not retain a user session for background authority, implement timers, or access platform scheduling tables.
+
 # Evidence
 
 - `redeven:go.mod:14` - Pins the released ReDevPlugin Go module.

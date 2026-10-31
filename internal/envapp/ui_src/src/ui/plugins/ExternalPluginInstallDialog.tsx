@@ -1,3 +1,4 @@
+import { backgroundScheduleLabel } from './PluginBackgroundStatus';
 import { StableText } from '@floegence/floe-webapp-core/ui';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
@@ -829,7 +830,7 @@ function InspectionHighlights(props: {
           </Show>
           <Show when={props.summary.background}>
             <div data-external-plugin-background-access>
-              <AccessRow icon={<Loader2 class="h-4 w-4" />} title={i18n.t('uiCopy.plugin.external.backgroundEntry')} change={changeFor('background', props.summary.background!.worker_id)} />
+              <AccessRow icon={<Loader2 class="h-4 w-4" />} title={backgroundScheduleLabel(props.summary.background!, i18n)} change={changeFor('background', props.summary.background!.worker_id)} />
             </div>
           </Show>
           <For each={props.summary.secret_refs}>{(secret) => (

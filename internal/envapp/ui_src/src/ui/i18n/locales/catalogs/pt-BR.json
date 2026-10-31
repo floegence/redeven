@@ -7201,6 +7201,18 @@
         "reviewAgain": "Revisar novamente",
         "checkStatus": "Verificar status",
         "refreshFailed": "Os dados foram restaurados. Atualize a lista de plugins para ver o status atual."
+      },
+      "interval": {
+        "every": "A cada {interval}",
+        "state": {
+          "scheduled": "Agendado",
+          "running": "Em execução",
+          "stopped": "Parado",
+          "blocked": "Bloqueado"
+        },
+        "unknown": "Resultado anterior desconhecido",
+        "failed": "A última execução falhou",
+        "next": "Próxima execução: {time}"
       }
     },
     "pluginRuntime": {

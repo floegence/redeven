@@ -7197,6 +7197,18 @@
         "reviewAgain": "確認をやり直す",
         "checkStatus": "状態を確認",
         "refreshFailed": "データは復元済みです。プラグイン一覧を更新して最新の状態を確認してください。"
+      },
+      "interval": {
+        "every": "{interval} ごとに実行",
+        "state": {
+          "scheduled": "実行待ち",
+          "running": "実行中",
+          "stopped": "停止中",
+          "blocked": "制限されています"
+        },
+        "unknown": "前回の実行結果は不明です",
+        "failed": "前回の実行に失敗しました",
+        "next": "次回の実行：{time}"
       }
     },
     "pluginRuntime": {

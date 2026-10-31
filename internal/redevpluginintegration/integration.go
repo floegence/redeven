@@ -225,7 +225,7 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		},
 		Secrets:    &host.SecretsModule{Store: secretStore},
 		Process:    &host.ProcessModule{Supervisor: processSupervisor},
-		Background: &host.BackgroundModule{RunnerFactory: host.NewBackgroundWorkerRunner},
+		Background: &host.BackgroundModule{RunnerFactory: host.NewBackgroundWorkerRunner, Policy: newBackgroundPolicyAdapter(opts.PermissionPolicy)},
 		ExternalPackage: &host.ExternalPackageModule{
 			SignatureAssessor: packageTrustVerifier,
 			SourceID:          "redeven.external-package",

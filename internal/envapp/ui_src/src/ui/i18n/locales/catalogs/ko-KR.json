@@ -7197,6 +7197,18 @@
         "reviewAgain": "다시 검토",
         "checkStatus": "상태 확인",
         "refreshFailed": "데이터가 복원되었습니다. 플러그인 목록을 새로고침하여 최신 상태를 확인하세요."
+      },
+      "interval": {
+        "every": "{interval}마다 실행",
+        "state": {
+          "scheduled": "예약됨",
+          "running": "실행 중",
+          "stopped": "중지됨",
+          "blocked": "차단됨"
+        },
+        "unknown": "이전 실행 결과를 알 수 없음",
+        "failed": "이전 실행 실패",
+        "next": "다음 실행: {time}"
       }
     },
     "pluginRuntime": {

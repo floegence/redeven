@@ -38,6 +38,20 @@ function method(name: string, effect: string, dangerous = false, preflightOnly =
 }
 
 describe('external plugin security projection', () => {
+  it('binds interval method, period and budget in review differences', () => {
+    const background = { strategy: 'interval' as const, worker_id: 'worker', method: 'counter.tick', interval_ms: 60000, max_runtime_ms: 5000 };
+    const current = summary({ background });
+    const row = securityDeclarations(current, summary())[0];
+    expect(row).toMatchObject({ key: 'background:worker', change: 'added', value: background });
+    expect(row.facts).toContain('method=counter.tick');
+    expect(row.facts).toContain('interval_ms=60000; max_runtime_ms=5000');
+    for (const changed of [{ ...background, method: 'counter.refresh' }, { ...background, interval_ms: 120000 }, { ...background, max_runtime_ms: 4000 }]) {
+      expect(securityDeclarations(summary({ background: changed }), current)[0]).toMatchObject({ change: 'changed', previousFacts: row.facts });
+    }
+    expect(securityDeclarations(current, current)[0].change).toBeUndefined();
+    expect(securityDeclarations(summary(), current)[0].change).toBe('removed');
+  });
+
   it('preserves exact data-upgrade declarations and detects every relevant change', () => {
     const upgrade = { from: [{ version: '1.0.0', shape_sha256: 'a'.repeat(64) }], method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000 };
     const current = summary({ data_upgrade: upgrade });

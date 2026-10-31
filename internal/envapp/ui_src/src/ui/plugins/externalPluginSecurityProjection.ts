@@ -162,6 +162,8 @@ export function projectSecurityDeclarations(summary: PluginExternalPackageSecuri
   if (summary.background) {
     add('background', summary.background.worker_id, [
       `strategy=${summary.background.strategy}; worker_id=${summary.background.worker_id}`,
+      ...(summary.background.method ? ['method=' + summary.background.method] : []),
+      ...(summary.background.interval_ms !== undefined ? ['interval_ms=' + summary.background.interval_ms + '; max_runtime_ms=' + summary.background.max_runtime_ms] : []),
     ], summary.background);
   }
   if (summary.data_upgrade) {

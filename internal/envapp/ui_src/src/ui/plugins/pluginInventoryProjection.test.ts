@@ -96,6 +96,26 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
 }
 
 describe('plugin inventory projection', () => {
+  it('uses current interval state instead of a stale background diagnostic while retaining separate process status', () => {
+    const record = installedRecord({ background_interval: { state: 'scheduled', interval_ms: 60000, max_runtime_ms: 5000, last_outcome: 'success' } });
+    for (const officialCatalog of [[], [examplePlugin]]) {
+      const project = (eventType: string) => projectPluginInventory({ officialCatalog, installedPlugins: [record], processStatusByInstanceID: new Map([[record.plugin_instance_id, { state: 'crashed', eventType }]]) }).items[0];
+      expect(project('plugin.background.failed').processStatus).toBeUndefined();
+      expect(project('plugin.process.operation_failed').processStatus?.state).toBe('crashed');
+    }
+  });
+
+  it.each(['scheduled', 'running', 'stopped', 'blocked'] as const)('preserves authoritative %s interval status in official and generic inventory', (state) => {
+    const background_interval = { state, interval_ms: 60000, max_runtime_ms: 5000, last_outcome: 'unknown' as const, next_run_at: '2026-10-31T10:00:00Z' };
+    for (const officialCatalog of [[], [examplePlugin]]) {
+      const [item] = projectPluginInventory({ officialCatalog, installedPlugins: [installedRecord({ background_interval })] }).items;
+      expect(item.backgroundInterval).toEqual(background_interval);
+      const baseline = projectPluginInventory({ officialCatalog, installedPlugins: [installedRecord()] }).items[0];
+      expect(item.lifecycleState).toBe(baseline.lifecycleState);
+    }
+    expect(projectPluginInventory({ officialCatalog: [], installedPlugins: [installedRecord()] }).items[0].backgroundInterval).toBeUndefined();
+  });
+
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
       officialCatalog: [examplePlugin],

@@ -1,3 +1,4 @@
+import { PluginBackgroundStatus } from './PluginBackgroundStatus';
 import '../../index.css';
 import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 
@@ -862,6 +863,54 @@ describe('plugin management browser geometry and interaction', () => {
     expectNoHorizontalOverflow(review);
     expectInsideViewport(document.querySelector<HTMLElement>('[data-plugin-install-review-confirm]')!, viewport);
     expect(onCommand).not.toHaveBeenCalled();
+  });
+
+
+  it.each([
+    { width: 390, height: 844, theme: 'light' },
+    { width: 390, height: 844, theme: 'dark' },
+    { width: 1180, height: 900, theme: 'light' },
+    { width: 1180, height: 900, theme: 'dark' },
+  ])('reviews interval cadence with bounded technical disclosure at $width px in $theme', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    document.documentElement.classList.add(viewport.theme);
+    const inspection = browserInspection();
+    inspection.security_summary.background = { strategy: 'interval', worker_id: 'counter', method: 'counter.tick', interval_ms: 60000, max_runtime_ms: 5000 };
+    mountExternalDialog(async () => inspection);
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await userEvent.fill(dialog.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://plugins.example.com/counter.redevplugin');
+    dialog.querySelector<HTMLButtonElement>('[data-external-plugin-inspect]')!.click();
+    await vi.waitFor(() => expect(dialog.querySelector('[data-external-plugin-background-access]')).not.toBeNull());
+    const schedule = dialog.querySelector<HTMLElement>('[data-external-plugin-background-access]')!;
+    expect(schedule.textContent).toBe('Every 1 min');
+    const details = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    expect(details.open).toBe(false);
+    details.querySelector('summary')!.click(); await settle();
+    expect(details.textContent).toContain('method=counter.tick');
+    expect(details.textContent).toContain('interval_ms=60000; max_runtime_ms=5000');
+    expectNoHorizontalOverflow(dialog);
+    expectInsideViewport(dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!, viewport);
+  });
+
+
+  it.each([
+    { width: 390, height: 844, theme: 'light' },
+    { width: 390, height: 844, theme: 'dark' },
+    { width: 1180, height: 900, theme: 'light' },
+    { width: 1180, height: 900, theme: 'dark' },
+  ])('keeps interval status and unknown outcome readable at $width px in $theme', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    document.documentElement.classList.add(viewport.theme);
+    const host = fixedHost();
+    disposers.push(render(() => <PluginBackgroundStatus item={{ ...metricsItem, backgroundInterval: { state: 'scheduled', interval_ms: 60000, max_runtime_ms: 5000, last_outcome: 'unknown', next_run_at: '2026-10-31T10:00:00Z' } }} />, host));
+    await settle();
+    const status = host.querySelector<HTMLElement>('[data-plugin-background-status]')!;
+    expect(status.textContent).toContain('Every 1 min');
+    expect(status.textContent).toContain('Previous result unknown');
+    expect(status.querySelector('button')).toBeNull();
+    expectNoHorizontalOverflow(status);
+    expectInsideViewport(status, viewport);
   });
 
   it('cancels and aborts an update review while update content is loading', async () => {

@@ -7197,6 +7197,18 @@
         "reviewAgain": "重新审阅",
         "checkStatus": "核对状态",
         "refreshFailed": "数据已恢复，请刷新插件列表以查看最新状态。"
+      },
+      "interval": {
+        "every": "每 {interval} 执行一次",
+        "state": {
+          "scheduled": "已安排",
+          "running": "运行中",
+          "stopped": "已停止",
+          "blocked": "受限"
+        },
+        "unknown": "上次运行结果未知",
+        "failed": "上次运行失败",
+        "next": "下次运行：{time}"
       }
     },
     "pluginRuntime": {

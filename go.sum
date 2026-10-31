@@ -174,6 +174,8 @@ github.com/floegence/redevplugin/v3 v3.9.0 h1:6Eh239LGErIl/SZUxfvWafSCKzp7JBUkde
 github.com/floegence/redevplugin/v3 v3.9.0/go.mod h1:03mDF3RG3u1zvUHKVbRo5Dkg5GvnCUp5z72I1b7FEGw=
 github.com/floegence/redevplugin/v3 v3.10.0 h1:uCshpUOMh0sVDVeDi4v7lOgqkE8lebmGXxyYlIEs7MY=
 github.com/floegence/redevplugin/v3 v3.10.0/go.mod h1:03mDF3RG3u1zvUHKVbRo5Dkg5GvnCUp5z72I1b7FEGw=
+github.com/floegence/redevplugin/v3 v3.11.0 h1:rfgqa1+5xEk8De5f9579xHC4QVedcCekV6NyrlHvCWc=
+github.com/floegence/redevplugin/v3 v3.11.0/go.mod h1:03mDF3RG3u1zvUHKVbRo5Dkg5GvnCUp5z72I1b7FEGw=
 github.com/flynn/noise v1.1.0 h1:KjPQoQCEFdZDiP03phOvGi11+SVVhBG2wOWAorLsstg=
 github.com/flynn/noise v1.1.0/go.mod h1:xbMo+0i6+IGbYdJhF31t2eR1BIU0CYc12+BNAKwUTag=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=

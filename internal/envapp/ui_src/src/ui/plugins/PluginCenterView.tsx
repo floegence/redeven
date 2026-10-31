@@ -1,3 +1,4 @@
+import { PluginBackgroundStatus, backgroundScheduleLabel } from './PluginBackgroundStatus';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 import { FeedbackIndicator, type FeedbackIndicatorEntry, StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
@@ -1370,9 +1371,12 @@ function OfficialProcessAccessReview(props: {
           <div class="flex min-w-0 items-start gap-2 rounded-md border px-3 py-2.5">
             <RefreshIcon class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span class="min-w-0 flex-1">
-              <span class="block text-[length:var(--floe-type-control)] font-semibold">{i18n.t('uiCopy.plugin.external.backgroundEntry')}</span>
-              <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.backgroundEntryGuidance')}</span>
-              <code class="mt-1 block break-all text-[11px] text-muted-foreground">{i18n.t('uiCopy.plugin.external.backgroundStrategy', { strategy: background().strategy })}</code>
+              <span class="block text-[length:var(--floe-type-control)] font-semibold">{backgroundScheduleLabel(background(), i18n)}</span>
+
+              <details data-plugin-install-background-details class="group mt-2 rounded-md border">
+                <summary class="flex min-h-11 cursor-pointer items-center px-3 text-xs font-medium">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+                <code class="block break-all border-t p-3 text-[11px] text-muted-foreground">{'strategy=' + background().strategy + '; method=' + (background().method ?? '-') + '; interval_ms=' + (background().interval_ms ?? '-') + '; max_runtime_ms=' + (background().max_runtime_ms ?? '-')}</code>
+              </details>
             </span>
           </div>
         )}
@@ -1768,6 +1772,7 @@ export function PluginCenterDetails(props: {
 
                 <PluginIssueDetails item={item()} />
 
+                <PluginBackgroundStatus item={item()} />
                 <PluginProcessStatusDetails item={item()} />
 
                 <details class="group rounded-md border px-3 py-2.5 transition-[border-color,background-color] duration-150 open:bg-muted/10 motion-reduce:transition-none" data-plugin-technical-details>
@@ -1779,6 +1784,7 @@ export function PluginCenterDetails(props: {
                     <DetailStat label={i18n.t('uiCopy.plugin.minimumRedeven')} value={item().officialCatalog?.minRedevenVersion ?? '-'} />
                     <DetailStat label={i18n.t('uiCopy.plugin.minimumReDevPlugin')} value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
                     <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={pluginTrustLabel(item(), i18n)} />
+                    <Show when={item().backgroundInterval}>{(status) => <code class="break-all text-[11px] text-muted-foreground">{'interval_ms=' + status().interval_ms + '; max_runtime_ms=' + status().max_runtime_ms + '; last_outcome=' + (status().last_outcome ?? '-')}</code>}</Show>
                   </div>
                   <code class="mt-3 block break-all text-[11px] text-muted-foreground">{item().pluginID}</code>
                 </details>

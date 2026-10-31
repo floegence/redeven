@@ -7197,6 +7197,18 @@
         "reviewAgain": "重新檢視",
         "checkStatus": "確認狀態",
         "refreshFailed": "資料已還原，請重新整理外掛程式清單以查看最新狀態。"
+      },
+      "interval": {
+        "every": "每 {interval} 執行一次",
+        "state": {
+          "scheduled": "已排程",
+          "running": "執行中",
+          "stopped": "已停止",
+          "blocked": "受限"
+        },
+        "unknown": "上次執行結果未知",
+        "failed": "上次執行失敗",
+        "next": "下次執行：{time}"
       }
     },
     "pluginRuntime": {

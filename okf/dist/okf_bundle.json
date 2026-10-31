@@ -1600,8 +1600,8 @@
               "plugins",
               "redevplugin"
             ],
-            "summary": "Background entries are a generic ReDevPlugin lifecycle mechanism, not a\nCodex-specific hidden page. A plugin declares `runtime_start` or `on_demand`;\nthe platform starts one headless worker per plugin instance and environment,\nkeeps it independent from visible Activity or Workbench surfaces, and exposes\nonly lifecycle outcomes. The platform stops it on disable, uninstall,\nrevocation, and Host close. Plugin business protocol state is not owned or\nrecovered by Redeven.",
-            "section_count": 2
+            "summary": "ReDevPlugin owns headless Worker lifecycle and durable intervals. Redeven supplies environment permission policy and presents verified status through ordinary plugin management. No hidden surface, host scheduler, replay endpoint or second Worker protocol is involved.",
+            "section_count": 3
           },
           {
             "concept_id": "architecture.redevplugin-package-lifecycle",
@@ -15299,7 +15299,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-31",
         "tags": [
           "architecture",
           "background",
@@ -15309,25 +15309,32 @@
         "title": "Plugin background entries",
         "type": "Architecture Contract"
       },
-      "body_length": 1604,
-      "summary": "Background entries are a generic ReDevPlugin lifecycle mechanism, not a\nCodex-specific hidden page. A plugin declares `runtime_start` or `on_demand`;\nthe platform starts one headless worker per plugin instance and environment,\nkeeps it independent from visible Activity or Workbench surfaces, and exposes\nonly lifecycle outcomes. The platform stops it on disable, uninstall,\nrevocation, and Host close. Plugin business protocol state is not owned or\nrecovered by Redeven.",
+      "body_length": 4043,
+      "summary": "ReDevPlugin owns headless Worker lifecycle and durable intervals. Redeven supplies environment permission policy and presents verified status through ordinary plugin management. No hidden surface, host scheduler, replay endpoint or second Worker protocol is involved.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`runtime_start` entries are recovered after Host startup and runtime recovery; `on_demand` entries start only after the plugin requests them through its declared lifecycle. Starts are idempotent and concurrent starts are serialized.\n\nStatus changes update only the owning plugin instance and do not lock Plugin Center, Activity, Workbench, or Composer.",
-          "char_count": 352
+          "body": "A plugin may declare runtime_start, on_demand or interval. The first two use the platform background manager: starts are idempotent, scoped to the installed instance and environment, and independent of visible Activity or Workbench surfaces. Interval requires background.method.v1 and background.interval.v1, an explicit method and parameters, an environment-scoped job Worker, synchronous execution, no confirmation or preflight, a 1,000–86,400,000 ms period, and a 1–300,000 ms execution budget not exceeding the period.\n\nThe platform persists and claims each due invocation before dispatch. One instance runs at most one interval invocation; separate plugins remain independent. The first run waits one period, then each next run follows completion plus the period. Missed periods coalesce. Restart preserves completed plans; an unfinished claim becomes unknown and is never replayed. A later period is new work, not proof of the earlier result. Disable, uninstall, package replacement and revocation fence and cancel exact current work. Host close drains execution before closing state. ReDevPlugin owns contiguous control-store migration and unknown-outcome handling.\n\nRedeven's background policy snapshots the validated runtime LocalMax intersected with the Env App application cap, then applies the existing method-effect rules. It does not depend on an online session, borrow a user's cached authority, or apply a per-user override to an environment-owned job. Admin and unknown effects are denied. The platform separately verifies owner, installed package trust, current grants, revisions, runtime admission and the durable claim. This policy grants no filesystem, process, secret or network resource: adapters requiring a live user session continue to reject background access. Selected-file and connection approvals retain their existing lifetime and owner rules.\n\nAn explicit install/enable action authorizes the declared environment lifecycle through the ordinary product review and platform APIs. Permission removal blocks future dispatch without changing the user's enabled intent. The existing disable action stops work. No separate scheduling switch is introduced.",
+          "char_count": 2181
+        },
+        {
+          "id": "presentation",
+          "title": "Presentation",
+          "level": 1,
+          "body": "Installation review shows the localized cadence for interval entries. Method identity, exact period and execution budget remain inside existing expandable technical details. Installed details consume the authoritative background_interval projection: scheduled, running, stopped or blocked, with next-run time only while scheduled. A prior failed or unknown result remains visible without a retry button that could replay effects. A previous background diagnostic cannot override current interval status; separate process diagnostics remain available. Refresh uses the existing owner-scoped inventory path.",
+          "char_count": 605
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "This concept owns headless plugin-entry lifecycle and recovery boundaries. Process stream ownership is defined by [Plugin process sessions](plugin-process-sessions.md); Redeven owns only the installation-review projection, permission state, and diagnostic presentation described by [Plugin platform integration](plugin-platform-integration.md).",
-          "char_count": 344
+          "body": "The platform owns durable plans, claims, authorization fencing, dispatch, cancellation, recovery and schema migration. Redeven owns only its product policy, localized review/status, and existing management controls. Business protocol state remains application-owned. See [Plugin platform integration](plugin-platform-integration.md), [Plugin process sessions](plugin-process-sessions.md), and [ReDevPlugin boundary](redevplugin-boundary.md).",
+          "char_count": 441
         }
       ],
-      "snippet": "Background entries are a generic ReDevPlugin lifecycle mechanism, not a Codex-specific hidden page. A plugin declares `runtime_start` or `on_demand`; the platform starts one headless worker per plugin instance and environment,",
+      "snippet": "ReDevPlugin owns headless Worker lifecycle and durable intervals. Redeven supplies environment permission policy and presents verified status through ordinary plugin management. No hidden surface, host scheduler, replay endpoint or second W",
       "links": [
         {
           "label": "Plugin platform integration",
@@ -15340,6 +15347,12 @@
           "path": "architecture/plugin-process-sessions.md",
           "concept_id": "architecture.plugin-process-sessions",
           "title": "Plugin process sessions"
+        },
+        {
+          "label": "ReDevPlugin boundary",
+          "path": "architecture/redevplugin-boundary.md",
+          "concept_id": "architecture.redevplugin-boundary",
+          "title": "ReDevPlugin host integration boundary"
         }
       ],
       "backlinks": [
@@ -15730,7 +15743,7 @@
         "title": "ReDevPlugin host integration boundary",
         "type": "Architecture Boundary"
       },
-      "body_length": 3739,
+      "body_length": 4098,
       "summary": "Redeven consumes the coordinated published ReDevPlugin Go, npm, Rust and machine-contract artifacts without forking platform mechanics. It owns session mapping, source policy/review, placement, product runtime builds and business adapters. Missing/unverifiable identity, lifecycle, interaction, package or runtime contracts fail closed without local compatibility or sibling-source fallback.",
       "sections": [
         {
@@ -15744,8 +15757,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot write opaque state, mint tokens, fabricate trust or grant broker authority. Wrong, legacy, drifted, tampered or future roots fail unchanged.\n\nPlugin data conversion and exact historical data binding remain released Host responsibilities. Redeven displays verified review evidence and calls the existing update APIs; it does not interpret converter code, copy generations, migrate the platform database, or retry uncertain writes.",
-          "char_count": 508
+          "body": "Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot write opaque state, mint tokens, fabricate trust or grant broker authority. Wrong, legacy, drifted, tampered or future roots fail unchanged.\n\nPlugin data conversion and exact historical data binding remain released Host responsibilities. Redeven displays verified review evidence and calls the existing update APIs; it does not interpret converter code, copy generations, migrate the platform database, or retry uncertain writes.\n\nDurable interval scheduling, claim fencing, restart recovery and unknown-outcome handling remain ReDevPlugin responsibilities. Redeven registers an environment/app permission-cap adapter and renders the released summary and inventory status. It does not retain a user session for background authority, implement timers, or access platform scheduling tables.",
+          "char_count": 867
         }
       ],
       "evidence": [
@@ -15778,6 +15791,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Plugin background entries",
+          "path": "architecture/plugin-background-entries.md",
+          "concept_id": "architecture.plugin-background-entries",
+          "title": "Plugin background entries"
+        },
         {
           "label": "Plugin platform integration",
           "path": "architecture/plugin-platform-integration.md",
@@ -23804,7 +23823,7 @@
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Published source and trust\n\nConsume manifest-pinned v3.10.0. Boundary scans reject sibling wiring, Go workspace/replace, npm links, copied runtimes/contracts, Rust paths and duplicate platform-core; exclude generated output/dependencies and fail on scanner errors. Do not commit plugin packages/parallel catalog. Validated latest-only market snapshots choose immutable transport; ReDevPlugin verifies retrieval. Metadata is not trust.\n\nRequire exactly one upstream platform-release-manifest.json. Bind tag/source/workflow/attestation; independently verify Go proxy/SumDB h1/go.mod, both npm SHA-512 integrities/provenance, runtime/worker crates.io checksums/Cargo VCS, manifest version/closed coordinate order/contract-set hash. Extra assets/partial publication/local or mutable identities/registry mismatches fail before construction.\n\nManifest transport requires verified HTTPS through redirects. Initial attempt plus three network retries (including handshake):15s connect/60s transfer/120s retry-start bounds; last transfer may finish later. Exhaustion removes partials and stops before Rust preparation with release-specific diagnostics. Validation never retries. --manifest-file applies identical offline validation. Node CLI must validate/emit evidence from canonical or symlinked paths; empty success is not evidence.\n\n## Native construction and admission\n\nBuild Linux/Darwin amd64/arm64 from exact published crate/packaged lock/Rust1.88.0; metadata cannot resolve another first-party path. Verify toolchain/target before preparation; warm caches avoid servers. Retry only transient installation failures, three attempts default/five maximum; integrity/signature/manifest failures stop. REDEVEN_RUSTUP_OFFLINE=1 means cache-only Rustup, not manifest/Cargo bypass. Honor standard Cargo/Rustup/proxies, disable probe auto-install, retain TLS/recheck installs/return exact Cargo. Download120s; waits2/4s capped60s; cancellation ends retries/cleans diagnostics.\n\nLinux: static PIE, no interpreter/dynamic dependencies. Darwin: native target-exact64-bit Mach-O; Developer ID/hardened runtime/timestamp before evidence (development ad hoc). Emit binary/SPDX SBOM/resolved provenance/notices/signature/certificate. Release Sigstore identity binds exact tag workflow; ephemeral local Ed25519 fails --require-release. Cosign3 uses --new-bundle-format=false/--use-signing-config=false with workflow/OIDC/transparency verification.\n\nredeven.redevplugin_runtime_build.v1 binds publication/product files/target/toolchain/source/workflow/signer. Consumption rechecks descriptors/target/profile/signature. Startup trusts expected marker digest, never field binary's self-computed hash. Runtime archives contain exactly Redeven, ReDevPlugin runtime, six evidence files, license/notices.\n\n## Desktop packages and collector\n\nBefore replacing .bundle/\u003ctarget\u003e, validate name/closed flat inventory/Go target/native policy. Gateway stays separate. Include full evidence beside Redeven. macOS exclusion regex matches only independently signed runtime; preserve its bytes/evidence. Redeven/Computer/Sparkle/bridge remain signable. After Electron assembly copy complete Computer resource tree/licenses. Validate startup before signing and again after refreshing only signer-visited Runtime/Computer descriptors, immediately before enclosing seal.\n\nInspect final DEB/RPM/read-only DMG and emit v2 installer-bound receipts for runtime/six evidence files. Upload only installers/receipts/latest-linux*.yml, no diagnostics/unrelated macOS YAML. Use Apple tools/system text without ripgrep and consume full pipelines under pipefail. Require Team ID/signature/hardened runtime/updater key/stapling/distribution; Sparkle lipo takes binary before -verify_arch. Separate Linux relink source/object archives from runtime. Derive epoch/windows from reviewed contract; normalize feed names before signed inventory.\n\nDEB permits POSIX ustar/GNU regular files/directories, bounded long names/metadata-only root. RPM disables optional build-id symlinks. Bounded no-follow snapshots reject noncanonical/duplicate paths, links/devices, privileged modes, sparse/PAX metadata, malformed trailers/trailing data/oversize.\n\nCollector requires four Runtime/Gateway package directories, four Desktop directories, and two Center directories. Inventory: four Redeven/four Gateway archives, two DEBs/two RPMs/two DMGs/six target receipts/identical shared metadata, plus both Center archives/receipts described by [release gates](ci-and-release-gates.md). Open each source once no-follow, hash/copy same descriptor, verify inode/metadata, fsync/link without replacement; clean partial output on failure.\n\nWindows managed_wsl_archive internally certifies one Linux amd64 archive bound to version/source/size/digest, rejecting redeven.exe. Formal collector rejects all Windows directories until signed-update/signing certification; no optional fifth target.\n\nFinal release requires release-only consumption, signed checksums/safe_extract_tar.py and complete draft names/sizes/hashes comparison before publication. [Installer](self-contained-installer.md) owns verify-before-execute, immutable suite activation/retention.",
+          "body": "## Published source and trust\n\nConsume manifest-pinned v3.11.0. Boundary scans reject sibling wiring, Go workspace/replace, npm links, copied runtimes/contracts, Rust paths and duplicate platform-core; exclude generated output/dependencies and fail on scanner errors. Do not commit plugin packages/parallel catalog. Validated latest-only market snapshots choose immutable transport; ReDevPlugin verifies retrieval. Metadata is not trust.\n\nRequire exactly one upstream platform-release-manifest.json. Bind tag/source/workflow/attestation; independently verify Go proxy/SumDB h1/go.mod, both npm SHA-512 integrities/provenance, runtime/worker crates.io checksums/Cargo VCS, manifest version/closed coordinate order/contract-set hash. Extra assets/partial publication/local or mutable identities/registry mismatches fail before construction.\n\nManifest transport requires verified HTTPS through redirects. Initial attempt plus three network retries (including handshake):15s connect/60s transfer/120s retry-start bounds; last transfer may finish later. Exhaustion removes partials and stops before Rust preparation with release-specific diagnostics. Validation never retries. --manifest-file applies identical offline validation. Node CLI must validate/emit evidence from canonical or symlinked paths; empty success is not evidence.\n\n## Native construction and admission\n\nBuild Linux/Darwin amd64/arm64 from exact published crate/packaged lock/Rust1.88.0; metadata cannot resolve another first-party path. Verify toolchain/target before preparation; warm caches avoid servers. Retry only transient installation failures, three attempts default/five maximum; integrity/signature/manifest failures stop. REDEVEN_RUSTUP_OFFLINE=1 means cache-only Rustup, not manifest/Cargo bypass. Honor standard Cargo/Rustup/proxies, disable probe auto-install, retain TLS/recheck installs/return exact Cargo. Download120s; waits2/4s capped60s; cancellation ends retries/cleans diagnostics.\n\nLinux: static PIE, no interpreter/dynamic dependencies. Darwin: native target-exact64-bit Mach-O; Developer ID/hardened runtime/timestamp before evidence (development ad hoc). Emit binary/SPDX SBOM/resolved provenance/notices/signature/certificate. Release Sigstore identity binds exact tag workflow; ephemeral local Ed25519 fails --require-release. Cosign3 uses --new-bundle-format=false/--use-signing-config=false with workflow/OIDC/transparency verification.\n\nredeven.redevplugin_runtime_build.v1 binds publication/product files/target/toolchain/source/workflow/signer. Consumption rechecks descriptors/target/profile/signature. Startup trusts expected marker digest, never field binary's self-computed hash. Runtime archives contain exactly Redeven, ReDevPlugin runtime, six evidence files, license/notices.\n\n## Desktop packages and collector\n\nBefore replacing .bundle/\u003ctarget\u003e, validate name/closed flat inventory/Go target/native policy. Gateway stays separate. Include full evidence beside Redeven. macOS exclusion regex matches only independently signed runtime; preserve its bytes/evidence. Redeven/Computer/Sparkle/bridge remain signable. After Electron assembly copy complete Computer resource tree/licenses. Validate startup before signing and again after refreshing only signer-visited Runtime/Computer descriptors, immediately before enclosing seal.\n\nInspect final DEB/RPM/read-only DMG and emit v2 installer-bound receipts for runtime/six evidence files. Upload only installers/receipts/latest-linux*.yml, no diagnostics/unrelated macOS YAML. Use Apple tools/system text without ripgrep and consume full pipelines under pipefail. Require Team ID/signature/hardened runtime/updater key/stapling/distribution; Sparkle lipo takes binary before -verify_arch. Separate Linux relink source/object archives from runtime. Derive epoch/windows from reviewed contract; normalize feed names before signed inventory.\n\nDEB permits POSIX ustar/GNU regular files/directories, bounded long names/metadata-only root. RPM disables optional build-id symlinks. Bounded no-follow snapshots reject noncanonical/duplicate paths, links/devices, privileged modes, sparse/PAX metadata, malformed trailers/trailing data/oversize.\n\nCollector requires four Runtime/Gateway package directories, four Desktop directories, and two Center directories. Inventory: four Redeven/four Gateway archives, two DEBs/two RPMs/two DMGs/six target receipts/identical shared metadata, plus both Center archives/receipts described by [release gates](ci-and-release-gates.md). Open each source once no-follow, hash/copy same descriptor, verify inode/metadata, fsync/link without replacement; clean partial output on failure.\n\nWindows managed_wsl_archive internally certifies one Linux amd64 archive bound to version/source/size/digest, rejecting redeven.exe. Formal collector rejects all Windows directories until signed-update/signing certification; no optional fifth target.\n\nFinal release requires release-only consumption, signed checksums/safe_extract_tar.py and complete draft names/sizes/hashes comparison before publication. [Installer](self-contained-installer.md) owns verify-before-execute, immutable suite activation/retention.",
           "char_count": 5177
         },
         {
@@ -31716,5 +31735,5 @@
       ]
     }
   ],
-  "source_sha256": "311f37521c0559312973e4fe639bf8b11c344bc7508b049b1c0bada856cbf41a"
+  "source_sha256": "d69596f09fe3e6c14df9872dbb6aff7c8a9c38b2dc990e084d9f3b9facdc24c7"
 }
