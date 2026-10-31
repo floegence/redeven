@@ -138,6 +138,8 @@ it.each([['zh-CN', 320, false], ['en-US', 1100, true], ['de-DE', 390, true]] as 
     await touch.emulateTouchInput(false);
     expect(surface.querySelector('[data-flower-progress-kind]')).toBeNull();
     const retry = status.querySelector<HTMLButtonElement>('button')!;
+    const restoredDetails = status.querySelector<HTMLButtonElement>('.flower-sync-details-toggle')!;
+    expect(Math.abs(retry.getBoundingClientRect().top - restoredDetails.getBoundingClientRect().top)).toBeLessThanOrEqual(4);
     expect(retry.getBoundingClientRect().right).toBeLessThanOrEqual(status.getBoundingClientRect().right + 1);
     retry.focus();
     expect(document.activeElement).toBe(retry);
