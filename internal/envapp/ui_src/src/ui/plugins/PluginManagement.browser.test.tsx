@@ -829,6 +829,11 @@ describe('plugin management browser geometry and interaction', () => {
     expect(details.closest('details')!.open).toBe(false);
     expect(details.textContent).toContain('method=data.convert');
     expect(details.textContent).toContain('max_runtime_ms=3000');
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.textContent).not.toContain('The publisher did not provide update notes');
+    expect(dialog.textContent).not.toContain('See what will change before installing');
+    expect(dialog.querySelector('details')!.textContent).toContain('Host package inspection is bound');
+    expect(dialog.querySelectorAll('h3')).toHaveLength(1);
   });
 
   it.each([

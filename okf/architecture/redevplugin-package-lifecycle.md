@@ -26,7 +26,7 @@ Redeven passes published SDK DTOs unchanged. Discovery, inspection and status re
 
 ReDevPlugin 3.10 owns package-declared conversion, isolated input/output generations, quotas, cancellation, and the atomic package/data/history transaction. A converter matches an exact predecessor version and data shape. Failed or cancelled conversion keeps the old package and data; committed or unknown outcomes use the existing update reconciliation path and never trigger automatic replay. Downgrade restores the exact historical package's last data generation. The platform migrates its control store before opening it; Redeven never reads or writes that schema.
 
-Redeven consumes the verified data-upgrade declaration from the released security summary. Review presents one concise saved-data notice before approval; method, predecessor identities and resource limits remain in expandable package details. Added, changed and removed declarations use the existing security-difference projection. No second migration wizard, converter dispatcher, durable job or product-owned data copy is introduced.
+Redeven consumes the verified data-upgrade declaration from the released security summary. Review presents one concise saved-data notice before approval; method, predecessor identities and resource limits remain in expandable package details. Added, changed and removed declarations use the existing security-difference projection. Review omits empty release-note placeholders and generic instructions; inspection-binding facts stay inside expandable evidence, and unchanged permission grants appear only once. No second migration wizard, converter dispatcher, durable job or product-owned data copy is introduced.
 
 # Boundaries
 
