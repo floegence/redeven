@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   desktopPrivateBridgeRequestHeaders,
+  desktopRequestSourceScope,
   resolveDesktopSessionTransport,
   shouldFailDesktopSessionMainDocument,
 } from './desktopSessionTransport';
@@ -198,6 +199,35 @@ describe('shouldFailDesktopSessionMainDocument', () => {
 });
 
 describe('desktopPrivateBridgeRequestHeaders', () => {
+  it('authorizes frame-less workers only from their browser-reported private origin', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    const url = `${transport.baseURL}_redeven_proxy/env/assets/elk-worker.js`;
+    const forged = { 'x-redeven-desktop-bridge-token': 'forged', Accept: '*/*' };
+    const details = { url, resourceType: 'script', initiatorOrigin: new URL(transport.baseURL).origin };
+    const scope = desktopRequestSourceScope(details);
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, scope))
+      .toEqual({ Accept: '*/*', 'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token });
+    for (const origin of ['', 'null', 'https://example.com', 'http://127.0.0.1:43124',
+      'https://127.0.0.1:43123', `http://${'a'.repeat(48)}.localhost:43123`]) {
+      expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, desktopRequestSourceScope({ ...details, initiatorOrigin: origin })))
+        .toEqual({ Accept: '*/*' });
+    }
+    for (const requestingFrameURL of ['', 'about:blank', 'https://example.com/']) {
+      expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, desktopRequestSourceScope({ ...details, frame: { url: requestingFrameURL } })))
+        .toEqual({ Accept: '*/*' });
+    }
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup,
+      'http://127.0.0.1:43124/_redeven_proxy/env/assets/elk-worker.js', forged, scope))
+      .toEqual({ Accept: '*/*' });
+    const workerHeaders = desktopPrivateBridgeRequestHeaders(transport, localStartup,
+      `${transport.baseURL}_redeven_proxy/api/settings`, {}, { ...scope, verifiedLocalHost: true, tessivenSource: 'a'.repeat(72) });
+    expect(workerHeaders).not.toHaveProperty('X-Redeven-Host-Access');
+    expect(workerHeaders).not.toHaveProperty('X-Redeven-Tessiven-Source');
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged,
+      desktopRequestSourceScope({ ...details, initiatorOrigin: undefined, frame: null })))
+      .toEqual({ Accept: '*/*' });
+  });
+
   it('never sends private credentials to plugin origins or on plugin frame requests', () => {
     const transport = resolveDesktopSessionTransport(localTarget, localStartup);
     const pluginURL = `http://${'a'.repeat(48)}.localhost:43123/index.html`;

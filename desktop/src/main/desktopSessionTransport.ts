@@ -32,9 +32,23 @@ export type DesktopPrivateBridgeRequestScope = Readonly<{
   tessivenSource?: string;
   verifiedLocalHost?: boolean;
   trustedEnvAppFrame?: boolean;
-  // Omitted only for requests created directly by the main process.
+  // Renderer requests carry either a frame URL or an initiator origin.
+  // Only requests created directly by the main process omit both.
   requestingFrameURL?: string;
+  // Electron's browser-reported origin for requests without an owning frame.
+  requestingInitiatorOrigin?: string;
 }>;
+
+export function desktopRequestSourceScope(details: Readonly<{
+  url: string;
+  resourceType: string;
+  frame?: { url: string } | null;
+  initiatorOrigin?: string;
+}>): Pick<DesktopPrivateBridgeRequestScope, 'requestingFrameURL' | 'requestingInitiatorOrigin'> {
+  if (details.resourceType === 'mainFrame') return { requestingFrameURL: details.url };
+  if (details.frame) return { requestingFrameURL: details.frame.url };
+  return { requestingInitiatorOrigin: details.initiatorOrigin ?? '' };
+}
 
 export function desktopPrivateBridgeRequestHeaders(
   transport: DesktopSessionTransport,
@@ -59,8 +73,9 @@ export function desktopPrivateBridgeRequestHeaders(
     const privateProtocol = request.protocol === 'http:' || request.protocol === 'ws:';
     const webServiceForwardID = String(scope.webServiceForwardID ?? '').trim().toLowerCase();
     const expectedHostname = webServiceForwardID && !scope.graphicalWindow ? `pf-${webServiceForwardID}.localhost` : allowed.hostname;
-    if (scope.requestingFrameURL !== undefined) {
-      const frame = new URL(scope.requestingFrameURL);
+    const requestingSource = scope.requestingFrameURL ?? scope.requestingInitiatorOrigin;
+    if (requestingSource !== undefined) {
+      const frame = new URL(requestingSource);
       if (frame.protocol !== allowed.protocol || frame.hostname !== expectedHostname || frame.port !== allowed.port) return requestHeaders;
     }
     if (scope.graphicalWindow && webServiceForwardID && !(

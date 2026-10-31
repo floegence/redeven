@@ -54,7 +54,7 @@ Raw adapter errors, tokens, secrets, cookies, query strings, absolute paths, and
 
 ## Plugin Web isolation
 
-Plugin documents use a distinct product-allocated origin and the published Web surface handler. Local UI and AppServer strip parent authentication before delegating child traffic. Desktop verifies the actual requesting frame origin before attaching private bridge credentials. Center binds child routes to an authenticated parent and cancels derived preparation on revocation; Gateway accepts only the expected child namespace and target.
+Plugin documents use a distinct product-allocated origin and the published Web surface handler. Local UI and AppServer strip parent authentication before delegating child traffic. Desktop verifies the actual requesting frame origin before attaching private bridge credentials. For frame-less worker requests, it verifies Electron's browser-reported initiator origin within the owning Runtime partition against the same exact private origin. Missing or opaque origins fail closed; a present frame remains authoritative, and worker requests never receive frame-only host-access or Tessiven source claims. Center binds child routes to an authenticated parent and cancels derived preparation on revocation; Gateway accepts only the expected child namespace and target.
 
 The application owns its DOM and browser rendering. These freedoms do not grant product session, filesystem, process, credential or management authority. The released platform remains responsible for asset sessions, bridge binding, permissions and revocation.
 
@@ -69,3 +69,7 @@ Redeven security adapters may narrow authority; they may not mint platform token
 - `redeven:internal/redevpluginintegration/session_adapter.go:1` - Derives exact owner hashes and bounded permission cache entries.
 
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
+
+- `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Covers exact worker origin admission, plugin and unknown-origin denial, and frame authority.
+
+- `redeven:desktop/scripts/check-tessiven-workers.mjs` - Reproduces the unauthenticated nested ELK worker failure in Electron, then verifies cold graph rendering, zoom, and reload through the protected origin.

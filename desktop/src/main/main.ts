@@ -315,6 +315,7 @@ import {
 } from './runtimeFlowerAttachmentPreview';
 import {
   desktopPrivateBridgeRequestHeaders,
+  desktopRequestSourceScope,
   requireLocalUIBridgeURL,
   resolveDesktopSessionTransport,
   shouldFailDesktopSessionMainDocument,
@@ -19017,7 +19018,7 @@ function installDesktopDiagnosticsHooks(
       diagnosticHeaders ?? details.requestHeaders as Record<string, string | string[]>,
       {
         webServiceForwardID, graphicalWindow,
-        requestingFrameURL: details.resourceType === 'mainFrame' ? details.url : details.frame?.url ?? '',
+        ...desktopRequestSourceScope(details),
         verifiedLocalHost: sessionRecord.target.kind === 'local_environment' && sessionRecord.target.route === 'local_host' && sessionRecord.transport.kind === 'native_local_bridge',
         tessivenSource: tessivenHostFor(sessionRecord.startup)?.host.source(),
         trustedEnvAppFrame: (contentsID === sessionRecord.root_window.webContentsID
