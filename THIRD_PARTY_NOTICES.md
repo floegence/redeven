@@ -2775,7 +2775,7 @@ SOFTWARE.
 | github.com/floegence/floret/v7 | v7.95.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.95.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.7.0 | Floegence first-party versioned Managed Service template catalog. |
-| github.com/floegence/redevplugin/v3 | v3.8.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.8.0 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin/v3 | v3.9.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.9.0 | Floegence first-party dependency. |
 | github.com/flynn/noise | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/flynn/noise@v1.1.0 | Detected from LICENSE. |
 | github.com/go-chi/chi/v5 | v5.5.0 | MIT | Runtime | https://pkg.go.dev/github.com/go-chi/chi/v5@v5.5.0 | Detected from LICENSE. |
 | github.com/go-jose/go-jose/v4 | v4.1.6 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-jose/go-jose/v4@v4.1.6 | Detected from LICENSE. |
@@ -3058,8 +3058,8 @@ SOFTWARE.
 | @floegence/flowersec-node-native-linux-x64-gnu | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.11.1 |  |
 | @floegence/flowersec-node-native | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.11.1 |  |
 | @floegence/redeven-service-templates | 0.7.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.7.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.7.0 source release. The SDK manifest omits its license field. |
-| @floegence/redevplugin-contracts | 3.8.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.8.0 |  |
-| @floegence/redevplugin-ui | 3.8.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.8.0 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 3.9.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.9.0 |  |
+| @floegence/redevplugin-ui | 3.9.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.9.0 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/ibm-plex-mono | 5.3.0 | OFL-1.1 | Env App UI | https://www.npmjs.com/package/%40fontsource%2Fibm-plex-mono/v/5.3.0 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
@@ -3075,6 +3075,7 @@ SOFTWARE.
 | @iconify/utils | 3.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.3 | License verified from the exact registry package manifest. |
 | @iconify/utils | 3.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.4 |  |
 | @isaacs/fs-minipass | 4.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/%40isaacs%2Ffs-minipass/v/4.0.1 |  |
+| @isaacs/nonrecursive-glob-match | 1.0.3 | BlueOak-1.0.0 | Env App UI | https://www.npmjs.com/package/%40isaacs%2Fnonrecursive-glob-match/v/1.0.3 |  |
 | @jitl/quickjs-ffi-types | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-ffi-types/v/0.32.0 |  |
 | @jitl/quickjs-wasmfile-debug-asyncify | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-wasmfile-debug-asyncify/v/0.32.0 |  |
 | @jitl/quickjs-wasmfile-debug-sync | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-wasmfile-debug-sync/v/0.32.0 |  |
@@ -3651,8 +3652,9 @@ SOFTWARE.
 | mime | 2.6.0 | MIT | Desktop shell | https://www.npmjs.com/package/mime/v/2.6.0 |  |
 | mimic-response | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/mimic-response/v/1.0.1 |  |
 | mimic-response | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/mimic-response/v/3.1.0 |  |
-| minimatch | 10.2.5 | BlueOak-1.0.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/minimatch/v/10.2.5 |  |
+| minimatch | 10.2.5 | BlueOak-1.0.0 | Code App UI, Desktop shell | https://www.npmjs.com/package/minimatch/v/10.2.5 |  |
 | minimatch | 10.2.6 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/minimatch/v/10.2.6 |  |
+| minimatch | 11.0.1 | BlueOak-1.0.0 | Env App UI | https://www.npmjs.com/package/minimatch/v/11.0.1 |  |
 | minimist | 1.2.8 | MIT | Desktop shell | https://www.npmjs.com/package/minimist/v/1.2.8 |  |
 | minipass | 7.1.3 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/minipass/v/7.1.3 |  |
 | minizlib | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/minizlib/v/3.1.0 |  |

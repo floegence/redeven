@@ -36,6 +36,7 @@ import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader, PluginProcessStatusBadge } from './PluginPresentationPrimitives';
 import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
+import { PluginRetainedDataDialog, type PluginRetainedDataAPI } from './PluginRetainedDataDialog';
 import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
@@ -50,6 +51,9 @@ export type PluginCenterViewProps = {
   selectedInventoryKey?: string;
   focusRequest?: number;
   canManagePlugins: boolean;
+  canRecoverPluginData?: boolean;
+  pluginOwnerScope?: object | false;
+  retainedDataAPI?: PluginRetainedDataAPI;
   canOpenPluginSurfaces: boolean;
   runtimeRecovery?: PluginRuntimeRecoveryPresentation;
   runtimeRecoveryByInstanceID?: Readonly<Record<string, PluginRuntimeRecoveryPresentation>>;
@@ -119,9 +123,16 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [officialInstallFlow, setOfficialInstallFlow] = createSignal<OfficialInstallFlow>({ status: 'idle' });
   const [officialInstallDialogOpen, setOfficialInstallDialogOpen] = createSignal(false);
-  const [retainedDataRecoveryItem, setRetainedDataRecoveryItem] = createSignal<PluginInventoryItem>();
-  const [retainedDataRecoveryPending, setRetainedDataRecoveryPending] = createSignal(false);
-  const [retainedDataRecoveryError, setRetainedDataRecoveryError] = createSignal<string>();
+  const [dataRecoveryTargetID, setDataRecoveryTargetID] = createSignal<string>();
+  const [dataRecoveryOpen, setDataRecoveryOpen] = createSignal(false);
+  const dataRecoveryItem = createMemo(() => props.projection.items.find((item) => item.pluginInstanceID === dataRecoveryTargetID()));
+  const requestDataRecovery = (item: PluginInventoryItem) => {
+    setDataRecoveryTargetID(item.pluginInstanceID);
+    setDataRecoveryOpen(true);
+  };
+  const [retainedDataDiscardItem, setRetainedDataDiscardItem] = createSignal<PluginInventoryItem>();
+  const [retainedDataDiscardPending, setRetainedDataDiscardPending] = createSignal(false);
+  const [retainedDataDiscardError, setRetainedDataDiscardError] = createSignal<string>();
   const officialInstallDialog = createMemo(() => {
     const flow = officialInstallFlow();
     return officialInstallDialogOpen() && flow.status !== 'idle' ? flow : undefined;
@@ -187,10 +198,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       )].map((element) => ({ element, top: element.scrollTop, left: element.scrollLeft }));
       restoreScrollPending = true;
     }
+    setDataRecoveryOpen(false);
     setExternalDialogOpen(false);
     setOfficialInstallDialogOpen(false);
     setUpdateReviewOpen(false);
-    setRetainedDataRecoveryItem(undefined);
+    setRetainedDataDiscardItem(undefined);
     setUninstallChoiceFor(null);
   });
 
@@ -299,9 +311,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setOfficialInstallFlow({ status: 'idle' });
   });
 
-  const requestRetainedDataRecovery = (item: PluginInventoryItem) => {
-    setRetainedDataRecoveryError(undefined);
-    setRetainedDataRecoveryItem(item);
+  const requestRetainedDataDiscard = (item: PluginInventoryItem) => {
+    setRetainedDataDiscardError(undefined);
+    setRetainedDataDiscardItem(item);
   };
   const reviewOfficialInstall = (item: PluginInventoryItem) => {
     const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
@@ -310,19 +322,19 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setOfficialInstallDialogOpen(true);
     setCommandError(null);
   };
-  const confirmRetainedDataRecovery = async () => {
-    const item = retainedDataRecoveryItem();
+  const confirmRetainedDataDiscard = async () => {
+    const item = retainedDataDiscardItem();
     const pluginInstanceID = item?.pluginInstanceID ?? item?.officialCatalog?.pluginInstanceID;
-    if (!pluginInstanceID || retainedDataRecoveryPending()) return;
-    setRetainedDataRecoveryPending(true);
-    setRetainedDataRecoveryError(undefined);
+    if (!pluginInstanceID || retainedDataDiscardPending()) return;
+    setRetainedDataDiscardPending(true);
+    setRetainedDataDiscardError(undefined);
     try {
       await props.onDiscardRetainedDataAndRetry?.(pluginInstanceID);
-      setRetainedDataRecoveryItem(undefined);
+      setRetainedDataDiscardItem(undefined);
     } catch (error) {
-      setRetainedDataRecoveryError(messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal'));
+      setRetainedDataDiscardError(messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal'));
     } finally {
-      setRetainedDataRecoveryPending(false);
+      setRetainedDataDiscardPending(false);
     }
   };
   const tabItems = createMemo(() => {
@@ -829,7 +841,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   commandPendingType={pendingCommandTypeForItem(item)}
                   installOperation={installOperationForItem(item)}
                   announceInstallStatus={!(officialInstallDialog()?.item.inventoryKey === item.inventoryKey
-                    || retainedDataRecoveryItem()?.inventoryKey === item.inventoryKey
+                    || retainedDataDiscardItem()?.inventoryKey === item.inventoryKey
                     || selectedInventoryKey() === item.inventoryKey)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
@@ -865,7 +877,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                     if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
                   }}
                   onReviewInstall={() => installItem(item)}
-                  onResolveRetainedData={() => requestRetainedDataRecovery(item)}
+                  onResolveRetainedData={() => requestRetainedDataDiscard(item)}
                 />
               )}
             </For>
@@ -903,7 +915,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               managementPending={itemManagementPending(item)}
               commandPendingType={pendingCommandTypeForItem(item)}
               installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
-                || retainedDataRecoveryItem()?.inventoryKey === item.inventoryKey
+                || retainedDataDiscardItem()?.inventoryKey === item.inventoryKey
                 ? undefined
                 : installOperationForItem(item)}
               pluginWidgetCounts={props.pluginWidgetCounts}
@@ -917,7 +929,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                 if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
               }}
               onReviewInstall={() => installItem(item)}
-              onResolveRetainedData={() => requestRetainedDataRecovery(item)}
+              onResolveRetainedData={() => requestRetainedDataDiscard(item)}
+              onRestoreData={props.canRecoverPluginData && props.retainedDataAPI ? () => requestDataRecovery(item) : undefined}
               marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
               marketDetailLoading={marketDetailState()?.pluginID === item.pluginID && marketDetailState()?.loading === true}
               marketDetailError={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.error : undefined}
@@ -926,6 +939,23 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           )}
         </Show>
       </div>
+      <Show when={props.retainedDataAPI}>{(api) => (
+        <PluginRetainedDataDialog
+          open={dataRecoveryOpen()}
+          item={dataRecoveryItem()}
+          ownerScope={props.pluginOwnerScope}
+          canRecover={Boolean(props.canRecoverPluginData)}
+          canDisable={props.canManagePlugins}
+          api={api()}
+          onOpenChange={setDataRecoveryOpen}
+          onDismissed={() => detailHeadingRef?.focus({ preventScroll: true })}
+          onRefresh={() => (props.onRefreshInstalled ?? props.onRefresh)()}
+          onDisable={async (item, signal) => {
+            if (!item.pluginInstanceID || item.managementRevision === undefined) return;
+            await props.onCommand({ type: 'disable', pluginInstanceID: item.pluginInstanceID, expectedManagementRevision: item.managementRevision }, signal);
+          }}
+        />
+      )}</Show>
       <OfficialPluginInstallDialog
         item={officialInstallDialog()?.item}
         installPreview={officialInstallDialog()?.item.officialCatalog?.installPreview}
@@ -956,7 +986,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           const item = officialInstallDialog()?.item;
           if (item) {
             setOfficialInstallDialogOpen(false);
-            requestRetainedDataRecovery(item);
+            requestRetainedDataDiscard(item);
           }
         }}
         onOpenChange={(open) => {
@@ -974,9 +1004,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         onConfirm={confirmOfficialInstall}
       />
       <Dialog
-        open={Boolean(retainedDataRecoveryItem())}
+        open={Boolean(retainedDataDiscardItem())}
         onOpenChange={(open) => {
-          if (!open && !retainedDataRecoveryPending()) setRetainedDataRecoveryItem(undefined);
+          if (!open && !retainedDataDiscardPending()) setRetainedDataDiscardItem(undefined);
         }}
         title={i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.title')}
         bodyDescription={i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.description')}
@@ -986,8 +1016,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             <button
               type="button"
               class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-body)] font-medium hover:bg-muted disabled:opacity-50')}
-              disabled={retainedDataRecoveryPending()}
-              onClick={() => setRetainedDataRecoveryItem(undefined)}
+              disabled={retainedDataDiscardPending()}
+              onClick={() => setRetainedDataDiscardItem(undefined)}
             >
               {i18n.t('common.actions.cancel')}
             </button>
@@ -995,17 +1025,17 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               type="button"
               data-plugin-retained-data-confirm
               class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-destructive px-4 text-[length:var(--floe-type-body)] font-semibold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50')}
-              disabled={retainedDataRecoveryPending()}
-              onClick={() => void confirmRetainedDataRecovery()}
+              disabled={retainedDataDiscardPending()}
+              onClick={() => void confirmRetainedDataDiscard()}
             >
-              <StableText reserve={[i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.installing'), i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.confirm')]}>{retainedDataRecoveryPending()
+              <StableText reserve={[i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.installing'), i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.confirm')]}>{retainedDataDiscardPending()
                 ? i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.installing')
                 : i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.confirm')}</StableText>
             </button>
           </div>
         )}
       >
-        <Show when={retainedDataRecoveryError()}>
+        <Show when={retainedDataDiscardError()}>
           {(message) => <p role="alert" class="text-[length:var(--floe-type-body)] text-destructive">{message()}</p>}
         </Show>
       </Dialog>
@@ -1623,6 +1653,7 @@ export function PluginCenterDetails(props: {
   onRetryInstall?: () => void;
   onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
+  onRestoreData?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   let detailControls: HTMLDivElement | undefined;
@@ -1702,6 +1733,7 @@ export function PluginCenterDetails(props: {
               onRetryInstall={props.onRetryInstall}
               onReviewInstall={props.onReviewInstall}
               onResolveRetainedData={props.onResolveRetainedData}
+              onRestoreData={props.onRestoreData}
               />
             </div>
 
@@ -2284,6 +2316,7 @@ function PluginActions(props: {
   onRetryInstall?: () => void;
   onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
+  onRestoreData?: () => void;
 }) {
   const i18n = useI18n();
   const presentation = () => presentPlugin(props.item);
@@ -2354,6 +2387,7 @@ function PluginActions(props: {
     ...(presentation().canOpenSurface ? [{ id: 'open', label: i18n.t('common.actions.open'), disabled: disabledOpen() }] : []),
     ...(presentation().canDisable ? [{ id: 'disable', label: i18n.t('uiCopy.plugin.disable'), disabled: disabledManagement() }] : []),
     ...(presentation().canCheckForUpdate ? [{ id: 'update', label: i18n.t('uiCopy.plugin.checkForUpdate'), disabled: disabledManagement() }] : []),
+    ...(item().pluginInstanceID && props.onRestoreData ? [{ id: 'restore-data', label: i18n.t('uiCopy.plugin.dataRecovery.title'), disabled: props.managementPending || commandPending() }] : []),
     ...(presentation().canUninstall ? [
       { id: 'danger-separator', label: '', separator: true },
       { id: 'uninstall', label: i18n.t('uiCopy.plugin.uninstall'), disabled: disabledManagement() },
@@ -2371,6 +2405,8 @@ function PluginActions(props: {
       });
     } else if (action === 'update') {
       props.onExternalUpdate(item());
+    } else if (action === 'restore-data') {
+      props.onRestoreData?.();
     } else if (action === 'uninstall') {
       props.onAskUninstall(item().pluginInstanceID!);
     }

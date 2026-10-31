@@ -7165,6 +7165,27 @@
         "accessNetwork": "接続先",
         "accessStorage": "プラグイン自身の保存データを使用",
         "accessCredential": "保存済みの認証情報を使用"
+      },
+      "dataRecovery": {
+        "title": "保存データを復元",
+        "savedData": "保存データ",
+        "loading": "保存データを読み込み中",
+        "empty": "復元できる互換データはありません",
+        "choose": "保存データを選択",
+        "disableContinue": "無効にして続ける",
+        "continue": "続ける",
+        "back": "戻る",
+        "restore": "復元",
+        "preserveCurrent": "現在のデータも保持されます。",
+        "complete": "データを復元しました",
+        "enableLater": "プラグインは無効のままです。準備ができたら有効にしてください。",
+        "loadFailed": "保存データを読み込めませんでした。もう一度お試しください。",
+        "reviewFailed": "プラグインまたはデータが変更されました。もう一度確認してください。",
+        "notApplied": "復元はまだ適用されていません。状態を再確認するか、確認をやり直してください。",
+        "unknown": "結果を確認できませんでした。次の操作の前に状態を確認してください。",
+        "reviewAgain": "確認をやり直す",
+        "checkStatus": "状態を確認",
+        "refreshFailed": "データは復元済みです。プラグイン一覧を更新して最新の状態を確認してください。"
       }
     },
     "pluginRuntime": {

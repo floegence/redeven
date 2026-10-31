@@ -7165,6 +7165,27 @@
         "accessNetwork": "연결 대상",
         "accessStorage": "플러그인 자체 저장 데이터 사용",
         "accessCredential": "저장된 인증 정보 사용"
+      },
+      "dataRecovery": {
+        "title": "보관된 데이터 복원",
+        "savedData": "보관된 데이터",
+        "loading": "보관된 데이터 불러오는 중",
+        "empty": "복원할 수 있는 호환 데이터가 없습니다",
+        "choose": "보관된 데이터 선택",
+        "disableContinue": "비활성화 후 계속",
+        "continue": "계속",
+        "back": "뒤로",
+        "restore": "복원",
+        "preserveCurrent": "현재 데이터도 보관됩니다.",
+        "complete": "데이터가 복원되었습니다",
+        "enableLater": "플러그인은 비활성 상태로 유지됩니다. 준비되면 활성화하세요.",
+        "loadFailed": "보관된 데이터를 불러오지 못했습니다. 다시 시도하세요.",
+        "reviewFailed": "플러그인 또는 데이터가 변경되었습니다. 다시 검토하세요.",
+        "notApplied": "복원이 아직 적용되지 않았습니다. 상태를 다시 확인하거나 새로 검토하세요.",
+        "unknown": "결과를 확인할 수 없습니다. 다른 작업을 하기 전에 상태를 확인하세요.",
+        "reviewAgain": "다시 검토",
+        "checkStatus": "상태 확인",
+        "refreshFailed": "데이터가 복원되었습니다. 플러그인 목록을 새로고침하여 최신 상태를 확인하세요."
       }
     },
     "pluginRuntime": {

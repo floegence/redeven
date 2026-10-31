@@ -7165,6 +7165,27 @@
         "accessNetwork": "連線服務",
         "accessStorage": "使用外掛程式自身的資料",
         "accessCredential": "使用已儲存的憑證"
+      },
+      "dataRecovery": {
+        "title": "還原保留資料",
+        "savedData": "保留資料",
+        "loading": "正在讀取保留資料",
+        "empty": "沒有可還原的相容資料",
+        "choose": "選擇保留資料",
+        "disableContinue": "停用並繼續",
+        "continue": "繼續",
+        "back": "返回",
+        "restore": "還原",
+        "preserveCurrent": "目前的資料也會保留。",
+        "complete": "資料已還原",
+        "enableLater": "外掛程式仍處於停用狀態，準備好後即可啟用。",
+        "loadFailed": "無法讀取保留資料，請重試。",
+        "reviewFailed": "外掛程式或資料已變更，請重新檢視。",
+        "notApplied": "還原尚未生效，可再次確認或重新檢視。",
+        "unknown": "暫時無法確認結果，請先確認狀態再進行其他操作。",
+        "reviewAgain": "重新檢視",
+        "checkStatus": "確認狀態",
+        "refreshFailed": "資料已還原，請重新整理外掛程式清單以查看最新狀態。"
       }
     },
     "pluginRuntime": {

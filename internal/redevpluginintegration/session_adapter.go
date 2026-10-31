@@ -371,6 +371,8 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionListExecutionEvents,
 		host.ManagementActionGetRuntimeHealth,
 		host.ManagementActionListRetainedData,
+		host.ManagementActionInspectRetainedRecovery,
+		host.ManagementActionGetRetainedRecoveryStatus,
 		host.ManagementActionGetSettingsSchema,
 		host.ManagementActionGetPluginSettings:
 		return perms.read
@@ -389,6 +391,7 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionExportPluginData,
 		host.ManagementActionDeleteExportedPluginData,
 		host.ManagementActionImportPluginData,
+		host.ManagementActionCommitRetainedRecovery,
 		host.ManagementActionPatchPluginSettings:
 		return perms.write
 	case host.ManagementActionImportLocalPackage,

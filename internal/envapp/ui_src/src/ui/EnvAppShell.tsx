@@ -3871,6 +3871,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           selectedInventoryKey={pluginCenterSelectedInventoryKey()}
           focusRequest={pluginCenterFocusRequest()}
           canManagePlugins={protocol.status() === 'connected' && (!isLocalMode() || pluginSessionReady()) && canAdmin()}
+          canRecoverPluginData={Boolean(pluginInventorySource() && env()?.permissions?.can_read && env()?.permissions?.can_write)}
+          pluginOwnerScope={pluginInventorySource()}
+          retainedDataAPI={pluginLifecycle}
           canOpenPluginSurfaces={canOpenPluginSurfaces()}
           runtimeRecovery={undefined}
           runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}

@@ -1233,3 +1233,31 @@ func TestNewKeepsRemoteReleaseAvailableWithUnusableDocumentCache(t *testing.T) {
 		t.Fatalf("unknown cache was changed: %q %v", value, err)
 	}
 }
+
+func TestRetainedRecoveryUsesIndependentReadWritePermissions(t *testing.T) {
+	for _, action := range []host.ManagementAction{
+		host.ManagementActionListRetainedData,
+		host.ManagementActionInspectRetainedRecovery,
+		host.ManagementActionGetRetainedRecoveryStatus,
+	} {
+		if !permissionsAllowAction(sessionPermissions{read: true}, action) {
+			t.Fatalf("read permission denied for %s", action)
+		}
+		for _, permissions := range []sessionPermissions{{}, {write: true}, {execute: true}, {admin: true}} {
+			if permissionsAllowAction(permissions, action) {
+				t.Fatalf("action %s requires read permission", action)
+			}
+		}
+	}
+	if !permissionsAllowAction(sessionPermissions{write: true}, host.ManagementActionCommitRetainedRecovery) {
+		t.Fatal("write permission denied for retained recovery")
+	}
+	for _, permissions := range []sessionPermissions{{}, {read: true}, {execute: true}, {admin: true}} {
+		if permissionsAllowAction(permissions, host.ManagementActionCommitRetainedRecovery) {
+			t.Fatal("retained recovery requires write permission")
+		}
+	}
+	if permissionsAllowAction(sessionPermissions{read: true, write: true}, host.ManagementActionDisablePlugin) {
+		t.Fatal("data recovery does not grant plugin management permission")
+	}
+}

@@ -48,6 +48,8 @@ const VISIBLE_ATTRIBUTES = new Set([
 ]);
 
 const EXCEPTIONS: readonly Exception[] = [
+  { file: '../../flower_ui/src/extensions/AgentPluginDetails.tsx', kind: 'text', text: 'MCP', reason: 'Standard Model Context Protocol identifier.' },
+  { file: '../../flower_ui/src/extensions/AgentPluginsPanel.tsx', kind: 'placeholder', text: 'owner/repository', reason: 'Literal GitHub repository coordinate example.' },
   { file: "../../../desktop/src/welcome/App.tsx", kind: "alt", text: "Redeven", reason: "Protected product name." },
   { file: "../../../desktop/src/welcome/App.tsx", kind: "aria-label", text: "Tessiven", reason: "Protected product name." },
   { file: "../../../desktop/src/welcome/App.tsx", kind: "title", text: "Tessiven", reason: "Protected product name." },

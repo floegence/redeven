@@ -3,6 +3,8 @@ import {
   type PluginExecution,
   type PluginPlatformClient,
   type PluginRequestOptions,
+  type PluginRetainedRecoveryInspection,
+  type PluginRetainedRecoveryInspectOptions,
 } from '@floegence/redevplugin-ui';
 
 import { officialPluginCatalog } from './officialPluginCatalog';
@@ -302,6 +304,15 @@ export function createPluginLifecycleAPI(
     }, options);
   };
 
+  const listRecoverableData = (targetPluginInstanceID: string, options: PluginRequestOptions = {}) =>
+    client.listRetainedData({ target_plugin_instance_id: targetPluginInstanceID }, options);
+  const inspectRetainedRecovery = (request: PluginRetainedRecoveryInspectOptions, options: PluginRequestOptions = {}) =>
+    client.inspectRetainedRecovery(request, options);
+  const commitRetainedRecovery = (inspection: PluginRetainedRecoveryInspection, options: PluginRequestOptions = {}) =>
+    client.commitRetainedRecovery(inspection, options);
+  const getRetainedRecoveryStatus = (inspection: PluginRetainedRecoveryInspection, options: PluginRequestOptions = {}) =>
+    client.getRetainedRecoveryStatus(inspection, options);
+
   const recoverEnabled = (options: PluginRequestOptions = {}) => client.recoverEnabled(options);
   const retryRecovery = (pluginInstanceID: string, options: PluginRequestOptions = {}) => (
     client.retryRecovery(pluginInstanceID, options)
@@ -380,6 +391,10 @@ export function createPluginLifecycleAPI(
     listReleaseInstallExecutionEvents,
     getIncompatibleRetainedDataRevision,
     deleteIncompatibleRetainedData,
+    listRecoverableData,
+    inspectRetainedRecovery,
+    commitRetainedRecovery,
+    getRetainedRecoveryStatus,
     recoverEnabled,
     retryRecovery,
     grantPermission,

@@ -7169,6 +7169,27 @@
         "accessNetwork": "Verbindung zu",
         "accessStorage": "Eigene gespeicherte Daten nutzen",
         "accessCredential": "Gespeicherte Zugangsdaten nutzen"
+      },
+      "dataRecovery": {
+        "title": "Gespeicherte Daten wiederherstellen",
+        "savedData": "Gespeicherte Daten",
+        "loading": "Gespeicherte Daten werden geladen",
+        "empty": "Keine kompatiblen gespeicherten Daten",
+        "choose": "Gespeicherte Daten auswählen",
+        "disableContinue": "Deaktivieren und fortfahren",
+        "continue": "Weiter",
+        "back": "Zurück",
+        "restore": "Wiederherstellen",
+        "preserveCurrent": "Ihre aktuellen Daten bleiben ebenfalls erhalten.",
+        "complete": "Daten wiederhergestellt",
+        "enableLater": "Das Plugin bleibt deaktiviert. Aktivieren Sie es, wenn Sie bereit sind.",
+        "loadFailed": "Gespeicherte Daten konnten nicht geladen werden. Versuchen Sie es erneut.",
+        "reviewFailed": "Das Plugin oder seine Daten haben sich geändert. Prüfen Sie sie erneut.",
+        "notApplied": "Die Wiederherstellung wurde noch nicht angewendet. Prüfen Sie den Status erneut oder beginnen Sie eine neue Prüfung.",
+        "unknown": "Das Ergebnis konnte nicht bestätigt werden. Prüfen Sie vor weiteren Aktionen den Status.",
+        "reviewAgain": "Erneut prüfen",
+        "checkStatus": "Status prüfen",
+        "refreshFailed": "Die Daten sind wiederhergestellt. Aktualisieren Sie die Plugin-Liste, um den aktuellen Status zu sehen."
       }
     },
     "pluginRuntime": {

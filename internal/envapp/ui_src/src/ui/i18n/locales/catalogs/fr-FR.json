@@ -7169,6 +7169,27 @@
         "accessNetwork": "Se connecter à",
         "accessStorage": "Utiliser ses propres données enregistrées",
         "accessCredential": "Utiliser les identifiants enregistrés"
+      },
+      "dataRecovery": {
+        "title": "Restaurer les données conservées",
+        "savedData": "Données conservées",
+        "loading": "Chargement des données conservées",
+        "empty": "Aucune donnée conservée compatible",
+        "choose": "Choisir les données conservées",
+        "disableContinue": "Désactiver et continuer",
+        "continue": "Continuer",
+        "back": "Retour",
+        "restore": "Restaurer",
+        "preserveCurrent": "Vos données actuelles seront également conservées.",
+        "complete": "Données restaurées",
+        "enableLater": "Le plugin reste désactivé. Activez-le lorsque vous êtes prêt.",
+        "loadFailed": "Impossible de charger les données conservées. Réessayez.",
+        "reviewFailed": "Le plugin ou ses données ont changé. Vérifiez-les à nouveau.",
+        "notApplied": "La restauration n’a pas encore été appliquée. Vérifiez le statut ou recommencez la vérification.",
+        "unknown": "Le résultat n’a pas pu être confirmé. Vérifiez le statut avant toute autre action.",
+        "reviewAgain": "Vérifier à nouveau",
+        "checkStatus": "Vérifier le statut",
+        "refreshFailed": "Les données sont restaurées. Actualisez la liste des plugins pour voir le statut actuel."
       }
     },
     "pluginRuntime": {

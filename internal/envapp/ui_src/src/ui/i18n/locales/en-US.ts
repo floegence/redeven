@@ -655,6 +655,27 @@ export const enUS = defineDictionary({
   },
   uiCopy: {
     plugin: {
+      dataRecovery: {
+        "title": "Restore saved data",
+        "savedData": "Saved data",
+        "loading": "Loading saved data",
+        "empty": "No compatible saved data",
+        "choose": "Choose saved data",
+        "disableContinue": "Disable and continue",
+        "continue": "Continue",
+        "back": "Back",
+        "restore": "Restore",
+        "preserveCurrent": "Your current data will also be kept.",
+        "complete": "Data restored",
+        "enableLater": "The plugin stays disabled. Enable it when you are ready.",
+        "loadFailed": "Could not load saved data. Try again.",
+        "reviewFailed": "The plugin or its data changed. Review it again.",
+        "notApplied": "Recovery has not been applied. Check again or start a new review.",
+        "unknown": "The result could not be confirmed. Check its status before taking further action.",
+        "reviewAgain": "Review again",
+        "checkStatus": "Check status",
+        "refreshFailed": "Data is restored. Refresh the plugin list to see the latest state."
+      },
       continuity: {
         "ready": "Ready",
         "pending": "Updating plugin. Your layout is preserved.",

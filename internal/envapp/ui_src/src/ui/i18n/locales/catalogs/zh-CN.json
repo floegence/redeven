@@ -7165,6 +7165,27 @@
         "accessNetwork": "连接服务",
         "accessStorage": "使用插件自身的数据",
         "accessCredential": "使用已保存的凭据"
+      },
+      "dataRecovery": {
+        "title": "恢复保留数据",
+        "savedData": "保留数据",
+        "loading": "正在读取保留数据",
+        "empty": "没有可恢复的兼容数据",
+        "choose": "选择保留数据",
+        "disableContinue": "停用并继续",
+        "continue": "继续",
+        "back": "返回",
+        "restore": "恢复",
+        "preserveCurrent": "当前数据也会保留。",
+        "complete": "数据已恢复",
+        "enableLater": "插件仍处于停用状态，可在准备好后启用。",
+        "loadFailed": "无法读取保留数据，请重试。",
+        "reviewFailed": "插件或数据已变化，请重新审阅。",
+        "notApplied": "恢复尚未生效，可再次核对或重新审阅。",
+        "unknown": "暂时无法确认结果，请先核对状态再进行其他操作。",
+        "reviewAgain": "重新审阅",
+        "checkStatus": "核对状态",
+        "refreshFailed": "数据已恢复，请刷新插件列表以查看最新状态。"
       }
     },
     "pluginRuntime": {

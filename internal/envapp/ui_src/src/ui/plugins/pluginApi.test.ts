@@ -895,3 +895,29 @@ beforeEach(async () => {
   releaseTestTransport = await bindTestSessionHTTP((input, init) => fetchLocalApi(input instanceof Request ? input.url : String(input), init));
 });
 afterEach(() => releaseTestTransport?.());
+
+it('forwards exact recovery targets, reviewed plans and cancellation through the released SDK', async () => {
+  const controller = new AbortController();
+  const options = { signal: controller.signal };
+  const source = { plugin_instance_id: 'plugin_saved', generation_id: 'saved', state: 'retained' as const, revision: 3, shape_hash: 'a'.repeat(64) };
+  const target = { ...source, plugin_instance_id: 'plugin_current', generation_id: 'current', state: 'active' as const };
+  const inspection = { plan: { source, target, target_management_revision: 7, target_active_fingerprint: 'b'.repeat(64), retained_at: '2026-10-30T10:00:00Z' }, plan_hash: 'c'.repeat(64) };
+  const result = { active: { ...target, generation_id: source.generation_id }, retained: { ...source, generation_id: target.generation_id }, management_revision: 8 };
+  const client = {
+    listRetainedData: vi.fn(async () => ({ retained_data: [source] })),
+    inspectRetainedRecovery: vi.fn(async () => inspection),
+    commitRetainedRecovery: vi.fn(async () => result),
+    getRetainedRecoveryStatus: vi.fn(async () => ({ state: 'applied', result })),
+  };
+  const lifecycle = createPluginLifecycleAPI(client as unknown as PluginPlatformClient, []);
+  expect(await lifecycle.listRecoverableData(target.plugin_instance_id, options)).toEqual({ retained_data: [source] });
+  expect(client.listRetainedData).toHaveBeenCalledWith({ target_plugin_instance_id: target.plugin_instance_id }, options);
+  const request = { source_plugin_instance_id: source.plugin_instance_id, target_plugin_instance_id: target.plugin_instance_id };
+  expect(await lifecycle.inspectRetainedRecovery(request, options)).toBe(inspection);
+  expect(client.inspectRetainedRecovery).toHaveBeenCalledWith(request, options);
+  expect(await lifecycle.commitRetainedRecovery(inspection, options)).toBe(result);
+  expect(client.commitRetainedRecovery).toHaveBeenCalledExactlyOnceWith(inspection, options);
+  expect(await lifecycle.getRetainedRecoveryStatus(inspection, options)).toEqual({ state: 'applied', result });
+  expect(client.getRetainedRecoveryStatus).toHaveBeenCalledWith(inspection, options);
+  expect(client.commitRetainedRecovery).toHaveBeenCalledTimes(1);
+});
