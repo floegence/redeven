@@ -1,6 +1,6 @@
 import { historyItemNeedsObservation } from './historyWindowRetention';
 import { createHistorySequenceCompletion } from './historySequenceCompletion';
-import { createFlowerHistoryGapSubscriptions, createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions } from './flowerPresentationSubscriptions';
+import { createFlowerHistoryGapSubscriptions, createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions, createFlowerThreadSubscription } from './flowerPresentationSubscriptions';
 import type { FlowerTaskFilePreviewContentProps } from './FlowerTaskFilePreview';
 import { FlowerTaskFiles } from './FlowerTaskFiles';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
@@ -1647,7 +1647,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (pending && selectedThreadID() === pending.threadID) scheduleThreadSelectionContentPresented(pending.threadID);
   };
 
-	const selectedThread = createMemo(() => {
+	const selectedThread = createFlowerThreadSubscription(() => {
 		const threadID = trimString(selectedThreadID());
 		if (!threadID) return null;
 		return threadCache().views.get(threadID)?.thread ?? null;
@@ -7137,7 +7137,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return previous?.thread === thread && previous.entries === entries ? previous : { threadID: thread?.thread_id ?? '', thread, entries };
   });
   const selectedTimelineEntries = createMemo(() => selectedTimelineDocument().entries);
-  const selectedTimelineThread = createMemo(() => selectedTimelineDocument().thread);
+  const selectedTimelineThread = createFlowerThreadSubscription(() => selectedTimelineDocument().thread);
   const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | null>(null);
   createEffect(on([activeThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
@@ -7466,7 +7466,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!active) return null;
     return selectedSubagentItems().find((item) => trimString(item.threadID) === active.childThreadID) ?? active.item;
   });
-  const subagentDetailThread = createMemo<FlowerThreadSnapshot | null>(() => threadCache().views.get(activeSubagentID())?.thread ?? null);
+  const subagentDetailThread = createFlowerThreadSubscription(() => threadCache().views.get(activeSubagentID())?.thread ?? null);
   const subagentParentEventReading = createParentEventReading({
     scroll: subagentDetailScroll,
     get threadID() { return subagentDetailOpen() ? activeSubagentID() : ''; },
@@ -13005,7 +13005,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return previous?.thread === thread && previous.entries === entries ? previous : { threadID: thread?.thread_id ?? '', thread, entries };
   });
   const subagentDetailTimelineEntries = createMemo(() => subagentTimelineDocument().entries);
-  const subagentTimelineThread = createMemo(() => subagentTimelineDocument().thread);
+  const subagentTimelineThread = createFlowerThreadSubscription(() => subagentTimelineDocument().thread);
   const mainHistoryGaps = createFlowerHistoryGapSubscriptions(visibleTimelineEntries, () => mainReadingGaps().thread === selectedThreadID() ? mainReadingGaps().gaps : []);
   const childHistoryGaps = createFlowerHistoryGapSubscriptions(subagentDetailTimelineEntries, () => childReadingGaps().thread === activeSubagentID() ? childReadingGaps().gaps : []);
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());

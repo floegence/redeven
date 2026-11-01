@@ -1,9 +1,28 @@
 import { createComputed, createMemo, createRoot, createSignal } from 'solid-js';
+import { createStore } from 'solid-js/store';
 import { expect, it } from 'vitest';
-import { createFlowerHistoryGapSubscriptions, createFlowerTurnEndSubscriptions, createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerProcessSubscriptions, createFlowerFinalItemSubscriptions } from './flowerPresentationSubscriptions';
+import { createFlowerHistoryGapSubscriptions, createFlowerTurnEndSubscriptions, createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerProcessSubscriptions, createFlowerFinalItemSubscriptions, createFlowerThreadSubscription } from './flowerPresentationSubscriptions';
 import { projectFlowerTurnProcess } from './flowerTurnPresentation';
 import type { FlowerRuntimeTurn, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
+
+it('publishes thread replacement while preserving local field updates and document ownership', () => createRoot(dispose => {
+  try {
+    const [first, setFirst] = createStore({ thread_id: 'first', status: 'running' } as { -readonly [K in keyof FlowerThreadSnapshot]: FlowerThreadSnapshot[K] });
+    const [document, setDocument] = createSignal({ thread: first, rows: 1 });
+    const thread = createFlowerThreadSubscription(() => document().thread);
+    let identityChanges = 0, statusChanges = 0;
+    createComputed(() => { thread(); identityChanges++; });
+    createComputed(() => { void thread().status; statusChanges++; });
+    for (let rows = 2; rows <= 600; rows++) setDocument({ thread: first, rows });
+    expect(identityChanges).toBe(1); expect(statusChanges).toBe(1);
+    setFirst('status', 'success');
+    expect(identityChanges).toBe(1); expect(statusChanges).toBe(2);
+    const second = { ...first, thread_id: 'second' };
+    setDocument({ thread: second, rows: 1 });
+    expect(thread()).toBe(second); expect(identityChanges).toBe(2); expect(statusChanges).toBe(3);
+  } finally { dispose(); }
+}));
 
 it('publishes changed rows without invalidating retained row dependency graphs', () => createRoot(dispose => {
   try {

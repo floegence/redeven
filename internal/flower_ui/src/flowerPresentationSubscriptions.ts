@@ -6,6 +6,15 @@ import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerTurnProcess, FlowerTurnProcessProjection } from './flowerTurnPresentation';
 import type { FlowerToolSequenceMember, FlowerToolSequenceProjection } from './flowerToolSequences';
 
+// A document projection changes when rows arrive, while its reactive thread
+// owner usually stays the same. Publish that identity before notifying the
+// mounted document, instead of marking every row's memo chain pending first.
+export function createFlowerThreadSubscription<T extends FlowerThreadSnapshot | null | undefined>(source: Accessor<T>): Accessor<T> {
+  const [thread, setThread] = createSignal<T>(untrack(source));
+  createComputed(() => { const next = source(); setThread(() => next); });
+  return thread;
+}
+
 // These are mounted presentation subscriptions, not another transcript. Publish
 // only changed keyed values: a memo over a whole map still marks every descendant
 // pending before equality is known, including all retained offscreen Markdown.
