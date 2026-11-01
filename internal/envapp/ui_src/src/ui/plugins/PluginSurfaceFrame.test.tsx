@@ -122,7 +122,7 @@ describe('PluginSurfaceBody', () => {
     elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['app_ready'],
   } satisfies PluginSurfaceOpeningProgress;
 
-  it('shows delayed SDK progress, then removes it without replacing a ready surface', async () => {
+  it('keeps one loading presentation before and through SDK progress without replacing a ready surface', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const host = createHost();
@@ -132,12 +132,16 @@ describe('PluginSurfaceBody', () => {
     dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
       target={target} visible onRetirementError={vi.fn()} />, mount);
     const options = vi.mocked(coordinator.open).mock.calls[0]![2]!;
-    expect(mount.querySelector('[data-plugin-surface-opening]')).toBeNull();
+    const opening = mount.querySelector('[data-plugin-surface-opening]');
+    expect(opening).not.toBeNull();
+    const loadingText = opening?.textContent;
     options.onOpeningProgress?.(progress);
-    expect(mount.querySelector('[role="status"]')?.textContent).toContain('Starting plugin');
+    expect(mount.querySelector('[data-plugin-surface-opening]')).toBe(opening);
+    expect(opening?.textContent).toBe(loadingText);
     const committing = { ...progress, stage: 'connecting' as const, pendingMilestones: ['entry_ready'] } satisfies PluginSurfaceOpeningProgress;
     options.onOpeningProgress?.(committing);
-    expect(mount.querySelector('[role="status"]')?.textContent).toContain('Connecting plugin');
+    expect(mount.querySelector('[data-plugin-surface-opening]')).toBe(opening);
+    expect(opening?.textContent).toBe(loadingText);
     resolveOpen(host);
     await flushAsync();
     options.onOpeningProgress?.(progress);
@@ -216,8 +220,8 @@ describe('PluginSurfaceBody', () => {
       />
     ), mount);
 
-    expect(mount.textContent).not.toContain('Opening plugin surface');
-    expect(mount.querySelector('[role="status"]')).toBeNull();
+    expect(mount.querySelector('[role="status"] .sr-only')?.textContent).toContain('Opening plugin surface');
+    expect(mount.querySelector('[data-plugin-surface-opening]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-surface-stage]')?.className).toContain('opacity-100');
     expect(coordinator.open).toHaveBeenCalledWith(
       expect.anything(),

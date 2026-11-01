@@ -22,12 +22,12 @@ export function ActivityPluginSurfacePage(props: ActivityPluginSurfacePageProps)
 
   return (
     <div class="h-full min-h-0 w-full" data-activity-plugin-surface-page>
-      <Show when={props.target()} keyed>
+      <Show when={props.target()}>
         {(target) => (
           <PluginSurfaceContainer resolveSurface={props.resolveSurface} refreshInventory={props.refreshInventory}
             coordinator={props.coordinator}
             confirmationQueue={props.confirmationQueue}
-            target={target}
+            target={target()}
             visible={activation.active()}
             registerClose={props.registerClose}
             onInteraction={(event) => {

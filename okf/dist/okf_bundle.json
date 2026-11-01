@@ -30403,15 +30403,15 @@
         "title": "Plugin surfaces",
         "type": "UI Contract"
       },
-      "body_length": 2938,
+      "body_length": 3805,
       "summary": "Redeven owns plugin discovery, navigation and placement; released ReDevPlugin owns admission, surface authority, bridge sessions, confirmation and revocation. Activity and Workbench use independent SDK slots. Management preserves search/selection, exposes actionable failures and reconciles unknown outcomes against authoritative state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Discovery and exact inventory\nActivity Bar Plugins opens a Shell-root Launcher without changing the normal surface. Search intersects category with NFKC/locale-case-folded display names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay the grid without reflow and restore originating-row focus.\n\n## Session recovery\nAn authenticated session-ready transition invokes idempotent Host `recoverEnabled` without a stability timer. All placements consume Host `action_state`; trust, grants, policy or recovery flags cannot derive `can_open`.\n\n## Installation and package review\n[Installation progress](plugin-installation-progress.md) owns durable Execution observation and approved setup; [package review](plugin-package-review.md) owns external packages. Failures preserve placement rather than delete components.\n\n## Permissions and policy\nPlugin Center joins inventory, grants, Host requirements and policy. Method effects cannot rename granted capabilities. Failure reloads authority and requires a new confirmation.\n\n## Activity windows and pinned pages\nEach window creates one fresh `PluginSurfaceSlot` through `openSurfaceInSlot`. Opening/bridge failures replace the iframe with local recovery; timeouts explain delay and offer Retry. Restart restores shortcuts but starts on a built-in page, never automatically opens third-party content.\n\n## Workbench widgets and placement\n[Layout continuity](plugin-layout-continuity.md) owns saved bindings, atomic placement, exact removal and recovery. Status overlays cannot forward input, guess focus or create a second bridge. Unpin removes only the shortcut.\n\n## Confirmation and teardown\nOne abort-aware FIFO dialog decides requests independently with initial Cancel focus. Hidden, retired or revoked surfaces cannot approve queued work. Retired surfaces cannot download; Shell neither uploads nor retains exported bytes.",
-          "char_count": 1900
+          "body": "## Discovery and exact inventory\nActivity Bar Plugins opens a Shell-root Launcher without changing the normal surface. Search intersects category with NFKC/locale-case-folded display names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay the grid without reflow and restore originating-row focus.\n\n## Session recovery\nAn authenticated session-ready transition invokes idempotent Host `recoverEnabled` without a stability timer. All placements consume Host `action_state`; trust, grants, policy or recovery flags cannot derive `can_open`.\n\n## Installation and package review\n[Installation progress](plugin-installation-progress.md) owns durable Execution observation and approved setup; [package review](plugin-package-review.md) owns external packages. Failures preserve placement rather than delete components.\n\n## Permissions and policy\nPlugin Center joins inventory, grants, Host requirements and policy. Method effects cannot rename granted capabilities. Failure reloads authority and requires a new confirmation.\n\n## Activity windows and pinned pages\nEach window creates one fresh `PluginSurfaceSlot` through `openSurfaceInSlot`. Opening/bridge failures replace the iframe with local recovery; timeouts explain delay and offer Retry. Restart restores shortcuts but starts on a built-in page, never automatically opens third-party content.\n\nReopening an existing Activity page with equivalent inventory metadata preserves its container, iframe and application state. Visibility changes use the existing slot lifecycle. A changed instance, surface, management revision or runtime generation still retires the old lease; revoked authority never survives for visual continuity. Cold opening immediately shows one host-themed accessible waiting surface, without rotating internal bootstrap-stage labels. Ready content replaces it; failures keep actionable recovery and diagnostic details.\n\n## Workbench widgets and placement\n[Layout continuity](plugin-layout-continuity.md) owns saved bindings, atomic placement, exact removal and recovery. Status overlays cannot forward input, guess focus or create a second bridge. Unpin removes only the shortcut.\n\n## Confirmation and teardown\nOne abort-aware FIFO dialog decides requests independently with initial Cancel focus. Hidden, retired or revoked surfaces cannot approve queued work. Retired surfaces cannot download; Shell neither uploads nor retains exported bytes.",
+          "char_count": 2445
         },
         {
           "id": "boundaries",
@@ -30422,6 +30422,16 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx:0:equivalent target updates retain the live document; authority changes retire it.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx",
+          "description": "Equivalent target updates retain the live document; authority changes retire it."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:0:immediate, stable opening feedback and terminal recovery behavior.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx",
+          "description": "Immediate, stable opening feedback and terminal recovery behavior."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx:0:published sdk/product placement: actual webgl1/2 pixels, visibility, close/reopen.",
           "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx",
@@ -31530,5 +31540,5 @@
       ]
     }
   ],
-  "source_sha256": "a8989565e8adb22c666912bf159d092e67a1b1fdcc0abbdc4906bd4667b74c2d"
+  "source_sha256": "64f8ff332a4821bec74641820c758f26ecf53d64bbb1a274a37711069beae47d"
 }

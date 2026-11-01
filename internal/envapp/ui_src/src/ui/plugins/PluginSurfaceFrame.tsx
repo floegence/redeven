@@ -15,7 +15,7 @@ import type { PluginSurfaceInteractionEvent, PluginSurfacePlacementCoordinator }
 import { createRedevenPluginSurfaceContext, pluginSurfaceContextFingerprint } from './pluginSurfaceContext';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
-import { surfaceOpeningFeedback, surfaceOpeningStageKeys, surfaceFailureDiagnostic, type SurfaceOpeningFeedback } from './pluginSurfaceOpeningFeedback';
+import { surfaceOpeningFeedback, surfaceFailureDiagnostic, type SurfaceOpeningFeedback } from './pluginSurfaceOpeningFeedback';
 
 export type PluginSurfaceBodyProps = {
   coordinator: PluginSurfacePlacementCoordinator;
@@ -47,7 +47,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const [loadState, setLoadState] = createSignal<SurfaceLoadState>('opening');
   const [errorMessage, setErrorMessage] = createSignal('');
   const [retrying, setRetrying] = createSignal(false);
-  const [openingProgress, setOpeningProgress] = createSignal<SurfaceOpeningFeedback>();
   const [openingFailure, setOpeningFailure] = createSignal<SurfaceOpeningFeedback>();
   const [errorCode, setErrorCode] = createSignal('');
   const [copyState, setCopyState] = createSignal<'idle' | 'copied' | 'failed'>('idle');
@@ -95,7 +94,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       : '';
     setErrorCode(code);
     setOpeningFailure(surfaceOpeningFeedback('details' in firstTerminalError ? firstTerminalError.details : undefined));
-    setOpeningProgress(undefined);
     setLoadState('error');
     settleCloseConfirmation?.(false);
     setErrorMessage(firstTerminalError.message || code || i18n.t('uiCopy.plugin.surfaceFailed'));
@@ -121,7 +119,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     setLoadState('opening');
     setErrorMessage('');
     setErrorCode('');
-    setOpeningProgress(undefined);
     setOpeningFailure(undefined);
     setCopyState('idle');
     setCleanupPending(false);
@@ -140,10 +137,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       onInteraction: props.onInteraction,
       onCleanupError: props.onRetirementError,
       surfaceContext: currentSurfaceContext,
-      onOpeningProgress(progress) {
-        if (!mounted || slot !== ownedSlot || firstTerminalError || loadState() !== 'opening') return;
-        setOpeningProgress(surfaceOpeningFeedback(progress));
-      },
       onError(error) {
         failSurface(ownedSlot, error);
       },
@@ -154,7 +147,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       if (currentSurfaceContext.revision > initialSurfaceContextRevision) {
         openedHost.updateContext(currentSurfaceContext);
       }
-      setOpeningProgress(undefined);
       setLoadState('ready');
     }).catch((error: unknown) => {
       recordTerminalError(ownedSlot, error);
@@ -314,12 +306,12 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       class="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
       <div class="relative min-h-0 flex-1 bg-muted/20">
-        <Show when={loadState() === 'opening' && openingProgress()}>
-          {(progress) => <div role="status" aria-live="polite" data-plugin-surface-opening
-            class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-[length:var(--floe-type-body)] text-muted-foreground">
-            <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
-            <span>{i18n.t(surfaceOpeningStageKeys[progress().stage])}</span>
-          </div>}
+        <Show when={loadState() === 'opening'}>
+          <div role="status" aria-live="polite" data-plugin-surface-opening
+            class="absolute inset-0 z-10 flex items-center justify-center bg-background text-muted-foreground">
+            <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            <span class="sr-only">{i18n.t('uiCopy.plugin.openingSurface')}</span>
+          </div>
         </Show>
         <Show when={loadState() === 'closing'}>
           <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-[length:var(--floe-type-body)] text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">

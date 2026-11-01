@@ -4,14 +4,17 @@ import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ActivityPluginSurfacePage } from './ActivityPluginSurfacePage';
 import type { PluginSurfaceInteractionEvent } from './pluginPlatform';
+import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 const bridge = vi.hoisted(() => ({ interact: undefined as ((event: PluginSurfaceInteractionEvent) => void) | undefined }));
 let active = () => true;
 vi.mock('@floegence/floe-webapp-core', () => ({ useViewActivation: () => ({ active: () => active() }) }));
 vi.mock('./PluginSurfaceContainer', () => ({
-  PluginSurfaceContainer: (props: { onInteraction?: (event: PluginSurfaceInteractionEvent) => void }) => {
+  PluginSurfaceContainer: (props: { target: PluginSurfaceLaunchTarget; visible: boolean; onInteraction?: (event: PluginSurfaceInteractionEvent) => void }) => {
     bridge.interact = event => props.onInteraction?.(event);
-    return <iframe title="Plugin surface" />;
+    return <div data-visible={String(props.visible)} data-revision={props.target.expectedManagementRevision}>
+      <iframe title="Plugin surface" /><input aria-label="Unsaved document" />
+    </div>;
   },
 }));
 
@@ -38,4 +41,34 @@ it('projects trusted user interactions from the active Activity page without tre
   setVisible(true);
   bridge.interact?.({ kind: 'activation' } as PluginSurfaceInteractionEvent);
   expect(onInteraction).toHaveBeenCalledTimes(4);
+});
+
+it('retains the page when reopening an equal target and forwards authoritative updates', () => {
+  const initial: PluginSurfaceLaunchTarget = { pluginID: 'example.plugin', pluginInstanceID: 'instance', surfaceID: 'main', expectedManagementRevision: 1 };
+  const [target, setTarget] = createSignal<PluginSurfaceLaunchTarget | null>(initial);
+  const [visible, setVisible] = createSignal(true);
+  active = visible;
+  const mount = document.createElement('div');
+  document.body.append(mount);
+  dispose = render(() => <ActivityPluginSurfacePage target={target}
+    coordinator={{} as any} confirmationQueue={{} as any} registerClose={vi.fn()} onRetirementError={vi.fn()} />, mount);
+  const frame = mount.querySelector('iframe');
+  const editor = mount.querySelector('input')!;
+  editor.value = 'Unsaved work';
+
+  setVisible(false);
+  setTarget({ ...initial });
+  expect(mount.querySelector('iframe')).toBe(frame);
+  expect(mount.querySelector('input')).toBe(editor);
+  expect(editor.value).toBe('Unsaved work');
+  expect(mount.querySelector('[data-visible]')?.getAttribute('data-visible')).toBe('false');
+  setVisible(true);
+  setTarget({ ...initial, expectedManagementRevision: 2 });
+  expect(mount.querySelector('iframe')).toBe(frame);
+  expect(mount.querySelector('[data-revision]')?.getAttribute('data-revision')).toBe('2');
+
+  setTarget(null);
+  expect(mount.querySelector('iframe')).toBeNull();
+  setTarget({ ...initial, expectedManagementRevision: 3 });
+  expect(mount.querySelector('iframe')).not.toBe(frame);
 });

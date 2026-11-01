@@ -27,6 +27,8 @@ Plugin Center joins inventory, grants, Host requirements and policy. Method effe
 ## Activity windows and pinned pages
 Each window creates one fresh `PluginSurfaceSlot` through `openSurfaceInSlot`. Opening/bridge failures replace the iframe with local recovery; timeouts explain delay and offer Retry. Restart restores shortcuts but starts on a built-in page, never automatically opens third-party content.
 
+Reopening an existing Activity page with equivalent inventory metadata preserves its container, iframe and application state. Visibility changes use the existing slot lifecycle. A changed instance, surface, management revision or runtime generation still retires the old lease; revoked authority never survives for visual continuity. Cold opening immediately shows one host-themed accessible waiting surface, without rotating internal bootstrap-stage labels. Ready content replaces it; failures keep actionable recovery and diagnostic details.
+
 ## Workbench widgets and placement
 [Layout continuity](plugin-layout-continuity.md) owns saved bindings, atomic placement, exact removal and recovery. Status overlays cannot forward input, guess focus or create a second bridge. Unpin removes only the shortcut.
 
@@ -40,6 +42,9 @@ Manifest surface kinds remain `view|command|background` with semantic roles. Act
 It does not verify packages or releases, mint tokens, serve assets, grant permissions implicitly, or call business adapters directly.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx` - Equivalent target updates retain the live document; authority changes retire it.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx` - Immediate, stable opening feedback and terminal recovery behavior.
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx` - Published SDK/product placement: actual WebGL1/2 pixels, visibility, close/reopen.
 
