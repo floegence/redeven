@@ -7,11 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns canonical history, identity and versions. Redeven authorizes public
-projection; one workspace stream delivers it to ThreadCache. Text growth changes
-one item at its UTF-8 offset, never copying, scanning or encoding complete history.
-Window loss refreshes that reading interest; transport loss uses the existing
-connection owner. Both preserve execution, accepted prose and drafts.
+Floret owns canonical history/versions; Redeven authorizes one stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads keep navigation and disclosure stable.
 
 # Contract
 
@@ -32,14 +28,14 @@ Foreground pages may publish while baselines queue. Reuse prefixes only with exa
 ## Bodies and transport
 Retain accepted prose/media/anchors/follow during refresh; skeletons cover only unread content. One observer admits within 160 px. Text/disclosure share two slots/15 s, prioritizing live/interactive, visible, then background with aging every eight admissions. Offscreen/navigation cancels; errors expose Retry.
 
-ThreadCache binds item/turn/run/source. Public text reads <=16 KiB at accepted UTF-8 offsets; Coalesce growth and cancellation ownership; yield between chunks. No polling/full-prefix download. Source/sealing change restarts from canonical preview while retaining readable content until replacement. Same-source progress survives refresh; reject late replies. Retired locator source_changed needs authoritative ItemBody: release slot and await observation, never guess offsets. Terminal/exhausted reads Retry without replay.
+ThreadCache binds item/turn/run/source. Public text reads <=16 KiB at accepted UTF-8 offsets; coalesce growth and yield between chunks. Live visibility owners survive complete extents; completed reads detach parent cancellation listeners without aborting. Navigation, offscreen visibility and source changes retain cancellation. No polling/full-prefix download. Source/sealing change restarts from canonical preview while retaining readable content until replacement. Same-source progress survives refresh; reject late replies. Retired locator source_changed needs authoritative ItemBody: release slot and await observation, never guess offsets. Terminal/exhausted reads Retry without replay.
 
 live:false alone does not change source. Same-source previews atomically update text/pending/locator; overlap retains layout and suffix resumes at current offset. Changed source retires reads; identity/range/prefix/empty-nonterminal failures stay explicit.
 
 Schema v3 has one decoder. Base64 fragments <=32 KiB carry ID/index/count/total and exact scope/revision with contiguous version/UTF-8 offsets. Growth carries locators. Constant-storage coalescing preserves original base/semantics. Bound 16 pending batches, 32 MiB envelope/subscriber and 32 MiB global refs. Started frames are immutable; byte-accounted coverage suppresses duplicates. Summary/private/child mailboxes stay separate. Pending controls use authorized 64-item pages back to user boundary, verify leaf/version and individually read oversized items, never full View/body. Missing authority or a broken sequence invalidates observation.
 
 ## DOM and retention
-Offscreen sections retain DOM/height; visible/live/focused/selected content stays accessible. Partition active turns near 24 rows after prose, preserving groups and mounted owners. Presence tracks empty/nonempty. Keyed subscriptions dispose with owners. Equal replacements and empty preview boundaries retain ordered membership; preview changes reproject only matching tools. Structural facts avoid per-field observers. Titles never rescan history; thinking retains its block; sets own membership; empty coverage ignores leaf-only changes; following scans no old anchors.
+Offscreen sections retain DOM/height; visible/live/focused/selected content stays accessible. Partition active turns near 24 rows after prose, preserving groups and mounted owners. Presence tracks empty/nonempty. Keyed subscriptions dispose with owners. Equal replacements/empty previews retain membership; preview changes reproject matching tools only. Unchanged sequence tokens, entries and coverage reuse summaries before recounting. Structural facts avoid per-field observers. Titles never rescan history; thinking retains its block; sets own membership; empty coverage ignores leaf-only changes; following scans no old anchors.
 
 [Activity](flower-activity-interaction.md) owns inspection/before-paint scroll; Fork inherits no disclosure. Readiness/body growth cannot change restoration provenance or cancel unrelated motion; full baseline/hydration admits history. Stage cold sealed Markdown across reconnect and reveal complete final geometry without entrance motion. Navigation suppresses arrivals until placed. Count cache objects once without reactive recursion. Current run/visible anchors guide compaction; paging restores decoration.
 

@@ -6,6 +6,29 @@ afterEach(() => vi.useRealTimers());
 const settle = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); };
 
 describe('history body request ownership', () => {
+  it('releases parent cancellation subscriptions after completed reads', async () => {
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const navigation = new AbortController(), visible = new AbortController();
+    const compose = vi.spyOn(AbortSignal, 'any');
+    const add = vi.spyOn(visible.signal, 'addEventListener');
+    const remove = vi.spyOn(visible.signal, 'removeEventListener');
+    const completed: AbortSignal[] = [];
+    try {
+      for (let index = 0; index < 100; index++) {
+        loader.request('item', 'source', [navigation.signal, visible.signal], async signal => { completed.push(signal); });
+        await settle();
+      }
+      expect(loader.state('item')).toBeUndefined();
+      expect(completed.every(signal => !signal.aborted)).toBe(true);
+      expect(compose).not.toHaveBeenCalled();
+      expect(add).toHaveBeenCalledTimes(100);
+      expect(remove).toHaveBeenCalledTimes(100);
+      for (let index = 0; index < add.mock.calls.length; index++) {
+        expect(remove.mock.calls[index][1]).toBe(add.mock.calls[index][1]);
+      }
+    } finally { loader.dispose(); compose.mockRestore(); add.mockRestore(); remove.mockRestore(); }
+  });
+
   it('composes cancellation only when admitting a read and observes both owners', async () => {
     const loader = createHistoryBodyLoader(() => 'timeout');
     const navigation = new AbortController(), visible = new AbortController();

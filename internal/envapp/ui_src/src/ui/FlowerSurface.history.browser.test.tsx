@@ -394,6 +394,30 @@ describe('bounded Flower history', () => {
     await waitFor(() => history.mock.calls.length === calls + 2);
   });
 
+  it('retains visible live read ownership after each complete extent', async () => {
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({
+      thread_id: 'history', bytes: input.through_bytes, ...input, text: 'x'.repeat(input.through_bytes - input.offset_bytes),
+    }));
+    const { root, push, history } = await mount(false, false, { live: true, loadHistoryBody: incremental });
+    await waitFor(() => root.textContent?.includes('Preview text' + 'x'.repeat(16)) === true);
+    expect(incremental.mock.calls[0][2].aborted).toBe(false);
+    const bubble = root.querySelector('.flower-history-message .flower-message-bubble');
+    let version = 7;
+    const readingRevision = history.mock.calls.at(-1)![1].reading_revision;
+    for (let index = 1; index <= 5; index++) {
+      const bytes = 28 + index * 10;
+      push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision, update: {
+        thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: version++, view_version: version,
+        facts: { activity: 'active', attention: {}, queue_count: 0, run_progress: { phase: 'streaming' } },
+        items: [{ kind: 'body', item_id: 'latest', body: { field: 'content', source_id: 'latest', run_id: 'run', bytes, preview_bytes: 12 } }],
+      } });
+      await waitFor(() => bubble?.textContent?.includes('x'.repeat(bytes - 12)) === true);
+      expect(incremental.mock.calls.at(-1)![2].aborted).toBe(false);
+    }
+    expect(incremental).toHaveBeenCalledTimes(6);
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+  });
+
   it('keeps visible live prose through slow reads, burst growth, and canonical completion', async () => {
     let finish!: (text: string) => void;
     const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({ thread_id: 'history', bytes: input.through_bytes, ...input, text: await new Promise<string>(resolve => { finish = resolve; }) }));

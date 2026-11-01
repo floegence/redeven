@@ -44,6 +44,35 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
+  it('reuses unchanged sequence summaries while a long active turn adds groups', () => {
+    let labels = 0;
+    const entries: Message[] = [];
+    const tokens = new Map<Message, ReturnType<NonNullable<Parameters<typeof projectFlowerToolSequences>[6]>>>();
+    const append = (index: number) => {
+      const thinking = text('thinking-' + index, true), call = tool('call-' + index), prose = text('prose-' + index);
+      entries.push(thinking, call, prose);
+      tokens.set(thinking, [{ key: thinking.key, entryKey: thinking.key, scope: 'scope', turnID: 'turn', kind: 'thinking', active: false, failed: false }]);
+      tokens.set(call, [{ key: call.key, entryKey: call.key, scope: 'scope', turnID: 'turn', kind: 'tool', active: false, failed: false,
+        get label() { labels++; return call.key; } }]);
+      tokens.set(prose, [{ outputScope: 'scope', contentKey: prose.key }]);
+    };
+    for (let index = 0; index < 600; index++) append(index);
+    const tokenize = (entry: Message) => tokens.get(entry)!;
+    const before = projectFlowerToolSequences(entries, 'thread', [], undefined, undefined, undefined, tokenize);
+    expect(before.groups.size).toBe(600);
+    labels = 0; append(600);
+    const after = projectFlowerToolSequences(entries, 'thread', [], before, undefined, undefined, tokenize);
+    expect(labels).toBe(1);
+    expect(after.groups.size).toBe(601);
+    for (const [key, group] of before.groups) expect(after.groups.get(key)).toBe(group);
+    expect(after.groups.get('thinking-600')?.latestToolLabel).toBe('call-600');
+    const changed = entries[1];
+    tokens.set(changed, [{ key: changed.key, entryKey: changed.key, scope: 'scope', turnID: 'turn', kind: 'tool', active: false, failed: true, label: 'Failed call' }]);
+    const failed = projectFlowerToolSequences(entries, 'thread', [], after, undefined, undefined, tokenize);
+    expect(failed.groups.get('thinking-0')).toMatchObject({ latestToolLabel: 'Failed call', failedCount: 1 });
+    expect(failed.groups.get('thinking-1')).toBe(after.groups.get('thinking-1'));
+  });
+
   it('keeps certified islands in one group without claiming complete counts or crossing compaction', () => {
     const call = (ordinal: number) => { const row = tool(String(ordinal)); return { ...row, message: { ...row.message, canonical_ordinal: ordinal } }; };
     const entries = [text('before'), call(1), call(2), call(9), call(10), text('after')];

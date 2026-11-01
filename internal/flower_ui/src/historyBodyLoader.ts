@@ -16,6 +16,7 @@ type BodyRead = {
   recoverable: boolean;
   timer?: ReturnType<typeof setTimeout>;
   cancel: () => void;
+  releaseOwners: () => void;
   controller: AbortController;
 };
 
@@ -28,11 +29,11 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
   let sequence = 0;
   let dispatches = 0;
   const priorities = { background: 0, visible: 1, interactive: 2 };
-  const remove = (key: string, entry: BodyRead) => {
-    entry.signal.removeEventListener('abort', entry.cancel);
+  const remove = (key: string, entry: BodyRead, cancel = true) => {
+    entry.releaseOwners();
     if (entry.timer !== undefined) clearTimeout(entry.timer);
     entry.timer = undefined;
-    entry.controller.abort();
+    if (cancel) entry.controller.abort();
     if (reads.get(key) === entry) { reads.delete(key); changed(); }
   };
   const pump = () => {
@@ -54,7 +55,7 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
             // A chunk yields its slot to queued visible items. New extent
             // notifications coalesce into the same read owner.
             entry.state = 'queued'; entry.queuedAt = dispatches; reads.delete(key); reads.set(key, entry);
-          } else remove(key, entry);
+          } else remove(key, entry, false);
         },
         error => {
           if (entry.signal.aborted) remove(key, entry);
@@ -106,13 +107,16 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       }
       if (previous) remove(key, previous);
       const controller = new AbortController();
-      // Growth notifications reuse this owner. Compose only after admission so
-      // one long-lived navigation signal does not collect thousands of unused
-      // dependent signals before cancellation.
-      const ownedSignal = AbortSignal.any([...signals, controller.signal]);
-      const entry: BodyRead = { identity, signal: ownedSignal, controller, read, priority, queuedAt: dispatches, state: 'queued', failures: 0, recoverable: false, cancel: () => { remove(key, entry); pump(); } };
+      // Completed reads detach from their long-lived parents immediately.
+      // Native composite signals retain dependencies until collection; a
+      // streaming body can complete thousands of reads before leaving view.
+      const owners = [...new Set(signals)];
+      const entry: BodyRead = { identity, signal: controller.signal, controller, read, priority, queuedAt: dispatches, state: 'queued', failures: 0, recoverable: false,
+        cancel: () => { remove(key, entry); pump(); },
+        releaseOwners: () => { for (const owner of owners) owner.removeEventListener('abort', entry.cancel); },
+      };
       reads.set(key, entry);
-      ownedSignal.addEventListener('abort', entry.cancel, { once: true });
+      for (const owner of owners) owner.addEventListener('abort', entry.cancel, { once: true });
       changed(); pump();
     },
   };

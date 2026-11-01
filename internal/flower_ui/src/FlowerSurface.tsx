@@ -12307,8 +12307,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const hasPendingText = createMemo(() => message().body_pending?.kind === 'text');
                 const needsBody = createMemo(() => hasPendingText() && (!isThinking() || message().live === true
                   || expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', contentBlock().key)] === true));
+                const observesBody = createMemo(() => message().live === true || needsBody());
                 onMount(() => createEffect(() => {
-                  if (!hasPendingText() || !needsBody()) return;
+                  if (!observesBody()) return;
                   const element = readElement();
                   const viewport = viewportScope.viewport();
                   if (element && viewport) {
@@ -12321,7 +12322,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const readOwner = createMemo(() => JSON.stringify([thread()?.thread_id, message().id, liveSyncState().connectionEpoch]));
                 const readController = createMemo(() => {
                   readOwner();
-                  if (!visible() || !hasPendingText() || !needsBody()) return;
+                  if (!visible() || !observesBody()) return;
                   const controller = new AbortController();
                   onCleanup(() => controller.abort());
                   return controller;

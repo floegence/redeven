@@ -21,6 +21,7 @@ type SequenceNode = Readonly<{
 
 type SequenceToken = SequenceNode | { outputScope: string; contentKey: string } | { gap: true } | { continuity: HistoryReadingGap } | null;
 type MessageEntry = Extract<FlowerTimelineEntry, { type: 'message' }>;
+const sequenceInputs = new WeakMap<FlowerToolSequence, Readonly<{ nodes: readonly SequenceNode[]; entries: readonly FlowerTimelineEntry[]; settled: boolean; trailing: boolean }>>();
 
 const sequenceBoundaryToolNames = new Set(['ask_user']);
 const sequenceableParentEventKinds = new Set(['report', 'completed', 'failed', 'cancelled', 'interrupted', 'timed_out']);
@@ -236,14 +237,20 @@ export function projectFlowerToolSequences(
   const continuingEntries = new Set<string>();
   const settledTurns = new Set([...turnsByID.values()].filter((turn) => turn.outcome && turn.ended_at)
     .map((turn) => turn.turn_id));
+  const publish = (group: FlowerToolSequence, nodes: readonly SequenceNode[]) => {
+    groups.set(group.key, group);
+    group.entryKeys.slice(0, -1).forEach(key => continuingEntries.add(key));
+    nodes.forEach((node, nodeIndex) => {
+      const priorMember = previous?.members.get(node.key);
+      members.set(node.key, priorMember?.group === group ? priorMember
+        : { group, first: nodeIndex === 0, last: nodeIndex === nodes.length - 1 });
+    });
+  };
   runs.forEach(({ nodes, followingContentKeys, countsComplete, missingBefore, missingAfter, gap }, index) => {
     if (nodes.length < 2) return;
-    const tools = nodes.filter(node => node.kind === 'tool');
-    const thinking = nodes.filter(node => node.kind === 'thinking');
-    const subagentEvents = nodes.filter(node => node.kind === 'subagent_event');
     const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
     const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
-    const entryKeys = entries.slice(firstEntry, lastEntry + 1).map(entry => entry.key);
+    const sourceEntries = entries.slice(firstEntry, lastEntry + 1);
     const ordinal = (entry: FlowerTimelineEntry | undefined) => entry?.type === 'message' ? readPresentationValue(entry.message).canonical_ordinal
       : entry?.type === 'parent_event' ? entry.event.canonical_ordinal
         : entry?.type === 'context_compaction' ? entry.decoration.compaction.canonical_ordinal : undefined;
@@ -254,9 +261,29 @@ export function projectFlowerToolSequences(
     const settled = Boolean(nodes[0].turnID && settledTurns.has(nodes[0].turnID));
     // Keep disclosure identity when pagination prepends the missing prefix.
     const retainedKey = nodes.find(node => previous?.groups.has(node.key) && !groups.has(node.key))?.key;
-    const messageEntries = entries.slice(firstEntry, lastEntry + 1).filter((entry): entry is MessageEntry => entry.type === 'message');
+    const key = retainedKey ?? nodes[0].key;
+    const prior = previous?.groups.get(key);
+    const inputs = prior && sequenceInputs.get(prior);
+    const trailing = !followingContentKeys.length && index === runs.length - 1;
+    // Token owners publish new immutable facts only at their own boundaries.
+    // Reuse settled summaries before counting and classifying every old group.
+    if (prior && inputs && inputs.settled === settled && inputs.trailing === trailing
+      && inputs.nodes.length === nodes.length && nodes.every((node, i) => node === inputs.nodes[i])
+      && inputs.entries.length === sourceEntries.length && sourceEntries.every((entry, i) => entry === inputs.entries[i])
+      && prior.countsComplete === (countsComplete && !missingEvents) && prior.missingBefore === missingBefore && prior.missingAfter === missingAfter
+      && prior.missingItemAfter === gap?.beforeID && prior.missingItemBefore === gap?.afterID
+      && prior.firstCanonicalOrdinal === ordinal(entries[firstEntry]) && prior.lastCanonicalOrdinal === ordinal(entries[lastEntry])
+      && prior.followingContentKeys.length === followingContentKeys.length && followingContentKeys.every((value, i) => value === prior.followingContentKeys[i])) {
+      publish(prior, nodes);
+      return;
+    }
+    const tools = nodes.filter(node => node.kind === 'tool');
+    const thinking = nodes.filter(node => node.kind === 'thinking');
+    const subagentEvents = nodes.filter(node => node.kind === 'subagent_event');
+    const entryKeys = sourceEntries.map(entry => entry.key);
+    const messageEntries = sourceEntries.filter((entry): entry is MessageEntry => entry.type === 'message');
     let group: FlowerToolSequence = {
-      key: retainedKey ?? nodes[0].key,
+      key,
       countsComplete: countsComplete && !missingEvents,
       missingBefore, missingAfter,
       missingItemAfter: gap?.beforeID, missingItemBefore: gap?.afterID,
@@ -275,22 +302,16 @@ export function projectFlowerToolSequences(
       subagentEventCount: subagentEvents.length,
       runningCount: tools.filter(node => node.active).length,
       followingContentKeys,
-      disclosure: nodes.some(node => node.active) || !settled && !followingContentKeys.length && index === runs.length - 1 ? 'manual' : 'automatic',
+      disclosure: nodes.some(node => node.active) || !settled && !followingContentKeys.length && trailing ? 'manual' : 'automatic',
     };
-    const prior = previous?.groups.get(group.key);
     if (prior && (Object.keys(group) as (keyof FlowerToolSequence)[]).every(key => {
       const value = group[key], old = prior[key];
       return Array.isArray(value) && Array.isArray(old)
         ? value.length === old.length && value.every((item, index) => item === old[index])
         : value === old;
     })) group = prior;
-    groups.set(group.key, group);
-    entryKeys.slice(0, -1).forEach(key => continuingEntries.add(key));
-    nodes.forEach((node, nodeIndex) => {
-      const priorMember = previous?.members.get(node.key);
-      members.set(node.key, priorMember?.group === group ? priorMember
-        : { group, first: nodeIndex === 0, last: nodeIndex === nodes.length - 1 });
-    });
+    sequenceInputs.set(group, { nodes, entries: sourceEntries, settled, trailing });
+    publish(group, nodes);
   });
   const previousKeys = previous ? [...previous.groups.keys()] : [];
   if (previous && groups.size === previous.groups.size && members.size === previous.members.size
