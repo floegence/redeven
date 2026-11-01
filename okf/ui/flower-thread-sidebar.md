@@ -25,6 +25,9 @@ The header pencil edits the existing ThreadID, including during execution/loadin
 ## Reference action
 Right-click, More and Shift+F10 share the ThreadID-owned menu. [References](flower-thread-references.md) own deduplication, preview, admission and recovery.
 
+## Context menu response
+Sidebar and transcript context menus are fully visible on the first frame, without an entrance transition. Use published Floe compact row/control tokens on desktop and retain 44px touch targets. The shared resize observer supplies the measured client border box to `SurfaceFloatingLayer`; Floe owns clamping and projected coordinates. Live action changes remeasure without replacing the menu or losing focus. Long paths remain truncated with the full path available on hover.
+
 ## Pending replies and approvals
 Localized reply/approval labels appear beside the title with bounded status/progress width. Background updates use the workspace stream without selection.
 
@@ -41,6 +44,8 @@ The [storage contract](../ai/flower-storage-ownership-and-migrations.md) owns au
 Read confirmation and loaded-content revisions follow the canonical [read-state contract](flower-read-state.md). A successful detail fetch alone does not acknowledge unseen content.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - First-frame visibility, compact light/dark geometry, live resizing, viewport edges, touch scrolling, enlarged text and reduced motion.
 
 - `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Coalesced resize, final coordinates, cancellation and preference failures.
 - `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.

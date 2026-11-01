@@ -8292,16 +8292,15 @@ button.flower-composer-context-source:focus-visible,
   background: var(--primary);
 }
 
-/* Floe owns the menu recipe: panel radius, hairline, float elevation, the
- * row-height item rhythm and the menu presence motion. Flower supplies only
- * the surface palette and the destructive tone. */
+/* Point-triggered menus appear immediately and use Floe's compact control
+ * tokens. Placement stays with SurfaceFloatingLayer; touch targets stay roomy. */
 .flower-thread-context-menu {
   width: min(15rem, calc(100vw - 1rem));
   max-height: min(36rem, calc(100vh - 1rem));
   overflow-y: auto;
   padding: var(--floe-gap-inline);
   border: 1px solid var(--floe-line);
-  border-radius: var(--floe-radius-panel);
+  border-radius: var(--floe-radius-control);
   background: var(--popover, var(--flower-chat-surface-elevated, var(--card)));
   color: var(--popover-foreground, var(--foreground));
   box-shadow: var(--floe-elevation-float);
@@ -8310,13 +8309,13 @@ button.flower-composer-context-source:focus-visible,
 .flower-thread-menu-item {
   display: flex;
   width: 100%;
-  min-height: var(--floe-row-height);
+  min-height: var(--floe-row-height-compact);
   align-items: center;
   gap: 0.5rem;
   border-radius: var(--floe-radius-sm);
   padding: 0 0.5rem;
   text-align: left;
-  font-size: var(--floe-type-control);
+  font-size: var(--floe-type-supporting);
   line-height: var(--floe-line-control);
   color: var(--floe-ink);
   cursor: pointer;
@@ -11641,9 +11640,10 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-directory-menu-path {
   overflow: hidden;
-  padding: 0.375rem 0.5rem;
+  padding: var(--floe-gap-inline) 0.5rem;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
+  line-height: var(--floe-line-control);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

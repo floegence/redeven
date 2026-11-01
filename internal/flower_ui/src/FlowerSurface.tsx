@@ -15164,7 +15164,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             x={menu().x}
             y={menu().y}
             label={copy().threadList.contextMenuLabel(menu().title)}
-            height={220}
             resolveRestore={() => menu().restore}
             onClose={closeTranscriptMenu}
           >

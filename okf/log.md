@@ -6,6 +6,8 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-11-01
 
+- Make Flower [context menus](ui/flower-thread-sidebar.md) visible on the first frame, consume published Floe compact tokens and measured floating placement, and retain keyboard, directory snapshot and touch behavior.
+
 - Bind [plugin recovery](architecture/redevplugin-surface-recovery.md) to the exact current installation through published ReDevPlugin 3.12.1. Reject obsolete startup/retry observations, preserve current sibling failures, and localize error reasons without technical instance IDs.
 - Condense repeated knowledge summaries and historical qualification detail below 900,000 characters, preserving active contracts, source links, failed results and scope limits. The primary agent performs this review under the user's explicit no-delegation instruction; Git retains earlier detail.
 

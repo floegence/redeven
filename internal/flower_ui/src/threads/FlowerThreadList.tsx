@@ -250,7 +250,6 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       x={props.x}
       y={props.y}
       label={props.copy.contextMenuLabel(props.item.title.trim())}
-      height={384 + (props.item.pinned ? 72 : 0) + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0)}
       resolveRestore={props.resolveRestore}
       onClose={props.onClose}
     >

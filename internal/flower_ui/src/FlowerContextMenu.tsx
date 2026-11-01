@@ -1,23 +1,27 @@
 import type { JSX } from 'solid-js';
-import { createEffect, onCleanup } from 'solid-js';
-import { createFloatingPresence, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { createEffect, createMemo, onCleanup } from 'solid-js';
+import { useResizeObserver } from '@floegence/floe-webapp-core';
+import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 /** Flower menus share projected placement and keyboard/focus ownership. */
 export function FlowerContextMenu(props: Readonly<{
   x: number;
   y: number;
   label: string;
-  height: number;
   resolveRestore: () => HTMLElement | undefined;
   onClose: (restoreFocus?: boolean) => void;
   children: JSX.Element;
 }>): JSX.Element {
   let menuRef: HTMLDivElement | undefined;
   let disposed = false;
-  // Flower mounts this menu only while it is open, so presence supplies the
-  // floe menu entrance (240ms, -0.375rem rise, 0.97 scale). Dismissal still
-  // unmounts through the caller, keeping focus restoration unchanged.
-  const menuPresence = createFloatingPresence({ open: () => true, element: () => menuRef });
+  const contentSize = useResizeObserver(() => menuRef);
+  const menuSize = createMemo(() => {
+    if (!contentSize() || !menuRef) return undefined;
+    // The upstream layer clamps in client coordinates, including projected
+    // surface scale. Measure the complete border box instead of counting rows.
+    const { width, height } = menuRef.getBoundingClientRect();
+    return { width, height };
+  });
   const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled):not([aria-disabled="true"])') ?? []);
   const focusItem = (delta: number) => {
     const items = focusableItems();
@@ -93,7 +97,7 @@ export function FlowerContextMenu(props: Readonly<{
     <SurfaceFloatingLayer
       owner={props.resolveRestore()}
       position={{ x: props.x, y: props.y }}
-      estimatedSize={{ width: 272, height: props.height }}
+      estimatedSize={menuSize()}
       class="flower-thread-context-menu-layer"
       data-flower-floating-layer="true"
     >
@@ -101,8 +105,7 @@ export function FlowerContextMenu(props: Readonly<{
         ref={menuRef}
         role="menu"
         tabIndex={-1}
-        class="flower-thread-context-menu floe-floating-presence floe-floating-menu"
-        data-floating-presence={menuPresence.state()}
+        class="flower-thread-context-menu"
         aria-label={props.label}
         onFocusOut={(event) => {
           const next = event.relatedTarget;

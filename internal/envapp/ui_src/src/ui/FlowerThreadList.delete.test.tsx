@@ -10,7 +10,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerThreadListItem, FlowerThreadReadStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { FlowerThreadList } from '../../../../flower_ui/src/threads/FlowerThreadList';
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
 }));
 

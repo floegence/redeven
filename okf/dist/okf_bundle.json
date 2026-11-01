@@ -28929,15 +28929,15 @@
         "title": "Flower conversation sidebar",
         "type": "UI Contract"
       },
-      "body_length": 3234,
+      "body_length": 3951,
       "summary": "Desktop and Env App share one Flower sidebar with ThreadID-owned rows and endpoint-owned pin order. Selection, running work, unread attention and pending actions remain distinct. Live summaries preserve row/menu/focus identity. Resizing and pin feedback are ephemeral presentation over the canonical ThreadCache.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Resizing\nOne 220–380 CSS-pixel preference owns desktop sidebar width. Inline resizing updates only its grid track, at most once per frame; drawer width applies only in overlay mode. Mobile, companion and embedded layouts keep their sizing.\n\nOne primary-pointer gesture retains the latest sample and settles on release, cancellation, lost capture, blur, layout change or unmount. Release listeners, frames and cursor/selection shielding; persist once per gesture or immediately for keyboard changes. Storage failure cannot interrupt interaction. Width changes cannot reparse Markdown or invalidate the full transcript.\n\n## Rename from the conversation header\nThe header pencil edits the existing ThreadID, including during execution/loading, with canonical title prefilled and selected. Header/sidebar share one save owner and thread cache.\n\n## Selection and detail reads\n[Selection](flower-thread-selection.md) owns deferred commitment, bounded reads, cancellation and recovery. ThreadCache owns committed selection/detail; sidebar intent reserves feedback only.\n\n## Reference action\nRight-click, More and Shift+F10 share the ThreadID-owned menu. [References](flower-thread-references.md) own deduplication, preview, admission and recovery.\n\n## Pending replies and approvals\nLocalized reply/approval labels appear beside the title with bounded status/progress width. Background updates use the workspace stream without selection.\n\n## Pin ordering\nThe stable `.flower-thread-rows` owner contains inline size for real/skeleton rows; movable cards cannot be size containers. Keyboard order matches visible search/pin-overlay order. Failed pin operations undo only their own presentation and reconcile via the existing summary stream or one explicit command read.\n\n## Stable presentation and convergence\nKey rows by ThreadID and group labels separately. ThreadCache owns summaries; each batch publishes once under existing title/revision rules, preserving menus, focus and running-wave continuity.",
-          "char_count": 1996
+          "body": "## Resizing\nOne 220–380 CSS-pixel preference owns desktop sidebar width. Inline resizing updates only its grid track, at most once per frame; drawer width applies only in overlay mode. Mobile, companion and embedded layouts keep their sizing.\n\nOne primary-pointer gesture retains the latest sample and settles on release, cancellation, lost capture, blur, layout change or unmount. Release listeners, frames and cursor/selection shielding; persist once per gesture or immediately for keyboard changes. Storage failure cannot interrupt interaction. Width changes cannot reparse Markdown or invalidate the full transcript.\n\n## Rename from the conversation header\nThe header pencil edits the existing ThreadID, including during execution/loading, with canonical title prefilled and selected. Header/sidebar share one save owner and thread cache.\n\n## Selection and detail reads\n[Selection](flower-thread-selection.md) owns deferred commitment, bounded reads, cancellation and recovery. ThreadCache owns committed selection/detail; sidebar intent reserves feedback only.\n\n## Reference action\nRight-click, More and Shift+F10 share the ThreadID-owned menu. [References](flower-thread-references.md) own deduplication, preview, admission and recovery.\n\n## Context menu response\nSidebar and transcript context menus are fully visible on the first frame, without an entrance transition. Use published Floe compact row/control tokens on desktop and retain 44px touch targets. The shared resize observer supplies the measured client border box to `SurfaceFloatingLayer`; Floe owns clamping and projected coordinates. Live action changes remeasure without replacing the menu or losing focus. Long paths remain truncated with the full path available on hover.\n\n## Pending replies and approvals\nLocalized reply/approval labels appear beside the title with bounded status/progress width. Background updates use the workspace stream without selection.\n\n## Pin ordering\nThe stable `.flower-thread-rows` owner contains inline size for real/skeleton rows; movable cards cannot be size containers. Keyboard order matches visible search/pin-overlay order. Failed pin operations undo only their own presentation and reconcile via the existing summary stream or one explicit command read.\n\n## Stable presentation and convergence\nKey rows by ThreadID and group labels separately. ThreadCache owns summaries; each batch publishes once under existing title/revision rules, preserving menus, focus and running-wave continuity.",
+          "char_count": 2498
         },
         {
           "id": "boundaries",
@@ -28948,6 +28948,11 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx:0:first-frame visibility, compact light/dark geometry, live resizing, viewport edges, touch scrolling, enlarged text and reduced motion.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx",
+          "description": "First-frame visibility, compact light/dark geometry, live resizing, viewport edges, touch scrolling, enlarged text and reduced motion."
+        },
         {
           "id": "redeven:internal/flower_ui/src/threadRailResize.test.ts:0:coalesced resize, final coordinates, cancellation and preference failures.",
           "source": "redeven:internal/flower_ui/src/threadRailResize.test.ts",
@@ -31525,5 +31530,5 @@
       ]
     }
   ],
-  "source_sha256": "965ba16c94cb62bbc44d8fbe2ef798db4fae277f5b73668571388ec02b50b79a"
+  "source_sha256": "a8989565e8adb22c666912bf159d092e67a1b1fdcc0abbdc4906bd4667b74c2d"
 }
