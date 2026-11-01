@@ -1647,7 +1647,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (pending && selectedThreadID() === pending.threadID) scheduleThreadSelectionContentPresented(pending.threadID);
   };
 
-	const selectedThread = createFlowerThreadSubscription(() => {
+	const selectedThread = createMemo(() => {
 		const threadID = trimString(selectedThreadID());
 		if (!threadID) return null;
 		return threadCache().views.get(threadID)?.thread ?? null;
@@ -7466,7 +7466,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!active) return null;
     return selectedSubagentItems().find((item) => trimString(item.threadID) === active.childThreadID) ?? active.item;
   });
-  const subagentDetailThread = createFlowerThreadSubscription(() => threadCache().views.get(activeSubagentID())?.thread ?? null);
+  const subagentDetailThread = createMemo<FlowerThreadSnapshot | null>(() => threadCache().views.get(activeSubagentID())?.thread ?? null);
   const subagentParentEventReading = createParentEventReading({
     scroll: subagentDetailScroll,
     get threadID() { return subagentDetailOpen() ? activeSubagentID() : ''; },
