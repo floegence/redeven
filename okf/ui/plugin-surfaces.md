@@ -31,6 +31,8 @@ Reopening an existing Activity page with equivalent inventory metadata preserves
 
 Each pinned page runtime owns a stable registered component function. Inventory or pin updates may refresh names, icons and ordering without replacing other live page components. Removing or revoking one plugin must not recreate a sibling's iframe or discard its editing state.
 
+The released Floe retained-view container owns sibling collection isolation and stable DOM order. Moving a retained iframe can reload its document even when the element identity survives, so acceptance checks the inner document and draft as well as the container. Redeven consumes the published implementation rather than copying a second keep-alive stack.
+
 ## Workbench widgets and placement
 [Layout continuity](plugin-layout-continuity.md) owns saved bindings, atomic placement, exact removal and recovery. Status overlays cannot forward input, guess focus or create a second bridge. Unpin removes only the shortcut.
 
