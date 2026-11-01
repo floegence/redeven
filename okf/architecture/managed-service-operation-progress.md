@@ -19,7 +19,7 @@ Failed uninstall retains current records and output; the [management review](ser
 ## Service-row interaction
 The owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state.
 
-Rows retain a compact operation status; explicit status activation opens detail without automatic row growth. Failed/interrupted operations remain visibly labelled. Notices without an operation stay visible; operation notices follow its disclosure. Reduced-motion preference removes the animation without shortening the readable hold.
+Rows retain a compact operation status; explicit status activation opens detail without automatic row growth. Failed/interrupted operations remain visibly labelled. Service notices remain visible across operation arrival, settlement and dismissal; only operation details follow disclosure. Reduced-motion preference removes the animation without shortening the readable hold.
 
 # Boundaries
 

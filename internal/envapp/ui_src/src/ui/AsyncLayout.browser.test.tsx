@@ -117,7 +117,7 @@ it.each([1280, 390])('keeps neighboring services still through operation settlem
   setPhase('visible'); setCurrent({ ...operation, state: 'failed', stage: 'failed' }); await settle();
   expect(geometry()).toEqual(initial);
   const notice = host.querySelector<HTMLElement>('[data-testid="managed-service-notice"]')!;
-  expect(notice.checkVisibility({ visibilityProperty: true })).toBe(false);
+  expect(notice.checkVisibility({ visibilityProperty: true })).toBe(true);
   await userEvent.click(host.querySelector('.web-service-status-trigger')!); await settle();
   expect(notice.checkVisibility()).toBe(true);
   expect(notice.getBoundingClientRect().width).toBeGreaterThan(100);

@@ -14590,15 +14590,15 @@
         "title": "Managed Service operation progress",
         "type": "Runtime Contract"
       },
-      "body_length": 2007,
+      "body_length": 2048,
       "summary": "A Manager Reporter owns live operation output; Registry owns history. One operation ID preserves drawer disclosure and brief completion through list/stream refresh. Redact safe command templates before persistence; output never defines Runtime identity. Persistence, capture or stream failures must not expose secrets, URL queries, private paths or control characters.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Reporter and persisted detail\n`ManagedOperationProgressDetail` schema v2 is the sole progress document. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.\n\nFailed uninstall retains current records and output; the [management review](service-management-recovery.md) presents completed and pending resources before a new confirmed continuation.\n\n## Service-row interaction\nThe owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state.\n\nRows retain a compact operation status; explicit status activation opens detail without automatic row growth. Failed/interrupted operations remain visibly labelled. Notices without an operation stay visible; operation notices follow its disclosure. Reduced-motion preference removes the animation without shortening the readable hold.",
-          "char_count": 1075
+          "body": "## Reporter and persisted detail\n`ManagedOperationProgressDetail` schema v2 is the sole progress document. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.\n\nFailed uninstall retains current records and output; the [management review](service-management-recovery.md) presents completed and pending resources before a new confirmed continuation.\n\n## Service-row interaction\nThe owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state.\n\nRows retain a compact operation status; explicit status activation opens detail without automatic row growth. Failed/interrupted operations remain visibly labelled. Service notices remain visible across operation arrival, settlement and dismissal; only operation details follow disclosure. Reduced-motion preference removes the animation without shortening the readable hold.",
+          "char_count": 1116
         },
         {
           "id": "boundaries",
@@ -31550,5 +31550,5 @@
       ]
     }
   ],
-  "source_sha256": "1cb71ada81203f02608d24760daecb5bb3044e9a7bb051c837877af2237b956c"
+  "source_sha256": "fcb76f06bbb45278893f272ae161fd0870f73ad921d076616cee34ab40c58430"
 }

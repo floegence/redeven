@@ -1592,7 +1592,6 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
     : primaryAction() === 'start' || primaryAction() === 'stop' ? primaryFullLabel()
     : i18n.t(primaryAction() === 'recover' ? 'webServices.collection.recover' : 'webServices.collection.review');
   const notices = createMemo(() => {
-    if (activeOperation()) return [];
     const messages: string[] = [];
     if (props.service.status === 'uninstall_pending') messages.push(i18n.t('webServices.management.problems.cleanupBlocked'));
     else if (props.service.problem_code) messages.push(i18n.t(managementProblemKey(props.service.problem_code)));
@@ -1733,7 +1732,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
         </div>
       </div>
       <div class="web-service-activity">
-      <div class="web-service-notice-region" data-expanded={(!operation() || props.operationExpanded) && notices().length > 0 || undefined} aria-hidden={Boolean(operation() && !props.operationExpanded) || notices().length === 0 || undefined} data-testid="managed-service-notice">
+      <div class="web-service-notice-region" data-expanded={notices().length > 0 || undefined} aria-hidden={notices().length === 0 || undefined} data-testid="managed-service-notice">
         <div class="web-service-notice-clip"><div class="web-service-notice">
           <AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <div><For each={notices()}>{(message) => <p>{message}</p>}</For></div>
