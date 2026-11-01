@@ -29,6 +29,8 @@ Each window creates one fresh `PluginSurfaceSlot` through `openSurfaceInSlot`. O
 
 Reopening an existing Activity page with equivalent inventory metadata preserves its container, iframe and application state. Visibility changes use the existing slot lifecycle. A changed instance, surface, management revision or runtime generation still retires the old lease; revoked authority never survives for visual continuity. Cold opening immediately shows one host-themed accessible waiting surface, without rotating internal bootstrap-stage labels. Ready content replaces it; failures keep actionable recovery and diagnostic details.
 
+Each pinned page runtime owns a stable registered component function. Inventory or pin updates may refresh names, icons and ordering without replacing other live page components. Removing or revoking one plugin must not recreate a sibling's iframe or discard its editing state.
+
 ## Workbench widgets and placement
 [Layout continuity](plugin-layout-continuity.md) owns saved bindings, atomic placement, exact removal and recovery. Status overlays cannot forward input, guess focus or create a second bridge. Unpin removes only the shortcut.
 
@@ -43,6 +45,7 @@ It does not verify packages or releases, mint tokens, serve assets, grant permis
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Inventory refresh and sibling removal retain the registered page component while presentation metadata updates.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx` - Equivalent target updates retain the live document; authority changes retire it.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx` - Immediate, stable opening feedback and terminal recovery behavior.
 

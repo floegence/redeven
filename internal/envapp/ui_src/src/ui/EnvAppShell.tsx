@@ -353,6 +353,7 @@ type PluginPanelState = Readonly<{
 }>;
 
 type ActivityPluginPageRuntime = Readonly<{
+  component: FloeComponent['component'];
   target: Accessor<PluginSurfaceLaunchTarget | null>;
   setTarget: Setter<PluginSurfaceLaunchTarget | null>;
   close: Accessor<(() => Promise<boolean>) | null>;
@@ -1380,7 +1381,32 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     if (existing) return existing;
     const [target, setTarget] = createSignal<PluginSurfaceLaunchTarget | null>(null);
     const [close, setClose] = createSignal<(() => Promise<boolean>) | null>(null);
-    const runtime = { target, setTarget, close, setClose };
+    const runtime: ActivityPluginPageRuntime = {
+      target, setTarget, close, setClose,
+      component: () => {
+        let ownedClose: (() => Promise<boolean>) | null = null;
+        return (
+          <ActivityPluginSurfacePage
+            resolveSurface={resolvePluginSurface}
+            refreshInventory={refreshPluginSurfaceInventory}
+            coordinator={pluginSurfaceCoordinator}
+            confirmationQueue={pluginConfirmationQueue}
+            target={target}
+            onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')}
+            registerClose={(requestClose) => {
+              if (requestClose) {
+                ownedClose = requestClose;
+                setClose(() => requestClose);
+                return;
+              }
+              if (close() === ownedClose) setClose(null);
+              ownedClose = null;
+            }}
+            onRetirementError={reportPluginSurfaceRetirementError}
+          />
+        );
+      },
+    };
     activityPluginPageRuntimes.set(inventoryKey, runtime);
     return runtime;
   };
@@ -1874,34 +1900,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     pinnedActivityPluginTiles().map((tile, index) => {
       const inventoryKey = tile.item.inventoryKey;
       const runtime = ensureActivityPluginPageRuntime(inventoryKey);
-      const ActivityPluginPage = () => {
-        let ownedClose: (() => Promise<boolean>) | null = null;
-        return (
-          <ActivityPluginSurfacePage
-            resolveSurface={resolvePluginSurface}
-            refreshInventory={refreshPluginSurfaceInventory}
-            coordinator={pluginSurfaceCoordinator}
-            confirmationQueue={pluginConfirmationQueue}
-            target={runtime.target}
-            onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')}
-            registerClose={(close) => {
-              if (close) {
-                ownedClose = close;
-                runtime.setClose(() => close);
-                return;
-              }
-              if (runtime.close() === ownedClose) runtime.setClose(null);
-              ownedClose = null;
-            }}
-            onRetirementError={reportPluginSurfaceRetirementError}
-          />
-        );
-      };
       return {
         id: pluginActivityComponentID(inventoryKey),
         name: tile.item.displayName,
         icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
-        component: ActivityPluginPage,
+        component: runtime.component,
         sidebar: {
           order: 102 + index,
           fullScreen: true,

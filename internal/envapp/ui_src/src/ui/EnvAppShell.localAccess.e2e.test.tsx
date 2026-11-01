@@ -4055,6 +4055,37 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   }, 10000);
 
+  it('preserves a pinned page component across inventory refresh and sibling removal', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = activityPluginProjection(2);
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.filter((tile: any) => tile.kind === 'plugin').length === 2, 60);
+      for (const item of projection.items) await pluginPanelState.lastProps.onSetPluginPin('activity', item.inventoryKey, true);
+      const id = 'redeven.plugin.activity:' + encodeURIComponent(projection.items[1].inventoryKey);
+      await flushUntil(() => registeredComponentsState.dynamicComponents.some(item => item.id === id), 60);
+      const first = registeredComponentsState.dynamicComponents.find(item => item.id === id)!.component;
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onRefresh));
+      const renamed = { ...projection.items[1], displayName: 'Renamed application' };
+      for (const items of [[projection.items[0], renamed], [renamed]]) {
+        pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({ ...projection, items });
+        await pluginCenterViewState.lastProps.onRefreshInstalled();
+        await flushUntil(() => pluginCenterViewState.lastProps?.projection?.items?.length === items.length
+          && pluginCenterViewState.lastProps.projection.items.at(-1)?.displayName === 'Renamed application');
+        const current = registeredComponentsState.dynamicComponents.find(item => item.id === id)!;
+        expect(current.component).toBe(first);
+        expect(current).toMatchObject({ name: 'Renamed application' });
+      }
+      expect(registeredComponentsState.dynamicComponents).toHaveLength(1);
+    } finally { dispose(); }
+  }, 10000);
+
   it('keeps an Activity pin when exact close fails and removes it after a successful retry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
