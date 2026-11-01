@@ -51,6 +51,7 @@ function fixture(initial: FlowerRuntimeCurrentView) {
       }
     },
   }, { layout: true, focusThreadRequest: { request_id: 'focus', thread_id: threadID } });
+  surface.style.cssText = 'width: 100%; height: 100dvh;';
   return { surface, loadThread, snapshot, submitInput, setComputerViewer, inputComputerControl, loadComputerFrame, connections: () => connections,
     restart: (next: FlowerRuntimeCurrentView) => { canonical = next; revision++; receive(undefined); },
     disconnect: () => receive(undefined), emit: (value: FlowerLiveStreamEnvelope) => receive(value),

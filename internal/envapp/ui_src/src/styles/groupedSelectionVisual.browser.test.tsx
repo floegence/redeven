@@ -1,5 +1,6 @@
 import '../index.css';
 import '../ui/pages/env-containers.css';
+import '../ui/pages/service-template-center.css';
 import '../../../../flower_ui/src/styles/flower.css';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { SegmentedControl } from '@floegence/floe-webapp-core/ui';

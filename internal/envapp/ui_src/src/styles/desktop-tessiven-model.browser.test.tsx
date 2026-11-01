@@ -42,6 +42,7 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
   let releaseSettings!: () => void;
   const settingsReady = new Promise<void>(resolve => { releaseSettings = resolve; });
   const request = vi.fn(async ({ path }: { path: string }) => {
+    if (path.endsWith('/conversation_preferences')) return { ok: true, data: { model_id: 'deepseek/deepseek-flash', reasoning_by_model: {}, revision: 1 } };
     if (path.endsWith('/settings')) await settingsReady;
     if (path.endsWith('/settings')) return { ok: true, data: { ai: { permission_type: 'full_access', current_model_id: 'deepseek/deepseek-flash', providers: [
       { id: 'deepseek', name: 'DeepSeek', type: 'deepseek', model_selection: { selected_models: ['deepseek-flash', 'deepseek-pro'] } },
@@ -49,7 +50,7 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
     if (path.includes('/models')) return { ok: true, data: modelDirectoryWireFixture({ ai: { current_model_id: 'deepseek/deepseek-flash', providers: [{ id: 'deepseek', name: 'DeepSeek', type: 'deepseek', models: [], model_selection: { selected_models: ['deepseek-flash', 'deepseek-pro'] } }] } }, { current_model: 'deepseek/deepseek-flash', models: [{ id: 'deepseek/deepseek-flash', label: 'DeepSeek / deepseek-flash' }, { id: 'deepseek/deepseek-pro', label: 'DeepSeek / deepseek-pro' }] }) };
     throw new Error(`Unexpected model request: ${path}`);
   });
-  const desktop = createLocalEnvironmentFlowerSurfaceAdapter({ requestRuntimeFlower: request } as unknown as DesktopSettingsBridge);
+  const desktop = createLocalEnvironmentFlowerSurfaceAdapter({ requestRuntimeFlower: request, cancelRuntimeFlowerRead: vi.fn() } as unknown as DesktopSettingsBridge);
   const adapter = {
     ...canvasFlowerAdapter(),
     loadSettings: desktop.loadSettings,
@@ -79,7 +80,8 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
   expect(warmup.getBoundingClientRect().height).toBeLessThan(320);
   await page.screenshot({ element: host, path: `__screenshots__/desktop-canvas-preparing-${themeID}.png` });
   setState('ready');
-  await expect.element(page.getByRole('status', { name: 'Flower settings are still loading.' })).toBeVisible();
+  await expect.poll(() => request.mock.calls.some(([input]) => input.path.endsWith('/settings'))).toBe(true);
+  expect(document.querySelector<HTMLButtonElement>('[data-flower-primary-action="send"]')?.disabled).toBe(true);
   expect(document.querySelector('.tessiven-flower-output .flower-composer')?.textContent).not.toContain('No model selected');
   await page.screenshot({ element: host, path: `__screenshots__/desktop-canvas-model-loading-${themeID}.png` });
   releaseSettings();
@@ -97,7 +99,7 @@ it.each(['porcelain-light', 'porcelain-dark'])('recovers the Desktop canvas mode
   await page.getByRole('button', { name: 'Show replies', exact: true }).click();
   await expect.element(page.getByRole('textbox')).toHaveValue('Arrange this architecture from left to right');
   await expect.poll(() => document.querySelector('.tessiven-flower-output .flower-composer')?.textContent).toContain('DeepSeek');
-  await expect.poll(() => request.mock.calls.length).toBe(3);
+  await expect.poll(() => request.mock.calls.filter(([input]) => input.path.endsWith('/settings')).length).toBe(1);
   await page.getByRole('button', { name: 'Expand replies', exact: true }).click();
   await expect.poll(() => document.querySelector('button.flower-model-reasoning-model-trigger')).not.toBeNull();
   const trigger = document.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!;

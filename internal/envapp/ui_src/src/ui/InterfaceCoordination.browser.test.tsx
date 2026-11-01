@@ -58,7 +58,7 @@ it.each([false, true])('separates narrow file toolbar layout from touch sizing, 
   const boundary = input.closest('label')!;
   console.info('File toolbar geometry', JSON.stringify({ touch, font: getComputedStyle(input).fontSize, height: boundary.getBoundingClientRect().height }));
   await page.screenshot({ element: host, path: `__screenshots__/coordination-files-${touch}.png` });
-  expect.soft(getComputedStyle(input).fontSize).toBe(touch ? '16px' : '12px');
+  expect.soft(getComputedStyle(input).fontSize).toBe(touch ? '16px' : '13px');
   expect.soft(boundary.getBoundingClientRect().height).toBe(touch ? 44 : 32);
   for (const button of host.querySelectorAll<HTMLElement>('[data-toolbar-layout] > div:last-child button')) {
     if (button.getClientRects().length) expect.soft(button.getBoundingClientRect().height).toBe(touch ? 44 : 32);
@@ -84,7 +84,8 @@ it.each([
     await expect.poll(() => getComputedStyle(control).backgroundColor).toMatch(/(?:,\s*0|\/\s*0)\)$/);
     expect.soft(getComputedStyle(control).borderTopWidth).toBe('0px');
   }
-  const trigger = runtime.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!;
+  await expect.poll(() => runtime.querySelector('.flower-composer-control-slot .flower-model-reasoning-model-trigger')).not.toBeNull();
+  const trigger = runtime.querySelector<HTMLButtonElement>('.flower-composer-control-slot .flower-model-reasoning-model-trigger')!;
   expect(getComputedStyle(trigger).fontSize).toBe(touch ? '12px' : '10px');
   expect(getComputedStyle(runtime.querySelector('.flower-permission-label')!).fontSize).toBe(touch ? '12px' : '10px');
   const slot = trigger.closest('.flower-composer-control-slot')!;
@@ -137,7 +138,7 @@ it.each([false, true])('fits four choices into a compact reply surface and prese
     await page.screenshot({ element: surface, path: `__screenshots__/coordination-question${touch ? '-touch' : ''}${dark ? '-dark' : ''}.png` });
     expect.soft(surface.getBoundingClientRect().height).toBeLessThanOrEqual(touch ? 360 : 320);
   }
-  expect.soft(getComputedStyle(surface.querySelector('.flower-input-request-question-header')!).fontSize).toBe(touch ? '14px' : '12px');
+  expect.soft(getComputedStyle(surface.querySelector('.flower-input-request-question-header')!).fontSize).toBe(touch ? '14px' : '13px');
   for (const choice of surface.querySelectorAll('.flower-input-request-choice, .flower-input-request-choice-custom')) {
     expect(choice.getBoundingClientRect().height).toBeGreaterThanOrEqual(touch ? 44 : 28);
   }
@@ -170,7 +171,7 @@ it.each([false, true])('keeps resource filters compact on a narrow desktop and a
   onTestFinished(() => { dispose(); host.remove(); });
   await document.fonts.ready;
   for (const input of host.querySelectorAll('input')) {
-    expect.soft(getComputedStyle(input).fontSize).toBe(touch ? '16px' : '12px');
+    expect.soft(getComputedStyle(input).fontSize).toBe(touch ? '16px' : '13px');
     expect.soft(input.getBoundingClientRect().height).toBe(touch ? 44 : 32);
   }
   for (const header of host.querySelectorAll('header')) {

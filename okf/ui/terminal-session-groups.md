@@ -22,9 +22,9 @@ One Terminal Session Catalog Provider owns the browser projection, the live in-m
 Search matches Group name, Group path, and Session presentation; a matching folded child is revealed temporarily without changing that saved preference.
 
 ## Interaction and asynchronous lifecycle
-The sidebar renders Group headers with explicit expand/collapse and scoped create-Session actions.
+The 258px sidebar starts with one search/refresh row, without a redundant title/count. One-line Group headers and Session rows are 32px on desktop. Groups use the published yellow Floe FolderIcon/FolderOpenIcon, count, disclosure, scoped create and action menu. Session actions share one accessible overflow menu. Full paths remain in tooltips; no secondary desktop path row or decorative tree rails. Mobile retains larger touch targets.
 
-Header decoration must not offset that geometry on desktop or under Workbench scaling.
+Session/group reorder and cross-group moves retain the catalog mutation contracts; Default remains first. Disclosure and metadata never remount terminal instances.
 
 Individual failures are returned as explicit Session IDs; those Sessions remain hidden, no success is fabricated, and no silent retry loop is introduced.
 

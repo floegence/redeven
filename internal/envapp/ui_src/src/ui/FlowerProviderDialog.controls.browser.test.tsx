@@ -158,7 +158,11 @@ for (const surface of ['desktop', 'env'] as const) {
     expect(document.activeElement).toBe(primary);
     expect(dialog.querySelector('.flower-provider-account-welcome')).toBeNull();
     expect(dialog.querySelector('.flower-provider-account-notice')).toBeNull();
-    expect(dialog.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')).toBe(false);
+    // Keyboard focus may transition its indicator; reduced motion must skip
+    // the disclosure's geometry animation, not remove accessible focus paint.
+    expect(dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running')
+      .some(animation => (animation.effect as KeyframeEffect).getKeyframes()
+        .some(frame => ['height', 'maxHeight', 'gridTemplateRows', 'transform'].some(property => property in frame)))).toBe(false);
   });
 
   for (const locale of SUPPORTED_LOCALES) it(`keeps connected account actions and confirmation readable at 390px in ${surface} ${locale}`, async () => {

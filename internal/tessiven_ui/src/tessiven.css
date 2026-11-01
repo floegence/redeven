@@ -1768,7 +1768,7 @@
   padding: 0;
   overflow: hidden;
 }
-.tessiven-flower-output .tessiven-icon-button { width: 27px; height: 27px; border-radius: 5px; color: var(--muted-foreground); }
+.tessiven-flower-output .tessiven-icon-button { width: 27px; height: 27px; border-radius: 5px; color: var(--foreground); }
 .tessiven-flower-output .tessiven-icon-button svg { width: 14px; height: 14px; }
 .tessiven-flower-menu-trigger { display: grid; place-items: center; }
 .tessiven-flower-conversation,

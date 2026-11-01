@@ -19,7 +19,7 @@
 .host-apps-category { min-width:0; width:160px; max-width:100%; height:var(--floe-control-height-md); padding-inline:0.625rem; cursor:pointer; text-overflow:ellipsis; }
 .host-apps-search { position:relative; width:250px; max-width:100%; }
 .host-apps-search>svg { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted-foreground); pointer-events:none; }
-.host-apps-search input { height:var(--floe-control-height-md); padding-left:31px; font-size:12px; }
+.host-apps-search input { height:var(--floe-control-height-md); padding-left:31px; font-size:var(--floe-type-control); }
 .host-apps-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,252px),1fr)); gap:10px; }
 .host-app-tile-wrap { display:flex; flex-direction:column; min-width:0; }
 .host-app-tile { display:flex; align-items:center; gap:13px; flex:1; width:100%; min-width:0; min-height:80px; padding:14px 16px; text-align:left; border-radius:10px; cursor:pointer; transition:background-color .16s,border-color .16s; }

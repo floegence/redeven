@@ -1,4 +1,5 @@
 {
+  "terminalWorkspace": {"previous": "Session précédente", "next": "Session suivante", "directories": "Dossiers", "quickSwitch": "Changement rapide", "layout": "Disposition", "split": "Diviser le volet", "single": "Volet unique", "columns": "Deux colonnes", "rows": "Deux lignes", "threeColumns": "Trois colonnes", "mainLeft": "Volet principal à gauche", "grid": "Grille", "left": "Diviser à gauche", "right": "Diviser à droite", "top": "Diviser au-dessus", "bottom": "Diviser en dessous", "maximize": "Agrandir le volet", "restore": "Restaurer les volets", "closePane": "Fermer le volet", "resize": "Redimensionner les volets", "panes": "Volets du terminal"},
   "centerEntry": {
     "expiringTitle": "La session d’accès expire bientôt",
     "expiringMessage": "Continuez à interagir avec l’environnement pour maintenir la session d’accès active. Une nouvelle connexion reste nécessaire à la fin de sa durée maximale."

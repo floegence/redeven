@@ -1,8 +1,11 @@
 import './terminal-mobile-navigation.css';
+import './terminal-workspace.css';
 import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Input, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
-import { Check, Copy, FolderOpen, FolderPlus, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, FolderPlus, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
+
+import { FolderIcon, FolderOpenIcon } from '@floegence/floe-webapp-core/file-browser';
 
 import { useI18n } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
@@ -272,19 +275,6 @@ function terminalActivityTooltip(
     : activity;
 }
 
-function terminalFilesTooltip(
-  item: TerminalSessionNavigationItem,
-  t: ReturnType<typeof useI18n>['t'],
-): string {
-  switch (item.filesAvailability) {
-    case 'remote': return t('terminal.remotePathActionsUnavailable');
-    case 'verifying': return t('terminal.localPathVerificationPending');
-    case 'invalid': return t('terminal.localPathUnavailable');
-    case 'permission': return t('terminal.filesReadPermissionRequired');
-    case 'available': return `${t('terminal.files')}: ${item.localWorkingDir}`;
-  }
-}
-
 export function describeTerminalSessionNavigationItem(
   item: TerminalSessionNavigationItem,
   t: ReturnType<typeof useI18n>['t'],
@@ -344,7 +334,7 @@ function sanitizeDragPreviewClone(clone: HTMLElement) {
 
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const i18n = useI18n();
-  const sidebarWidth = () => (props.mobile ? 232 : 286);
+  const sidebarWidth = () => (props.mobile ? 232 : 258);
   let drawerDialogEl: HTMLDivElement | undefined;
   let dragBoundaryEl: HTMLDivElement | undefined;
   let dragPreviewEl: HTMLDivElement | undefined;
@@ -824,9 +814,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
           ariaLabel={i18n.t('terminal.title')}
           class={`redeven-terminal-session-sidebar ${props.mobile
             ? '!h-full !max-h-full !min-h-0 !w-full overflow-hidden'
-            : '!w-[286px] !min-w-[286px] !max-w-[286px] overflow-hidden'}`}
+            : '!w-[258px] !min-w-[258px] !max-w-[258px] overflow-hidden'}`}
         >
-          <SidebarContent class="h-full min-h-0 overflow-hidden">
+          <SidebarContent class="terminal-navigation-content h-full min-h-0 overflow-hidden">
             <div
               ref={dragBoundaryEl}
               class="relative flex h-full min-h-0 select-none flex-col overflow-hidden"
@@ -839,41 +829,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
               }}
             >
               <Show when={props.mobile}><div class="terminal-mobile-drawer-handle" aria-hidden="true" /></Show>
-              <div class="shrink-0 space-y-2">
-              <div class="terminal-session-drawer-header flex items-center gap-2 px-0.5">
-                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent/55 text-sidebar-accent-foreground">
-                  <TerminalSessionChromeIcon avatar={props.activeAvatar} class="h-3.5 w-3.5" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="terminal-session-drawer-eyebrow text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">{i18n.t('terminal.title')}</div>
-                  <div class="truncate text-xs font-semibold text-sidebar-foreground" title={props.activeTitle}>{props.mobile ? i18n.t('terminal.sessions') : props.activeTitle}</div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  class="w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
-                  data-testid="terminal-sidebar-refresh"
-                  onClick={props.onRefresh}
-                  disabled={!props.connected || props.refreshing}
-                  loading={props.refreshing}
-                  title={i18n.t('terminal.refresh')}
-                >
-                  <Refresh class="h-3.5 w-3.5" />
-                </Button>
-                <Show when={props.mobile}>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="w-7 cursor-pointer p-0"
-                    data-testid="terminal-session-drawer-close"
-                    onClick={props.onCloseDrawer}
-                    title={i18n.t('terminal.closeSessions')}
-                  >
-                    <X class="h-3.5 w-3.5" />
-                  </Button>
-                </Show>
-              </div>
-              <div class="relative">
+              <div class="terminal-navigation-heading terminal-session-drawer-header flex shrink-0 items-center gap-2">
+              <div class="terminal-navigation-filter relative min-w-0 flex-1">
                 <Search class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   size="sm"
@@ -896,10 +853,36 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   </button>
                 </Show>
               </div>
-            </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  class="w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
+                  data-testid="terminal-sidebar-refresh"
+                  onClick={props.onRefresh}
+                  disabled={!props.connected || props.refreshing}
+                  loading={props.refreshing}
+                  title={i18n.t('terminal.refresh')}
+                  aria-label={i18n.t('terminal.refresh')}
+                >
+                  <Refresh class="h-3.5 w-3.5" />
+                </Button>
+                <Show when={props.mobile}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="w-7 cursor-pointer p-0"
+                    data-testid="terminal-session-drawer-close"
+                    onClick={props.onCloseDrawer}
+                    title={i18n.t('terminal.closeSessions')}
+                    aria-label={i18n.t('terminal.closeSessions')}
+                  >
+                    <X class="h-3.5 w-3.5" />
+                  </Button>
+                </Show>
+              </div>
 
             <SidebarSection
-              title={props.mobile ? undefined : i18n.t('terminal.title')}
+              title={props.mobile ? undefined : i18n.t('terminalWorkspace.directories')}
               actions={(
                 <button
                   type="button"
@@ -931,7 +914,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   <Index each={navigationGroups()}>
                     {(navigationGroup) => (
                       <div
-                        class="group/tree relative pb-3 transition-opacity duration-150"
+                        class="group/tree terminal-navigation-group relative transition-opacity duration-150"
                         classList={{
                           'opacity-35': draggedGroupId() === navigationGroup().id,
                         }}
@@ -959,7 +942,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </span>
                         </Show>
                         <div
-                          class={`relative flex ${props.mobile ? 'min-h-10' : 'min-h-11'} items-center gap-1 rounded-lg bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]`}
+                          class={`relative flex ${props.mobile ? 'h-11' : 'h-8'} items-center gap-0.5 rounded-md px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]`}
                           data-terminal-group-header={navigationGroup().id}
                           data-terminal-group-drop-target={dropIntent()?.groupId === navigationGroup().id ? dropIntent()?.position : undefined}
                           data-terminal-group-draggable={!navigationGroup().isDefault && !navigationGroup().pending ? 'true' : 'false'}
@@ -1017,37 +1000,21 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             else commitDrop(event);
                           }}
                         >
-                          <Show when={navigationGroup().expanded && navigationGroup().itemIds.length > 0}>
-                            <span
-                              class="pointer-events-none absolute bottom-[-4px] left-[18px] top-1/2 w-px bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))]"
-                              data-terminal-tree-trunk={navigationGroup().id}
-                              aria-hidden="true"
-                            />
-                          </Show>
                           <button
                             type="button"
-                            class="relative z-10 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-[5px] border border-[color-mix(in_srgb,var(--primary)_28%,var(--sidebar-border))] bg-sidebar text-[13px] font-semibold leading-none text-primary shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_7%,transparent)] hover:border-[color-mix(in_srgb,var(--primary)_48%,var(--sidebar-border))] hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            class="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-[7px] text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                             data-testid={`terminal-group-toggle-${navigationGroup().id}`}
+                            data-terminal-group-drag-handle={navigationGroup().id}
                             aria-expanded={navigationGroup().expanded}
                             aria-label={navigationGroup().expanded ? i18n.t('terminal.collapseGroup') : i18n.t('terminal.expandGroup')}
+                            title={draggedSessionId() || draggedGroupId() ? undefined : `${navigationGroup().name}
+${navigationGroup().defaultWorkingDir}`}
                             onClick={() => props.onToggleGroup?.(navigationGroup().id)}
                           >
-                            {navigationGroup().expanded ? '−' : '+'}
-                          </button>
-                          <button
-                            type="button"
-                            class="min-w-0 flex-1 cursor-pointer text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-                            data-terminal-group-drag-handle={navigationGroup().id}
-                            title={draggedSessionId() || draggedGroupId()
-                              ? undefined
-                              : `${navigationGroup().name}\n${navigationGroup().defaultWorkingDir}`}
-                            onClick={() => props.onToggleGroup?.(navigationGroup().id)}
-                          >
-                            <span class="flex items-center gap-1.5">
-                              <span class="min-w-0 flex-1 truncate text-[12px] font-semibold">{navigationGroup().name}</span>
-                              <span class="rounded-full bg-primary/10 px-1.5 text-[9px] tabular-nums text-primary/80">{navigationGroup().pending ? '…' : navigationGroup().totalSessionCount}</span>
-                            </span>
-                            <span class="block truncate text-[9px] leading-3 text-muted-foreground/65">{navigationGroup().defaultWorkingDir}</span>
+                            <ChevronRight class={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${navigationGroup().expanded ? 'rotate-90' : ''}`} />
+                            <Show when={navigationGroup().expanded} fallback={<FolderIcon size={16} />}><FolderOpenIcon size={16} /></Show>
+                            <span class="min-w-0 truncate text-[var(--floe-type-control)] font-semibold">{navigationGroup().name}</span>
+                            <span class="text-[var(--floe-type-caption)] tabular-nums text-muted-foreground">{navigationGroup().pending ? '…' : navigationGroup().totalSessionCount}</span>
                           </button>
                           <button
                             type="button"
@@ -1074,17 +1041,10 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         </div>
                         <Show when={navigationGroup().expanded}>
                           <div
-                            class="relative ml-[18px] mt-1 pl-5"
+                            class="relative mt-0.5"
                             data-terminal-group-sessions={navigationGroup().id}
                             data-terminal-tree-children={navigationGroup().id}
                           >
-                            <Show when={navigationGroup().itemIds.length > 0}>
-                              <span
-                                class={`pointer-events-none absolute left-0 top-0 w-px bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))] ${props.mobile ? 'bottom-[34px]' : 'bottom-[26px]'}`}
-                                data-terminal-tree-rail={navigationGroup().id}
-                                aria-hidden="true"
-                              />
-                            </Show>
                             <For each={navigationGroup().itemIds}>
                     {(sessionId) => {
                       const navigationIndex = createMemo(() => props.itemIds.indexOf(sessionId));
@@ -1099,7 +1059,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         ? TERMINAL_AGENT_CLI_PRESENTATIONS[agentIdentity()!]
                         : null);
                       const statusDescription = createMemo(() => describeTerminalSessionNavigationItem(item(), i18n.t));
-                      const filesTooltip = createMemo(() => terminalFilesTooltip(item(), i18n.t));
                       const rowDropIntent = createMemo(() => {
                         const intent = dropIntent();
                         return intent?.targetSessionId === sessionId ? intent : null;
@@ -1159,16 +1118,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             else commitDrop(event);
                           }}
                         >
-                          <span
-                            class="pointer-events-none absolute -left-5 top-1/2 h-px w-5 bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))]"
-                            data-terminal-tree-connector={sessionId}
-                            aria-hidden="true"
-                          />
-                          <span
-                            class="pointer-events-none absolute -left-[23px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full border border-[color-mix(in_srgb,var(--primary)_38%,var(--sidebar-border))] bg-sidebar"
-                            data-terminal-tree-junction={sessionId}
-                            aria-hidden="true"
-                          />
                           <Show when={rowDropIntent()} keyed>
                             {(intent) => (
                               <span
@@ -1187,8 +1136,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
                           class={`group relative grid cursor-pointer items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 ${props.mobile
                             ? 'min-h-[64px] grid-cols-[36px_minmax(0,1fr)_44px] gap-x-2 px-2.5 py-1'
-                            : 'min-h-[52px] grid-cols-[36px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
-                            ? 'border-primary/15 bg-[color-mix(in_srgb,var(--primary)_6%,var(--sidebar))] text-sidebar-accent-foreground'
+                            : 'h-8 grid-cols-[20px_minmax(0,1fr)_24px] gap-x-1.5 pl-[27px] pr-1 py-0'} ${sidebarActive()
+                            ? 'bg-[var(--floe-state-selected)] text-sidebar-accent-foreground'
                             : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
                         >
@@ -1242,7 +1191,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             type="button"
                             tabIndex={-1}
                             draggable={item().transitionState === 'none'}
-                            class="relative z-10 flex h-9 w-9 shrink-0 cursor-grab select-none items-center justify-center rounded-full transition-colors duration-150 hover:bg-sidebar-accent/60 focus:outline-none active:cursor-grabbing"
+                            class={`relative z-10 flex shrink-0 cursor-grab select-none items-center justify-center rounded transition-colors duration-150 hover:bg-sidebar-accent/60 focus:outline-none active:cursor-grabbing ${props.mobile ? 'h-9 w-9' : 'h-6 w-5'}`}
                             classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
                             data-terminal-session-drag-handle={sessionId}
                             aria-label={`${item().label}: ${item().title}`}
@@ -1267,21 +1216,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               when={agentIdentity()}
                               fallback={(
                                 <span
-                                  class="pointer-events-none relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
-                                  style={{
-                                    background: item().avatarTone.background,
-                                    'border-color': item().avatarTone.border,
-                                    color: item().avatarTone.foreground,
-                                  }}
+                                  class="pointer-events-none relative flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground"
                                   data-terminal-session-avatar={sessionId}
                                   aria-hidden="true"
                                 >
-                                  <Show
-                                    when={item().avatar.kind === 'link'}
-                                    fallback={item().avatarInitial}
-                                  >
-                                    <Link class="h-4 w-4" />
-                                  </Show>
+                                  <TerminalSessionChromeIcon avatar={item().avatar} class="h-3.5 w-3.5" />
                                   <TerminalSessionTransitionBadge state={item().transitionIndicator} />
                                 </span>
                               )}
@@ -1296,12 +1235,12 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             </Show>
                           </button>
                           <span
-                            class={`pointer-events-none relative z-10 grid ${props.mobile ? 'min-h-9' : 'min-h-11'} min-w-0 content-center overflow-hidden text-left`}
+                            class={`pointer-events-none relative z-10 grid ${props.mobile ? 'min-h-9' : 'h-8'} min-w-0 content-center overflow-hidden text-left`}
                             data-terminal-session-content={sessionId}
                           >
-                            <span class="flex h-7 min-w-0 items-center gap-1">
+                            <span class="flex h-6 min-w-0 items-center gap-1">
                               <span
-                                class="min-w-0 flex-1 truncate text-[length:var(--floe-type-control)] font-semibold leading-5"
+                                class="min-w-0 flex-1 truncate text-xs font-medium leading-4"
                                 data-terminal-session-title={sessionId}
                               >
                                 {item().title}
@@ -1376,13 +1315,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                 </Show>
                               </span>
                             </span>
-                            <Show when={item().subtitle}>
-                              <span class="flex h-4 min-w-0 max-w-full items-center">
+                            <Show when={props.mobile && item().subtitle}>
+                              <span class="flex h-3 min-w-0 max-w-full items-center">
                                 <Show when={item().subtitleIcon === 'link'}>
                                   <Link class="mr-1 h-3 w-3 shrink-0 text-muted-foreground/75" aria-hidden="true" />
                                 </Show>
                                 <span
-                                  class="pointer-events-none min-w-0 flex-1 cursor-pointer truncate text-[11px] leading-4 text-muted-foreground/75"
+                                  class="pointer-events-none min-w-0 flex-1 cursor-pointer truncate text-[10px] leading-3 text-muted-foreground/75"
                                   data-terminal-session-path={sessionId}
                                   data-testid={`terminal-session-path-${sessionId}`}
                                 >
@@ -1391,100 +1330,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </span>
                             </Show>
                           </span>
-                          <Show when={props.mobile} fallback={(
-                          <div
-                            class={`pointer-events-none relative z-20 grid self-center justify-self-end gap-1 grid-cols-[20px_20px] grid-rows-[20px_20px]`}
-                            data-terminal-session-actions={sessionId}
-                          >
-                            <span
-                              class={`col-start-1 row-start-1 flex items-center justify-center h-5 w-5`}
-                              data-terminal-session-action-cell="index"
-                              aria-hidden="true"
-                            >
-                              <Show when={!props.mobile && navigationIndex() >= 0 && navigationIndex() < 9}>
-                                <span class="flex h-5 w-5 items-center justify-center rounded bg-sidebar-accent/45 text-[9px] font-medium leading-none tabular-nums text-muted-foreground/75">
-                                  {navigationIndex() + 1}
-                                </span>
-                              </Show>
-                            </span>
-                            <span
-                              class={`col-start-2 row-start-1 flex items-center justify-center h-5 w-5`}
-                              data-terminal-session-action-cell="close"
-                            >
-                              <Show when={item().closable}>
-                                <button
-                                  type="button"
-                                  class={`flex cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 h-5 w-5 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100`}
-                                  data-testid={`close-session-${sessionId}`}
-                                  aria-label={`${i18n.t('terminal.deleteSession')} ${item().title}`}
-                                  title={i18n.t('terminal.deleteSession')}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    props.onCloseSession(sessionId);
-                                  }}
-                                >
-                                  <X class="h-3 w-3" />
-                                </button>
-                              </Show>
-                            </span>
-                            <span
-                              class={`col-start-1 row-start-2 flex items-center justify-center h-5 w-5`}
-                              data-terminal-session-action-cell="copy"
-                            >
-                              <Show when={item().fullPath}>
-                                <button
-                                  type="button"
-                                  class={`pointer-events-auto flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring h-5 w-5 ${props.copiedPathSessionId === sessionId
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'}`}
-                                  title={props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
-                                  aria-label={`${props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}: ${item().fullPath}`}
-                                  data-testid={`terminal-session-path-copy-${sessionId}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    props.onCopyPath(item());
-                                  }}
-                                >
-                                  <Show when={props.copiedPathSessionId === sessionId} fallback={<Copy class="h-3 w-3" />}>
-                                    <Check class="h-3 w-3" />
-                                  </Show>
-                                </button>
-                              </Show>
-                            </span>
-                            <span
-                              class={`col-start-2 row-start-2 flex items-center justify-center h-5 w-5`}
-                              data-terminal-session-action-cell="files"
-                            >
-                              <Tooltip content={filesTooltip()} placement="top" delay={0} disabled={draggedSessionId() !== null || draggedGroupId() !== null}>
-                                <button
-                                  type="button"
-                                  class={`flex items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${item().canBrowsePath
-                                    ? 'cursor-pointer hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                                    : 'cursor-not-allowed opacity-45'} h-5 w-5 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100`}
-                                  data-testid={`terminal-session-files-${sessionId}`}
-                                  data-terminal-files-availability={item().filesAvailability}
-                                  aria-disabled={item().canBrowsePath ? undefined : 'true'}
-                                  aria-label={filesTooltip()}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    if (!item().canBrowsePath) return;
-                                    props.onOpenFiles(item());
-                                  }}
-                                >
-                                  <FolderOpen class="h-3 w-3" />
-                                </button>
-                              </Tooltip>
-                            </span>
-                          </div>
-                          )}>
-                            <button type="button" class="relative z-20 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-sidebar-accent"
-                              data-testid={`terminal-session-actions-${sessionId}`}
-                              aria-label={`${i18n.t('common.actions.more')}: ${item().title}`}
-                              aria-haspopup="menu"
-                              onClick={(event) => props.onOpenContextMenu(event, item())}>
-                              <MoreHorizontal class="h-5 w-5" />
-                            </button>
-                          </Show>
+                          <button type="button" class={`terminal-session-more relative z-20 flex cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent ${props.mobile ? 'h-11 w-11' : 'h-6 w-6 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
+                            data-testid={`terminal-session-actions-${sessionId}`}
+                            aria-label={`${i18n.t('common.actions.more')}: ${item().title}`}
+                            aria-haspopup="menu"
+                            onClick={(event) => props.onOpenContextMenu(event, item())}>
+                            <MoreHorizontal class={props.mobile ? 'h-5 w-5' : 'h-3.5 w-3.5'} />
+                          </button>
                         </div>
                         </div>
                       );
@@ -1542,6 +1394,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 </SidebarItemList>
               </div>
             </SidebarSection>
+            <button type="button" class="terminal-navigation-quick-switch" onClick={() => drawerDialogEl?.querySelector<HTMLInputElement>('[data-testid="terminal-session-filter"]')?.focus()}>
+              <Search class="h-3.5 w-3.5" /><span>{i18n.t('terminalWorkspace.quickSwitch')}</span>
+            </button>
             <span class="sr-only" aria-live="polite" data-terminal-drag-announcement>
               {draggedSessionId() ? dropAnnouncement() : ''}
             </span>

@@ -158,7 +158,7 @@ describe('Flower pinned conversation interaction', () => {
     expect(pinned.getBoundingClientRect().left).toBe(ordinary.getBoundingClientRect().left);
     expect(pinned.getBoundingClientRect().width).toBe(ordinary.getBoundingClientRect().width);
     expect(getComputedStyle(pinned).fontSize).toBe('13px');
-    expect(ui.row('first').querySelector('.flower-thread-card-select-button')!.getBoundingClientRect().height).toBe(28);
+    expect(ui.row('first').querySelector('.flower-thread-card-select-button')!.getBoundingClientRect().height).toBe(30);
     expect(pinned.draggable).toBe(true);
     expect(pinned.title).toBe(copy.dragPinned);
     expect(ordinary.draggable).toBe(false);

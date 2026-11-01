@@ -45,7 +45,7 @@ for (const [count, width, initiallySelected] of [[4, 1280, false], [40, 1280, fa
     await settledDialog();
     const input = document.querySelector<HTMLInputElement>('input[aria-label="agent-2"]')!;
     const panel = document.getElementById('flower-provider-type-ollama')!;
-    const scroller = width < 760 ? panel.closest<HTMLElement>('[data-floe-dialog-body]')! : panel;
+    const scroller = panel;
     input.closest('label')!.scrollIntoView({ block: 'center' });
     await frame();
     expect(scroller.scrollTop).toBeGreaterThan(0);

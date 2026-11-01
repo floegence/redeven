@@ -3575,7 +3575,7 @@
               "typography",
               "ui"
             ],
-            "summary": "Published Floe owns typography, dimensions, responsive targets and virtual rows; Redeven maps product roles to it. At 16px root/100% zoom, desktop body is 12px/20px, conversation titles 13px/20px, navigation 12px/18px and ordinary rows 28px including spacing. Touch/enlarged text grows naturally. No density setting, root shrink or transform changes scale.",
+            "summary": "Published Floe owns type, controls and responsive rows; Redeven maps semantic roles without root scaling or a separate density setting. Desktop uses 13px body/control, 12px supporting and 11px captions. Coarse-pointer fields and targets retain the published touch scale.",
             "section_count": 2
           },
           {
@@ -12517,15 +12517,15 @@
         "title": "Env App terminal and surface composition",
         "type": "Frontend Contract"
       },
-      "body_length": 1645,
+      "body_length": 3088,
       "summary": "Env App keeps terminal and Activity/Workbench surfaces thin over published Floeterm and Floe components. A mounted view owns only its semantic projection and local interaction state; Floeterm owns PTY facts and Floe owns shell, selection, KeepAlive, focus, and layer mechanics. Lazy loading and recovery preserve those ownership boundaries while keeping existing surfaces mounted and interactive where policy allows.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "File preview surfaces carry an internal `surface` contract that defaults to `main`.\n\nA history viewport is one atomic server snapshot with canonical width and height even when its compact payload crosses multiple transport chunks.\n\nFloe owns the CSS contract; Redeven marks custom compound controls without duplicating focus styling.",
-          "char_count": 333
+          "body": "File preview surfaces carry an internal `surface` contract that defaults to `main`.\n\nA history viewport is one atomic server snapshot with canonical width and height even when its compact payload crosses multiple transport chunks.\n\nFloe owns the CSS contract; Redeven marks custom compound controls without duplicating focus styling.\n\n## Terminal workspace placement\n\nPublished Floe SplitWorkspace owns recursive splits, presets, edge docking, center swaps and pointer/keyboard resizing. Redeven owns localized controls and the environment/panel-scoped v1 layout record. Validate saved trees and reconcile only after catalog hydration. Selecting an unplaced session replaces the focused pane; closing a pane preserves the session. Explicit splitting creates a session in the target group using its verified local cwd or group startup directory; dragging places an existing session. Group, cwd and placement remain independent.\n\nRuntime nodes stay keyed by session ID across layout changes. Visible panes paint independently; active session alone owns keyboard input, search and toolbar commands. Mobile shows the active pane and pane tabs without changing the saved desktop tree. Maximize is transient. Alt+Shift+Left/Right cycles placed panes.\n\nPane headers, dividers, toolbar controls and footer inherit a palette derived from the selected terminal theme, independently of the shell-themed directory sidebar. Prehydrated catalog snapshots initialize placement before reconciliation, so reload cannot prune a saved split tree against an empty local list. Resize controls retain keyboard focus through geometry updates.",
+          "char_count": 1619
         },
         {
           "id": "boundaries",
@@ -12550,6 +12550,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/services/terminalCatalogTransport.ts:0:keeps catalog/history outside the initial live renderer graph.",
           "source": "redeven:internal/envapp/ui_src/src/ui/services/terminalCatalogTransport.ts",
           "description": "Keeps catalog/history outside the initial live renderer graph."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/scripts/checkTerminalWorkspace.mjs:0:real pty group moves, docking, retained runtime identity, mobile layout and reload.",
+          "source": "redeven:internal/envapp/ui_src/scripts/checkTerminalWorkspace.mjs",
+          "description": "Real PTY group moves, docking, retained runtime identity, mobile layout and reload."
         }
       ],
       "snippet": "Env App keeps terminal and Activity/Workbench surfaces thin over published Floeterm and Floe components. A mounted view owns only its semantic projection and local interaction state; Floeterm owns PTY facts and Floe owns shell, selection, K",
@@ -14585,15 +14590,15 @@
         "title": "Managed Service operation progress",
         "type": "Runtime Contract"
       },
-      "body_length": 1758,
+      "body_length": 2007,
       "summary": "A Manager Reporter owns live operation output; Registry owns history. One operation ID preserves drawer disclosure and brief completion through list/stream refresh. Redact safe command templates before persistence; output never defines Runtime identity. Persistence, capture or stream failures must not expose secrets, URL queries, private paths or control characters.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Reporter and persisted detail\n`ManagedOperationProgressDetail` schema v2 is the sole progress document. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.\n\nFailed uninstall retains current records and output; the [management review](service-management-recovery.md) presents completed and pending resources before a new confirmed continuation.\n\n## Service-row interaction\nThe owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state.\n\nReduced-motion preference removes the animation without shortening the readable hold.",
-          "char_count": 826
+          "body": "## Reporter and persisted detail\n`ManagedOperationProgressDetail` schema v2 is the sole progress document. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.\n\nFailed uninstall retains current records and output; the [management review](service-management-recovery.md) presents completed and pending resources before a new confirmed continuation.\n\n## Service-row interaction\nThe owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state.\n\nRows retain a compact operation status; explicit status activation opens detail without automatic row growth. Failed/interrupted operations remain visibly labelled. Notices without an operation stay visible; operation notices follow its disclosure. Reduced-motion preference removes the animation without shortening the readable hold.",
+          "char_count": 1075
         },
         {
           "id": "boundaries",
@@ -25009,15 +25014,15 @@
         "title": "Env App floating layer order",
         "type": "UI Contract"
       },
-      "body_length": 2877,
+      "body_length": 3066,
       "summary": "Env App assigns global layers to movable windows, Flower, plugin surfaces, blocking modals and command UI. Interaction reorders only its window band. Published Floe owns visible-viewport constraints and drag geometry; Redeven persists settled geometry and preserves reachable controls, local scrolling and destination interaction.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Drag-region synchronization\nDesktop projects iframe-relative native drag regions. A settled snapshot must not schedule another frame by rebuilding itself; native pointer/geometry ownership remains upstream.\n\n## Global bands\nOrdinary windows use 1000–1099; expanded Flower 2000; its context previews 2100–2199; plugin Panel 3000 and plugin context menu 3100; product modals 4000; command palette 5000. Local menus, tooltips and recovery UI stay within their surface's global band.\n\n## Dialog placement\nMobile plugin/tools navigation belongs to Shell content, not a global Launcher. Backdrop clicks close only the Dialog without reaching Activity beneath it; titlebar controls remain no-drag.\n\n## Visible viewport boundaries\nPublished Floe owns visible viewport/safe areas, Safari fixed-origin conversion and projected-surface intersection. Do not bypass it with fixed positions, uncapped viewport heights or transforms. Temporary constraints preserve preferred size.\n\nUpstream elastic dragging resists boundary overflow, retains a reachable header and returns the window inside safe bounds on release/interruption. Dragging a maximized header restores preferred size at the grab point and continues the gesture; controls, double-click and mounted body remain independent. Redeven supplies safe-area insets and persists only settled geometry.\n\n## Movable window order\nA Shell-lifetime provider registers stable IDs, retains multiply registered IDs until all owners unregister, and assigns bounded MRU order within each window band. Minimized Debug Console is a base-band launcher, not an open window.\n\n## Flower dismissal\nExpanded Flower sits above ordinary windows; owned previews sit above Flower and below plugin Panels. Dismissal never restores composer focus, which would expand it again. Host pointer/focus and trusted plugin bridge activation/focus/action events collapse Flower without consuming destination interaction, including cross-origin iframe interaction.",
-          "char_count": 1972
+          "body": "## Drag-region synchronization\nDesktop projects iframe-relative native drag regions. A settled snapshot must not schedule another frame by rebuilding itself; native pointer/geometry ownership remains upstream.\n\n## Global bands\nOrdinary windows use 1000–1099; expanded Flower 2000; its context previews 2100–2199; plugin Panel 3000 and plugin context menu 3100; product modals 4000; command palette 5000. Local menus, tooltips and recovery UI stay within their surface's global band.\n\n## Dialog placement\nMobile plugin/tools navigation belongs to Shell content, not a global Launcher. Backdrop clicks close only the Dialog without reaching Activity beneath it; titlebar controls remain no-drag.\n\n## Visible viewport boundaries\nPublished Floe owns visible viewport/safe areas, Safari fixed-origin conversion and projected-surface intersection. Do not bypass it with fixed positions, uncapped viewport heights or transforms. Temporary constraints preserve preferred size.\n\nUpstream elastic dragging resists boundary overflow, retains a reachable header and returns the window inside safe bounds on release/interruption. Dragging a maximized header restores preferred size at the grab point and continues the gesture; controls, double-click and mounted body remain independent. Redeven supplies safe-area insets and persists only settled geometry.\n\n## Movable window order\nA Shell-lifetime provider registers stable IDs, retains multiply registered IDs until all owners unregister, and assigns bounded MRU order within each window band. Minimized Debug Console is a base-band launcher, not an open window.\n\n## Flower dismissal\nExpanded Flower sits above ordinary windows; owned previews sit above Flower and below plugin Panels. Dismissal never restores composer focus, which would expand it again. Host pointer/focus and trusted plugin bridge activation/focus/action events collapse Flower without consuming destination interaction, including cross-origin iframe interaction.\n\nPublished Floe keeps resize handles on the outer geometry surface, outside rounded content clipping. All eight handles remain pointer-reachable; compact and maximized windows expose none.",
+          "char_count": 2161
         },
         {
           "id": "boundaries",
@@ -29762,15 +29767,15 @@
         "title": "Shared interface scale",
         "type": "UI Contract"
       },
-      "body_length": 2226,
-      "summary": "Published Floe owns typography, dimensions, responsive targets and virtual rows; Redeven maps product roles to it. At 16px root/100% zoom, desktop body is 12px/20px, conversation titles 13px/20px, navigation 12px/18px and ordinary rows 28px including spacing. Touch/enlarged text grows naturally. No density setting, root shrink or transform changes scale.",
+      "body_length": 2293,
+      "summary": "Published Floe owns type, controls and responsive rows; Redeven maps semantic roles without root scaling or a separate density setting. Desktop uses 13px body/control, 12px supporting and 11px captions. Coarse-pointer fields and targets retain the published touch scale.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Type roles and boundaries\nEnv App/Desktop bundle Inter Variable with shared script fallbacks. Guidance, errors, labels/dialogs use published roles, not fixed 13–14px or generic utilities. Root size, zoom and magnification remain user-controlled. [Message appearance](flower-message-appearance.md) owns the separate transcript reading scale.\n\n## Controls and layout density\nInline desktop actions use 28px targets; ordinary primary actions/fields use 32px. [Settings fields](runtime-settings.md#settings-controls-and-identity) follow the same published 32px control height and `--floe-radius-field` corners rather than a product-local scale. Buttons take their height, padding, radius and type size from the published `size` primitive: `icon` for square icon actions, `md` for ordinary text actions, `lg` where a 36px target was already intended. Do not re-impose heights on top of `size`, because the merge helper lets a passed class silently defeat the primitive and neighbours diverge. Groups are 8px apart with the last action at trailing padding; focus changes only the existing border color.\n\nMeasure real published components after fonts load, recording source/package identity, font, root, DPR and zoom. Mixed-script Markdown at 434px/758px must fit within 90% of the frozen reference height. Compare matching content/dimensions; another product's screenshots do not establish CSS measurements.",
-          "char_count": 1404
+          "body": "## Type roles and boundaries\nEnv App/Desktop bundle Inter Variable with shared script fallbacks. Guidance, errors, labels/dialogs use published roles, not ad-hoc fixed sizes or generic utilities. Root size, zoom and magnification remain user-controlled. [Message appearance](flower-message-appearance.md) owns the separate transcript reading scale.\n\n## Controls and layout density\nInline desktop actions use 28px targets; ordinary primary actions/fields use 32px. [Settings fields](runtime-settings.md#settings-controls-and-identity) follow the same published 32px control height and `--floe-radius-field` corners rather than a product-local scale. Buttons take their height, padding, radius and type size from the published `size` primitive: `icon` for square icon actions, `md` for ordinary text actions, `lg` where a 36px target was already intended. Do not re-impose heights on top of `size`, because the merge helper lets a passed class silently defeat the primitive and neighbours diverge. Ordinary rows use 30px, with the terminal navigator retaining its documented 32px rows. Coarse pointers use 44px rows/targets, 14px body and at least 16px fields; focus changes only the existing border color.\n\nPublished group spacing comes from role tokens. Measure real published components after fonts load, recording source/package identity, font, root, DPR and zoom. Mixed-script Markdown at 434px/758px must fit within 90% of the frozen reference height. Compare matching content/dimensions; another product's screenshots do not establish CSS measurements.",
+          "char_count": 1557
         },
         {
           "id": "boundaries",
@@ -29787,7 +29792,7 @@
           "description": "Actual scaled dialog roles, pointer/touch differences, headings and rename."
         }
       ],
-      "snippet": "Published Floe owns typography, dimensions, responsive targets and virtual rows; Redeven maps product roles to it. At 16px root/100% zoom, desktop body is 12px/20px, conversation titles 13px/20px, navigation 12px/18px and ordinary rows 28px",
+      "snippet": "Published Floe owns type, controls and responsive rows; Redeven maps semantic roles without root scaling or a separate density setting. Desktop uses 13px body/control, 12px supporting and 11px captions. Coarse-pointer fields and targets ret",
       "links": [
         {
           "label": "Message appearance",
@@ -30729,15 +30734,15 @@
         "title": "Terminal session groups",
         "type": "UI Contract"
       },
-      "body_length": 2335,
+      "body_length": 2751,
       "summary": "Runtime catalog alone owns group identity/order/revision and each Session assignment. Activity/Workbench share a two-level tree with independent expansion/placement. Default always exists, immutable; every session has one known group_id, and group paths affect new startup only. Stale replies cannot regress; unknown groups refresh without reassignment. Delete closes/hides members first.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Catalog and Session assignment\nRedeven owns `apps/terminal/groups.sqlite` as a versioned product database. Future versions, wrong kinds, and schema drift fail closed without replacing the file.\n\nReorder persists one complete non-Default order in a single database transaction and revision; Default remains protected at order zero.\n\n## Activity, Workbench, and view-local state\nOne Terminal Session Catalog Provider owns the browser projection, the live in-memory Session display order, and the Redeven-specific `session_id -\u003e group_id` membership map for the Environment. List requests carry membership and lifecycle fences, so an older response cannot overwrite a local move or newer notification.\n\nSearch matches Group name, Group path, and Session presentation; a matching folded child is revealed temporarily without changing that saved preference.\n\n## Interaction and asynchronous lifecycle\nThe sidebar renders Group headers with explicit expand/collapse and scoped create-Session actions.\n\nHeader decoration must not offset that geometry on desktop or under Workbench scaling.\n\nIndividual failures are returned as explicit Session IDs; those Sessions remain hidden, no success is fabricated, and no silent retry loop is introduced.",
-          "char_count": 1240
+          "body": "## Catalog and Session assignment\nRedeven owns `apps/terminal/groups.sqlite` as a versioned product database. Future versions, wrong kinds, and schema drift fail closed without replacing the file.\n\nReorder persists one complete non-Default order in a single database transaction and revision; Default remains protected at order zero.\n\n## Activity, Workbench, and view-local state\nOne Terminal Session Catalog Provider owns the browser projection, the live in-memory Session display order, and the Redeven-specific `session_id -\u003e group_id` membership map for the Environment. List requests carry membership and lifecycle fences, so an older response cannot overwrite a local move or newer notification.\n\nSearch matches Group name, Group path, and Session presentation; a matching folded child is revealed temporarily without changing that saved preference.\n\n## Interaction and asynchronous lifecycle\nThe 258px sidebar starts with one search/refresh row, without a redundant title/count. One-line Group headers and Session rows are 32px on desktop. Groups use the published yellow Floe FolderIcon/FolderOpenIcon, count, disclosure, scoped create and action menu. Session actions share one accessible overflow menu. Full paths remain in tooltips; no secondary desktop path row or decorative tree rails. Mobile retains larger touch targets.\n\nSession/group reorder and cross-group moves retain the catalog mutation contracts; Default remains first. Disclosure and metadata never remount terminal instances.\n\nIndividual failures are returned as explicit Session IDs; those Sessions remain hidden, no success is fabricated, and no silent retry loop is introduced.",
+          "char_count": 1656
         },
         {
           "id": "boundaries",
@@ -31545,5 +31550,5 @@
       ]
     }
   ],
-  "source_sha256": "78e69506327fbd038ce78cd5c7943585aa2cdf3e74a015226174b1c34a0b56c4"
+  "source_sha256": "1cb71ada81203f02608d24760daecb5bb3044e9a7bb051c837877af2237b956c"
 }

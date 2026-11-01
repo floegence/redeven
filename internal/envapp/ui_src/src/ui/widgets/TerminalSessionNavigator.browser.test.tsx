@@ -103,24 +103,16 @@ function mountNavigator(mobile: boolean, scale = 1) {
   return host;
 }
 
-function expectContinuousRail(host: HTMLElement, groupId: string) {
-  const group = host.querySelector<HTMLElement>(`[data-terminal-tree-group="${groupId}"]`)!;
-  const trunk = group.querySelector<HTMLElement>('[data-terminal-tree-trunk]')!;
-  const rail = group.querySelector<HTMLElement>('[data-terminal-tree-rail]')!;
-  const trunkRect = trunk.getBoundingClientRect();
-  const railRect = rail.getBoundingClientRect();
-
-  expect(trunkRect.width).toBeGreaterThan(0);
-  expect(trunkRect.height).toBeGreaterThan(0);
-  expect(railRect.height).toBeGreaterThan(0);
-  expect(Math.abs(trunkRect.left - railRect.left), `${groupId}: horizontal alignment`).toBeLessThan(0.1);
-  expect(Math.abs(trunkRect.bottom - railRect.top), `${groupId}: vertical continuity`).toBeLessThan(0.1);
-  expect(trunkRect.width).toBeCloseTo(railRect.width, 2);
-  expect(getComputedStyle(trunk).backgroundColor).toBe(getComputedStyle(rail).backgroundColor);
-  for (const connector of group.querySelectorAll<HTMLElement>('[data-terminal-tree-connector]')) {
-    expect(Math.abs(connector.getBoundingClientRect().left - railRect.left)).toBeLessThan(0.1);
-    expect(getComputedStyle(connector).backgroundColor).toBe(getComputedStyle(rail).backgroundColor);
-  }
+function expectCompactGroup(host: HTMLElement, groupId: string, scale = 1) {
+  const group = host.querySelector<HTMLElement>('[data-terminal-tree-group="' + groupId + '"]')!;
+  const header = group.querySelector<HTMLElement>('[data-terminal-group-header]')!;
+  const folder = header.querySelector('svg[data-file-icon-type="folder"]')!;
+  expect(header.getBoundingClientRect().height / scale).toBeCloseTo(32, 1);
+  expect(folder).not.toBeNull();
+  expect(header.querySelector('[data-terminal-group-drag-handle]')?.getAttribute('title')).toContain('/workspace/redeven');
+  expect(header.textContent).not.toContain('/workspace/redeven');
+  expect(group.querySelector('[data-terminal-tree-trunk], [data-terminal-tree-rail], [data-terminal-tree-connector]')).toBeNull();
+  expect(getComputedStyle(folder).getPropertyValue('--floe-icon-folder').trim()).not.toBe('');
 }
 
 async function settleLayout() {
@@ -134,17 +126,24 @@ const surfaces = [
 ];
 
 describe.each(['light', 'dark'])('TerminalSessionNavigator %s tree geometry', (theme) => {
-  it.each(surfaces)('joins group and session rails on $surface', async ({ mobile, scale }) => {
+  it.each(surfaces)('renders one-line directory groups with canonical folder artwork on $surface', async ({ mobile, scale }) => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     const host = mountNavigator(mobile, scale);
     await settleLayout();
 
-    expectContinuousRail(host, 'default');
-    expectContinuousRail(host, 'workspace');
+    const search = host.querySelector<HTMLInputElement>('[data-testid="terminal-session-filter"]')!.getBoundingClientRect();
+    const refresh = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')!.getBoundingClientRect();
+    expect(host.querySelector('.terminal-navigation-heading h2, .terminal-navigation-count')).toBeNull();
+    expect(Math.abs(search.top + search.height / 2 - refresh.top - refresh.height / 2) / scale).toBeLessThan(1);
+    expect(refresh.left).toBeGreaterThan(search.right);
+    expect(host.querySelector('.terminal-navigation-heading')!.getBoundingClientRect().height / scale).toBeCloseTo(48, 1);
+    expectCompactGroup(host, 'default', scale);
+    expectCompactGroup(host, 'workspace', scale);
+    for (const row of host.querySelectorAll('[data-terminal-session-row]')) expect(row.getBoundingClientRect().height / scale).toBeCloseTo(32, 1);
   });
 });
 
-it.each([false])('removes empty and folded rails and restores alignment (mobile=%s)', async (mobile) => {
+it.each([false])('collapses groups and restores the compact folder row (mobile=%s)', async (mobile) => {
   const host = mountNavigator(mobile);
   await settleLayout();
   const empty = host.querySelector('[data-terminal-tree-group="empty"]')!;
@@ -160,7 +159,7 @@ it.each([false])('removes empty and folded rails and restores alignment (mobile=
   toggle.click();
   await settleLayout();
   expect(toggle.getAttribute('aria-expanded')).toBe('true');
-  expectContinuousRail(host, 'workspace');
+  expectCompactGroup(host, 'workspace');
 });
 
 

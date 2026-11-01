@@ -24,6 +24,15 @@ const catalog = JSON.parse(catalogJS.slice(catalogJS.indexOf(' = ') + 3).trim().
   consoleControl: Record<string, Record<string, string>>;
 };
 const media = commands as unknown as {emulateMediaPreferences: (preferences: {forcedColors:'active' | 'none'}) => Promise<void>};
+function normalizedShadow(value: string) {
+  const context = document.createElement('canvas').getContext('2d')!;
+  return value.replace(/rgba?\([^)]*\)|color\([^)]*\)/g, color => {
+    context.clearRect(0, 0, 1, 1);
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+    return JSON.stringify([...context.getImageData(0, 0, 1, 1).data]);
+  });
+}
 afterEach(async () => { document.body.replaceChildren(); await media.emulateMediaPreferences({forcedColors:'none'}); });
 
 async function viewer(theme: string, locale = 'zh-CN', width = 420) {
@@ -69,7 +78,7 @@ it.each(builtInShellThemePresets)('matches Env App colors and floating material 
   expect(view.getComputedStyle(doc.querySelector('.mac-app-controls')!).backgroundColor).toBe(canonical.backgroundColor);
   // The opened button uses the theme's active state; the close button stays neutral.
   expect(view.getComputedStyle(doc.querySelector('.mac-app-close')!).color).toBe(canonical.color);
-  expect(view.getComputedStyle(doc.querySelector('.mac-app-popover')!).boxShadow).toBe(canonical.boxShadow);
+  expect(normalizedShadow(view.getComputedStyle(doc.querySelector('.mac-app-popover')!).boxShadow)).toBe(normalizedShadow(canonical.boxShadow));
   const selected = doc.querySelector('[data-picture-mode="auto"]')!;
   const primary = reference.contentWindow!.getComputedStyle(reference.contentDocument!.querySelector('#primary')!);
   expect(view.getComputedStyle(selected).backgroundColor).toBe(primary.backgroundColor);

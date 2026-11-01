@@ -129,6 +129,7 @@ vi.mock('./TerminalSessionRuntime', () => ({
 import { TerminalSessionCatalogProvider } from '../services/terminalSessionCatalog';
 import type { TerminalPanelSessionOperations } from './TerminalPanel';
 import { TerminalPanel } from './TerminalPanel';
+import { useTerminalPreferences } from '../services/terminalPreferences';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { flowerPageContextSnapshot } from '../flower/flowerPageContext';
 import type { SemanticTerminalViewportHandle } from './semanticTerminalViewport';
@@ -221,6 +222,7 @@ describe('TerminalPanel loading continuity', () => {
     runtimeState.propsBySession.clear();
     flowerLauncher.mockClear();
     sessionStorage.clear();
+    localStorage.removeItem('redeven_terminal_workspace:v1:env-1:terminal_page');
   });
 
   afterEach(() => {
@@ -228,6 +230,76 @@ describe('TerminalPanel loading continuity', () => {
     disposeRendered = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+  });
+
+  it('retains terminal instances while applying layouts, focusing panes, maximizing and closing placement', async () => {
+    let sequence = 0;
+    const create = vi.fn(async () => ({ ...createdSession('split-session-' + ++sequence), name: 'Shell ' + sequence }));
+    const host = renderCreateFlow(create);
+    await vi.waitFor(() => expect(runtimeState.propsBySession.has('split-session-1')).toBe(true));
+    const original = host.querySelector('[data-terminal-runtime-session="split-session-1"]');
+    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Grid', exact: true }));
+    await vi.waitFor(() => expect(runtimeState.propsBySession.size).toBe(4));
+    for (const [id, props] of runtimeState.propsBySession) props.onInteractive?.(id);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(4);
+    expect(host.querySelector('[data-terminal-runtime-session="split-session-1"]')).toBe(original);
+    for (const props of runtimeState.propsBySession.values()) expect(props.visible()).toBe(true);
+    expect([...runtimeState.propsBySession.values()].filter(props => props.active())).toHaveLength(1);
+    const second = host.querySelector<HTMLElement>('[data-floe-split-pane="split-session-2"]')!;
+    second.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    expect(runtimeState.propsBySession.get('split-session-2').active()).toBe(true);
+    await userEvent.click(second.querySelector<HTMLButtonElement>('[aria-label="Maximize pane"]')!);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
+    await userEvent.click(page.getByRole('button', { name: 'Restore panes', exact: true }));
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(4);
+    await userEvent.click(second.querySelector<HTMLButtonElement>('[aria-label="Close pane"]')!);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
+    expect(runtimeState.propsBySession.size).toBe(4);
+    expect(host.querySelector('[data-terminal-session-id="split-session-2"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-runtime-session="split-session-1"]')).toBe(original);
+    const saved = JSON.parse(localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page')!);
+    expect(saved.type).toBe('split');
+    const first = host.querySelector<HTMLElement>('[data-floe-split-pane="split-session-1"]')!;
+    await userEvent.click(first.querySelector<HTMLButtonElement>('[aria-label="Split pane"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
+    await expect.poll(() => create.mock.calls.length).toBe(5);
+    // No local cwd capability was verified in this fixture; use the group directory.
+    expect(create).toHaveBeenLastCalledWith(undefined, '/', 'default');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).toContain('split-session-5');
+    expect(visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).not.toContain('split-session-2');
+    expect(host.querySelector('[data-terminal-runtime-session="split-session-2"]')).not.toBeNull();
+    await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/desktop.png' });
+  });
+
+  it('keeps headers, dividers and buttons within the selected terminal palette across shell themes', async () => {
+    let sequence = 0;
+    const host = renderCreateFlow(vi.fn(async () => createdSession('palette-' + ++sequence)));
+    await vi.waitFor(() => expect(runtimeState.propsBySession.has('palette-1')).toBe(true));
+    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Two columns', exact: true }));
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    const preferences = useTerminalPreferences();
+    const originalTheme = preferences.userTheme();
+    const htmlClass = document.documentElement.className;
+    try {
+      for (const terminalTheme of ['light', 'dark', 'solarizedDark'] as const) {
+        document.documentElement.className = terminalTheme === 'light' ? 'dark' : 'light';
+        preferences.setUserTheme(terminalTheme);
+        const area = host.querySelector<HTMLElement>('[data-terminal-work-area]')!;
+        const colors = runtimeState.propsBySession.get('palette-1').themeColors();
+        expect(area.style.getPropertyValue('--background')).toBe(colors.background);
+        expect(area.style.getPropertyValue('--foreground')).toBe(colors.foreground);
+        expect(area.style.getPropertyValue('--floe-ink-soft')).toBe(area.style.getPropertyValue('--muted-foreground'));
+        expect(area.style.getPropertyValue('--floe-state-hover')).toContain(colors.background);
+        const inactiveHeader = host.querySelector<HTMLElement>('[data-floe-split-pane][data-active="false"] [data-floe-split-header]')!;
+        expect(getComputedStyle(inactiveHeader).backgroundColor).toBe(getComputedStyle(area).backgroundColor);
+        expect(getComputedStyle(inactiveHeader).borderBottomColor).toBe(getComputedStyle(host.querySelector('.terminal-workspace-toolbar')!).borderBottomColor);
+        await expect.poll(() => getComputedStyle(inactiveHeader.querySelector('button')!).color).toBe(getComputedStyle(inactiveHeader).color);
+        const divider = host.querySelector<HTMLElement>('[data-floe-split-divider]')!;
+        expect(getComputedStyle(divider).backgroundColor).toBe(getComputedStyle(area).backgroundColor);
+      }
+    } finally { preferences.setUserTheme(originalTheme); document.documentElement.className = htmlClass; }
   });
 
   it('captures the active displayed screen for page references and right-click Ask Flower without reading scrollback', async () => {

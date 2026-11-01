@@ -31,6 +31,8 @@ A Shell-lifetime provider registers stable IDs, retains multiply registered IDs 
 ## Flower dismissal
 Expanded Flower sits above ordinary windows; owned previews sit above Flower and below plugin Panels. Dismissal never restores composer focus, which would expand it again. Host pointer/focus and trusted plugin bridge activation/focus/action events collapse Flower without consuming destination interaction, including cross-origin iframe interaction.
 
+Published Floe keeps resize handles on the outer geometry surface, outside rounded content clipping. All eight handles remain pointer-reachable; compact and maximized windows expose none.
+
 # Boundaries
 
 This contract governs cross-surface Env App stacking and the Activity-versus-Workbench Dialog boundary. New global UI must select an existing band or update this contract and its browser hit-testing evidence; arbitrary escape values, document-level dismissal patches, per-Dialog placement branches, and component-specific global counters are forbidden.

@@ -70,6 +70,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
   "file.present": { icon: "file-text", cycle: 2400, tracks: [] },
   "file.edit": writingPencilMotion,
   "file.write": writingPencilMotion,
+  "attachment.materialize": writingPencilMotion,
   "apply_patch": writingPencilMotion,
   "file.read": {
     "icon": "file-text",

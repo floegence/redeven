@@ -141,13 +141,14 @@ it('creates immediately, delegates edits to Flower, and follows current versions
       return () => {};
     },
   } as TessivenTransport;
+  const flowerAdapter = { ...canvasFlowerAdapter(), launchTurn: ask };
   dispose = render(
     () => (
       <TessivenPage
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
-        renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={{ ...canvasFlowerAdapter(), launchTurn: ask }} />}
+        renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
         registerPageContext={read => { readPage = read; }}
         onOpenFlower={() => {}}
         onOpenService={() => {}}
@@ -234,7 +235,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         t={tessivenText('en-US')}
         canWrite
         transport={transport}
-        renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={{ ...canvasFlowerAdapter(), launchTurn: ask }} />}
+        renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
         onOpenFlower={() => {}}
         onOpenService={() => {}}
         openRequest={{ canvasID: 'commerce', version: 1, nonce: 1 }}
@@ -491,9 +492,10 @@ it('removes an object reference through the canvas session owner and sends the i
     subscribe: () => () => {},
   } as TessivenTransport;
   const ask = vi.fn(canvasFlowerAdapter().launchTurn);
+  const flowerAdapter = { ...canvasFlowerAdapter(), launchTurn: ask };
   dispose = render(() => <TessivenPage t={tessivenText('en-US')} canWrite transport={transport}
     openRequest={{ canvasID: 'commerce', nonce: 1 }}
-    renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={{ ...canvasFlowerAdapter(), launchTurn: ask }} />}
+    renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={flowerAdapter} />}
     onOpenFlower={() => {}} onOpenService={() => {}} />, host);
   await expect.element(page.getByRole('textbox')).toBeVisible();
   expect(host.querySelector('.flower-composer-context-references')).toBeNull();

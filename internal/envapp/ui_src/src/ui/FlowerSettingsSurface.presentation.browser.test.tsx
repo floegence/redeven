@@ -163,7 +163,7 @@ it('opens a searchable model dialog with metadata and saves a selection', async 
   expect(saveModel.mock.calls[0][0].model_profile?.current_model_id).toBe('deepseek/deepseek-v4-pro');
   await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
   expect(currentModel.textContent).toContain('deepseek-v4-pro');
-  expect(document.activeElement).toBe(edit);
+  await expect.poll(() => document.activeElement).toBe(edit);
 });
 
 it('balances provider identity, readiness, and actions across a compact row', async () => {
@@ -188,7 +188,7 @@ it('closes model editing by keyboard without saving and keeps default reasoning 
   await expect.element(page.getByRole('dialog', { name: copy.settings.changeModel })).toBeVisible();
   await userEvent.keyboard('{Escape}');
   await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
-  expect(document.activeElement).toBe(edit);
+  await expect.poll(() => document.activeElement).toBe(edit);
   expect(saveModel).not.toHaveBeenCalled();
   await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-reasoning button')!);
   await userEvent.click(page.getByRole('menuitemradio', { name: copy.settings.reasoningControl.max, exact: true }));
@@ -206,8 +206,8 @@ for (const [locale, dark, width] of [
     const { copy, openComputerSettings } = await mount(locale, width, dark);
     const frame = host.querySelector<HTMLElement>('.flower-settings-frame')!;
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
-    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('25px');
-    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontWeight).toBe('600');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('16px');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontWeight).toBe('500');
     expect(getComputedStyle(frame.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
     expect(document.querySelector('.flower-model-selection-dialog')).toBeNull();
     const sections = [...frame.querySelectorAll<HTMLElement>(':scope > section')];
@@ -301,7 +301,7 @@ for (const [locale, dark, width] of [
     await expect.element(page.getByRole('dialog', { name: copy.settings.changeModel })).toBeVisible();
     const dialog = document.querySelector<HTMLElement>('.flower-model-selection-dialog')!;
     const search = dialog.querySelector<HTMLInputElement>('input')!;
-    expect(getComputedStyle(search).fontSize).toBe('12px');
+    expect(getComputedStyle(search).fontSize).toBe('13px');
     expect(modelField.scrollWidth).toBeLessThanOrEqual(modelField.clientWidth);
     await expect.poll(() => document.activeElement).toBe(search);
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && locale === 'zh-CN' && !dark) {
@@ -310,7 +310,7 @@ for (const [locale, dark, width] of [
     }
     await userEvent.keyboard('{Escape}');
     await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
-    expect(document.activeElement).toBe(edit);
+    await expect.poll(() => document.activeElement).toBe(edit);
   });
 }
 
@@ -451,7 +451,7 @@ it('searches provider names and wire identities, reports empty results, and rese
   expect(saveModel).not.toHaveBeenCalled();
   await userEvent.click(page.getByRole('button', { name: copy.settings.closeModelSelection }));
   await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
-  expect(document.activeElement).toBe(edit);
+  await expect.poll(() => document.activeElement).toBe(edit);
   await userEvent.click(edit);
   await expect.element(page.getByRole('dialog')).toBeVisible();
   await expect.poll(() => document.activeElement).toBe(document.querySelector('.flower-model-selection-search input'));
@@ -459,7 +459,7 @@ it('searches provider names and wire identities, reports empty results, and rese
   expect(document.querySelectorAll('.flower-model-selection-option')).toHaveLength(4);
   await userEvent.click(document.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!, { position: { x: 8, y: 8 } });
   await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
-  expect(document.activeElement).toBe(edit);
+  await expect.poll(() => document.activeElement).toBe(edit);
   expect(saveModel).not.toHaveBeenCalled();
 });
 
@@ -486,7 +486,7 @@ it('navigates the model dialog by keyboard and leaves the current selection unch
   await expect.poll(() => saveModel.mock.calls.length).toBe(1);
   expect(saveModel.mock.lastCall?.[0].model_profile?.current_model_id).toBe('local/qwen3.8:27b');
   await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
-  expect(document.activeElement).toBe(edit);
+  await expect.poll(() => document.activeElement).toBe(edit);
 });
 
 it.each([360, 1000])('scrolls large model catalogs within a %ipx dialog while keeping search visible', async width => {

@@ -299,6 +299,14 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     ({ value, source, offset }) => value === 'bg-black' && isInsideNamedFunction(source, offset, 'renderVideoPreview'),
   ),
   exception(
+    'internal/flower_ui/src/preview/preview.css',
+    'media',
+    'The workbook renderer retains its paper canvas independently of application chrome.',
+    ({ value, source, offset, lineSource }) => value === 'white'
+      && cssBlockSelector(source, offset) === '.flower-delimited-canvas'
+      && /\bbackground\s*:\s*white\s*;/u.test(lineSource),
+  ),
+  exception(
     'internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx',
     'media',
     'Rendered PDF pages retain a paper-white canvas independent of application chrome.',

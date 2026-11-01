@@ -510,8 +510,8 @@ describe('Subagent inline capsules', () => {
       const requestCount = requests.length;
       target.click();
       await waitFor(() => requests.length === requestCount + 1);
-      expect(surface.querySelector('.flower-subagent-detail-loading')).not.toBeNull();
-      // Even a cached child must renew its baseline before exposing content.
+      // Cached content stays mounted but hidden until reading geometry is ready.
+      if (index !== 0) expect(surface.querySelector('.flower-subagent-detail-loading')).not.toBeNull();
       if (index === 0) expect(surface.querySelector<HTMLElement>('.flower-subagent-detail-timeline')!.checkVisibility({ visibilityProperty: true })).toBe(false);
       if (index === 0) expect(surface.querySelector('.flower-subagent-detail-transcript')).not.toBeNull();
       checkGeometry();

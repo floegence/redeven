@@ -1180,7 +1180,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-warmup')).toBeNull();
   });
 
-  it('retains the new-thread draft until canonical admission wins the launch race', async () => {
+  it('retains submitted input in delivery feedback until canonical admission wins the launch race', async () => {
     const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] }]);
     const launchResponse = deferred<FlowerTurnLaunchReceipt>();
     const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchResponse.promise);
@@ -1215,7 +1215,8 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => launchTurn.mock.calls.length === 1);
     const requestID = launchTurn.mock.calls[0]![0].client_request_id;
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('hi');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(launchTurn.mock.calls[0]![0].prompt).toBe('hi');
     expect(runtime.querySelector('.flower-composer-submit')?.getAttribute('aria-label')).toBe('Sending');
     const receipt = launchReceipt('thread-new-race', 'turn-new-race', 'start', requestID);
     const current = {
@@ -1287,7 +1288,8 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => launchTurn.mock.calls.length === 1);
     const requestID = launchTurn.mock.calls[0]![0].client_request_id;
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('first request');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(launchTurn.mock.calls[0]![0].prompt).toBe('first request');
     (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
     textarea.value = 'second draft';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -2034,7 +2036,7 @@ describe('Flower final thread cache and workspace transport', () => {
       expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
       runtime.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
       stream.push({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] });
-      await waitFor(() => runtime.querySelector('.flower-workspace-sync') === null);
+      await waitFor(() => runtime.querySelector('.flower-workspace-sync[data-restored="true"]') !== null);
       await waitFor(() => loadThread.mock.calls.length === 2);
       expect(runtime.querySelector('.flower-model-status-indicator')).not.toBeNull();
     }
@@ -2243,7 +2245,7 @@ describe('Flower final thread cache and workspace transport', () => {
       scrollTop: { configurable: true, writable: true, value: 1_200 },
     });
     transcript.dispatchEvent(new Event('scroll'));
-    expect(runtime.querySelector('.flower-chat-bottom-dock .flower-error-card')).not.toBeNull();
+    expect(runtime.querySelector('.flower-chat-notices .flower-thread-sync-error .flower-error-card')).not.toBeNull();
     expect(runtime.querySelector('.flower-chat-transcript .flower-error-card')).toBeNull();
 
     const textarea = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
@@ -2261,15 +2263,15 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(stop.disabled).toBe(false);
     expect((runtime.querySelector(`[data-thread-id="${running.thread_id}"] button`) as HTMLButtonElement).disabled).toBe(false);
 
-    (runtime.querySelector('.flower-chat-bottom-dock .flower-error-actions button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-chat-notices .flower-thread-sync-error .flower-error-actions button') as HTMLButtonElement).click();
     await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 3);
-    expect(runtime.querySelector('.flower-chat-bottom-dock .flower-error-card')).not.toBeNull();
+    expect(runtime.querySelector('.flower-chat-notices .flower-thread-sync-error .flower-error-card')).not.toBeNull();
     expect((runtime.querySelector('[data-flower-primary-action="send"]') as HTMLButtonElement).disabled).toBe(true);
 
     recoveryRequest.resolve(liveBootstrap(completed, 796));
     await waitFor(() => runtime.querySelectorAll('[data-flower-message-id]').length === 6);
     expect(runtime.textContent).toContain('Redeven 是一个本地开发环境产品。');
-    expect(runtime.querySelector('.flower-chat-bottom-dock .flower-error-card')).toBeNull();
+    expect(runtime.querySelector('.flower-chat-notices .flower-thread-sync-error .flower-error-card')).toBeNull();
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while Flower resyncs');
   });
 

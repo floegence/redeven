@@ -790,14 +790,14 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
-      const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      const progress = row.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!;
       expect(controlText(progress)).toContain('Pulling image');
-      expect(controlText(row.querySelector('[data-testid="managed-operation-header"]'))).toContain('2/7');
       expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
       expect(controlText(row)).not.toContain('Error');
       expect(row.querySelector<HTMLButtonElement>('[data-testid="managed-service-primary"]')?.disabled).toBe(false);
 
       progress.click();
+      expect(controlText(row.querySelector('[data-testid="managed-operation-header"]'))).toContain('2/7');
       const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
       expect(progress.getAttribute('aria-expanded')).toBe('true');
       expect(controlText(details)).toContain('ghcr.io/runzhliu/example-service');
@@ -855,7 +855,7 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
-      const trigger = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      const trigger = host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!;
       expect(controlText(trigger)).toContain('Downloading package');
       trigger.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
@@ -903,7 +903,7 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
-      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
+      host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')?.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
       expect(controlText(details)).toContain('No byte transfer details are available for this stage.');
       expect(controlText(details)).toContain('3s');
@@ -958,7 +958,7 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
-      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
+      host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')?.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
       expect(controlText(details)).toContain('0 B');
       expect(controlText(details)).toContain('0 B/s');
@@ -1911,7 +1911,7 @@ describe('EnvPortForwardsPage', () => {
 
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-background-install"]')).toBeTruthy());
       const serviceRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
-      const progress = serviceRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      const progress = serviceRow.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!;
       expect(controlText(progress)).toContain('Pulling image');
       progress.click();
       expect(controlText(serviceRow.querySelector('[data-testid="managed-service-operation-details"]'))).toContain('2 / 5');
@@ -1924,7 +1924,7 @@ describe('EnvPortForwardsPage', () => {
       streamController?.close();
       await waitForAssertion(() => {
         const updatedRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
-        expect(controlText(updatedRow.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Completed');
+        expect(updatedRow.querySelector('.web-service-status-trigger[aria-expanded]')?.getAttribute('aria-label')).toContain('Completed');
         expect(updatedRow.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
         expect(controlText(updatedRow)).toContain('Running');
       });
@@ -2011,7 +2011,7 @@ describe('EnvPortForwardsPage', () => {
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 2 },
     }));
     expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeNull();
-    await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Update'));
+    await waitForAssertion(() => expect(host.querySelector('.web-service-status-trigger[aria-expanded]')?.getAttribute('aria-label')).toContain('Update'));
     expect(host.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
     streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-desktop-update', service_id: 'mws-desktop', action: 'update', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`));
     streamController?.close();
@@ -2338,7 +2338,7 @@ describe('EnvPortForwardsPage', () => {
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await waitForAssertion(() => expect(controlText(host)).toContain('Pulling image'));
-      const trigger = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      const trigger = host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!;
       expect(trigger).toBeTruthy();
       expect(controlText(host)).not.toContain('Error');
       trigger.click();
@@ -2399,14 +2399,14 @@ describe('EnvPortForwardsPage', () => {
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-stable-details"]')).toBeTruthy());
       const start = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Start')!;
       start.click();
-      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeTruthy());
-      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!.click();
+      await waitForAssertion(() => expect(host.querySelector('.web-service-status-trigger[aria-expanded]')).toBeTruthy());
+      host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!.click();
       expect(host.querySelector('[data-testid="managed-service-operation-details"]')).toBeTruthy();
 
       listedOperation = acceptedOperation;
       operationRequest.resolve(acceptedOperation);
       await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-operation-output"]'))).toContain('server preparation started'));
-      expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
+      expect(host.querySelector('.web-service-status-trigger[aria-expanded]')?.getAttribute('aria-expanded')).toBe('true');
       expect(controlText(host.querySelector('[data-testid="managed-operation-command-output"]'))).toContain('<managed-executable> serve');
       const stableRow = host.querySelector('[data-managed-service-id="mws-stable-details"]');
       const stableDisclosure = host.querySelector('[data-testid="managed-operation-disclosure"]');
@@ -2415,7 +2415,7 @@ describe('EnvPortForwardsPage', () => {
       await flushPage();
       expect(host.querySelector('[data-managed-service-id="mws-stable-details"]')).toBe(stableRow);
       expect(host.querySelector('[data-testid="managed-operation-disclosure"]')).toBe(stableDisclosure);
-      expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
+      expect(host.querySelector('.web-service-status-trigger[aria-expanded]')?.getAttribute('aria-expanded')).toBe('true');
 
       const secondSnapshot = {
         ...acceptedOperation,
@@ -2426,9 +2426,9 @@ describe('EnvPortForwardsPage', () => {
       };
       streamControllers.get(acceptedOperation.operation_id)!.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(secondSnapshot)}\n\n`));
       await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-operation-output"]'))).toContain('waiting for health check'));
-      expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
+      expect(host.querySelector('.web-service-status-trigger[aria-expanded]')?.getAttribute('aria-expanded')).toBe('true');
 
-      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!.click();
+      host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!.click();
       expect(host.querySelector('[data-testid="managed-service-operation-details"]')).toBeNull();
       streamControllers.get(acceptedOperation.operation_id)!.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ ...secondSnapshot, progress_current: 2 })}\n\n`));
       await flushPage();
@@ -2436,7 +2436,7 @@ describe('EnvPortForwardsPage', () => {
 
       listedOperation = { ...acceptedOperation, operation_id: 'mop-next-details' };
       host.querySelector<HTMLButtonElement>('[data-testid="web-services-refresh"]')!.click();
-      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('false'));
+      await waitForAssertion(() => expect(host.querySelector('.web-service-status-trigger[aria-expanded]')?.getAttribute('aria-expanded')).toBe('false'));
     } finally {
       dispose();
     }
@@ -2468,14 +2468,14 @@ describe('EnvPortForwardsPage', () => {
 
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
-      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(2));
+      await waitForAssertion(() => expect(host.querySelectorAll('.web-service-status-trigger[aria-expanded]')).toHaveLength(2));
       const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"]'));
       const firstRow = rows.find((row) => row.dataset.managedServiceId === 'mws-one')!;
-      firstRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
+      firstRow.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')?.click();
       expect(controlText(firstRow.querySelector('[data-testid="managed-operation-stage-detail"]'))).toContain('example-service');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('data-indeterminate')).toBe('true');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBeNull();
-      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
+      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('.web-service-status-trigger[aria-expanded]')).toBeNull();
       expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-one/events'), expect.objectContaining({ method: 'GET' }));
       expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-two/events'), expect.objectContaining({ method: 'GET' }));
       expect(host.querySelector('[data-testid="unified-web-services-list"]')?.parentElement?.querySelector(':scope > [data-testid="managed-operation-progress"]')).toBeNull();
@@ -2534,7 +2534,7 @@ describe('EnvPortForwardsPage', () => {
         Array.from(host.querySelectorAll<HTMLButtonElement>(`[data-managed-service-id="${serviceID}"] button`))
           .find((button) => controlText(button)?.trim() === 'Start')?.click();
       }
-      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(2));
+      await waitForAssertion(() => expect(host.querySelectorAll('.web-service-status-trigger[aria-expanded]')).toHaveLength(2));
       await waitForAssertion(() => {
         expect(streamSignals.get('mop-first')?.aborted).toBe(false);
         expect(streamSignals.get('mop-second')?.aborted).toBe(false);
@@ -2547,9 +2547,9 @@ describe('EnvPortForwardsPage', () => {
         controller.close();
       }
       await waitForAssertion(() => {
-        const triggers = host.querySelectorAll('[data-testid="managed-service-operation-trigger"]');
+        const triggers = host.querySelectorAll('.web-service-status-trigger[aria-expanded]');
         expect(triggers).toHaveLength(2);
-        for (const trigger of triggers) expect(controlText(trigger)).toContain('Completed');
+        for (const trigger of triggers) expect(trigger.getAttribute('aria-label')).toContain('Completed');
       });
     } finally {
       dispose();
@@ -2579,13 +2579,15 @@ describe('EnvPortForwardsPage', () => {
       Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => controlText(button)?.trim() === 'Start')?.click();
       await flushMicrotasks();
 
-      const submitting = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      const submitting = host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!;
       expect(controlText(submitting)).toContain('Submitting request');
+      expect(host.querySelector('[data-testid="managed-operation-header"]')).toBeNull();
+      submitting.click();
       expect(controlText(host.querySelector('[data-testid="managed-operation-header"]'))).toContain('0/3');
       expect(controlText(host.querySelector('[data-managed-service-id="mws-retry"]'))).not.toContain('Error');
 
       operationRequest.resolve(running);
-      await waitForAssertion(() => expect(controlText(host.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Pulling image'));
+      await waitForAssertion(() => expect(controlText(host.querySelector('.web-service-status-trigger[aria-expanded]'))).toContain('Pulling image'));
     } finally {
       dispose();
     }
@@ -2657,7 +2659,8 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => controlText(button)?.trim() === 'Start')?.click();
 
     await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith('Failed to start service', 'The image registry is unavailable. Check the network connection, then retry.'));
-    expect(controlText(host.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('Failed');
+    expect(controlText(host.querySelector('.web-service-status-trigger[aria-expanded]'))).toContain('Failed');
+    host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')!.click();
     expect(host.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
     expect(notificationMocks.error).not.toHaveBeenCalledWith('Failed to open service', expect.anything());
   });

@@ -749,8 +749,10 @@ async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
   const searchLineIndex = Math.max(0, lineCount - 256);
   const searchMarker = `semantic-history-${String(searchLineIndex).padStart(6, '0')}`;
   const marker = path.join(tempDir, 'semantic-history-seeded');
+  const releaseOutput = path.join(tempDir, 'semantic-history-release-output');
+  const liveDuringHistoryMarker = path.join(tempDir, 'history-live-output-ok');
   const before = await waitForTrace(runtime, () => true);
-  const command = `i=0; while [ $i -lt ${lineCount} ]; do printf 'semantic-history-%06d abcdefghijklmnopqrstuvwxyz\\n' "$i"; i=$((i+1)); done; printf ok > ${shellQuote(marker)}`;
+  const command = `i=0; while [ $i -lt ${lineCount} ]; do printf 'semantic-history-%06d abcdefghijklmnopqrstuvwxyz\\n' "$i"; i=$((i+1)); done; (while [ ! -f ${shellQuote(releaseOutput)} ]; do sleep 0.05; done; printf 'semantic-live-during-history\\n'; printf ok > ${shellQuote(liveDuringHistoryMarker)}) & printf ok > ${shellQuote(marker)}`;
   await sendTerminalCommand(page, command, runtime);
   await waitForFile(marker, 30_000);
   const after = await waitForTrace(runtime, (trace) => trace.sequence > before.sequence, 30_000);
@@ -814,26 +816,25 @@ async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
     projectedHashes.push(nextEvidence.hash);
   }
 
-  const beforeBurst = await runtimeTrace(runtime);
+  // A pixel change can be cursor paint before the coalesced wheel frame runs.
+  // Wait for the forward reading position before dispatching the next gesture.
+  const beforeBurst = await waitForTrace(runtime, (trace) => (
+    !trace.history_busy && (!trace.history_projected || trace.history_offset > afterScrollTrace.history_offset)
+  ));
   await dispatchTerminalWheelBurst(canvas, [-80, -160, 120, -240, 300, -120]);
   const afterBurst = await waitForTrace(runtime, (trace) => (
     !trace.history_busy
     && trace.history_projected
-    && trace.history_request_state === 'settled'
-    && trace.history_request_direction === 'backward'
-    && trace.history_request_count >= beforeBurst.history_request_count + 2
+    && (!beforeBurst.history_projected || trace.history_offset < beforeBurst.history_offset)
+    && trace.sequence === beforeBurst.sequence
   ));
   if (afterBurst.history_error || afterBurst.semantic_error) {
     throw new Error(`continuous semantic history wheel failed: ${JSON.stringify(afterBurst)}`);
   }
 
-  const liveDuringHistoryMarker = path.join(tempDir, 'history-live-output-ok');
   const liveSequenceBefore = afterBurst.sequence;
-  await sendTerminalCommand(
-    page,
-    `printf 'semantic-live-during-history\\n'; printf ok > ${shellQuote(liveDuringHistoryMarker)}`,
-    runtime,
-  );
+  // Release background output without focusing the input or issuing a new command.
+  await writeFile(releaseOutput, 'ready');
   await waitForFile(liveDuringHistoryMarker);
   const liveDuringHistory = await waitForTrace(runtime, (trace) => (
     trace.sequence > liveSequenceBefore

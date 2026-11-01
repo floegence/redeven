@@ -492,7 +492,7 @@ it('opens native subagent and settings surfaces from the projected reply menu', 
   await expect.element(page.getByRole('dialog', { name: 'Subagents', exact: true })).toBeVisible();
   const subagents = document.querySelector('.flower-subagents-dropdown')!;
   expect(subagents.closest('[data-floe-local-interaction-surface]')).not.toBeNull();
-  await expect.poll(() => document.activeElement === subagents).toBe(true);
+  await expect.poll(() => subagents.contains(document.activeElement)).toBe(true);
   await userEvent.keyboard('{Escape}');
   await expect.poll(() => document.querySelector('.flower-subagents-dropdown')).toBeNull();
   expect(document.querySelector('.tessiven-flower-output')).not.toBeNull();
@@ -878,6 +878,10 @@ it('shows reasoning as it arrives before any assistant reply or tool result', as
         { id: 'thinking', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'thinking', live: true, text },
       ],
     } });
+    if (index === 0) {
+      await expect.poll(() => document.querySelector('.flower-thinking-toggle')).toBeTruthy();
+      await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!);
+    }
     await expect.poll(() => document.querySelector('.flower-thinking-content')?.textContent).toContain(`Inspecting canvas layer ${index}.`);
     expect(document.querySelector('.flower-thinking-content')!.clientHeight).toBeGreaterThan(0);
   }

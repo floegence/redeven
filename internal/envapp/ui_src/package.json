@@ -28,6 +28,7 @@
     "test:startup-continuity": "node scripts/checkStartupContinuity.mjs",
     "test:terminal-font-carrier": "node scripts/checkTerminalFontCarrier.mjs",
     "test:terminal-font-electron": "node scripts/checkTerminalFontElectron.mjs",
+    "test:terminal-workspace": "node scripts/checkTerminalWorkspace.mjs",
     "test:terminal-carrier": "node scripts/checkSemanticTerminalCarrier.mjs",
     "test:terminal-performance": "node scripts/checkTerminalInteractionPerformance.mjs",
     "test:file-preview-media": "node scripts/checkFilePreviewMedia.mjs",

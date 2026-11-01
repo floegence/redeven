@@ -683,6 +683,36 @@
   display: none;
 }
 
+/* Recovery uses the collapsed row so the retained shell never clips its action. */
+.flower-surface-companion-collapsed .flower-composer > .flower-settings-read-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 0.375rem;
+  flex-wrap: nowrap;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--floe-type-caption);
+}
+.flower-surface-companion-collapsed .flower-composer > .flower-settings-read-status > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flower-surface-companion-collapsed .flower-composer > .flower-settings-read-status > button {
+  min-height: 1.5rem;
+  height: 1.5rem;
+  padding-block: 0;
+}
+.flower-surface-companion-collapsed .flower-composer:has(> .flower-settings-read-status) > :is(
+  .flower-companion-collapsed-icon, .flower-companion-collapsed-status,
+  .flower-companion-collapsed-thread-switcher, .flower-companion-collapsed-action,
+  .flower-companion-collapsed-summary, .flower-composer-content
+) { display: none; }
+
 .flower-surface-companion-collapsed .flower-composer-content > :not(textarea):not(.flower-composer-entry) {
   display: none;
 }
@@ -1231,7 +1261,7 @@
 
 .flower-chat-shell, .flower-subagent-detail-window, .flower-subagents-dropdown {
   --flower-reading-title: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
-  --flower-reading-secondary: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  --flower-reading-secondary: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   --flower-reading-report: color-mix(in srgb, var(--foreground) 92%, var(--muted-foreground) 8%);
   --flower-reading-success: color-mix(in srgb, var(--success) 45%, var(--foreground) 55%);
   --flower-reading-warning: color-mix(in srgb, var(--warning) 45%, var(--foreground) 55%);
@@ -5878,7 +5908,7 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-inline {
   --flower-activity-tool-row-foreground: var(--flower-reading-title);
-  --flower-activity-tool-row-quiet: color-mix(in srgb, var(--muted-foreground) 94%, var(--background) 6%);
+  --flower-activity-tool-row-quiet: var(--flower-reading-secondary);
   --flower-activity-tool-row-foreground-strong: var(--foreground);
   --flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 6%, transparent);
   display: grid;
@@ -8486,13 +8516,6 @@ button.flower-composer-context-source:focus-visible,
   transition: border-color 120ms ease-out;
 }
 
-/* Keep the editor boundary steady while retaining the published forced-colors focus treatment. */
-@media (forced-colors: none) {
-  .flower-composer {
-    --floe-input-focus-color: var(--input);
-  }
-}
-
 /* The companion owns the collapsed outline; only an open editor paints its own surface. */
 .flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer {
   border: 1px solid var(--input);
@@ -9962,7 +9985,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-parent-event { min-width: 0; margin-block: 0.25rem; font-size: 0.75rem; line-height: 1.125rem; }
-.flower-parent-event-heading { display: flex; align-items: center; gap: 0.375rem; min-width: 0; }
+.flower-parent-event-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; min-width: 0; }
 .flower-parent-event:not([data-parent-event-kind='report']) .flower-parent-event-heading { min-height: 2rem; }
 .flower-subagent-avatar.flower-parent-event-avatar { width: 1.25rem; height: 1.25rem; }
 .flower-parent-event-type { flex-shrink: 0; color: var(--foreground); white-space: nowrap; }

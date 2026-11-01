@@ -201,16 +201,15 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       />
     ), host));
 
-    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]')?.focus();
+    const actions = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-actions-session-1"]')!;
+    actions.focus();
     setItems((current) => current.map((item) => (
       item.id === 'session-1' ? { ...item, canBrowsePath: false, filesAvailability: 'invalid' } : item
     )));
     await Promise.resolve();
-    const disabledFiles = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]');
-    expect(disabledFiles?.getAttribute('aria-disabled')).toBe('true');
-    expect(document.activeElement).toBe(disabledFiles);
+    expect(document.activeElement).toBe(actions);
 
-    host.querySelector<HTMLButtonElement>('[data-testid="close-session-session-1"]')?.focus();
+    actions.focus();
     setItems((current) => current.filter((item) => item.id !== 'session-1'));
     await Promise.resolve();
     expect(document.activeElement)
@@ -229,7 +228,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rgba(');
     expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
-    expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('border-primary/15');
+    expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('bg-[var(--floe-state-selected)]');
     const descriptionId = rowButton.getAttribute('aria-describedby');
     expect(descriptionId).toBe('terminal-panel-test-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output');
@@ -339,7 +338,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
   });
 
-  it('keeps the neutral initial avatar and no agent output indicator for ordinary commands', () => {
+  it('uses a compact terminal glyph and no agent output indicator for ordinary commands', () => {
     const { host } = renderNavigator(navigationItem({
       title: 'top',
       avatar: { kind: 'initial' },
@@ -348,8 +347,8 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     }));
 
     expect(host.querySelector('[data-terminal-agent-identity]')).toBeNull();
-    expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.textContent).toContain('R');
-    expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).toContain('color-mix(in_srgb,var(--background)_18%,transparent)');
+    expect(host.querySelector('[data-terminal-session-avatar="agent-session"] svg')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rounded-full');
     expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
   });
 
@@ -427,16 +426,15 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"] svg')).not.toBeNull();
   });
 
-  it('shows a Link location marker beneath an Agent running over SSH', () => {
+  it('keeps remote location in the accessible name without a second desktop row', () => {
     const { host } = renderNavigator(navigationItem({
       subtitleIcon: 'link',
       subtitle: 'root@host · /root/project',
       remote: true,
     }));
 
-    const path = host.querySelector('[data-testid="terminal-session-path-agent-session"]');
-    expect(path?.previousElementSibling?.tagName.toLowerCase()).toBe('svg');
-    expect(path?.textContent).toBe('root@host · /root/project');
+    expect(host.querySelector('[data-terminal-session-path]')).toBeNull();
+    expect(host.querySelector('[data-terminal-session-id="agent-session"]')?.getAttribute('aria-label')).toContain('root@host · /root/project');
   });
 
   it('describes a pending session creation failure precisely', () => {
@@ -525,23 +523,17 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     ], t)).toBe('ビルド。入力が必要です。レビュー。未読の出力があります。');
   });
 
-  it('reserves four explicit trailing action cells even when actions are unavailable', () => {
+  it('exposes one overflow action without a desktop action grid', () => {
     const { host } = renderNavigator(navigationItem({
       fullPath: '',
       canBrowsePath: false,
       closable: false,
     }));
-    const grid = host.querySelector('[data-terminal-session-actions="agent-session"]');
-    const cells = Array.from(grid?.querySelectorAll('[data-terminal-session-action-cell]') ?? []);
-
-    expect(cells.map((cell) => cell.getAttribute('data-terminal-session-action-cell'))).toEqual([
-      'index',
-      'close',
-      'copy',
-      'files',
-    ]);
-    expect(grid?.className).toContain('grid-cols-[20px_20px]');
-    expect(grid?.className).toContain('grid-rows-[20px_20px]');
+    const actions = host.querySelector('[data-testid="terminal-session-actions-agent-session"]');
+    expect(actions?.getAttribute('aria-haspopup')).toBe('menu');
+    expect(host.querySelector('[data-terminal-session-action-cell]')).toBeNull();
+    expect(host.querySelector('[data-terminal-session-row]')?.className).toContain('h-8');
+    expect(host.querySelector('[data-terminal-session-path]')).toBeNull();
   });
 
   it('renders compact sessions beneath an independently collapsible group header', () => {
@@ -561,22 +553,18 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     });
 
     expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('Services');
-    expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('/workspace/services');
-    expect(host.querySelector('[data-terminal-group-header="group-services"]')?.className).toContain('var(--primary)_7%');
-    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('ml-[18px]');
-    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('pl-5');
-    expect(host.querySelector('[data-terminal-tree-trunk="group-services"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-tree-rail="group-services"]')?.className).toContain('bottom-[26px]');
-    expect(host.querySelector('[data-terminal-tree-connector="session-1"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-tree-junction="session-1"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="terminal-group-toggle-group-services"]')?.className).toContain('text-primary');
-    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('min-h-[52px]');
-    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('grid-cols-[36px_minmax(0,1fr)_40px]');
+    expect(host.querySelector('[data-terminal-group-drag-handle="group-services"]')?.getAttribute('title')).toContain('/workspace/services');
+    expect(host.querySelector('[data-terminal-group-header="group-services"]')?.textContent).not.toContain('/workspace/services');
+    expect(host.querySelector('[data-terminal-group-header="group-services"]')?.className).toContain('h-8');
+    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).not.toContain('ml-3');
+    expect(host.querySelector('[data-terminal-tree-trunk], [data-terminal-tree-rail], [data-terminal-tree-connector], [data-terminal-tree-junction]')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-group-toggle-group-services"] svg')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('h-8');
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-toggle-group-services"]')?.click();
     expect(onToggleGroup).toHaveBeenCalledWith('group-services');
   });
 
-  it('uses one continuous rail for every session branch in a group', () => {
+  it('keeps session indentation without decorative rails in a group', () => {
     const firstItem = navigationItem({ id: 'session-1', title: 'alpha' });
     const secondItem = navigationItem({ id: 'session-2', title: 'beta' });
     const { host } = renderNavigator(firstItem, vi.fn(), {
@@ -592,9 +580,9 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       }],
     });
 
-    expect(host.querySelectorAll('[data-terminal-tree-rail="group-services"]')).toHaveLength(1);
-    expect(host.querySelectorAll('[data-terminal-tree-connector]')).toHaveLength(2);
-    expect(host.querySelectorAll('[data-terminal-tree-junction]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-terminal-tree-rail="group-services"]')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-terminal-tree-connector]')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-terminal-tree-junction]')).toHaveLength(0);
     expect(host.querySelector('[data-terminal-tree-child="session-1"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-tree-child="session-2"]')).not.toBeNull();
   });
@@ -631,7 +619,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(sessionButton.getAttribute('draggable')).not.toBe('true');
     expect(dragHandle.getAttribute('draggable')).toBe('true');
     expect(dragHandle.className).toContain('cursor-grab');
-    expect(dragHandle.className).toContain('h-9 w-9');
+    expect(dragHandle.className).toContain('h-6 w-5');
     expect(sessionRow.getAttribute('aria-grabbed')).toBe('false');
     expect(onSelectSession).toHaveBeenCalledOnce();
 
@@ -1078,7 +1066,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     expect(onOpenGroupContextMenu).toHaveBeenCalledTimes(2);
     expect(onOpenGroupContextMenu.mock.calls.map((call) => call[1])).toEqual(['group-services', 'group-services']);
-    expect(groupHeader.querySelectorAll('.cursor-pointer').length).toBeGreaterThanOrEqual(4);
+    expect(groupHeader.querySelectorAll('.cursor-pointer').length).toBeGreaterThanOrEqual(3);
     expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('cursor-pointer');
     expect(host.querySelector('[data-terminal-session-row="session-1"]')?.hasAttribute('draggable')).toBe(false);
     expect(host.querySelector('[data-terminal-session-id="session-1"]')?.hasAttribute('draggable')).toBe(false);

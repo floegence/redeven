@@ -52,6 +52,9 @@ main[aria-busy="false"] .progress { display:none; }
 .mac-app-toolbar-spacer { flex:1; min-width:8px; }
 .mac-app-toolbar-separator { width:1px; height:16px; margin:0 5px; background:var(--border); flex:none; }
 .mac-app-toolbar>.mac-app-quit:hover:not(:disabled) { color:var(--error); background:color-mix(in srgb,var(--error) 12%,var(--background)); }
+.mac-app-toolbar>.mac-app-takeover-toggle { color:var(--foreground); }
+.mac-app-toolbar:has(.mac-app-takeover-toggle:not([hidden]))>.mac-app-menu-toggle { flex:0 1 auto; min-width:32px; }
+@media(max-width:680px) { .mac-app-takeover-toggle .mac-app-toolbar-label { display:none; } }
 .mac-app-popover { position:fixed; top:calc(var(--mac-viewport-top) + var(--mac-toolbar-height) + 6px); width:320px; max-width:calc(100vw - var(--floe-space-4)); max-height:calc(var(--mac-viewport-height) - var(--mac-toolbar-height) - 14px); overflow:auto; overscroll-behavior:contain; padding:var(--floe-space-4); border:1px solid var(--border); border-radius:var(--floe-radius-floating); background:var(--popover); color:var(--popover-foreground);  animation:unfold .14s ease-out; }
 .mac-app-popover[data-section="menu"] { width:280px; padding:var(--floe-space-2); }
 .mac-app-popover[data-section="windows"] { width:360px; padding:var(--floe-space-2); }

@@ -132,6 +132,7 @@ function harness(options: Readonly<{
   autoFocus?: boolean;
   attachSettlement?: Promise<void>;
   activityStack?: boolean;
+  splitVisible?: boolean;
 }> = {}) {
   let presentationHandler: ((value: unknown) => void) | null = null;
   let lifecycleHandler: ((event: Parameters<Parameters<RedevenTerminalEventSource['onTerminalLiveAttachmentLifecycle']>[1]>[0]) => void) | null = null;
@@ -286,6 +287,7 @@ function harness(options: Readonly<{
         session={SESSION}
         variant="panel"
         active={active}
+        visible={options.splitVisible === undefined ? undefined : () => options.splitVisible!}
         connected={() => true}
         protocolClient={() => transport}
         viewActive={() => viewActive() && (activation?.active() ?? true) && displayMode() === 'activity'}
@@ -1097,6 +1099,26 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     await Promise.resolve();
 
     expect(runtime.activate).not.toHaveBeenCalled();
+  });
+
+  it('paints an unfocused visible split while rejecting its keyboard input', async () => {
+    const runtime = harness({ splitVisible: true, controller: false });
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'visible split'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    runtime.setActive(false);
+    await waitForPaint();
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    expect(canvas.style.visibility).toBe('visible');
+    runtime.emitPresentation(presentation(2, 'background output'));
+    await waitForPaint();
+    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('background output');
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+    expect(runtime.sendInputIntent).not.toHaveBeenCalled();
+    expect(runtime.interactInputIntent).not.toHaveBeenCalled();
+    runtime.setViewVisible(false);
+    await vi.waitFor(() => expect(canvas.style.visibility).toBe('hidden'));
   });
 
   it('never exposes a keep-mounted canvas with stale backing while its tab is inactive', async () => {

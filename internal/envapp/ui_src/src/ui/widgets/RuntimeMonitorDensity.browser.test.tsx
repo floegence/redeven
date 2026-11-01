@@ -41,8 +41,8 @@ it.each([false, true])('measures real monitoring rows and retains chart content 
   await expect.poll(() => host.querySelectorAll('[data-monitor-process-selected]').length).toBe(25);
   await document.fonts.ready;
   const rows = [...host.querySelectorAll<HTMLElement>('[data-monitor-process-selected]')];
-  expect(rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top).toBe(touch ? 44 : 28);
-  expect(getComputedStyle(rows[0].children[1]).fontSize).toBe(touch ? '13px' : '12px');
+  expect(rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top).toBe(touch ? 44 : 30);
+  expect(getComputedStyle(rows[0].children[1]).fontSize).toBe('13px');
   expect(host.querySelector('.chart-svg')).not.toBeNull();
   const content = host.querySelector('.max-w-7xl')!;
   expect(content.querySelector('.grid')!.getBoundingClientRect().top).toBe(content.getBoundingClientRect().top);

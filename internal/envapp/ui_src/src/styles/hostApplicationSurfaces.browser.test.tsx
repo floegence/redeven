@@ -24,6 +24,8 @@ import viewportJS from '../../../../codeapp/appserver/host_application_viewer/vi
 import catalogJS from '../../../../codeapp/appserver/host_application_viewer/catalog.generated.js?raw';
 const viewerCSS = inputCSS + '\n' + pointerCSS + '\n' + appearanceCSS + '\n' + rawViewerCSS;
 const connectionJS = inputJS + '\n' + pointerJS + '\n' + viewportJS + '\n' + catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
+const fixtureViewerHTML = viewerHTML.replace('<script src="{{.TransportScript}}"></script>',
+  '<script>window.RedevenWindowTransport={create:()=>({fetch:(...args)=>window.fetch(...args),WebSocket:class {constructor(...args){return new window.WebSocket(...args)} static get OPEN(){return window.WebSocket.OPEN}},dispose(){}})};</script>');
 
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
@@ -70,9 +72,9 @@ it.each([320, 390, 1000].flatMap(width => ['light', 'dark'].map(scheme => ({widt
     if (typeof value === 'string') copy[name] = value;
   }
   const config = {base:'/fixture', icon:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', copy};
-  frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
+  frame.srcdoc = fixtureViewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS).replace('{{.Config}}', JSON.stringify(config))
-    .replace('{{.Script}}', `window.fetch = () => new Promise(() => {});\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
+    .replace('{{.Script}}', () => `window.fetch = () => new Promise(() => {});\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-controls-toggle')).toBeTruthy();
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -142,10 +144,10 @@ it.each([
     const name = key.startsWith('mac') ? key[3].toLowerCase() + key.slice(4) : key;
     if (typeof value === 'string') copy[name] = value;
   }
-  frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
+  frame.srcdoc = fixtureViewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:'/fixture',copy,initial:{state:'ended',end_reason:reason}}))
-    .replace('{{.Script}}', `window.redevenHostApplicationWindow = {request() {}}; window.fetch = () => { throw Error('Terminal document must not reconnect'); };\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
+    .replace('{{.Script}}', () => `window.redevenHostApplicationWindow = {request() {}}; window.fetch = () => { throw Error('Terminal document must not reconnect'); };\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe(state);
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -154,7 +156,7 @@ it.each([
   expect(view.getComputedStyle(doc.querySelector('.progress')!).display).toBe('none');
   expect(view.getComputedStyle(doc.querySelector('#retry')!).display).toBe('none');
   expect(view.getComputedStyle(doc.querySelector('.mac-app-controls')!).display).not.toBe('none');
-  expect([...doc.querySelectorAll<HTMLButtonElement>('.mac-app-toolbar button')].every(button => button.disabled)).toBe(true);
+  expect([...doc.querySelectorAll<HTMLButtonElement>('.mac-app-toolbar button')].filter(button => !button.hidden).every(button => button.disabled)).toBe(true);
   const dismiss = doc.querySelector<HTMLButtonElement>('#dismiss')!;
   expect(dismiss.textContent).toBe(copy.dismiss);
   expect(view.getComputedStyle(dismiss).cursor).toBe('pointer');
@@ -191,10 +193,10 @@ it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while
       close() {}
     };
   `;
-  frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
+  frame.srcdoc = fixtureViewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',copy}))
-    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
+    .replace('{{.Script}}', () => `${fixture}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -203,6 +205,7 @@ it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while
   const toolbar = doc.querySelector<HTMLElement>('.mac-app-toolbar')!;
   expect(toolbar.scrollWidth).toBeLessThanOrEqual(width);
   for (const button of toolbar.querySelectorAll('button')) {
+    if (!button.getClientRects().length) continue;
     const bounds = button.getBoundingClientRect();
     expect(bounds.left).toBeGreaterThanOrEqual(0);
     expect(bounds.right).toBeLessThanOrEqual(width);
@@ -272,10 +275,10 @@ it('decodes and acknowledges a single static native video frame without waiting 
       close() { this.readyState = 3; }
     };
   `;
-  frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Decoder Fixture')
+  frame.srcdoc = fixtureViewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Decoder Fixture')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',copy:{}}))
-    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
+    .replace('{{.Script}}', () => `${fixture}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.video).toBe('true');
   await expect.poll(() => frame.contentDocument?.body.dataset.ack, {timeout:2000}).toBe('1');
@@ -307,10 +310,10 @@ it.each([
     document.documentElement.style.setProperty('--redeven-desktop-titlebar-start-inset', '${start}px');
     document.documentElement.style.setProperty('--redeven-desktop-titlebar-end-inset', '${end}px');
     window.fetch = () => new Promise(() => {});`;
-  frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}','en-US').replaceAll('{{.Name}}','Text Editor')
+  frame.srcdoc = fixtureViewerHTML.replaceAll('{{.Locale}}','en-US').replaceAll('{{.Name}}','Text Editor')
     .replaceAll('{{.Nonce}}','fixture').replace('{{.Style}}',viewerCSS)
     .replace('{{.Config}}',JSON.stringify({base:'/fixture',copy,icon:''}))
-    .replace('{{.Script}}', `${native}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
+    .replace('{{.Script}}', () => `${native}\n${connectionJS}\n${toolbarJS}\n${canvasJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-toolbar')).toBeTruthy();
   const doc=frame.contentDocument!, view=frame.contentWindow!;
@@ -320,6 +323,7 @@ it.each([
   expect(view.getComputedStyle(doc.querySelector('.mac-app-controls')!).display).not.toBe('none');
   expect(toolbar.scrollWidth).toBeLessThanOrEqual(width);
   for (const button of toolbar.querySelectorAll<HTMLButtonElement>('button')) {
+    if (!button.getClientRects().length) continue;
     const bounds=button.getBoundingClientRect();
     expect(bounds.left).toBeGreaterThanOrEqual(start);
     expect(bounds.right).toBeLessThanOrEqual(width-end);

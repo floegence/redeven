@@ -31,6 +31,7 @@ async function mount(component: () => JSX.Element, touch = false, width = 1100) 
   const dispose = render(() => <FloeConfigProvider><LayoutProvider>{component()}</LayoutProvider></FloeConfigProvider>, host);
   onTestFinished(async () => { dispose(); host.remove(); await media.emulateTouchInput(false); });
   await document.fonts.ready;
+  await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
   return host;
 }
 async function expectSize(selector: string, size = '12px') {
@@ -45,36 +46,37 @@ it('uses the body role for local window guidance and preserves the title role', 
     const [host, setHost] = createSignal<HTMLElement>();
     return <div ref={setHost} style={{ height: '100%' }}><WindowModal open host={host()} title="File access" bodyDescription="Allow access to this directory." /></div>;
   });
-  await expectSize('[role="dialog"] p');
-  await expectSize('[role="dialog"] [id]:not(p)', '14px');
+  await expectSize('[role="dialog"] p', '13px');
+  const dialog = document.querySelector('[role="dialog"]')!;
+  await expectSize('[id="' + dialog.getAttribute('aria-labelledby') + '"]', '13px');
 });
 it.each([false, true])('keeps rename editing usable, touch=%s', async touch => {
   const confirm = vi.fn();
   await mount(() => <InputDialog open title="Rename" label="Name" value="notes.md" onConfirm={confirm} onCancel={noop} />, touch, 390);
-  await expectSize('[role="dialog"] input', touch ? '16px' : '12px');
+  await expectSize('[role="dialog"] input', touch ? '16px' : '13px');
   const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
   input.value = 'renamed.md'; input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   expect(confirm).toHaveBeenCalledWith('renamed.md');
-  if (touch) expect(input.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  if (touch) await expect.poll(() => input.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 });
 it('keeps terminal group fields at the control scale', async () => {
   await mount(() => <TerminalGroupEditorDialog open group={null} defaultWorkingDir="/workspace/project" onCancel={noop} onSubmit={noop} />);
-  await expectSize('[role="dialog"] input');
+  await expectSize('[role="dialog"] input', '13px');
 });
 it('keeps terminal deletion guidance at the body scale', async () => {
   await mount(() => <TerminalGroupDeleteDialog open group={null} sessionCount={3} onCancel={noop} onConfirm={noop} />);
-  await expectSize('[role="dialog"] p');
+  await expectSize('[role="dialog"] p', '13px');
 });
 it('keeps folder guidance compact without shrinking the heading', async () => {
   await mount(() => <FileBrowserRecoveryView requestedPath="/workspace/project" message="Check the folder access settings." unavailable pending={false} homeAvailable parentAvailable accessFailure canManageAccess onRetry={noop} onOpenHome={noop} onOpenParent={noop} onManageAccess={noop} onDismiss={noop} />);
-  await expectSize('[role="status"] p:last-child');
+  await expectSize('[role="status"] p:last-child', '12px');
   expect(parseFloat(getComputedStyle(document.querySelector('h2')!).fontSize)).toBeGreaterThan(12);
 });
 it('keeps archive warnings and inputs compact', async () => {
   await mount(() => <ArchiveExtractionDialog open request={{ item: { id: 'archive', name: 'project.zip', path: '/workspace/project.zip', type: 'file' }, classification: { kind: 'multipart', format: 'zip', defaultOutputName: 'project' } }} pickerProps={{ loadDirectory: vi.fn().mockResolvedValue([]) }} isWritablePath={() => true} onExtract={resolved} onComplete={noop} onClose={noop} />);
-  await expectSize('[data-testid="archive-extraction-dialog"] [role="alert"]');
-  await expectSize('[data-testid="archive-extraction-dialog"] input:not([type="checkbox"])');
+  await expectSize('[data-testid="archive-extraction-dialog"] [role="alert"]', '13px');
+  await expectSize('[data-testid="archive-extraction-dialog"] input:not([type="checkbox"])', '13px');
 });
 it.each([false, true])('keeps plugin source fields and actions on their roles, touch=%s', async touch => {
   await mount(() => <ExternalPluginInstallDialog open onOpenChange={noop} onInspect={resolved} onCommit={resolved} onCommitted={noop} />, touch);
@@ -92,19 +94,19 @@ it.each([false, true])('separates narrow Plugin Center search from touch, touch=
 });
 it.each([false, true])('separates narrow access fields from touch, touch=%s', async touch => {
   await mount(() => <EnvironmentAccessGate phase="unlock_required" local environmentName="Local environment" pending={false} unlocking={false} recoveryBusy={false} retryActive={false} retryDuration="" password="" feedback={null} languageMenu={null} inputRef={noop} onPasswordInput={noop} onSubmit={resolved} onRetry={resolved} onReload={noop} />, touch, 390);
-  await expectSize('#redeven-access-password', touch ? '16px' : '12px');
-  await expectSize('label[for="redeven-access-password"]', touch ? '13px' : '12px');
+  await expectSize('#redeven-access-password', touch ? '16px' : '13px');
+  await expectSize('label[for="redeven-access-password"]', '13px');
 });
 it('keeps the Flower computer-use switch on the control scale', async () => {
   await mount(() => <FlowerSettingsSurface snapshot={{ defaults: { permission_type: 'approval_required', computer_use_enabled: true }, model_profile: { schema_version: 1, current_model_id: '', providers: [] }, provider_secrets: [] }} onSaveDefaultPermission={resolved} onSaveComputerUseEnabled={resolved} onSaveModelProfile={resolved} />);
-  await expectSize('.flower-settings-toggle-label');
+  await expectSize('.flower-settings-toggle-label', '13px');
 });
 it('keeps managed-browser readiness on the body scale', async () => {
   await mount(() => <FlowerManagedBrowser copy={computerUseEnUS} canMutate management={{ loadBrowserInstallation: vi.fn().mockResolvedValue({ enabled: true, state: 'installed', launch: { state: 'ready' }, package: { name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64' } }) }} />);
-  await expectSize('.flower-browser-ready p');
+  await expectSize('.flower-browser-ready p', '13px');
 });
 
 it('keeps inline appearance choices at the control scale', async () => {
   await mount(() => <FloeProvider config={{ storage: { enabled: false } }}><EnvAppThemePicker presentation="inline" onSourceChange={() => true} onShellThemeChange={() => true} /></FloeProvider>);
-  await expectSize('[role="radio"]');
+  await expectSize('[role="radio"]', '13px');
 });

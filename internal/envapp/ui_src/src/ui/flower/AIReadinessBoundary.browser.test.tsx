@@ -238,14 +238,14 @@ describe('AIReadinessBoundary browser layout', () => {
     await expectAuditedVisualEvidence(320, 720);
   });
 
-  it('uses the shared twelve-pixel reading role for blocked guidance and actions', async () => {
+  it('uses the shared thirteen-pixel reading role for blocked guidance and actions', async () => {
     const host = mount();
     await sizeReadinessSurface(544, 720);
     await document.fonts.ready;
     for (const selector of ['.ai-readiness-description', '.ai-readiness-data-statement', '.ai-readiness-action']) {
       const element = host.querySelector<HTMLElement>(selector);
       expect(element, selector).not.toBeNull();
-      expect(getComputedStyle(element!).fontSize, selector).toBe('12px');
+      expect(getComputedStyle(element!).fontSize, selector).toBe('13px');
     }
   });
 

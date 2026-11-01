@@ -10,9 +10,13 @@ import {
   type DropdownItem,
 } from '@floegence/floe-webapp-core/ui';
 import './adaptive-sidebar.css';
+import './terminal-workspace.css';
+import { SplitWorkspace, dockSplitWorkspaceItem, presetSplitWorkspace, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceEdge, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
+import { createTerminalWorkspace } from './terminalWorkspace';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Grid, Link, Maximize, Menu, Pencil, Plus, Refresh, Search, ChevronLeft, ChevronRight, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { FolderIcon } from '@floegence/floe-webapp-core/file-browser';
 
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
@@ -1029,7 +1033,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [localSessionDrawerOpen, setLocalSessionDrawerOpen] = createSignal(false);
   const [desktopSessionDrawerOpen, setDesktopSessionDrawerOpen] = createSignal(false);
   const [navigationContainer, setNavigationContainer] = createSignal<HTMLDivElement>();
-  const sidebarPresentation = createAdaptiveSidebar({ container: navigationContainer, sidebarWidth: () => 286, minContentWidth: () => 480 });
+  const sidebarPresentation = createAdaptiveSidebar({ container: navigationContainer, sidebarWidth: () => 258, minContentWidth: () => 480 });
   const desktopNavigationOverlay = () => !layout.isMobile() && sidebarPresentation() === 'overlay';
   const navigationOverlay = () => layout.isMobile() || desktopNavigationOverlay();
   createEffect(() => { if (!desktopNavigationOverlay()) setDesktopSessionDrawerOpen(false); });
@@ -1286,6 +1290,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalThemeMutedForeground = createMemo(() => (
     `color-mix(in srgb, ${terminalThemeForeground()} 70%, transparent)`
   ));
+  const terminalWorkspaceVars = createMemo(() => ({
+    '--background': terminalThemeBackground(),
+    '--foreground': terminalThemeForeground(),
+    '--muted': `color-mix(in srgb, ${terminalThemeBackground()} 96%, ${terminalThemeForeground()})`,
+    '--muted-foreground': terminalThemeMutedForeground(),
+    '--border': `color-mix(in srgb, ${terminalThemeBackground()} 88%, ${terminalThemeForeground()})`,
+    '--accent': `color-mix(in srgb, ${terminalThemeBackground()} 90%, ${terminalThemeForeground()})`,
+    '--accent-foreground': terminalThemeForeground(),
+    '--primary': terminalThemeColors().blue ?? terminalThemeForeground(),
+    '--primary-foreground': terminalThemeBackground(),
+    '--ring': terminalThemeColors().blue ?? terminalThemeForeground(),
+    '--floe-ink-soft': terminalThemeMutedForeground(),
+    '--floe-state-hover': `color-mix(in srgb, ${terminalThemeBackground()} 90%, ${terminalThemeForeground()})`,
+    '--floe-line-strong': `color-mix(in srgb, ${terminalThemeBackground()} 76%, ${terminalThemeForeground()})`,
+    '--floe-plane': terminalThemeBackground(),
+  }));
   const terminalLoadingVars = createMemo(() => ({
     '--redeven-terminal-loading-background': terminalThemeBackground(),
     '--redeven-terminal-loading-foreground': terminalThemeForeground(),
@@ -1298,7 +1318,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     '--redeven-terminal-search-accent': terminalThemeColors().selectionBackground ?? terminalThemeColors().selection ?? terminalThemeForeground(),
   }));
 
-  const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([]);
+  const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([...(terminalCatalog?.sessions() ?? [])]);
   const [optimisticTerminalSessions, setOptimisticTerminalSessions] = createSignal<TerminalSessionInfo[]>([]);
   const [optimisticClosingSessionIds, setOptimisticClosingSessionIds] = createSignal<Set<string>>(new Set());
   const [pendingTerminalSessions, setPendingTerminalSessions] = createSignal<pending_terminal_session[]>([]);
@@ -1694,6 +1714,77 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
 
     setActiveRealSessionId(normalizedValue);
+  };
+
+  const [workspaceBusy, setWorkspaceBusy] = createSignal(false);
+  const workspace = createTerminalWorkspace({
+    storageKey: () => 'redeven_terminal_workspace:v1:' + String(env.env_id() ?? '') + ':' + panelId,
+    sessionIds: () => sessions().map(session => session.id),
+    hydrated: sessionsHydrated,
+    deferSelectionPlacement: workspaceBusy,
+    activeId: activeSessionId,
+    select: setActiveSessionId,
+  });
+  const workspaceLabels = () => ({
+    single: i18n.t('terminalWorkspace.single'), columns: i18n.t('terminalWorkspace.columns'), rows: i18n.t('terminalWorkspace.rows'),
+    'three-columns': i18n.t('terminalWorkspace.threeColumns'), 'main-left': i18n.t('terminalWorkspace.mainLeft'), grid: i18n.t('terminalWorkspace.grid'),
+  });
+  const maximizedWorkspaceSessionId = createMemo(() => workspace.maximized() ? activeSessionId() : null);
+  const selectWorkspacePane = (id: string) => {
+    clearPendingTerminalFocusIntent();
+    markSessionMounted(id);
+    setActiveSessionId(id);
+  };
+  const splitWorkspaceSession = async (targetId: string, edge: SplitWorkspaceEdge) => {
+    if (workspaceBusy() || !connected()) return;
+    const target = sessions().find(session => session.id === targetId);
+    if (!target) return;
+    const operationEnvironment = env.env_id();
+    const startupDir = terminalChromeBySession().get(targetId)?.canUseLocalPath
+      ? terminalChromeBySession().get(targetId)?.localWorkingDir
+      : terminalGroups().find(group => group.id === target.groupId)?.defaultWorkingDir;
+    if (!startupDir) return;
+    const original = workspace.layout() ?? splitWorkspacePane(targetId);
+    setWorkspaceBusy(true);
+    try {
+      const id = await beginCreateSession(undefined, startupDir, target.groupId || 'default');
+      if (!id || env.env_id() !== operationEnvironment || !sessions().some(session => session.id === targetId)) return;
+      const current = workspace.layout();
+      const base = splitWorkspaceItems(current).includes(targetId) ? current : original;
+      batch(() => {
+        workspace.commit(dockSplitWorkspaceItem(base, id, targetId, edge, 'split-' + createClientId()));
+        workspace.setMaximized(false);
+        markSessionMounted(id);
+        setActiveSessionId(id);
+      });
+    } finally { setWorkspaceBusy(false); }
+  };
+  const applyWorkspacePreset = async (preset: SplitWorkspacePreset) => {
+    if (workspaceBusy() || !connected()) return;
+    const target = activeSession();
+    if (!target) return;
+    const operationEnvironment = env.env_id();
+    const startupDir = terminalChromeBySession().get(target.id)?.canUseLocalPath
+      ? terminalChromeBySession().get(target.id)?.localWorkingDir
+      : terminalGroups().find(group => group.id === target.groupId)?.defaultWorkingDir;
+    if (!startupDir) return;
+    const count = preset === 'grid' ? 4 : preset === 'single' ? 1 : preset === 'columns' || preset === 'rows' ? 2 : 3;
+    const ids = [...new Set([target.id, ...workspace.paneIds(), ...sessions().map(session => session.id)])].slice(0, count);
+    setWorkspaceBusy(true);
+    try {
+      while (ids.length < count) {
+        const id = await beginCreateSession(undefined, startupDir, target.groupId || 'default');
+        if (!id || env.env_id() !== operationEnvironment) return;
+        ids.push(id);
+      }
+      const available = ids.filter(id => sessions().some(session => session.id === id));
+      batch(() => {
+        workspace.commit(presetSplitWorkspace(preset, available, () => 'split-' + createClientId()));
+        workspace.setMaximized(false);
+        available.forEach(markSessionMounted);
+        if (available.includes(target.id)) setActiveSessionId(target.id);
+      });
+    } finally { setWorkspaceBusy(false); }
   };
 
   type PendingTerminalFocusIntent = Readonly<{
@@ -3289,6 +3380,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return preserveStableTerminalSessionReferences([...list, ...retainedSessions], previous);
   }, []);
   const sessionPanelIds = createMemo(() => renderableSessions().map((session) => session.id));
+  createEffect(() => {
+    for (const id of workspace.paneIds()) {
+      if (sessions().some(session => session.id === id)) markSessionMounted(id);
+    }
+  });
   const activeUnmountedSession = createMemo<TerminalSessionInfo | null>(() => {
     const activeId = activeSessionId();
     if (!activeId) return null;
@@ -3972,6 +4068,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const moreItems = createMemo<DropdownItem[]>(() => {
     const items: DropdownItem[] = [{ id: 'search', label: i18n.t('terminal.search') }];
+    if (isMobileLayout()) items.push({ id: 'clear', label: i18n.t('terminal.clear'), disabled: !activeSessionId() || clearingSessionId() !== null });
     if (isMobileLayout() && mobileInputMode() === 'floe') {
       items.push({
         id: mobileKeyboardVisible() ? 'hide_floe_keyboard' : 'show_floe_keyboard',
@@ -4695,6 +4792,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleRootShortcutKeyDown: (e: KeyboardEvent) => void = (e) => {
     if (e.isComposing) return;
+    if (e.altKey && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const ids = workspace.paneIds();
+      if (ids.length > 1) {
+        e.preventDefault(); e.stopPropagation();
+        const index = ids.indexOf(activeSessionId() ?? '');
+        requestSessionSelection(ids[(index + (e.key === 'ArrowRight' ? 1 : ids.length - 1)) % ids.length], true);
+      }
+      return;
+    }
     if (matchesPlainPrimaryModShortcut(e, 'f')) {
       e.preventDefault();
       e.stopPropagation();
@@ -4714,6 +4820,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
+    if (e.defaultPrevented) return;
+    if (e.key === 'Escape' && workspace.maximized() && !searchOpen() && !sessionDrawerOpen()) {
+      e.preventDefault(); workspace.setMaximized(false); return;
+    }
+
     if (e.key === 'Escape' && searchOpen()) {
       e.preventDefault();
       closeSearch();
@@ -4742,6 +4853,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const handleMoreSelect = (id: string) => {
+    if (id === 'clear') { void clearActive(); return; }
     if (id === 'search') {
       openSearch();
       return;
@@ -4781,6 +4893,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!activeId) return null;
     return sessionListItems().find((item) => item.id === activeId) ?? null;
   });
+  const activeToolbarGroup = createMemo(() => navigationGroups().find(group => group.id === activeGroupId()));
+  const cycleWorkspaceSession = (direction: number) => {
+    const items = sessionListItems();
+    if (!items.length) return;
+    const index = items.findIndex(item => item.id === activeSessionId());
+    requestSessionSelection(items[(index + direction + items.length) % items.length].id, true);
+  };
   const activeToolbarTitle = createMemo(() => activeSessionListItem()?.title ?? i18n.t('terminal.title'));
   const activeToolbarAvatar = createMemo(() => activeSessionListItem()?.avatar ?? { kind: 'initial' as const });
   const activeToolbarTransitionIndicator = createMemo(() => activeSessionListItem()?.transitionIndicator ?? 'none');
@@ -4954,13 +5073,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         <div ref={setNavigationContainer} data-terminal-sidebar-presentation={navigationOverlay() ? 'overlay' : 'inline'}
           class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
           <SessionNavigation />
-          <div inert={desktopNavigationOverlay() && sessionDrawerPresent()} class="min-w-0 min-h-0 flex flex-1 flex-col">
+          <div inert={desktopNavigationOverlay() && sessionDrawerPresent()} data-terminal-work-area="" class="terminal-work-area min-w-0 min-h-0 flex flex-1 flex-col" style={terminalWorkspaceVars()}>
             <div
               ref={(element) => {
                 mobileToolbarEl = element;
               }}
               tabIndex={-1}
-              class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background px-2 outline-none"
+              class="terminal-workspace-toolbar flex shrink-0 items-center gap-2 border-b border-border bg-background outline-none"
             >
               <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => mobileToolbarEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
               <Show when={navigationOverlay()}>
@@ -5003,8 +5122,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     </Show>
                   </span>
                 </Show>
-                <div class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
-                  <TerminalSessionChromeIcon avatar={activeToolbarAvatar()} class="h-3.5 w-3.5" />
+                <div class="terminal-workspace-context-icon relative flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
+                  <FolderIcon size={16} />
                   <TerminalSessionTransitionBadge state={activeToolbarTransitionIndicator()} />
                 </div>
                 <div class="min-w-0 flex-1 overflow-hidden">
@@ -5023,19 +5142,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   >
                     <button
                       type="button"
-                      class="block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      class="terminal-workspace-context w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       aria-label={[activeToolbarTitle(), activeToolbarSubtitle()].filter(Boolean).join(', ')}
                       aria-describedby={activeToolbarStatusDescription() ? activeContextStatusId : undefined}
                       data-testid="terminal-active-context-disclosure"
                     >
+                      <span class="terminal-workspace-group truncate text-xs text-muted-foreground">{activeToolbarGroup()?.name}</span>
+                      <span aria-hidden="true" class="terminal-workspace-breadcrumb-separator text-muted-foreground">/</span>
                       <span
-                        class="block truncate text-xs font-semibold text-foreground"
+                        class="terminal-workspace-context-title truncate text-xs font-semibold text-foreground"
                         data-terminal-session-title={activeSessionId() ?? ''}
                       >
                         {activeToolbarTitle()}
                       </span>
                       <Show when={activeToolbarSubtitle()}>
-                        <span class="flex min-w-0 items-center text-[10px] leading-3 text-muted-foreground">
+                        <span class="terminal-workspace-context-path flex min-w-0 items-center text-[10px] leading-3 text-muted-foreground">
                           <Show when={activeToolbarSubtitleIcon() === 'link'}>
                             <span class="mr-1 flex h-2.5 w-2.5 shrink-0" data-terminal-toolbar-location-icon="link" aria-hidden="true">
                               <Link class="h-2.5 w-2.5" />
@@ -5098,6 +5219,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   />
                 )}
               </Show>
+              <Show when={!isMobileLayout()}>
+                <Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminalWorkspace.previous')} onClick={() => cycleWorkspaceSession(-1)} disabled={sessionListItems().length < 2}><ChevronLeft class="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminalWorkspace.next')} onClick={() => cycleWorkspaceSession(1)} disabled={sessionListItems().length < 2}><ChevronRight class="h-3.5 w-3.5" /></Button>
+                <span class="terminal-toolbar-divider" aria-hidden="true" />
+                <Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminal.search')} onClick={openSearch} disabled={!activeSessionId()}><Search class="h-3.5 w-3.5" /></Button>
+              </Show>
+              <Dropdown align="end"
+                trigger={<Button size="sm" variant="ghost" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!activeSessionId() || workspaceBusy()}><Grid class="h-3.5 w-3.5" /><span class="terminal-workspace-layout-label">{i18n.t('terminalWorkspace.layout')} {workspace.paneIds().length}</span></Button>}
+                items={Object.entries(workspaceLabels()).map(([id, label]) => ({ id, label }))}
+                onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
               <Button
                 aria-busy={clearingSessionId() !== null}
                 data-terminal-clear-state={clearingSessionId() ? 'pending' : 'idle'}
@@ -5112,7 +5243,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               </Button>
               <Dropdown
                 trigger={
-                  <Button size="sm" variant="ghost" disabled={!connected()} title={i18n.t('terminal.moreOptions')}>
+                  <Button size="sm" variant="ghost" disabled={!connected()} title={i18n.t('terminal.moreOptions')} aria-label={i18n.t('terminal.moreOptions')}>
                     <MoreVerticalIcon class="w-3.5 h-3.5" />
                   </Button>
                 }
@@ -5120,8 +5251,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 onSelect={handleMoreSelect}
                 align="end"
               />
+              <Button size="sm" variant="primary" class="terminal-workspace-new-session" aria-label={i18n.t('terminal.newSession')} data-testid="terminal-workspace-new-session" onClick={createSession} disabled={!connected() || workspaceBusy()}>
+                <Plus class="h-3.5 w-3.5" /><span>{i18n.t('terminal.newSession')}</span>
+              </Button>
             </div>
 
+            <Show when={isMobileLayout() && workspace.paneIds().length > 1}>
+              <nav aria-label={i18n.t('terminalWorkspace.panes')} class="flex h-9 shrink-0 gap-1 overflow-x-auto border-b border-border px-1">
+                <For each={workspace.paneIds()}>{id => <button type="button" aria-pressed={activeSessionId() === id}
+                  class="shrink-0 rounded px-2 text-xs" classList={{ 'bg-accent text-accent-foreground': activeSessionId() === id }}
+                  onClick={() => requestSessionSelection(id, true)}>{sessionListItemById().get(id)?.title}</button>}</For>
+              </nav>
+            </Show>
             <div
               ref={setTerminalContextMenuHostEl}
               data-testid="terminal-content"
@@ -5148,8 +5289,28 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               </Show>
               <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
                 <div class="h-full">
-                  <For each={sessionPanelIds()}>
-                    {(sessionId) => {
+                  <SplitWorkspace
+                    itemIds={sessionPanelIds()} layout={workspace.layout()} activeId={activeDisplaySessionId()}
+                    compact={isMobileLayout()} maximizedId={maximizedWorkspaceSessionId()}
+                    showHeaders={!isMobileLayout()}
+                    resizeLabel={i18n.t('terminalWorkspace.resize')}
+                    onLayoutChange={workspace.commit} onActivate={selectWorkspacePane}
+                    externalDragType="application/x-redeven-terminal-session"
+                    resolveExternalDrag={event => event.dataTransfer?.getData('application/x-redeven-terminal-session') || null}
+                    renderHeader={sessionId => <>
+                      <span class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden" title={sessionListItemById().get(sessionId)?.fullPath}>
+                        <TerminalSessionChromeIcon avatar={sessionListItemById().get(sessionId)?.avatar ?? { kind: 'initial' }} class="h-3 w-3 shrink-0" />
+                        <span class="truncate text-xs font-medium">{sessionListItemById().get(sessionId)?.title}</span>
+                        <span class="terminal-pane-path truncate text-[11px] text-muted-foreground">{sessionListItemById().get(sessionId)?.subtitle}</span>
+                      </span>
+                      <Dropdown align="end" trigger={<Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.split')} disabled={workspaceBusy()}><Plus class="h-3 w-3" /></Button>}
+                        items={(['left', 'right', 'top', 'bottom'] as const).map(edge => ({ id: edge, label: i18n.t(edge === 'left' ? 'terminalWorkspace.left' : edge === 'right' ? 'terminalWorkspace.right' : edge === 'top' ? 'terminalWorkspace.top' : 'terminalWorkspace.bottom') }))}
+                        onSelect={edge => void splitWorkspaceSession(sessionId, edge as SplitWorkspaceEdge)} />
+                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={workspace.maximized() ? i18n.t('terminalWorkspace.restore') : i18n.t('terminalWorkspace.maximize')}
+                        onClick={() => { selectWorkspacePane(sessionId); workspace.setMaximized(value => !value); }}><Maximize class="h-3 w-3" /></Button>
+                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.closePane')} onClick={() => workspace.closePane(sessionId)}><X class="h-3 w-3" /></Button>
+                    </>}
+                    renderItem={(sessionId, visible) => {
                       const sessionForId = createMemo(() => renderableSessions().find((session) => session.id === sessionId) ?? null);
                       const mountedSessionForId = createMemo(() => (
                         mountedSessionIds().has(sessionId) ? sessionForId() : null
@@ -5157,11 +5318,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       return (
                         <Show when={mountedSessionForId()}>
                           {/* Keep runtime identity tied to sessionId; metadata snapshots may replace session objects. */}
-                          <TabPanel active={activeDisplaySessionId() === sessionId} keepMounted class="h-full">
+                          <div class="h-full">
                             <TerminalSessionRuntime
                               session={mountedSessionForId() as TerminalSessionInfo}
                               variant={variant}
                               active={() => activeDisplaySessionId() === sessionId}
+                              visible={visible}
                               connected={connected}
                               protocolClient={() => protocol.session?.()}
                               viewActive={() => viewActive() && displayModeSelected()}
@@ -5202,13 +5364,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               onTerminalExternalLinkOpen={openTerminalExternalLink}
                               onNameUpdate={handleNameUpdate}
                             />
-                          </TabPanel>
+                          </div>
                         </Show>
                       );
                     }}
-                  </For>
+                  />
                   <Show when={activeUnmountedSession()}>
-                    <TabPanel active keepMounted class="h-full">
+                    <TabPanel active keepMounted class="absolute inset-0">
                       <div
                         class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
                         data-terminal-deferred-surface="true"
@@ -5228,7 +5390,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   </Show>
                   <Index each={visiblePendingTerminalSessions()}>
                     {(session) => (
-                      <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
+                      <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="absolute inset-0">
                         <div
                           class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
                           data-terminal-pending-surface="true"

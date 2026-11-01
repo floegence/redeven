@@ -956,6 +956,9 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await settle();
 
     const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
+    expect(row.querySelector('[data-testid="managed-operation-header"]')).toBeNull();
+    await userEvent.click(row.querySelector<HTMLButtonElement>('.web-service-status-trigger')!);
+    await settle();
     const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
     const operationHeader = row.querySelector<HTMLElement>('[data-testid="managed-operation-header"]')!;
     expect(progress.textContent).toContain('Pulling image');
@@ -966,11 +969,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(operationHeaderHeight).toBeGreaterThan(0);
     expect(row.querySelector('.web-service-status-trigger')?.textContent).toContain('Pulling');
     expect(row.textContent).not.toContain('Error');
-    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(130);
+    expect(row.querySelector('.web-service-summary')?.getBoundingClientRect().height ?? 0).toBeLessThanOrEqual(130);
     expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
-
-    await userEvent.click(row.querySelector<HTMLButtonElement>('.web-service-status-trigger')!);
-    await settle();
 
     const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
     const stageDetail = details.querySelector<HTMLElement>('[data-testid="managed-operation-stage-detail"]')!;
@@ -1156,11 +1156,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
     ), host);
     await settle();
 
+    expect(document.querySelector('[data-testid="managed-operation-header"]')).toBeNull();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.web-service-status-trigger')!);
+    await settle();
     const trigger = document.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
     expect(trigger.textContent).toContain('Installing · Downloading package');
     expect(document.querySelector('.service-operation-fraction')?.textContent).toBe('2/7');
-    await userEvent.click(document.querySelector<HTMLButtonElement>('.web-service-status-trigger')!);
-    await settle();
 
     const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
     expect(details.textContent).toContain('Software package');
@@ -1228,11 +1229,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
     ), host);
     await settle();
 
+    expect(document.querySelector('[data-testid="managed-operation-header"]')).toBeNull();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.web-service-status-trigger')!);
+    await settle();
     const trigger = document.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
     expect(trigger.textContent).toContain('Installing · Pulling image');
     expect(document.querySelector('.service-operation-fraction')?.textContent).toBe('2/7');
-    await userEvent.click(document.querySelector<HTMLButtonElement>('.web-service-status-trigger')!);
-    await settle();
 
     const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
     const elapsed = details.querySelector<HTMLElement>('[data-testid="managed-operation-elapsed"]')!;

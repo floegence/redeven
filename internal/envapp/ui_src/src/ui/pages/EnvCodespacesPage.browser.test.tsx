@@ -52,7 +52,7 @@ afterEach(async () => {
   dispose?.(); dispose = undefined; document.body.replaceChildren(); await page.viewport(1280, 720);
 });
 
-const geometry = () => ['header', '.codespaces-grid', '.codespace-card', '.codespace-card > div > :nth-child(1)', '.codespace-card > div > :nth-child(2)', '.codespace-card > div > :nth-child(3)'].map(selector => {
+const geometry = () => ['header', '.codespaces-grid', '.codespace-card', '.codespace-card > :nth-child(1)', '.codespace-card > :nth-child(2)', '.codespace-card > :nth-child(3)'].map(selector => {
   const rect = host.querySelector(selector)!.getBoundingClientRect();
   return { selector, top: rect.top, left: rect.left, width: rect.width, height: rect.height };
 });
@@ -146,7 +146,7 @@ it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])(
     expect.soft(getComputedStyle(card.querySelector('h3')!).fontSize).toBe('13px');
     expect.soft(getComputedStyle(card.querySelector('.codespace-path')!).fontSize).toBe('12px');
     expect.soft(card.querySelector('.codespace-path')!.textContent).toMatch(/^\/workspace|^\/Users/);
-    expect.soft(getComputedStyle(card.querySelector('button')!).fontSize).toBe('12px');
+    expect.soft(getComputedStyle(card.querySelector('button')!).fontSize).toBe('13px');
     expect.soft(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
     const action = card.querySelector<HTMLButtonElement>('button')!;
     expect.soft(action.getBoundingClientRect().height).toBe(28);
@@ -223,7 +223,7 @@ it.each([320, 544, 1077, 1440].flatMap(width => [false, true].flatMap(desktop =>
       expect(second.left - first.right).toBeLessThanOrEqual(9);
       const buttons = [...footer.querySelectorAll('button')];
       for (const [index, button] of buttons.entries()) {
-        expect(getComputedStyle(button).fontSize).toBe('12px');
+        expect(getComputedStyle(button).fontSize).toBe('13px');
         expect(button.getBoundingClientRect().height).toBe(28);
         assertButtonText(button);
         if (index > 0) {

@@ -48,7 +48,7 @@ it.each([434, 758])('keeps the mixed-script reading sample compact at %ipx', asy
   expect.soft(geometry.height).toBeLessThanOrEqual(baselineHeight + 1);
 });
 
-it('fits twenty ordinary rows and preserves a readable attention title without hover shifts', async () => {
+it('fits eighteen ordinary rows and preserves a readable attention title without hover shifts', async () => {
   await page.viewport(1280, 1000);
   const host = document.createElement('div');
   host.className = 'flower-component-shell flower-surface';
@@ -69,8 +69,8 @@ it('fits twenty ordinary rows and preserves a readable attention title without h
   const before = title.getBoundingClientRect().width;
   console.info('Interface density list geometry', JSON.stringify({ step: bounds[1].top - bounds[0].top, visible, titleWidth: before }));
   await page.screenshot({ element: host, path: '__screenshots__/density-thread-list.png' });
-  expect.soft(bounds[1].top - bounds[0].top).toBeCloseTo(28, 0);
-  expect.soft(visible).toBe(20);
+  expect.soft(bounds[1].top - bounds[0].top).toBeCloseTo(30, 0);
+  expect.soft(visible).toBe(18);
   expect.soft(before).toBeGreaterThanOrEqual(100);
   await userEvent.hover(cards[1]); await frame();
   expect.soft(Math.abs(title.getBoundingClientRect().width - before)).toBeLessThanOrEqual(1);
@@ -120,7 +120,7 @@ it.each([false, true])('keeps thread controls and reading roles usable with coar
     await document.fonts.ready; await frame();
     const paragraph = host.querySelector('p')!;
     expect(parseFloat(getComputedStyle(title).fontSize)).toBe(root * 0.8125);
-    expect(parseFloat(getComputedStyle(paragraph).fontSize)).toBe(root * (touch ? 0.875 : 0.75));
+    expect(parseFloat(getComputedStyle(paragraph).fontSize)).toBe(root * (touch ? 0.875 : 0.8125));
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
     for (const button of host.querySelectorAll('button')) {
       const box = button.getBoundingClientRect();

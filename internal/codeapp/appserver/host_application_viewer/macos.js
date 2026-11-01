@@ -634,8 +634,15 @@
   takeoverPanel.append(takeoverTitle, takeoverHint, takeoverCancel, takeoverConfirm);
   document.body.append(takeoverPanel);
   const takeoverButton = document.createElement('button');
+  takeoverButton.className = 'mac-app-takeover-toggle';
   takeoverButton.hidden = true;
-  hostApplicationAppearance.copy(takeoverButton, 'desktopTakeover');
+  hostApplicationAppearance.copy(takeoverButton, 'desktopTakeover', 'aria-label');
+  hostApplicationAppearance.copy(takeoverButton, 'desktopTakeover', 'title');
+  takeoverButton.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2" y="3" width="16" height="11" rx="2"/><path d="M7 17h6m-3-3v3m-3-9 3 3 3-3m-3-3v6"/></svg>';
+  const takeoverLabel = document.createElement('span');
+  takeoverLabel.className = 'mac-app-toolbar-label';
+  hostApplicationAppearance.copy(takeoverLabel, 'desktopTakeover');
+  takeoverButton.append(takeoverLabel);
   takeoverButton.onclick = () => takeoverPanel.showModal();
   toolbar.append(takeoverButton);
   function showControlTakeover() {

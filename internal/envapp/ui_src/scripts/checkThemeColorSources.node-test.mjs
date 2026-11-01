@@ -319,6 +319,13 @@ test('terminal preview exceptions require exact ANSI fields inside the preview f
 });
 
 
+test('workbook paper does not exempt application chrome', () => {
+  const pathname = 'internal/flower_ui/src/preview/preview.css';
+  assert.deepEqual(findThemeColorViolations('.flower-delimited-canvas { background:white; }', pathname, THEME_COLOR_EXCEPTIONS), []);
+  assert.equal(findThemeColorViolations('.flower-delimited-toolbar { background:white; }', pathname, THEME_COLOR_EXCEPTIONS).length, 1);
+  assert.equal(findThemeColorViolations('.flower-delimited-canvas { color:white; }', pathname, THEME_COLOR_EXCEPTIONS).length, 1);
+});
+
 test('slide paper and exported document palettes cannot exempt product chrome', () => {
   const slide = 'internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.tsx';
   assert.deepEqual(findThemeColorViolations('<div class="pptx-preview-pane__page-frame bg-white"/><div class="pptx-preview-pane__slide-content text-black"/>', slide, THEME_COLOR_EXCEPTIONS), []);

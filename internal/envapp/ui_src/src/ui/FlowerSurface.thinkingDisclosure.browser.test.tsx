@@ -285,7 +285,7 @@ it.each(['collapsed', 'expanded'] as const)('retains %s through disconnect and t
   expect(live.connections).toHaveLength(2);
   expect(live.connections[0].input.signal.aborted).toBe(true);
   live.push({ ...sealed(initial), view_version: 3 });
-  await waitFor(() => root.querySelector('.flower-workspace-sync') === null);
+  await waitFor(() => root.querySelector('.flower-workspace-sync')?.getAttribute('data-restored') === 'true');
   expect(disclosure(root).dataset.flowerThinkingView).toBe(view);
 });
 

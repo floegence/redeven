@@ -263,7 +263,7 @@ describe('Settings theme hierarchy', () => {
       } else {
         expect(indicatorStyle.display, `${preset.name} quiet selection`).toBe('none');
       }
-      expect(secondSectionStyle.marginTop, `${preset.name} section spacing`).toBe('32px');
+      expect(secondSectionStyle.marginTop, `${preset.name} section spacing`).toBe('24px');
 
       if (preset.name === 'hc-light') {
         expect(sectionStyle.borderTopWidth, `${preset.name} section boundary`).toBe('1px');

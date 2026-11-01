@@ -10,6 +10,7 @@ import connectionJS from '../../../../codeapp/appserver/host_application_viewer/
 import toolbarJS from '../../../../codeapp/appserver/host_application_viewer/toolbar.js?raw';
 import inputJS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.js?raw';
 import pointerJS from '../../../../codeapp/appserver/host_application_viewer/remote-pointer.generated.js?raw';
+import viewportJS from '../../../../codeapp/appserver/host_application_viewer/viewport.generated.js?raw';
 import viewerJS from '../../../../codeapp/appserver/host_application_viewer/viewer.js?raw';
 
 const catalog = JSON.parse(catalogJS.slice(catalogJS.indexOf(' = ') + 3).trim().slice(0, -1)) as {
@@ -50,9 +51,10 @@ async function viewer(width: number, theme: string, locale = 'en-US') {
   frame.style.cssText = `width:${width}px;height:620px;border:0`;
   const copy = {...catalog.locales[locale], locale, shellTheme:theme, pictureHint:catalog.locales[locale].sessionPictureHint};
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', locale).replaceAll('{{.Theme}}', theme).replaceAll('{{.Name}}', 'Text editor')
+    .replace('<script src="{{.TransportScript}}"></script>', '<script>window.RedevenWindowTransport={create:()=>({fetch:(...args)=>window.fetch(...args),dispose(){}})};</script>')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:'/__host_display_fixture__', backend:'xpra', copy}))
-    .replace('{{.Script}}', ['window.fetch=async()=>({ok:true,json:async()=>({state:"running",password:"fixture"})});', inputJS, pointerJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
+    .replace('{{.Script}}', () => ['window.fetch=async()=>({ok:true,json:async()=>({state:"running",password:"fixture"})});', inputJS, pointerJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector<HTMLIFrameElement>('#application')?.contentDocument?.querySelector('.floe-remote-input')).toBeTruthy();
   const doc = frame.contentDocument!, view = frame.contentWindow!;

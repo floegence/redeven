@@ -18,6 +18,14 @@ A history viewport is one atomic server snapshot with canonical width and height
 
 Floe owns the CSS contract; Redeven marks custom compound controls without duplicating focus styling.
 
+## Terminal workspace placement
+
+Published Floe SplitWorkspace owns recursive splits, presets, edge docking, center swaps and pointer/keyboard resizing. Redeven owns localized controls and the environment/panel-scoped v1 layout record. Validate saved trees and reconcile only after catalog hydration. Selecting an unplaced session replaces the focused pane; closing a pane preserves the session. Explicit splitting creates a session in the target group using its verified local cwd or group startup directory; dragging places an existing session. Group, cwd and placement remain independent.
+
+Runtime nodes stay keyed by session ID across layout changes. Visible panes paint independently; active session alone owns keyboard input, search and toolbar commands. Mobile shows the active pane and pane tabs without changing the saved desktop tree. Maximize is transient. Alt+Shift+Left/Right cycles placed panes.
+
+Pane headers, dividers, toolbar controls and footer inherit a palette derived from the selected terminal theme, independently of the shell-themed directory sidebar. Prehydrated catalog snapshots initialize placement before reconciliation, so reload cannot prune a saved split tree against an empty local list. Resize controls retain keyboard focus through geometry updates.
+
 # Boundaries
 
 Redeven supplies product placement, permission mapping, local-path capability, and localized chrome. It must not parse terminal output, predict echo, own history or renderer state, recreate shell token/layer/focus state machines, or replace a retained surface with a second recovery curtain. Browser validation and semantic terminal carriers prove this adapter boundary; packaged Desktop evidence remains a separate gate.
@@ -29,3 +37,5 @@ Redeven supplies product placement, permission mapping, local-path capability, a
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts` - Opens only `terminal/live_v1` and delegates ordering to Floeterm.
 
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalCatalogTransport.ts` - Keeps catalog/history outside the initial live renderer graph.
+
+- `redeven:internal/envapp/ui_src/scripts/checkTerminalWorkspace.mjs` - Real PTY group moves, docking, retained runtime identity, mobile layout and reload.

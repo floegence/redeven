@@ -88,7 +88,7 @@ describe('Flower activity status presentation', () => {
 
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: var(--flower-reading-title)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: var(--foreground)');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-quiet: color-mix(in srgb, var(--muted-foreground) 94%, var(--background) 6%)');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-quiet: var(--flower-reading-secondary)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 6%, transparent)');
     expect(buttonRule).toContain('position: relative');
     expect(buttonRule).toContain('overflow: hidden');
@@ -115,7 +115,7 @@ describe('Flower activity status presentation', () => {
     expect(detailRule).toContain('color: var(--flower-activity-tool-row-quiet)');
     expect(detailRule).toContain('font-family: var(--font-sans, inherit)');
     expect(durationRule).toContain('color: var(--flower-activity-tool-row-quiet)');
-    expect(durationRule).toContain('font-size: 0.6875rem');
+    expect(durationRule).toContain('font-size: 0.8125rem');
     expect(durationRule).toContain('font-weight: 400');
     expect(runningTitleRule).toContain('font-weight: 500');
     expect(runningTitleRule).not.toContain('text-shadow');

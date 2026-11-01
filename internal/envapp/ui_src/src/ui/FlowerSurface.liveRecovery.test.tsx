@@ -21,6 +21,16 @@ import {
 const syncFailure = 'Live updates stopped because data could not be read or applied. Displayed state may be outdated.';
 const stopUnconfirmed = 'Stop status is unconfirmed. Resync before trying again.';
 
+function noticeMessage(notice: Element | null): string {
+  const details = notice?.querySelector<HTMLButtonElement>('.flower-sync-details-toggle');
+  if (details?.getAttribute('aria-expanded') === 'false') details.click();
+  return notice?.textContent ?? '';
+}
+function recoveredNotice(surface: ParentNode): boolean {
+  return Boolean(surface.querySelector('.flower-workspace-sync[data-restored="true"]'));
+}
+
+
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
     return this.classList.contains('flower-chat-transcript') ? 600 : 0;
@@ -73,7 +83,7 @@ describe('parent event synchronization boundaries', () => {
     expect(surface.querySelector('[data-flower-message-id]')).toBe(message);
     expect(surface.textContent).not.toContain(stopUnconfirmed);
     (surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement).click();
-    await waitFor(() => connections === 2 && !surface.querySelector('.flower-workspace-sync'));
+    await waitFor(() => connections === 2 && recoveredNotice(surface));
     expect(surface.textContent).toContain('Plan deploy');
     expect(launchTurn).not.toHaveBeenCalled();
   });
@@ -161,12 +171,12 @@ describe('Flower workspace synchronization recovery', () => {
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
     disconnect.resolve();
     await waitFor(() => attempts === 3, 2000);
-    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toContain('Reconnecting');
+    expect(noticeMessage(surface.querySelector('.flower-workspace-sync'))).toContain('Syncing');
     expect(surface.querySelector('[data-flower-progress-kind]')).toBeNull();
     expect(surface.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
     expect(surface.textContent).toContain('Plan deploy');
     recovered.resolve();
-    await waitFor(() => !surface.querySelector('.flower-workspace-sync') && Boolean(surface.querySelector('[data-flower-progress-kind]')));
+    await waitFor(() => recoveredNotice(surface) && Boolean(surface.querySelector('[data-flower-progress-kind]')));
     expect(surface.querySelector('[data-flower-progress-sync-state]')).toBeNull();
     expect(surface.querySelector('.flower-composer textarea')).toBe(editor);
     expect(editor.value).toBe('Keep this draft while reconnecting');
@@ -185,7 +195,7 @@ describe('Flower workspace synchronization recovery', () => {
     await waitFor(() => Boolean(surface.querySelector('[data-flower-sync-state="failed"]')));
     const lane = surface.querySelector('.flower-workspace-sync')!;
     expect(lane.getAttribute('role')).toBe('alert');
-    expect(lane.textContent).toContain('Displayed state may be outdated');
+    expect(noticeMessage(lane)).toContain('Displayed state may be outdated');
     expect(lane.querySelector('[data-flower-progress-kind]')).toBeNull();
     expect(lane.querySelector('[data-floe-progress-shimmer]')).toBeNull();
     const retry = lane.querySelector<HTMLButtonElement>('button')!;
@@ -221,13 +231,13 @@ describe('Flower workspace synchronization recovery', () => {
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
     failure.resolve();
     await waitFor(() => surface.querySelector('[data-flower-sync-state="failed"]') !== null);
-    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toContain(guidance);
+    expect(noticeMessage(surface.querySelector('.flower-workspace-sync'))).toContain(guidance);
     expect(surface.textContent).not.toContain('Private recovery diagnostic');
     await flush();
     expect(attempts).toBe(1);
     expect(editor.disabled).toBe(false);
     (surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement).click();
-    await waitFor(() => attempts === 2 && surface.querySelector('.flower-workspace-sync') === null);
+    await waitFor(() => attempts === 2 && recoveredNotice(surface));
     expect(editor.value).toBe('Preserve my recovery draft');
   });
 
@@ -295,7 +305,7 @@ describe('Flower workspace synchronization recovery', () => {
     await waitFor(() => stream.connectLiveStream.mock.calls.length === 1);
     stream.fail();
     await waitFor(() => surface.querySelector('[data-flower-sync-state="failed"]') !== null);
-    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toContain(syncFailure);
+    expect(noticeMessage(surface.querySelector('.flower-workspace-sync'))).toContain(syncFailure);
     expect(surface.querySelector('.flower-workspace-sync button')?.textContent).toBe('Resync');
     expect(surface.textContent).not.toContain('internal encoding diagnostic');
 
@@ -304,7 +314,7 @@ describe('Flower workspace synchronization recovery', () => {
       selectThread(surface, selected.thread_id);
       await waitFor(() => loadThread.mock.calls.some(([threadID]) => threadID === selected.thread_id)
         && surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
-      expect(surface.querySelector('[data-flower-sync-state="failed"]')?.textContent).toContain(syncFailure);
+      expect(noticeMessage(surface.querySelector('[data-flower-sync-state="failed"]'))).toContain(syncFailure);
       expect(surface.textContent).toContain('Plan deploy');
     }
     const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
@@ -316,7 +326,7 @@ describe('Flower workspace synchronization recovery', () => {
       && surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-busy') !== 'true');
     expect(surface.querySelector('[data-flower-transport-delivery="accepted"]')).toBeNull();
     expect(launchTurn).toHaveBeenCalledTimes(1);
-    expect(surface.querySelector('[data-flower-sync-state="failed"]')?.textContent).toContain(syncFailure);
+    expect(noticeMessage(surface.querySelector('[data-flower-sync-state="failed"]'))).toContain(syncFailure);
     expect(stream.connectLiveStream).toHaveBeenCalledTimes(1);
   });
 
@@ -336,7 +346,7 @@ describe('Flower workspace synchronization recovery', () => {
     await waitFor(() => surface.querySelector('[data-flower-bottom-mode="approval"]') !== null);
     stream.fail();
     await waitFor(() => surface.querySelector('[data-flower-sync-state="failed"]') !== null);
-    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toContain(syncFailure);
+    expect(noticeMessage(surface.querySelector('.flower-workspace-sync'))).toContain(syncFailure);
     expect(surface.querySelector('[data-flower-bottom-mode="approval"]')).not.toBeNull();
     expect(surface.querySelector('.flower-composer-stop-thread')?.hasAttribute('disabled')).toBe(false);
     expect(surface.querySelector('.flower-composer-approval-decision')?.hasAttribute('disabled')).toBe(false);
@@ -361,7 +371,7 @@ describe('Flower workspace synchronization recovery', () => {
     const readsBeforeRecovery = loadThread.mock.calls.length;
     const resync = surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement;
     resync.click(); resync.click(); resync.click();
-    await waitFor(() => stream.connectLiveStream.mock.calls.length >= 2 && surface.querySelector('.flower-workspace-sync') === null);
+    await waitFor(() => stream.connectLiveStream.mock.calls.length >= 2 && recoveredNotice(surface));
     await waitFor(() => loadThread.mock.calls.length > readsBeforeRecovery);
     expect(stream.attempts[0].signal.aborted).toBe(true);
     expect(stream.attempts.filter((attempt) => !attempt.signal.aborted)).toHaveLength(1);
@@ -427,7 +437,7 @@ describe('Flower workspace synchronization recovery', () => {
     await waitFor(() => stopThread.mock.calls.length === 1);
     expect(stop.disabled).toBe(true);
     stopAccepted.resolve();
-    await waitFor(() => surface.querySelector('.flower-workspace-sync')?.textContent?.includes(stopUnconfirmed) ?? false);
+    await waitFor(() => noticeMessage(surface.querySelector('.flower-workspace-sync')).includes(stopUnconfirmed) ?? false);
     await waitFor(() => !surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.disabled);
     expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label')).toBe('Stop');
     expect(surface.querySelector('.flower-workspace-sync button')?.textContent).toBe('Resync');
@@ -480,7 +490,7 @@ describe('Flower workspace synchronization recovery', () => {
     failure.resolve();
     await waitFor(() => surface.querySelector('[data-flower-sync-state="failed"]') !== null);
     const dialogRecovery = document.querySelector('[data-flower-subagent-detail="open"] .flower-workspace-sync');
-    expect(dialogRecovery?.textContent).toContain(syncFailure);
+    expect(noticeMessage(dialogRecovery)).toContain(syncFailure);
     expect(dialogRecovery?.querySelector('button')?.textContent).toBe('Resync');
     (surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement).click();
     await waitFor(() => loadSubagentDetail.mock.calls.length === 2);
@@ -615,7 +625,7 @@ it('bounds a stalled Stop, preserves navigation and drafts, and confirms before 
   editor.value = 'Keep my draft';
   editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
   expire();
-  await waitFor(() => surface.querySelector('.flower-workspace-sync')?.textContent?.includes(stopUnconfirmed) === true);
+  await waitFor(() => noticeMessage(surface.querySelector('.flower-workspace-sync')).includes(stopUnconfirmed) === true);
   pending.resolve();
   await flush();
   expect(surface.textContent).toContain('Other chat');
@@ -653,7 +663,7 @@ it('bounds Stop confirmation reads and ignores their late terminal detail', asyn
   surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
   await waitFor(() => stopThread.mock.calls.length === 1 && Boolean(expire));
   expire();
-  await waitFor(() => surface.querySelector('.flower-workspace-sync')?.textContent?.includes(stopUnconfirmed) === true);
+  await waitFor(() => noticeMessage(surface.querySelector('.flower-workspace-sync')).includes(stopUnconfirmed) === true);
   expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.disabled).toBe(false);
   expect(surface.querySelector('.flower-workspace-sync button')?.textContent).toBe('Resync');
   confirmation.resolve(liveBootstrap(thread({ ...running, status: 'success', error: undefined }), 10));

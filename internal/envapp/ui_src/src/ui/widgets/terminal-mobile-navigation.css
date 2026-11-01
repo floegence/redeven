@@ -30,7 +30,7 @@
 [data-terminal-mobile-drawer] [data-terminal-group-header] { background: transparent; padding-inline: 0; gap: 0; }
 [data-terminal-mobile-drawer] [data-terminal-group-header] > button:first-of-type { border: 0; box-shadow: none; background: transparent; }
 [data-terminal-mobile-drawer] [data-terminal-group-drag-handle] > span:first-child { font-size: 13px; }
-[data-terminal-mobile-drawer] [data-terminal-group-drag-handle] > span:last-child { font-size: 11px; line-height: 16px; }
+
 [data-terminal-mobile-drawer] [data-terminal-session-row] { border-radius: 12px; }
 [data-terminal-mobile-drawer] [data-terminal-session-path] { font-size: 12px; }
 [data-terminal-mobile-drawer] [data-terminal-output-slot] { width: 44px; height: 44px; }

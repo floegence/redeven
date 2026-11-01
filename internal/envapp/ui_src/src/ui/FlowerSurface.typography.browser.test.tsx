@@ -86,7 +86,7 @@ function background(node: HTMLElement): string {
 }
 const roles = [
   ['.flower-chat-md-block p', 14, 24.5], ['.flower-chat-md-block table', 13, 20],
-  ['.flower-activity-inline-title', 12, 18], ['.flower-activity-inline-duration', 11, 18],
+  ['.flower-activity-inline-title', 13, 18], ['.flower-activity-inline-duration', 13, 18],
   ['.flower-activity-error-message', 13, 21], ['.flower-activity-inline-details', 12, 20], ['.flower-activity-preview-text', 12, 20],
   ['.flower-parent-event-heading', 12, 18], ['.flower-parent-event-body', 13, 21], ['.flower-parent-event-action', 12, 18],
 ] as const;
@@ -133,17 +133,14 @@ it('emphasizes only confirmed running tools and quiets them when the canonical r
     await confirmed.promise;
     yield* fixture.adapter.connectLiveStream!(input);
   } }, { focusThreadRequest: { request_id: 'live-typography', thread_id: fixture.thread.thread_id } });
-  await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="live-tool"]')));
-  const unconfirmed = element(runtime, '[data-flower-activity-item-id="live-tool"] .flower-activity-inline-title');
-  expect(unconfirmed.hasAttribute('data-floe-progress-shimmer')).toBe(false);
-  expect(getComputedStyle(unconfirmed).fontWeight).toBe('400');
-  expect(getComputedStyle(unconfirmed).color).not.toBe(getComputedStyle(element(runtime, '.flower-chat-md-block p')).color);
+  await waitFor(() => Boolean(runtime.querySelector('.flower-warmup')));
+  expect(runtime.querySelector('[data-flower-activity-item-id="live-tool"]')).toBeNull();
   confirmed.resolve();
   await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="live-tool"] [data-floe-progress-shimmer="text"]')));
   const row = element(runtime, '[data-flower-activity-item-id="live-tool"]');
   const title = element(row, '.flower-activity-inline-title');
   const prose = element(runtime, '.flower-chat-md-block p');
-  expect(getComputedStyle(title).fontSize).toBe('12px');
+  expect(getComputedStyle(title).fontSize).toBe('13px');
   expect(getComputedStyle(title).fontWeight).toBe('500');
   expect(getComputedStyle(title).color).toBe(getComputedStyle(prose).color);
   const running = fixture.current();
@@ -183,10 +180,15 @@ it.each(['porcelain-light', 'classic-dark', 'solarized-light', 'cloud-white', 's
   element(runtime, '.flower-parent-event-source').click(); await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript .flower-chat-md-block p')));
   await waitFor(() => document.querySelector<HTMLElement>('.flower-subagent-detail-window')?.dataset.floatingPresence === 'open');
   const ledger = element(document, '.flower-subagent-detail-window');
+  const process = ledger.querySelector<HTMLButtonElement>('.flower-turn-summary-button[aria-expanded="false"]');
+  process?.click();
+  const sequence = ledger.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle[aria-expanded="false"]');
+  sequence?.click();
+  await expect.poll(() => ledger.querySelector('.flower-activity-inline-title')?.textContent).toBeTruthy();
   expect(getComputedStyle(element(ledger, '.flower-subagent-detail-overview-meta')).fontSize).toBe('12px');
-  expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontSize).toBe('12px');
+  expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontSize).toBe('13px');
   expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontWeight).toBe('400');
-  expect(getComputedStyle(element(ledger, '.flower-activity-inline-duration')).fontSize).toBe('11px');
+  expect(getComputedStyle(element(ledger, '.flower-activity-inline-duration')).fontSize).toBe('13px');
   expect(getComputedStyle(element(ledger, '.flower-activity-inline-duration')).fontFamily).toBe(getComputedStyle(element(runtime, '.flower-activity-inline-duration')).fontFamily);
   expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontFamily).toBe(getComputedStyle(element(runtime, '.flower-activity-inline-title')).fontFamily);
   expect(getComputedStyle(element(ledger, '.flower-chat-md-block p')).fontSize).toBe('14px');

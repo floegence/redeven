@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 
 export async function dragViewerHandle(page, handle, dx, dy) {
+  const hit = await handle.evaluate(element => {
+    const bounds = element.getBoundingClientRect();
+    const target = element.ownerDocument.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+    return { reachable: target === element || element.contains(target), target: target?.outerHTML.slice(0, 400), handle: element.outerHTML, bounds: bounds.toJSON() };
+  });
+  assert(hit.reachable, `viewer handle must receive pointer input: ${JSON.stringify(hit)}`);
   const box = await handle.boundingBox(); assert(box);
   const local = await handle.evaluate(element => element.getBoundingClientRect().toJSON());
   const scaleX = box.width / local.width; const scaleY = box.height / local.height;

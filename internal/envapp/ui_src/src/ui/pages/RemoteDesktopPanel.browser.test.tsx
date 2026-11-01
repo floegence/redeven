@@ -190,6 +190,7 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     expect(duration).toBeLessThanOrEqual(.3);
     expect(getComputedStyle(flow).animationName).toBe(reducedMotion === 'reduce' ? 'none' : 'remote-desktop-flow-enter');
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+    await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).length).toBe(0);
     const initialHeight = dialog.getBoundingClientRect().height;
     const actionWidth = flow.querySelector('.remote-desktop-flow-footer > button:last-child')!.getBoundingClientRect().width;
     await userEvent.click(flow.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
@@ -207,7 +208,7 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     expect(dialog.contains(document.activeElement)).toBe(true);
     expect(getComputedStyle(flow.querySelector('.remote-desktop-step-title')!).boxShadow).toBe('none');
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
-    expect(Math.abs(dialog.getBoundingClientRect().height - initialHeight)).toBeLessThan(1);
+    await expect.poll(() => Math.abs(dialog.getBoundingClientRect().height - initialHeight)).toBeLessThan(1);
     if (reducedMotion === 'no-preference') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-step-applying.png' });
     state.status.mockResolvedValue({ ...setupNeeded, capabilities: { ...setupNeeded.capabilities, state: 'ready', screen: true, input: true }, login_service: { ...setupNeeded.login_service, state: 'active' } });
     finishDeployment({ ok: true });
@@ -217,7 +218,7 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     expect(flow.querySelector('[aria-current=step]')?.textContent).toContain('Connect');
     expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
-    expect(Math.abs(dialog.getBoundingClientRect().height - initialHeight)).toBeLessThan(1);
+    await expect.poll(() => Math.abs(dialog.getBoundingClientRect().height - initialHeight)).toBeLessThan(1);
     if (reducedMotion === 'no-preference') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-step-connecting.png' });
     finishConnection({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' });
     await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();

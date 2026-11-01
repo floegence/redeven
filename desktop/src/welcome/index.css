@@ -3428,7 +3428,7 @@ pre,
 /* Text-entry controls share the dialog's control size. Choice and file inputs
  * are drawn by the platform at their own intrinsic size, so the same height
  * would stretch a radio into a 13px-wide bar. */
-[role='dialog'] input:not([type='radio'], [type='checkbox'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']) {
+:where([role='dialog']) input:not([type='radio'], [type='checkbox'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']) {
   font-size: var(--floe-type-control);
   height: 2rem;
 }
@@ -4479,12 +4479,6 @@ pre,
  * and never alters the surface colour under the label. */
 .redeven-environment-card .redeven-split-action-primary button[data-floe-progress-shimmer='surface']::before,
 .redeven-gateway-card button[data-floe-progress-shimmer='surface']::before {
-  background-image: linear-gradient(
-    100deg in srgb,
-    transparent 46%,
-    rgb(128 128 128 / 0.28) 50%,
-    transparent 54%
-  );
   background-image: linear-gradient(
     100deg in srgb,
     transparent 46%,

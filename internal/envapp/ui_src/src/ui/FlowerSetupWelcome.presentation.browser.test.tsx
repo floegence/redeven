@@ -47,7 +47,7 @@ it.each([
     <FlowerSetupWelcome copy={copy} actions={[]} onOpenSettings={openSettings}
       onRefresh={() => undefined} refreshing={false} onAction={() => undefined} />
   </FloeProvider>, host);
-  await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe(`porcelain-${theme}`);
+  await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe(BUILT_IN_SHELL_THEME_DEFAULTS[theme]);
   // Capture the product at its CSS viewport size, without the test runner's iframe transform.
   await frame.sizeReadinessFrame({ width, height: 900 });
   const card = host.querySelector<HTMLButtonElement>('.flower-setup-action')!;

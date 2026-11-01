@@ -66,8 +66,8 @@
 .web-service-notice p + p { margin-top: 4px; }
 .web-service-managed > [data-testid="managed-operation-disclosure"] { grid-column: 1 / -1; }
 .web-services-refresh-error { display: flex; gap: 8px; align-items: start; font-size: 12px; line-height: 18px; color: var(--redeven-status-warning-foreground); padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
-.web-service-notice-region { grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 220ms var(--web-service-ease, ease-out), opacity 180ms; }
-.web-service-notice-region[data-expanded] { grid-template-rows: 1fr; opacity: 1; }
+.web-service-notice-region { visibility: hidden; grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 220ms var(--web-service-ease, ease-out), opacity 180ms; }
+.web-service-notice-region[data-expanded] { visibility: visible; grid-template-rows: 1fr; opacity: 1; }
 .web-service-notice-clip { min-height: 0; overflow: hidden; }
 @container web-services (max-width: 48rem) {
   .web-service-row { grid-template-rows: auto auto; }

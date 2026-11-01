@@ -1,0 +1,58 @@
+/* Product geometry follows the approved workspace; colors follow the selected terminal. */
+.terminal-work-area { color: var(--foreground); background: var(--background); }
+.terminal-work-area [data-terminal-semantic-surface] { top: 14px; left: 24px; right: 16px; }
+.terminal-workspace-toolbar { height: 48px; padding-inline: 16px; }
+.terminal-workspace-context { display: flex; align-items: center; gap: 12px; }
+.terminal-workspace-context-path { font-family: var(--font-mono); font-size: var(--floe-type-caption); }
+.terminal-workspace-context-path::before { content: '/'; margin-right: 12px; opacity: .4; }
+.terminal-work-area [data-floe-split-header] { height: 38px; gap: 8px; padding-inline: 16px; color: var(--muted-foreground); background: var(--background); border-color: var(--border); }
+.terminal-work-area [data-floe-split-pane][data-active='true'] > [data-floe-split-header] { color: var(--foreground); background: var(--muted); box-shadow: inset 0 2px color-mix(in srgb, var(--primary) 65%, transparent); }
+.terminal-work-area [data-floe-split-header] button { color: var(--muted-foreground); }
+.terminal-work-area [data-floe-split-header] button:hover { color: var(--foreground); background: var(--accent); }
+.terminal-work-area [data-floe-split-divider] { background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat, var(--background); }
+.terminal-work-area [data-floe-split-divider][aria-orientation='horizontal'] { background-size: 100% 1px; }
+.terminal-work-area [data-floe-split-divider]:hover,
+.terminal-work-area [data-floe-split-divider]:focus-visible { background: var(--primary); }
+.terminal-pane-path { margin-left: 8px; }
+.terminal-work-area:has([data-floe-split-divider]) .terminal-pane-path { display: none; }
+.terminal-navigation-content { padding: 0 !important; gap: 0 !important; }
+.terminal-navigation-heading { padding: 8px 12px; }
+.terminal-session-drawer-header { height: 48px; }
+.terminal-navigation-filter { margin-bottom: 0; }
+.terminal-navigation-filter input { height: 32px; }
+.terminal-navigation-content [data-testid='terminal-session-list'] { padding-inline: 8px; }
+.terminal-navigation-group { padding-bottom: var(--floe-gap-group); }
+.terminal-navigation-content [data-terminal-session-avatar] { background: transparent; border: 0; box-shadow: none; }
+.terminal-navigation-content [data-terminal-session-row] [data-terminal-agent-identity] { width: 18px; height: 18px; }
+.terminal-navigation-content [data-terminal-agent-identity] > img,
+.terminal-navigation-content [data-terminal-agent-identity] > .bg-current { max-width: 16px; max-height: 16px; }
+.terminal-workspace-toolbar, .terminal-work-area .terminal-status-bar { border-color: var(--border); }
+.terminal-workspace-new-session { margin-left: 8px; --primary: var(--foreground); --primary-foreground: var(--background); }
+.terminal-toolbar-divider { width: 1px; height: 15px; background: var(--border); margin-inline: 4px; }
+.terminal-workspace-layout-label { font-size: var(--floe-type-supporting); margin-left: 6px; }
+.terminal-workspace-group { max-width: 40%; }
+.terminal-navigation-quick-switch { display: flex; align-items: center; gap: 8px; flex-shrink: 0; height: 44px; padding-inline: 20px; color: var(--muted-foreground); font-size: var(--floe-type-caption); border-top: 1px solid var(--floe-line-quiet); cursor: pointer; }
+.terminal-navigation-quick-switch:hover { background: var(--floe-state-hover); color: var(--foreground); }
+@media (min-width: 768px) {
+  .terminal-workspace-context-path { display: none; }
+}
+@media (max-width: 767px) {
+  .terminal-work-area [data-terminal-semantic-surface] { top: 8px; left: 8px; right: 0; }
+  .terminal-workspace-layout-label, .terminal-workspace-group, .terminal-workspace-breadcrumb-separator, .terminal-workspace-new-session span { display: none; }
+  .terminal-workspace-new-session { margin-left: 0; padding-inline: 8px; }
+}
+@media (max-width: 600px) {
+  .terminal-workspace-toolbar { height: 44px; padding-inline: 8px; gap: 4px; }
+  .terminal-workspace-toolbar .terminal-workspace-context-icon,
+  .terminal-workspace-toolbar [data-testid='terminal-clear-active-session'] { display: none; }
+  .terminal-workspace-toolbar > button,
+  .terminal-workspace-toolbar [data-testid='terminal-workspace-layout'] { width: 28px; min-width: 28px; padding-inline: 0; flex-shrink: 0; }
+  .terminal-workspace-toolbar .terminal-shared-geometry-notice--mobile { width: 28px; min-width: 28px; max-width: 28px; }
+  .terminal-workspace-toolbar .terminal-shared-geometry-notice__short,
+  .terminal-workspace-toolbar .terminal-shared-geometry-notice__label { display: none; }
+  .terminal-workspace-toolbar .terminal-shared-geometry-notice__chrome { padding-inline: 6px; }
+  .terminal-workspace-context { display: block; }
+  .terminal-workspace-context-title { display: block; }
+  .terminal-workspace-context-path { font-family: inherit; font-size: 10px; }
+  .terminal-workspace-context-path::before { display: none; }
+}

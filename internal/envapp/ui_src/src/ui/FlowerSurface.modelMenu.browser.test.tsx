@@ -26,7 +26,10 @@ it.each([390, 1280])('keeps model search and management visible at %s px', async
   const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [] });
   surface.style.cssText = 'width:100%;height:100vh';
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('agent-0') === true);
-  surface.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!.click();
+  await waitFor(() => Boolean(document.querySelector(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')) || Boolean(surface.querySelector('.flower-composer-more-button')));
+  if (!document.querySelector(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')) surface.querySelector<HTMLButtonElement>('.flower-composer-more-button')!.click();
+  await waitFor(() => Boolean(document.querySelector(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')));
+  document.querySelector<HTMLButtonElement>(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')!.click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
   await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
@@ -79,7 +82,7 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
   const attributes = ['class', 'style', 'data-floe-shell-theme'].map(name => [name, root.getAttribute(name)] as const);
   onTestFinished(() => { for (const [name, value] of attributes) { if (value === null) root.removeAttribute(name); else root.setAttribute(name, value); } });
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('Flash') === true);
-  const trigger = surface.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!;
+  const trigger = document.querySelector<HTMLButtonElement>(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')!;
   trigger.click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
   for (const theme of ['paper', 'porcelain-dark']) {
@@ -92,11 +95,11 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
     for (const width of [1280, 320]) {
       await page.viewport(width, 900);
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      if (!surface.querySelector('button.flower-model-reasoning-model-trigger')) {
+      if (!document.querySelector(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')) {
         surface.querySelector<HTMLButtonElement>('.flower-composer-more-button')!.click();
-        await waitFor(() => Boolean(surface.querySelector('button.flower-model-reasoning-model-trigger')));
+        await waitFor(() => Boolean(document.querySelector(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')));
       }
-      if (!document.querySelector('.flower-model-menu')) surface.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!.click();
+      if (!document.querySelector('.flower-model-menu')) document.querySelector<HTMLButtonElement>(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')!.click();
       await waitFor(() => Boolean(document.querySelector('.flower-model-menu')));
       const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
       const bounds = menu.getBoundingClientRect();
@@ -143,7 +146,7 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
     }
   }
   const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
-  const activeTrigger = surface.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!;
+  const activeTrigger = document.querySelector<HTMLButtonElement>(':is(.flower-composer-control-slot, .flower-composer-more-control) button.flower-model-reasoning-model-trigger')!;
   menu.querySelector<HTMLInputElement>('input')!.focus();
   await userEvent.keyboard('{ArrowDown}');
   const selected = menu.querySelector('.flower-model-menu-item')!;

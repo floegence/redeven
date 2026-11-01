@@ -117,12 +117,13 @@ it.each([1280, 390])('keeps neighboring services still through operation settlem
   setPhase('visible'); setCurrent({ ...operation, state: 'failed', stage: 'failed' }); await settle();
   expect(geometry()).toEqual(initial);
   const notice = host.querySelector<HTMLElement>('[data-testid="managed-service-notice"]')!;
-  expect(notice.checkVisibility()).toBe(false);
+  expect(notice.checkVisibility({ visibilityProperty: true })).toBe(false);
   await userEvent.click(host.querySelector('.web-service-status-trigger')!); await settle();
   expect(notice.checkVisibility()).toBe(true);
   expect(notice.getBoundingClientRect().width).toBeGreaterThan(100);
   expect(notice.getBoundingClientRect().height).toBeGreaterThan(16);
   expect(notice.innerText.trim()).not.toBe('');
   await userEvent.click(host.querySelector('.web-service-status-trigger')!); await settle();
+  await Promise.allSettled(host.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
   expect(geometry()).toEqual(initial);
 });

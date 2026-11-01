@@ -150,6 +150,8 @@ export type TerminalSessionRuntimeProps = Readonly<{
   session: TerminalSessionInfo;
   variant: 'panel' | 'workbench';
   active: () => boolean;
+  /** Visible split panes paint independently of exclusive keyboard ownership. */
+  visible?: () => boolean;
   connected: () => boolean;
   protocolClient: () => unknown;
   viewActive: () => boolean;
@@ -1128,7 +1130,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         runtimeRoot.dataset.terminalLastProjectionRendered = metrics.projected ? 'true' : 'false';
       },
     );
-    renderer.setVisible(props.active() && props.viewVisible());
+    renderer.setVisible((props.visible?.() ?? props.active()) && props.viewVisible());
     renderer.setPalette(resolvedPalette());
     applyTypography(props.fontSize(), props.fontFamily());
     historyController = new HistoryViewportController({
@@ -1264,7 +1266,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   });
 
   createEffect(() => {
-    const visible = props.active() && props.viewVisible();
+    const visible = (props.visible?.() ?? props.active()) && props.viewVisible();
     if (!renderer) return;
     if (!visible) {
       renderer.setVisible(false);
@@ -1278,7 +1280,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   createEffect(() => {
     const active = props.active() && props.viewActive();
-    historyController?.setVisible(active);
+    historyController?.setVisible((props.visible?.() ?? props.active()) && props.viewVisible());
     if (active) inputBridge?.syncGeometry();
   });
 
@@ -1318,6 +1320,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   createEffect(() => {
     if (!props.active() || !props.viewActive() || !props.autoFocus() || !ready()) return;
+    // Geometry settlement must not steal keyboard ownership from pane controls.
+    const focused = document.activeElement;
+    if (focused instanceof Element && focused !== inputElement
+      && focused.closest('[data-floe-split-header], [data-floe-split-divider]')) return;
     focusAndActivate(true);
   });
 

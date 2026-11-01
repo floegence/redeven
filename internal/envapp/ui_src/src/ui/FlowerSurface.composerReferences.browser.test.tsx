@@ -40,7 +40,10 @@ describe('Flower composer reference browser interaction', () => {
         : []),
     });
 
-    await waitFor(() => runtime.querySelector('textarea') !== null);
+    await waitFor(() => runtime.querySelector('textarea:not(:disabled)') !== null);
+    await document.fonts.ready;
+    await expect.poll(() => runtime.querySelector('.flower-composer-control-slot .flower-model-reasoning-model-label')?.textContent?.length).toBeGreaterThan(0);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     const unfocusedRect = composer.getBoundingClientRect();

@@ -68,7 +68,7 @@ describe('Subagent immediate guidance controls', () => {
   });
   it('keeps a bounded child interval while refreshing after a command receipt', async () => {
     const source = fixture().detail;
-    const bounded: FlowerSubagentDetail = { ...source, window: { first_item_id: 'guide', last_item_id: 'guide', has_before: true, has_after: true } };
+    const bounded: FlowerSubagentDetail = { ...source, window: { first_item_id: 'guide', last_item_id: 'guide', has_before: true, has_after: false } };
     const reload = deferred<FlowerSubagentDetail>();
     let reads = 0;
     const { loadDetail } = await mount(async () => ({ ...source, current: { ...source.current, view_version: 40, items: [] } }), async () => ++reads === 1 ? bounded : reload.promise, true);

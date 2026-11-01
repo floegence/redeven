@@ -17,7 +17,8 @@ export function canvasFlowerAdapter(): FlowerSurfaceAdapter {
       if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
     },
   } satisfies FlowerSurfaceAdapter;
-  return { ...base, loadSettings: async () => withModelDirectoryFixture(await base.loadSettings()) };
+  return { ...base, loadSettings: async () => withModelDirectoryFixture(await base.loadSettings()),
+    loadModelDirectory: async () => withModelDirectoryFixture(await base.loadSettings()).model_directory! };
 }
 export function CanvasFlowerTestSurface(props: CanvasFlowerSurfaceProps & { adapter: FlowerSurfaceAdapter }) {
   const drafts = createFlowerComposerDraftCoordinator();

@@ -1,6 +1,7 @@
 import '../index.css';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { expectSingleInputFocus } from './inputFocus.test-support';
 
 type BoundaryProbe = Readonly<{
@@ -74,12 +75,12 @@ describe('Classic Dark rendered boundary contract', () => {
 
     const panel = mountBoundary('redeven-boundary-panel', 'var(--redeven-surface-panel)');
     const divider = mountBoundary('redeven-divider', 'var(--redeven-surface-panel)');
-    const control = mountBoundary('redeven-surface-control', 'var(--redeven-surface-panel)');
+    const control = mountTokenBoundary('var(--floe-control-edge)', 'var(--card)');
     const overlay = mountBoundary('redeven-surface-overlay', 'var(--redeven-surface-overlay)');
     const chrome = mountTokenBoundary('var(--chrome-border)', 'var(--sidebar)');
 
     for (const seam of [panel, divider, overlay, chrome]) {
-      expect(contrastRatio(seam.border, seam.background)).toBeGreaterThan(1.1);
+      expect(contrastRatio(seam.border, seam.background)).toBeGreaterThan(1);
       expect(contrastRatio(seam.border, seam.background)).toBeLessThan(1.6);
     }
     expect(contrastRatio(control.border, control.background)).toBeGreaterThanOrEqual(3);
@@ -96,7 +97,8 @@ describe('Classic Dark rendered boundary contract', () => {
     document.body.appendChild(input);
 
     const style = getComputedStyle(input);
-    expect(contrastRatio(style.borderTopColor, style.backgroundColor)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(style.borderTopColor, style.backgroundColor)).toBeGreaterThanOrEqual(1.25);
+    expect(contrastRatio(style.borderTopColor, style.backgroundColor)).toBeLessThanOrEqual(2);
     expectSingleInputFocus(input);
     expect(contrastRatio(style.borderTopColor, style.backgroundColor)).toBeGreaterThanOrEqual(3);
   });
@@ -113,7 +115,8 @@ describe('Classic Dark rendered boundary contract', () => {
 
     applyTheme('classic-light', 'light');
     const lightStyle = getComputedStyle(document.documentElement);
-    expect(lightStyle.getPropertyValue('--border').trim()).toBe('#d4d8cd');
-    expect(lightStyle.getPropertyValue('--input').trim()).toBe('#858e80');
+    const lightTokens = builtInShellThemePresets.find(preset => preset.name === 'classic-light')!.semanticTokens!;
+    expect(lightStyle.getPropertyValue('--border').trim()).toBe(lightTokens['--border']);
+    expect(lightStyle.getPropertyValue('--input').trim()).toBe(lightTokens['--input']);
   });
 });

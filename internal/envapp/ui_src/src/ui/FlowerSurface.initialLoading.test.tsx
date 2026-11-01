@@ -124,7 +124,7 @@ describe('Flower initial conversation loading', () => {
     expect(surface.querySelector('.flower-composer textarea')).toBe(editor);
     expect(editor.value).toBe('Draft through reconnect');
     reconnect.resolve();
-    await waitFor(() => !surface.querySelector('.flower-workspace-sync'));
+    await waitFor(() => Boolean(surface.querySelector('.flower-workspace-sync[data-restored="true"]')));
   });
 
   it('keeps the full workspace in loading when a focused conversation arrives before its list', async () => {
@@ -166,7 +166,8 @@ describe('Flower initial conversation loading', () => {
         render: parts => <div data-embedded>{parts.conversation}{parts.composer}</div> },
     });
     await waitFor(() => Boolean(surface.querySelector('.flower-chat-notices [role="status"]')));
-    expect(surface.querySelectorAll('.flower-chat-notices .flower-thread-wave-bar')).toHaveLength(4);
+    expect(surface.querySelector('.flower-chat-notices')?.textContent).toContain('Syncing');
+    expect(surface.querySelector('.flower-composer')).not.toBeNull();
     expect(surface.querySelector('.flower-warmup')).toBeNull();
     detail.resolve(liveBootstrap(focused));
     await waitFor(() => Boolean(surface.querySelector('[data-flower-message-id]')));

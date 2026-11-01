@@ -216,8 +216,8 @@ describe('Flower turn launcher send feedback', () => {
       expect(parseFloat(idleStyle.borderRadius)).toBeGreaterThanOrEqual(idleRect.width / 2);
       const textRight = textarea!.getBoundingClientRect().right - parseFloat(textareaStyle.paddingRight);
       expect(idleRect.left - textRight).toBeGreaterThanOrEqual(4);
-      expect(textareaStyle.fontSize).toBe(narrow || testCase.touch ? '16px' : '12px');
-      expect(getComputedStyle(document.querySelector('.flower-turn-launcher-message-surface .flower-body-copy')!).fontSize).toBe(testCase.touch ? '14px' : '12px');
+      expect(textareaStyle.fontSize).toBe(narrow || testCase.touch ? '16px' : '13px');
+      expect(getComputedStyle(document.querySelector('.flower-turn-launcher-message-surface .flower-body-copy')!).fontSize).toBe(testCase.touch ? '14px' : '13px');
       expect(sendButton!.querySelector('svg')).not.toBeNull();
       expect(sendButton!.querySelector('.animate-spin')).toBeNull();
 

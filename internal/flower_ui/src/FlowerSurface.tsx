@@ -3073,7 +3073,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     blockHotkeys: false, closeOnEscape: 'inside', escapeKeyPhase: 'bubble',
   });
   createEffect(() => {
-    if (!subagentDropdownOpen()) return;
+    if (!subagentDropdownOpen() || subagentDropdownPresence.state() !== 'open') return;
     const focusFrame = window.requestAnimationFrame(() => {
       (subagentDropdownRows()[0] ?? subagentDropdownRef)?.focus({ preventScroll: true });
     });
@@ -14175,6 +14175,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   queueComposerAttachmentIntent(currentComposerSessionKey(), { kind: 'add', files, source: 'drop' });
                 }}
               >
+                <Show when={companionCollapsed()}>{settingsReadNotice(true)}</Show>
                 <Show when={companionCollapsed() && !props.companionCopy && !companionSummaryVisible()}>
                   <span
                     class={cn(
@@ -14852,7 +14853,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <div class="flower-chat-main" data-flower-action-layout={bottomActionMode()} data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
         <div class="flower-chat-notices">
           <Show when={!selectedThreadLoadFailed() || unconfirmedStops().size > 0}>{workspaceSyncNotice()}</Show>
-          {settingsReadNotice(true)}
+          <Show when={!companionCollapsed()}>{settingsReadNotice(true)}</Show>
           {initialThreadErrorNotice()}
           {threadSyncErrorNotice()}
           {historyReadNotice()}{groupCompletionNotice()}
