@@ -3,57 +3,39 @@ type: Release Contract
 title: CI and release gates
 tags: [release, ci, quality, okf]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven runs focused development checks, a fast staged pre-commit gate and one
-bounded integration gate for the exact main tip being pushed. Published
-dependencies, generated assets, localization, compatibility and OKF must agree.
-[Long-thread correctness and responsiveness](../operations/flower-long-thread-gate.md) run as explicit acceptance, outside unified commit, integration and CI gates. Broad browser, Desktop, Docker and native qualification also run explicitly;
-release packaging additionally requires same-commit historical conversation
-evidence and authenticated target-specific artifacts. Windows remains an internal
-certification target and cannot enter the formal release inventory.
+Focused development checks precede staged pre-commit and exact-tip main admission. Dependencies, generated assets, locales and OKF must agree. Long-thread, browser, Desktop and native acceptance stay explicit; release needs authenticated artifacts and same-commit historical data qualification. Windows remains internal-only.
 
 # Contract
 
 ## Checks and provenance
+AGENTS owns workflow/100-line cap, enforced by quick_ci_policy. Development is focused; staged commit checks locale/hygiene/notices/viewer bytes. Ordinary CI has one bounded source job. check_final_integration.sh runs once on exact clean rebased base/tip: pushed object equals main, ancestry fast-forwards, no unpublished merges. Earlier evidence cannot certify changes. Reuse fingerprints bind inputs/tools except variable macOS MANPATH; real-hook tests guard identity. List all formatting errors first; generators leave no diff.
 
-AGENTS.md owns Git workflow/100-line cap; quick_ci_policy.test.mjs enforces it. Development checks affected behavior; staged pre-commit checks localization/hygiene/notices/viewer assets. Ordinary push/PR has one bounded source job. Main check_final_integration.sh runs once for exact clean rebased base/tip, verifying pushed tip equals local main, fast-forward ancestry and no unpublished merges. Earlier evidence cannot certify changed tips. Fingerprints bind tools/inputs except variable macOS MANPATH; real-hook tests guard reuse. Formatting lists all offenders before expensive checks; generators leave no diff.
+Long-thread/browser/Electron/broad UI/Docker/native/stress remain explicit. Release also requires authenticated target artifacts and same-commit historical-conversation Actions. Staged notices use index snapshot, installed metadata and cached exact Go with GOTOOLCHAIN=local, no network/index rewrite. Viewer readback uses staged source/locked deps, no install/generation; sole generator is buildHostApplicationAppearance.mjs.
 
-Long-thread/browser/Electron and broad UI/Docker/native/stress run explicitly, outside unified profiles. Releases additionally require authenticated target artifacts and same-commit historical-conversation Actions.
+Daily/manual CodeQL skips unchanged main only after a successful scheduled run; lookup failure scans. Review source/locks; dismissals need specific authority/input evidence. Unavailable/nonzero is not clean. Actions pins/Node 24 are independent of product Node.
 
-Staged notices use an index snapshot (including partial staging), installed metadata and exact cached Go/GOTOOLCHAIN=local without network. Missing prerequisites/stale output blocks commit; cleanup never rewrites index/worktree. Viewer verification uses staged source/locked installed dependencies without install/generation; buildHostApplicationAppearance.mjs alone generates.
+## Build contracts
+Exact Go patch comes from go.mod; first-party Node from .node-version. Gates/engines/README agree. Desktop allows only Electron/esbuild lifecycle, ignores electron-winstaller for internal NSIS. Dependency changes regenerate notices. README translations preserve structure/terms/hash; imagery has actual Runtime/shared provenance and localized alt. Root URLs are only the exact public destinations in hygiene allowlist; variants and implementation copies remain blocked. Commit three OKF outputs.
 
-Daily/manual CodeQL is separate: unchanged main since successful schedule skips; failed lookup scans. Review source/all locks; dismissal requires specific authority/input evidence. Unavailable/nonzero scan is not clean. Reviewed Actions commit pins/Node24 are independent of product Node.
-
-## Build ownership
-
-go.mod owns exact Go patch/.node-version first-party Node; gates/engines/README agree. Desktop pnpm permits only electron/esbuild lifecycle; electron-winstaller ignored for internal NSIS. Dependency changes regenerate/check notices. README locales preserve structure/links/literals/terms/hashes, not reviewer counts. The concise README uses captures from a running Runtime, shared visual provenance and translated alt text; detailed setup lives in public Docs and OKF. Root READMEs may link only to the exact public product destinations enumerated in open_source_hygiene_check.sh; nested paths, query extensions, lookalike hosts and those same URLs in implementation files remain blocked. Commit all three OKF artifacts.
-
-Build embedded UI before Go consumers. Env App flock spans cleanup/typecheck/Vite/budgets/compression and lasts through builds; same checkout waits, separate worktrees do not. build_assets.sh cannot compress outside lock/skip missing output.
-
-Runtime ships cgo/floeterm_native on native Linux/Darwin amd64/arm64 with published terminal-go; untagged live attachment fails closed. Release/Desktop/SSH/carrier contracts cover macOS Bash3.2 strict arguments. Main verifies source contracts; native execution remains explicit.
+Build embedded UI before Go. Env checkout lock covers cleanup/typecheck/Vite/budgets/compression; same checkout waits, worktrees are independent. build_assets cannot compress unlocked or skip absent output. Native Linux/Darwin amd64/arm64 Runtime uses published cgo/floeterm_native; untagged attachment rejects. Contracts cover Bash 3.2 arguments; main checks source, native execution is explicit.
 
 ## Qualification and security
+History workflow copies immutable released-writer state through public APIs/restart. Releases require same-commit success; ordinary checks validate fixture provenance. [Upgrade](../ai/flower-upgrade-compatibility.md) owns preservation. Use canonical headless carriers/fresh assets; [web dependencies](../architecture/env-app-upstream-web-dependencies.md) owns modes. Floe tests use real client/browser utilities except stated boundaries. Preserve scroll geometry/after-paint focus; PDF drag restores temporary scale removal.
 
-flower-history-qualification.yml continues copied immutable released-writer data through product APIs/restart. Release-ref requires same-commit successful Actions; ordinary gates verify fixture source only. [Upgrade contract](../ai/flower-upgrade-compatibility.md) owns preservation/recovery.
+[Desktop test lifecycle](../desktop/desktop-test-lifecycle.md) owns cleanup. Isolate preload/session/work paths and drain exact owned process groups/Windows trees. External SIGKILL fails. Pinned Electron preflight rejects AMFI/signals as environment failure; never resign/change trust/deps. Windows qualifies exact origin/main, Linux Runtime/two owned WSL distros and install/Start/Bridge/external-stop/Retry/Update/exact Stop before internal unsigned NSIS; only owned distros unregister.
 
-Use canonical headless carriers/fresh exact-source assets, not ignored dist/headed diagnostics. [Web dependencies](../architecture/env-app-upstream-web-dependencies.md) owns modes. Floe renderer tests use client Vitest/browser DOM resolution and real utilities except tested boundaries. Preserve scrollbar/space geometry and wait for after-paint focus; PDF drag restores temporary runner-scale removal.
+Read/hash/consume manifests, logs, source identity, pins, keys and credentials through one no-follow descriptor, checking inode replacement. Computer proxy permits fixed Responses POST only; terminal TLS exceptions need isolated CA. Single-line bounded diagnostics/synthetic data/quoted SSH confer no authority. Secret scan excludes downloaded dependency caches but retains native/product build files.
 
-[Desktop lifecycle](../desktop/desktop-test-lifecycle.md) owns cleanup. Preload tests isolate work/utility/session paths; stop/drain owned POSIX groups or Windows trees only. External SIGKILL fails. Preflight runs pinned Electron; AMFI/signal rejection is environment failure, not permission to resign/change trust/dependencies. Windows qualification uses exact origin/main, Linux amd64 Runtime/two owned WSL2 distros, verifying install/Start/Bridge/external-stop/Retry/Update/exact Stop before unsigned internal NSIS. Only owned fixture cleanup unregisters distros.
+## Release
+Center shares tag but installs independently: native Linux amd64/arm64 static binaries with exact identity, UI/licenses/templates and same-commit digest receipts. Missing/mismatch blocks collector; checksums/readback include both. [Deployment](../operations/web-center-deployment.md) owns service procedure. CI/tag alone certifies no long-duration/device acceptance.
 
-Signed manifests/logs/source identity/installer pins/Sparkle keys/credentials use one no-follow descriptor for read/hash/consume; source captures verify enumerated inode with replacement regressions. Computer proxy allows fixed Responses POST only. Terminal TLS exceptions need isolated CA. Diagnostics are bounded single-line; reports/synthetic secrets/quoted SSH data confer no authority. Secret scanning excludes downloaded SwiftPM/npm caches but retains native/build product files.
+[Plugin artifacts](redevplugin-release-gates.md) and [integration](plugin-integration-gates.md) own their gates. Consumers pin Cosign. Desktop uses Corepack/frozen Env dependencies to stage Playwright/QuickJS without browser acquisition. Bash 3.2/Linux traps preserve staging and original failure.
 
-## Release handoff
-
-Web Center joins Runtime and Desktop under the same tag as independently installable Linux amd64/arm64 archives. Native Center jobs build a static binary with exact version/commit/time, and package the UI, licenses and deployment templates. The closed collector requires both Center archives and matching digest receipts from the release commit. Missing or mismatched Center artifacts block publication; archives/receipts join signed aggregate checksums and remote readback. [Center deployment](../operations/web-center-deployment.md) owns installation and upgrade details. No tag creation or successful CI run alone claims completion of long-duration or physical-device qualification.
-
-[Plugin artifact gates](redevplugin-release-gates.md) own publication/evidence/inventory; [integration](plugin-integration-gates.md) owns Host/market/UI. Consuming runners install pinned Cosign. Desktop jobs use Corepack/frozen Env App dependencies to stage Playwright/QuickJS without browser download/qualification. Bundle traps retain exact staging path and original failure under Bash3.2/Linux.
-
-Protected redeven-release supplies signing/notarization/Sparkle/Team ID secrets; Desktop exposes credential-free HTTPS feed/public key. Verify App/framework/bridge/DMG architecture, Team ID, hardened runtime and notarization. DMG requires Accepted/stapled validation before receipts/feeds; App ticket and syspolicy_check distribution pass.
-
-Stable releases sign two non-delta Sparkle appcasts/notes, verify and remove temporary keys. Prereleases omit stable feeds; collector rejects them. Linux feeds match architecture. Installers/feeds/notes join aggregate checksums/remote readback before publication. [Installer](self-contained-installer.md) owns pins, activation and separately guarded promotion.
+Protected redeven-release supplies signing/notarization/Sparkle/Team secrets; public feed/key is credential-free HTTPS. Verify App/framework/bridge/DMG target, Team, hardening/notarization. DMG must be Accepted/stapled before receipts/feed; App ticket and distribution policy pass. Stable publishes two signed non-delta appcasts/notes then deletes temp keys; prereleases omit them and collector rejects feeds. Linux feeds match target. Installer/feed/notes join checksums/readback; [installer](self-contained-installer.md) owns activation and separate promotion.
 
 # Boundaries
 

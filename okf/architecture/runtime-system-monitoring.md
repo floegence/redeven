@@ -3,11 +3,11 @@ type: Runtime Contract
 title: Runtime system monitoring
 tags: [architecture, runtime, monitoring]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The Monitor service owns environment CPU, memory, network, and process sampling. Its cached snapshot is the authority for both the Monitoring page and Workbench. Network byte totals and rates exclude every interface marked as loopback by the operating system and share one filtered counter source. A failed network sample never enters rate history or falls back to all-interface totals; later valid background samples recover automatically while other resource sampling continues.
+Monitor owns one CPU/memory/network/process snapshot for page and Workbench. All OS-marked loopback interfaces are excluded from the shared network counters/rates. Failed network samples never enter history or fall back to unfiltered totals; later samples recover independently while other metrics remain usable.
 
 # Contract
 
@@ -30,6 +30,6 @@ Existing client request errors retain their Retry action, subsequent polling, an
 
 # Evidence
 
-- `redeven:internal/monitor/service.go` - Sole collectors, loopback filtering, snapshot publication, and cached RPC access.
+- `redeven:internal/monitor/service.go` - One collector, loopback filtering and cached snapshots.
 
-- `redeven:internal/monitor/network_counters_test.go` - Flag-based accounting, failure isolation, cancellation, and automatic recovery.
+- `redeven:internal/monitor/network_counters_test.go` - Flag-based accounting, isolated failures/cancel/recovery.

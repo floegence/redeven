@@ -3,7 +3,7 @@ type: AI Interaction Contract
 title: Flower context compaction and Goal continuation
 tags: [ai, flower, goals, context, compaction, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -28,4 +28,4 @@ Floret exclusively owns canonical compaction and Goal execution. [Usage and pres
 
 - `redeven:internal/ai/compact_thread_context.go` - Authorized asynchronous admission through published Floret.
 
-- `redeven:internal/ai/compact_thread_context_test.go` - Canvas Send rejection, preparation, replay, Goal intent and authorization.
+- `redeven:internal/ai/compact_thread_context_test.go` - Canvas Send/Goal authorization, preparation/replay/rejection.

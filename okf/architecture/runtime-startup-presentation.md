@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime startup presentation
 tags: [architecture, runtime, startup, desktop]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -22,8 +22,8 @@ Desktop readiness must come from the machine presentation and startup-report con
 
 # Evidence
 
-- `redeven:cmd/redeven/main.go:222` - Run mode defaults to local and accepts explicit remote, hybrid, local, or desktop values.
+- `redeven:cmd/redeven/main.go:222` - Local default and explicit remote/hybrid/local/desktop modes.
 
-- `redeven:cmd/redeven/desktop_startup_coordination.go:20` - Launch reports are enabled only for machine-readable desktop-mode startup with a report path.
+- `redeven:cmd/redeven/desktop_startup_coordination.go:20` - Reports only for machine desktop startup with explicit report path.
 
-- `redeven:internal/runtimepresentation/events.go:1` - Startup phases and event payloads live in the runtimepresentation package.
+- `redeven:internal/runtimepresentation/events.go:1` - runtimepresentation owns startup phases/events.

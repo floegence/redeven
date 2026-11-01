@@ -3,17 +3,11 @@ type: Architecture Contract
 title: Flower computer viewer presentation
 tags: [ui, flower, computer-use, media]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe owns Stage window geometry and launcher interaction; Flower owns
-canonical visual status and presentation scope. Users can view decoded pixels,
-move or restore the Stage, and retain geometry across visibility changes. Opening
-and closing affect viewing only, never target or execution authority. Missing,
-interrupted or private frames retain explicit recovery and cannot borrow an
-unrelated public image. Media authorization and sampling remain with the
-[Computer use media contract](../ai/computer-use-media.md).
+Floe owns Stage geometry/launcher; Flower projects canonical status and decoded media. Viewing, moving, closing or restoring grants no target/execution authority. Interrupted/private frames retain recovery and cannot borrow unrelated images. The media contract remains the sole authorization/sampling owner.
 
 # Contract
 
@@ -27,6 +21,6 @@ The viewer cannot authorize actions or own execution lifecycle. Published Floe r
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerStage.window.browser.test.tsx` - real published Floe window and launcher interaction, geometry retention, status, and safe boundaries.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerStage.window.browser.test.tsx` - Real Floe viewer/launcher geometry, retention, status and authority.
 
 - `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - decoded Blob URL viewing.

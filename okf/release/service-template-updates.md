@@ -3,16 +3,11 @@ type: Release Contract
 title: Automated service-template catalog updates
 tags: [release, automation, templates, supply-chain]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The template repository owns recommendation discovery and immutable catalog releases.
-Redeven's daily and manually dispatched watcher owns adoption of the published Go
-module into source `main`. A successful update pins verified checksums, regenerates
-notices and knowledge artifacts, and passes the normal final integration gate.
-Failures preserve the last published main tip; a failed or uncertain push requires
-remote-ref inspection before another attempt.
+The template repository publishes immutable recommendations. Redeven daily/manual adoption pins public Go checksums, regenerates notices/OKF and passes normal integration checks. Failure retains published main and uncertain push requires ref inspection. Adoption never upgrades installed service instances.
 
 # Contract
 
@@ -39,6 +34,6 @@ The [Managed Service release contract](../architecture/managed-service-release-d
 
 # Evidence
 
-- `redeven:.github/workflows/update-service-template-dependency.yml` - Schedules isolated updates, prepares dependencies, and constrains generated output.
+- `redeven:.github/workflows/update-service-template-dependency.yml` - Isolated update scheduling/dependencies and generated-output bounds.
 
-- `redeven:scripts/update_service_template_dependency.mjs` - Enforces public module discovery, checksums, exact sums, no-op, and failure restoration.
+- `redeven:scripts/update_service_template_dependency.mjs` - Public modules/checksums/no-op adoption and failure restoration.

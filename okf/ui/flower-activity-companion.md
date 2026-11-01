@@ -4,7 +4,7 @@ title: Flower Activity companion
 tags: [ui, flower, activity, companion, read-state, floret]
 quality_exception: Cross-surface placement contract spanning Activity, Workbench residency, contextual launch handoff, and viewer read acknowledgement; composer presentation has its own owner.
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -40,4 +40,4 @@ The companion never auto-expands for completion, failure, approval, or user inpu
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx` - Active-page trusted bridge interaction projection.
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Pinned plugin interaction dismisses Flower without retiring either product surface.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Plugin interaction dismisses Flower while preserving both surfaces.

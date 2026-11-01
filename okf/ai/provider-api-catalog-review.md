@@ -3,7 +3,7 @@ type: Provider Compatibility Review
 title: Provider API and catalog review
 tags: [ai, models, providers, compatibility]
 lifecycle: active_evidence
-reviewed_at: "2026-10-24"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -49,6 +49,6 @@ Runtime owns routing and projection. Native Anthropic/Google discovery preserves
 
 # Evidence
 
-- `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev response projection and original response SHA-256.
+- `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev projection and original SHA-256.
 
 - redeven:internal/ai/model_gateway_kimi_code_test.go - Subscription wire, canonical replay, quota classification and K3.1 platform parameters.

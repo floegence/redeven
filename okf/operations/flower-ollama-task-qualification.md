@@ -3,43 +3,26 @@ type: Qualification Contract
 title: Flower Ollama task qualification
 tags: [flower, ollama, tasks, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The opt-in task qualification calls the selected installed Ollama model through
-the production Flower service and published Floret runtime. The model chooses
-real tool calls; assertions inspect actual files, terminal processes, canonical
-views, and the workspace stream. A failed scenario remains a failure, with no
-simulated replacement or automatic rerun. Tests own isolated state and stop only
-their own services and tools. Source configuration and credentials stay unchanged.
+Explicit Ollama qualification uses the installed model, production Flower and published Floret. Verify real tool effects, files, processes, canonical views and streams. Failures remain failures without simulated substitutes or automatic reruns. Tests own cleanup and preserve source credentials/configuration.
 
 # Contract
 
-Run `scripts/check_flower_tasks_ollama.sh` explicitly; `--interleavings` selects
-combined operation cases. Every request uses the selected installed model, with
-real chosen tools and exact Ollama Chat history. Observe actual effects and canonical
-state; retain failure without simulation or automatic reruns.
+Explicit scripts/check_flower_tasks_ollama.sh uses the selected installed model, exact Ollama Chat history and real model-chosen tools; --interleavings adds combined cases. Check actual effects/canonical state, retaining failures without simulation or automatic reruns.
 
-| Scenario | Required observable result |
-| --- | --- |
-| Data/file task | Read structured data, compute sum, write/verify, modify in a later turn |
-| Stop generation | Prompt acceptance, cancelled terminal state, no failure retry of cancellation, later task accepted |
-| Stop terminal | Preserve confirmed initial effect, kill owned process, prevent delayed write, accept later task |
-| Queue edits | Optimistic text match, stale edit rejection, reorder/delete and exact execution/user-text order |
-| Send now | Cancel active provider request and execute selected queued task |
-| Concurrent duplicate input | One retained task; conflicting content for same key rejected across stop/restart/promotion |
-| Stop/restart at generation, approval or Ask User | Original stop identity, stale response rejection and exactly-once retained queue promotion |
-| Queue edits during approval | Stop/restart before promotion; late approval cannot execute cancelled tool |
-| Duplicate approvals | Same answer replays before/after restart, conflicting answer rejects, one actual effect |
-| Cancel Ask User | Replacement input runs after restart; stale answer cannot revive task |
-| Two interrupted continuations | Concurrent Retry/queued input retain original write exactly once |
-| Duplicate send-now | Consumed items reject edits; restart replay does not reexecute |
-| Permission/model change | Queued permission changes, active model-change rejection and immutable existing approval snapshot |
-| Repeated permission transitions | Readonly/approval, stop/restart, stale/fresh approval, post-effect failure, downgrade/retry and restored full-access effects |
+Required cases:
+- Read/sum/write/verify structured data and modify it in a later turn.
+- Stop generation or owned terminal: preserve confirmed effects, prevent delayed writes, accept later work; cancellation is not failure-retried.
+- Queue optimistic edit/stale rejection/order/delete, exact executed user order, Send now cancellation/promotion and conflicting duplicate keys.
+- Stop/restart at generation/approval/Ask User; stale answers cannot execute, retained queue promotes once. Queue edits during approval preserve this boundary.
+- Duplicate approval replays across restart, conflicting answer rejects, exactly one effect. Canceled Ask User cannot revive work.
+- Two interrupted continuations plus concurrent Retry/queued input preserve original write once. Duplicate Send now rejects consumed edits/reexecution.
+- Queued permission updates, rejected active-model changes and immutable approvals; repeated readonly/approval/full-access transitions include stop/restart, stale/fresh approvals, post-effect failures and downgrade/retry.
 
-Tests own isolated state, services and tools. Remove temporary stores/files after
-each case while retaining reports; source configuration and credentials stay unchanged.
+Own and remove temporary stores/files/services/processes, preserve reports and unchanged source configuration/credentials.
 
 # Boundaries
 

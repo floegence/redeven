@@ -4,7 +4,7 @@ title: Env App terminal and surface composition
 tags: [architecture, env-app, terminal, ui]
 quality_exception: Cross-surface frontend composition contract spanning semantic terminal rendering, lazy boundaries, keep-alive navigation, recovery presentation, and renderer evidence.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -24,7 +24,7 @@ Redeven supplies product placement, permission mapping, local-path capability, a
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - Adapts published semantic renderer, input, history, activation, and live APIs.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - Published terminal semantic/input/history/live adapter.
 
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts` - Opens only `terminal/live_v1` and delegates ordering to Floeterm.
 

@@ -3,7 +3,7 @@ type: UI Contract
 title: Floating Files window dismissal
 tags: [ui, files, floating-windows, lifecycle, motion]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -27,6 +27,6 @@ The controller remains the owner of active request state and return focus. The h
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/createFileBrowserSurfaceController.ts` - Clears the active request and restores the visible opener on close.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createFileBrowserSurfaceController.ts` - Close clears request and restores opener.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSurfaceHost.browser.test.tsx` - Checks frame-by-frame content continuity, inert exit, cleanup, reduced motion, themes, and rapid reopen.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSurfaceHost.browser.test.tsx` - Framewise inert close, cleanup, motion/themes and rapid reopen.

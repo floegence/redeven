@@ -4,7 +4,7 @@ title: Floret Redeven adapter and projection
 tags: [ai, floret, adapter, projection]
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -12,38 +12,21 @@ Redeven's adapter is a thin typed boundary over published Floret. It authorizes 
 
 # Contract
 
-[Flower Goals](flower-goals.md) use the optional published Goal controller. Ordinary executable items retain strict identity.
+[Goals](flower-goals.md) use the optional public controller; ordinary executable items retain strict identity.
 
-## Incremental observation and public projection
-Floret supplies optional `ThreadFactsSource`, `ThreadWindowSource` and canonical body readers. The published module `v7.87.4` includes bounded item-text reads, lazy hidden-field preparation, prepared-thread startup reuse and single-mutation title summaries. Title extraction uses at most 16 KiB of the existing canonical array prefix without detail preparation or new index writes. Blank-module adoption opens released-writer fixtures and verifies historical continuation and restart. Floret alone owns text cadence, versions, append buffers, Activity reduction and canonical reads.
+## Observation
+Floret supplies ThreadFactsSource, ThreadWindowSource and canonical body readers. v7.87.4 includes bounded text, lazy fields, startup reuse and single-mutation title summaries from <=16 KiB canonical prefix, without detail/index writes. Blank-module adoption verifies released historical continuation/restart. Floret alone owns cadence, versions, buffers, Activity reduction and reads.
 
-Root detail, child detail and command receipts use the bounded window projection. The accepted window includes its canonical Summary in the same baseline; there is no separate preparation window or independently sampled read watermark. POST history selects an authorized page and, when an observer is supplied, installs its reading interest on the same ordered Floret subscription. POST history-item expands one canonical item by its published body locators: frozen live extent, manifest parts or hash-verified field chunks. Every read refreshes endpoint, namespace and user authorization. The client never supplies raw entry locators as authority. Historical zero-byte Activity sources are synthesized only by Floret on explicit expansion; Redeven must not duplicate those defaults.
+Root/child/command receipts share bounded windows containing canonical Summary in the same baseline. No separately sampled preparation/watermark. Authorized history POST installs interest on the ordered observer; item POST expands only published frozen-live/manifest/hash-verified locators. Recheck endpoint/user/namespace each read. Client locators grant no authority. Only Floret synthesizes historical zero-byte Activity defaults on explicit expansion.
 
-Workspace updates carry facts only; unchanged sidebar-visible facts preserve cache identity at text-stream cadence. Each observer has exactly two cancellable reading slots, for the conversation and optional child panel. Computer assistance outside the selected interval uses server-only canonical evidence, which is not included in the bounded response. See [live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md).
+Workspace facts preserve equal sidebar cache identity. Each observer has two cancellable slots: conversation and child. Off-window Computer assistance uses server-only canonical evidence, excluded from bounded response. [Live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md) own details. No schema/migration change.
 
-No database schema or migration changes are part of this optimization.
+## Model result and UI
+[Final encoder](../../internal/ai/tool_result_encoding.go) applies execution facts/content policy/JSON, then Text plus independent Decoder.UseNumber structured snapshot. Activity separately projects valid source; truncation cannot alter model content. Floret's uncertain-effect warning sits outside payload budget, preserving complete diagnostics through provider/restart/retry.
 
-## Model output and presentation
-[tool_result_encoding.go](../../internal/ai/tool_result_encoding.go) owns the single final result encoder: execution facts, tool content policy, final JSON, then Text and an independent Decoder.UseNumber Structured snapshot. Activity independently projects valid source data; its display truncation never changes model output. Floret applies the engine-owned uncertain-effect warning outside the tool payload budget, preserving complete JSON diagnostics in the next provider request and through restart/retry.
+Optional encoding loss emits factual error and continues provider loop, never soliciting human confirmation merely for possible mutation. Preserve result_unavailable/result_error_code separately from original owner error, invocation ID, completed_actions, needs_observation and target, including confirmed prefix/uncertain remainder. Malformed metadata cannot replace classification. Empty prefix proves no absence of effects; invocation completion is not task success. Model chooses authorized observation/work; never replay tools. Actual interactions/cancellation/dispatch/uncertainty retain authority; failure to encode safe result is infrastructure failure. Persisted questions keep canonical answer/cancel after restart, without host migration/auto-answer.
 
-Optional result encoding loss returns a small factual error and continues the
-normal provider loop. It never creates a human confirmation solely because a
-mutation may have completed. The safe result retains result_unavailable and
-result_error_code independently of the execution owner's original error code
-and bounded message; malformed metadata cannot replace that classification.
-It also retains
-correlated invocation identity, completed_actions, needs_observation and target
-facts, including a confirmed prefix before an uncertain remainder. Invocation
-completion is not task success; an empty prefix does not establish no effect.
-The model chooses observation or other authorized work; no tool is replayed.
-Actual pending interactions, cancellation, dispatch errors and canonical effect
-uncertainty keep their authority. Failure to encode even the safe result remains
-an infrastructure failure. Previously persisted input requests retain their
-canonical response path through restart; no host migration or auto-answer occurs.
-
-Its `request_key` remains the send idempotency identity used only to settle the short-lived browser outbox; the two values are not interchangeable.
-
-Flower ask_user exposes only write and select_or_write. The latter always presents fixed choices with a separate custom-text answer, even when write_label is omitted. Floret owns normalization of historical select requests; Redeven does not add a second compatibility path. Ordinary InputRequired selection remains a separate contract.
+request_key remains send idempotency for transient browser outbox, not invocation identity. ask_user supports write and select_or_write; fixed choices always include custom text even without write_label. Floret normalizes historical select; ordinary InputRequired is separate. No product compatibility path.
 
 # Boundaries
 
@@ -57,4 +40,4 @@ The obsolete logged max_tool_calls declaration is removed because it never enfor
 
 - `redeven:internal/ai/floret_runtime.go` - Composes the published typed runtime.
 
-- `redeven:internal/ai/threads.go` - Enforces endpoint/thread ownership and summary-only inventory mapping.
+- `redeven:internal/ai/threads.go` - Endpoint/thread authorization and summary-only inventory.

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower composer references
 tags: [ui, flower, composer, references, floret]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -40,6 +40,6 @@ After Send, only the browser transport outbox may retain the original ordinary l
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Compact removable chips reuse the input boundary and restore keyboard focus.
+- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Removable chips retain input/focus boundary.
 
-- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Exact removal and submission, frozen retry context, selection previews and consolidated snapshots.
+- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Removal/Send, frozen retry refs, selection previews and snapshots.

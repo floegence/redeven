@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower reasoning selection ownership
 tags: [ai, flower, reasoning, composer]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -30,6 +30,6 @@ This is shared Redeven UI policy, not a Floret API or a second preference store.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Resolve confirmed settings independently from explicit drafts and freeze submission options.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Confirmed reasoning settings versus drafts; frozen submissions.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Cold loading, explicit intent, failed saves, remounts, and request ownership.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Cold load, explicit intent, failed save/remount and ownership.

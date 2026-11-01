@@ -3,16 +3,11 @@ type: Architecture Contract
 title: Volume usage observation
 tags: [architecture, containers, docker, podman, volumes]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven's container engine owns volume observations; the native resource service
-binds them to the authorized active runtime. Container references include stopped
-containers, and disk usage reports occupied space rather than capacity. Partial
-inspection cannot establish that a volume is unused. A failed or unsupported
-size read leaves the inventory usable and the size unavailable. Neither
-observation replaces the current authoritative mutation preflight.
+The engine supplies bounded volume observations to authenticated active Runtime resources. References include stopped containers and sizes mean occupied bytes, not capacity. Partial inspection proves no unused state. Failed size reads preserve inventory with unavailable metrics; mutations still require current preflight.
 
 # Contract
 
@@ -32,4 +27,4 @@ Volume usage is an observation, not a capacity, quota, free-space, billing, or c
 
 - `redeven:internal/containerengine/volume_usage.go` - Reads bounded engine statistics and preserves unavailable sizes.
 
-- `redeven:internal/containerengine/volume_usage_test.go` - Checks both engine formats, invalid data, exact target selection, and cancellation.
+- `redeven:internal/containerengine/volume_usage_test.go` - Both engine formats, validation, exact target and cancellation.

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower subagent detail presentation
 tags: [ai, flower, subagents, ui]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -34,10 +34,10 @@ and Escape focus restoration remain product task-list semantics.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx` - Verifies delayed-field row geometry, narrow/touch layouts, request counts, informational identities, and explicit child navigation.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx` - Delayed/narrow/touch geometry, read counts and explicit child navigation.
 
 - `redeven:internal/flower_ui/src/SubagentAvatarStack.tsx` - Owns bounded portrait rotation and local motion cleanup.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentHeader.browser.test.tsx` - Verifies running overflow, live completion, gray settlement, motion preferences, themes, and narrow header access.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentHeader.browser.test.tsx` - Running/completed detail motion, theme and narrow-header access.
 
 - `redeven:internal/ai/types.go:172` - Backend SubAgent summaries expose canonical thread identity only.

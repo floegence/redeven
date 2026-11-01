@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Managed Service Instance Configuration
 tags: [architecture, web-services, containers, configuration, security]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -22,6 +22,6 @@ No change to template topology/endpoint, ReDevPlugin or public IPC; no raw engin
 
 # Evidence
 
-- `redeven:internal/managedwebservice/configuration.go` - Defines the override document, canonical identity, typed validation, and managed anchors.
+- `redeven:internal/managedwebservice/configuration.go` - Override schema, canonical identity, typed validation and anchors.
 
-- `redeven:internal/managedwebservice/settings.go` - Owns settings projection, secret redaction, candidate construction, Resource Plans, and risk classification.
+- `redeven:internal/managedwebservice/settings.go` - Settings, redacted secrets, candidate Resource Plans and risk classification.

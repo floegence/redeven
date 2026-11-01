@@ -3,16 +3,11 @@ type: Desktop Contract
 title: Desktop SSH environment settings
 tags: [desktop, environments, ssh, settings, interaction]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-SSH creation and editing share one form and the existing registration save API.
-Common fields remain visible ahead of advanced settings; custom configuration
-stays discoverable in a summary. Failed saves preserve input. Connection and
-secret authority remain with [Environment registrations](desktop-environment-registrations.md).
-The window, tab, draft lifetime and asynchronous recovery contract belongs to
-[Environment settings](desktop-environment-settings.md).
+SSH creation/editing share one form and registration API. Common controls precede advanced options, retained in an inspectable summary. Failures preserve drafts. Registration contracts own connections/secrets, while Environment settings owns the window, tab, draft and asynchronous recovery lifetime.
 
 # Contract
 
@@ -27,6 +22,6 @@ Password retention, replacement and removal continue through the existing secret
 
 # Evidence
 
-- `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.tsx` - Shared creation/editing fields, nested keyboard handling and validation presentation.
+- `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.tsx` - Shared forms, nested keys and validation presentation.
 
 - `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.client.test.tsx` - Editing, password actions, validation and save behavior.

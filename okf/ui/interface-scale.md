@@ -3,7 +3,7 @@ type: UI Contract
 title: Shared interface scale
 tags: [ui, flower, desktop, accessibility, typography]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -25,4 +25,4 @@ Scale is presentation only. Composer drafts, permissions, atomic approval batche
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/BodyTypography.browser.test.tsx` - Real dialog/body/control roles, narrow fine-pointer versus touch fields, preserved headings and rename submission.
+- `redeven:internal/envapp/ui_src/src/ui/BodyTypography.browser.test.tsx` - Actual scaled dialog roles, pointer/touch differences, headings and rename.

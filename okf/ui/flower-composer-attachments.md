@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower composer attachments
 tags: [ui, flower, attachments, composer, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -32,6 +32,6 @@ Canonical timeline projection does not fall back to a staged client snapshot whe
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Unicode, selection, upload-limit normalization and attachment-identity helpers define shared semantics.
+- `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Unicode, selection, upload limits and attachment identities.
 
-- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - The accessible attachment lane presents bounded item states and icon actions.
+- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - Bounded accessible attachment states/actions.

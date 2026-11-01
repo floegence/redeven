@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower interactions and context state
 tags: [ui, flower, approval, input, context]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -28,6 +28,6 @@ The decision surface owns drafts, disabled reasons, focus, and row-local command
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Compact question bounds, touch targets, scrolling, and retained selection.
+- `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Bounded questions, touch/scroll and retained choices.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Input, approval, composer, and navigation behavior.

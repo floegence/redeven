@@ -3,17 +3,11 @@ type: Protocol Contract
 title: Computer semantic snapshots
 tags: [ai, computer-use, accessibility, protocol]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-ComputerUseRuntime owns the model-visible semantic schema, version 2. Browser,
-macOS AX and Linux AT-SPI collect native facts; Runtime validates and normalizes
-one bounded tree. Relationships never point outside that tree. Unsupported
-facts stay absent. Invalid protocol, protected fields or inconsistent graphs
-produce a closed observation failure, discard that observation and preserve
-confirmed input effects and earlier explicit script output without replay. Existing target authority and privacy scans remain
-mandatory; semantic metadata does not grant input or capture permission.
+ComputerUseRuntime normalizes browser, macOS AX and Linux AT-SPI facts into bounded schema v2. Unsupported facts stay absent and relationships stay within the tree. Invalid observations are discarded while confirmed effects/output survive. Metadata grants no input authority and uncertain effects never replay.
 
 # Contract
 
@@ -69,11 +63,11 @@ Confirmed actions survive an observation failure; failed content never enters mo
 
 # Evidence
 
-- `redeven:internal/ai/computer_semantic.go` - Runtime schema validation, role inventory, byte pruning and focus projection.
+- `redeven:internal/ai/computer_semantic.go` - Semantic roles/schema/pruning and focus projection.
 
-- `redeven:internal/ai/computer_semantic_test.go` - graph, relationship, state, diff, selector and privacy assertions.
-- `redeven:internal/ai/computer_field_integrity_test.go` - normalization, compact/detailed/diff/guest preservation, scalar bounds and diagnostics.
-- `redeven:internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs` - real Chromium Unicode boundaries and full-name reference/cursor checks.
+- `redeven:internal/ai/computer_semantic_test.go` - Graph/state/diff/selector/privacy assertions.
+- `redeven:internal/ai/computer_field_integrity_test.go` - Semantic normalization/diffs/bounds and guest diagnostics.
+- `redeven:internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs` - Actual Chromium Unicode/full-name ref/cursor checks.
 
 Browser identity-read failures and explicit recovery also have real Chromium and
 connected-extension regressions in computerScrollReference.node-test.mjs and

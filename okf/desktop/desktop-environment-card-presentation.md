@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Environment card presentation
 tags: [desktop, environment, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -36,7 +36,7 @@ A bundled original-color OS mark beside the Runtime name reflects trusted platfo
 
 # Evidence
 
-- `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Ten locales, themes, text scaling, tabs, alignment, focus and busy states.
-- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Creation-grid completeness, connection-summary alignment, matched diagnostic/footer controls and preserved actions.
-- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Independent card refresh completion and overlapping batch/card requests.
-- `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Per-target success and failure snapshots before the slowest probe settles.
+- `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Ten-locale theme/scale/tab/focus/busy geometry.
+- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Creation grid, connection summaries, aligned diagnostics/footer and actions.
+- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Independent card refresh and overlapping requests.
+- `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Per-target probe results before slowest completion.

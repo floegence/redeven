@@ -4,7 +4,7 @@ title: Workbench terminal interaction
 tags: [ui, terminal, workbench, activity, semantic]
 quality_exception: Cross-runtime terminal interaction contract spanning actor authority, semantic rendering, multi-view control, browser input, history, accessibility, and performance.
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -39,6 +39,6 @@ The existing canonical active/running/idle state and the persisted activity indi
 
 # Evidence
 
-- `redeven:internal/terminal/manager.go` - Registers terminal-go live, semantic history, clear, catalog, and lifecycle boundaries.
+- `redeven:internal/terminal/manager.go` - Published terminal live/history/clear/catalog/lifecycle RPC.
 
-- `redeven:internal/terminal/live_stream_test.go` - Proves permission admission and generation-scoped actor-owned clear.
+- `redeven:internal/terminal/live_stream_test.go` - Permission and generation-bound actor clear.

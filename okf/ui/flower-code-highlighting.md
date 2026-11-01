@@ -3,16 +3,11 @@ type: UI Contract
 title: Flower code highlighting
 tags: [flower, markdown, syntax, performance]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower owns Markdown parsing and committed segment lifetime. Published Floe
-`enhanceCodeBlock` owns visible-code tokenization, scheduling and color application.
-Completed language-labelled fences receive syntax colors in both Env App and
-Desktop. Original code remains immediately readable and copyable. Highlighting
-must not alter text, frame geometry, copy controls, focus or an active selection;
-unavailable or excessive highlighting work leaves plain code visible.
+Flower owns committed Markdown lifetime; Floe enhanceCodeBlock owns visible tokenization/scheduling/color. Completed labelled fences receive colors in Env App/Desktop while source stays readable/copyable. Highlighting preserves geometry, focus and selection; unavailable or excessive work leaves plain code.
 
 # Contract
 

@@ -3,11 +3,11 @@ type: Desktop Contract
 title: Desktop Environment library
 tags: [desktop, environment, cloud, welcome]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Welcome projects one Environment library from authoritative snapshot owners. Exactly linked Runtime/Cloud entries share a card; paired Gateways add access tabs rather than duplicate cards. Independent Runtime, URL and Cloud owners retain their cards. Grouping never merges registrations, grants permission, substitutes failed transports or changes operation ownership. Unlinking restores independent cards; Cloud failures retain known environments with stale-result context.
+Welcome projects authoritative owners into one library. Exact Runtime/Cloud links share a card; paired Gateways add access tabs. Independent registrations remain separate. Grouping grants no permission or fallback transport. Unlink restores cards; Cloud failures preserve known entries with stale-result context.
 
 # Contract
 
@@ -25,4 +25,4 @@ Welcome projects one Environment library from authoritative snapshot owners. Exa
 
 - `redeven:desktop/src/main/environmentAccess.ts` - Authoritative connection ownership and preserved access defaults.
 
-- `redeven:desktop/src/main/runtimeConnectionProjection.test.ts` - Raw Local/SSH/WSL observations, restricted Cloud management, offline catalogs, window deduplication and identity conflicts.
+- `redeven:desktop/src/main/runtimeConnectionProjection.test.ts` - Raw local/remote facts, restricted Cloud, offline/deduplicated windows and conflicts.

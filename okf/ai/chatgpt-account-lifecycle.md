@@ -3,7 +3,7 @@ type: Authentication Contract
 title: ChatGPT account lifecycle
 tags: [ai, flower, authentication, openai, runtime, security]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -32,6 +32,6 @@ This concept owns local registration and credential lifecycle. Connection config
 
 # Evidence
 
-- `redeven:internal/chatgpt/client.go` - Bounded OAuth attempts, verified credential commit, issued-client recovery and canceled-session cleanup.
+- `redeven:internal/chatgpt/client.go` - Bounded OAuth, verified commit, client recovery and canceled cleanup.
 
-- `redeven:internal/chatgpt/account_lifecycle_contract_test.go` - Repeated code failures, identity-only persistence, cancellation during exchange/installation, unconfirmed revocation and unbound renewal.
+- `redeven:internal/chatgpt/account_lifecycle_contract_test.go` - OAuth failures/cancel, identity persistence, uncertain revocation and unbound renewal.

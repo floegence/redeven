@@ -3,7 +3,7 @@ type: UI Contract
 title: Git workspace generation and Files decoration
 tags: [ui, git, files, state, interaction]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -35,4 +35,4 @@ Non-Git Flowersec outbound allocation is outside this feature's transport budget
 
 - `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.ts` - Exposes the revision-aware production RPC codec.
 
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/sdk/git.ts` - Defines capability, revision, path-status, aggregate, and stash-section DTOs.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/sdk/git.ts` - Git capability/revision/status/aggregate/stash DTOs.

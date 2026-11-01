@@ -3,17 +3,11 @@ type: Architecture Contract
 title: Container runtime execution
 tags: [architecture, containers, docker, podman]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The containerengine package owns Docker and Podman discovery and execution for
-Containers and Web Services. Each request binds one engine, endpoint and canonical
-resource identity. Engines are observed independently without probing inactive
-contexts or changing global selection. Failed discovery or resource observation
-remains an explicit error, never an empty successful inventory or fallback engine.
-[Native container resources](container-resources-capability.md) owns mutation
-admission, persistent operations and product permissions.
+containerengine owns Docker/Podman discovery and execution. Each request binds engine, endpoint and canonical resource. Observe engines independently without probing inactive contexts or changing global selection. Failures stay explicit, never empty success or fallback; resource mutations retain their own admission owner.
 
 # Contract
 
@@ -30,4 +24,4 @@ Endpoint identifiers remain internal, and current endpoint resolution precedes e
 
 - `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
 
-- `redeven:internal/containerengine/runtime_detection_test.go` - Proves immediate stopped-daemon feedback, independent discovery deadlines, and request cancellation with a virtual clock.
+- `redeven:internal/containerengine/runtime_detection_test.go` - Stopped-daemon feedback and independent cancellable discovery under virtual time.

@@ -94,7 +94,9 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     else signal.addEventListener('abort', close, { once: true });
   }));
   const recoverEnabled = vi.fn(async (): Promise<PluginRecoverySnapshot> => ({ revision: 1, complete: true, results: [] }));
-  const retryRecovery = vi.fn(async (pluginInstanceID: string) => ({ plugin_instance_id: pluginInstanceID, status: 'ready' as const }));
+  const retryRecovery = vi.fn(async (pluginInstanceID: string): Promise<PluginRecoverySnapshot['results'][number]> => ({
+    ...exampleRecoveryIdentity(), plugin_instance_id: pluginInstanceID, status: 'ready',
+  }));
   const execute = vi.fn(async (_command: any) => ({}));
   const installOfficialRelease = vi.fn(async (
     _command: any,
@@ -250,6 +252,15 @@ const examplePluginCatalog = {
   },
 } as const;
 
+function exampleRecoveryIdentity(packageRevision = 'initial') {
+  return {
+    plugin_instance_id: examplePluginCatalog.pluginInstanceID,
+    active_fingerprint: 'sha256:active-' + packageRevision,
+    installed_at: '2026-11-01T10:00:00Z',
+    management_revision: 11,
+  };
+}
+
 function examplePluginProjection(
   state: 'not_installed' | 'disabled' | 'enabled' | 'update_available' = 'not_installed',
   packageRevision = 'initial',
@@ -263,6 +274,10 @@ function examplePluginProjection(
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         version: state === 'update_available' ? '1.9.0' : examplePluginCatalog.stableVersion,
         managementRevision: 11,
+        recoveryIdentity: {
+          ...exampleRecoveryIdentity(packageRevision),
+          enable_state: state === 'disabled' ? 'disabled_by_user' : 'enabled',
+        },
         installedPackage: {
           packageHash: `sha256:package-${packageRevision}`,
           manifestHash: `sha256:manifest-${packageRevision}`,
@@ -1628,6 +1643,7 @@ beforeEach(async () => {
   pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: true, results: [] });
   pluginLifecycleMocks.retryRecovery.mockReset();
   pluginLifecycleMocks.retryRecovery.mockImplementation(async (pluginInstanceID: string) => ({
+    ...exampleRecoveryIdentity(),
     plugin_instance_id: pluginInstanceID,
     status: 'ready' as const,
   }));
@@ -2519,6 +2535,122 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('removes a superseded installation failure while keeping a current sibling failure', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const siblingID = 'plugin_sibling';
+    const sibling = { ...examplePluginProjection('enabled').items[0], pluginInstanceID: siblingID,
+      inventoryKey: 'instance:' + siblingID, pluginID: 'com.example.sibling', displayName: 'Sibling',
+      recoveryIdentity: { ...exampleRecoveryIdentity(), plugin_instance_id: siblingID, enable_state: 'enabled' as const } };
+    let currentProjection = { items: [...examplePluginProjection('enabled').items, sibling] };
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
+    pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: false, results: [
+      { ...exampleRecoveryIdentity(), status: 'failed', reason: 'unknown', action: 'retry' },
+      { ...exampleRecoveryIdentity(), plugin_instance_id: siblingID, status: 'failed', reason: 'trust_revoked', action: 'reinstall' },
+    ] } satisfies PluginRecoverySnapshot);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => pluginCenterViewState.lastProps?.runtimeRecoveryByInstanceID?.[examplePluginCatalog.pluginInstanceID]?.state === 'failed', 40);
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID].error).toBe('Plugin runtime recovery failed.');
+      currentProjection = { items: [sibling] };
+      await pluginCenterViewState.lastProps.onRefresh(); await flushAsync();
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]).toBeUndefined();
+      const reinstalled = examplePluginProjection('enabled').items[0];
+      reinstalled.recoveryIdentity = { ...reinstalled.recoveryIdentity!, installed_at: '2026-11-01T11:00:00Z' };
+      currentProjection = { items: [reinstalled, sibling] };
+      await pluginCenterViewState.lastProps.onRefresh(); await flushAsync();
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]).toBeUndefined();
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[siblingID]).toMatchObject({ state: 'failed', reason: 'trust_revoked' });
+      expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(1);
+      expect(pluginLifecycleMocks.retryRecovery).not.toHaveBeenCalled();
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
+      expect(host.querySelector('[data-activity-id=files]')).not.toBeNull();
+    } finally { dispose(); }
+  }, 10000);
+
+  it('retries the current failed installation and preserves its successful result', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: false, results: [{ ...exampleRecoveryIdentity(), status: 'failed', reason: 'recovery_timeout', action: 'retry' }] } satisfies PluginRecoverySnapshot);
+    pluginLifecycleMocks.retryRecovery.mockResolvedValue({ ...exampleRecoveryIdentity(), status: 'ready' });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => pluginCenterViewState.lastProps?.runtimeRecoveryByInstanceID?.[examplePluginCatalog.pluginInstanceID]?.state === 'failed', 40);
+      pluginCenterViewState.lastProps.onRetryRuntimeRecovery(examplePluginCatalog.pluginInstanceID);
+      await flushUntil(() => pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]?.state === 'ready', 40);
+      expect(pluginLifecycleMocks.retryRecovery).toHaveBeenCalledTimes(1);
+      expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  }, 10000);
+
+  it('discards a startup failure delivered after the same package was reinstalled', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let currentProjection = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
+    const pending = deferred<PluginRecoverySnapshot>();
+    pluginLifecycleMocks.recoverEnabled.mockReturnValueOnce(pending.promise);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      currentProjection = examplePluginProjection('enabled');
+      currentProjection.items[0].recoveryIdentity = { ...currentProjection.items[0].recoveryIdentity!, installed_at: '2026-11-01T11:00:00Z' };
+      await pluginCenterViewState.lastProps.onRefresh(); await flushAsync();
+      pending.resolve({ revision: 1, complete: false, results: [{ ...exampleRecoveryIdentity(), status: 'failed', reason: 'unknown', action: 'retry' }] });
+      await flushAsync();
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]).toBeUndefined();
+      expect(notificationErrorMock).not.toHaveBeenCalled();
+      expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  }, 10000);
+
+  it.each(['ready', 'failed', 'rejected'] as const)('discards a late %s retry after the installation changes', async (outcome) => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let currentProjection = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
+    pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: false, results: [{ ...exampleRecoveryIdentity(), status: 'failed', reason: 'recovery_timeout', action: 'retry' }] } satisfies PluginRecoverySnapshot);
+    const pending = deferred<PluginRecoverySnapshot['results'][number]>();
+    pluginLifecycleMocks.retryRecovery.mockReturnValueOnce(pending.promise);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => pluginCenterViewState.lastProps?.runtimeRecoveryByInstanceID?.[examplePluginCatalog.pluginInstanceID]?.state === 'failed', 40);
+      pluginCenterViewState.lastProps.onRetryRuntimeRecovery(examplePluginCatalog.pluginInstanceID);
+      await flushUntil(() => pluginLifecycleMocks.retryRecovery.mock.calls.length === 1, 40);
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID].state).toBe('recovering');
+      currentProjection = examplePluginProjection('enabled');
+      currentProjection.items[0].recoveryIdentity = { ...currentProjection.items[0].recoveryIdentity!, installed_at: '2026-11-01T11:00:00Z' };
+      await pluginCenterViewState.lastProps.onRefresh(); await flushAsync();
+      if (outcome === 'rejected') pending.reject(new Error('Old installation retry failed'));
+      else pending.resolve({ ...exampleRecoveryIdentity(), status: outcome, ...(outcome === 'failed' ? { reason: 'unknown' as const, action: 'retry' as const } : {}) });
+      await flushAsync();
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]).toBeUndefined();
+      expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(1);
+      expect(pluginLifecycleMocks.retryRecovery).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  }, 10000);
+
   it('keeps an enabled recovery failure installed and exposes retry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -2598,6 +2730,7 @@ describe('EnvAppShell environment entry affordances', () => {
         revision: 1,
         complete: true,
         results: [{
+          ...exampleRecoveryIdentity(),
           plugin_instance_id: examplePluginCatalog.pluginInstanceID,
           status: 'failed',
           reason: 'recovery_canceled',
@@ -2608,6 +2741,7 @@ describe('EnvAppShell environment entry affordances', () => {
         revision: 2,
         complete: true,
         results: [{
+          ...exampleRecoveryIdentity(),
           plugin_instance_id: examplePluginCatalog.pluginInstanceID,
           status: 'ready',
         }],
@@ -2632,6 +2766,7 @@ describe('EnvAppShell environment entry affordances', () => {
         revision: 1,
         complete: true,
         results: [{
+          ...exampleRecoveryIdentity(),
           plugin_instance_id: examplePluginCatalog.pluginInstanceID,
           status: 'failed',
           reason: 'recovery_timeout',
@@ -2642,6 +2777,7 @@ describe('EnvAppShell environment entry affordances', () => {
         revision: 2,
         complete: true,
         results: [{
+          ...exampleRecoveryIdentity(),
           plugin_instance_id: examplePluginCatalog.pluginInstanceID,
           status: 'ready',
         }],
@@ -2682,6 +2818,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(retrySignal?.aborted).toBe(true);
 
       resolveRetry({
+        ...exampleRecoveryIdentity(),
         plugin_instance_id: examplePluginCatalog.pluginInstanceID,
         status: 'failed',
         reason: 'recovery_canceled',
@@ -2705,6 +2842,7 @@ describe('EnvAppShell environment entry affordances', () => {
         revision: 2,
         complete: true,
         results: [{
+          ...exampleRecoveryIdentity(),
           plugin_instance_id: 'plugin_example_metrics',
           status: 'ready',
         }],
@@ -2732,7 +2870,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('does not derive runtime package identity from an inventory refresh', async () => {
+  it('invalidates replaced package recovery without triggering another recovery pass', async () => {
     vi.useFakeTimers();
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -2742,6 +2880,7 @@ describe('EnvAppShell environment entry affordances', () => {
       revision: 1,
       complete: true,
       results: [{
+        ...exampleRecoveryIdentity('v1'),
         plugin_instance_id: examplePluginCatalog.pluginInstanceID,
         status: 'ready',
       }],
@@ -2771,7 +2910,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await pluginCenterViewState.lastProps.onRefresh();
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2, 40);
       expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(recoveryCallsBeforeUpdate);
-      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]).toEqual({ state: 'ready' });
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[examplePluginCatalog.pluginInstanceID]).toBeUndefined();
     } finally {
       dispose();
     }
@@ -2786,6 +2925,7 @@ describe('EnvAppShell environment entry affordances', () => {
         revision: 1,
         complete: true,
         results: [{
+          ...exampleRecoveryIdentity(),
           plugin_instance_id: 'plugin_example_metrics',
           status: 'failed',
           reason: 'trust_revoked',
@@ -2796,6 +2936,7 @@ describe('EnvAppShell environment entry affordances', () => {
         revision: 2,
         complete: true,
         results: [{
+          ...exampleRecoveryIdentity(),
           plugin_instance_id: 'plugin_example_metrics',
           status: 'ready',
         }],
@@ -2820,7 +2961,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
       expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID.plugin_example_metrics).toEqual({
         state: 'failed',
-        error: 'plugin_example_metrics: trust_revoked',
+        error: 'This plugin release is no longer trusted.',
         reason: 'trust_revoked',
         action: 'reinstall',
       });
@@ -2848,13 +2989,14 @@ describe('EnvAppShell environment entry affordances', () => {
       revision: 1,
       complete: true,
       results: [{
+        ...exampleRecoveryIdentity(),
         plugin_instance_id: examplePluginCatalog.pluginInstanceID,
         status: 'failed',
         reason: 'recovery_timeout',
         action: 'retry',
       }],
     } satisfies PluginRecoverySnapshot);
-    const retryDeferred = deferred<{ plugin_instance_id: string; status: 'ready' }>();
+    const retryDeferred = deferred<PluginRecoverySnapshot['results'][number]>();
     const retrySignals: AbortSignal[] = [];
     pluginLifecycleMocks.retryRecovery.mockImplementationOnce((pluginInstanceID: string, options?: { signal?: AbortSignal }) => {
       if (options?.signal) retrySignals.push(options.signal);
@@ -2890,6 +3032,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(retrySignals[0]?.aborted).toBe(true);
 
       retryDeferred.resolve({
+        ...exampleRecoveryIdentity(),
         plugin_instance_id: examplePluginCatalog.pluginInstanceID,
         status: 'ready',
       });

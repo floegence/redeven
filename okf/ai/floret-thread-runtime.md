@@ -4,11 +4,11 @@ title: Floret thread runtime integration
 tags: [ai, floret, threads, runtime]
 quality_exception: Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and the optional independent CompactContext return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
+Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven authorizes endpoint ownership, resolves attachments and maps provider/tool effects. Send, Respond, Cancel, Retry, and the optional independent CompactContext return typed state before continuation. Canonical records prevent duplicates; drafts and execution tokens remain transient.
 
 # Contract
 

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Container engine service management
 tags: [architecture, containers, docker, podman, host-control]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -37,9 +37,9 @@ Observed health leads; active work retains locks/feedback. Terminal start/restar
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` and its browser suite cover recovered lifecycle failures, preserved active/configuration feedback, immutable history, and responsive status revalidation in English and Simplified/Traditional Chinese.
 
-- `redeven:internal/containerengine/container_services.go` - Defines the service model, safe DTO, preflights, and controller adapter boundary.
+- `redeven:internal/containerengine/container_services.go` - Typed service model, safe DTO, preflight/controller boundary.
 
-- `redeven:internal/containerengine/container_services_desktop_test.go` - Covers Desktop context ownership, bounded discovery, management/health failures and recovery, unsafe-action rejection, and start/stop/start with stable identity.
+- `redeven:internal/containerengine/container_services_desktop_test.go` - Desktop ownership, bounded discovery/health/recovery and stable lifecycle identity.
 
 - `redeven:internal/containerresource/desktop_lifecycle_qualification_test.go` - Opt-in macOS stop/start/restart through production preflight, durable operations and reconciliation; requires explicit host lifecycle authorization and is skipped in ordinary CI. On 2026-10-27, the real Desktop dev environment reproduced a Docker Desktop 4.52.0 fork-server crash (`unmarshaling start request: unexpected EOF`) with LaunchServices as well as the earlier CLI path. Removing Redeven metadata allowed startup. With the explicit application environment, the same dev environment plus 58 KiB of synthetic runtime metadata passed stop (10.290 s), start (12.111 s) and restart (22.354 s), verified engine 29.0.1, and preserved the four running container IDs. The earlier shell-only start qualification did not cover this dev-environment failure.
 

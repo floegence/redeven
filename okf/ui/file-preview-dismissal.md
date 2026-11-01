@@ -3,17 +3,11 @@ type: UI Contract
 title: File preview dismissal
 tags: [ui, files, preview, lifecycle, motion]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The file-preview controller owns document state and immediate cancellation;
-published Floe owns window and mobile dialog presence. Accepted close must keep
-the live document and title unchanged throughout exit, then release all retained
-content when the panel unmounts. It must not create a blank iframe, a brighter gray
-intermediate surface, extra reads, or an additional close delay. Owner disposal
-always releases resources, and stale asynchronous work cannot revive a closed
-preview.
+The preview owner cancels reads immediately; Floe owns exit presence. Accepted close retains document/title through motion and releases resources at unmount, without blank iframes, brighter intermediate surfaces, extra reads or delays. Disposal always cleans up and late responses cannot revive closed content.
 
 # Contract
 
@@ -33,6 +27,6 @@ The [window actions contract](file-preview-window-actions.md) owns file actions 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts` - Cancels work immediately and releases retained document resources at the presentation boundary.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts` - Immediate read cancellation; content release at presence disposal.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Releases retained content when the published presence owner disposes the panel.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Retained content released by published presence disposal.

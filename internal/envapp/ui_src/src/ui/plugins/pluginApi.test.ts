@@ -71,8 +71,8 @@ function createClientHarness() {
     inspectExternalPackage: vi.fn(async () => ({})),
     inspectUploadedExternalPackage: vi.fn(async () => ({})),
     installInspectedPackage: vi.fn(async () => ({})),
-    recoverEnabled: vi.fn(async () => ({ revision: 1, complete: true, results: [] })),
-    retryRecovery: vi.fn(async () => ({ plugin_instance_id: examplePlugin.pluginInstanceID, status: 'ready' as const })),
+    recoverEnabled: vi.fn(async (): ReturnType<PluginPlatformClient['recoverEnabled']> => ({ revision: 1, complete: true, results: [] })),
+    retryRecovery: vi.fn(async () => ({ plugin_instance_id: examplePlugin.pluginInstanceID, active_fingerprint: generatedMetricsRecord.active_fingerprint, installed_at: generatedMetricsRecord.installed_at, management_revision: generatedMetricsRecord.management_revision, status: 'ready' as const })),
     listRetainedData: vi.fn(async () => ({ retained_data: [{
       plugin_instance_id: examplePlugin.pluginInstanceID,
       generation_id: 'gen-retained',
@@ -528,6 +528,19 @@ describe('plugin lifecycle client integration', () => {
     await expect(lifecycle.listInstalledPlugins()).resolves.toEqual([]);
     expect(mocks.catalog).toHaveBeenCalledOnce();
     expect(mocks.catalog).toHaveBeenCalledWith({});
+  });
+
+  it('forwards the exact released recovery installation identity unchanged', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const snapshot = { revision: 1, complete: false, results: [{
+      plugin_instance_id: generatedMetricsRecord.plugin_instance_id,
+      active_fingerprint: generatedMetricsRecord.active_fingerprint,
+      installed_at: generatedMetricsRecord.installed_at,
+      management_revision: generatedMetricsRecord.management_revision,
+      status: 'failed' as const, reason: 'unknown' as const, action: 'retry' as const,
+    }] };
+    mocks.recoverEnabled.mockResolvedValueOnce(snapshot);
+    expect(await lifecycle.recoverEnabled()).toEqual(snapshot);
   });
 
   it('reads the Host-owned enabled plugin recovery snapshot', async () => {

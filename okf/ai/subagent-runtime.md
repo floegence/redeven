@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Flower subagent runtime
 tags: [ai, floret, subagents, permissions]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -38,6 +38,6 @@ Task labels and previews are presentation, not identity or results. Redeven must
 
 # Evidence
 
-- `redeven:internal/ai/subagents_model_payload.go` - Removes coordination display echoes without changing complete handoffs.
+- `redeven:internal/ai/subagents_model_payload.go` - No display echo; complete handoffs preserved.
 
-- `redeven:internal/ai/floret_tools.go` - Maps SubAgent calls and results into the typed operation Activity without losing action or target order.
+- `redeven:internal/ai/floret_tools.go` - Typed SubAgent Activity preserves action/target order.

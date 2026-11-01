@@ -3,7 +3,7 @@ type: UI Contract
 title: Asynchronous layout stability
 tags: [ui, accessibility, layout]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -26,4 +26,4 @@ Normal-state acceptance measures the top of actual content, including both chart
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - Standalone application controls keep localized labels on one line across Chromium, Firefox, and WebKit.
+- `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - Single-line localized app controls in Chromium/Firefox/WebKit.

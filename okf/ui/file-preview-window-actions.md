@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview window actions
 tags: [ui, files, preview, floating-windows, selection]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -34,6 +34,6 @@ Preview scale, content bounds, and asynchronous renderer ownership follow the [v
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Chooses title-bar actions for desktop and the inline header for mobile.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Desktop titlebar versus mobile inline actions.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewPanel.tsx` - Retains the body and unsaved-change confirmation boundary.

@@ -3,7 +3,7 @@ type: Security Contract
 title: Runtime two-factor authentication
 tags: [security, authentication, runtime, desktop, totp]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -30,4 +30,4 @@ Password-only challenges grant no ordinary product data access. Loopback address
 
 # Evidence
 
-- `redeven:internal/accessgate/authentication_test.go` - Exercises real codes, replay, restart, recovery consumption, throttle persistence, collisions, revocation and child scope.
+- `redeven:internal/accessgate/authentication_test.go` - Real TOTP/replay/restart/recovery/throttle/collision/revocation/scope tests.

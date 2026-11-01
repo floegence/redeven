@@ -3,16 +3,11 @@ type: UI Contract
 title: Ask Flower window boundaries
 tags: [ui, flower, floating-windows, desktop]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns the Ask Flower launcher's placement policy in Activity, Workbench,
-and Desktop Welcome. Its titlebar and composer remain reachable below the visible
-Shell header and native Desktop chrome. The launcher supports dragging and manual
-resizing, but neither a maximize button nor titlebar double-click may maximize it.
-When available space shrinks, the published Floe geometry constrains the existing
-window without replacing the composer or discarding its draft.
+Redeven places Ask Flower in Activity, Workbench and Welcome beneath visible Shell/native chrome. Header/composer stay reachable during drag and resize; maximize and titlebar double-click are unavailable. Floe constrains shrinking viewports while retaining the same composer, draft and interaction state.
 
 # Contract
 

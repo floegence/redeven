@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native Desktop CodeSpace access
 tags: [desktop, codespace, security, transport]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,8 +23,8 @@ Compatibility remains defined by the current protocol and published manifests, n
 
 # Evidence
 
-- `redeven:desktop/src/main/codespaceNativeWindows.ts` - Single-window navigation, readiness, cancellation, and bounded failure diagnostics.
+- `redeven:desktop/src/main/codespaceNativeWindows.ts` - Single-window navigation/readiness/cancel and bounded diagnostics.
 
-- `redeven:desktop/src/main/codespaceNativeWindows.test.ts` - Deterministic document-ordering, retry, concurrent-open, and late-close regression coverage.
+- `redeven:desktop/src/main/codespaceNativeWindows.test.ts` - Ordering, Retry, concurrent Open and late-close regressions.
 
 - `redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts` - ID-only trusted shell request contract.

@@ -3,7 +3,7 @@ type: UI Contract
 title: Absolute filesystem directory selection
 tags: [ui, filesystem, flower, spaces, workbench]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -12,34 +12,28 @@ Published Floe owns picker navigation, validity and request lifetime; Redeven su
 # Contract
 
 ## Absolute paths and runtime authority
-DirectoryPicker, DirectoryInput and file pickers share the released core. Invalid context cannot synthesize Home/Root permissions. [Filesystem policy](../security/permission-policy-and-filesystem-scope.md) owns session, filesystem, OS and process access.
+Released Floe DirectoryPicker/DirectoryInput/file pickers own navigation/validity/request lifetime. Redeven supplies connection, authoritative path context, i18n/form state. [Filesystem policy](../security/permission-policy-and-filesystem-scope.md) reauthorizes operations; Home/Root/context never invent grants.
 
 ## Navigation state and failures
-Each picker owns directory, entries, path input, hidden switch and validity. Stale successes/failures cannot replace newer intent. Validation is not authorization; changed policy/files/OS permissions may reject later operations.
+Each picker owns directory/entries/input/hidden switch/validity. Fence stale success/failure by current intent; validation is no later authorization. Files uses released parsePickerPath/formatPickerPath without Home-prefixing absolute paths. Real viewports declare Workbench local-scroll; host/Floe retain modal/focus/keyboard.
 
 ## Live language changes
-Home/Root resolve from active locale without replacing inputs/drafts/selection or reloading authorization. Desktop and Env App share the adapter.
+Translate Home/Root in place without replacing drafts/selection or reloading authority; Desktop/Env App share the adapter.
 
 ## Product presentations
-Files uses released `parsePickerPath`/`formatPickerPath`; absolute input never gets a Home prefix. Actual viewports carry Workbench local-scroll markers; host/published components retain modal, keyboard and focus ownership.
+A failed Files navigation retains its last readable listing and one dismissible notice:selectable full path, copy, recovery actions. Without a readable listing use a bounded recovery card. Paths wrap/controls reflow inside scaled/narrow views. Link input to this notice by ID; syntax/cancellation retain own explanation. Editing clears stale invalid-input state, not unresolved navigation. Retry keeps focus/geometry through pending/repeated failure.
 
-Files owns its runtime recovery presentation over published Floe controls, icons and semantic colors. A failed navigation retains the last readable directory and shows one compact, dismissible notice with a selectable full path, adjacent copy action and grouped recovery actions. If no readable directory remains, a bounded recovery card replaces the listing. Long paths wrap and whole controls reflow inside Activity and scaled Workbench viewports.
+Existing browse/cache owner shows only visited target's snapshot while verifying. Uncached targets preserve readable listing with separate pending intent. Current clicks do not reload; pending duplicates share a request. Unverified cached destinations still verify/commit. Superseded reads release queue immediately and cannot alter content/persistence/recovery. Manual/hidden-path changes verify first.
 
-Files shortcuts use the existing browse request and session cache: a visited directory presents only its own snapshot while revalidating; an uncached target retains the readable listing and reports pending intent separately. Repeated current clicks do not reload; repeated pending clicks share one request. Returning to an unverified cached path still verifies and commits it. Superseded reads release the queue immediately, and late successes or failures cannot change content, persistence or recovery. Manual path entry and hidden-segment changes still verify before committing.
-
-The Files tree reveals each changed destination once per visible sidebar container. Cache revalidation and pending completion do not repeat scrollIntoView or undo subsequent user scrolling. Pointer navigation retains its clicked-row anchor. Tree selection keeps fixed typography and has no layout or font-weight transition.
-
-Runtime failures link the path input to the visible recovery description by ID instead of repeating its message under the toolbar. Syntax validation and canceled requests keep their own inline explanation. Editing clears the input's stale invalid state; it does not clear the unresolved navigation notice. Retry retains the same controls, focus and geometry through pending and repeated failure. Navigation, authorization, snapshots and persistence remain owned by the existing runtime controller.
+Reveal each changed tree destination once per visible container; revalidation cannot repeat scrollIntoView or undo user scroll. Pointer navigation keeps row anchor; selection typography/geometry never transitions.
 
 ## Creating a child directory
-The released Floe picker owns a New folder toolbar action and its anchored nonmodal popup. The popup shows the parent path, a labelled name input and its own actions without resizing the picker or adding another backdrop. Focus, Enter/Escape handling, pending state and retired-request isolation stay upstream. Escape or Cancel closes only the popup; idle outside interaction also dismisses it. Failed creation preserves the name and displays the localized error beside its input. Redeven supplies one authenticated creation callback to Flower, DirectoryInput and the shared Env App picker adapter. Names represent one child of the validated parent, never nested paths or traversal. A successful create refreshes the parent listing; entering the new row and confirming remain separate actions. Canceling the picker leaves the draft unchanged and does not undo a submitted filesystem operation.
+Released picker owns New folder and nonmodal anchored popup:parent, name, actions, focus, Enter/Escape, pending/stale-request handling. No extra backdrop/resize. Escape/Cancel/outside idle closes popup only. Failure retains name/local error. One authenticated callback serves Flower, DirectoryInput/Env adapters. Names are one child, not traversal/nested paths. Success refreshes parent; enter/confirm remain explicit. Canceling picker preserves draft and cannot undo submitted work.
 
-Env App uses the existing nonrecursive filesystem RPC and workspace invalidation. Desktop uses exact POST /_redeven_proxy/api/fs/mkdir for the selected Runtime. Both enter the same filesystem service, scope resolver and agent-owned Git mutation coordinator. HTTP requires session write permission, rejects unknown fields and missing parents, and preserves existing entries. No alternate coordinator, recursive creation, synthetic successful listing or automatic write retry is introduced. Uncertain failures ask the user to inspect the directory before retrying. All ten shipped locales explicitly translate creation errors.
-
-Runtime compatibility epoch 70 requires the new Desktop HTTP resource; older peers take the existing upgrade path. Gateway protocol, Floret APIs and persistent schemas are unchanged.
+Env App uses nonrecursive filesystem RPC/invalidation; Desktop exact POST /_redeven_proxy/api/fs/mkdir. Both share filesystem/scope/Git mutation owners. Require session write, strict fields, existing parent and preserve existing entries. No recursive creation, synthetic list or automatic retry. Unknown effects require inspection. All ten locales translate errors. Compatibility epoch 70 requires the Desktop resource; older peers upgrade. Gateway/Floret/schema unchanged.
 
 ## Shared directory favorites
-All pickers use controlled [favorites](directory-favorites.md), which own scoped persistence, refresh and failures. Shortcut views cannot confirm an earlier directory selection.
+[Favorites](directory-favorites.md) owns scoped persistence/refresh/failures; shortcut views cannot confirm an old selection.
 
 # Boundaries
 
@@ -47,11 +41,11 @@ The published picker owns navigation and request lifetime. A validated selection
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx` - All ten locale presentations and live language changes without replacing picker or composer inputs.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx` - Ten-locale live translation preserves picker/composer inputs.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published path parsing and formatting, absolute identity, and localized input recovery.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published absolute-path parsing and localized recovery.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Single error description, retained directory, localized light/dark and narrow recovery, selectable paths, retry continuity, rapid shortcut switching, cache identity, canceled reads, permission/hidden-path boundaries and explicit recovery destinations.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Localized/narrow navigation recovery, retained listings, paths, cache, cancellation and permissions.
 
 - redeven:internal/codeapp/appserver/server_fs_mkdir_test.go — actual creation, duplicate preservation, strict requests, outside-scope and session write rejection.
 - redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryPicker.test.shared.tsx — creation, explicit confirmation, failed-name retention and canceled draft preservation.

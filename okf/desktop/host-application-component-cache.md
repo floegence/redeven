@@ -3,17 +3,11 @@ type: Desktop Contract
 title: Host application component cache
 tags: [desktop, applications, cache, installation]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The released `floe-native-apps/artifactcache` SDK owns archive verification,
-exclusive cache access and eviction. Redeven Desktop owns its private directory,
-seven-day idle retention and 2,000,000,000-byte archive budget, document-scoped
-transfer files and localized presentation. Multiple devices reuse the same
-verified publisher files; upload remains independent for each host. Cancellation
-preserves completed archives. Unknown catalogs fail explicitly, and cleanup
-failures never replace successful preparation with an installation failure.
+Published artifactcache owns verification, locking and eviction. Desktop supplies its private directory, seven-day idle retention and 2 GB budget plus document-local transfers/UI. Devices reuse verified archives; cancellation retains completed cache. Unknown catalogs fail and cleanup cannot negate successful preparation.
 
 # Contract
 

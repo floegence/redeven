@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop session and model source
 tags: [desktop, sessions, models, flower]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,6 +21,6 @@ Welcome Flower and Tessiven share compatibility/AI readiness. Returning to prepa
 
 # Evidence
 
-- `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Runtime event streams release their document ownership on full navigation, renderer crash, or destruction; in-page navigation preserves the active connection.
+- `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Document ownership ends on navigation/crash/destruction, not in-page navigation.
 
-- `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Canvas startup waits for AI publication and preserves drafts through recovery.
+- `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Canvas waits for AI readiness and retains recovery drafts.

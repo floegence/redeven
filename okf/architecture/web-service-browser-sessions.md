@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Web Service browser sessions
 tags: [architecture, desktop, port-forward, security, ui]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,6 +23,6 @@ Temporary forwards are memory-only until Save; expired/unknown identities cannot
 
 # Evidence
 
-- `redeven:internal/portforward/service.go` - Runtime normalizes addresses and owns exact persistent reuse, temporary expiry, and explicit persistence.
+- `redeven:internal/portforward/service.go` - Normalized addresses, exact persistent reuse and temporary expiry.
 
-- `redeven:internal/managedwebservice/open_session.go` - Observes the applied instance and shares bounded opening preparation without implicit Restart.
+- `redeven:internal/managedwebservice/open_session.go` - Applied-instance reads and shared bounded opening without implicit Restart.

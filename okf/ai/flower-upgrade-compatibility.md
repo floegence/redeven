@@ -3,14 +3,11 @@ type: Compatibility Contract
 title: Flower historical writer acceptance
 tags: [ai, compatibility, fixtures, release]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-- Authority: locked Redeven writers with released Floret dependencies produce fixture bytes; current tests only copy them.
-- Outcome: supported historical data upgrades, remains inspectable and can continue a new conversation.
-- Invariants: immutable originals, exact source/module identities, digest verification, product write paths and complete final-main acceptance.
-- Failure boundary: fixture drift or a failed upgrade blocks integration; a successful database open alone is insufficient evidence.
+Immutable fixtures come from locked released Redeven writers; current tests copy and verify them. Supported history must remain readable and continue after upgrade. Preserve source/module digests and public write paths. Fixture drift or upgrade failure blocks integration; database open alone is insufficient.
 
 # Contract
 
@@ -26,6 +23,6 @@ Historical producers are immutable evidence, never helpers linked into current p
 
 # Evidence
 
-- `redeven:internal/ai/tool_correction_history_compatibility_test.go` - Exact v7.69.1 failures through product classification, explicit Retry, Send, Fork and restart.
+- `redeven:internal/ai/tool_correction_history_compatibility_test.go` - Exact v7.69.1 failures through Retry/Send/Fork/restart.
 
 - `redeven:internal/ai/testdata/upgrade/10ce4c152/manifest.json` - Locked compatibility baseline.

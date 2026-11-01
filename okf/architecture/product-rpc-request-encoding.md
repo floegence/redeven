@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Product RPC request encoding
 tags: [architecture, rpc, filesystem]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -27,8 +27,8 @@ The request object itself must contain only JSON values before entering the publ
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.ts` - Constructs filesystem requests and conditionally includes optional fields.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.ts` - Filesystem RPC includes only provided optional fields.
 
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.test.ts` - Checks omitted, undefined, false, and encoding options before serialization.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.test.ts` - Optional/false/undefined fields checked before encoding.
 
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts` - Checks empty-file request and Runtime success response mapping through the product RPC adapter.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts` - Empty-file request and success response through production RPC.

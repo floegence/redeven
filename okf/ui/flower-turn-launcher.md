@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower command and composer flow
 tags: [ui, flower, composer, commands]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -43,6 +43,6 @@ Composer drafts and the transport outbox own only unconfirmed browser input, sta
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Shared host presentation; immutable snapshots use the existing text viewer.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Shared host snapshots use existing text viewer.
 
 - `redeven:internal/flower_ui/src/transportOutbox.ts` - IndexedDB request recovery without secret answers.

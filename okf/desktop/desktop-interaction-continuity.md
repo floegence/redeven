@@ -3,11 +3,11 @@ type: Interaction Contract
 title: Desktop interaction continuity
 tags: [desktop, interaction, accessibility, testing]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop Welcome owns interaction sessions; Launcher and Runtime own business facts and execution progress. Background observations must preserve an open dialog or popup, its draft, selection, step, details, focus, native text selection and scroll. Only explicit opening, closing, switching, handoff or the current operation's completion changes visibility. Invalid authority preserves the visible session and input, blocks stale submission and offers verification or an accessible exit. Closing progress does not cancel its task.
+Welcome owns interaction sessions; Launcher/Runtime own business operations. Observations retain open panels, draft, focus, selection, steps and scroll. Only explicit user transitions or current completion alter visibility. Invalid authority blocks submission with recovery; closing progress never cancels work.
 
 # Contract
 

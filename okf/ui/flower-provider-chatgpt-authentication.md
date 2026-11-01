@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower ChatGPT authentication
 tags: [ai, flower, settings, authentication]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -29,6 +29,6 @@ Account removal does not delete an OpenAI account or provider configuration. The
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Account selection, recovery, sign-out continuity and confirmed local removal.
+- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Account selection/recovery/confirmed sign-out with continuity.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Attempt polling without account-list reloads.

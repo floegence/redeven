@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application cursor acceptance
 tags: [applications, cursor, linux, validation]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -15,20 +15,9 @@ qualify physical pointer appearance. Unavailable devices remain unpassed.
 
 # Contract
 
-## Published qualification
-`floe-native-apps` v0.6.2 passed its immutable release qualification on native Linux amd64 and arm64, including installation, legacy update, source/race/vet, vulnerability scanning, archive integrity and managed/system Xpra input checks.
+Native 0.6.2 immutable qualification passes Linux amd64/arm64 install/update/source/race/vet/vulnerability/archive/managed-system Xpra checks, then Go proxy/SumDB readback. TestInstalledClientInputViewer owns private state/display/port/app. Disposable Mac fixture passes pixels/click/Unicode/shortcut/menu/reconnect/stale-input/resize/window replacement/close.
 
-Go proxy and checksum database readback verified the release.
-
-## Product acceptance
-The opt-in `TestInstalledClientInputViewer` uses a task-owned state directory, private display, port and application.
-
-The real macOS disposable application fixture passed pixels, click, Unicode, shortcut, menu, reconnect, stale input, resize, window replacement and close checks.
-
-## Remaining physical acceptance
-The current records do not qualify physical system-pointer appearance in shipped Electron, Chrome, Safari or Firefox, page zoom 80/100/125/150/200 percent, or monitor changes.
-
-These limitations do not alter the earlier real IME/soft-keyboard acceptance assigned to the user in the [input validation record](host-application-validation.md).
+Physical system pointers in shipped Electron/Chrome/Safari/Firefox,80/100/125/150/200% zoom and monitor changes remain unqualified. [Input validation](host-application-validation.md) separately assigns real IME/soft-keyboard acceptance.
 
 # Boundaries
 

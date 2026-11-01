@@ -3,7 +3,7 @@ type: Acceptance Record
 title: Graphical window native transport qualification
 tags: [desktop, applications, transport, validation]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -16,27 +16,9 @@ replace the separate [performance measurement contract](remote-desktop-validatio
 
 # Contract
 
-## Source And Published Dependencies
-The live capture checks below used Runtime source `5b4e303718adcb5e1b7e244dd306ab8043d2ad9d`, `GOWORK=off`, and no sibling module or package overlays.
+Runtime 5b4e303718adcb5e1b7e244dd306ab8043d2ad9d/GOWORK=off uses published dependencies; user excluded product push/full gate. Chromium validates public HTTPS/HTTP and numeric loopback; 4,194,321-byte payload matches,>32 MiB closes before upstream. Upstream covers Xpra 20/21 classes; no retained physical Xpra launch here.
 
-The user excluded Redeven push and full integration gates from this local delivery.
-
-## Transport And Authority
-Actual Chromium direct checks cover public HTTPS, public HTTP and private numeric-loopback acquisition.
-
-A 4,194,321-byte payload matches byte for byte; a payload larger than 32 MiB closes its stream and never reaches the upstream.
-
-The prepared Xpra 20/21 classes are covered upstream; this phase did not launch a retained Xpra host application on a physical host.
-
-## Linux Live Behavior And Queue Recovery
-`server` uses an isolated Runtime and state directory, reached through an owned LAN SSH forward.
-
-Bounded blocking delivery now waits for the consumer and exits on attachment shutdown. The queue was not enlarged and the failure evidence is retained.
-
-## Connection Launcher Refinement
-The launcher now names the actual Desktop connection or reported local hostname, keeps optional view/grant-reuse settings collapsed, omits a single-display selector, and separates status checking from connecting.
-
-This verifies the launcher and locked-host boundary; the unlocked macOS limits above still apply.
+Isolated server Runtime/state/LAN forward qualifies Linux. Bounded blocking reply delivery waits for consumer and exits on shutdown, with no queue enlargement; retain original failure. Launcher uses actual connection/hostname, collapses optional settings, omits single-display selection and separates checking/connecting. Locked Mac refusal passes; active capture/Electron fullscreen, first-time capture and prior-build evidence cannot qualify this build.
 
 # Boundaries
 

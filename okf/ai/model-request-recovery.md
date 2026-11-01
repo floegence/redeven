@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model request recovery
 tags: [ai, providers, recovery, diagnostics]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,6 +21,6 @@ Redeven neither repairs old cancellation records nor owns a second retry loop.
 
 # Evidence
 
-- `redeven:internal/ai/floret_request_timeout_integration_test.go` - Heartbeat and incomplete-argument deadlines, typed failures, no dispatch, and released admission/HTTP resources.
+- `redeven:internal/ai/floret_request_timeout_integration_test.go` - Stream/argument deadlines, typed failure and resource release without dispatch.
 
 - `redeven:internal/ai/provider_failure.go` - Structured response-time retry advice and safe diagnostics.

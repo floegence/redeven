@@ -3,21 +3,19 @@ type: Acceptance Record
 title: Wayland cursor and scheduling optimization evidence
 tags: [desktop, linux, wayland, validation, latency]
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Native v0.22.12 owns cursor/scheduling evidence; session/viewer contracts retain authority. Separate-cursor frames exclude pointer pixels; view-only keeps them. Input replies cannot block capture/authority, and damage cannot hide post-gap changes. Distribution/browser tests do not prove GNOME latency. User waived udesk24 performance on 2026-10-05, not functional regression.
+Native 0.22.12 qualifies separate cursor/scheduling semantics with synthetic PipeWire frames. Input replies cannot block capture/authority; damage must retain post-gap changes. Fresh GNOME consent fails HOST_CONSENT_TIMEOUT, so distribution tests establish no live-GNOME latency. October 5 user waiver covers udesk24 performance only.
 
 # Contract
 
-The GNOME portal advertises cursor metadata, but the preceding native component requested embedded capture while the viewer showed a local pointer. Missing cursor metadata in a negotiated metadata stream fails explicitly; it cannot prove embedded pixels.
-
-The published hardware encoder and decoder-preference optimizations remain available according to actual platform capabilities; this change cannot establish that a browser selected a particular physical GPU.
+[Media](../architecture/remote-desktop-media.md) owns behavior. Missing negotiated cursor metadata fails explicitly. Published ba8ecda3 verifies via proxy/SumDB; source integration never restarts Runtime.
 
 # Boundaries
 
-A fresh GNOME sharing request timed out with `HOST_CONSENT_TIMEOUT`. Historical real-desktop measurements remain in the [Wayland results](remote-desktop-wayland-results.md) and must not be relabelled as evidence for this candidate.
+Hardware preferences follow actual capability, not claimed GPU selection. [Earlier Wayland](remote-desktop-wayland-results.md) cannot certify this candidate. Git retains exact source, private evidence path and qualification failures.
 
 # Evidence
 

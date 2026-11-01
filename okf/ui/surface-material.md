@@ -3,16 +3,11 @@ type: UI Contract
 title: Shared surface material
 tags: [ui, desktop, flower, themes, performance]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe Webapp owns shared material and control motion. Redeven selects
-`soft-neumorphic` in Env App and Desktop Welcome, maps product boundaries to the
-released surface roles, and keeps business content flat. Native input, local
-portals, widget identity, and hot interaction ownership do not change. A visual
-conflict is resolved by removing the product override at its source; there is
-no copied shadow engine, local dependency overlay, or second theme owner.
+Published Floe owns material and motion. Env App/Welcome select soft-neumorphic roles while business content stays flat. Preserve input, portals, widget identity and hot interaction ownership. Resolve conflicts at the product override source without copying shadow logic or introducing another theme/dependency owner.
 
 # Contract
 
@@ -32,4 +27,4 @@ Use restrained static depth and short functional control motion. The progress di
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Env App material configuration.
 
-- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Opaque product surfaces and independent control boundary mapping.
+- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Opaque surfaces and independent control mapping.

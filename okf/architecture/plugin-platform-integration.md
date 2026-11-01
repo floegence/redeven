@@ -4,7 +4,7 @@ title: Plugin platform integration
 tags: [architecture, plugins, local-ui, redevplugin]
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -33,4 +33,4 @@ A surface opens through the released Web SDK using an origin prepared by its pro
 
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
 
-- `redeven:internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts:1` - Qualifies a backend-free package through actual Center and Gateway routes: native modules, Worker, Canvas, independent surfaces, unsaved close and forced invalidation. Enable with `REDEVEN_PLUGIN_WEB_QUALIFICATION=1` in the existing explicit browser qualifications; this does not certify Worker backend execution.
+- `redeven:internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts:1` - Opt-in real Center/Gateway Web UI: modules, Worker, Canvas, slots, close/revoke; no backend-Worker qualification.

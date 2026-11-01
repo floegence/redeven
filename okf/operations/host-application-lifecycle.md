@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application lifecycle acceptance
 tags: [applications, macos, linux, validation]
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -11,32 +11,17 @@ Qualify process, window, decoded-frame and authenticated-viewer facts independen
 
 # Contract
 
-| Scenario | Required result and evidence |
-| --- | --- |
-| Existing single-instance Mac app | Reuse exact process; lease release preserves it (native fixture) |
-| First window after 40 seconds | Keep waiting, then reveal without relaunch (48-second fixture and Go watchdog) |
-| Multiple windows | Counted picker with literal titles, retained selection/focus and direct switching (viewer/browser tests) |
-| Close cancelled | Retain process/session and viewer (native cancellation fixture) |
-| Unreadable/replaced surface | Uncertainty never expires into closure (Swift inventory/presence tests) |
-| Linux dialog-only app | Reveal decoded dialog at native dimensions (Xpra adapter) |
-| Final window actually closes | Close established physical viewer (native/viewer tests) |
-| Last lease released | End sharing, retain newly launched app and all windows (multi-window fixture) |
-| One stale quit selection | Reject whole selection before termination (native quit fixture) |
-| App cancels quit | Keep process, pixels and sharing; permit another explicit request (cancellation/reconnect fixture) |
-| Unknown quit result | Keep confirmation error; never infer exit or auto-retry (Env App test) |
-| Read-only caller | May list running apps, never quit/detach (API/UI tests) |
-| Network loss/reload | Keep app; suspend capture/input, reclaim buffers, reconnect same session/current credential (WebSocket/native/viewer tests) |
-| Second viewer | Revoke previous input, release held keys, suspend old capture before successor resumes (WebSocket/native tests) |
-| Permission loss/console lock | Invalidate capture/input and expose distinct recovery (Swift/viewer tests) |
-| Helper exit | Sharing failure is not app exit; reclaim route, credential, buffers and helper before terminal state (Go/viewer tests) |
-| Late callback/unknown terminal reason | Ignore stale results; retain terminal page without automatic physical closure (macOS/Xpra viewer tests) |
-| Unproven foreground/window ownership | Nonblocking input failure, no replay into another app (native/viewer tests) |
-| Missing video decoder | Negotiate same-process image transport (picture/viewer acceptance) |
+Qualify these independent boundaries with native/viewer/API fixtures:
 
-Toolbar checks cover content resize below its fixed bar, bounded popovers at
-320/390/1000 px, native-menu keyboard access, distinct window close/confirmed quit,
-late menu dismissal and no replay of unconfirmed quit. Native quit tests cover
-catalog/session controls, visible/windowless apps, cancellation and stale generations.
+- Reuse an existing single-instance Mac process and preserve it after lease release. A 48-second first-window fixture must wait without relaunch.
+- Multiwindow picker counts/literal titles preserve selection/focus; canceled close/quit retains process, pixels, sharing and explicit retry. Last lease release ends sharing, never the application.
+- Unreadable/replaced surfaces never expire into closure. Confirmed final-window closure ends established physical viewers. Linux dialog-only apps reveal native-sized decoded dialogs.
+- Stale quit selection rejects the whole set before termination. Unknown outcome retains error without inferred exit/retry. Read-only callers may list but cannot quit/detach.
+- Network/reload retains process, suspends input/capture, frees buffers and reconnects the same session/current credential. Successor viewer revokes prior input/releases held keys/suspends capture first.
+- Permission loss/lock has distinct recovery. Helper exit is sharing failure, not app exit; retire route/credential/buffers/helper before terminal state. Ignore late callbacks and retain unknown-terminal pages.
+- Unproven foreground/window identity rejects input without replay/retargeting. Missing decoder negotiates same-process image transport.
+
+Toolbar qualification: fixed bar with resizable content, bounded 320/390/1000 px popovers, keyboard menus, separate close/confirmed quit, late dismissal and no unconfirmed replay. Native quit covers catalog/session controls, visible/windowless apps, cancellation and stale generations.
 
 # Boundaries
 

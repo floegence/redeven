@@ -3,30 +3,19 @@ type: Qualification Record
 title: Orange AFBC capture qualification
 tags: [desktop, drm, rockchip, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published native conversion decodes Orange 1920x1080 Wayland scanout through installed EGL using the exact legacy AFBC convention. Real pixel/lock/unlock tests pass on Orange, with udesk26 regression. Privileged service/fresh paint owns input. Unsupported layouts fail; native results do not certify browser/network latency, physical photons or installed product update.
+Native 0.22.34 decodes Orange 1920×1080 Wayland legacy AFBC through EGL. Real pixels/lock/unlock and udesk26 regression pass; unsupported layouts reject. Input still requires privileged service/fresh paint. Native checks do not certify product update, browser/network latency or physical photons.
 
 # Contract
 
-The [media contract](../architecture/remote-desktop-media.md) owns the format mapping and privilege boundaries. No target Portal interaction, new driver, compositor configuration, ACL change or private desktop is needed.
+[Media](../architecture/remote-desktop-media.md) owns mapping/privilege. Commit 2bcd721e2eeb68947c3943627ab0135068f2b808 needs no Portal, driver, ACL or compositor change. Exclude other drivers/modifiers/HDR/multiplane.
 
 # Boundaries
 
-## Measurements And Acceptance Limits
-Three candidate-only rounds each use 100 alternating pointer moves, maximum dimension 1920, 15 FPS and original pixels.
-
-| Host | Command receipt | Matched DRM feedback |
-| --- | --- | --- |
-| orange | 7.882 / 8.449 / 11.023 | 17.031 / 17.169 / 17.431 |
-| udesk26 | 8.140 / 9.771 / 9.887 | 16.822 / 16.786 / 66.872 |
-
-## Deployed Viewer boundary
-The [physical-device Viewer record](remote-desktop-device-viewer-results.md) owns the 2026-10-11 Env App deployment, actual toolkit input, physical unlock, window switching and bounded recovery measurements.
-
-The [earlier responsiveness record](remote-desktop-responsive-input-results.md) owns previous X11/client-input evidence and does not qualify this repair's orange product flow.
+[Viewer](remote-desktop-device-viewer-results.md) owns product acceptance; [earlier response](remote-desktop-responsive-input-results.md) cannot certify this repair. Git retains three 100-move rounds and source evidence; credentials excluded.
 
 # Evidence
 

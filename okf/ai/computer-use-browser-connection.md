@@ -3,13 +3,11 @@ type: Product Interaction Contract
 title: Guided personal browser connection
 tags: [ai, browser-use, chrome, onboarding]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop and Env App share one personal browser connection guide. ComputerUseRuntime owns
-connections; Floret ask_user and Respond remain the conversation owners.
-The guide is bounded UI observation, not a second execution lifecycle. Users confirm installation and the first connection in Chrome; that profile then restores the same environment connection after restarts. Routine tasks reuse the verified connection without manually selecting a target.
+Desktop and Env App share browser connection guidance over ComputerUseRuntime and Floret interactions. Users confirm Chrome installation and initial binding; later sessions restore the same environment. This bounded observation UI owns neither execution nor another lifecycle, and verified connections are reused.
 
 # Contract
 
@@ -25,4 +23,4 @@ Installation and connection never grant website access or authorize a tab. Uncer
 
 - `redeven:internal/ai/computer_extension_onboarding.go` - fixed native destinations and stable package staging.
 
-- `redeven:internal/ai/computer_extension_onboarding_test.go` - destination rejection, sandbox arguments and installation replacement.
+- `redeven:internal/ai/computer_extension_onboarding_test.go` - Browser destination/sandbox/replacement rejection.

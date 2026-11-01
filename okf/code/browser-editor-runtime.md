@@ -4,7 +4,7 @@ title: Browser Editor runtime
 tags: [code-app, browser-editor, local-ui, desktop]
 quality_exception: Cross-surface Browser Editor contract spanning Code App runtime state, Desktop transfer, Env App orchestration, remote download validation, and codespace navigation security.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,6 +23,6 @@ Opening or managing Browser Editor is not just a static file route. The session-
 
 # Evidence
 
-- `redeven:internal/codeapp/appserver/server.go:80` - App server backend owns codespace start, stop, delete, and port resolution.
+- `redeven:internal/codeapp/appserver/server.go:80` - AppServer codespace lifecycle and ports.
 
 - `redeven:internal/localui/localui.go:132` - Local UI mounts `/cs/` for codespace routes.

@@ -3,16 +3,11 @@ type: Interaction Contract
 title: Native Linux host application picture streams
 tags: [applications, linux, display, performance]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe Native Apps owns native capture, region encoding and browser
-composition. Redeven maps picture preferences and displays measured statistics.
-Only successfully composed pixels authorize input and acknowledgement. Quality
-changes preserve application and connection identity. Incompatible or malformed
-frames require explicit recovery; surviving legacy sessions remain viewable.
-The [display contract](host-application-display.md) owns application geometry.
+Floe Native Apps owns capture, region encoding and composition. Redeven presents preferences/measurements. Only composed pixels authorize input/ACK; quality changes retain process/connection identity. Malformed/incompatible frames need explicit recovery; surviving legacy sessions remain viewable under the display contract.
 
 # Contract
 

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower parent event timeline
 tags: [ai, flower, subagents, ui]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -27,6 +27,6 @@ An isolated Service/SQLite/scripted-provider browser qualification exercises act
 
 - The parent-event browser suite covers inline timestamp geometry at 292/420/960 px, long names, unavailable sources, mouse/keyboard name navigation, report expansion/scroll anchoring, themes and localized disclosure controls. The prior layout fails all three new geometry cases. Existing ResizeObserver delivery diagnostics also reproduce on the unmodified baseline.
 
-- `redeven:internal/flower_ui/src/parentEvents.tsx` - Canonical avatars, inline disclosure, fixed-range reads and stale-response isolation.
+- `redeven:internal/flower_ui/src/parentEvents.tsx` - Canonical portraits, disclosure, ranged reads and stale fencing.
 
 - `redeven:internal/ai/parent_events.go` - Recipient authorization and canonical event reads.

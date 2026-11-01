@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Private browser observation and input
 tags: [ai, computer-use, browser, privacy]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -34,4 +34,4 @@ Browser observation is a bounded protection, not proof of atomic safety across a
 
 - `redeven:internal/ai/computer_user_control.go` - authenticated non-model input.
 
-- `redeven:scripts/check_computer_host_safety.mjs` - isolated real-browser safety and private form fixtures with cleanup.
+- `redeven:scripts/check_computer_host_safety.mjs` - Isolated real-browser safety/private forms and cleanup.

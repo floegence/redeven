@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Verified Environment access routes
 tags: [desktop, gateway, runtime, identity, access]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -45,4 +45,4 @@ This contract owns display association and route selection. Proof observation ne
 
 - `redeven:internal/runtimeidentity/access_identity.go` - State identity, exclusive initialization and nonce proof.
 
-- `redeven:internal/localui/access_identity_test.go` - Public/private identity agreement and independent Runtime authentication.
+- `redeven:internal/localui/access_identity_test.go` - Public/private identity and independent Runtime auth.

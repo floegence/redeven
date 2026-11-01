@@ -3,11 +3,11 @@ type: Runtime Contract
 title: Desktop Web Service browser window
 tags: [desktop, managed-services, security, ui]
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop owns the trusted toolbar, isolated target view, navigation admission, and window cleanup. The Runtime's [Web Service session contract](../architecture/web-service-browser-sessions.md) owns the forward identity and authorized route. Reopening the same live forward reuses its window; application content never receives a Desktop bridge. Invalid navigation fails closed, while a marked upstream connection failure exposes a local retry without replacing authorization or restarting the application.
+Desktop owns protected target views, toolbar, navigation and cleanup over Runtime-authorized Web Service routes. Reopen reuses the same live forward; content gets no Desktop bridge. Invalid navigation rejects, while marked upstream failure offers local retry without reauthorizing or restarting the app.
 
 # Contract
 
@@ -32,6 +32,6 @@ System-browser authorization and the persisted access-mode decision remain owned
 
 # Evidence
 
-- `redeven:desktop/src/shared/desktopShellWebServiceWindowIPC.ts:1` - The semantic Desktop IPC validates HTTP(S) URLs and DNS-safe forward identities.
+- `redeven:desktop/src/shared/desktopShellWebServiceWindowIPC.ts:1` - Semantic IPC validates HTTP(S) and DNS-safe forward IDs.
 
-- `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - The isolated gateway maps redirects for the current protected Forward back to application-root paths without accepting other route identities.
+- `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - Protected Forward redirects stay in the same route identity.

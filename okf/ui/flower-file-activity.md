@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower file activity presentation
 tags: [ai, flower, files, activity, presentation]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -25,8 +25,8 @@ Activity presentation is not a filesystem authority or a second mutation record.
 
 # Evidence
 
-- `redeven:internal/ai/floret_tools.go` - One result-to-Floret payload mapping preserves reads and all ordered mutations.
+- `redeven:internal/ai/floret_tools.go` - One Floret result mapping for reads and ordered writes.
 
-- `redeven:internal/ai/activity_file_actions.go` - Public Activity sanitization permits only explicit target paths while filtering unrelated private fields.
+- `redeven:internal/ai/activity_file_actions.go` - Explicit Activity targets with unrelated private fields filtered.
 
-- `redeven:internal/ai/activity_file_targets.go` - Maps confirmed targets and enriches response copies through exact canonical queries.
+- `redeven:internal/ai/activity_file_targets.go` - Confirmed target enrichment through canonical queries.

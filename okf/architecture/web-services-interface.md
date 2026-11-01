@@ -3,7 +3,7 @@ type: UI Contract
 title: Web Services interface
 tags: [architecture, ui, desktop, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -38,6 +38,6 @@ The shell retains only collection and loading-presentation styles; management an
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Shared collection, per-target opening, archive navigation, and refreshed facts.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Shared inventory, target Open/archive and fresh facts.
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/web-services.css` - Container-based layout, semantic surfaces, and reduced-motion handling.
+- `redeven:internal/envapp/ui_src/src/ui/pages/web-services.css` - Container layout, semantic surfaces/reduced motion.

@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model request reuse
 tags: [ai, providers, cache, usage]
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -36,6 +36,6 @@ rotation separately invalidates the live connection before another request.
 
 # Evidence
 
-- `redeven:internal/ai/model_gateway_openai_connections.go` - Separates request fingerprints from authenticated connection admission and credential rotation.
+- `redeven:internal/ai/model_gateway_openai_connections.go` - Request equality is separate from authenticated connection/credential identity.
 
 - `redeven:internal/ai/openai_continuation_test.go` - Wire requests preserve full history with continuation disabled.

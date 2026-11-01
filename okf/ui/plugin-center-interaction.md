@@ -3,17 +3,11 @@ type: UI Contract
 title: Plugin Center interaction
 tags: [ui, plugins, plugin-center, workbench, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns Plugin Center navigation and presentation; released Floe Webapp owns
-Dialog positioning, Portal placement, presence, and modal input. Workbench opens
-one retained bottom drawer outside its inert canvas. Activity uses the same
-directory in a page. Search, filters, selection, and scroll survive reopening.
-Failed actions remain actionable; closing management never cancels an admitted
-Host Execution. Released ReDevPlugin remains the authority for lifecycle actions,
-permissions, exact inventory identity, and SDK surface lifetime.
+Redeven owns Plugin Center navigation; Floe owns dialogs, presence and input. Workbench uses a retained drawer and Activity the same directory page. Search/filter/selection/scroll persist. Closing management does not cancel Host execution; released ReDevPlugin owns lifecycle, permissions and surface authority.
 
 # Contract
 
@@ -39,8 +33,8 @@ Management presentation never creates a second lifecycle or permission authority
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterDrawer.tsx:1` - Retains content within an explicit global placement context and consumes the released bottom-drawer Dialog.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterDrawer.tsx:1` - Retained global placement using released bottom-drawer Dialog.
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Owns exact selection, scoped keyboard behavior, distinct accessibility IDs, and responsive details.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Exact selection, scoped keys, unique accessibility IDs and responsive detail.
 
 - redeven:internal/envapp/ui_src/src/ui/plugins/PluginRetainedDataDialog.browser.test.tsx:1 - Exercises single commits, uncertain outcomes, owner/target changes, permissions, focus, localized layouts and mobile geometry.

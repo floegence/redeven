@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Independent Web Environment Center
 tags: [architecture, desktop, gateway, web]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -12,38 +12,26 @@ Desktop combines an environment center with its existing local Runtime lifecycle
 # Contract
 
 ## Shared behavior and host ownership
+Shared desktop/src/envcenter owns routes/search/filter/recovery/order/cancellation/Gateway lists. Desktop adapter calls existing lifecycle/windows; Web calls Center HTTP/browser tabs. Shared code imports neither Electron/Node filesystem nor Web auth. Desktop never contacts Center or changes Welcome/navigation/preparation/shutdown. Config/secrets do not sync. cmd/center-contracts generates exact DTO/TS/schema bounds.
 
-`desktop/src/envcenter` owns exact route identity, search/filter, failure/recovery classification, operation ordering, cancellation and Gateway list presentation. Desktop's adapter invokes its existing main-process lifecycle/window owner; Web invokes Center HTTP and browser tabs. Shared modules cannot import Electron, Node filesystem APIs or Web authentication.
-
-Desktop does not contact Center, acquire Center credentials, or change Welcome layout, default navigation, local preparation preferences or shutdown ownership. Host configuration/secrets do not synchronize automatically. Go DTOs generate TypeScript and JSON schema through `cmd/center-contracts`, including enum/integer bounds.
-
-Labels/hostnames grant no trust. Directory revisions and operation sequences reject stale observations. A canceled pending tab cannot navigate after delayed completion; cancellation preserves an already-open route owner. Refresh reads authority instead of creating another intent.
+Labels/hostnames grant no trust. Revisions/sequences fence observations; late completion cannot navigate canceled pending tabs or cancel open route owners. Refresh reads authority, not new intent.
 
 ## Server entry
+Portal, Env and each child use distinct HTTPS origins under one registrable domain/port with matching TLS. Bookmarks are direct. Clipboard denial/absence retains descriptor/manual localized selection; announce success only after actual write.
 
-Portal, each Env and each child application use distinct HTTPS origins on the same registrable domain and port. TLS covers all origins. Browser bookmarks remain explicitly direct links.
+Center pairs as access-only Gateway after fingerprint confirmation. Runtime independently persists consent through redeven web-binding apply --stdin --yes, binding RuntimeID/origin/clientSPKI/scope/revision. Published Flowersec mutually authenticated TLS1.3 pins signed Runtime service; no inbound app TCP listener.
 
-Binding descriptor copy is a browser capability, not a network operation. Clipboard denial or absence produces local, localized manual-copy guidance without discarding the descriptor or changing authorization. Keyboard-accessible text selection remains available, and success is announced only after the browser confirms the write.
-
-Center pairs as an access-only Gateway client after fingerprint confirmation. Runtime consent is independently persisted by `redeven web-binding apply --stdin --yes`. Binding pins Runtime ID, exact origin, client SPKI, application scope and revision. Published Flowersec carries mutually authenticated TLS 1.3 to the signed, pinned Runtime service. The target needs no inbound application TCP listener.
-
-Each operation belongs to one administrator device and route. Browser nonce, exact origins, bounded redemption and a single-use code complete handoff. Same-request response-loss retry recovers one outcome. Host-only cookies do not replace Runtime password/MFA. Logout, security changes and source/route revocation cancel derived admissions/streams.
+Operations bind device/route. Browser nonce/exact origins/bounded redemption/single-use code complete handoff; response-loss same-request retry recovers one outcome. Host-only cookies never replace Runtime password/MFA. Logout/security/source/route revocation cancels derived admissions/streams.
 
 ## Runtime and child applications
+webbinding owns consent, webconnector pinned TLS, environmentcenter admin/directory/proxy. Deployment requires separate stateless Connector via Unix socket with exact peer UID before credentials. Worker holds admitted route credentials only; Center retains admin/factors/master key. Direct adapter is test-only, never deployment fallback.
 
-`internal/webbinding` owns durable consent; `internal/webconnector` composes pinned TLS; `internal/environmentcenter` owns administrator authority, directory and proxy admission. Deployed Center requires a separate state-free Connector process through a local Unix socket. Both peers verify the configured OS UID before exchanging credentials. Only admitted route credentials enter worker memory; administrator state, factors and master key remain with Center. Embedded protocol tests may use the direct adapter; deployed services never silently fall back.
+Control connection owns worker lease; Center loss/logout/revocation closes all streams. Connector restart loses leases; next request requires fresh valid admission. Never replay business HTTP. Systemd/Compose use distinct unprivileged identities; Connector cannot read Center state/TLS keys. IPC preserves bounded permission/capacity/compatibility/offline codes; Runtime payloads cannot invent worker errors. Published controller retries only explicit transient Gateway admission conflicts; invalid/denied/revoked proofs terminate.
 
-A live control connection owns each worker lease. Center loss, logout or security revocation closes it and every derived stream. Connector restart loses leases; only a still-valid Center admission may establish a fresh lease on the next request. Business HTTP requests are never replayed by this owner. Systemd and Compose use distinct unprivileged identities and deny Connector access to Center state/TLS-key mounts.
-
-IPC preserves bounded machine error codes so permission, capacity, compatibility and offline failures retain shared recovery semantics. Runtime responses cannot inject worker error authority. The published connection controller owns retry timing; only explicit transient Gateway admission conflicts are retryable, while denied/revoked identity and invalid proofs remain terminal.
-
-Services, editor and graphical viewers receive resource-specific origins. Parent Runtime credentials stay in the trusted proxy and never reach child browsers. Editor admission pins the running instance. Raw graphical routes cannot bypass resource-scoped Flowersec. Child responses retain authenticated Runtime framing policy so editor worker iframes work; portal framing remains denied.
+Services/editor/graphical viewers use resource origins; trusted proxy retains parent credentials. Editor pins running instance. Graphical access requires scoped Flowersec. Child framing follows authenticated Runtime policy for editor workers; Portal denies framing.
 
 ## Plugin application origins
-
-Center prepares and revokes plugin origins through authenticated parent-route operations. Pending preparations and active origins share bounded capacity. A concurrent preparation for the same origin is busy; failed or canceled probes release their reservation. DELETE cancels and fences an in-flight preparation so a delayed probe cannot resurrect a revoked route or overwrite a reopened generation.
-
-Each child origin retains its exact parent route and Runtime admission. Child requests cannot call Center management APIs. Gateway certificates cover the admitted child-origin namespace, and CONNECT routing validates the exact Runtime target. Desktop private transport attaches parent bridge credentials only for the trusted parent frame.
+Authenticated parent operations prepare/revoke origins under shared pending/active capacity. Duplicate pending origin is busy; failed/canceled probes release reservation. DELETE fences pending work so late probes cannot revive/replace generations. Each child binds parent route/Runtime admission and cannot call management APIs. Gateway certificates/CONNECT enforce exact namespace/target. Desktop credentials attach only to trusted parent frame.
 
 # Boundaries
 

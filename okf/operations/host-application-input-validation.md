@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application input validation
 tags: [applications, input, linux, macos, validation]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -11,22 +11,9 @@ Qualify client input using real application receipts/saved bytes. Upstream owns 
 
 # Contract
 
-## Released capabilities
-The current integration consumes Floe Native Apps v0.22.19 and Floe webapp core 0.86.0 with `GOWORK=off`.
+Published native 0.22.19/Floe core 0.86.0/GOWORK=off:Linux maps physical keys to the seat, uses confirmed Unicode for unrepresentable layouts, and orders clipboard publication before paste upstream. Never paste stale selections, replay text or release composition after scroll.
 
-The native Linux adapter maps physical keys to the published seat, uses confirmed text when the client layout cannot be represented by that keymap, and sends clipboard publication before paste through the upstream scheduler. It must not paste the old selection, replay text or release composition when scrolling ends.
-
-## Actual application receipts
-On a task-owned Linux installation, set `REDEVEN_TEST_DESKTOP_COMPONENT_STATE` to the released combined component root.
-
-The application must report the received string before further checks.
-
-Minimal test images may lack CJK/emoji fonts: exact string receipts remain valid input evidence, but missing glyphs are not visual font acceptance.
-
-## Lifecycle and retained resources
-`TestInstalledDesktopApplicationTransport` verifies real pointer/text/key input, exact saved bytes, invalid clipboard rejection and cancellation of dependent input, then recreates the Runtime manager and saves again through the same helper.
-
-Unknown records fail read-only. Elapsed time alone cannot end a live application awaiting its first window; the installed timeout regression observes the old 40-second boundary without ending sharing or the process.
+Set REDEVEN_TEST_DESKTOP_COMPONENT_STATE to the task-owned released combined root; independently confirm received string. Missing CJK/emoji fonts do not invalidate exact receipts or qualify visible glyphs. TestInstalledDesktopApplicationTransport verifies pointer/text/keys/saved bytes, rejects invalid clipboard/cancels dependent input, recreates manager and saves through the same helper. Unknown records fail read-only; the old 40 s boundary cannot terminate a live first-window wait.
 
 # Boundaries
 

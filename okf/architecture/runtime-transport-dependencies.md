@@ -4,11 +4,11 @@ title: Runtime transport dependencies
 tags: [architecture, dependencies, terminal]
 quality_exception: Published Flowersec transport and Floeterm boundary covering session ownership, protocol profiles, and shared admission.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven runtime builds control and data sessions on the Transport v3 artifact and the current Flowersec lease, connection-controller, session, RPC, and byte-stream primitives, while terminal lifecycle is delegated to Floeterm. Each Env App owns one protocol provider and current Flowersec session; RPC and independent live streams share it. Placement HTTP/2 is a separate SSH stdio boundary and does not change Flowersec wire or public SDK contracts.
+Runtime composes Transport v3 and published Flowersec connection/session/RPC/stream primitives; Floeterm owns terminal lifecycle. Each Env App shares one current protocol session across RPC and live streams. Desktop SSH placement HTTP/2 is separate and does not redefine Flowersec wire or public SDK behavior.
 
 # Contract
 
@@ -34,4 +34,4 @@ Compatibility depends on these published transport and terminal interfaces stayi
 
 - `redeven:go.mod:10` - Redeven pins floeterm terminal-go in the runtime module.
 
-- `redeven:internal/agent/agent.go:20` - Agent imports the published Flowersec Go v5 root package and uses `ConnectionController`, `WaitForSession`, `Connect`, `Session`, `RPCPeer`, and `ByteStream`.
+- `redeven:internal/agent/agent.go:20` - Published Flowersec v5 controller, sessions, RPC and byte streams.

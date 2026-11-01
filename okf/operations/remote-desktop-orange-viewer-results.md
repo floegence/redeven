@@ -3,37 +3,19 @@ type: Qualification Record
 title: Orange remote desktop Viewer follow-up
 tags: [desktop, ssh, deployment, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Orange native v0.22.37 passes thirteen release jobs and Viewer Unicode/lock/password/unlock/input/media checks. Mac Pinyin is deferred; host Pinyin unvalidated. Two paired rounds improve latency/FPS, but missing idle responses and SSH recovery fail parity; a third RustDesk half has severe tails/disconnects. Measured LAN loss moves comparison to udesk26; quality/resource evidence remains required.
+Orange 0.22.37 passes thirteen release jobs and Viewer Unicode/lock/unlock/input/media checks. Mac Pinyin is deferred; host Pinyin unvalidated. Improved paired latency/FPS does not erase missing idle responses/SSH recovery failures or later RustDesk tails/disconnects; measured LAN loss limits comparison.
 
 # Contract
 
-## Current Product Deployment
-The task Desktop uses state `/tmp/redeven-orange-viewer-desktop` and a bundle built from Redeven `bb6683b5ce18`, consuming published native `v0.22.37` with `GOWORK=off`. Only bounded task fixtures receive qualification input.
-
-The [SSH deployment owner](../architecture/remote-desktop-ssh-deployment.md) defines update and admission; deployment identity differs from recipe identity.
-
-## Release And Regression Evidence
-Redeven `b7d994aff911` fixes Node 26 linked-entrypoint identity after Desktop exit 71 exposed skipped release verification; all 31 affected checks pass.
-
-Redeven setup nevertheless fails before installation because the Go module omits nested MPP assets; the old service remains usable.
-
-Test tabs and the isolated HTTP server close afterward.
-
-## Real Viewer Acceptance
-Explicit local paste previously depended on host clipboard synchronization, which DRM does not advertise. The product adapter now uses existing bounded client text, fences delayed reads after mode/authority changes and reports denied clipboard access.
-
-Credentials never enter evidence, command arguments, environment or diagnostics.
-
-## RustDesk Comparison Status
-The [physical desktop comparison](remote-desktop-rustdesk-comparison-results.md) owns its method, measurements and unresolved acceptance boundaries. Orange results remain evidence for Orange only; no hardware-wide parity claim is supported.
+Task consumer bb6683b5ce18/GOWORK=off. b7d994aff911 repairs Node 26 linked-entry verification,31checks pass; missing published MPP assets still block setup while old service works. Bounded paste respects authority.
 
 # Boundaries
 
-These observations apply only to the recorded hardware, published candidate and measured paths. The acceptance results and unresolved cases above remain authoritative.
+[Comparison](remote-desktop-rustdesk-comparison-results.md) and [deployment](../architecture/remote-desktop-ssh-deployment.md) own remaining qualification. Orange proves no hardware-wide parity; Git retains task IDs/failures.
 
 # Evidence
 

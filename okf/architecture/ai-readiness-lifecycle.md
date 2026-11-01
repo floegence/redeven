@@ -3,7 +3,7 @@ type: Architecture Contract
 title: AI readiness and service generation lifecycle
 tags: [architecture, ai, readiness, lifecycle, floret]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,6 +23,6 @@ The controller imports no Floret/SQLite/threadstore packages, holds no Host/Back
 
 # Evidence
 
-- `redeven:internal/codeapp/ai_readiness.go:1` - Owns serialized startup, sanitized state, generation cancellation, drain, replacement, and close.
+- `redeven:internal/codeapp/ai_readiness.go:1` - Serialized startup, sanitized generations, drain/replace/close.
 
-- `redeven:internal/codeapp/appserver/server.go:2277` - Acquires one request lease and propagates its service through request context.
+- `redeven:internal/codeapp/appserver/server.go:2277` - One request lease propagated through context.

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop loopback Web Service access
 tags: [architecture, desktop, port-forward, proxy, security]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,6 +21,6 @@ Compatibility origin is not direct access, RBI, public listening, Local UI login
 
 # Evidence
 
-- `redeven:internal/portforward/registry/schema.go` - The fresh Registry baseline persists one constrained access mode and route-safe forward identity.
+- `redeven:internal/portforward/registry/schema.go` - Registry baseline pins constrained access mode and route identity.
 
-- `redeven:desktop/src/main/navigation.ts:256` - Navigation maps only the exact HTTP target scope and supported loopback aliases into the assigned gateway Origin.
+- `redeven:desktop/src/main/navigation.ts:256` - Exact HTTP target/loopback mapping to the assigned gateway origin.

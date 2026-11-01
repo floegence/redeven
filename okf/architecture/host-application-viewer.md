@@ -3,11 +3,11 @@ type: Interaction Contract
 title: Host application viewer state and recovery
 tags: [applications, ui, desktop, runtime]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime/native events own application facts; Redeven bootstrap owns viewer presentation. Show pixels only after decoding. Transport/access loss never proves exit, and reconnect preserves process identity without launching. Confirmed last-window/app closure dismisses an established viewer; an already-loaded terminal document remains readable. [Application authorization](host-applications.md) and [titlebar](../desktop/host-application-titlebar.md) retain their owners.
+Runtime/native events own app facts and bootstrap owns viewing. Decoded pixels precede input; transport loss never proves exit. Reconnect keeps process identity. Only confirmed final-window/app closure dismisses an established viewer; terminal pages remain readable and application/titlebar authorities stay separate.
 
 # Contract
 

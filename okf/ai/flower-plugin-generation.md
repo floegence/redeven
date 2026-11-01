@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Flower plugin generation
 tags: [ai, flower, plugins, floret]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -33,4 +33,4 @@ A requested approval remains waiting until Floret resolves it.
 
 - `redeven:AGENTS.md` - AI behavior should be prompt-first and contract guided.
 
-- `redeven:okf/ai/ai-tool-runtime.md:15` - Floret owns permission lifecycle and Redeven returns allow, ask, or deny before dispatch.
+- `redeven:okf/ai/ai-tool-runtime.md:15` - Floret permission lifecycle; product allow/ask/deny before dispatch.

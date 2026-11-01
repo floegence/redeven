@@ -3,16 +3,11 @@ type: UI Contract
 title: File icon presentation
 tags: [ui, files, git, flower, upstream]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe Webapp owns file recognition rules, SVG artwork, and product
-palettes. Redeven supplies filenames, directory and link metadata, and rendered
-sizes. JSON, YAML, and TOML remain visually distinct; language, design, office,
-and installer formats retain their reviewed identities. Unknown formats use the
-upstream generic icon. An icon never grants preview, execution, or extraction
-capabilities; those operations retain their existing permission and format checks.
+Floe owns filename recognition, SVG icons and palettes; Redeven supplies names, directory/link metadata and size. Formats retain reviewed distinctions and unknown files use the generic upstream icon. Icons confer no preview/execution/extraction authority, whose independent format and permission checks remain.
 
 # Contract
 

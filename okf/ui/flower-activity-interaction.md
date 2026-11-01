@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 tags: [ai, flower, activity, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -65,11 +65,11 @@ This is presentation policy, not a Floret API/execution lifecycle. Safe details 
   cover bounded layout work, burst retargeting, frame displacement, text identity,
   selection, reduced motion and lifecycle cancellation.
 
-- `redeven:internal/ai/tool_activity_details.go` - Bounded product input/result mapping over the released Floret contract.
+- `redeven:internal/ai/tool_activity_details.go` - Bounded product payloads over public Floret.
 
-- `redeven:internal/ai/computer_activity.go` - Candidate and semantic page facts without redundant status or platform details.
+- `redeven:internal/ai/computer_activity.go` - Candidate/page facts without duplicate status/platform detail.
 
-- `redeven:internal/flower_ui/src/FlowerActivityRows.tsx` - Published code display, localized copy feedback and stable row expansion.
+- `redeven:internal/flower_ui/src/FlowerActivityRows.tsx` - Published code/copy feedback and stable expansion.
 
 - [Title reveal owner](../../internal/flower_ui/src/flowerActivityTitleReveal.ts)
   and [browser regression checks](../../internal/envapp/ui_src/src/ui/FlowerSurface.activityTyping.browser.test.tsx)

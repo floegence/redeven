@@ -3,16 +3,11 @@ type: UI Contract
 title: HTML file preview
 tags: [ui, files, preview, html, security]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns file classification, authorized reads, edit state, and preview
-placement. Published Floe owns HTML document construction and isolation policy.
-Opening an HTML file displays its page by default; source editing requires an
-explicit action and write permission. The document cannot access the trusted
-shell or authenticated resources. Oversized, truncated, or unreadable content
-never executes and retains the existing localized preview error surface.
+Redeven classifies files and authorizes reads/edits/placement; Floe constructs isolated HTML pages. Opening renders by default and source editing is explicit/write-authorized. Content cannot reach trusted Shell/resources. Oversized, incomplete or unreadable input never executes and retains localized recovery.
 
 # Contract
 
@@ -35,6 +30,6 @@ Edit opens the existing HTML source editor only when write permission permits. A
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.tsx` - Product page placement over published Floe HTML isolation and explicit source editing.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.tsx` - Product placement over published HTML isolation/explicit source edit.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.browser.test.tsx` - Real HTML/CSS/script rendering, isolation, editing, mobile sizing, and Workbench wheel ownership.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.browser.test.tsx` - Actual HTML/CSS/script rendering, isolation, edits, mobile/wheel behavior.

@@ -3,11 +3,11 @@ type: Desktop Contract
 title: Desktop transport recovery
 tags: [desktop, runtime, transport, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Each Desktop placement bridge owns one HTTP/2 session, an immutable-generation recovery snapshot, and one exact registry identity. Recovery replaces the stdio exec and HTTP/2 session once through that owner, validates process and Runtime identity, rejects stale callbacks, and disposes transport and model resources through one terminal settlement path. Health observers and individual streams cannot independently recreate the bridge lifecycle.
+Each placement bridge owns HTTP/2, immutable recovery generation and registry identity. Its owner replaces stdio/session once, verifies process/Runtime, rejects late callbacks and disposes resources at one terminal boundary. Health observers or individual streams cannot independently restart transport.
 
 # Contract
 
@@ -27,8 +27,8 @@ Transport recovery IPC is a narrow current-session capability. The separate Desk
 
 # Evidence
 
-- `redeven:desktop/src/main/nativeLocalTransportRecovery.test.ts:1` - Production HTTP failure routing and explicit Open cover terminal native listener loss, unrelated request isolation, and workspace-preserving lifecycle recovery.
+- `redeven:desktop/src/main/nativeLocalTransportRecovery.test.ts:1` - HTTP/native listener failure, request isolation and workspace-preserving Open recovery.
 
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.test.ts:280` - Terminal Desktop failure stops protocol acquisition and rejects late connection events.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.test.ts:280` - Terminal Desktop failure cancels acquisition/fences late connections.
 
-- `redeven:desktop/src/main/localUIURL.ts:44` - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.
+- `redeven:desktop/src/main/localUIURL.ts:44` - Desktop Env entry under /_redeven_proxy/env/.

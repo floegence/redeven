@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: OKF tool suite
 tags: [ai, okf, ui]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -27,6 +27,6 @@ The tools return scoped Redeven repository knowledge and do not mutate OKF sourc
 
 - `redeven:internal/okf/search.go:17` - LoadEmbeddedBundle reads the embedded bundle lazily once.
 
-- `redeven:internal/ai/tools/registry.go:249` - Builtin presentation metadata keeps OKF tools read-only with structured rendering.
+- `redeven:internal/ai/tools/registry.go:249` - Read-only structured OKF presentation metadata.
 
-- `redeven:internal/ai/builtin_tool_handlers.go:662` - Tool definition text limits OKF tools to Redeven repository knowledge and excludes internet/current/general web facts.
+- `redeven:internal/ai/builtin_tool_handlers.go:662` - OKF is repository-only knowledge, excluding current/external web facts.

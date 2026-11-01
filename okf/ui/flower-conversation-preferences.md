@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower personal conversation preferences
 tags: [ai, flower, preferences, composer, persistence]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -31,6 +31,6 @@ This is Redeven product preference policy using already published Floret capabil
 
 # Evidence
 
-- `redeven:internal/ai/conversation_preferences.go` - Authenticated product preference API and model/directory/reasoning validation.
+- `redeven:internal/ai/conversation_preferences.go` - Authenticated model/cwd/reasoning preferences.
 
 - `redeven:internal/ai/threads.go` - Root creation precedence and final validation.

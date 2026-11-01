@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench input ownership
 tags: [ui, workbench, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -26,4 +26,4 @@ Components embedded in projected Workbench surfaces must use the shared floating
 
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Wheel ownership uses a dedicated data attribute.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51` - Tests enforce that text-selection props do not grant wheel ownership by themselves.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51` - Selection props alone confer no wheel ownership.

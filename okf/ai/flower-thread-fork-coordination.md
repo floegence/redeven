@@ -3,7 +3,7 @@ type: AI Persistence Contract
 title: Flower thread fork coordination
 tags: [ai, threads, persistence, floret]
 lifecycle: contract
-reviewed_at: "2026-10-21"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,6 +23,6 @@ Redeven never stores a fork saga, source/destination turn or run identity mappin
 
 # Evidence
 
-- `redeven:internal/ai/threads.go` - Authorizes the source, calls typed Floret Fork, adopts returned product settings, and applies an optional title.
+- `redeven:internal/ai/threads.go` - Source authorization, typed Fork, product settings and optional title.
 
 - `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.

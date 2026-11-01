@@ -3,7 +3,7 @@ type: AI Context Contract
 title: Flower context action admission
 tags: [ai, flower, context]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,6 +21,6 @@ Context actions and references do not alter working directory, target permission
 
 # Evidence
 
-- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Bounded, redacted environment inspection and card-owned operation capture.
+- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Bounded redacted inspection and card-owned operation.
 
-- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - State distinctions, owner isolation, failure diagnostics, omission, Unicode bounds, and shared wire fixture.
+- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - State/owner/errors, omission/Unicode limits and shared wire fixture.

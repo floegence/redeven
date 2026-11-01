@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop SSH runtime operations
 tags: [desktop, ssh, runtime, process]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -11,31 +11,26 @@ Desktop manages SSH-host and SSH-container Runtime only through the saved connec
 
 # Contract
 
-## Transport/authentication
+## Authentication and transport
+Keys bind normalized destination/port, authentication, SSH executable and credential scope. Preserve failure without substitution/replay. macOS/Linux use ControlMaster; Windows bounded native OpenSSH plus one child/private Bridge, never WSL/ControlMaster. Cancel only owned children.
 
-Keys bind normalized destination/port, authentication, SSH executable and credential scope. Preserve failures without substitution/replay. macOS/Linux reuse ControlMaster; Windows uses bounded native OpenSSH and one persistent child per private Bridge, no WSL/ControlMaster. Cancel/dispose only owned children.
+Omitted passwords reuse exact private scope; explicit changes reject during leases and never cross scopes. Without password, explicit connections try configured keys/agent in batch mode even for password registrations; passive status may defer. Never send empty retries. Start/Restart/Update carry transient credentials through access/certificate checks, preparation and verification without saving; observations reject passwords.
 
-Omitted passwords reuse exact-scope private credentials, never clear them. Explicit changes reject during leases; no cross-scope inheritance. Without passwords, attempt configured keys/agent in batch mode even for password-mode registration; never send empty retries. Explicit connection allows this; passive status may defer. Password presence grants no authority. Start/Restart/Update carry transient credentials through certificate/access preflight, preparation and verification without saving. Observations reject passwords.
+Connect Timeout bounds probe/inventory/readiness; startup/packages have distinct deadlines. Windows x64 askpass accepts password/passphrase, rejects host-key prompts, writes only private stdout and preserves OpenSSH trust. Missing helper fails; no secrets in args/files/logs. Bounded includes exclude wildcard/negated picker aliases, not explicit destinations. Save exact root/container engine+ID separately from label.
 
-Normalized Connect Timeout bounds connection/probe/inventory/readiness; package/startup keep separate deadlines. Packaged Windows x64 askpass accepts password/passphrase, rejects host-key prompts, emits only private stdout and retains OpenSSH trust. Missing helper fails; secrets never enter argv/files/logs. Bounded SSH includes omit wildcard/negated picker aliases; explicit destinations remain valid. Save exact root/container engine+ID separately from display name.
+## Execution
+One operation reuses transport and probes platform once. Only inventory/stop prepares the small helper; Start/Stop never build full bundles. Update verifies before mutation with visible acquisition/upload/build. Use public dependencies and install Desktop deps before Env assets.
 
-## Preparation/execution
+Archive bounds: 256 MiB compressed/512 MiB expanded including Runtime/Computer/signed plugins, enforced before writes and parsed once. Upload progress has its own stall deadline; command timeout resumes after final write. Stall/cancel/loss stops owned command; pipe bytes prove no receipt. Password prompts have no upload deadline.
 
-One operation reuses transport, probes platform once and prepares a small helper only for inventory/stop. Start/Stop never build full packages. Update verifies before mutation; build/download/upload remain visible. Clean builds use published dependencies and install Desktop dependencies before Env App assets.
+Private slots: runtime/managed/bin/executables 0700, stamps/evidence 0600 independent of umask. Failed normalization preserves live slot; upstream owns executable admission. Host targets require confirmed user/root, containers exact saved identity. Start/Restart/Update/Reinstall may start container; Stop never does and accepts empty inventory. Signal only verified scope; retain before/after. Wipe-reinstall may tolerate helper inventory/stop failure only when direct access can isolate root.
 
-Archives: ≤256 MiB compressed/512 MiB expanded tar stream including Runtime, Computer and signed plugins. Enforce while decoding before target writes; parse inventory once. Upload uses bounded writes/progress deadline; progressing transfer may exceed command timeout, which resumes after final write. Stall/cancel/loss terminates owned command; pipe progress is not receipt. Credential prompts have no upload deadline.
+Remote snippets perform bounded probe/stage/inventory/stop/install/start/verify/isolate/cleanup. Desktop owns order/deadlines/cancel/progress/retry; no target lock/heartbeat/supervisor.
 
-Shared private slot metadata across upload/install/container/reinstall: runtime, managed, bin and both executables0700; stamp/evidence0600 regardless of umask. Normalization failure preserves live slot; ReDevPlugin owns executable admission.
+## Progress and results
+Use generated signed GitHub latest/download/redeven-install.sh with selected tag, no Portal duplicate. One Launcher Operation measures actual upload/download/acquisition bytes. Parse complete Downloading Redeven: N% records; stderr diagnostics, stdout stage path. Companion output cannot reset Runtime progress. No additional parser/process/poll.
 
-Host actions use confirmed user/root; container actions inspect exact saved container. Start/Restart/Update/Reinstall may start it; Stop cannot and accepts empty Runtime inventory. Signal verified scope matches only; retain typed before/after. Wipe-reinstall may treat helper inventory/stop as best effort only when direct access can isolate root.
-
-Remote snippets perform one bounded probe/stage/inventory/stop/install/start/verify/isolate/cleanup. Desktop owns ordering/deadlines/cancellation/progress/retry; no remote lock, heartbeat or lifecycle machine.
-
-## Progress/failures
-
-Bootstrap uses generated signed https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh with selected tag; Portal supplies no second installer. One Launcher Operation owns transfers: local upload writes, acquired response bytes with known size, shared acquisition progress. Direct downloads consume complete Downloading Redeven: N% records; stderr is diagnostics, stdout only staged path. Companion output cannot reset Runtime progress.
-
-No extra download/parser process/SSH poll. Transfer100% is not verified install/readiness. Failure/cancel freezes measured progress. Acquisition/directory/upload/unpack are preparation; only activation mutates live slot. Operation exists before first SSH command. Distinguish connection, engine/container, preparation, command and readiness failures with technical stderr. Empty successful startup-report means pending to deadline; nonzero read is command failure, valid blocked report Runtime failure, only nonempty malformed report invalid. Every lifecycle path uses this interpretation.
+100% transfer proves no activation/readiness. Freeze measured progress on failure/cancel. Acquisition/staging/upload/unpack are preparation; only activation changes live slot. Create operation before first SSH command. Distinguish connection/engine/preparation/command/readiness errors with technical stderr. Empty successful report stays pending to deadline; nonzero read is command failure, valid blocked report Runtime failure, only nonempty malformed report invalid. All lifecycle paths share interpretation.
 
 # Boundaries
 
@@ -45,4 +40,4 @@ SSH registrations retain direct lifecycle menus. Gateway/Provider-only entries c
 
 - `redeven:desktop/src/main/sshTransportManager.ts:1` - Credential-scoped SSH transport reuse and cancellation.
 - `redeven:desktop/native/windows-ssh/main.go:1` - Native Windows askpass prompt and credential boundary.
-- `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Platform execution, failure classification, and owned-child disposal.
+- `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Platform execution, classification and owned cleanup.

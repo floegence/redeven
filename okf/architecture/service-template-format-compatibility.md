@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Redeven Service Template format compatibility
 tags: [architecture, templates, compatibility, localization]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -38,4 +38,4 @@ The npm SDK publishes the corresponding types, schemas, and GitHub acquisition c
 
 - `redeven:go.mod` - Pins the formally released upstream reader and data types.
 
-- `redeven:internal/managedwebservice/template_sources.go` - Reads original directories through the published adapter and applies Runtime policy.
+- `redeven:internal/managedwebservice/template_sources.go` - Original-directory adapter reads under current Runtime policy.

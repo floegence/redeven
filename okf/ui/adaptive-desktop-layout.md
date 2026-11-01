@@ -3,17 +3,11 @@ type: UI Contract
 title: Adaptive desktop layout
 tags: [ui, desktop, layout, navigation, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven chooses interaction mode through released Floe layout configuration.
-Native Desktop always uses desktop interaction. Browser mobile interaction
-requires all three conditions: width below 768 CSS pixels, a coarse primary
-pointer, and no primary hover capability. Narrow mouse windows retain Activity
-and Workbench. Floe owns media-query observation, local space measurement, and
-drawer placement/focus; Redeven owns navigation disclosure and content.
-Automatic sidebar placement never changes saved navigation or collapse preferences.
+Native Desktop keeps desktop interaction. Browser mobile mode requires width below 768 CSS px, coarse primary pointer and no hover; narrow mouse windows keep Activity/Workbench. Floe observes layout and owns drawer focus; Redeven owns navigation. Automatic placement preserves saved navigation and collapse choices.
 
 # Contract
 
@@ -42,6 +36,6 @@ Narrow layouts may ellipsize selection titles; explanations remain normal prose 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Maps native host identity and browser capabilities into Floe configuration.
+- `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Native/browser facts mapped to Floe layout.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Checks compact sidebar geometry, mobile dismissal, and retained navigation across inline/drawer transitions.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Mobile/sidebar geometry, dismissal and retained drawer navigation.

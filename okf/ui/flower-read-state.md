@@ -45,6 +45,6 @@ Read confirmation belongs to Redeven product state, not Floret execution or shar
   cover foreground/reselect/cache/cold-navigation races, late and failed refreshes,
   visible unread indicators and bounded read/acknowledgement counts.
 
-- `redeven:internal/flower_ui/src/threadCache.ts` - Independent monotonic activity and confirmation merging, with a separate loaded-content revision.
+- `redeven:internal/flower_ui/src/threadCache.ts` - Monotonic read/activity merge with separate content coverage.
 
-- `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Fake-clock retry, timeout, offline/access recovery, coalescing and late-callback coverage.
+- `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Clocked retry/timeout/offline/access and late callbacks.

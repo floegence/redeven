@@ -3,7 +3,7 @@ type: Frontend Transport Contract
 title: Env App connection and recovery
 tags: [architecture, env-app, transport, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -25,4 +25,4 @@ Floe and Flowersec own acquisition, retry timing, source consumption, protocol f
 
 - `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501` - Maps local and remote acquisition into the published source.
 
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Projects structured reconnect events without product retry heuristics.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Typed reconnect projection without product retry guesses.

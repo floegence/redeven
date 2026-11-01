@@ -156,6 +156,14 @@ function projectCatalogItem(
     publisher: installedPublisher || installed.publisher_id,
     version: installed.version,
     managementRevision: installed.management_revision,
+    recoveryIdentity: {
+      plugin_instance_id: installed.plugin_instance_id,
+      active_fingerprint: installed.active_fingerprint,
+      installed_at: installed.installed_at,
+      management_revision: installed.management_revision,
+      enable_state: installed.enable_state,
+      deleted_at: installed.deleted_at,
+    },
     installedPackage: {
       packageHash: installed.package_hash,
       manifestHash: installed.manifest_hash,
@@ -227,6 +235,14 @@ function projectInstalledItem(
     publisher,
     version: installed.version,
     managementRevision: installed.management_revision,
+    recoveryIdentity: {
+      plugin_instance_id: installed.plugin_instance_id,
+      active_fingerprint: installed.active_fingerprint,
+      installed_at: installed.installed_at,
+      management_revision: installed.management_revision,
+      enable_state: installed.enable_state,
+      deleted_at: installed.deleted_at,
+    },
     installedPackage: {
       packageHash: installed.package_hash,
       manifestHash: installed.manifest_hash,

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Host application platform validation
 tags: [operations, host-applications, validation, platforms]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -17,26 +17,18 @@ successful simulated acceptance.
 
 # Contract
 
-The current combined backend and package matrix is owned by the [desktop compatibility record](host-application-desktop-validation.md). The older Xpra results below qualify that retained backend only; they are not evidence for Snap, Flatpak, Wayland or a newly prepared combined component.
+[Combined desktop/package evidence](host-application-desktop-validation.md) supersedes the retained Xpra lane for new components. Historical Xpra userspaces have no desktop/monitor and cannot qualify boot, kernel, SELinux/AppArmor, GPU or login policy.
 
-## Retained Xpra distribution validation
-The historical Xpra matrix below covers userspace installations without a desktop environment or monitor. Container checks cannot certify a distribution's boot, kernel, SELinux/AppArmor, GPU, or login policies.
-
-| Environment | Installed stack | Evidence scope |
+| Userspace | Installed Xpra / HTML5 | Qualified scope |
 | --- | --- | --- |
-| Ubuntu 22.04, orange host | Xpra 6.5.3, HTML5 v20 | Native host application acceptance, browser/Desktop window controls, input and reconnect |
-| Debian 13 | Upstream Xpra 6.5.3 packages with explicit `xpra-x11`, HTML5 v21 | GIO checks; X11 launch/resume/stop; browser display, input, reconnect and application-exit closure |
-| Fedora 43 | Distribution Xpra 6.5.3, separately installed HTML5 v20 | Same installed-stack and GIO checks |
-| openSUSE Tumbleweed | Distribution Xpra 6.5.3, separately installed HTML5 v20 | Same installed-stack and GIO checks |
-| Alpine 3.23 ARM64 | Distribution Xpra 6.2.2, upstream HTML5 v20, static GNU Redeven Runtime | GIO; launch/resume/stop; complete Runtime and native terminal; browser display, input, reconnect and application-exit closure |
-| Arch Linux x86_64 | Distribution Xpra 6.4.4, upstream HTML5 v20 | GIO and isolated X11 launch/resume/stop in the prepared userspace; complete Runtime and browser flow under the translation constraints below |
-| AlmaLinux 9 x86_64 | Upstream Xpra 6.5.3, HTML5 v21 | GIO and isolated X11 launch/resume/stop in the prepared userspace |
-| Rocky Linux 9 x86_64 | Upstream Xpra 6.5.3, HTML5 v21 | GIO and isolated X11 launch/resume/stop in the prepared userspace |
+| Ubuntu 22.04, Orange | 6.5.3 / v20 | Native product, browser/Desktop controls, input/reconnect |
+| Debian 13 | 6.5.3 plus xpra-x11 / v21 | GIO, X11 lifecycle, browser input/reconnect/exit |
+| Fedora 43; openSUSE Tumbleweed | 6.5.3 / v20 | Same installed-stack/GIO scope |
+| Alpine 3.23 ARM64 | 6.2.2 / v20 | Static GNU Runtime/native terminal plus GIO/lifecycle/browser |
+| Arch x86_64 | 6.4.4 / v20 | GIO/X11 lifecycle; translated Runtime/browser, not native hardware |
+| AlmaLinux 9; Rocky Linux 9 x86_64 | 6.5.3 / v21 | GIO and isolated X11 lifecycle only |
 
-## macOS validation
-The native adapter was exercised on macOS 26.5.2 ARM64 in a logged-in graphical session with capture and accessibility permission. The disposable AppKit fixture verifies real bundle metadata/icons, direct launch, captured pixels, pointer input, Unicode text, native shortcuts, actual menu invocation, real AX resize, reconnect without a new process, stale input rejection, and application-window closure.
-
-This covers the idle-helper replayd contention that single-application startup tests cannot detect; the [capture ownership contract](../architecture/macos-application-capture-owner.md) defines the required process and channel boundaries.
+macOS 26.5.2 ARM64 graphical session with capture/accessibility grants: disposable AppKit verifies real bundle/icon, launch/pixels, pointer/Unicode/shortcuts/menu/AX resize, same-process reconnect, stale-input rejection and window closure. Include idle-helper replayd contention; [capture ownership](../architecture/macos-application-capture-owner.md) owns process/channel boundaries. This evidence does not qualify Snap, Flatpak, Wayland or arbitrary applications.
 
 # Boundaries
 

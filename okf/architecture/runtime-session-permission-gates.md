@@ -3,11 +3,11 @@ type: Runtime Contract
 title: Runtime session permission gates
 tags: [architecture, security, session-security]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward. Read permission grants the existing system-monitor snapshot, including process names, users, and resource usage. Process termination remains independently protected by execute permission.
+Runtime validates session metadata and supported app/channel pairs before intersecting control-plane and local policy. Code App and Port Forward add their own gates. Read permits existing monitor/process observations; process termination independently requires execute and cannot inherit authority from visibility.
 
 # Contract
 
@@ -22,6 +22,6 @@ Browser or UI-side permission claims remain non-authoritative. This concept only
 
 # Evidence
 
-- `redeven:internal/config/permission_policy.go:13` - PermissionPolicy clamps control-plane session metadata to a user-approved local maximum.
+- `redeven:internal/config/permission_policy.go:13` - Control-plane permission intersected with user-approved local cap.
 
-- `redeven:internal/session/types.go:29` - Process launch is allowed only when write and execute are both effective.
+- `redeven:internal/session/types.go:29` - Process launch needs both write and execute.

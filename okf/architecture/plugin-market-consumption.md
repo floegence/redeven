@@ -31,6 +31,6 @@ Market owns reviewed metadata/publication. Redeven owns refresh, validated cache
 
 # Evidence
 
-- `redeven:internal/pluginmarket/service.go` - Separates remote refresh from validated local snapshot reads and consumes catalog install previews without `/latest` fan-out.
+- `redeven:internal/pluginmarket/service.go` - Validated catalog reads/refresh and install previews without /latest fan-out.
 
-- `redeven:internal/pluginmarket/contracts.go` - Validates generation, GitHub release identity, hashes, anchors, and complete release transport.
+- `redeven:internal/pluginmarket/contracts.go` - Catalog generation, immutable releases, hashes/anchors and complete transport.

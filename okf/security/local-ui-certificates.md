@@ -3,7 +3,7 @@ type: Security Contract
 title: Local UI certificates
 tags: [security, local-ui, desktop, certificates]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -37,6 +37,6 @@ Runtime owns saved identity validation and replacement; Desktop owns explicit ma
 
 # Evidence
 
-- `redeven:internal/localui/public_address_refresh_test.go` - Verifies CA continuity, imported coverage, signing recovery, actual TLS/WSS, and established-session survival.
+- `redeven:internal/localui/public_address_refresh_test.go` - CA/import/signing recovery and real TLS/WSS/session continuity.
 
-- `redeven:internal/localui/device_identity.go` - Validated imports, locked replacement, interruption recovery, explicit removal, and bind preflight.
+- `redeven:internal/localui/device_identity.go` - Verified certificate import/replacement/recovery/removal and bind preflight.

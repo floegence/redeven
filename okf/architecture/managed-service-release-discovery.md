@@ -4,7 +4,7 @@ title: Managed Service release discovery and updates
 quality_exception: Cross-domain release lifecycle contract spanning discovery, verification, installation, rollback, and UI selection states.
 tags: [architecture, web-services, releases, npm, oci, updates]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,8 +23,8 @@ Redeven does not mirror source content/credentials or guarantee registry availab
 
 # Evidence
 
-- `redeven:internal/managedwebservice/release_discovery.go` - Persists, scopes, revalidates, restores, and schedules release candidates and summaries.
+- `redeven:internal/managedwebservice/release_discovery.go` - Scoped durable release discovery/revalidation/restoration/scheduling.
 
-- `redeven:internal/managedwebservice/release_catalog.go` - Owns the open, refresh, continue, verify, cursor, candidate, and partial-failure state machine.
+- `redeven:internal/managedwebservice/release_catalog.go` - Release discovery/cursor/verification/partial-failure owner.
 
-- `redeven:internal/managedwebservice/update_plan.go` - Creates, validates, expires, and consumes the single release-and-template update plan.
+- `redeven:internal/managedwebservice/update_plan.go` - Single release/template plan creation, validation, expiry and consumption.

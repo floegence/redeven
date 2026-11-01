@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment connections
 tags: [desktop, environment, connection, settings]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -22,7 +22,7 @@ Welcome and settings share a pure connection model derived from host access, pla
 
 # Evidence
 
-- `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Verifies five-second real probes with a pending Cloud request, per-target deduplication, and disabled automatic probing.
+- `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Real five-second probes, pending Cloud, per-target deduplication and disabled auto-probe.
 
-- `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - One typed connection, address, and status model for Welcome and settings.
-- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Real Welcome geometry, keyboard disclosure, refresh continuity and actions across shipped locales, themes and widths.
+- `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - One typed Welcome/settings connection model.
+- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Real localized/theme/responsive Welcome navigation, refresh and actions.

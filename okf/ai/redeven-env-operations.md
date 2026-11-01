@@ -3,7 +3,7 @@ type: AI Operation Contract
 title: Redeven environment operations
 tags: [ai, flower, cli, desktop, runtime]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -26,4 +26,4 @@ It can be used to invoke Redeven product commands, but it must not be described 
 
 - `redeven:cmd/redeven/env.go:13` - The `env` command dispatches lifecycle subcommands.
 
-- `redeven:internal/agentprotocol/targets.go:37` - Target discovery projects the default local target and saved catalog connections into target descriptors.
+- `redeven:internal/agentprotocol/targets.go:37` - Default local and saved targets projected from authoritative discovery.

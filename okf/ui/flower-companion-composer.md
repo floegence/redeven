@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower companion composer and motion
 tags: [ui, flower, companion, composer, motion]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -28,4 +28,4 @@ This concept owns content presentation only. [Flower companion presence](flower-
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Retained editor and explicit entry decisions.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Stable resting appearance across focus cycles in both themes and presentations, with forced-colors focus preserved.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Stable composer focus cycles across themes/carriers, retaining forced-color focus.

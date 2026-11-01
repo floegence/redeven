@@ -3,17 +3,11 @@ type: AI Runtime Contract
 title: Model reasoning capabilities and transport
 tags: [ai, models, reasoning, providers]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floret owns the portable reasoning selection contract, Ollama metadata
-parser, and Ollama wire encoding. Redeven maps model metadata, product settings,
-and provider requests to that contract. Only verified capabilities create
-controls; Default, Off, On, named effort, and token budget retain distinct
-meanings. Invalid selections fail before provider dispatch, while unknown
-controls retain the model's default behavior. Active Turns keep immutable
-settings through continuation and restart.
+Published Floret owns reasoning choices, Ollama metadata and wire encoding; Redeven maps verified capabilities and settings. Default, Off, On, effort and budget remain distinct. Invalid selection rejects before dispatch; unknown controls retain model defaults. Active turns keep immutable settings through restart.
 
 # Contract
 
@@ -46,8 +40,8 @@ The same capability and selection reach direct Environment models and Desktop mo
 
 # Evidence
 
-- `redeven:internal/config/ai_reasoning_catalog.go` - Thin published-Floret metadata mapping and explicit OpenRouter metadata contract.
+- `redeven:internal/config/ai_reasoning_catalog.go` - Public Floret/OpenRouter metadata mapping.
 
 - `redeven:internal/ai/model_catalog.go` - Read-only discovery from declared capabilities.
 
-- `redeven:internal/ai/initial_turn_reasoning_test.go` - Default on an OpenAI-compatible model without reasoning controls starts a turn without reasoning wire fields.
+- `redeven:internal/ai/initial_turn_reasoning_test.go` - Default unsupported reasoning emits no OpenAI-compatible reasoning fields.

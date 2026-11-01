@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Git workspace inventory lifecycle
 tags: [architecture, git, runtime, filesystem, transport]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -24,4 +24,4 @@ Git remains authoritative; snapshots are read models. Hostile external writers a
 
 - `redeven:internal/gitrepo/workspace.go` - Captures workspace state and projects revision-bound pages.
 
-- `redeven:internal/gitrepo/service.go` - Registers Git RPC handlers, capabilities, errors, and mutation entrypoints.
+- `redeven:internal/gitrepo/service.go` - Git RPC capability/error/mutation registration.

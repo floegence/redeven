@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop managed Environment reinstall
 tags: [desktop, reinstall, runtime, ssh, containers]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,7 +21,7 @@ Never scan a home directory, follow an unconfirmed symlink, prune containers glo
 
 # Evidence
 
-- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - Direct target confirmation, journal, exact-root replacement, verification, and recovery.
+- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - Confirmed target/root replacement, journal, verification and recovery.
 
 - `redeven:desktop/src/shared/desktopReinstallProgress.ts:1` - Runtime-only ordered phase contract.
 

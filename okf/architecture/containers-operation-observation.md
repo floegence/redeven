@@ -3,16 +3,11 @@ type: Architecture Contract
 title: Native container operation observation
 tags: [architecture, containers, operations, reconciliation]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Every native Containers mutation has one durable Redeven operation identity and
-one resource-local lock. Submission, cancellation, progress events, restart
-recovery, and terminal reconciliation flow through `containerresource`.
-Inventory refreshes and UI observation never become a second lifecycle owner.
-Lost submissions, stale plans, runtime restarts, and unavailable engines are
-reported explicitly and are never hidden behind automatic replay.
+Every Containers mutation has one durable operation ID and resource lock in containerresource. Submission, progress, cancellation and restart reconciliation share that owner. Inventory/UI never create another lifecycle; stale plans, lost replies or unavailable engines remain explicit without automatic replay.
 
 # Contract
 
@@ -42,6 +37,6 @@ Mobile and desktop expose the same state and cancellation authority. Service lif
 
 # Evidence
 
-- `redeven:internal/containerresource/service.go` - Admits operations and observes interrupted startup state without replay.
+- `redeven:internal/containerresource/service.go` - Interrupted operation observation without replay.
 
-- `redeven:internal/containerengine/cli_client.go` - Parses bounded image pull phase and layer evidence without retaining raw output.
+- `redeven:internal/containerengine/cli_client.go` - Bounded image-pull phase/layer facts without raw output.

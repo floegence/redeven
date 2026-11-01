@@ -3,7 +3,7 @@ type: Runtime Qualification
 title: Flower context compaction qualification
 tags: [ai, flower, context, compaction, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -38,7 +38,7 @@ live context updates; aligning the fixture restored coverage without changing
 production code or weakening the assertions. Optional private historical-copy
 and real-provider lanes were not rerun by this check.
 
-- `redeven:internal/ai/flower_compaction_ui_test.go` - Isolated scripted Runtime and optional historical-copy qualification.
+- `redeven:internal/ai/flower_compaction_ui_test.go` - Isolated Runtime and optional historical-copy checks.
 
 - `redeven:scripts/check_flower_compaction_ui.mjs` - Actual FlowerSurface order, collapse and refresh assertions.
 

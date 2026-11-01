@@ -3,7 +3,7 @@ type: Security Contract
 title: Runtime access sessions
 tags: [security, authentication, runtime, desktop, cookies]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -40,4 +40,4 @@ Native transport never acquires trusted Desktop management identity.
 
 - `redeven:internal/localui/access_cookie.go` - Owns name derivation, attributes and exact-scope deletion.
 
-- `redeven:internal/localui/access_cookie_test.go` - Covers validated/default/IPv6 authorities, ignored forwarded headers and rejected foreign or retired names.
+- `redeven:internal/localui/access_cookie_test.go` - Default/IPv6 authority admission; forwarded/foreign/retired names reject.

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower incremental live state
 tags: [ui, flower, live, threads]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -16,62 +16,41 @@ connection owner. Both preserve execution, accepted prose and drafts.
 # Contract
 
 ## Baseline and ownership
+ThreadFactsSource carries body-free workspace/account/Computer facts. Authorized root/child windows are independent; one worker coalesces <=64 dirty parents without blocking facts. [Adapter](../ai/floret-redeven-adapter-and-projection.md) owns authorization. Register before freezing navigation-ordered roots; emit Ready, <=25-summary pages, baseline_complete, then private states. Facts wait; accepted reads bypass sidebar preparation. Cancellation drains budgets/queues without Next. Broken observation invalidates, never skips pinned roots.
 
-ThreadFactsSource.SubscribeFacts carries workspace/account/Computer facts without bodies/viewers. Authorized root/child ThreadWindowSource interests are independent; one worker coalesces≤64 dirty parents without blocking facts. [Adapter ownership](../ai/floret-redeven-adapter-and-projection.md) applies.
+Merge pages immediately and prune only on completion, preserving local creation/selection. [Startup](../architecture/flower-startup-presentation.md) admits first page, confirmed empty inventory or selected detail, never empty partial Ready. HTTP refresh has 25-row cancellable pages and 10 s per progressing page; retain partial success. Desktop cancels history/item POSTs. Install baseline before shared loading; coalesce demand except command confirmation. Navigation/disposal/transport cancels waiters, preserving content/draft/scroll on reconnect.
 
-Register before freezing authorized roots in navigation order. Emit Ready,≤25-summary pages,last-page baseline_complete,then private states. Facts wait; accepted reads bypass sidebar preparation. Draining/cancellation releases budgets/queues/subscribers without Next. Broken observation invalidates; never time out/skip pinned roots.
+## Reading windows
+Root/child revisions fence replacement; baseline/delta share one subscription. Initial: 50 items, 1 KiB previews, Activity summaries and existing byte bound. Paging: 150 items/512 KiB; POST: 64 KiB JSON/150 IDs; locator: 8 KiB; exact membership: 448 KiB previews excluding hydrated bodies. Viewer read events and current-only updates cannot manufacture loaded-content coverage.
 
-Merge pages immediately, prune only on completion, preserving selection/local creations. [Startup](../architecture/flower-startup-presentation.md) admits first page, confirmed empty inventory or selected detail, never partial empty Ready. HTTP refresh uses cancellable25-row pages/10s per progressing page and retains partial results; Desktop cancels history/item POSTs. Install baseline before shared loading; coalesce demand except explicit command confirmation. Navigation/disposal/transport cancels obsolete waiters; reconnect preserves content/draft/scroll.
+Charge max(transmitted, window_bytes). Receipts refresh accepted intervals without forcing Latest. Retain confirmed sealed bodies and mounted visible/focused/selected live islands; evict inactive documents whole. Prefetch near missing intervals. One explicit input demand owns handoff, including stationary/folded edges; layout/HTTP cannot traverse. Anchors guide placement, never admission. Failures retain draft/content with Retry.
 
-## Bounded reading
+Collapsed turns/sequences install public range navigation plus retained rows in one observer. Canonical membership resolves same-turn/run skips; no host hidden-page scan. Only intermediate prose may skip, with active/unknown/trailing/approval/input/unsafe facts as boundaries. Accepted finite IDs prevent repeated skips on refresh; gaps stay reachable by scrolling/expansion. [Sequence proofs](flower-tool-sequences.md#membership-and-counts) prevent duplicate folded summaries. HTTP/observer share proof; metadata reads acquire neither bodies nor extra observers. Keyed gaps update affected rows only. Disclosure cancels navigation, restores interest and retires demand; new input starts another.
 
-Monotonic root/child revisions fence stale replacements; baseline/delta share subscription.
+Foreground pages may publish while baselines queue. Reuse prefixes only with exact sealedID/kind/turn/run/ordinal/canonicalOrdinal; stale windows prove no ends. Preserve focused/selected/disclosed DOM. Receipt alignment uses <=one preview page/displayed span; other gaps remain demand. Sequence contract owns counts/unknown labels. Patch summaries show actual mutation/type or localized count, retaining totals/files on expansion. Activity summaries hold bounded shapes/scalars; field reads use frozen authorized sources.
 
-| Read | Bound |
-| --- | --- |
-| Initial |50items/1KiB previews/Activity summaries/existing byte budget|
-| Earlier/newer |150items/512KiB|
-| Window POST |64KiB JSON/150identities|
-| Body locator |8KiB|
-| Exact membership |448KiB canonical previews,excluding hydrated bodies|
+## Bodies and transport
+Retain accepted prose/media/anchors/follow during refresh; skeletons cover only unread content. One observer admits within 160 px. Text/disclosure share two slots/15 s, prioritizing live/interactive, visible, then background with aging every eight admissions. Offscreen/navigation cancels; errors expose Retry.
 
-Viewer read events and current-only updates cannot manufacture loaded-content coverage.
+ThreadCache binds item/turn/run/source. Public text reads <=16 KiB at accepted UTF-8 offsets; coalesce extents/accepted prefixes and yield between chunks. No polling/full-prefix download. Source/sealing change restarts from canonical preview while retaining readable content until replacement. Same-source progress survives refresh; reject late replies. Retired locator source_changed needs authoritative ItemBody: release slot and await observation, never guess offsets. Terminal/exhausted reads Retry without replay.
 
-Charge max(transmitted,window_bytes). Receipts refresh accepted intervals without forcing Latest. Retain confirmed-path sealed bodies and mounted visible/focused/selected live islands; evict inactive documents whole. Gap reads stop at missing intervals, prefetch before edges. One input demand owns handoff, including stationary/folded edges; layout/HTTP completion cannot traverse history. Anchors guide layout, not admission. Failure retains draft/content with Retry.
+live:false alone does not change source. Same-source previews atomically update text/pending/locator; overlap retains layout and suffix resumes at current offset. Changed source retires reads; identity/range/prefix/empty-nonterminal failures stay explicit.
 
-A mounted collapsed turn or tool sequence requests published Floret range navigation plus retained visible/focused/selected rows in one observer installation. The canonical membership index resolves same-turn/run boundaries; no product scan of hidden pages. Turn skips include only canonically intermediate prose; active, unknown, trailing, approval/input and unsafe-effect facts remain boundaries. Accepted interest becomes finite IDs, so live refresh never repeats the skip. Omitted intervals remain reachable by scrolling or progressive completion on explicit expansion. [Certified sequence gaps](flower-tool-sequences.md#membership-and-counts) prevent duplicate folded summaries across retained islands. HTTP and ordered observer delivery share one proof result; metadata checks never acquire bodies or another observer. Keyed gap subscriptions update affected rows only. Disclosure cancels pending navigation, restores prior interest and retires old scroll demand; new explicit input starts another demand.
+Schema v3 has one decoder. Base64 fragments <=32 KiB carry ID/index/count/total and exact scope/revision with contiguous version/UTF-8 offsets. Growth carries locators. Constant-storage coalescing preserves original base/semantics. Bound 16 pending batches, 32 MiB envelope/subscriber and 32 MiB global refs. Started frames are immutable; byte-accounted coverage suppresses duplicates. Summary/private/child mailboxes stay separate. Pending controls use authorized 64-item pages back to user boundary, verify leaf/version and individually read oversized items, never full View/body. Missing authority or a broken sequence invalidates observation.
 
-Foreground reads publish while live baselines queue. Reuse only confirmed prefixes matching sealedID/kind/turn/run/ordinal/canonicalOrdinal; stale windows cannot infer ends. Paging preserves disclosure/focused/selected DOM. [Sequences](flower-tool-sequences.md#membership-and-counts) own exact coverage/counts and generic unknown labels. Receipt alignment≤one preview page/displayed span; gaps remain scroll demand.
+## DOM and retention
+Offscreen sections retain DOM/intrinsic height; visible/live/focused/selected content stays accessible. Split active turns after prose near 24 rows without splitting groups/replacing owners on prepend. Presence depends only on empty/nonempty. Equal projection retains identity; keyed sections/entries/sequences/process/time/final facts dispose with owners. Structural projection handles replacements without per-field observers. Titles never rescan history, thinking keeps its block, sets own membership, empty coverage ignores leaf-only changes and following scans no historical anchors.
 
-Patches show one mutation name/type or localized file count, never invented diffs; expansion retains title/totals/files. Activity summaries hold shape/count/scalars/small values; field reads use frozen authorized sources.
+[Activity](flower-activity-interaction.md) owns inspection/before-paint scroll; Fork inherits no disclosure. Readiness/body growth cannot change restoration provenance or cancel unrelated motion; full baseline/hydration admits history. Stage cold sealed Markdown across reconnect and reveal complete final geometry without entrance motion. Navigation suppresses arrivals until placed. Count cache objects once without reactive recursion. Current run/visible anchors guide compaction; paging restores decoration.
 
-## Bodies and wire transport
-
-Accepted prose/media/anchors/follow survive refresh; only unseen text has skeletons. One observer admits within160px; text/disclosure share two slots/15s, ordered live/interactive→visible history→background, aging every eight admissions. Offscreen/navigation cancels; failures expose Retry.
-
-ThreadCache owns bodies by item/turn/run/source. Authorized ThreadItemTextReader reads≤16KiB at accepted UTF-8 offsets; one source task coalesces extents/accepts in-flight prefixes/yields between chunks. No polling/full-prefix/history download. Changed source/sealing restarts at canonical preview, retaining accepted prose until complete replacement. Same-source progress survives refresh; reject stale replies. Retired locators return source_changed only after public ItemBody confirms source: release slot/await observation, never guess offsets/hide errors. Exhaustion/terminal errors Retry without replay.
-
-live:false alone is no source change. Same-source previews atomically update text/pending and retain locator; overlap preserves layout, missing suffix resumes at current offset. Source changes discard obsolete reads; identity/range/prefix/empty-nonterminal errors stay explicit.
-
-Schema v3 single decoder: base64 fragments carry ID,index/count,total bytes.≤32KiB fragments require matching revision/thread/item/turn/run,contiguous version/UTF-8 offset. Growth sends locators. Coalescing preserves original base/semantic boundaries in constant storage. Limits:16pending batches,32MiB envelope/subscriber,32MiB global refs. Started frames are immutable; byte-accounted covered versions suppress duplicate deltas. Summary/private/child mailboxes stay separate. Pending controls are page-independent:authorized server64-item pages read safety facts back to user boundary,verify leaf/version,individual oversized reads; no full View/body. Missing authority or a broken sequence invalidates observation.
-
-## Presentation and retention
-
-Offscreen sections retain DOM/intrinsic height without layout; visible/live/focused/selected sections keep accessible content/disclosure. Split active turns after prose near24rows without splitting tool/thinking groups or replacing owners on prepend. Presence changes only empty/nonempty; equal projections keep identity. Keyed subscriptions publish affected section/entry/sequence/process/end-time/final-answer facts and dispose with owners. Immutable structural projection observes sealing/replacement without per-field subscriptions. Expired titles never revisit history; thinking retains block, membership uses sets, empty coverage ignores leaf-only changes; following scans no historical anchors.
-
-[Activity](flower-activity-interaction.md) owns inspection/before-paint scrolling; Fork inherits no disclosure. Independent readiness and incremental bodies cannot change restoration provenance/cancel unrelated motion; full hydration/baseline admit history.
-
-Stage cold sealed chunks across reconnect; publish complete Markdown at final geometry without entrance/partial structures. Retain accepted prose; root/child navigation suppresses arrival scrolling until positioned/revealed. Count raw cache objects once, without reactive recursion. Compaction follows visible anchors/current run; paging restores older decorations. Inactive budget12threads/32MiB estimated, preserving summaries and selected/retained/in-flight owners. Append logs256chunks/256KiB use absolute cursors/exact-source catchup; active documents/selection remain uncapped.
-
-Catchup shares one notice after200ms without delaying publication. [Composer](flower-turn-launcher.md) owns captured-input/request-key DOM before SendAck/windows.
+Inactive cache: 12 threads/32 MiB estimated, protecting selected/retained/in-flight owners and summaries. Append logs: 256 chunks/256 KiB with absolute cursors/exact-source catchup; active documents/selection uncapped. Catchup notice waits 200 ms, never delays publication. [Composer](flower-turn-launcher.md) owns captured-input DOM before confirmation.
 
 ## Recovery
+Detail/baseline: 200/600/1200 ms backoff, <=4 attempts/15 s. New revisions retire unpublished state; leaf drift recovers, foreign/malformed terminates. Navigation/disposal/connection cancels. Exhaustion retains draft/DOM/scroll with interrupted-sync Retry; no command replay. history_invalidated permits one bounded read per selection/manual intent, then Retry. Release immediately cancels interest; child release affects only its slot, one-shot windows inherit none.
 
-Detail/baseline retries200/600/1200ms,≤4 attempts/15s. New revisions discard unpublished data; leaf drift recovers,foreign/malformed terminates. Navigation/disposal/connection cancels reads/backoff. Success adds no work; exhaustion preserves DOM/draft/scroll with interrupted-sync Retry, distinct from first-load failure. Never replay commands.
+Transport/handshake/gaps use existing backoff; disposal never publishes and reconnect publishes boundary. Observers track DOM lifetime. Auth/capacity/version/malformed are terminal; transport errors may classify, mapper exceptions never retry. Diagnostics retain category/status/epoch, SSE503/baseline 504/invalid 400/capacity 429. Unknown effects retain request keys.
 
-history_invalidated permits one bounded read per selection/manual action, then Retry. Release cancels pending/installed interest immediately, child only its slot; one-shot windows inherit no members. Transport loss/handshake/gaps use existing backoff; disposal aborts without publication and reconnect publishes boundary. Observers follow DOM adoption/disposal. Auth/capacity/version/malformed failures are terminal; classify fetch/bridge errors, never retry mapper exceptions. Diagnostics: category/status/epoch, SSE503/baseline504/invalid400/capacity429. Unknown results retain keys without replay.
-
-One pointer-local stack floats feedback over message content without transcript height; companion above editor. Sync feedback never enters the header or composer. A compact status, Resync and details disclosure retain the explanation; details can minimize to a small floating control. Escape/outside interaction closes details without stealing editor focus. Touch targets remain 44px. Recovery uses one existing observation owner and coalesces repeated reconnect actions, never replaying commands. Show restored only after the connection and selected authoritative detail are current, then dismiss after 2.6s unless focused, hovered or expanded. Optional collapsed detail reads do not delay this confirmation. Preserve drafts, selection and transcript/composer bounds across every state. Canonical cancellation owns Stopping; viewer facts cannot invent coverage. [Approvals](flower-approval-context.md),[read state](flower-read-state.md),[process disclosure](flower-turn-process-disclosure.md) own policy.
+One pointer-local floating stack (above companion editor) shows compact sync status, Resync and details without moving transcript/composer or occupying headers. Details minimize; Escape/outside dismisses without stealing focus; targets >=44 px. Existing owner coalesces reconnect. Restored requires current connection and selected authoritative detail, not optional collapsed reads. Dismiss after 2.6 s unless focused/hovered/expanded. Preserve drafts/selection/bounds. Canonical cancellation owns Stopping; viewer facts never invent coverage. [Approvals](flower-approval-context.md), [read state](flower-read-state.md), [turn disclosure](flower-turn-process-disclosure.md) retain their policy.
 
 # Boundaries
 

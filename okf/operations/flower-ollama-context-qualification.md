@@ -3,7 +3,7 @@ type: Qualification Contract
 title: Flower Ollama context qualification
 tags: [flower, ollama, context, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -36,6 +36,6 @@ Results qualify the selected installed model and its observed serving capacity, 
 
 # Evidence
 
-- `redeven:scripts/check_flower_context_ollama.sh` - Explicit real-provider entrypoint using the selected local profile.
+- `redeven:scripts/check_flower_context_ollama.sh` - Explicit installed-profile real-provider runner.
 
 - `redeven:internal/ai/model_catalog.go` - Discovers served capacity before theoretical model capacity.

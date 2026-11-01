@@ -3,17 +3,11 @@ type: UI Contract
 title: Tessiven relationship summaries
 tags: [ui, tessiven, graph, performance]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The shared Tessiven presentation projection owns group relationship summaries.
-Collapsed groups show at most four call patterns, not every instance call.
-Expanded group headers expose one pool-wide overview. Physical node cards keep
-exact relationship rows. All original endpoints, relationship IDs and evidence
-remain authoritative; summaries never edit documents or manufacture observations.
-Full details remain available through search, node filters and bounded pagination.
-Missing visible endpoints suppress previews rather than connecting substitute rows.
+Shared Tessiven projection summarizes group relationships: at most four collapsed patterns, one expanded pool overview and exact physical-node rows. Canonical endpoints, IDs and evidence remain unchanged. Search, filters and paging expose detail; missing visible endpoints suppress previews without substitutes.
 
 # Contract
 

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: GitHub service template sources
 tags: [architecture, templates, desktop, credentials, persistence]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -36,6 +36,6 @@ Host hooks receive `REDEVEN_TEMPLATE_DIR` for original helper files. [Registry m
 
 # Evidence
 
-- `redeven:internal/managedwebservice/template_sources.go` - Owns review, current source resolution, source identity, confirmation, and orphan cleanup.
+- `redeven:internal/managedwebservice/template_sources.go` - Git-source review/current identity/confirmation/orphan cleanup.
 
-- `redeven:internal/portforward/registry/template_sources_test.go` - Verifies the v4-to-v5 edge, rollback, stale confirmation, and absence of executable projections.
+- `redeven:internal/portforward/registry/template_sources_test.go` - v4→v5 migration, rollback/stale rejection, no executable projection.

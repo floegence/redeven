@@ -6,6 +6,9 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 
 ## 2026-11-01
 
+- Bind [plugin recovery](architecture/redevplugin-surface-recovery.md) to the exact current installation through published ReDevPlugin 3.12.1. Reject obsolete startup/retry observations, preserve current sibling failures, and localize error reasons without technical instance IDs.
+- Condense repeated knowledge summaries and historical qualification detail below 900,000 characters, preserving active contracts, source links, failed results and scope limits. The primary agent performs this review under the user's explicit no-delegation instruction; Git retains earlier detail.
+
 - Keep [read confirmation](ui/flower-read-state.md) under the existing detail and presentation owners; remove the foreground readiness latch that could strand acknowledgements after navigation, and cover visibility/navigation races without polling or additional payloads.
 
 ## 2026-10-31
@@ -31,23 +34,3 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 - Align [sent-message capsules](ui/flower-message-appearance.md) with quiet Floe planes and strong reading ink; preserve complete question/answer context, selection, copying and responsive alignment.
 - Preserve confirmed [Computer script](ai/computer-use-scripts.md) output independently of later invalid observations; retain known protocol methods and helper-exchange uncertainty without replay.
 - Keep [folded tool sequences](ui/flower-tool-sequences.md) stable across certified sparse history, using published canonical range metadata and bounded progressive interior reads. Preserve semantic boundaries, disclosure races and root/child reading geometry.
-
-## 2026-10-28
-
-- Patch JOSE/Seroval and signature-verification dependencies; pin authorized filesystem reads to handles and retain [dependency floors](architecture/env-app-upstream-web-dependencies.md), [filesystem scope](security/permission-policy-and-filesystem-scope.md) and explicit catalog recovery.
-
-- Add independent [Web Center packages](operations/web-center-deployment.md), signed checksums, exact source identity and closed release collection without Runtime/Desktop lifecycle coupling.
-- Keep [long-thread acceptance](operations/flower-long-thread-gate.md) explicit, with fixed content, drag and compositor budgets outside ordinary gates.
-- Bound [timeline](ui/flower-live-timeline.md)/[sequences](ui/flower-tool-sequences.md), preserving reading, selection, provenance, retained bodies and live motion; retain [entry performance failures](operations/flower-thread-switch-qualification.md).
-- Unify [task-file](ai/flower-task-files.md) Fork/restart/deletion recovery and canonical upload ownership.
-- Preserve [Computer scripts](ai/computer-use-scripts.md) scroll geometry, protocol diagnostics and native receipts; distinguish model, assertion and product failures in [qualification](ai/computer-use-qualification.md).
-- Condense duplicate metadata/prose to meet the knowledge cap, retaining lifecycle/review dates, contracts, source links and adverse evidence. Primary-agent review follows the user's no-delegation instruction.
-
-## 2026-10-27
-
-- Compact Computer Use around targets/select_target/exec, exact downloads, bounded observations and confirmed effects through failure.
-- Preserve streaming follow/fold order, immediate send feedback and full Markdown; scope performance and recovery claims to tested source.
-
-- 2026-10-29: Adopt published Floret v7.94.0 aggregate image-capacity recovery, Desktop typed cause transport and localized inline history organization.
-
-- 2026-10-30: Move Anthropic Messages protocol ownership to published Floret v7.95.0; document signed history, effective caching and measured-input boundaries.

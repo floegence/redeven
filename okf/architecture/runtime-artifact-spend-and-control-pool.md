@@ -3,7 +3,7 @@ type: Runtime Security Contract
 title: Runtime artifact spend and control pool
 tags: [architecture, runtime, security, artifacts]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,6 +21,6 @@ This concept owns Redeven's durable spend ledger and control-artifact pool. Prod
 
 # Evidence
 
-- `redeven:internal/agent/agent.go:1149` - Binds Lease spending to the digest-global durable ledger before connection.
+- `redeven:internal/agent/agent.go:1149` - Lease digest ledger checked before connection.
 
 - `redeven:internal/agent/control_artifact_pool.go:67` - Validates top-up and ACK replay through one pending request.

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop host application titlebar
 tags: [desktop, host-applications, ui]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -34,4 +34,4 @@ Toolbar presentation does not own the capture or Xpra session. Disconnection dis
 
 - `redeven:internal/codeapp/appserver/host_application_viewer/toolbar.js` and `viewer.js` - Shared control presentation and Xpra-owned action routing.
 
-- `redeven:internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx` - Native safe areas, compact layouts, dark appearance and bounded popovers.
+- `redeven:internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx` - Native safe areas, compact/dark popover bounds.

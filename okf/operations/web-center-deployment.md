@@ -3,7 +3,7 @@ type: Operations Contract
 title: Deploy and qualify standalone Web Center
 tags: [operations, deployment, web, qualification]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -11,48 +11,30 @@ Center binary/UI deploy separately from Desktop and Runtime. Evidence records so
 
 # Contract
 
-## Versioned release artifacts
+## Release and install
+Center installs independently beside Runtime/Desktop under one tag; upgrades never touch those services. Protocol/capability admission, not shared tag, decides compatibility. Formal artifacts are Linux amd64/arm64 archives with .manifest.json receipts, signed SHA256SUMS and remote readback. Native jobs execute each target; either failure blocks. macOS source is development only, no Windows/macOS service or registry image.
 
-Center is independently installable alongside Runtime/Desktop under one repository tag. Center installation/upgrades never install/restart/upgrade either. Binding protocol/capability checks determine compatibility; shared tags alone do not.
+Archive contains binary/UI, two units, environment examples, Docker/Compose/.env, licenses, DEPLOYMENT.md and manifest. --version reports source/time without state. Verify every file/target/tag/digest; reject dirty source, extras/missing files, links or mismatch. Both targets share commit. Extract verified signed bytes into a new version directory. Target needs no build toolchain/Electron/local Runtime. Compose builds from package and exact .env; upgrades preserve state/settings. Runtime installer does not install Center.
 
-Tagged releases require redeven-center_linux_amd64.tar.gz and redeven-center_linux_arm64.tar.gz, each with .tar.gz.manifest.json receipt, signed SHA256SUMS and remote byte readback. Native runners build/execute their architecture; either failure blocks release. macOS source builds are for development; no formal macOS/Windows service or published registry image.
+Source uses pinned Node, Desktop package manager, Go and public dependencies. build_center.sh <new-directory> [version] emits complete package; omitted version is dev, production requires tag. Cross-builds need real target execution.
 
-Archives contain binary, ui/, two service units, environment examples, Docker/Compose/.env, licenses, DEPLOYMENT.md and manifest.json. version/--version reports tag/source/time without state. Manifests hash every file; reject dirty source, incorrect tag/source/architecture, missing/extra files, links/digest mismatch. Collector requires both architectures from one commit.
+serve requires state-root/origin/tls-cert/tls-key/assets/connector-socket/connector-user/listen. Separate connector uses socket and center-user; both verify peer UID before credentials. Origin is immutable. DNS/TLS covers portal/Env/children; Center terminates TLS, edge TCP passthrough allowed, forwarded headers grant nothing.
 
-Download chosen release/architecture, verify signed checksums using release instructions and extract into a new version directory. Deployment needs no Node/Go/Electron/local Runtime. Compose builds locally from verified package and exact .env version; preserve .env/state on upgrade. Runtime installer does not install Center.
+Linux: nonlogin redeven-center/redeven-connector share group; root-owned /opt/redeven-center; private 0700 /var/lib/redeven-center and Center-readable keys. Install units plus /etc/redeven-center/center.env; Connector owns /run/redeven-connector/connector.sock without state/config access. Group traversal/kernel UID authenticate. daemon-reload and enable --now redeven-center start both independently of Runtime. Owner commands require Center/root. Stop-state backup/explicit replacement precede upgrade, never recursive deletion.
 
-## Install
+Compose: supplied Linux Dockerfile, Center UID/GID10001, Connector UID10002, shared socket, read-only roots/dropped capabilities. Only Center mounts private state/TLS. tls/server.pem/server-key.pem readable by 10001; configure CENTER_ORIGIN then compose up --build -d. Port 8443 must match external DNS/SAN. Exec Center setup for temporary credential. Preserve named volume; down -v deletes data. Operator owns DNS/TLS.
 
-Source builds use .node-version, Desktop package manager, go.mod and published dependencies. scripts/build_center.sh <new-directory> [version] emits complete package; production requires explicit tag, omitted version is dev. Cross-builds require target execution.
+## First use and recovery
+Verify trusted HTTPS /healthz. Owner runs setup with state root, then browser password/TOTP/recovery codes. Add access-only Gateway after fingerprint confirmation, assign Env origin and apply descriptor through Runtime owner CLI. Runtime factors stay independent; direct bookmarks bypass server relay.
 
-serve requires --state-root/--origin/--tls-cert/--tls-key/--assets/--connector-socket/--connector-user and chosen --listen. Independent worker: connector --connector-socket ... --center-user <Center OS user>. Both verify exact peer UID before route credentials. Origin is immutable identity. Configure DNS/TLS SANs or wildcard for portal/Env/children. Center terminates TLS; edge TCP passthrough is allowed, forwarded headers confer no authority.
+Stop Center before preserving key/database/sidecars together with ownership/modes. Restore same origin/compatible binary. Restart invalidates devices, not Runtime workspaces. Never copy only live SQLite main/key or delete missing committed material to reopen setup. Factor loss uses recover or stopped offline recover --origin, completing browser factors. Route-key rotation closes exact route and requires new descriptor/current revision. TLS renewal restarts; master-key reencryption/pinned-origin changes are not exposed.
 
-Linux: separate nonlogin redeven-center/redeven-connector accounts in redeven-center group; root-owned package at /opt/redeven-center. State /var/lib/redeven-center mode0700 and TLS keys readable only by Center. Install both units in /etc/systemd/system and example at /etc/redeven-center/center.env. Connector has no state, is denied Center state/config and owns /run/redeven-connector/connector.sock. Group traversal plus kernel peer UID authenticates Center. systemctl daemon-reload; systemctl enable --now redeven-center starts both without Runtime dependency. Connector restarts independently. Owner commands run as Center or root. Upgrades need stopped-state backup/explicit replacement, never recursive deletion.
+## Explicit qualification
+check_center.sh verifies contracts/security/host/UI. REDEVEN_CENTER_BROWSER=1 Go TestCenterBrowserQualification with floeterm_native uses real browsers/Gateway/Runtimes and trusted TLS; WebKit is not Safari. EXTERNAL_FIXTURE selects owned remote state. Private factors stay out of Git; optional physical/model/container/file lanes require actual components and cleanup. Authorized model tests delete threads.
 
-Compose: build supplied Dockerfile from Linux package; Center UID10001/GID10001 and Connector UID10002 share socket volume, read-only roots/dropped capabilities. Only Center mounts state/TLS; ensure matching private ownership. Place tls/server.pem/server-key.pem readable by10001; set CENTER_ORIGIN and docker compose up --build -d. Exposed8443 must match DNS/SAN/external origin. Obtain setup credential with docker compose exec center /opt/redeven-center/redeven-center setup --state-root /var/lib/redeven-center. Preserve named volume; down -v deletes data. Operators provision public DNS/TLS.
+CAPACITY=1 creates 100 signed members/ten live Runtime tabs/90 offline. CONNECTOR_BIN selects built worker and tests restart. SOAK_SECONDS=28800 needs eight actual hours with terminal/Flower subscriptions and file roundtrips, no paid generation. Separate fixture heap from process RSS/browser memory. Failed/stopped preflight proves no soak time.
 
-## First use
-
-1. Start service and verify `/healthz` through trusted HTTPS.
-2. Run `redeven-center setup --state-root ...` as owner/root. Paste the temporary credential, set password, verify TOTP, save codes and sign in.
-3. Add access-only Gateway, confirm fingerprint and register an Env origin.
-4. Apply the descriptor on its Runtime through the owner CLI. Runtime password/MFA stay independent. Direct bookmarks do not exercise server relay.
-
-## Recovery and upgrade
-
-Stop Center and preserve `center.key`, `center.sqlite` and applicable SQLite sidecars together, with modes/ownership. Restore using the same origin and compatible binary. Restart invalidates devices but leaves Runtime services/workspaces separate. Never copy only a live database main file or only its key. Diagnose missing committed material instead of deleting it to reopen setup.
-
-Use `redeven-center recover` for factor loss, or stop the service and use `recover --offline --origin ...`. Complete replacement factors through the browser. Route key rotation closes that route and requires applying the new descriptor with current Runtime binding revision. TLS renewal requires restart. Master-key re-encryption and changing pinned portal origin are not exposed workflows.
-
-## Qualification
-
-`scripts/check_center.sh` checks contracts, security packages, host behavior and UI build. `REDEVEN_CENTER_BROWSER=1 go test -tags=floeterm_native ./internal/localui -run '^TestCenterBrowserQualification$' ...` runs actual browsers/Gateway/Runtimes with trusted certificates. WebKit is not Safari.
-
-`REDEVEN_CENTER_EXTERNAL_FIXTURE` selects explicit task-owned remote state; private factor material never enters Git/reports. Optional physical/model/container/large-file flags require actual components and cleanup. Model configuration use needs authorization; test threads are deleted.
-
-`REDEVEN_CENTER_CAPACITY=1` creates 100 signed members, ten actual Runtime applications/tabs and 90 offline entries. `REDEVEN_CENTER_CONNECTOR_BIN` selects the built independent worker and verifies process restart. `REDEVEN_CENTER_SOAK_SECONDS=28800` requests eight real hours with persistent terminal/Flower subscriptions and terminal/file roundtrips. Resource samples distinguish fixture Go heap from fixture/worker process RSS; browser heap is not total browser memory. No paid generation occurs in soak; browser input uses ordinary activity policy. A stopped or failed preflight does not certify elapsed soak time.
-
-`scripts/check_center_deployment.mjs <release>` checks standalone startup, setup, restart, recovery lock, missing-key and TLS name rejection. `scripts/check_center_linux_deployment.mjs <ssh-host> <staged-root> <address> <image>` runs the actual systemd template and nonroot container with Chrome, owner peer denial and online/offline recovery. It requires task-owned staged artifacts, TLS trusted by the test browser, sudo and explicitly authorized host access. It stops/removes its units and container; the caller removes its staged state and artifacts after inspecting evidence.
+check_center_deployment.mjs validates package startup/setup/restart/recovery/missing-key/TLS denial. check_center_linux_deployment.mjs <ssh-host> <staged-root> <address> <image> runs real systemd/nonroot container with Chrome, peer denial and factor recovery. Require owned artifacts/trusted TLS/sudo/authorized host. Tool removes its units/container; caller removes staged artifacts/state after evidence review.
 
 # Boundaries
 

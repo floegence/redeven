@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower terminal activity presentation
 tags: [ai, flower, terminal, presentation]
 lifecycle: contract
-reviewed_at: "2026-10-31"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -35,6 +35,6 @@ Presentation never changes Floret status, ordering, persistence, read acknowledg
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - The Env adapter maps authorized terminal output reads to the product API without owning process lifecycle.
+- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - Authorized terminal-output mapping, without process lifecycle ownership.
 
-- `redeven:internal/ai/terminal_activity_test.go` - Verifies typed terminal outcomes survive the public activity sanitizer.
+- `redeven:internal/ai/terminal_activity_test.go` - Typed terminal outcomes survive Activity sanitization.

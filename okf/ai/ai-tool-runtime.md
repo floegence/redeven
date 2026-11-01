@@ -3,11 +3,11 @@ type: AI Tool Contract
 title: AI tool runtime
 tags: [ai, tools, runtime, floret]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven exposes typed AI tools through product-owned registration, policy, presentation, and concrete execution adapters while Floret owns admitted conversation, turn, invocation, approval, and projection lifecycle. This overview is the canonical navigation point for the focused tool, terminal, model/context, thread, and subagent contracts. Detailed behavior belongs in those concepts rather than one cross-domain implementation inventory.
+Redeven registers typed tools with product policy, presentation and effects; Floret owns admitted conversations, invocations, approval and history. This concept indexes focused tool, terminal, model, thread and subagent contracts. Detailed behavior belongs with its owner, without a duplicate implementation inventory.
 
 # Contract
 
@@ -24,6 +24,6 @@ Redeven must consume published Floret releases and must not persist a second cop
 
 # Evidence
 
-- `redeven:internal/ai/tools/registry.go:98` - Builtin tool definitions declare mutation, approval, and presentation specs.
+- `redeven:internal/ai/tools/registry.go:98` - Typed tool mutation, approval and presentation specs.
 
-- `redeven:internal/ai/tools/types.go:126` - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.
+- `redeven:internal/ai/tools/types.go:126` - ToolPresentationSpec renderer, operation, label, fallback and payload/chip fields.

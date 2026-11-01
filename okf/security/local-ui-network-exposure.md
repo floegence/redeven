@@ -3,7 +3,7 @@ type: Security Contract
 title: Local UI network exposure
 tags: [security, local-ui, desktop, env-app, flowersec]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -53,8 +53,8 @@ Installing trust in each HTTPS client is an explicit user action outside Runtime
 
 # Evidence
 
-- `redeven:internal/localui/public_address_refresh.go` - Publishes one current address and certificate snapshot and owns refresh cancellation.
+- `redeven:internal/localui/public_address_refresh.go` - Single address/certificate snapshot and canceled refresh.
 
-- `redeven:internal/localui/public_address_refresh_test.go` - Covers network replacement, loss/recovery, fixed binds, reports, certificates, and authenticated WSS across refresh.
+- `redeven:internal/localui/public_address_refresh_test.go` - Network changes/recovery, fixed binds, reports, certificates and authenticated WSS.
 
-- `redeven:internal/config/catalog_test.go` - Preserves saved addresses, password protection, and explicit HTTPS while defaulting a missing protocol to HTTP without rewriting catalog bytes.
+- `redeven:internal/config/catalog_test.go` - Saved addresses/password/HTTPS preserved; absent protocol defaults HTTP without writes.

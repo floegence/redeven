@@ -3,11 +3,11 @@ type: UI Contract
 title: Flower timeline ordering
 tags: [ui, flower, timeline, ordering]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower renders the ordered items in Floret's typed current view. Canonical stable IDs plus each item's exact TurnID and RunID determine user, assistant, tool, interaction, queue, and terminal rows. Ordinary captured input appears immediately as a pending user row; only the captured draft is consumed. Queued submissions appear in the queue dock. Canonical request-key confirmation retains the corresponding mounted row without duplicating the transcript; newer drafts remain editable. Summaries never write timeline detail.
+Flower renders Floret ordered facts using stable item, TurnID and RunID identities. Captured ordinary input appears immediately; only that draft is consumed. Queued inputs stay in the dock. Canonical request-key confirmation preserves mounted rows without duplicates, and summaries never author timeline detail.
 
 # Contract
 
@@ -21,6 +21,6 @@ Stable row identity and order come only from the published Floret current view. 
 
 # Evidence
 
-- `redeven:go.mod` - Pins the published Floret current-item identity and turn presentation contract.
+- `redeven:go.mod` - Published current-item/turn presentation contract.
 
-- `redeven:internal/ai/floret_timeline_messages_test.go` - Proves Redeven preserves public ordered items and live markers from the typed view.
+- `redeven:internal/ai/floret_timeline_messages_test.go` - Public ordered items and live markers preserved in projection.

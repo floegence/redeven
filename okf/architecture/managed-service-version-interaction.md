@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Managed Service version interaction
 tags: [architecture, web-services, releases, updates, ui]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,6 +21,6 @@ Only explicit submit requests execution. Selection, preparation and closing a dr
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Owns selection, compact presentation, inline notices, stop and admission handling.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Selection, compact feedback, Stop and admission.
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceUpdatePreparation.test.ts` - Covers rapid selection, session changes, expiry, and explicit retry.
+- `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceUpdatePreparation.test.ts` - Rapid selection/session/expiry and explicit Retry.

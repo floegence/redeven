@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop shell theme state
 tags: [desktop, themes, ui, electron]
 lifecycle: contract
-reviewed_at: "2026-10-27"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,6 +23,6 @@ Resolve public npm dependencies without sibling wiring/patches. Renderer storage
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Exact path and declaration boundaries for published theme sources.
+- `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Exact public theme-source paths/declarations.
 
-- `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Generated standalone stylesheet readback against the published dependency.
+- `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Generated stylesheet verified against public dependency.

@@ -3,7 +3,7 @@ type: Development Contract
 title: Desktop development sessions and bundles
 tags: [desktop, development, storage, retention]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -14,33 +14,29 @@ reviewed_at: "2026-10-28"
 
 # Contract
 
-## Build and launch
+## Source and build identity
+scripts/dev_desktop.sh captures HEAD plus tracked/nonignored source; concurrent mutation fails. Generated OKF/ignored assets are outputs, while authored OKF/builders/Go embeds remain inputs. Profile receipts require identical source, dependencies, toolchains, target/settings and verified Desktop/immutable Runtime bytes. Missing/corrupt/incomplete output rebuilds; failure never launches old bundles. Only pinned Rust installation may change preparation toolchain. --rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests select pnpm/npm and their locks, not another compatibility-lock installer.
 
-scripts/dev_desktop.sh captures HEAD/current tracked and non-ignored source; concurrent edits fail. Generated OKF/ignored assets are outputs; protect authored OKF/builders/Go embeds. A profile-local receipt reuses output only when HEAD, dirty source, dependency bytes, toolchains, target/settings and verified Desktop/immutable Runtime bytes match. Missing/changed/incomplete output rebuilds; failed preparation never launches old bundles. Only installing pinned Rust admits preparation-time toolchain drift.
+## Network and caches
+macOS preparation reads enabled static HTTP/HTTPS system proxies once. Any explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (including lowercase/empty) or REDEVEN_DEV_SYSTEM_PROXY=0 disables discovery. Preserve explicit NO_PROXY, otherwise add loopback/compatible exclusions. PAC/SOCKS-only needs explicit policy. Never log credentials or weaken TLS/artifact checks. Remove only inferred variables before launching services.
 
---rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests choose pnpm/npm; receipts bind selected locks/toolchain, not a second installer from compatibility locks. First launch establishes receipts.
+Official Node checksum/archive transfers each get three attempts, 1/2-second backoff for transport or HTTP 408/429/500/502/503/504; permanent HTTP/certificate errors stop. Separate CONNECT/origin status from bytes. Retry the same official URL/policy; resume only this build's partial archive, verify complete checksum, delete failed partials. Cached archives still need fresh official checksums.
 
-On macOS, preparation reads enabled static HTTP/HTTPS system proxies once and exports them to dependency and bundle build tools. Any explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY variable (including lowercase or empty values) owns network policy and disables discovery; REDEVEN_DEV_SYSTEM_PROXY=0 also opts out. Preserve explicit NO_PROXY; otherwise include loopback and compatible system exclusions. PAC/SOCKS-only settings require explicit environment policy. Diagnostics never expose credentials; TLS and official artifact verification remain mandatory. Remove only inferred variables before launching Desktop, Runtime or Gateways.
+Development may reuse Cargo registry/target caches but freshly stage exact locked public crates and regenerate verified digest/execution/consumption evidence. Complete caches work offline; incomplete caches acquire explicitly. Corruption/compiler errors cannot switch paths. Release directories remain isolated. Source changes rebuild the whole product, without component/watch mode.
 
-Official Node checksum and archive acquisition share a three-attempt budget per transfer, with one- and two-second backoff for transient transport failures and HTTP 408/429/500/502/503/504. Read origin and proxy CONNECT status separately from artifact bytes; permanent HTTP and certificate errors stop immediately. Retry the same official URL under the existing proxy policy. Resume only the current build's temporary archive; verify the complete checksum before caching, remove failed partial files, and require fresh official checksums even for cached archives.
+## Scheduling and lifecycle
+Desktop compile overlaps Runtime preparation. Runtime assets/Go, plugins and Computer resources have separate outputs. Env App typecheck overlaps bundling under checkout lock. Notices follow all asset tasks to avoid installed-metadata/parser races. Go waits for embeds; receipts/publication wait for all outputs and unchanged inputs. Release stays sequential. Three dependency workers overlap probes with serial-equivalent digests/order. Supervisors retain phase errors and stop owned descendants on cancellation/failure.
 
-Development may cache Cargo registry/targets while staging exact locked published crates freshly. Verify digest/execution/consumption and regenerate evidence. Complete caches resolve/install offline; incomplete caches follow acquisition policy with diagnostics. Corrupt crates or compiler failure cannot retry via another path. Release Cargo dirs stay isolated. Source changes rebuild whole product, not component/watch mode.
+Saved local Gateways reuse intact compatible installs; source changes do not force upgrade. Service owner repairs missing/damaged packages; explicit Update selects current build. Archive cache keys include dirty source; changed inputs discard old cache generation, absent keys create a session cache. Package owner validates archives.
 
-Desktop compilation overlaps Runtime preparation. Runtime assets/Go, plugin staging and Computer resources have independent outputs. Env App no-emit typecheck overlaps bundling under its checkout lock. Notices run after all asset tasks because installed metadata/YAML parser cannot race cold dependency install. Go waits for embeds; publication/receipts wait for all builds and unchanged-input checks. Release order stays sequential.
+Dev gzip1/Brotli 4 retains identical decoded bytes; normal/release compression stays maximum. Profile is part of identity. Gateway source copies exclude other worktrees/native caches. Log dependency/verification/Desktop/Runtime/Gateway durations. Qualify rebuilt and reused launches with a saved local Gateway, exact Runtime commit and cleanup; empty-profile warm measurements alone are insufficient.
 
-Three dependency-scan workers overlap toolchain probes with serial-equivalent digests/order. Supervisors label diagnostics, preserve failures and stop owned groups/descendants on cancel or sibling failure.
-
-Saved local Gateways reuse compatible intact installs; Desktop source change does not force replacement. Service owner prepares missing/damaged packages; explicit Update selects current build. Verified archive caches bind full launch input key including dirty source; changed keys discard previous generation, missing key creates session cache. Package owner verifies archives.
-
-Dev embedded compression: gzip1/Brotli4 with identical decoded bytes; ordinary/release use maximum. Profile enters build identity. Gateway source copies omit unrelated worktrees/native caches. Logs separate dependencies/verification/Desktop/Runtime/Gateway phases and total. Empty-profile warm timings cannot certify changed-source/saved-Gateway launches; qualify both rebuilt/reused launches with local Gateway, exact Runtime commit and cleanup.
-
-Normal exit, preparation failure, Ctrl+C/SIGTERM stop only owned local services; production shutdown semantics remain. Electron resolution emits path only, logs to stderr, propagates failure and rechecks executable after dependency builds.
+Exit/preparation failure/signals stop only owned services. Electron resolution outputs only its path, logs to stderr, propagates errors and rechecks executable after dependency builds.
 
 ## Credentials and retention
+Unpackaged development uses AES-256-GCM with a random retained 0600 profile key: plaintext protection, not protection from the same user. Other launches use Electron system storage without constructor probes. Legacy Keychain offers explicit recovery; never read preferences/system secrets implicitly. Each file migrates atomically only after user action. Failure retains credentials/retry/quit; corrupt keys never reset accounts/Runtime/Keychain.
 
-Unpackaged dev encrypts with AES-256-GCM/random profile key 0600, retained with profile; protects plaintext, not same-user access. Other launches use Electron system storage without constructor probing. Legacy Keychain opens recovery without reading preferences/system secrets; only explicit action decrypts and atomically migrates each file. Failure preserves credentials/retry/quit; corrupt keys require repair, never reset accounts/Runtime/Keychain.
-
-Publish complete bundles under <development-state-root>/desktop/bundles/<manifest-sha256>. Keep newest three, selected (including reuse) and all live bundles. This bounds inactive verified package count, not bytes; active/unverified entries may grow.
+Publish complete bundles under <development-state-root>/desktop/bundles/<manifest-sha256>. Retain newest three, selected/reused and all live bundles. This bounds inactive verified count, not total bytes; active/unverified entries may grow.
 
 # Boundaries
 
@@ -52,7 +48,7 @@ in-progress directories.
 - `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Input drift, corruption and toolchain admission.
 - `redeven:scripts/dev_desktop_build_proxy.test.mjs` and `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Proxy precedence, preparation inheritance and launch isolation.
-- `redeven:scripts/resolve_node_archive.test.mjs` - Bounded HTTP/transport retries, real HTTPS 503 recovery, permanent failures, checksum admission and partial cleanup.
+- `redeven:scripts/resolve_node_archive.test.mjs` - Bounded HTTPS retry, permanent failure, checksum and partial-file cleanup.
 - `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.
 - `redeven:scripts/build_assets.test.mjs` - Cold-install ordering and asset/notice failure propagation.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.

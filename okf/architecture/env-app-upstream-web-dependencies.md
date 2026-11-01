@@ -4,7 +4,7 @@ title: Env App upstream web dependencies
 tags: [architecture, dependencies, protocol, ui]
 quality_exception: Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.
 lifecycle: contract
-reviewed_at: "2026-10-31"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -36,37 +36,14 @@ Core supplies Host Applications' remote pointer/input controllers with render-in
 
 # Boundaries
 
-Env App and Desktop retain Solid 1.9.17 or newer. Both npm and pnpm overrides
-and lockfiles require Seroval >=1.6.11 for RegExp and typed-array serialization
-fixes; a Solid version alone does not establish the transitive security floor.
+Retain Solid >=1.9.17 and matching npm/pnpm locks/overrides for Seroval >=1.6.11, Zod >=4.6.7 within major 4. Solid alone does not prove transitive fixes. Tailwind Node/Vite 4.3.3 uses the current loader hook. ESLint 10 retains explicit ESLint 9 recommended policy with compatible Solid lint; Desktop tests use ESM extensions. Reviewed Electron/esbuild lifecycle allowlists match pnpm; deny other hooks.
 
-Tailwind Node/Vite 4.3.3 uses the current Node loader hook, avoiding deprecated asynchronous loader registration on the pinned toolchain.
+FloeBrowser 0.1.28 bundles host/viewer/media collector at projection protocol 26; retain integrity manifest and verified licenses. Pin @rrweb/utils, rrdom, rrweb and rrweb-snapshot 2.1.7 alongside recorder/replay/types. 2.2.0 fails dynamic-frame input/projection and cannot replace that closed helper graph.
 
-ESLint 10 runs the existing explicit ESLint 9 recommended rule policy; engine
-maintenance does not silently change product lint policy. Solid lint supports
-ESLint 10. Desktop test configs use explicit ESM extensions. npm lifecycle
-permissions pin reviewed Electron/esbuild versions and deny other install hooks,
-matching the pnpm build allowlist.
-
-Matching npm/pnpm overrides and locks require Zod 4.6.7 or newer within major 4,
-including FloeBrowser's transitive validator.
-
-FloeBrowser's source host, viewer and native media collector come from the same
-published package. Version 0.1.28 retains projection protocol 26 while updating
-its recorder, media and validation dependencies. Helper staging retains the
-package's collector integrity manifest and verified third-party licenses.
-
-Matching npm/pnpm overrides retain `@rrweb/utils`, `rrdom`, `rrweb` and
-`rrweb-snapshot` at 2.1.7 alongside FloeBrowser's record, replay and types packages.
-This preserves dynamic iframe input/projection behavior and one version per
-runtime package in immutable helper staging; rrweb 2.2.0 fails that frame contract.
-
-Redeven owns adapters for shell presets, permissions, credentials, local-path authority and placement. Upstream retains Floe shell tokens, FloeBrowser DOM/media projection, Flowersec reconnect/framing/RPC, and Floeterm parsing, key encoding, history, attachment arbitration, geometry, Presentation encoding, cursor, graphics and canvas rendering.
-
-Reviewed coordinates do not relax guards for other LGPL dependencies.
+Redeven owns shell presets, permissions, credentials, path authority and placement. Upstream owns Floe tokens, browser DOM/media, Flowersec framing/recovery/RPC and Floeterm parsing/input/history/arbitration/geometry/Presentation/cursor/graphics/rendering. These reviewed coordinates do not waive other LGPL guards.
 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/package.json` - Published pins and matching overrides.
 
-- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - Published source adapters retain navigation grants, user ownership and shared debugger identity.
+- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - Published adapters preserve grants, ownership and debugger identity.

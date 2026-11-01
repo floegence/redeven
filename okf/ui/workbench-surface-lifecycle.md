@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench surface lifecycle
 tags: [ui, workbench, lifecycle, keep-alive]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -22,6 +22,6 @@ Only the shell-level recovery snapshot may suspend the Workbench interaction tre
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests cover reusing a singleton widget without implicit ensureWidget centering when focus is disabled.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Singleton reuse without implicit centering when focus is disabled.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241` - Selected Terminal wheel routing delegates only an explicit local-scroll marker to the widget without a DOM-focus gate.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241` - Terminal local-scroll wheel delegation without DOM-focus requirement.

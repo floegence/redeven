@@ -3,7 +3,7 @@ type: UI Contract
 title: Env App floating layer order
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -37,4 +37,4 @@ This contract governs cross-surface Env App stacking and the Activity-versus-Wor
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.browser.test.tsx` - Published elastic drag, reachable header, settled persistence, maximize drag restore, and retained draft.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.browser.test.tsx` - Published drag, reachable header, persistence, maximize restore and draft.

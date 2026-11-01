@@ -3,16 +3,11 @@ type: UI Contract
 title: Tessiven canvas navigation and rendering
 tags: [ui, tessiven, graph, performance]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe owns layout, routing, viewport interaction and route painting.
-Tessiven supplies canonical topology projection, localized view controls and
-palette. Folding, filtering and navigation never rewrite a saved document.
-Canonical relationships remain inspectable while only the current connection
-scope is routed and painted. Offscreen geometry cannot expand the SVG layer. Invalid graph data or actual worker failures stay visible;
-view changes retain the last valid scene until the next layout is ready.
+Floe owns layout, routing and viewport painting; Tessiven provides topology, controls and palette. Folding/filtering never rewrites documents. Canonical relationships remain inspectable while only the selected scope paints. Worker/data failures stay visible, retaining the last valid scene during ordinary view changes.
 
 # Contract
 

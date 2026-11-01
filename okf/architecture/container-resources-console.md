@@ -4,7 +4,7 @@ title: Native container console
 tags: [architecture, containers, ui, workbench]
 quality_exception: Cross-surface native container contract spanning aggregated resources, target-scoped navigation, operations, and Compose workflows.
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -25,6 +25,6 @@ Floe owns reusable pickers/controls/icons. Redeven owns filesystem adaptation, p
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Owns the aggregated console, structured Compose and container-run forms, Exec placement, action presentation, and exact-target navigation.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Containers console, run/Compose forms, Exec and exact-target actions.
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies exact run serialization, localhost port defaults, Exec lifecycle, file selection, ordered Compose requests, navigation, actions, and failure behavior.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Exact run/Compose requests, localhost defaults, Exec/files and navigation failures.

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin surface recovery and permissions
 tags: [architecture, plugins, ui, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -45,6 +45,22 @@ Visibility and theme/context delivery can race with SDK retirement or document
 navigation. A synchronous delivery failure enters the same first-error path
 for that exact slot, refreshes inventory once, and retires through the SDK. It
 must not escape into the Workbench error boundary or close sibling placements.
+
+## Installation-bound runtime recovery
+
+Startup recovery results describe the exact Host-checked installation: instance
+ID, active fingerprint, installation timestamp, and management revision. The
+released SDK compares that identity with the current enabled inventory record.
+Env App preserves those fields in both official and external inventory projections
+and displays only matching observations. Updates, reinstalls, disabling, and
+uninstalling invalidate an old observation without deriving readiness or starting
+another recovery pass. A current failure on a sibling installation stays visible.
+
+Explicit retry loading, success, failure, and rejected requests remain bound to
+the installation and authenticated session captured when retry began. A delayed
+response cannot overwrite a replacement installation. Product copy localizes the
+released reason code; a catalog instance ID or a raw unknown code is not the
+user-facing failure message. Inventory action state remains the launch authority.
 
 ## User close and forced revocation
 

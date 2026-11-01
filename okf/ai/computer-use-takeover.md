@@ -3,17 +3,11 @@ type: Interaction Contract
 title: Computer use safety pauses and user control
 tags: [ai, computer-use, safety, takeover]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns questions, answers, cancellation and continuation. Redeven owns
-computer execution, authorization, private input and media. Operations return
-facts or errors; Flower decides whether to call `ask_user` separately. A blocked
-capture is never a successful screenshot. Answers reach the Agent unchanged and
-do not grant permission, clear safety or replay an operation. Fresh safe
-observation is required before further actions. No host waiting table, recovery
-journal or second conversation lifecycle exists.
+Floret owns questions, answers and continuation; Redeven owns authorized computer effects and private media. Failures remain factual and blocked capture is not a screenshot. Answers pass unchanged without granting authority or replay. Fresh safe observation precedes further input; no second recovery lifecycle exists.
 
 # Contract
 

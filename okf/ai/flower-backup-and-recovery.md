@@ -3,7 +3,7 @@ type: Recovery Contract
 title: Flower backup and recovery
 tags: [ai, storage, recovery, backups]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -31,4 +31,4 @@ Only conversation-owned databases and uploaded resources participate in a restor
 
 - `redeven:internal/ai/storage_snapshot.go` - Explicit capture, metadata and preserved snapshot inventory.
 
-- `redeven:internal/ai/storage_files.go` - Directory durability, staging cleanup and replacement verification.
+- `redeven:internal/ai/storage_files.go` - Directory durability, staging and replacement checks.

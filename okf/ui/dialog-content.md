@@ -3,7 +3,7 @@ type: UI Contract
 title: Dialog content placement
 tags: [ui, dialogs, accessibility, desktop]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -50,8 +50,8 @@ Headers contain identity and controls only. Missing guidance must be repaired in
 
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Uses the published Dialog and ConfirmDialog contracts.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Places window-local confirmation guidance in its scrollable body.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Window-local confirmation inside scrollable body.
 
-- `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Real Floe shells and both host styles: global dialog/drawers, resizing, native titlebars, safe insets, hidden mobile headers and surface-local placement.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Settings and nested editors below actual shell headers at desktop/phone widths, with retained loading geometry.
+- `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Real Floe global/local dialog geometry, native headers, safe insets and resizing.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Header-bounded desktop/phone settings, nested editors and stable loading.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Short-window bounds, title editing, saving and focus behavior.

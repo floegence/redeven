@@ -4,17 +4,11 @@ title: Tessiven canvas
 tags: [ui, tessiven, graph]
 quality_exception: Cross-surface canvas interaction contract for Activity, standalone windows, topology browsing, and exact object actions; document, Runtime, and Flower lifecycle remain separately owned.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Tessiven presents one progressively detailed canvas for understanding where
-business services run. Solid Runtime node cards sit inside tinted dashed visual
-groups; external dependencies use a separate card treatment. Default connections
-show root-level overview; hover and focus show only the current group or host's
-relationships. Wheel zoom and drag pan belong to
-the canvas, while object details and the read-only document remain normal selectable
-text. Flower is the editing surface; the canvas has no manual content editor.
+Tessiven maps services to Runtime cards, tinted groups and distinct external dependencies. Root connections give overview; focus reveals local relationships. Canvas owns pan/zoom while details remain selectable. Flower edits documents; the canvas progressively presents them without a parallel manual editor.
 
 # Contract
 
@@ -37,8 +31,8 @@ The shared document-to-graph mapper passes only visible container rules from `pr
 
 # Evidence
 
-- `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts` - Identity-only native window request and explicit acknowledgement.
+- `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts` - Identity-only native request/ACK.
 
 - `desktop/src/main/main.ts` - Session-authorized Service Canvas window creation and reuse.
 
-- `desktop/scripts/check-service-canvas-window.mjs` - Real Desktop opening, repeated activation, close/reopen, and invalid-request rejection.
+- `desktop/scripts/check-service-canvas-window.mjs` - Real Desktop Open/repeat/close/reopen and invalid rejection.

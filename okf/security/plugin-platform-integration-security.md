@@ -85,6 +85,6 @@ Redeven security adapters may narrow authority; they may not mint platform token
 
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
 
-- `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Covers exact worker origin admission, plugin and unknown-origin denial, and frame authority.
+- `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Exact worker/frame origin authority and plugin/unknown denial.
 
-- `redeven:desktop/scripts/check-tessiven-workers.mjs` - Reproduces the unauthenticated nested ELK worker failure in Electron, then verifies cold graph rendering, zoom, and reload through the protected origin.
+- `redeven:desktop/scripts/check-tessiven-workers.mjs` - Electron nested ELK auth failure reproduced; protected cold render/zoom/reload verified.

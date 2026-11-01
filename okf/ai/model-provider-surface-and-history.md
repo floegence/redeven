@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model provider surface and history
 tags: [ai, models, providers, history]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -12,82 +12,34 @@ Floret owns the provider-visible history and render lineage for each Turn. Redev
 # Contract
 
 ## Native web-search observation
-OpenAI Responses hosted search requests include `web_search_call.action.sources` so returned source URLs can reach the canonical Activity. Qwen requests keep their existing tool shape.
+Responses hosted search requests include web_search_call.action.sources for canonical Activity URLs. Qwen keeps its tool shape.
 
 ## Provider surface and history
-Published Floret v7.92.2 owns native Responses replay through
-PrepareResponsesHistory. API-key OpenAI, compatible Responses, Qwen and
-ChatGPT adapters retain search receipts, encrypted reasoning and original
-function items across local tools. Activity is never a replay source.
-Disabling new searches retains old evidence. Completed item events supply
-output when terminal snapshots omit it. Confirmed terminal incomplete responses
-retain their native snapshot for length
-continuations; interrupted and failed streams install no state. ChatGPT continues
-to reject incomplete responses. Content-filtered output never advances Engine
-history.
+Published Floret v7.92.2 PrepareResponsesHistory owns API-key OpenAI, compatible Responses, Qwen and ChatGPT native replay: search receipts, encrypted reasoning and function items survive local tools. Activity is no replay source. Disabling searches retains evidence; completed events supply output omitted from terminal snapshots. Confirmed incomplete Responses retain snapshots for length continuation; interrupted/failed streams install none. ChatGPT rejects incomplete responses; content filtering never advances history.
 
-Preparation estimates complete native input. API-key OpenAI uses server
-continuation only with explicit responses_continuation and Engine permission;
-it sends only the validated suffix after the response ID. Other connections
-send complete native input. This choice freezes with preparation and transport
-retries. Rejected IDs never trigger automatic evidence-dropping retries;
-explicit configuration changes can select full replay using retained state.
-ChatGPT keeps its namespace, OAuth, WebSocket and published native state format.
+Preparation estimates full native input. API-key OpenAI uses response-ID/suffix continuation only with explicit responses_continuation and Engine permission; others send full input. Freeze selection/request across retries. Rejected IDs never trigger evidence-dropping retries; explicit configuration can select full replay. ChatGPT retains namespace/OAuth/WebSocket/published state.
 
-Published ID-only OpenAI states remain readable with their original opt-in
-continuation behavior; missing historical bytes cannot be recovered. New
-responses write the complete upstream envelope. Removing the historical reader
-requires a domain migration in a future major release, never within v7.
-Changed canonical prefixes discard stale native suffixes and server IDs;
-model/account and supplemental-secret isolation remain Floret boundaries.
-The Responses history acceptance test covers provider modes, streamed-only
-output, continuation suffixes, immutable retries, Goal review, truncation and
-restart. Manual Retry and Fork retain canonical facts and confirmed tool results;
-their existing lineage boundaries discard source provider state. Transport retry
-keeps the frozen native request.
+Historical ID-only OpenAI states retain opt-in continuation; absent bytes cannot be recovered. New states store complete upstream envelopes. Reader removal needs a future-major domain migration, never within v7. Changed canonical prefixes discard stale suffixes/IDs; Floret isolates model/account/secrets. Manual Retry/Fork retain canonical facts/tool results but clear source state; transport retries preserve frozen requests. Acceptance covers provider modes, streamed-only output, suffixes, immutable retry, Goal review, truncation/restart.
 
-Flower's provider prefix has one owner. Published Floret v7.37.0 keeps one append-only canonical history and keys each render lineage by the complete provider request surface: provider, model, reasoning, System Prompt, local and hosted tools, adapter, context policy, and provider-state compatibility.
-
-Flower reads persisted Activity first and otherwise uses a neutral label and renderer without exposing arguments or unknown JSON.
+Floret v7.37.0 owns append-only canonical history and lineages keyed by provider/model/reasoning/prompt/local-hosted tools/adapter/context policy/state compatibility. Flower reads persisted Activity or uses neutral presentation without unknown JSON/arguments.
 
 ## Provider rendering and estimation
-Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Chat Completions, Gemini signatures, Moonshot, and Anthropic. Verified model mappings select official vocabularies; unknown models use an explicit multilingual BPE proxy. These remain estimates because server rendering can differ; Redeven adds no network preflight or calibration ledger.
+Floret v7.26.0 EstimateRenderedRequest owns Responses, Chat Completions, Gemini signatures, Moonshot and Anthropic. Verified mappings use official vocabularies; unknown models use an explicit multilingual BPE proxy. Server rendering may differ; no host calibration ledger/network preflight.
 
 ## Anthropic Messages
+Floret v7.95.0 owns HTTP/SSE, frozen cache hints, authorized attachments and native signed output. Flower maps controls/content/usage/events through public Gateway; retire the SDK route. Endpoint brand/intermediary does not select behavior. Engine policy allows at most four ephemeral markers and separately controls opaque state. Cache-off retains permitted signed history; secret isolation clears both reuse paths.
 
-Published Floret v7.95.0 owns Messages HTTP/SSE, frozen cache hints, authorized
-attachment expansion and native signed output. Flower maps model controls,
-authorized content, usage and events through the public Gateway. The retired
-Anthropic SDK path is removed. No endpoint brand or intermediary-specific logic
-selects behavior. Effective Engine reuse policy enables at most four ephemeral
-markers and independently controls opaque state. Cache-off preserves permitted
-signed history; supplemental-secret isolation clears both reuse paths.
+Completed output survives continuation/restart. Retry/Fork/compaction retain canonical facts and clear source state through Floret. Never fabricate signed historical reasoning or recast it as answer text. State stays opaque. Frozen transport retries resolve no attachments and carry new attempt IDs.
 
-Completed native output survives ordinary continuation and restart. Manual
-Retry/Fork and compaction retain canonical facts and clear source state through
-existing Floret boundaries. Historical unsigned reasoning is never fabricated as
-signed thinking or recast as visible answer text. Native state remains opaque.
-Frozen transport retries resolve no attachments and carry the new attempt ID.
+Usage separates uncached/cache-read/cache-write. Measured request input needs complete partitions and excludes service-transformed hosted/signed input; unsupported evidence remains estimated. Failed streams retain billing without advancing state. Diagnostics preserve public structured HTTP errors and exact byte limits.
 
-Usage keeps uncached, cache-read and cache-write partitions. Request-bound input
-measurement requires complete reported partitions and excludes hosted or signed
-input the service may transform. Unsupported evidence stays an estimate rather
-than a false measured context size. Streaming failures retain reported billing
-without advancing native state. Product diagnostics preserve structured public
-HTTP errors and exact byte-limit classifications.
-
-Evidence: model_gateway_anthropic_test.go checks the final wire, usage, state
-serialization, cache-off replay, credential isolation and frozen retry identity.
-The Anthropic Service regression verifies two canonical turns preserve signed
-and redacted blocks while public timeline thinking stays separately typed.
-Existing argument-stream, attachment, cancellation and prepared-request tests
-exercise the shared route. No production thread is resumed by qualification.
+model_gateway_anthropic_test.go covers final wire/usage/state/cache-off/secret isolation/frozen identity. Service regression retains signed/redacted blocks across two turns with separately typed public thinking. Shared argument/attachment/cancel/prepared-request tests remain; no qualification resumes production threads.
 
 ## Native request measurement
-Published Floret v7.79.0 owns [native request measurement](model-request-measurement.md), frozen-prefix pressure and schema 28. Redeven maps protocol facts without a second pressure policy or measurement store.
+Floret v7.79.0 owns [measurement](model-request-measurement.md), frozen-prefix pressure and schema 28; Redeven adds no pressure policy/store.
 
 ## Provider request recovery
-[Model request recovery](model-request-recovery.md) defines Engine-owned retry budgets, physical-request deadlines, attempt diagnostics and current-view feedback. Neither creates a second history owner.
+[Recovery](model-request-recovery.md) owns Engine retry budgets/deadlines/attempt diagnostics/current feedback, without another history owner.
 
 # Boundaries
 
@@ -95,7 +47,7 @@ Redeven maps product model and permission state into Floret's typed surface. It 
 
 # Evidence
 
-- `redeven:internal/ai/floret_runtime.go` - Hosted Agents receive the current prompt, tools, model, reasoning, and context policy.
+- `redeven:internal/ai/floret_runtime.go` - Current hosted prompt/tools/model/reasoning/context inputs.
 
 - `redeven:internal/ai/floret_bootstrap.go` - Restart uses canonical Turn input and provider-safe state.
 

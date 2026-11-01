@@ -3,7 +3,7 @@ type: UI Contract
 title: Terminal session groups
 tags: [ui, terminal, groups, activity, workbench, sqlite]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -34,6 +34,6 @@ Group membership is not Workbench placement, shell working directory, controller
 
 # Evidence
 
-- `redeven:internal/terminal/group_catalog.go` - Owns the revisioned catalog, protected Default Group, and atomic product mutations.
+- `redeven:internal/terminal/group_catalog.go` - Revisioned group catalog and protected default/atomic writes.
 
-- `redeven:internal/terminal/groups.go` - Resolves paths, serializes membership changes, deletion, and Group order, bounds closes, and registers Terminal group types 2017-2023.
+- `redeven:internal/terminal/groups.go` - Paths and serialized group mutations/order, bounded close, RPC 2017–2023.

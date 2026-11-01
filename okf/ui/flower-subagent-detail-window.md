@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower subagent detail window
 tags: [ai, flower, subagents, ui]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -25,6 +25,6 @@ The detail window must not infer membership from activity, poll for updates, swi
 
 - `redeven:internal/ai/flower_current_projection.go` - Shares the safe current projection between HTTP and SSE.
 
-- `redeven:internal/flower_ui/src/threadCache.ts` - Owns bounded retained detail and root-inventory cleanup; cache tests cover capacity, reconnect, attention and release.
+- `redeven:internal/flower_ui/src/threadCache.ts` - Bounded detail/root cleanup, capacity, reconnect, attention and release.
 
-- `redeven:internal/envapp/ui_src/src/ui/flower/SubagentDetailWindow.progressDock.browser.test.tsx` - Asserts the footer rail sits below the transcript region, stays centered, and keeps its pill width and label inset while reported tokens grow from `11` to `1234567`.
+- `redeven:internal/envapp/ui_src/src/ui/flower/SubagentDetailWindow.progressDock.browser.test.tsx` - Centered footer below transcript; stable pill/inset as tokens grow 11 to 1234567.

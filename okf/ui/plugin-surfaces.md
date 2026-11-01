@@ -4,7 +4,7 @@ title: Plugin surfaces
 tags: [ui, plugins, activity, workbench, plugin-center]
 quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -41,6 +41,6 @@ It does not verify packages or releases, mint tokens, serve assets, grant permis
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx` - Uses the published SDK and authenticated product placement adapter to verify WebGL 1/2 pixels, visibility, exact close, and reopening.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx` - Published SDK/product placement: actual WebGL1/2 pixels, visibility, close/reopen.
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns inventory, client lifetime, lifecycle commands, and cross-placement serialization.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Inventory/client/commands and cross-placement lifecycle serialization.

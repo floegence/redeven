@@ -3,16 +3,11 @@ type: UI Contract
 title: Flower conversation references
 tags: [flower, composer, references, interaction]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The existing composer draft owner stores unadmitted thread references; Floret owns
-admitted snapshots. Reference this conversation appends only basic facts to the
-current editor, preserves selection and input, and never sends automatically.
-Thread identity includes its runtime. Authorized Open selects only after a valid
-read. Failed or canceled reads retain the preview and draft; frozen transport
-retries retain the original snapshot after source rename or deletion.
+The composer owns unadmitted references; Floret owns admitted snapshots. Reference appends basic facts without sending or disturbing selection. Identity includes Runtime and Open requires authorized reads. Failed/canceled reads retain draft/preview; transport retries keep the frozen source even after rename/deletion.
 
 # Contract
 

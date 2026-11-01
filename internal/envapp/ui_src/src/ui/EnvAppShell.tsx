@@ -66,7 +66,7 @@ import {
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { PluginPlatformRequestError, pluginMutationOutcome } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, isPluginRecoveryCurrent, pluginMutationOutcome, type PluginRecoveryResult } from '@floegence/redevplugin-ui';
 
 import {
   EnvContext,
@@ -616,7 +616,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     previousClient: unknown;
   }>>();
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
-  const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
+  type PluginRecoveryObservation = Readonly<{
+    result: PluginRecoveryResult;
+    presentation: import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation;
+  }>;
+  const [pluginRuntimeRecoveryObservations, setPluginRuntimeRecoveryObservations] = createSignal<Record<string, PluginRecoveryObservation>>({});
   const [pluginSurfacePhases, setPluginSurfacePhases] = createSignal<Record<string, 'pending' | 'refreshing' | 'unknown'>>({});
   const [pluginSurfaceGenerations, setPluginSurfaceGenerations] = createSignal<Record<string, number>>({});
   const pluginSurfaceReconciliations = new Map<string, () => Promise<void>>();
@@ -1535,6 +1539,26 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     const state = pluginInventorySessionState.latest;
     return owner && state?.owner === owner ? state.projection : undefined;
   };
+  const pluginRuntimeRecoveryByInstanceID = createMemo(() => {
+    const observations = pluginRuntimeRecoveryObservations();
+    const current: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
+    for (const item of pluginInventoryProjection()?.items ?? []) {
+      const observation = item.pluginInstanceID ? observations[item.pluginInstanceID] : undefined;
+      if (observation && item.recoveryIdentity && isPluginRecoveryCurrent(observation.result, item.recoveryIdentity)) {
+        current[observation.result.plugin_instance_id] = observation.presentation;
+      }
+    }
+    return current;
+  });
+  const presentPluginRecovery = (result: PluginRecoveryResult): PluginRecoveryObservation => ({
+    result,
+    presentation: result.status === 'ready' ? { state: 'ready' } : {
+      state: 'failed',
+      error: i18n.t(`uiCopy.plugin.runtimeRecoveryReason.${result.reason ?? 'unknown'}`),
+      reason: result.reason,
+      action: result.action,
+    },
+  });
   const pluginInventoryError = () => {
     const owner = pluginInventorySource();
     const failure = pluginInventoryFailure();
@@ -1683,13 +1707,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       pluginRuntimeRecoveryAbort?.abort('Plugin runtime session disconnected');
       pluginRuntimeRecoveryAbort = undefined;
       setPluginRuntimeRecoveryComplete(false);
-      setPluginRuntimeRecoveryByInstanceID({});
+      setPluginRuntimeRecoveryObservations({});
       return;
     }
     if (!canAdmin()) {
       cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery unavailable');
       setPluginRuntimeRecoveryComplete(true);
-      setPluginRuntimeRecoveryByInstanceID({});
+      setPluginRuntimeRecoveryObservations({});
       return;
     }
     if (pluginRuntimeRecoveryClient === connectedClient) return;
@@ -1699,33 +1723,24 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     const controller = new AbortController();
     pluginRuntimeRecoveryAbort = controller;
     setPluginRuntimeRecoveryComplete(false);
-    setPluginRuntimeRecoveryByInstanceID({});
+    setPluginRuntimeRecoveryObservations({});
     void pluginLifecycle.recoverEnabled({ signal: controller.signal }).then((result) => {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
-      const failures = result.results.filter((entry) => entry.status === 'failed');
-      const recoveryByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
-      for (const entry of result.results) {
-        recoveryByInstanceID[entry.plugin_instance_id] = entry.status === 'failed'
-          ? {
-            state: 'failed',
-            error: `${entry.plugin_instance_id}: ${entry.reason ?? 'unknown'}`,
-            reason: entry.reason,
-            action: entry.action,
-          }
-          : { state: 'ready' };
-      }
-      setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
+      const recoveryByInstanceID: Record<string, PluginRecoveryObservation> = {};
+      for (const entry of result.results) recoveryByInstanceID[entry.plugin_instance_id] = presentPluginRecovery(entry);
+      setPluginRuntimeRecoveryObservations(recoveryByInstanceID);
       setPluginRuntimeRecoveryComplete(true);
-      if (failures.length > 0) {
-        notify.error(
-          i18n.t('uiCopy.plugin.needsAttention'),
-          failures.map((entry) => `${entry.plugin_instance_id}: ${entry.reason ?? 'unknown'}`).join('\n'),
-        );
-      }
+      const failures = (pluginInventoryProjection()?.items ?? []).flatMap((item) => {
+        const entry = item.pluginInstanceID ? recoveryByInstanceID[item.pluginInstanceID] : undefined;
+        if (!entry || entry.presentation.state !== 'failed' || !item.recoveryIdentity
+          || !isPluginRecoveryCurrent(entry.result, item.recoveryIdentity)) return [];
+        return [item.displayName + ': ' + entry.presentation.error];
+      });
+      if (failures.length > 0) notify.error(i18n.t('uiCopy.plugin.needsAttention'), failures.join('\n'));
     }).catch((error: unknown) => {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       setPluginRuntimeRecoveryComplete(true);
-      setPluginRuntimeRecoveryByInstanceID({});
+      setPluginRuntimeRecoveryObservations({});
       // The inventory error stays visible in plugin surfaces without interrupting
       // unrelated work during automatic startup recovery.
       if (!(error instanceof PluginPlatformRequestError && error.errorCode === 'PLUGIN_RUNTIME_UNAVAILABLE')) {
@@ -1745,14 +1760,18 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
     const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
     if (!connectedClient || (isLocalMode() && !pluginSessionReady())) return;
+    const observation = pluginRuntimeRecoveryObservations()[pluginInstanceID];
+    const currentIdentity = () => pluginInventoryProjection()?.items.find((item) => item.pluginInstanceID === pluginInstanceID)?.recoveryIdentity;
+    const identity = currentIdentity();
+    if (!observation || !identity || !isPluginRecoveryCurrent(observation.result, identity)) return;
     const previousRetry = pluginRuntimeRecoveryRetries.get(pluginInstanceID);
     previousRetry?.controller.abort('Plugin runtime recovery retry superseded');
     const controller = new AbortController();
     const requestID = ++pluginRuntimeRecoveryRetryRequestID;
     pluginRuntimeRecoveryRetries.set(pluginInstanceID, { client: connectedClient, requestID, controller });
-    setPluginRuntimeRecoveryByInstanceID((current) => ({
+    setPluginRuntimeRecoveryObservations((current) => ({
       ...current,
-      [pluginInstanceID]: { state: 'recovering' },
+      [pluginInstanceID]: { result: observation.result, presentation: { state: 'recovering' } },
     }));
     const isCurrentRetry = () => (
       !controller.signal.aborted
@@ -1762,28 +1781,33 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       && protocol.status() === 'connected'
       && protocol.session() === connectedClient
       && (!isLocalMode() || pluginSessionReady())
+      && Boolean(currentIdentity() && isPluginRecoveryCurrent(observation.result, currentIdentity()!))
     );
     void pluginLifecycle.retryRecovery(pluginInstanceID, { signal: controller.signal }).then((result) => {
       if (!isCurrentRetry()) return;
-      pluginRuntimeRecoveryRetries.delete(pluginInstanceID);
-      setPluginRuntimeRecoveryByInstanceID((current) => ({
+      const identity = currentIdentity();
+      if (!identity || !isPluginRecoveryCurrent(result, identity)) {
+        setPluginRuntimeRecoveryObservations((current) => {
+          const next = { ...current };
+          delete next[pluginInstanceID];
+          return next;
+        });
+        return;
+      }
+      setPluginRuntimeRecoveryObservations((current) => ({
         ...current,
-        [pluginInstanceID]: result.status === 'ready'
-          ? { state: 'ready' }
-          : {
-            state: 'failed',
-            error: `${pluginInstanceID}: ${result.reason ?? 'unknown'}`,
-            reason: result.reason,
-            action: result.action,
-          },
+        [pluginInstanceID]: presentPluginRecovery(result),
       }));
     }).catch((error: unknown) => {
       if (!isCurrentRetry()) return;
-      pluginRuntimeRecoveryRetries.delete(pluginInstanceID);
-      setPluginRuntimeRecoveryByInstanceID((current) => ({
+      setPluginRuntimeRecoveryObservations((current) => ({
         ...current,
-        [pluginInstanceID]: { state: 'failed', error: getErrorMessage(error) },
+        [pluginInstanceID]: { result: observation.result, presentation: { state: 'failed', error: getErrorMessage(error) } },
       }));
+    }).finally(() => {
+      if (pluginRuntimeRecoveryRetries.get(pluginInstanceID)?.requestID === requestID) {
+        pluginRuntimeRecoveryRetries.delete(pluginInstanceID);
+      }
     });
   };
   onCleanup(() => {

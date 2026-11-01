@@ -3,11 +3,11 @@ type: Desktop Contract
 title: Desktop environment settings presentation
 tags: [desktop, settings, interaction, themes]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop composes published Floe Dialog, Tabs, controls and presence into one Environment settings surface. Theme tokens own material and contrast; product CSS owns grouping and geometry. Every page preserves readable labels, reachable actions and a fixed viewport. Loading, failure and disclosures retain the draft owner. [Settings sessions](desktop-environment-settings.md) own authority, persistence and recovery; styling adds no operation state.
+Desktop composes Floe dialogs/tabs/controls into one bounded settings surface. Theme tokens own material, product CSS grouping/geometry. Every page retains readable labels, reachable actions and draft ownership through loading/errors/disclosure. Settings sessions retain authority and persistence without styling state.
 
 # Contract
 
@@ -25,12 +25,12 @@ Presentation adds no modal, focus manager, persistence or lifecycle owner.
 
 # Evidence
 
-- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Shared theme material, fields, target sizes and responsive geometry.
+- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Shared material/fields/targets/responsive geometry.
 
-- `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.css` - Connection grouping, access tasks, password and workflow hierarchy.
+- `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.css` - Connection/access/password/workflow hierarchy.
 
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Released Dialog, retained panels and fixed scrolling/actions.
 
 - `redeven:desktop/src/welcome/SSHDestinationCombobox.tsx` - Shared destination field and published feedback indicator.
 
-- `redeven:desktop/scripts/check-welcome-form-alignment.mjs` - Browser geometry, localized stepper, SSH creation variants, feedback recovery and input focus checks.
+- `redeven:desktop/scripts/check-welcome-form-alignment.mjs` - Localized browser layout/stepper/SSH/feedback and focus.

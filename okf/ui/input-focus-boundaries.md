@@ -3,7 +3,7 @@ type: UI Contract
 title: Input focus boundaries
 tags: [ui, desktop, flower, accessibility, focus]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -31,4 +31,4 @@ Third-party frames, separate application views, and editor-internal input carrie
 
 - `redeven:internal/envapp/ui_src/package.json` - Published Floe dependency and source-policy checks.
 
-- `redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx` - All shell themes, compound controls, readonly, disabled, invalid, and forced-color behavior.
+- `redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx` - All themes, compound/readonly/disabled/invalid/forced-color focus.

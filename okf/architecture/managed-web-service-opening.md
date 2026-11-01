@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Service opening
 tags: [architecture, managed-services, security, desktop, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -41,4 +41,4 @@ Entrance preparation operates within the existing [Managed Web Service contract]
 
 - `redeven:internal/managedwebservice/opening_prepare.go` - Common source validation, private cache and generation checks.
 
-- `redeven:internal/managedwebservice/opening_launch.go` - Native and container launch authority, including unique Compose entrance selection.
+- `redeven:internal/managedwebservice/opening_launch.go` - Host/container launch authority and unique Compose entrance.

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower companion presence
 tags: [ui, flower, companion, presence, floret]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -35,6 +35,6 @@ Presence is a read-only projection of canonical work and local composer intent. 
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - canonical thread summaries produce mutually exclusive priority groups and fallback-preserving title selection.
+- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Canonical mutually exclusive priority groups with title fallback.
 
-- `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - active-run blocks project waiting/thinking status, compact tool presentation, or latest assistant output without exposing raw thinking.
+- `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - Canonical waiting/thinking/tool/output projection without raw thinking.

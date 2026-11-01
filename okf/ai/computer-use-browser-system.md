@@ -3,7 +3,7 @@ type: Runtime and Product Contract
 title: Built-in browser Linux system preparation
 tags: [runtime, browser, installation, linux, security]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -29,4 +29,4 @@ The operation retains personal browser processes, browser profiles, login state,
 
 - `redeven:internal/browserinstall/system_readiness.go` - Single readiness state and structured action.
 
-- `redeven:internal/browserinstall/system_linux.go` - Fixed privileged publication, trusted paths and exact AppArmor policy.
+- `redeven:internal/browserinstall/system_linux.go` - Privileged fixed publication, trusted paths/AppArmor.

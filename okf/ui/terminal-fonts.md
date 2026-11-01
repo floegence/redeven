@@ -3,11 +3,11 @@ type: UI Contract
 title: Terminal fonts across client devices
 tags: [ui, terminal, fonts, activity, workbench, desktop]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The Env App owns terminal font selection and document-local loading. New preferences use bundled JetBrains Mono at the existing default size of 12; existing font IDs and sizes remain intact. Each client resolves its own available font, while Floeterm owns character cells, cursor positions, and the authoritative session grid. A missing saved font falls back visibly without rewriting that preference. Font loading failure keeps the terminal usable in system monospace and offers an explicit retry.
+Env App owns document-local terminal fonts. New preferences use bundled JetBrains Mono at size 12; existing IDs/sizes remain unchanged and each client resolves availability. Floeterm retains canonical cells, cursor and session grid. Font presentation cannot replace terminal authority or erase stored preferences.
 
 # Contract
 
@@ -34,6 +34,6 @@ Quick CI and the final pre-push gate use the same Floeterm dependency consistenc
 
 # Evidence
 
-- `redeven:scripts/check_floeterm_dependency_consistency.mjs` - Published Go/npm release parity shared by Quick CI and final integration.
+- `redeven:scripts/check_floeterm_dependency_consistency.mjs` - Go/npm release parity in Quick CI/integration.
 
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.ts` - Client-local loading, stable candidate IDs, and side-effect-free resolution.
+- `redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.ts` - Client-local fonts, stable IDs and side-effect-free resolution.

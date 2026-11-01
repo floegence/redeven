@@ -3,7 +3,7 @@ type: Qualification Record
 title: LAN desktop experiment decision ledger
 tags: [desktop, performance, experiments]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -15,12 +15,9 @@ diagnostic only. C05 owns current paired results and remaining limits.
 
 # Contract
 
-Before another run, review the [C05 preparation and compatibility contract](remote-desktop-lan-published-c05.md), the [measured C05 results](remote-desktop-lan-c05-results.md), and the [RustDesk acceptance criteria](remote-desktop-rustdesk-comparison-results.md). Retry only a named fixture repair or a discriminating hypothesis. Preserve candidate and fixture identities, every attempted round, source and response counts, and the reason for excluding invalid input. Never remove adverse completed trials.
+Before retry, consult [C05 preparation](remote-desktop-lan-published-c05.md), [results](remote-desktop-lan-c05-results.md) and [RustDesk criteria](remote-desktop-rustdesk-comparison-results.md). Require a named fixture repair or discriminating hypothesis; retain immutable candidate/fixture, all rounds/source-response counts/exclusion reasons and adverse complete trials. Diagnostics restore verified published service; exclude credentials.
 
-Keep each experiment separate from product qualification. Restore the verified published service after diagnostics, and never include credentials in the record.
-
-## Decision record
-C01's historical crossover remains a counterexample, not a current performance claim. C02 found no production benefit from confirmed-receipt batching and did not justify a product change. C03's exhausted-window timer was rejected. C04's four/six-frame comparison supports the optional Linux path, not parity or root-cause attribution. The detailed run records were removed from the current tree; Git history retains them.
+C01 crossover is historical counterevidence. C02 receipt batching gives no production benefit; C03 exhausted-window timer rejected. C04 supports optional Linux six-frame throughput, not parity/causality. Git retains detailed older experiments; C05 remains current.
 
 # Boundaries
 

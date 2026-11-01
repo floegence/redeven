@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Database schema migration ownership
 tags: [architecture, storage, sqlite, migrations, upgrades]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -29,6 +29,6 @@ Automatic migration is not permission to accept arbitrary historical shapes. A r
 
 # Evidence
 
-- `redeven:internal/persistence/sqliteutil/engine.go` - Owns WAL-aware read-only preflight, sidecar restoration, exact initialization, and transactional migrations.
+- `redeven:internal/persistence/sqliteutil/engine.go` - WAL-aware read-only preflight, sidecars and atomic verified migrations.
 
-- `redeven:internal/persistence/sqliteutil/engine_test.go` - Covers initialization, rollback, kind, version, metadata, and concurrency rules.
+- `redeven:internal/persistence/sqliteutil/engine_test.go` - Initialization/kind/version/metadata, rollback and concurrency.

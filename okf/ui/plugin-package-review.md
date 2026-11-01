@@ -3,11 +3,11 @@ type: UI Contract
 title: Plugin package review
 tags: [ui, plugins, review, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-ReDevPlugin owns package inspection, validation, and atomic lifecycle mutation. Redeven presents the exact candidate, source evidence, permissions, and confirmation before submitting through released APIs. Cancellation affects only pre-submit inspection. Unknown mutation outcomes require inventory reconciliation instead of resubmission. Updates retain saved components and use fresh authorized slots after reconciliation; only confirmed uninstall removes their placement.
+ReDevPlugin owns inspection, validation and atomic mutations. Redeven presents the exact candidate/source/permissions before confirmation. Cancel affects only pre-submit inspection; unknown effects require reconciliation without replay. Updates preserve layout with fresh slots; only confirmed uninstall removes it.
 
 # Contract
 

@@ -3,17 +3,11 @@ type: UI Contract
 title: Activity navigation restoration
 tags: [ui, desktop, navigation, persistence]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns exactly one versioned Activity navigation record. It selects the
-saved target before the first page mounts, commits valid navigation immediately,
-and remembers a unique recency order of built-in pages. Floe persists layout
-sizes and collapse state but does not read or write the active tab. Invalid
-dynamic targets fall back to the latest available built-in page, or Terminal.
-A transient directory failure preserves the original saved target for a future
-startup or explicit retry; a late restoration never replaces user navigation.
+One Redeven Activity record selects the saved target before mounting and commits navigation/recency immediately. Floe owns geometry only. Invalid targets use available built-ins or Terminal; transient inventory failure retains the target, and late restoration never overrides a newer user selection.
 
 # Contract
 
@@ -33,6 +27,6 @@ A late restoration cannot replace explicit user navigation. Transient directory 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/services/activityNavigation.ts` - Versioned record, strict target projection, migration, and recency fallback.
+- `redeven:internal/envapp/ui_src/src/ui/services/activityNavigation.ts` - Versioned navigation, target validation, migration and recency.
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Display-mode separation, inventory validation, and cancellation fences.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Separate display modes, inventory checks and cancellation.

@@ -3,7 +3,7 @@ type: UI Contract
 title: UI presentation transactions
 tags: [ui, interaction, performance, keep-alive]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -28,6 +28,6 @@ Explicit environment replacement, permission-root replacement, connection recove
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405` - Activity/Workbench display mode uses a shared UI-first selection controller.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405` - Shared UI-first Activity/Workbench mode controller.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:3246` - Files and Git retain mounted panels after first activation.

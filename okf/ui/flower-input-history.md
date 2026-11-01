@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower input history
 tags: [ui, flower, composer, keyboard, drafts]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -26,6 +26,6 @@ Recall never submits, changes canonical messages, restores attachments or overwr
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Selects canonical ordinary user text without restoring metadata or structured answers.
+- `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Canonical ordinary input excludes metadata and structured answers.
 
-- `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Verifies candidate authority, repeated text and secret-answer exclusion.
+- `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Canonical input candidates exclude secrets and duplicates.

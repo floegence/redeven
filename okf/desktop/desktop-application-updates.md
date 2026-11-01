@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop application updates
 tags: [desktop, updates, sparkle, linux, windows, security, release]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -24,4 +24,4 @@ Sparkle owns macOS discovery, verification, download UI and relaunch. Runtime, P
 
 - `redeven:desktop/src/welcome/App.tsx:1` and `redeven:desktop/src/welcome/index.css:1` - Permanent icon entry, localized tooltip, and state presentation.
 
-- `redeven:desktop/src/main/linuxPackageUpdateAdapter.ts:1` - DEB/RPM update metadata, download, cancellation, and install adapter.
+- `redeven:desktop/src/main/linuxPackageUpdateAdapter.ts:1` - DEB/RPM metadata/download/cancel/install adapter.

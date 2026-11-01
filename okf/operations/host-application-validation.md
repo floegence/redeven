@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application distribution validation
 tags: [runtime, applications, linux, validation]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -11,25 +11,11 @@ Historical Xpra userspace checks certify only their tested stack, not host polic
 
 # Contract
 
-## Managed component qualification
-The published `floe-native-apps` v0.1.2 stack passed real Xpra window discovery, picture decoding, a live private D-Bus connection and button input receipt on Ubuntu 22.04 arm64 and Debian 11 amd64 hosts.
+Published native 0.1.2 qualified real Xpra discovery/decoded pixels/private D-Bus/button receipts on Ubuntu 22.04 arm64 and Debian 11 amd64. Require another authoritative inventory within 3 s after launch readiness. Window integration differs from managed actual application execution.
 
-The test reports launch-to-window readiness, then requires another authoritative Xpra window inventory response within three seconds.
+[Input validation](host-application-input-validation.md) owns GTK3/GTK4/Qt/XIM receipts, focus and old-session upgrades; component installation cannot certify input. September 24 pointer follow-up uses Floe core 0.77.1/product assets; run pnpm --dir internal/envapp/ui_src test:host-application-browser for three-engine pointer/appearance. OS IME candidates remain separate.
 
-This is window integration evidence; the separate managed native launch test establishes actual host application execution.
-
-## Client input qualification
-[Host application input validation](host-application-input-validation.md) owns current GTK3/GTK4/Qt/XIM application receipts, click-to-keyboard focus, old-session upgrade checks and the distinction between synthetic composition and real IME acceptance. Earlier component installation results do not qualify toolkit input.
-
-## Mobile pointer acceptance
-The September 24 follow-up uses published Floe core `0.77.1` and production viewer assets.
-
-Run `pnpm --dir internal/envapp/ui_src test:host-application-browser` for the bounded three-engine pointer and appearance suite.
-
-The previously separate real OS IME candidate checks remain independent of this pointer task.
-
-## Platform evidence
-[Host application platform validation](host-application-platform-validation.md) records the Linux distribution matrix, translation limitations, native macOS acceptance and reproducible platform commands. Component, client-input and pointer qualification do not extend that platform evidence.
+[Platform validation](host-application-platform-validation.md) owns distribution/translation/macOS evidence and commands; earlier components/pointers cannot extend it.
 
 # Boundaries
 

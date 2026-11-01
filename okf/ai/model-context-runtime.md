@@ -4,11 +4,11 @@ title: AI model and context runtime
 tags: [ai, models, context, providers]
 quality_exception: Unified model-context contract linking provider mapping, immutable provider checkpoints, usage accounting, compaction, and Desktop source compatibility.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven persists product model and reasoning preferences, provider credentials, and model-source selection, while Floret owns provider-visible context and opaque continuation state. Environment and Desktop model sources remain distinct, context and compaction presentation come from typed Floret observations, and input/output token limits preserve their separate meanings. Product configuration updates merge permission and model state without overwriting unrelated settings.
+Redeven persists model/reasoning preferences, credentials and source selection. Floret owns provider context and opaque continuation. Desktop/environment sources stay distinct; typed observations drive usage/compaction. Token input/output limits remain separate and configuration merges preserve unrelated settings.
 
 # Contract
 
@@ -39,6 +39,6 @@ Redeven owns model preferences, credentials, gateway selection, and the one-shot
 
 # Evidence
 
-- `redeven:internal/ai/floret_provider.go:55` - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.
+- `redeven:internal/ai/floret_provider.go:55` - Provider deltas become Floret events, never direct product-state writes.
 
-- `redeven:internal/ai/prompt_builder.go` - Stable persona, policy, and capability System Prompt without mutable objective or runtime overlays.
+- `redeven:internal/ai/prompt_builder.go` - Stable persona/policy/capability prompt without mutable runtime overlays.

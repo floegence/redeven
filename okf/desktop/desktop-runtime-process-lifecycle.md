@@ -3,11 +3,11 @@ type: Desktop Contract
 title: Desktop runtime process lifecycle
 tags: [desktop, runtime, lifecycle, coordination, process, inventory, wsl]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop owns managed Runtime lifecycle through one process-local `RuntimeLifecycleCoordinator`. Local, WSL, SSH and container Start, Stop, Restart, Update, Refresh, Open recovery and Reinstall use the saved direct channel. The first accepted operation owns its target until terminal; conflicts return that identity without preemption or queuing. Gateway and Provider provide access only. Old process, database or renderer state cannot create another lifecycle owner or fallback.
+One RuntimeLifecycleCoordinator owns managed Local/WSL/SSH/container operations through saved direct channels. First admission retains the target until terminal; conflicts return its identity without preemption/queueing. Gateway/Provider grant access only, and old process or renderer state cannot create another owner.
 
 # Contract
 

@@ -4,7 +4,7 @@ title: Desktop environment settings
 tags: [desktop, environments, settings, interaction]
 quality_exception: One target-bound settings session joins connection drafts, access prerequisites, and restart recovery; keep their cross-domain authority and focus handoff together.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -37,4 +37,4 @@ SSH field and secret details are owned by [SSH environment settings](desktop-ssh
 
 # Evidence
 
-- `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Clicks inside tab and action padding, keyboard switching, multilingual narrow layouts and touch target dimensions.
+- `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Tab/action padding, keyboard, localized narrow and touch geometry.

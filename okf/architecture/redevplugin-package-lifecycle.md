@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin package and runtime lifecycle
 tags: [architecture, plugins, release, runtime]
 lifecycle: contract
-reviewed_at: "2026-10-31"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -36,6 +36,6 @@ Redeven does not parse plugin bytes, persist inspection receipts, implement a se
 
 - `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules and product adapters.
 
-- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Admits the released runtime and its fixed process manager contract.
+- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Published runtime admission and fixed manager.
 
 - redeven:internal/redevpluginintegration/adapters_test.go:1 - Verifies independent read, write and admin recovery permissions.

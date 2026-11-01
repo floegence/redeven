@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench composition surfaces and editing
 tags: [ui, workbench, composition, editing, persistence]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -33,8 +33,8 @@ Migration atomicity, incompatible-schema rejection, and startup failure behavior
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx` - Published canvas/body colors at 35% and 100% zoom, shell palettes, localized editing and accessibility.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx` - Published 35%/100% canvas colors, themes, localization/accessibility.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts` - English first-run content, non-overlapping region placement, and complete-scene laptop framing.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts` - First-run English, nonoverlap and full-scene laptop framing.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Thin published-surface adapter and localized composition messages.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Published surface adapter/localized composition.

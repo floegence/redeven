@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime Service snapshot
 tags: [architecture, desktop, runtime-service, compatibility]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -31,4 +31,4 @@ Portal `ControlChannelFence` fields protect the Provider control channel and are
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.
 
-- `redeven:internal/runtimeservice/workload.go:1` - Protected workload admission, leases, revisions, and supervisor-facing impact snapshots.
+- `redeven:internal/runtimeservice/workload.go:1` - Workload admission/leases/revisions and supervisor impact.

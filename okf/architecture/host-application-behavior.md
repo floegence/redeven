@@ -3,16 +3,11 @@ type: Interaction Contract
 title: Cross-platform host application behavior
 tags: [applications, macos, linux, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Host Applications separates viewing, sharing, window closure and process exit on
-both platforms. Ordinary actions preserve unsaved work and respect app cancellation.
-Only an independently confirmed Force quit may bypass saving. The backend owns
-process evidence, and the interface names the actual supported operation. OS
-session, display and service policies remain authoritative; unavailable recovery
-must not silently relaunch an unrelated or replacement process.
+Viewing, sharing, closing windows and ending processes are distinct on every OS. Ordinary actions preserve unsaved work and app cancellation; only confirmed Force quit bypasses saving. Backend facts drive supported controls. Session/display policy remains authoritative and unavailable recovery cannot silently relaunch.
 
 # Contract
 

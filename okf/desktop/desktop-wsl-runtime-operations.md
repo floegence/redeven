@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop WSL runtime operations
 tags: [desktop, windows, wsl, runtime, bridge, packaging]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -41,4 +41,4 @@ Windows and WSL 2 remain separate authorities. No boundary may be hidden by a na
 
 - `redeven:desktop/src/shared/desktopPlatformCapabilities.ts:1` - Main-owned Windows capability contract.
 
-- `redeven:desktop/src/main/runtimeHostAccess.ts:1` - Exact argument-array WSL command execution and streaming transport.
+- `redeven:desktop/src/main/runtimeHostAccess.ts:1` - Exact argv WSL execution and streams.

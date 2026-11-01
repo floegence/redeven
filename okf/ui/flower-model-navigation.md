@@ -3,11 +3,11 @@ type: UI Contract
 title: Flower model and navigation presentation
 tags: [ai, flower, models, navigation]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower keeps environment and Desktop model sources explicit, preserves thread-owned model and reasoning defaults, and keeps unavailable selections distinct from first-time setup. Thread selection separates immediate visual intent from committed content and rejects stale loads. Transient operation failures use host notifications instead of transcript content, while canonical run and tool failures stay with their owning timeline renderers.
+Flower separates Desktop/environment sources, unavailable models and first setup. Thread-owned model/reasoning choices remain authoritative. Navigation distinguishes visual intent from committed content and fences stale reads. Transient action failures use notifications; canonical failures remain in their timeline.
 
 # Contract
 
@@ -39,6 +39,6 @@ The header switcher is only a product-specific compact presentation; it does not
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Mobile permission placement, draft retention, request success/failure and keyboard dismissal.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Mobile permission controls, retained drafts and keyboard/error recovery.
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Flower recognizes `model_io.updated` as a model-status presentation boundary.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - model_io.updated projects model status.

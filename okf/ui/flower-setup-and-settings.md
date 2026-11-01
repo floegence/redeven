@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower setup and settings
 tags: [ai, flower, settings, onboarding]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -39,4 +39,4 @@ Permission descriptions sit outside the single-line selection buttons and are li
 
 - `redeven:internal/flower_ui/src/i18n/flowerSurfaceMessages.ts` - Canonical localized task copy and complete seeded prompts.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.starterTasks.browser.test.tsx` - Localized card layout, complete draft insertion, keyboard and pointer focus handoff, and no automatic submission.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.starterTasks.browser.test.tsx` - Localized cards, complete prompt insertion and focus without automatic Send.

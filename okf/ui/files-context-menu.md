@@ -3,7 +3,7 @@ type: UI Contract
 title: Files context menus
 tags: [ui, files, menus, mobile, workbench]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -32,4 +32,4 @@ Existing context-event target snapshots, multi-selection, permissions, file oper
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Verifies that Files passes a stable diff target to Shell in Activity and Workbench without preloading content.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Captured Files diff target in both layouts without content preload.

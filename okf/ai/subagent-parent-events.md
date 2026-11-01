@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Flower subagent parent events
 tags: [ai, floret, subagents, events]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,6 +23,6 @@ Events are observations and context inputs, not a second result store or a backg
 
 # Evidence
 
-- `redeven:internal/ai/parent_events_test.go` - Covers scoped reports, lifecycle references, bounded reads, waits and input attention.
+- `redeven:internal/ai/parent_events_test.go` - Scoped lifecycle reports, reads/waits and input attention.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Presents parent events and canonical child current views.

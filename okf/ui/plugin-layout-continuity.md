@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin layout continuity
 tags: [ui, plugins, workbench, persistence, recovery]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -29,6 +29,6 @@ Redeven layout operations never grant plugin authority or inspect platform store
 
 # Evidence
 
-- `redeven:internal/workbenchlayout/plugin_widgets.go:1` - Atomic placement, exact-instance removal, and layout event publication.
+- `redeven:internal/workbenchlayout/plugin_widgets.go:1` - Atomic exact-instance layout/event mutation.
 
-- `redeven:internal/workbenchlayout/plugin_widgets_test.go:1` - Idempotency, concurrency, rollback, metadata, and geometry preservation.
+- `redeven:internal/workbenchlayout/plugin_widgets_test.go:1` - Idempotency/concurrency/rollback and geometry preservation.

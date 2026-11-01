@@ -3,7 +3,7 @@ type: Verification Evidence
 title: Media contention and native read qualification
 tags: [ai, computer-use, testing, media, accessibility]
 lifecycle: active_evidence
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -24,43 +24,15 @@ input replay or alternative parameter signatures were added.
 
 # Evidence
 
-Before the fix, deterministic tests reproduce a maintenance-blocked write, a
-cancelled writer that cannot return, and missing native truncation flags. The
-final focused media race suite, complete ai package, go vet, 19 browser/QuickJS
-checks, 37 Swift tests and isolated Linux GTK/AT-SPI/X11 qualification pass.
-Serial macOS qualification confirms node/subtree/leaf facts, scroll events,
-capture and focus/pointer restoration. Commit continuity checks pass 239 state
-tests and 374 client tests.
+Red fixtures reproduce maintenance-blocked writes, cancellation that cannot return and missing truncation flags. Green:media race, full ai, vet,19 browser/QuickJS,37 Swift, isolated Linux GTK/AT-SPI/X11; serial macOS confirms node/subtree/leaf, scroll, capture, focus/pointer restoration. Commit continuity:239 state/374 client passes.
 
-Configured local DeepSeek V4.1 Flash (1017), wire deepseek-flash, runs through the
-production Service and isolated Chromium/AppKit fixtures. The original 12 cases
-repeated three times yield 31/36 strict assertion passes, 248 provider requests,
-217 tool activities and 35 error activities including intentional diagnostics.
-Media contention passes 3/3: the scan cancels, screenshots finish and each save
-occurs exactly once. All three tasks contain separately reported model script
-errors; contract success does not imply error-free execution.
+Configured DeepSeek V4.1 Flash 1017 (deepseek-flash) uses production Service/isolated Chromium/AppKit. Twelve×3=31/36 strict passes,248 requests,217 activities,35 errors including negatives. Contention 3/3 cancels scans/completes screenshots/saves once; each has separately reported model errors.
 
-The five original failures remain retained: two multi-page tasks do not perform
-two transitions in one script; one content-wait task uses wrong arguments and an
-absent value() method; one native result is correct but labelled JSON is missed
-by the test parser; one browser scope task combines that parser issue with an
-unsupported snapshot option. Only the test parser changes: it accepts a complete
-JSON object/array after an optional label and rejects partial JSON, prose and
-trailing commentary. It does not repair production responses.
+Retain five failures:two multipage tasks omit two transitions in one script; content-wait uses wrong args/absent value(); native label-JSON parser misses correct result; browser scope combines parser defect with unsupported snapshot option. Only parser accepts complete object/array after optional label; reject partial JSON/prose/trailing commentary, never repair product output.
 
-Six supplemental scope tasks yield 4/6 strict passes, 39 requests, 33 activities
-and two errors. All six confirm container and limited-subtree truncation; all
-three browser cases confirm complete rows. One browser case fails its unchanged
-zero-script-error assertion. One native case filters on absent canonical_role,
-does not read/log a complete leaf, and correctly fails that requirement. Exact
-native text, one click and screenshots are confirmed in all three native cases.
-No further reruns replace those failures.
+Six supplements 4/6,39 requests/33 activities/two errors. All confirm container/subtree truncation, browser 3/3 complete rows. One browser violates zero-error assertion; one native filters absent canonical_role/omits complete leaf. Native exact text/one click/screenshots 3/3. No reruns erase failures.
 
-Earlier environment/pilot failures and native focus/capture transients remain
-external evidence. One initial full-ai run hits an unrelated three-second
-history deadline; the focused test passes three repeats and the complete package
-passes with bounded parallelism. Missing Desktop dependencies initially prevent
-the commit gate; a frozen-lockfile installation resolves that prerequisite.
+Pilot/environment/native-focus transients remain external. Initial full ai hits unrelated three-second history deadline; focused×3 and bounded-parallel full package pass. Frozen Desktop dependencies resolve an initial commit-gate prerequisite failure.
 
 # Boundaries
 

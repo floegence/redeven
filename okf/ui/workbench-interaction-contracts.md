@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench interaction contracts
 tags: [ui, workbench, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -24,4 +24,4 @@ Workbench widgets must not infer canvas, input, recovery, focus, or overlay owne
 
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Wheel ownership uses a dedicated data attribute.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests cover reusing a singleton widget without implicit ensureWidget centering when focus is disabled.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Singleton reuse without implicit centering when focus is disabled.

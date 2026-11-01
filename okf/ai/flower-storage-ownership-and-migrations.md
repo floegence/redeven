@@ -3,14 +3,11 @@ type: Storage Contract
 title: Flower storage ownership and migrations
 tags: [ai, storage, sqlite, migrations, floret]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-- Authority: Floret owns canonical Agent data and its physical and logical formats; Redeven owns product facts, read state and uploaded resources.
-- Outcome: supported existing data upgrades automatically and remains usable for new conversations.
-- Invariants: stable database kinds, contiguous transactional migrations, immutable historical decoders, public Floret APIs and one service generation.
-- Failure boundary: unknown formats, future versions, drift or failed validation block Flower without resetting data or disabling the core Runtime.
+Floret owns canonical Agent formats; Redeven owns product facts and uploads. Supported state upgrades through stable kinds, contiguous atomic migrations and public APIs while preserving history. Unknown, future, drifted or invalid state blocks Flower without resetting data or disabling the core Runtime.
 
 # Contract
 

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Service operation progress
 tags: [architecture, managed-services, operations, observability, security, ui]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -27,6 +27,6 @@ Operation output is observability data, not a terminal, shell, downloadable tran
 
 # Evidence
 
-- `redeven:internal/managedwebservice/operation_progress.go` - Owns concurrent mutation, throttled persistence, limits, sequencing, and redaction.
+- `redeven:internal/managedwebservice/operation_progress.go` - Concurrent bounded mutation, persistence, sequence and redaction.
 
-- `redeven:internal/managedwebservice/custom_host.go` - Streams Host lifecycle output through one collector and closes commands with their actual result.
+- `redeven:internal/managedwebservice/custom_host.go` - Single Host progress collector and actual command completion.

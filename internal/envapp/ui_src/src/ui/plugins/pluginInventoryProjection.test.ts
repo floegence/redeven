@@ -96,6 +96,22 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
 }
 
 describe('plugin inventory projection', () => {
+  it('preserves the Host installation identity in official and generic inventory', () => {
+    const record = installedRecord();
+    const expected = {
+      plugin_instance_id: record.plugin_instance_id,
+      active_fingerprint: record.active_fingerprint,
+      installed_at: record.installed_at,
+      management_revision: record.management_revision,
+      enable_state: record.enable_state,
+      deleted_at: record.deleted_at,
+    };
+    for (const officialCatalog of [[], [examplePlugin]]) {
+      expect(projectPluginInventory({ officialCatalog, installedPlugins: [record] }).items[0].recoveryIdentity).toEqual(expected);
+    }
+    expect(projectPluginInventory({ officialCatalog: [examplePlugin], installedPlugins: [] }).items[0].recoveryIdentity).toBeUndefined();
+  });
+
   it('uses current interval state instead of a stale background diagnostic while retaining separate process status', () => {
     const record = installedRecord({ background_interval: { state: 'scheduled', interval_ms: 60000, max_runtime_ms: 5000, last_outcome: 'success' } });
     for (const officialCatalog of [[], [examplePlugin]]) {

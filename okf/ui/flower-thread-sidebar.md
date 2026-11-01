@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 tags: [flower, sidebar, navigation, pins, interaction]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -42,9 +42,9 @@ Read confirmation and loaded-content revisions follow the canonical [read-state 
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Frame coalescing, final coordinates, cancellation, pointer identity, cleanup and preference failures.
-- `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - Run with `--resize-only` for isolated Electron pointer dragging, bounded style invalidation, one persistence write and Markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling.
+- `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Coalesced resize, final coordinates, cancellation and preference failures.
+- `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Header rename, save/cancel focus, failed saves, narrow titles and host capability.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Header rename/save/cancel/focus and narrow failure recovery.
 
 - `redeven:internal/flower_ui/src/threads/threadListModel.ts` - One canonical filter, comparator and pin/date grouping model.

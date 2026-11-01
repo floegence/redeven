@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation selection and detail reads
 tags: [flower, navigation, cancellation, recovery, detail]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -15,70 +15,25 @@ Readiness controls reveal; elapsed time controls feedback only.
 # Contract
 
 ## Selection and navigation
-Rail feedback precedes visible commit by two animation callbacks and a task; hidden documents do not wait for frames. Latest intent supersedes earlier work; summary effects cannot bypass foreground coordination.
+Rail feedback precedes commit by two animation callbacks and a task; hidden documents skip frames. Latest intent supersedes prior work; summaries cannot bypass coordination. Reveal after required baseline/handoff, measurable layout and visible historical text settle. Cached windows renew bounded interest if needed; ready caches prepare immediately. Never await runtime quiet. Canceled reads cannot release newer selections.
 
-Reveal only after the current selection accepts its required baseline/handoff, measurable layout and visible historical text settle. Cached windows requiring renewed interest remain hidden through that existing bounded read; a cache needing no read prepares immediately. The boundary is finite and never waits for runtime quiet. Canceled reads cannot release a newer selection; reselect, reconnect and retry retain the same loader ownership. The scroll owner also prepares the latest active tool sequence after row placement, so both outer and inner tails are positioned before reveal. Restored title, sequence and whole-turn disclosure settle without animation; a sequence inside a folded turn cannot block readiness; explicit group folds survive and retain a current activity label. Initial positioning has no smooth scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and failed body reads remain local and retry with renewed viewport demand or reconnect.
+One loader owns selection/reselect/reconnect/retry. Position transcript and active sequence after placement before reveal. Restored titles/groups/turns are static; folded turns cannot block readiness, and manual folds retain labels. No smooth initial positioning or timer fallback. One cancellable 200 ms feedback deadline spans detail/body/layout without delaying ready/error state. New chat/navigation/disposal cancels old feedback; frame/composer stay stable and body failures retry locally.
 
-Cached destinations flush render effects; visible rows pass `checkVisibility({ contentVisibilityAuto: true })`. ResizeObserver adjusts above-viewport growth before paint, while reveal/body work stays in rAF; visibility events reuse this pass. Navigation clears arrival motion. No positioning polls or per-row observers. Explicit wheel/touch/scrollbar/keyboard input can interrupt preparation, and the awaited refresh cannot resume following afterward; scroll events alone cannot.
-
-Two read slots prioritize visible text/margin and cancel obsolete demand. ThreadCache retains immutable bodies. Growth/refresh/completion never restart selection or remove accepted prose; [live delivery](flower-live-timeline.md) owns validation/retry. Selection opens Latest; reading restoration is separate. Ordinary threads sort by descending creation time, then ascending ThreadID.
+Cached destinations flush effects and use checkVisibility({contentVisibilityAuto:true}). ResizeObserver corrects above-viewport growth before paint; rAF/visibility handles reveal/body work. No polls/per-row observers. Explicit wheel/touch/scrollbar/keyboard pauses following through late reads; scroll events alone do not. Two slots prioritize visible/margin text and cancel obsolete demand; ThreadCache retains immutable bodies. Growth/refresh/completion preserves accepted prose/selection. [Live delivery](flower-live-timeline.md) owns validation/retry. Open Latest; reading restoration is separate. Sort by creation descending then ThreadID ascending.
 
 ## Continuous history and concurrent activity
+Scrolling reads canonical windows automatically, retaining visible/selected/focused rows, details and anchors across live changes. A collapsed short tail retains trailing room during prepend; reclaim it only outside view or as content fills it. Resize preserves anchors; destination preparation clears temporary geometry. Attach content observation after mount and correct growth before paint, without new reads/state/disclosure changes.
 
-Users browse earlier and newer history by scrolling. Viewport demand reads
-canonical windows automatically; no load-earlier or load-newer action is part
-of normal navigation. Retained windows preserve visible, selected and focused
-rows while gaps are filled in either direction. Stable item identities preserve
-expanded details and scroll anchors during live appends and replacements.
-When a collapsed tail is shorter than the viewport, prepending history retains
-the visible trailing room required by its reading anchor. The scroll owner
-reclaims that room only as it leaves view or content fills it; loading must not
-push existing messages down to fill the viewport. Viewport resizing preserves
-the anchor, and destination preparation clears the temporary geometry. The
-transcript content observer attaches after DOM mounting and corrects growth
-before paint. This adds no history reads, persisted state or disclosure changes.
-The floating Latest action stays available above the composer while reading
-away from latest, including at the bottom of a historical window. It is hidden
-during destination preparation and keeps pointer-gesture protection. If the
-latest window is already installed, the action scrolls smoothly and retires
-retained trailing room at arrival. Otherwise it cancels obsolete reading demand,
-installs one bounded tail interest and reveals the prepared latest destination;
-it never walks intervening pages. Main and child views share these semantics.
-The accepted history baseline belongs to the live observer and reading revision;
-superseded navigation cannot replace a newer selection. Transport deduplication
-and convergence are scoped to that reading revision: distinct committed baselines
-remain ordered even at the same canonical version. Full-view watermarks cannot
-suppress a reading baseline, and obsolete refresh markers retire without
-invalidating a newer interest. Existing queue byte/count limits still apply.
-Collapsed turn/tool ranges
-use one canonical skip-and-retain installation to reach preceding dialogue. Opening
-a skipped disclosure immediately reveals cached rows and completes its requested
-sequence with demand-only canonical pages. There is no full-content button.
-Each document has one page request, forty records per page, and a finite forward
-horizon; page acceptance never replaces the live observation interest. A single
-floating indicator appears after 150 ms without changing transcript geometry.
-Cancellation hides it immediately; only actual failures expose Retry. Changing
-disclosure during a read cancels obsolete navigation, while live updates continue
-under the accepted interest. Thread/child selection and Latest clear queued gap
-requests. Header placement continues to follow chronological turn order and transfers
-focus when preceding content supplies an earlier header owner.
+Latest remains above the composer away from current tail, even at a historical window bottom; hide during preparation and preserve gesture protection. If tail is installed, smooth-scroll and retire trailing room at arrival. Otherwise cancel obsolete demand, install one bounded tail interest and reveal its prepared destination without walking pages. Root/child share this path.
 
-Collapsed tools and parent reports retain presentation previews. Full activity
-bodies and report text are requested when disclosed, under fresh authorization.
-Collapse, navigation and disposal cancel unused demand; reconnect restores active
-consumers. Retry is local to an actual read failure. Released empty activity
-sources use Floret's canonical default presentation in source order.
+Observer/reading revision own accepted baselines. Ordered delivery/deduplication cannot discard distinct baselines at equal canonical version; full-view watermarks cannot suppress reading baselines. Retire obsolete refresh markers without invalidating newer interest. Queue budgets remain unchanged.
 
-Ordinary observed history retains complete activity expansion. Demand-only pages
-use published Floret v7.91.0 source-backed activity summaries; opening individual
-activities acquires bodies/targets through the existing detail owner. Page reads
-never enumerate all tools in a turn for target hydration. Mutable live records,
-lifecycle and observation versions remain owned by the current runtime document.
-This release does not promise a fixed opening latency or globally bounded memory
-for all expanded terminal output.
+Collapsed ranges use canonical skip-and-retain to reach prior dialogue. Explicit disclosure shows cached rows immediately and completes only its sequence: one request/document, 40 records/page, finite forward horizon. No full-content button/replacement observer. Show one geometry-neutral indicator after 150 ms; cancellation hides it immediately and only failure exposes Retry. Disclosure changes cancel obsolete navigation; thread/child/Latest clears gap demand. Headers follow canonical order and transfer focus to earlier owners.
+
+Tools/reports retain previews; disclosure reads authorized bodies through the existing owner. Collapse/navigation/disposal cancels unused demand; reconnect restores consumers. Empty activity sources use Floret defaults in source order. Ordinary history retains full expansion; demand pages use published Floret v7.91.0 source-backed summaries without enumerating all turn tools. Runtime document owns mutable live records/versions. No universal latency or expanded-output memory guarantee.
 
 ## Detail read ownership
-Floret supplies canonical summaries, source-bound windows and exact body reads; ThreadCache owns selection/detail with twelve entries. The bounded coordinator shares navigation, confirmation and reference-preflight demand. Cancellation never reconnects the workspace stream.
+Floret supplies canonical summaries/windows/body reads. ThreadCache owns selection/detail with twelve entries; one bounded coordinator shares navigation, command confirmation and reference preflight. Cancellation never reconnects the workspace stream.
 
 # Boundaries
 
@@ -86,6 +41,6 @@ The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title e
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Shared demand, fresh confirmations, cancellation, explicit retry, settlement and bounded idle records.
+- `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Shared read demand, confirmation, cancellation/retry and bounded idle records.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - First exposed destination, delayed reads, cached switches, cancellation, explicit input and failure recovery.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - First destination, cached/delayed reads, cancellation and explicit recovery.

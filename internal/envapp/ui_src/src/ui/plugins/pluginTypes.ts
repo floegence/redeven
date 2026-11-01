@@ -273,6 +273,9 @@ export type PluginInventoryItem = {
   version?: string;
   managementRevision?: number;
   installedPackage?: PluginPackageIdentity;
+  recoveryIdentity?: Pick<ReDevPluginRecord,
+    'plugin_instance_id' | 'active_fingerprint' | 'installed_at' |
+    'management_revision' | 'enable_state' | 'deleted_at'>;
   canDisable?: boolean;
   lifecycleState: PluginLifecycleState;
   trustBadge: PluginTrustBadge;

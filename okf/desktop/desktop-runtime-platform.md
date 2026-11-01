@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Runtime platform facts and icons
 tags: [desktop, runtime, platform, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,4 +23,4 @@ Runtime owns OS/distribution facts; Desktop consumes recognized trusted observat
 
 - `redeven:spec/openapi/rcpp-v5.yaml` - Optional Runtime OS in the Cloud health schema.
 
-- `redeven:internal/runtimemanagement/runtime_platform_test.go` - Exact distribution identity, missing facts, shell literals and non-Linux boundaries.
+- `redeven:internal/runtimemanagement/runtime_platform_test.go` - Distribution identity, missing facts, shell literals/platform boundaries.

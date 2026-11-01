@@ -3,17 +3,11 @@ type: UI Contract
 title: Env App document reload presentation
 tags: [ui, desktop, startup, caching]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe owns the anonymous geometry placeholder spanning a full document
-reload. Redeven's Shell owns its handoff to the selected Activity inventory.
-Reload must not paint an empty root, reveal a differently shaped list skeleton,
-or replace restored content with another loading state. Geometry is never
-resource data or authorization. Explicit access denial, navigation, an actionable
-error, or changed authentication ends the placeholder instead of hiding recovery.
-Unavailable presentation storage must not prevent normal startup.
+Floe owns the anonymous reload geometry placeholder; Redeven hands it to current Activity inventory. Never replace restored content with a blank or mismatched skeleton. Geometry grants no data/authority. Denial, navigation, errors or auth change end it, and unavailable storage cannot block startup.
 
 # Contract
 

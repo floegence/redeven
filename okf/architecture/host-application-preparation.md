@@ -3,11 +3,11 @@ type: Runtime Contract
 title: Managed host application preparation
 tags: [runtime, desktop, applications, linux, security]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe Native Apps owns Linux component acquisition, verification, staging, self-check and activation. Redeven owns authorized routes, private placement, localized progress and pending app opening. Preparation needs no container, VM, package manager or admin password. Runtime upgrades remain independent; compatible installed components survive optional-update failure/cancellation. Activate only after verification and graphical qualification.
+Floe Native Apps acquires, verifies, stages and activates Linux components. Redeven owns routes, placement and progress. Preparation needs no VM/container/package manager/admin password. Runtime upgrades are independent; optional failure preserves compatible installs. Activation requires verification and graphical qualification.
 
 # Contract
 

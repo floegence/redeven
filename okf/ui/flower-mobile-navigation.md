@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower mobile navigation
 tags: [ui, flower, mobile, navigation, composer]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,6 +23,6 @@ The [Activity companion](flower-activity-companion.md) owns product placement. T
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Retains detail and thread-rail nodes, routes drawer navigation, and gates detail engagement.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Retained mobile thread/detail DOM and engagement gates.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Checks mobile widths, draft and node retention, desktop restoration, and action geometry.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Mobile geometry/drafts/nodes and restored desktop layout.

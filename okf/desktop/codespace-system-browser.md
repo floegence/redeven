@@ -3,7 +3,7 @@ type: Runtime Contract
 title: CodeSpace system-browser access
 tags: [desktop, codespace, security, browser]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -35,4 +35,4 @@ No upstream package, public listener, SSH forwarding process, editor injection, 
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx` - Desktop browser selection submits resource intent after startup.
 
-- `redeven:desktop/src/main/codespaceBrowserSessions.ts` - Profile identity, concurrent setup, explicit reopen, and failure cleanup.
+- `redeven:desktop/src/main/codespaceBrowserSessions.ts` - Profile identity, concurrent setup/reopen/cleanup.

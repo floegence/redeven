@@ -3,16 +3,11 @@ type: Performance Qualification
 title: Computer use paired model measurements
 tags: [ai, computer-use, browser-use, performance]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Computer use performance is qualified through the production Flower Service,
-published Floret, model adapter and managed browser. Paired fixtures measure the
-same task with visual primitives and with semantic scripts available. The report
-must retain failures and reject missing, duplicate or unmeasured samples.
-Headless performance evidence does not establish native desktop or Chrome focus
-behavior; those remain separate [acceptance requirements](computer-use-qualification.md).
+Paired production Flower/Floret/model/browser fixtures compare visual primitives with semantic scripts on the same tasks. Keep all failures and reject missing, duplicate or unmeasured samples. Headless results do not certify native desktop or Chrome focus; those require separate product qualification.
 
 # Contract
 

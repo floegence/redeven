@@ -3,11 +3,11 @@ type: Security Contract
 title: Administrator-authorized remote desktop deployment over SSH
 tags: [desktop, ssh, authorization, runtime, security]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop owns SSH authorization and UI-operation lifetime; published Floe Native Apps owns privileged preparation; Runtime owns product authorization, service authentication and audit. Every SSH connection runs ensure, including active older-policy services, and authenticates the actual Runtime before opening. Unknown records remain unchanged. Cancellation reports observed rollback; verified completion may win the race but still suppresses automatic viewer opening.
+Desktop owns SSH authorization/UI lifetime, Floe Native Apps privileged preparation and Runtime service authorization/audit. Every connection ensures current policy and authenticates actual Runtime. Unknown state is preserved. Cancellation reports rollback; verified completion may win but cannot auto-open after cancel.
 
 # Contract
 

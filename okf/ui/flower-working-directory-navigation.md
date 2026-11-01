@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower working directory navigation
 tags: [ui, flower, filesystem, terminal, workbench]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -39,8 +39,8 @@ Directory callbacks express product navigation, not file-action authorization or
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - ThreadID-owned   row menus retain a captured working directory across summary replacement.
+- `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - ThreadID-owned menus retain captured cwd across summary replacement.
 
-- `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` -   Shared accessible header and selector presentation with suffix-preserving names.
+- `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` - Accessible headers/selectors with suffix-preserving names.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx` - Saved and unsaved paths retain navigation and thread pinning without directory-favorite actions; every shipped locale verifies single-line directory labels, real icons, alignment and overflow in both themes.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx` - Saved/unsaved path navigation and pinning; ten-locale theme geometry without favorite actions.

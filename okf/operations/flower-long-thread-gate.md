@@ -3,7 +3,7 @@ type: Validation Contract
 title: Flower explicit long-thread qualification
 tags: [flower, performance, correctness, gates]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -11,37 +11,28 @@ Complete long-conversation content and responsive interaction are required produ
 
 # Contract
 
-## Explicit execution and provenance
+## Execution and evidence
+Run node scripts/check_flower_long_thread.mjs --fast for focused regressions; omit --fast for browser/sustained acceptance. Require frozen published Desktop/Env dependencies and visible composited Electron; unavailable prerequisites fail. Unified gate manifests exclude this explicit suite.
 
-Run node scripts/check_flower_long_thread.mjs --fast for focused regressions; omit --fast for browser correctness/sustained runtime. Install frozen published Desktop/Env App dependencies. Visible composited Electron is required; missing prerequisites fail, never skip. Unified gate manifests/entrypoints must exclude this suite.
-
-Retain source commit/tree, cleanliness, toolchain/dependency hashes, metrics and supervised cleanup. Product/dependency changes invalidate prior performance evidence. Policy-only changes may cite earlier results with explicit unchanged-product comparison/separate policy tests, never label the unmeasured tip tested.
-
-Nonzero exits, missing tests/tools/metrics, interruptions or cleanup failure fail acceptance. Retain the negative 110 ms presented-latency/21 position-commits-per-second regression and ordinary-profile exclusion test. No workload/threshold overrides or waived failures.
+Record exact source/tree/cleanliness, tools/dependencies, metrics and supervised cleanup. Changed product/dependencies invalidate performance evidence; policy-only changes may cite prior unchanged-product evidence separately, never relabel an unmeasured tip. Nonzero/interrupted runs, missing tests/metrics/tools or failed cleanup fail. Preserve negative 110 ms latency/21 commits-per-second regression and profile-exclusion test. No workload/threshold override or waived failure.
 
 ## Correctness
+Fast checks cover indexed records, queues, windows, turn/disclosure identity, block invalidation, keyed disposal, local thinking, structural/mutable dependencies, sealed bodies and incremental Markdown. Each sequence entry has one mounted owner; classification stays stable while live fields and first-prose boundaries update. Removed owners dispose. Title identity classifies once, visibility only on admission/claim; grouping never rescans completed bodies. Restored titles stay static. Cover 600 retained rows and actual browser arrival.
 
-Fast suites protect indexed records, ordered queues, retention/windows, turn/disclosure identity, block-boundary invalidation, keyed disposal, local thinking, structural/mutable dependencies, sealed-body handoff and incremental Markdown.
+Per-group disclosure observers update only changed blockers; removed groups dispose. A 600-group case forbids repeated historical folding. Body growth cannot advance restoration provenance; full hydration retains its boundary. Root/child regressions preserve fresh motion through history scans. Correct anchors synchronously on loading completion, not byte growth. Structural batches publish membership once after records are ready, without per-replacement rescans. Parent intervals own coverage independently of text; immutable turn facts add no per-field subscriptions. Cover history/reconnect/selection/input/approval/terminal state.
 
-One mounted owner per tool-sequence entry retains classification while live state, pending bodies, previews and first non-whitespace prose boundary remain reactive; removed owners dispose. Title identity classifies once; inspect visibility only when admitted/claimed. Group changes cannot rescan completed bodies; restored/reconnected titles stay static. Cover 600 retained rows and genuine browser arrival motion.
+Sustained fixture creates 500 canonical turns, 1,000 messages and 1,000 tools through real Service/published Floret/fake providers, verifying all admitted content. No paid provider, user state, raw DB writes or product fallback. Produce mixed text/reasoning/Markdown at 80 updates/s, one tool per 60 updates and initial 32 KiB body independently of UI; accumulate >=120 seconds in one active turn.
 
-Stable groups own disclosure observers; growth/title motion publishes only changed blockers and removed groups dispose observations. A 600-group regression rejects repeated historical folds. Body chunks extend admitted items without advancing timeline restoration provenance; full hydration retains its boundary. Root/child browsers protect fresh motion against body/live historical rescans. Correct anchors synchronously only on loading completion, not retained-byte growth.
-
-Structural batches publish membership once after affected records are ready, without document rescans per replacement. Parent-event intervals track membership/coverage independently of cache-wide text; immutable turn facts add no per-field subscriptions. Browsers also cover history/reconnect/selection/disclosure/input/approval/terminal state.
-
-Sustained workload: 500 real canonical turns, 1,000 messages and 1,000 completed tools through Service/published Floret/deterministic fake providers, fully verified after admission. No real provider/user state/raw DB edits/product fallback. Generate mixed text/reasoning/Markdown at 80 updates/s, a tool every 60 updates, and 32 KiB initial body. Preserve rate independently of UI; accumulate at least 120 seconds in one active turn before late sampling.
-
-After stopping, compare every generated prose/reasoning item and exact code blocks against canonical content/full Markdown through real history/disclosure controls. Wait for observed terminal state, enter reading mode, reveal sections before descendants; never force hidden clicks or mutate disclosure state. Draft/focus/selection survive drag. Synthetic floating output does not qualify terminal emulation; browser regressions retain other interactions.
+After canonical terminal observation, use actual history/disclosure controls to compare every generated prose/reasoning item and exact code blocks with canonical content/full Markdown. Enter reading mode and reveal parents before children; never force hidden clicks/change disclosure state. Draft/focus/selection survive drag. Synthetic floating output does not qualify terminal emulation.
 
 ## Responsiveness
+Sample idle/early/late/repeat on the same visible production UI with two PersistentFloatingWindows, >=12 monotonic seconds each. Cancellation, button release, blur or hidden document invalidates samples. Dedicated nonfocusable Electron host installs pointer isolation before showing, preventing native keyboard input while retaining real composition, CDP input, DOM focus and interruption checks. Assert both drafts before and throughout sampling.
 
-Sample idle, early, late and repeat on one visible production UI with two PersistentFloatingWindows, at least twelve monotonic seconds each. Cancellation/released buttons/blur/hidden document invalidates samples. The long-thread-only Electron host installs pointer isolation before showing its nonfocusable window and prevents native keyboard events; it remains visibly composited, and CDP input, DOM focus, handlers and interruption checks stay active. Assert both drafts before sampling and retain continuity checks throughout.
+Read counter before press; one CDP session performs press/move/release with no intervening backend calls. Use Chromium monotonic timestamps. Independent 60 Hz producer cannot await dispatch: offer >=55 events/s and require >=45 position commits/s and >=80% idle cadence.
 
-Read runtime counter before press; one CDP session presses/moves/releases without intervening backend requests. Use Chromium monotonic input timestamps, never Node wall time. Independent 60 Hz scheduling must offer at least 55 events/s; producer cannot await each dispatch. Require at least 45 actual position commits/s and 80% idle cadence.
+Fixed budgets: presented drag P95 <=75 ms; work-minus-idle <=25 ms; >=95% prose markers with P95 <=250 ms; frame P95 <=25 ms; reactive apply P95 <=12 ms/max <=50 ms; no main-thread task >=100 ms. Known regressions do not relax them; they are requirements, not universal/photon claims.
 
-Budgets: presented-drag P95 <=75 ms; work-minus-idle <=25 ms; at least 95% prose markers with P95 <=250 ms; frame P95 <=25 ms; live reactive apply P95 <=12 ms/max <=50 ms; no main-thread task >=100 ms. These are acceptance requirements, not claims of current success or physical mouse-to-photon measurement. Never relax for known long-active-turn regressions.
-
-Trace pairs nested async slices by process/identity/scope. Only complete MOUSE_DRAGGED spans with compositor presentation enter quantiles; count coalesced/nonpresented spans separately. Require at least 30 presented samples/s. Healthy rAF alone proves no pointer responsiveness. No profiling/screencast during timing.
+Pair complete MOUSE_DRAGGED async spans by process/identity/scope with compositor presentation. Report coalesced/unpresented separately and require >=30 presented samples/s. Healthy rAF cannot prove input responsiveness. No profiling/screencast during timing.
 
 # Boundaries
 

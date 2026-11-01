@@ -3,7 +3,7 @@ type: AI Persistence Contract
 title: Flower thread deletion coordination
 tags: [ai, threads, persistence, deletion, floret]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -23,8 +23,8 @@ Redeven never opens or edits Floret tables, never restores a deleted canonical t
 
 # Evidence
 
-- `redeven:internal/ai/threads.go` - Performs typed canonical delete followed by idempotent product cleanup.
+- `redeven:internal/ai/threads.go` - Canonical delete then idempotent product cleanup.
 
-- `redeven:internal/ai/threadstore/catalog_mutation.go` - Removes only Redeven-owned thread product data in one transaction.
+- `redeven:internal/ai/threadstore/catalog_mutation.go` - Atomic Redeven-only thread-data cleanup.
 
-- `redeven:internal/ai/thread_delete_test.go` - Covers product cleanup failure, retry convergence, and absence without a Floret read.
+- `redeven:internal/ai/thread_delete_test.go` - Cleanup failure/retry/absence without Floret reads.

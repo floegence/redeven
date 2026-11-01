@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower file edit preparation
 tags: [ui, flower, tools, streaming]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -30,8 +30,8 @@ Candidate names never create file actions, authorize paths, admit tool execution
 
 # Evidence
 
-- `redeven:internal/ai/flower_argument_preview.go` - Incremental bounded filename extraction from canonical patch headers.
+- `redeven:internal/ai/flower_argument_preview.go` - Incremental bounded patch filename extraction.
 
-- `redeven:internal/ai/flower_argument_preview_test.go` - Partial paths, chunk boundaries, rename/delete, Unicode, body isolation, and display bounds.
+- `redeven:internal/ai/flower_argument_preview_test.go` - Incremental patch paths, rename/delete/Unicode/body isolation and bounds.
 
 - [Browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.toolFailures.browser.test.tsx) - No-edit validation and confirmed destination diffs remain readable with one error notice at desktop English/light and narrow Chinese/dark sizes.

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Native container resources
 tags: [architecture, containers, docker, podman]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -24,4 +24,4 @@ Native container management uses one `containerengine` Docker/Podman execution l
 
 - `redeven:internal/containerengine/container_exec.go` - Validates running-container Exec and exact argv limits.
 
-- `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe Podman volume archive reads.
+- `redeven:internal/containerengine/resource_read.go` - Bounded engine stats/Inspect and safe Podman archive reads.

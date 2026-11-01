@@ -3,16 +3,11 @@ type: UI Contract
 title: Static PPTX file preview
 tags: [ui, files, preview, pptx]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe owns static PPTX parsing and rendering; Redeven owns the reading
-surface and authorized file bytes. Supported presentations open locally with
-windowed slides, selectable text, and stable zoom. External resources stay disabled;
-obsolete documents cannot replace the active source. Rendering failures expose
-local recovery or incomplete-content guidance. Original licenses and corresponding
-MPL source remain available with redistribution.
+Floe parses/renders static PPTX; Redeven authorizes bytes and presents the reading surface. Local windowed slides retain text selection and zoom, with external resources disabled. Stale work cannot replace current source. Errors expose bounded recovery, and redistribution retains licenses and corresponding MPL source.
 
 # Contract
 

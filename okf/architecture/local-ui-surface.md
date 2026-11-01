@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Local UI surface
 tags: [architecture, local-ui, runtime, security]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -34,6 +34,6 @@ Saved next-start settings never replace the running URL list.
 
 # Evidence
 
-- `redeven:internal/localui/localui.go:50` - Local UI options require bind, agent, app server, state, runtime-control, version, diagnostics, and access gate inputs.
+- `redeven:internal/localui/localui.go:50` - Required bind, Agent, AppServer, state, control, version, diagnostics/access inputs.
 
-- `redeven:internal/localui/http_security.go:24` - Listener and interface addresses produce the exact public network authority allowlist and real display URLs.
+- `redeven:internal/localui/http_security.go:24` - Listener/interfaces determine exact public authority allowlist and URLs.

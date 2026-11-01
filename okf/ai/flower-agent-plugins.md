@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Flower Agent Plugins
 tags: [ai, flower, plugins, skills, mcp, permissions]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -12,50 +12,32 @@ Flower loads Agent Plugins 1.0.0 as environment-scoped Skills and MCP extensions
 # Contract
 
 ## Ownership and supported format
+Redeven owns distribution/admission/state/credentials/UI; published Floret owns invocation, approval, effects, history/recovery; official MCP Go SDK owns wire/sessions. No local dependency copy or second lifecycle.
 
-Redeven owns distribution, admission, installation state, credentials and presentation. Published Floret owns invocation, approval, effects, history, cancellation and recovery; the official MCP Go SDK owns wire/session mechanics. Existing published APIs suffice, so this integration needs no upstream source copy, local dependency override or parallel execution lifecycle.
+Root plugin.json declares https://agent-plugins.org/schemas/1.0.0/plugin.schema.json; validate 1.0.0 locally, diagnosing unknown top-level fields and ignoring foreign namespaces. Skills are immediate skills/<name>/SKILL.md children. mcp.json declares the matching canonical MCP schema. Isolate invalid entries; malformed MCP disables that component type. Support stdio/Streamable HTTP; diagnose/skip legacy SSE. Do not interpret hooks, commands, postinstall or private formats.
 
-`plugin.json` at the package root must declare `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`. Validation follows the published 1.0.0 specification, including diagnostic-only unknown top-level fields and ignored foreign extension namespaces. No schema is fetched while loading. Skills are immediate `skills/<name>/SKILL.md` children. `mcp.json` must declare the matching canonical MCP schema. Invalid skill/server entries are isolated; malformed MCP documents disable that component type. Available transports are stdio and Streamable HTTP. Legacy SSE is diagnosed and skipped. Hooks, commands, postinstall scripts and vendor-private plugin formats are not interpreted.
-
-stdio commands are executable tokens or `./` package paths, never implicit shell expressions. `PLUGIN_ROOT` is the resolved managed snapshot; `PLUGIN_DATA` is writable per-installation state preserved across updates. Those placeholders expand once in args, environment values and cwd only. Package/data cwd cannot escape its root. Parent secrets are not inherited. HTTP headers are literal; client-generated protocol and authorization fields take precedence, and redirects are denied.
+stdio accepts executable tokens or ./ package paths, not shell expressions. Expand PLUGIN_ROOT (managed snapshot) and PLUGIN_DATA (persistent installation data) once in args/env/cwd only; cwd stays contained. Do not inherit parent secrets. HTTP headers are literal; generated protocol/auth fields win and redirects are denied.
 
 ## Discovery and distribution
+Administrators select readable local directories, public GitHub repository/ref/path, or explicit HTTPS catalogs. Resolve refs to immutable commit receipts before bounded download; local directories become snapshots. Flower catalogs use schema_version flower.agent_plugin_catalog.v1, id, and plugins containing id plus {type: github, repository, ref, path} sources; this is outside the Agent Plugins standard.
 
-An administrator can select a directory in the runtime's readable filesystem scope, a public GitHub repository/ref/package path, or add an explicit public HTTPS catalog. GitHub refs resolve to commit receipts before bounded archive download. Local packages become snapshots; they are not live mounts.
-
-Flower's distribution format is deliberately outside the Agent Plugins standard:
-
-```json
-{
-  "schema_version": "flower.agent_plugin_catalog.v1",
-  "id": "example",
-  "plugins": [
-    {"id": "tools", "source": {"type": "github", "repository": "example/tools", "ref": "v1", "path": "."}}
-  ]
-}
-```
-
-Catalogs recommend GitHub sources only. They cannot install local paths, enable components, supply credentials or execute commands. No default marketplace, official directory address or automatic GitHub search is shipped. [Catalog integration](flower-plugin-catalogs.md) defines opt-in runtime sources and display metadata. Distribution admits explicit ASCII HTTPS URL grammar and valid ports, then rejects private DNS-resolved addresses, unsafe redirects, archive links/duplicate paths and Windows drive/stream paths. Archive admission counts files and directories before extraction, limits paths to 32 separators, and writes through a pinned `os.Root` handle. Local contained symlinks are materialized; escapes fail preparation. These restrictions precede component loading. Limits: 4,096 entries, 16 MiB per file, 128 MiB per package/archive, 1 MiB per manifest/catalog configuration.
+Catalogs only recommend GitHub: no local installation, enabling, credentials or execution. Ship no default market/address/automatic search. [Catalog integration](flower-plugin-catalogs.md) owns opt-in sources/metadata. Admit explicit ASCII HTTPS/valid ports; reject private resolved targets, unsafe redirects, archive links/duplicates and Windows drive/stream paths. Before extraction count files/directories, allow at most 32 separators and use pinned os.Root writes. Materialize contained local symlinks; reject escapes. Limits: 4,096 entries, 16 MiB/file, 128 MiB/package/archive, 1 MiB/manifest/catalog.
 
 ## Review, persistence and recovery
+Preparation owns at most four workers, two minutes each, without executing commands. Review source/components/entry points/changes before commit. New installations default disabled; new update components require selection. MCP configuration changes clear corresponding credentials; every update clears discovery.
 
-Preparation is an owned asynchronous operation, bounded to four concurrent workers and two minutes per preparation. It never runs package commands. The administrator reviews source, components, execution entry points and changed/removed components before commit. New installations default disabled. New update components also require selection. Updated MCP connection configuration clears the corresponding credential binding; all updates clear tool discovery.
+Under <stateDir>/ai/agent-plugins/: registry.sqlite kind flower_agent_plugins/schema 1 has readonly preflight and atomic revision-CAS; packages/<sha256> stores snapshots, staging/<operation UUID> preparation, data/<installation UUID> retained data. Digests bind paths/bits/bytes. Unknown/future/drifted databases fail unchanged. One registry owns installation/component/discovery state.
 
-State lives in `<stateDir>/ai/agent-plugins/`: `registry.sqlite` has database kind `flower_agent_plugins`, schema 1, strict readonly preflight and atomic revision-CAS writes. `packages/<sha256>` contains managed snapshots, `staging/<operation UUID>` holds preparation, and `data/<installation UUID>` holds persistent plugin data. Digests bind paths, executable bits and contents. Unknown/future/drifted databases fail without reset. Installation, component state and discovered tool metadata have one registry authority.
+Namespace/endpoint/user scope operations; request identity plus reviewed digest bind commit, and changed-selection replay fails. Ready operations expire at 30 minutes but survive disconnect/resume. Restart fails interrupted preparation. Shutdown cancels/drains workers; cleanup removes only unreferenced packages/stages, never retained data. Conversation snapshots/restores omit extension configuration/data/credentials and never construct another manager.
 
-Operations are private to namespace, endpoint and user identity. Request identity and reviewed digest bind commit; replay with different selection fails. Ready operations expire after 30 minutes, survive disconnection and can be resumed. Interrupted preparation becomes failed after restart. Shutdown cancels and drains owned workers. Cleanup removes only unreferenced package/staging directories; retained data is never garbage-collected.
+SecretsStore schema 4 stores immutable write-only references; no values in listings/operations/audit. Replace/clear invalidates discovery; empty objects clear and omission preserves. Uninstall retains data by default; explicit permanent deletion validates UUID/pinned root, rejecting escaping replacements. Snapshot stat/read/link inspection also uses rooted handles.
 
-Conversation snapshots do not include environment extension configuration, package data or credentials. Restore staging does not create a plugin manager; the live registry, snapshots and data remain unchanged, matching standalone MCP/Skills configuration ownership.
-
-Credentials use immutable references in the existing locked SecretsStore, schema 4. Values are write-only and never included in plugin listing, operation views or audit records. Replacing/clearing credentials invalidates discovery. Empty objects clear; omission preserves. Uninstall defaults to retaining data; permanent deletion is an explicit option. Deletion validates the installation UUID and uses a pinned package-state root, so replacing the data directory with an escaping symlink cannot remove external files. Snapshot stat/read and unresolved-link inspection also use root-relative handles.
-
-GitHub installations offer an explicit automatic-check preference, initially enabled. A service worker checks eligible refs no more often than every six hours; it only records update availability. It never downloads, applies, enables or runs updates. Applying an update always returns through preparation and review.
+GitHub automatic checks default enabled as an explicit preference, run at most every six hours, and record availability only. Applying updates always repeats preparation/review; checks never download/apply/enable/execute.
 
 ## Projection and authorization
+Project package Skills/MCP into existing managers without standalone copies. Skills bind plugin name/installation UUID/name; MCP binds installation/digest/component/revision/credential/schema. Reject namespaced standalone writes. Readers inspect; authenticated administrators manage; stdio checks additionally need write+execute.
 
-Package Skills and MCP entries project into the existing managers; they are not copied into standalone configuration. Skill selectors include plugin name, installation UUID and skill name. MCP identities include installation, digest, component, revision, credential reference and tool schema. Namespaced standalone writes are rejected. Readers inspect; authenticated administrators manage. Checking stdio also requires existing write+execute process permission.
-
-Each skill read or MCP call resolves current authority and obtains a resource lease. Digest mismatches fail closed. Update/uninstall cannot retire a leased installation; disabling immediately prevents future dispatch. MCP configuration is checked again after connection and before dispatch. In-flight execution keeps Floret's existing outcome semantics; unknown outcomes are never replayed. Connection checks discover tools explicitly and do not bypass conversation permissions.
+Each skill read/MCP call resolves current authority and leases the resource. Digest mismatch fails closed. Update/uninstall cannot retire leased installations; disable prevents new dispatch immediately. Recheck MCP configuration after connecting and before dispatch. Floret retains in-flight/unknown-outcome semantics without replay. Explicit connection checks discover tools without bypassing conversation permissions.
 
 # Boundaries
 

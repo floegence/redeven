@@ -3,7 +3,7 @@ type: AI Resource Contract
 title: Flower attachment resources
 tags: [ai, flower, attachments, storage, security]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -11,31 +11,24 @@ Redeven owns bytes/metadata, authenticated owner, quotas and retention; Floret o
 
 # Contract
 
-Redeven threadstore product v1 stores generated attachment identity, the authenticated user hash, a server-only relative storage name, sanitized detected media metadata, exact byte size, SHA-256, optional strict UTF-8 code-point and logical-line counts, source, state, idempotency identity, and retention claims.
+## Identity and provider preparation
+Redeven product threadstore v1 owns generated attachment ID, authenticated user hash, private relative storage name, detected/sanitized media metadata, exact size/SHA-256, optional strict UTF-8 code-point/line counts, source/state/idempotency and retention claims. Floret ResourceRef is content-addressed; display locator is attachment://v1/<attachment-id>/<encoded-name>. Retention never authorizes canonical reads.
 
-The canonical Floret `ResourceRef` is content-addressed and the display locator is `attachment://v1/<attachment-id>/<encoded-name>`.
+Admit files independently of model modalities/tools. Preserve recognized text/image/PDF types; other files, including Office and non-UTF-8 documents, keep original bytes/name as application/octet-stream. Active UTF-8 uses text/plain; pasted long text requires strict UTF-8. Queue/admission enforce owner, staging, count and byte bounds, not a model MIME allowlist.
 
-Retention ownership does not authorize canonical reads.
+Capabilities affect presentation only. Supported modalities receive native content; otherwise the owning user message/tool result receives a factual manifest: name, media_type, size_bytes, locator, content_included:false, content_trust:untrusted. It adds no system message, tool-selection instruction or generic failure advice. Tool definitions own access guidance; manifest implies neither extraction, tool availability nor parser installation. The model chooses tools or explains its limitation. Switching models never rejects retained attachments/images; verify canonical descriptors/digest before the same manifest fallback, preserving native rendering for capable models.
 
-## Provider Preparation
-Upload admission is independent of provider-native modalities. Recognized text, image and PDF bytes retain their safe canonical types; all other files, including Office containers and non-UTF-8 documents, use `application/octet-stream` with their original names and bytes. Active UTF-8 text remains `text/plain`; pasted long text must still be strict UTF-8. Size, ownership, digest, staging and retention checks are unchanged.
+## Reads and copies
+Historical reads revalidate membership and bytes. Upload/image lookup uses current-path public Floret windows (50 items, 128-byte previews), one authorized subscription and page/stable-leaf correlation; no full hydration or retention-inventory authorization. Resolved handles prove ownership/metadata only. Hash during materialization; provider/text/image consumers verify their exact snapshots and downloads verify before returning paths. Avoid prehash plus reread. Bound size/cancellation; corrupt bytes never publish a copy.
 
-Every file is admitted independently of model modalities and tool support. Admission and queue edits enforce resource ownership, staging, count and byte limits, never a model-specific MIME allowlist. The capability snapshot describes presentation only: native image/text/PDF input when supported, otherwise a factual attachment manifest carrying `name`, `media_type`, `size_bytes`, `locator`, `content_included: false` and `content_trust: untrusted`. The manifest is independent of tool availability and stays in its owning user message or tool result; it adds no system message, tool-selection instruction or generic failure advice. Attachment tool definitions own locator access and usage guidance. A manifest never implies extracted content, current tool access or an installed parser. The model chooses processing tools or explains its actual limitation.
+Floret v7.51.1 exposes user and confirmed tool descriptors canonically. Retention distinguishes tool media from uploads; never parse image refs as upload rows.
 
-Model switching never rejects retained user attachments or tool images. Historical images unsupported by the selected model use the same manifest contract, after canonical descriptor and digest verification; native rendering remains available on capable models.
+attachment.materialize requires current execution/canonical authorization, RWX and normal write policy. Create a unique regular scratch copy using cancellable 32 KiB streaming with exact size/SHA-256; image locators retain bounded validation. Failure deletes private staging, repeated names never overwrite edited copies, and output exposes only the work path.
 
-Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state. Upload/tool-image reads search current-path public Floret windows (50 items, 128-byte previews) through one authorized subscription, correlated to each requested page and a stable leaf. They never hydrate full history or authorize from retention inventory. The internal resolved handle certifies ownership and metadata only: materialization hashes while copying, text/provider/image consumers verify their exact snapshot, and public download opens verify bytes before returning a path. Thus upload materialization does not prehash and then reread the original. Reads honor cancellation and declared-size bounds; corruption never publishes a work copy.
+## Lifetime
+Cleanup removes work copies, never original inputs/images. Retained references permit rematerialization after cleanup/restart/compaction/parent deletion. Historical Fork inherits refs only through its canonical cut and separately copies current scratch/staging. Product settings/claims publish transactionally without another admitted-message map.
 
-## Canonical image recovery
-Floret v7.51.1 exposes user and confirmed tool attachment descriptors through one canonical view. Upload retention recognizes tool media separately and never parses tool image references as upload records.
-
-## Local processing and lifecycle
-
-Immutable originals and mutable working copies share canonical thread references but have different lifetimes. attachment.materialize reauthorizes the execution identity and canonical attachment, requires RWX and the normal write-effect policy, then creates a unique regular work copy under the current thread scratch directory. Upload copies stream through a 32 KiB buffer with cancellation, exact size and SHA-256 validation. Image locators reuse bounded canonical image validation. Failed copies remove private staging; repeated same-name inputs never overwrite edited copies. Only the working path is returned, never the original backing path.
-
-Working-file cleanup deletes copies, not inputs or historical images. Originals can be materialized again after cleanup, restart, compaction or parent deletion when another conversation retains them. Historical Fork inherits input references only through its canonical cut and independently copies current scratch/staging. Product settings and upload claims publish transactionally; no second admitted-message mapping is stored.
-
-The Files panel derives input/media pages from the public Floret window interface with fresh product authorization. The last-reference inventory remains separate and includes inactive paths and queued inputs. External referenced files and delivered outputs keep their existing destinations and are never removed by conversation cleanup. Existing upload/media backup scope is unchanged; disposable task files are not added to backups.
+Files derives input/media pages from public windows with current product authorization. Last-reference inventory includes inactive paths/queued inputs but grants no read authority. External files/deliveries retain destinations and survive cleanup. Existing upload/media backup scope excludes disposable task files.
 
 # Boundaries
 
@@ -43,9 +36,9 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/schema.go` - Product v1 declares user-owned attachment resources, attempts, claims, and neutral staging targets without legacy upload shapes.
+- `redeven:internal/ai/threadstore/schema.go` - Product v1 attachment ownership, attempts, claims and neutral staging.
 
-- `redeven:internal/ai/threadstore/uploads.go` - Transactional idempotency, quotas, claims, and last-reference deletion are enforced in the resource store.
+- `redeven:internal/ai/threadstore/uploads.go` - Atomic attachment idempotency, quotas, claims and last-reference deletion.
 
 - [Materialization and integrity tests](../../internal/ai/attachment_materialize_test.go).
 - [No-native/no-tools provider preparation and historical manifest tests](../../internal/ai/attachment_manifest_test.go).

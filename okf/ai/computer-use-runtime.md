@@ -3,16 +3,11 @@ type: AI Tool Contract
 title: Computer and browser use runtime
 tags: [ai, computer-use, browser-use, targets]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
-`ComputerUseRuntime` owns targets, adapter resources, active control and script
-processes. Published Floret owns Agent lifecycle, tool effects and canonical
-results. Flower prefers authorized commands and integrations for data work,
-semantic browser or desktop operations for interaction, and explicit images for
-visual decisions. A missing target, permission or capability fails explicitly;
-no adapter silently selects another tab, window or device.
+ComputerUseRuntime owns targets, resources, control and script processes; Floret owns Agent lifecycle/effects/history. Prefer authorized commands for data, semantics for interaction and images for visual decisions. Missing target/permission/capability fails explicitly without selecting a substitute tab/window/device.
 
 # Contract
 

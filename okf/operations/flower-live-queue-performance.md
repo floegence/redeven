@@ -3,7 +3,7 @@ type: Qualification Evidence
 title: Flower live queue CPU qualification
 tags: [flower, performance, streaming, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -21,52 +21,12 @@ Older comparison predates paging. Recovery and520-turn results have different wo
 
 # Evidence
 
-## October22: queues
+October 22 v7.78.2,520turns/2080items, three alternating 120 s samples,10 s warmup, reference 40c924749/shared UI 7e14ee68d:median backend 90.31→6.39%, renderer 163.10→52.26%, combined 257.62→67.89%, payload 11621515→180390 B/s, allocation 677006967→52148838 B/s, output P95 1459→49 ms, frame 549.2→17.5 ms. Content/markers retained; reference timeouts 35/35/31. Relative gates pass; absolute renderer 20%/combined 60% and<100 ms tasks fail(576–618 ms). Three-thread 30 s preserves content/cleanup.
 
-v7.78.2,520 turns/2080 items, fresh forks, three alternating120s samples/side,10s warmup. Reference40c924749; both UI7e14ee68d.
+October 23 v7.80.3 pseudo-version 6389f55946e3,100turns/40 Hz/60 s:root CPU 5.30/18.45/33.37%, child 7.93/19.41/37.38%; output 38/44 ms, frame 17.3/17.6 ms. All fixed gates/content/markers/cleanup pass; idle combined 0.79%. Three-thread/1 MiB stresses pass their scope. Earlier child 20.34% fails before style-read removal; 130browser/98Desktop checks retain recovery/interaction.
 
-| Median | Reference | Candidate | Reduction |
-| --- | ---: | ---: | ---: |
-| Backend CPU | 90.31% | 6.39% | 92.9% |
-| Renderer CPU | 163.10% | 52.26% | 68.0% |
-| Combined CPU | 257.62% | 67.89% | 73.6% |
-| Payload bytes/s | 11,621,515 | 180,390 | 98.4% |
-| Allocation bytes/s | 677,006,967 | 52,148,838 | 92.3% |
-| Output P95 ms | 1459 | 49 | 96.6% |
-| Frame P95 ms | 549.2 | 17.5 | 96.8% |
+October 25 v7.87.0 renderer 20.27% fails; controlled 19.89% passes with little margin. Both exact content/no long tasks retain two live→sealed HTTP 500 s. Initial NDJSON30min fails disposal cycle 30; raw fetch reproduces and 120 parser cycles are not soak proof. Later SSE1800 s/30cycles passes:heap+6.71/+2.44%, CPU+4.14/+1.60%, DOM+0.32%,131listeners, max 19goroutines; zero disposed queues/subscriptions. Fixed workload cannot bound arbitrary content.
 
-Candidates retain28 items/100% markers/24 input-click probes/no timeout. Reference timeouts35/35/31; sample1 fails content,2/3 fail interaction. Candidates pass relative CPU≥50%/payload≥90%, interaction-output≤100ms/frame≤33ms P95; fail renderer≤20%, combined≤60%, every-task<100ms (576–618ms). Three-thread30s: exact content, input/click/output28.5/31/53ms, frame17.5ms, Stop44.5ms, clean queues/subscribers.
+October 26 eight 8 s Chromium/Electron samples,72/500messages,20/100tools,30/60 Hz:frame 16.7–17.6 ms, click 26–31.7 ms, no protected-DOM changes/flashes. Reference fa3a56ca0 CPU-32.4–55.4%, allocation-72.2–85%; 500-message 60 Hz baseline delivers~282 KiB versus 508–513 KiB, so CPU is not equal-work evidence. Twenty appends scan no 100/10000historic ordinals; no new schema/index.
 
-## October23: recovery
-
-v7.80.3-0.20261023160735-6389f55946e3 treats empty Goals as absent; upstream full/history/blank-module/Actions pass.100 turns,10s warmup/60s40Hz; child first visits11 roots/full cache. No overlapping owned builds/tests.
-
-| Sample | Backend/renderer/combined CPU | Input/click/output P95 ms | Frame P95 ms |
-| --- | --- | --- | ---: |
-| Root | 5.30/18.45/33.37% | 11.6/14.9/38 | 17.3 |
-| Child/cache | 7.93/19.41/37.38% | 11.2/15.2/44 | 17.6 |
-
-Pass backend≤30%, renderer≤20%, combined≤60%, input/click/output≤100ms/frame≤20ms P95, every-task<100ms; exact content/cadence/markers, no long tasks/sync/page errors. Idle30s CPU0/0.38/0.79% (≤3%). Three-thread and1MiB30s stress: combined47.86/44.87%, output38/39ms, exact content/cadence/markers/no long tasks/clean release. Large text is stress, not standard-budget proof.
-
-Earlier child20.34% fails before synchronous style-read removal. CSS currentColor and nine browser checks preserve theme/continuity/selection/cleanup. Child cursor tracks independently;130 browser/98 Desktop route/type/lint/race checks cover recovery/interests/Retry/drafts/commands/approval/Computer.
-
-## October25: lifecycle
-
-v7.87.0,100 turns,40Hz,10s warmup/60s, published SSE/product framing, no overlapping owned tests.
-
-| Sample | Backend/renderer/combined | Input/click/output/Stop P95 ms | Frame ms |
-| --- | --- | --- | ---: |
-| Initial CPU failure | 4.78/20.27/37.88% | 12.4/15.3/46/12.5 | 18.2 |
-| Controlled repeat | 4.61/19.89/37.22% | 12.2/16/47/16.6 | 18.4 |
-
-Both retained; renderer20% limit unchanged with little repeat margin.100% markers/exact Markdown/code/reasoning/no long tasks/page exceptions. Each has two live→sealed HTTP500s before convergence, not zero-error evidence.
-
-Earlier NDJSON30-minute attempt fails cycle30: subscription survives1s disposal (first29 are not pass). Raw Chromium fetch/abort reproduces; headers alone prove no fix. Actual parser120 mount/dispose cycles release<1s, not soak proof. Subsequent SSE1800s/30cycles passes: late/early renderer/runtime heap+6.71/+2.44%, app/runtime CPU+4.14/+1.60%, DOM+0.32%,131 listeners,max19 goroutines. Each cycle preserves exact content/draft/reopen, one mounted subscription, zero disposal queues/subscriptions, no page/convergence errors. Fixed workload cannot bound arbitrary Markdown/terminal memory.
-
-## October26: presentation
-
-Eight8s minified Chromium/Electron samples,72/500 messages,20/100 tools,30/60Hz: frame16.7–17.6ms,click26.0–31.7ms, no long tasks/protected DOM changes/skeleton flashes; selection/drafts,72 baseline/three recovery counts/output-progress retained. Synthetic short evidence is not production CPU/soak. Git supplies reference including deleted modules with equal minification/geometry.
-
-Referencefa3a56ca0: task CPU-32.4–55.4%, allocation-72.2–85.0%.500-message60Hz reference delivers~282KiB vs508–513KiB from timer lag, so not equal-work CPU; other pairs comparable. Twenty appends scan neither100 nor10,000 historic ordinals; no durable index/schema, canonical reads remain bounded.
-
-Sources: [queue](../../internal/ai/flower_live_stream.go), [pressure](../../internal/ai/flower_live_incremental_pressure_test.go), [backpressure](../../internal/ai/flower_live_backpressure_test.go), [reading/release](../../internal/ai/flower_history_test.go), [baseline](../../internal/ai/flower_live_baseline_test.go), [fixture](../../internal/ai/flower_cpu_qualification_test.go), [qualifier](../../scripts/qualify_flower_cpu.mjs).
+Sources: [queue](../../internal/ai/flower_live_stream.go), [pressure](../../internal/ai/flower_live_incremental_pressure_test.go), [backpressure](../../internal/ai/flower_live_backpressure_test.go), [history](../../internal/ai/flower_history_test.go), [baseline](../../internal/ai/flower_live_baseline_test.go), [fixture](../../internal/ai/flower_cpu_qualification_test.go), [qualifier](../../scripts/qualify_flower_cpu.mjs). Git retains exact sample tables and adverse results.

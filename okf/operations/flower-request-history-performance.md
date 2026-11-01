@@ -3,7 +3,7 @@ type: Qualification Evidence
 title: Flower request-history CPU qualification
 tags: [flower, performance, floret, history, qualification]
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -25,28 +25,10 @@ Reference31e4966a4 uses v7.78.2. Candidate also includes index removal2445833, b
 
 # Evidence
 
-Engine/SQLite1000 requests, three samples×ten executions: median778.78→150.89ms(-80.6%), allocation2,305,077,316→389,844,408 bytes(-83.1%). Reads10→1 for one tool and65→1 for twelve. Observer regression600 observers/300 snapshots now retains owners/content/selection/focus. Backend/race/history/retry/fork/restart/upstream historical/API checks pass.
+Engine 1000requests, three×ten executions:median 778.78→150.89 ms, allocation 2305077316→389844408 B; reads 10→1(one tool),65→1(twelve). Observer 600/300snapshots preserves owners/content/selection/focus; Go/race/history/retry/fork/restart/upstream checks pass.
 
-| Sample | Backend % | Renderer % | Combined % | GB/120s | Output ms | Input ms | Click ms | Stop ms |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| baseline-1 | 103.49 | 43.74 | 156.27 | 125.853 | 115 | 15.6 | 14.5 | 18.4 |
-| baseline-2 | 102.45 | 44.22 | 155.32 | 125.861 | 100 | 21.7 | 15.3 | 5.0 |
-| baseline-4 | 106.20 | 42.41 | 157.90 | 125.864 | 85 | 14.5 | 14.9 | 11.3 |
-| reuse-1 | 20.39 | 42.17 | 72.03 | 16.414 | 86 | 17.7 | 15.0 | 30.5 |
-| reuse-2 | 20.77 | 42.45 | 72.81 | 16.413 | 97 | 9.9 | 15.1 | 57.9 |
-| reuse-3 | 20.41 | 39.08 | 68.46 | 16.416 | 67 | 17.2 | 16.7 | 17.9 |
+Three product samples:median backend 103.49→20.41%, combined 156.27→72.03%, allocation 125.861→16.414GB/120 s; exact content/100%markers, frame 17.7–18.6 ms. Relative reductions≥50/30%, input/click/output/Stop≤100 ms, frame≤33 ms pass. Reuse long tasks 201/218 ms still fail strict budget. Preserve pre-reuse output 110/151/146 ms and Stop 106.6 ms; baseline 3 selector failure, candidate 2 heavy-test overlap and nonalternating order limit inference.
 
-Timings are P95; content/100% markers pass; frame17.7–18.6ms. Median backend103.49→20.41%(-80.3%), combined156.27→72.03%(-53.9%), allocation125.861→16.414GB(-87.0%). Acceptance: reductions≥50/30%, input/click/output/Stop≤100ms/frame≤33ms P95, cadence/coverage≥95%; inspect metrics, not ordinary qualifier exit alone.
+Earlier three-thread combined 99.23% and 30min soak(heap+1.48/+0.12%, stable nodes/listeners, bounded goroutines, zero release queues) predate reuse and cannot certify final source. Independent e4a505bfc/938b525a6 confirmations are not pooled medians:combined 71.35/65.96%, output 87/51 ms, frame 18.6 ms; content/cleanup pass. Goal fixtures retain 2cf47fd8f; 217browser plus 31scroll/55sequence checks pass.
 
-Retain pre-reuse accepted-1/2/3 (filenames, not passes): output110/151/146ms, one Stop106.6ms. Reuse1/2 long tasks201/218ms fail strict budget. Not fully alternating; baseline3 fails old selector after timing,baseline4 matches qualifier,candidate2 overlaps heavy tests. Earlier observer-corrected three-thread combined99.23%,input/click/output/Stop16.0/14.2/59.0/16.3ms, exact content. Its separate30min/30cycle soak: renderer/backend heap+1.48/+0.12%, stable nodes/listeners/bounded goroutines/zero release queues. Both predate projection reuse and cannot certify final source.
-
-Independent confirmations, not median samples:
-
-| Source | Backend/renderer/combined % | GB | Input/click/output/Stop P95 ms | Frame ms |
-| --- | --- | ---: | --- | ---: |
-| e4a505bfc, open-at-latest | 20.95/41.34/71.35 | 16.411 | 16.2/15.0/87.0/13.4 | 18.6 |
-| 938b525a6, scroll chaining | 20.45/36.85/65.96 | 16.410 | 11.4/16.6/51.0/23.2 | 18.6 |
-
-Exact content/100% markers/cleanup pass. Goal disclosure fixtures match existing2cf47fd8f; production unchanged. Browser217 plus31 scroll/55 sequence-streaming checks pass.
-
-Sources: [fixture](../../internal/ai/flower_cpu_qualification_test.go), [timing/soak](../../scripts/qualify_flower_cpu.mjs), [sidebar](../../internal/flower_ui/src/flowerSurfaceModel.test.ts), [browser](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx), [queue qualification](flower-live-queue-performance.md).
+Sources: [fixture](../../internal/ai/flower_cpu_qualification_test.go), [qualifier](../../scripts/qualify_flower_cpu.mjs), [sidebar](../../internal/flower_ui/src/flowerSurfaceModel.test.ts), [browser](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx), [queue](flower-live-queue-performance.md). Git retains individual source/sample tables. Loopback NDJSON excludes encryption/model latency.

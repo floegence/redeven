@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower approval surface
 tags: [ui, flower, approval, accessibility]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -28,6 +28,6 @@ One pure presenter owns trusted operation/title/description/command/target/risk 
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Canonical approval projection, per-interaction guards, batches, and focus handoff.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Canonical approvals, guarded batches and focus handoff.
 
 - `redeven:internal/flower_ui/src/flowerApprovalPresentation.ts` - Trusted operation labels, targets, and risk fields.

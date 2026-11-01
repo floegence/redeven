@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Service Templates
 tags: [architecture, templates, managed-services, localization, supply-chain]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -24,4 +24,4 @@ Do not copy upstream adapters, fingerprints, legacy paths, process/volume rules,
 
 - `redeven:go.mod` - Pins the released catalog module without local dependency wiring.
 
-- `redeven:internal/managedwebservice/types.go` - Aliases the published TemplateSpec, localization, and icon types and defines product lifecycle responses.
+- `redeven:internal/managedwebservice/types.go` - Public TemplateSpec/localization/icon aliases and product lifecycle DTOs.

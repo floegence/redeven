@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Independent Host service lifecycle
 tags: [architecture, managed-services, host, recovery, security]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -34,6 +34,6 @@ Imported Host templates receive `REDEVEN_TEMPLATE_DIR` pointing to the active or
 
 # Evidence
 
-- `redeven:internal/managedwebservice/custom_host.go` - Session launch, durable gate, identity verification, and explicit Stop.
+- `redeven:internal/managedwebservice/custom_host.go` - Session launch/durable identity gate and explicit Stop.
 
 - `redeven:internal/managedwebservice/process_identity_linux.go` - Native Linux boot, ticks, user, and namespace facts.
