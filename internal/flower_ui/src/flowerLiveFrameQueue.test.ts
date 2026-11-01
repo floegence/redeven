@@ -113,23 +113,6 @@ describe('ordered native live frame queue', () => {
     } finally { h.queue.dispose(); clock.mockRestore(); vi.useRealTimers(); }
   });
 
-  it('gives structural membership its own task between ordered growth updates', () => {
-    const h = harness();
-    const structural = { ...append(2), update: { ...append(2).update!, items: [{ kind: 'add' as const, item_id: 'next',
-      item: { id: 'next', ordinal: 2, kind: 'assistant' as const, turn_id: 'turn', run_id: 'run', text: '', live: true } }] } };
-    try {
-      h.queue.push(append(1)); h.queue.push(structural); h.queue.push(append(3));
-      vi.advanceTimersToNextTimer();
-      expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([1]);
-      vi.advanceTimersToNextTimer();
-      expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([1, 2]);
-      vi.runAllTimers();
-      expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([1, 2, 3]);
-      expect(h.onError).not.toHaveBeenCalled();
-      expect(h.queue.waitUntilIdle()).toBeUndefined();
-    } finally { h.queue.dispose(); }
-  });
-
   it('coalesces 2000 body extents into one constant-size frame without polling', () => {
     const h = harness();
     for (let version = 1; version <= 2000; version++) {

@@ -116,13 +116,6 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
     // Include reactive commits in the budget. Each envelope remains atomic;
     // yielding between envelopes gives input and painting a real task boundary.
     while (pending.length && scheduledGeneration === generation) {
-      const envelope = pending[0]!.envelope;
-      const update = envelope.update ?? envelope.subagent_update;
-      const structural = Boolean(envelope.current || envelope.subagent_current || update?.item_order || update?.turns
-        || update?.items?.some(change => change.kind === 'add' || change.kind === 'remove' || change.kind === 'replace'));
-      // Membership commits can mount rows and run layout. Do not spend the
-      // growth budget before one, or append more work after its atomic commit.
-      if (structural && updates) break;
       const value = pending.shift()!;
       pendingBytes -= value.bytes;
       if (options.batch) {
@@ -135,7 +128,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
         if (failure) throw failure.error;
       } else apply(value);
       updates++;
-      if (structural || performance.now() - started >= APPLY_BUDGET_MS) break;
+      if (performance.now() - started >= APPLY_BUDGET_MS) break;
     }
     pendingStartedAt = pending[0]?.queuedAt;
     releaseCapacity();
