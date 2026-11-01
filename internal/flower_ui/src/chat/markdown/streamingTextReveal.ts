@@ -1,3 +1,5 @@
+import { FLOE_HOT_INTERACTION_ATTR } from '@floegence/floe-webapp-core';
+
 const duration = 320;
 const maxGroups = 32;
 const phases = 20;
@@ -34,7 +36,10 @@ export function createStreamingTextReveal(root: HTMLElement) {
     preference?.removeEventListener('change', preferenceChanged);
     document.removeEventListener('visibilitychange', preferenceChanged);
   };
-  const allowed = () => supported && !preference?.matches && !document.hidden;
+  // Settle decorative ink during direct manipulation; text still commits
+  // immediately and only additions after release may start another reveal.
+  const allowed = () => supported && !preference?.matches && !document.hidden
+    && !document.documentElement.getAttribute(FLOE_HOT_INTERACTION_ATTR)?.split(/\s+/).some(kind => kind === 'drag' || kind === 'resize');
   const tick = (now: number) => {
     frame = 0;
     if (!allowed() || !root.isConnected) { clear(); return; }

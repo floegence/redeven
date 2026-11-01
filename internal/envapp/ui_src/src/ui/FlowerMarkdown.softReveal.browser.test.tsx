@@ -4,11 +4,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { commands } from 'vitest/browser';
 import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
 import { createStreamingTextReveal } from '../../../../flower_ui/src/chat/markdown/streamingTextReveal';
+import { startHotInteraction } from '@floegence/floe-webapp-core';
 import '../../../../flower_ui/src/styles/flower.css';
 
 const media = commands as unknown as { emulateMediaPreferences(value: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }): Promise<void> };
 let dispose: (() => void) | undefined;
 let root: HTMLDivElement;
+let stopInteraction: (() => void) | undefined;
 const highlights = () => [...CSS.highlights].filter(([name]) => name.startsWith('flower-stream-'));
 const revealed = () => highlights().flatMap(([, highlight]) => [...highlight].map(range => (range as Range).toString())).join('');
 const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -22,10 +24,33 @@ function mount(initial = '') {
   return { setContent, setStreaming };
 }
 afterEach(async () => {
+  stopInteraction?.(); stopInteraction = undefined;
   dispose?.(); dispose = undefined; root?.remove();
   vi.restoreAllMocks();
   window.getSelection()?.removeAllRanges();
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
+});
+
+it.each(['drag', 'resize'] as const)('keeps live text immediate during %s and reveals only new content after release', async kind => {
+  const { setContent } = mount('Read');
+  const paragraph = root.querySelector('p')!;
+  const text = paragraph.firstElementChild!.firstChild!;
+  const range = new Range(); range.selectNodeContents(text); window.getSelection()!.addRange(range);
+  setContent('Read before'); await frame();
+  expect(revealed()).toBe(' before');
+  stopInteraction = startHotInteraction({ kind, cursor: 'grabbing', lockDocumentStyles: false });
+  await frame();
+  expect(highlights()).toHaveLength(0);
+  setContent('Read before during'); await frame();
+  expect(paragraph.textContent).toBe('Read before during');
+  expect(paragraph.firstElementChild!.firstChild).toBe(text);
+  expect(window.getSelection()!.toString()).toBe('Read');
+  expect(highlights()).toHaveLength(0);
+  stopInteraction(); stopInteraction = undefined;
+  await frame();
+  expect(highlights()).toHaveLength(0);
+  setContent('Read before during after'); await frame();
+  expect(revealed()).toBe(' after');
 });
 
 it('reveals appended text while retaining selection and exact Unicode content', async () => {
