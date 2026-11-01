@@ -199,7 +199,14 @@ describe('Subagent detail window boundary', () => {
 
       expect(surfaceStyle.backgroundColor).not.toBe(fixtureStyle.backgroundColor);
       expect(parseRGBColor(surfaceStyle.backgroundColor).alpha).toBe(1);
-      expect(surfaceStyle.borderRadius).toBe('12px');
+      // The published Floe floating token owns the window radius.
+      const radiusReference = document.createElement('div');
+      radiusReference.style.borderRadius = 'var(--floe-radius-floating)';
+      surface.append(radiusReference);
+      const floatingRadius = getComputedStyle(radiusReference).borderRadius;
+      radiusReference.remove();
+      expect(parseFloat(floatingRadius)).toBeGreaterThan(0);
+      expect(surfaceStyle.borderRadius).toBe(floatingRadius);
       expect(geometryStyle.boxShadow).toBe('none');
       expect(geometryStyle.contain).not.toContain('paint');
       expect(surface.dataset.floeSurface).toBe('floating');
