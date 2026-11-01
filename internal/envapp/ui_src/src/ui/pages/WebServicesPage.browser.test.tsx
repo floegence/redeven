@@ -239,7 +239,8 @@ describe('Web Services product interaction', () => {
 
   for (const mode of ['immediate', 'streamed'] as const) it(`dismisses ${mode} recovery success while keeping the service row`, async () => {
     const row = await executeRecovery(mode);
-    await expect.poll(() => row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Completed');
+    await expect.poll(() => row.querySelector('.web-service-status-trigger')?.getAttribute('aria-label')).toContain('Completed');
+    expect(row.querySelector('[data-testid="managed-operation-disclosure"]')).toBeNull();
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     expect(row.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
     expect((page.getByRole('button', { name: 'Example dashboard: Stop', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);
@@ -266,17 +267,17 @@ describe('Web Services product interaction', () => {
 
   it('retains a failed recovery result after closing the review drawer', async () => {
     const row = await executeRecovery('immediate', 'failed');
-    await expect.poll(() => row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Failed');
+    await expect.poll(() => row.querySelector('[data-testid="managed-service-status"]')?.textContent).toContain('Failed');
     await userEvent.keyboard('{Escape}');
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 2_200));
-    expect(row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Failed');
+    expect(row.querySelector('[data-testid="managed-service-status"]')?.textContent).toContain('Failed');
     expect((page.getByRole('button', { name: 'Example dashboard: Details and diagnostics', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('replaces a failed recovery with the next reviewed success and restores opening', async () => {
     const row = await executeRecovery('immediate', 'failed');
-    await expect.poll(() => row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Failed');
+    await expect.poll(() => row.querySelector('[data-testid="managed-service-status"]')?.textContent).toContain('Failed');
     await userEvent.keyboard('{Escape}');
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     const original = api.fetch.getMockImplementation()!;
@@ -348,8 +349,8 @@ describe('Web Services product interaction', () => {
     api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/operations') ? Promise.reject(new Error('The operation request was not accepted.')) : original(url, options));
     await mount();
     await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Stop', exact: true }));
-    await expect.poll(() => host.querySelector('[data-testid="managed-operation-terminal-icon"]')).toBeTruthy();
-    expect(host.querySelector('[data-managed-service-id="sample-running"] [data-testid="managed-service-status"]')?.textContent).toBe('Running');
+    await expect.poll(() => host.querySelector('[data-managed-service-id="sample-running"] [data-testid="managed-service-status"]')?.textContent).toBe('Stop · Failed');
+    expect(host.querySelector('[data-testid="managed-operation-disclosure"]')).toBeNull();
     await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('.web-service-status-trigger')!));
     await expect.poll(() => host.textContent).toContain('The request did not complete. Check the service before trying again.');
     expect(host.textContent).not.toContain('The operation request was not accepted.');
@@ -437,7 +438,8 @@ describe('Web Services product interaction', () => {
     expect(api.fetch.mock.calls.some(([url]) => String(url).endsWith('/cancel'))).toBe(false);
     stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ ...operation, state: 'failed', error_code: 'STOP_SCRIPT_FAILED' })}\n\n`));
     stream.close();
-    await expect.poll(() => host.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
+    await expect.poll(() => host.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Stop · Failed');
+    expect(host.querySelector('[data-testid="managed-operation-disclosure"]')).toBeNull();
   });
 
   it('keeps reviewed content intact during the sidebar exit', async () => {

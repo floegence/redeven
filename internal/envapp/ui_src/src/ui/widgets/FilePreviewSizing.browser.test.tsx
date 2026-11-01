@@ -233,7 +233,7 @@ it('refits inside the real floating window after resizing, maximizing and restor
   writeUIStorageJSON(floatingWindowStorageKey('file-preview'), { x: 40, y: 40, width: 900, height: 640 });
   mount(() => <FilePreviewSurface open onOpenChange={() => {}} item={{ id: 'fixture', name: 'geometry.pdf', path: '/geometry.pdf', type: 'file' }} descriptor={{ mode: 'pdf' }} bytes={createPreviewPDF([{ width: 600, height: 400 }])} />);
   await vi.waitFor(() => expect(document.querySelector('.file-preview-floating-window')).toBeTruthy());
-  const root = document.querySelector<HTMLElement>('.file-preview-floating-window')!;
+  const root = document.querySelector<HTMLElement>('.file-preview-floating-window')!.closest<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
   await renderedPDF(root);
   const viewport = root.querySelector<HTMLElement>('.pdf-preview-pane')!;
   const frame = root.querySelector<HTMLElement>('.pdf-preview-pane__page-frame')!;
@@ -243,7 +243,8 @@ it('refits inside the real floating window after resizing, maximizing and restor
     expect(viewport.clientHeight).toBe(viewport.parentElement!.clientHeight);
     assertContained(viewport, root.querySelector<HTMLElement>('.preview-zoom-controls')!);
   };
-  const handle = [...root.querySelectorAll<HTMLElement>('div')].find(el => el.classList.contains('cursor-nwse-resize') && el.classList.contains('bottom-0') && el.classList.contains('right-0'))!;
+  const handle = root.querySelector<HTMLElement>('[data-floe-floating-window-resize-handle="se"]')!;
+  expect(handle).not.toBeNull();
   const bounds = handle.getBoundingClientRect();
   Object.defineProperty(root, 'setPointerCapture', { configurable: true, value: () => {} });
   Object.defineProperty(root, 'releasePointerCapture', { configurable: true, value: () => {} });

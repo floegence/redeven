@@ -21,7 +21,7 @@ Ask Flower sets the published `FloatingWindow.maximizable` capability to false.
 
 When it cannot accommodate the preferred size, the window shrinks within that viewport.
 
-Other outside-click dismissal remains unchanged.
+Outside-click dismissal treats the published geometry wrapper and its resize handles as part of the launcher; resizing must never dismiss it. Other windows remain outside this boundary.
 
 # Boundaries
 

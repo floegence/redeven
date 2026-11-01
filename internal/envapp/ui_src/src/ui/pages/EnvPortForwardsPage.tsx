@@ -958,9 +958,10 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
 const managedOperationActive = (operation: ManagedOperation | null | undefined) => Boolean(operation && ['submitting', 'pending', 'running', 'cancelling'].includes(operation.state));
 
 function managedOperationActivityLabel(operation: ManagedOperation, i18n: WebServicesI18n): string {
+  const stage = ['failed', 'interrupted', 'cancelled'].includes(operation.state) ? operation.state : operation.stage;
   return operation.state === 'submitting'
     ? i18n.t('webServices.managed.operationStarting')
-    : `${managedActionLabel(operation.action, i18n)} · ${managedStageLabel(operation.stage, i18n)}`;
+    : `${managedActionLabel(operation.action, i18n)} · ${managedStageLabel(stage, i18n)}`;
 }
 
 function managedOperationStages(operation: ManagedOperation, deployment: ManagedDeployment): readonly string[] {

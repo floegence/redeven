@@ -1,7 +1,5 @@
 # Redeven OKF Update Log
 
-- 2026-10-29: Adopt Floret v7.93.0 for default bounded model images across ingress, typed media failures, MCP image retention and browser/native screenshot coordinate mapping.
-
 Recent pointers only; concepts own contracts/evidence and Git retains earlier entries.
 
 ## 2026-11-01
@@ -10,7 +8,7 @@ Recent pointers only; concepts own contracts/evidence and Git retains earlier en
 - Adopt published Floe split workspaces for [terminal placement](architecture/env-app-terminal-and-surface-composition.md): retained PTYs, docking, resize, mobile tabs and reload. Compact the [directory navigator](ui/terminal-session-groups.md) to one search/refresh row and single-line yellow-folder groups; terminal chrome follows its selected palette.
 
 - Bind [plugin recovery](architecture/redevplugin-surface-recovery.md) to the exact current installation through published ReDevPlugin 3.12.1. Reject obsolete startup/retry observations, preserve current sibling failures, and localize error reasons without technical instance IDs.
-- Condense repeated knowledge summaries and historical qualification detail below 900,000 characters, preserving active contracts, source links, failed results and scope limits. The primary agent performs this review under the user's explicit no-delegation instruction; Git retains earlier detail.
+- Condense OKF below 900,000 characters while preserving contracts, evidence and limitations. The primary agent reviews under the user's no-delegation instruction; Git retains history.
 
 - Keep [read confirmation](ui/flower-read-state.md) under the existing detail and presentation owners; remove the foreground readiness latch that could strand acknowledgements after navigation, and cover visibility/navigation races without polling or additional payloads.
 

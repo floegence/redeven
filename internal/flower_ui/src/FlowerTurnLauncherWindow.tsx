@@ -152,6 +152,8 @@ function isPointerInsideLauncher(event: PointerEvent): boolean {
   for (const node of path) {
     if (!(node instanceof Element)) continue;
     if (node.classList.contains('flower-turn-launcher-window')) return true;
+    if (node.matches('[data-floe-geometry-surface="floating-window"]')
+      && node.querySelector(':scope > .flower-turn-launcher-window')) return true;
     if (node.classList.contains('flower-turn-launcher-related-surface')) return true;
   }
 

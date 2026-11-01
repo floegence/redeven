@@ -24646,15 +24646,15 @@
         "title": "Ask Flower window boundaries",
         "type": "UI Contract"
       },
-      "body_length": 1495,
+      "body_length": 1632,
       "summary": "Redeven places Ask Flower in Activity, Workbench and Welcome beneath visible Shell/native chrome. Header/composer stay reachable during drag and resize; maximize and titlebar double-click are unavailable. Floe constrains shrinking viewports while retaining the same composer, draft and interaction state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Host boundary\nThe host adapter measures the visible Shell header's client-space bottom edge and takes the larger of that edge and the current Desktop titlebar safe area.\n\nThe host boundary and margin feed one published `viewportInsets` geometry path for anchored opening, centered opening, dragging, edge resizing, and viewport changes.\n\n## Controls and constrained space\nAsk Flower sets the published `FloatingWindow.maximizable` capability to false.\n\nWhen it cannot accommodate the preferred size, the window shrinks within that viewport.\n\nOther outside-click dismissal remains unchanged.",
-          "char_count": 593
+          "body": "## Host boundary\nThe host adapter measures the visible Shell header's client-space bottom edge and takes the larger of that edge and the current Desktop titlebar safe area.\n\nThe host boundary and margin feed one published `viewportInsets` geometry path for anchored opening, centered opening, dragging, edge resizing, and viewport changes.\n\n## Controls and constrained space\nAsk Flower sets the published `FloatingWindow.maximizable` capability to false.\n\nWhen it cannot accommodate the preferred size, the window shrinks within that viewport.\n\nOutside-click dismissal treats the published geometry wrapper and its resize handles as part of the launcher; resizing must never dismiss it. Other windows remain outside this boundary.",
+          "char_count": 730
         },
         {
           "id": "boundaries",
@@ -31550,5 +31550,5 @@
       ]
     }
   ],
-  "source_sha256": "81780e8df3ac5508c5ae2d05184568025d2cab43cf12ce95dc9d992feccd8491"
+  "source_sha256": "fb87cf63d84edc5e75daf674fc311ae334248a1c84c35d923b5fff534271f772"
 }

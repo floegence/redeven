@@ -96,6 +96,7 @@ describe('Ask Flower window bounds', () => {
     const resize = root.querySelector<HTMLElement>('[data-floe-floating-window-resize-handle="se"]')!;
     await movePointer(resize, root, 60, 40);
     expect(root.getBoundingClientRect().width).toBeGreaterThan(initial.width);
+    expect(onClose).not.toHaveBeenCalled();
     await userEvent.click(root.querySelector<HTMLElement>('[data-floe-floating-window-control="close"]')!);
     expect(onClose).toHaveBeenCalledOnce();
   });
