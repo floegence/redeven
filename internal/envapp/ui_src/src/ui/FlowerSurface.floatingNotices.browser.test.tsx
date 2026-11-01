@@ -53,7 +53,7 @@ it.each([1280, 390])('floats settings loading and recovery without resizing a ne
   await frames(); verifyGeometry();
 });
 
-it('keeps settings recovery floating and clickable above a collapsed companion', async () => {
+it('keeps settings recovery clickable inside the collapsed companion row', async () => {
   await page.viewport(800, 700);
   const loadSettings = vi.fn().mockRejectedValueOnce(new Error('Settings unavailable')).mockResolvedValue(settingsSnapshot());
   const root = renderSurfaceWithAdapterProps({ ...adapter(), loadSettings, loadModelDirectory: async () => withModelDirectoryFixture(settingsSnapshot()).model_directory! }, { presentation: 'companion', companionOpen: false, engaged: true });
@@ -64,7 +64,11 @@ it('keeps settings recovery floating and clickable above a collapsed companion',
   const notice = root.querySelector<HTMLElement>('.flower-settings-read-status')!;
   const retry = notice.querySelector<HTMLButtonElement>('button')!;
   const rect = retry.getBoundingClientRect();
-  expect(rect.bottom).toBeLessThanOrEqual(composer.getBoundingClientRect().top);
+  const bounds = composer.getBoundingClientRect();
+  expect(rect.top).toBeGreaterThanOrEqual(bounds.top);
+  expect(rect.bottom).toBeLessThanOrEqual(bounds.bottom);
+  expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+  expect(rect.right).toBeLessThanOrEqual(bounds.right);
   expect(retry.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))).toBe(true);
   expect(composer.getBoundingClientRect().height).toBe(32);
   retry.click();

@@ -11,6 +11,8 @@ One native Flower textarea serves collapsed entry and expanded composer, retaini
 
 # Contract
 
+Settings recovery stays inside the collapsed row, with a reachable Retry and unchanged height. It replaces compact summary copy until recovery; active Stop remains available. The published shell cannot clip recovery outside its bounds. Expanded recovery uses the existing floating notice stack.
+
 ## Retained editor and explicit entry
 The same ordinary editor moves between compact/detail presentations. Specialized decisions retain separate controls; input/approval/work priority follows [presence](flower-companion-presence.md), never converts a decision/status entry into an editor.
 

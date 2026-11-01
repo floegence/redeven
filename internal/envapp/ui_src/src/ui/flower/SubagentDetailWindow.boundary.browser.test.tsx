@@ -246,7 +246,9 @@ describe('Subagent detail window boundary', () => {
     await page.viewport(1440, 900);
     const { geometry, surface, open } = await mountWindow('dark');
     const titlebar = surface.querySelector<HTMLElement>("[data-floe-floating-window-titlebar='true']")!;
-    const resizeHandle = surface.querySelector<HTMLElement>("[data-floe-floating-window-resize-handle='se']")!;
+    const resizeHandle = geometry.querySelector<HTMLElement>("[data-floe-floating-window-resize-handle='se']")!;
+    expect(resizeHandle).not.toBeNull();
+    expect(surface.contains(resizeHandle)).toBe(false);
     const start = geometry.getBoundingClientRect();
     geometry.setPointerCapture = () => undefined;
     geometry.releasePointerCapture = () => undefined;

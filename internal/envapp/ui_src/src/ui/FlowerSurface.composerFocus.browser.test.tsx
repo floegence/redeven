@@ -8,7 +8,7 @@ import { adapter, renderSurface, renderSurfaceWithAdapterProps, waitFor } from '
 it.each([
   ['light', 'page'], ['dark', 'page'],
   ['light', 'companion'], ['dark', 'companion'],
-] as const)('keeps the %s %s composer appearance unchanged when focus moves', async (theme, presentation) => {
+] as const)('changes only the published focus border on the %s %s composer', async (theme, presentation) => {
   await page.viewport(1280, 900);
   const previousClass = document.documentElement.className;
   document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -40,14 +40,22 @@ it.each([
     };
   };
   const unfocused = appearance();
+  const focusProbe = document.createElement('span');
+  focusProbe.style.color = 'var(--floe-input-focus-color, var(--ring))';
+  composer.append(focusProbe);
+  const focusColor = getComputedStyle(focusProbe).color;
+  focusProbe.remove();
+  const focused = { ...unfocused, borders: unfocused.borders.map(border => ({ ...border, color: focusColor })) };
   for (let cycle = 0; cycle < 2; cycle += 1) {
     editor.focus();
     editor.setSelectionRange(2, 7);
     expect(document.activeElement).toBe(editor);
     await new Promise(resolve => requestAnimationFrame(resolve));
-    expect(appearance()).toEqual(unfocused);
+    const during = appearance();
+    expect({ ...during, borders: during.borders.map(({ width }) => width) })
+      .toEqual({ ...unfocused, borders: unfocused.borders.map(({ width }) => width) });
     await new Promise(resolve => setTimeout(resolve, 180));
-    expect(appearance()).toEqual(unfocused);
+    expect(appearance()).toEqual(focused);
     editor.blur();
     await new Promise(resolve => setTimeout(resolve, 180));
     expect(appearance()).toEqual(unfocused);
