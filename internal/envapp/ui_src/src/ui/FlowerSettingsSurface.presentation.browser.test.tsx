@@ -502,6 +502,10 @@ it.each([360, 1000])('scrolls large model catalogs within a %ipx dialog while ke
   const dialog = document.querySelector<HTMLElement>('.flower-model-selection-dialog')!;
   const list = dialog.querySelector<HTMLElement>('.flower-model-selection-list')!;
   const search = dialog.querySelector<HTMLInputElement>('input')!;
+  // Measure scrolling after the published dialog finishes its entrance motion.
+  await Promise.all(document.getAnimations()
+    .filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+    .map(animation => animation.finished));
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
   expect(dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(720);
