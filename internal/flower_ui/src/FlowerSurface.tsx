@@ -780,7 +780,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const transcriptVisible = () => props.transcriptVisible ?? true;
   const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && !threadDrawerPresent() && documentVisible();
-  const effectiveEngagement = () => foregroundEngagementRequested() && engagementBootstrapReady();
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY;
   const attachmentCopy = () => copy().attachments;
   const draftCoordinator = props.draftCoordinator;
@@ -1128,7 +1127,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [documentVisible, setDocumentVisible] = createSignal(
     typeof document === 'undefined' || document.visibilityState !== 'hidden',
   );
-  const [engagementBootstrapReady, setEngagementBootstrapReady] = createSignal(foregroundEngagementRequested());
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
   const [approvalQueueAnnouncement, setApprovalQueueAnnouncement] = createSignal('');
@@ -1174,7 +1172,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentInputCommand = (itemID: string) => subagentInputCommands()[subagentInputKey(itemID)];
 
   let threadLoadSequence = 0;
-  let engagementBootstrapSequence = 0;
   let threadsRefreshSequence = 0;
   let threadsReadController: AbortController | undefined;
   let flowerLiveReadyCount = 0;
@@ -1421,7 +1418,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       presentedSelectionTimer = undefined;
     }
   };
-  const readPresentationVisible = () => effectiveEngagement() && sidePanel() === 'chat'
+  const readPresentationVisible = () => foregroundEngagementRequested() && sidePanel() === 'chat'
     && !companionCollapsed() && !settingsDialogPresent();
   const schedulePresentedSelection = (threadID: string, sequence: number, contentRevision = threadCache().views.get(threadID)?.contentRevision ?? 0) => {
     const tid = trimString(threadID);
@@ -5068,7 +5065,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         closeSubagentOverlays();
         setSelectedThreadID('');
       }
-      if (effectiveEngagement() && selectedID && selectedSummary && selectedDetailCurrent) {
+      if (foregroundEngagementRequested() && selectedID && selectedSummary && selectedDetailCurrent) {
         void requestThreadDetail(selectedID, 'summary_update');
       }
       return true;
@@ -5228,41 +5225,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   createEffect(on(
     foregroundEngagementRequested,
-    (engaged, previouslyEngaged) => {
-      if (!engaged) {
-        engagementBootstrapSequence += 1;
-        setEngagementBootstrapReady(false);
-        cancelPresentedSelectionSchedule();
-        setPresentedSelection(null);
-        return;
-      }
-      if (previouslyEngaged) return;
+    (engaged) => {
+      if (!engaged) return;
+      // The selected detail loader and presentation boundary already own
+      // readiness. A foreground refresh must not leave a second global latch
+      // behind when selection, cancellation, or a failed read supersedes it.
       const threadID = trimString(selectedThreadID());
-      if (!threadID) {
-        setEngagementBootstrapReady(true);
-        return;
-      }
-      const sequence = threadLoadSequence;
-      const bootstrapSequence = ++engagementBootstrapSequence;
-      setEngagementBootstrapReady(false);
-      cancelPresentedSelectionSchedule();
-      setPresentedSelection(null);
-      untrack(() => {
-        void requestThreadDetail(
-          threadID,
-          'background_refresh',
-        ).then(() => {
-            if (
-              bootstrapSequence !== engagementBootstrapSequence
-              || !foregroundEngagementRequested()
-              || sequence !== threadLoadSequence
-              || selectedThreadID() !== threadID
-              || !!threadLoadError()
-            ) return;
-            setEngagementBootstrapReady(true);
-            schedulePresentedSelection(threadID, sequence);
-          });
-      });
+      if (threadID) untrack(() => { void requestThreadDetail(threadID, 'background_refresh'); });
     },
     { defer: true },
   ));
@@ -6928,7 +6897,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     threadsRefreshSequence += 1;
     threadsReadController?.abort();
     threadsRefreshRequest = null;
-    if (retiringSelected) engagementBootstrapSequence += 1;
 
     detailLoader.forget(tid);
     setThreadDetailLoading(tid, false);

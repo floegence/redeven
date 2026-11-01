@@ -128,6 +128,75 @@ describe('Flower workspace stream visibility', () => {
     expect(markThreadRead).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['reselect', 'cached', 'cold'] as const)('acknowledges after foreground recovery is superseded by %s selection', async destination => {
+    const first = thread({ thread_id: 'foreground-first', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
+    const second = thread({ thread_id: 'foreground-second', updated_at_ms: 9, status: 'success', read_status: readStatus(true, 9) });
+    const markThreadRead = vi.fn(async (_id: string, snapshot: { activity_revision: number }) => readStatus(false, snapshot.activity_revision));
+    const loadThread = vi.fn(async (id: string) => liveBootstrap(id === first.thread_id ? first : second, id === first.thread_id ? 7 : 9));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [first, second]), loadThread, markThreadRead });
+    const select = (id: string) => (runtime.querySelector('[data-thread-id="' + id + '"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="foreground-first"] button')));
+    // Hidden cached content has never been presented or acknowledged.
+    setDocumentVisible(false);
+    if (destination === 'cached') {
+      select(second.thread_id);
+      await waitFor(() => loadThread.mock.calls.some(call => call[0] === second.thread_id));
+      await wait(40);
+    }
+    select(first.thread_id);
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === first.thread_id);
+    await wait(40);
+    expect(markThreadRead).not.toHaveBeenCalled();
+    const readsBefore = loadThread.mock.calls.length;
+    // The foreground callback awaits a resolved cache read. A selection in the
+    // same task retires that callback before its promise continuation runs.
+    setDocumentVisible(true);
+    const selected = destination === 'reselect' ? first : second;
+    select(selected.thread_id);
+    await waitFor(() => markThreadRead.mock.calls.some(call => call[0] === selected.thread_id));
+    expect(runtime.querySelector('[data-thread-id="' + selected.thread_id + '"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
+    expect(markThreadRead.mock.calls.map(call => call[0])).toEqual([selected.thread_id]);
+    expect(loadThread.mock.calls.length - readsBefore).toBeLessThanOrEqual(1);
+    const readsAfterPresentation = loadThread.mock.calls.length;
+    select(selected.thread_id);
+    await wait(40);
+    expect(markThreadRead).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalledTimes(readsAfterPresentation);
+  });
+
+  it.each(['late', 'failed'] as const)('does not let a %s foreground refresh own later presentation', async outcome => {
+    const first = thread({ thread_id: 'refresh-first', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
+    const newer = { ...first, updated_at_ms: 8, read_status: readStatus(true, 8) };
+    const second = thread({ thread_id: 'refresh-second', updated_at_ms: 9, status: 'success', read_status: readStatus(true, 9) });
+    const refresh = deferred<ReturnType<typeof liveBootstrap>>();
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [first, second] }]);
+    const markThreadRead = vi.fn(async (_id: string, snapshot: { activity_revision: number }) => readStatus(false, snapshot.activity_revision));
+    const loadThread = vi.fn().mockResolvedValueOnce(liveBootstrap(first, 7))
+      .mockImplementation((id: string) => id === first.thread_id ? refresh.promise : Promise.resolve(liveBootstrap(second, 9)));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), keepLiveWhenHidden: true, listThreads: vi.fn(async () => [first, second]), loadThread, markThreadRead, connectLiveStream: stream.connect });
+    const select = (id: string) => (runtime.querySelector('[data-thread-id="' + id + '"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="refresh-first"] button')));
+    select(first.thread_id);
+    await waitFor(() => markThreadRead.mock.calls.length === 1);
+    setDocumentVisible(false);
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [newer] });
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    setDocumentVisible(true);
+    if (outcome === 'failed') {
+      refresh.reject(new Error('foreground refresh failed'));
+      await wait(40);
+      expect(markThreadRead).toHaveBeenCalledTimes(1);
+    }
+    select(second.thread_id);
+    await waitFor(() => markThreadRead.mock.calls.some(call => call[0] === second.thread_id));
+    if (outcome === 'late') refresh.resolve(liveBootstrap(newer, 8));
+    await wait(40);
+    expect(markThreadRead.mock.calls.map(call => [call[0], call[1].activity_revision])).toEqual([[first.thread_id, 7], [second.thread_id, 9]]);
+    expect(loadThread).toHaveBeenCalledTimes(3);
+    expect(runtime.querySelector('[data-thread-id="refresh-first"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('true');
+    expect(runtime.querySelector('[data-thread-id="refresh-second"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
+  });
+
   it('retains a late confirmation after selection changes and ignores an older list', async () => {
     const first = thread({ thread_id: 'read-late-first', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
     const other = thread({ thread_id: 'read-late-other', title: 'Other conversation' });

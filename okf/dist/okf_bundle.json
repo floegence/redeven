@@ -28345,7 +28345,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-23",
+        "reviewed_at": "2026-11-01",
         "tags": [
           "flower",
           "read-state",
@@ -28355,15 +28355,15 @@
         "title": "Flower read state",
         "type": "UI Contract"
       },
-      "body_length": 1490,
+      "body_length": 2661,
       "summary": "Redeven owns per-user read confirmation. Unread indicators compare current activity with server confirmation and actual local presentation. Old responses never restore a dot for an already read version; new unseen activity remains unread. Temporary synchronization failures recover silently in the background, without blocking any user operation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Flower read state is a Redeven-owned per-user activity watermark. A separate loaded-content revision prevents metadata or private confirmations from qualifying stale body content as current.\n\nNo storage format or historical watermark is reset.\n\nNeither a detail response nor a hidden measuring transcript qualifies as\npresentation. Selection telemetry and read acknowledgement wait until the\n[destination presentation boundary](flower-thread-selection.md) releases its\nprepared viewport, then retain the existing visible-document and content-revision\nchecks.",
-          "char_count": 558
+          "body": "Flower read state is a Redeven-owned per-user activity watermark. A separate loaded-content revision prevents metadata or private confirmations from qualifying stale body content as current.\n\nNo storage format or historical watermark is reset.\n\nNeither a detail response nor a hidden measuring transcript qualifies as\npresentation. Selection telemetry and read acknowledgement wait until the\n[destination presentation boundary](flower-thread-selection.md) releases its\nprepared viewport, then retain the existing visible-document and content-revision\nchecks.\n\nForeground visibility is an input, not a second asynchronous readiness lifecycle.\nThe selected detail loader and destination presentation boundary own readiness;\nreturning to the foreground only requests their existing coalesced refresh.\nNavigation, reselect, canceled reads and failed refreshes must not strand a\nsurface-wide readiness flag or prevent another presented thread from confirming\nits content revision. Hidden, covered, loading and failed content remains\nunacknowledged through the presentation checks themselves.\n\nThis boundary adds no polling, detail payload, list refresh, or backend storage.\nAcknowledgements retain one in-flight request per thread, monotonic confirmation\nand the existing retry policy. Repeated presentation of the same confirmed\nrevision sends no additional acknowledgement.",
+          "char_count": 1370
         },
         {
           "id": "boundaries",
@@ -31735,5 +31735,5 @@
       ]
     }
   ],
-  "source_sha256": "40e15bc3cfcf50c74723bda35047980027507fddcdfcb602c6d9f63a7b90f51c"
+  "source_sha256": "ac082b62697667410ea90e2cb62bc08c0427fa3f07d94a2faa8d456a94bbbde3"
 }

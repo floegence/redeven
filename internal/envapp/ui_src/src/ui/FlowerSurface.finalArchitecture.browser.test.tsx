@@ -2,6 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import { page, userEvent } from 'vitest/browser';
 
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
@@ -223,6 +224,40 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('[data-flower-effect-retry]')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
+  it.each(['reselect', 'cached', 'cold'] as const)('confirms visible content after foreground reentry and %s navigation', async destination => {
+    const first = thread({ thread_id: 'foreground-browser-first', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
+    const second = thread({ thread_id: 'foreground-browser-second', updated_at_ms: 9, status: 'success', read_status: readStatus(true, 9) });
+    const [engaged, setEngaged] = createSignal(false);
+    const loadThread = vi.fn(async (id: string) => liveBootstrap(id === first.thread_id ? first : second, id === first.thread_id ? 7 : 9));
+    const markThreadRead = vi.fn(async (_id: string, snapshot: { activity_revision: number }) => readStatus(false, snapshot.activity_revision));
+    const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [first, second]), loadThread, markThreadRead }, { get engaged() { return engaged(); } });
+    const select = (id: string) => (runtime.querySelector('[data-thread-id="' + id + '"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="foreground-browser-first"] button')));
+    if (destination === 'cached') {
+      select(second.thread_id);
+      await waitFor(() => loadThread.mock.calls.some(call => call[0] === second.thread_id));
+      await wait(80);
+    }
+    select(first.thread_id);
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === first.thread_id);
+    await wait(80);
+    expect(markThreadRead).not.toHaveBeenCalled();
+    const before = loadThread.mock.calls.length;
+    setEngaged(true);
+    const selected = destination === 'reselect' ? first : second;
+    select(selected.thread_id);
+    await waitFor(() => markThreadRead.mock.calls.some(call => call[0] === selected.thread_id));
+    expect(runtime.querySelector('[data-thread-id="' + selected.thread_id + '"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
+    expect(runtime.querySelector('.flower-chat-transcript')?.clientHeight).toBeGreaterThan(0);
+    expect(markThreadRead.mock.calls.map(call => call[0])).toEqual([selected.thread_id]);
+    expect(loadThread.mock.calls.length - before).toBeLessThanOrEqual(1);
+    const after = loadThread.mock.calls.length;
+    select(selected.thread_id);
+    await wait(80);
+    expect(markThreadRead).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalledTimes(after);
   });
 
   it('coalesces live read revisions while one acknowledgement is in flight', async () => {

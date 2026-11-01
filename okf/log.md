@@ -4,6 +4,10 @@
 
 Recent pointers only; concepts own contracts/evidence and Git retains earlier entries.
 
+## 2026-11-01
+
+- Keep [read confirmation](ui/flower-read-state.md) under the existing detail and presentation owners; remove the foreground readiness latch that could strand acknowledgements after navigation, and cover visibility/navigation races without polling or additional payloads.
+
 ## 2026-10-31
 
 - Keep [terminal details](ui/flower-terminal-activity.md) atomic across summary updates and isolate optional read failures. Refine [sync recovery](ui/flower-live-timeline.md) as a compact floating notice with bounded, read-only recovery and stable interaction geometry.
