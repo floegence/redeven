@@ -96,8 +96,9 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       const state = reads.get(key)?.state;
       return state === 'queued' || state === 'waiting' ? 'loading' : state;
     },
-    request(key: string, identity: object | string, signal: AbortSignal, read: BodyRead['read'], priority: ActivityReadPriority = 'visible') {
-      if (signal.aborted) return;
+    request(key: string, identity: object | string, signal: AbortSignal | readonly AbortSignal[], read: BodyRead['read'], priority: ActivityReadPriority = 'visible') {
+      const signals: readonly AbortSignal[] = Array.isArray(signal) ? signal : [signal as AbortSignal];
+      if (signals.some(value => value.aborted)) return;
       const previous = reads.get(key);
       if (previous?.identity === identity) {
         if (priorities[priority] > priorities[previous.priority]) previous.priority = priority;
@@ -105,7 +106,10 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       }
       if (previous) remove(key, previous);
       const controller = new AbortController();
-      const ownedSignal = AbortSignal.any([signal, controller.signal]);
+      // Growth notifications reuse this owner. Compose only after admission so
+      // one long-lived navigation signal does not collect thousands of unused
+      // dependent signals before cancellation.
+      const ownedSignal = AbortSignal.any([...signals, controller.signal]);
       const entry: BodyRead = { identity, signal: ownedSignal, controller, read, priority, queuedAt: dispatches, state: 'queued', failures: 0, recoverable: false, cancel: () => { remove(key, entry); pump(); } };
       reads.set(key, entry);
       ownedSignal.addEventListener('abort', entry.cancel, { once: true });

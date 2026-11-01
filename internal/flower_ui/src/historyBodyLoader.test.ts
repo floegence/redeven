@@ -6,6 +6,33 @@ afterEach(() => vi.useRealTimers());
 const settle = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); };
 
 describe('history body request ownership', () => {
+  it('composes cancellation only when admitting a read and observes both owners', async () => {
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const navigation = new AbortController(), visible = new AbortController();
+    const compose = vi.spyOn(AbortSignal, 'any');
+    let finish!: () => void;
+    const read = vi.fn((signal: AbortSignal) => new Promise<void>(resolve => {
+      finish = resolve;
+      signal.addEventListener('abort', () => resolve(), { once: true });
+    }));
+    try {
+      loader.request('item', 'source', [navigation.signal, visible.signal], read);
+      await settle();
+      const compositions = compose.mock.calls.length;
+      for (let i = 0; i < 2000; i++) loader.request('item', 'source', [navigation.signal, visible.signal], read);
+      expect(compose.mock.calls.length).toBe(compositions);
+      expect(read).toHaveBeenCalledOnce();
+      visible.abort(); await settle();
+      expect(read.mock.calls[0][0].aborted).toBe(true);
+      expect(loader.state('item')).toBeUndefined();
+      const second = new AbortController();
+      loader.request('item', 'next-source', [navigation.signal, second.signal], read);
+      await settle(); navigation.abort(); await settle();
+      expect(read.mock.calls[1][0].aborted).toBe(true);
+      expect(loader.state('item')).toBeUndefined();
+    } finally { finish?.(); loader.dispose(); compose.mockRestore(); }
+  });
+
   it('waits for a new source without polling or blocking other visible reads', async () => {
     vi.useFakeTimers();
     const loader = createHistoryBodyLoader(() => 'timeout');

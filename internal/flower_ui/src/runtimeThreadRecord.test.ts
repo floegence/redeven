@@ -21,6 +21,24 @@ function append(base = 1, text = '!', offset = 10): FlowerRuntimeUpdate {
 }
 
 describe('runtime item records', () => {
+  it('refreshes and clears the matching running tool argument preview', () => {
+    const { current, initial } = fixture();
+    const tool = { id: 'tool', kind: 'tool' as const, ordinal: 2, turn_id: 'turn', run_id: 'run',
+      activity: { item_id: 'tool', tool_id: 'call', tool_name: 'write', kind: 'tool', status: 'running', severity: 'normal' } };
+    const view = { ...current, items: [...current.items!, tool] };
+    const record = createRuntimeThreadRecord(view, applyFlowerRuntimeCurrentView(initial, view));
+    const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
+      attempt_id: 'attempt', attempt_epoch: 1, call_id: 'call', name: 'write', arguments_complete: false, preview: { additions: 2 } };
+    const update = { ...append(), items: [], tool_call_previews: { value: [call] } };
+    record.apply(record.initializeThread(), update);
+    expect(record.initializeThread().messages.at(-1)?.blocks?.[0]).toMatchObject({ type: 'activity-timeline', items: [{ argument_preview: { additions: 2 } }] });
+    record.apply(record.initializeThread(), { ...update, base_version: 2, view_version: 3, tool_call_previews: { value: [] } });
+    const block = record.initializeThread().messages.at(-1)?.blocks?.[0];
+    expect(block?.type).toBe('activity-timeline');
+    if (block?.type === 'activity-timeline') expect(block.items[0].argument_preview).toBeUndefined();
+    expect(record.initializeThread().messages).toHaveLength(2);
+  });
+
   it('accepts canonical pages without replacing live facts or scanning archives on text append', () => {
     const { initial, record } = fixture();
     const anchor = record.item('one')!;

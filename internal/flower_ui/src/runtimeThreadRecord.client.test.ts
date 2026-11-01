@@ -134,6 +134,32 @@ it('updates a preview subscriber without rebuilding completed tools or the timel
   } finally { dispose(); }
 }));
 
+it('does not reproject completed tools when unrelated argument previews arrive or leave', () => createRoot(dispose => {
+  try {
+    let activityReads = 0;
+    const items = Array.from({ length: 600 }, (_, index) => ({ id: 'done-' + index, kind: 'tool' as const, ordinal: index, turn_id: 'turn', run_id: 'run',
+      activity: { item_id: 'done-' + index, tool_id: 'done-' + index, tool_name: 'read', kind: 'tool' as const,
+        get status() { activityReads++; return 'success' as const; }, severity: 'normal' as const } }));
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, tool_call_previews: [], items };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread();
+    const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
+      attempt_id: 'attempt', attempt_epoch: 1, call_id: 'new-call', name: 'write', arguments_complete: false, preview: { additions: 1 } };
+    activityReads = 0;
+    record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 1, view_version: 2,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, tool_call_previews: { value: [call] } });
+    expect(thread.messages.at(-1)?.blocks?.[0]).toMatchObject({ type: 'tool-call-preview', call });
+    record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 2, view_version: 3,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, tool_call_previews: { value: [] } });
+    expect(thread.messages).toHaveLength(600);
+    expect(activityReads).toBe(0);
+  } finally { dispose(); }
+}));
+
 it('keeps thinking text growth local to its content subscriber', () => createRoot(dispose => {
   try {
     const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run', run_progress: { phase: 'streaming' },
@@ -213,6 +239,31 @@ it('reads structural presentation values shallowly without changing ordinary inp
     record.syncMetadata({ ...thread, title: 'Updated' });
     expect(readPresentationValue(thread).title).toBe('Updated');
     expect(runs).toBe(1);
+  } finally { dispose(); }
+}));
+
+it('retains timeline membership for identical replacements and empty preview boundaries', () => createRoot(dispose => {
+  try {
+    const items = Array.from({ length: 600 }, (_, index) => ({ id: 'item-' + index, kind: 'thinking' as const,
+      ordinal: index + 1, turn_id: 'turn', run_id: 'run', text: 'Completed reasoning', live: false }));
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, interactions: [], queue: [], turns: [], tool_call_previews: [], items };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread();
+    const original = thread.messages;
+    const timeline = createFlowerTimelineProjection();
+    let projections = 0;
+    createComputed(() => { timeline(thread); projections++; });
+    for (let version = 2; version <= 5; version++) record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run',
+      base_version: version - 1, view_version: version,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'replace', item_id: items[0].id, item: { ...items[0] } }], tool_call_previews: { value: [] } });
+    expect(thread.messages).toBe(original);
+    expect(projections).toBe(1);
+    expect(record.version).toBe(5);
   } finally { dispose(); }
 }));
 

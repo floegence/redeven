@@ -4189,7 +4189,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const loadHistoryItem = (threadID: string, itemID: string, visibleSignal?: AbortSignal, viewportScope?: FlowerScrollTailController, priority?: ActivityReadPriority) => {
     const initial = threadCache().runtimeItem(threadID, itemID);
     if (!initial || (!initial.body && !initial.activity_bodies?.length) || !props.adapter.loadHistoryItem) return;
-    const signal = visibleSignal ? AbortSignal.any([navigationReadController.signal, visibleSignal]) : navigationReadController.signal;
+    const signal = visibleSignal ? [navigationReadController.signal, visibleSignal] : navigationReadController.signal;
     const epoch = liveTransport.connectionEpoch();
     const identity = initial.body ? JSON.stringify([initial.turn_id, initial.run_id, initial.body.run_id, initial.body.source_id, initial.body.entry_id, initial.body.field]) : initial;
     historyBodies.request(historyBodyKey(threadID, itemID), identity, signal, async readSignal => {

@@ -386,6 +386,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       const staged = new Map<string, ItemRecord | undefined>();
       const read = (id: string) => staged.has(id) ? staged.get(id) : items.get(id);
       let structure = false;
+      let replacedContent = false;
       for (const change of update.items ?? []) {
         const id = change.item_id;
         if (typeof id !== 'string' || !id.trim()) invalid('runtime change requires item identity');
@@ -414,7 +415,9 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           const item = change.item;
           if (!item || item.id !== id || change.append || (change.kind === 'add' ? Boolean(before) : !before)) invalid('runtime replacement has invalid item identity');
           if (!Number.isSafeInteger(item.ordinal) || item.ordinal < 0) invalid('runtime item requires an ordinal');
-          staged.set(id, retainBody(before, item) ?? { item, bytes: utf8.encode(item.text ?? '').length, retained: Boolean(item.live) });
+          const record = retainBody(before, item) ?? { item, bytes: utf8.encode(item.text ?? '').length, retained: Boolean(item.live) };
+          replacedContent ||= Boolean(before && retainEqualValue(before.item, record.item) !== before.item);
+          staged.set(id, record);
           structure ||= change.kind === 'add' || before?.item.ordinal !== item.ordinal;
         } else invalid('unknown runtime item change');
       }
@@ -456,7 +459,13 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       // Tool decoration depends on interactions and argument previews, never on
       // ordinary text growth. Revisit only tools at these explicit boundaries.
       if (update.interactions || update.tool_call_previews && !previewGrowth) {
-        for (const [id, record] of items) if (record.item.kind === 'tool') affected.add(id);
+        const previewCalls = new Set([...priorPreviews, ...nextPreviews].map(call =>
+          JSON.stringify([call.turn_id, call.run_id, call.call_id])));
+        for (const [id, record] of items) {
+          const item = record.item;
+          const callID = typeof item.activity?.tool_id === 'string' ? item.activity.tool_id.trim() : '';
+          if (item.kind === 'tool' && (update.interactions || previewCalls.has(JSON.stringify([item.turn_id?.trim(), item.run_id?.trim(), callID])))) affected.add(id);
+        }
       }
       const bodyOnly = new Set((update.items ?? []).filter(change => change.kind === 'body').map(change => change.item_id));
       for (const change of update.items ?? []) if (change.kind !== 'body') bodyOnly.delete(change.item_id);
@@ -522,10 +531,16 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           else makeMessage(message);
         }
         if (structure || update.item_order) {
-          projectedMessages = [...nextOrder.flatMap(id => messages.has(id) ? [messages.get(id)!.value] : []),
+          let membership: readonly FlowerChatMessage[] = [...nextOrder.flatMap(id => messages.has(id) ? [messages.get(id)!.value] : []),
             ...(previews ?? projectedMessages.filter(message => message.blocks?.[0]?.type === 'tool-call-preview')).flatMap(message => messages.has(message.id) ? [messages.get(message.id)!.value] : [])];
+          membership = withReadingMessages(membership);
+          // Protocol boundaries can replace an equal item or clear an already
+          // empty preview. Keep the mounted timeline when its ordered owners
+          // are unchanged; mutable message fields have their own subscribers.
+          if (replacedContent || membership.length !== projectedMessages.length || membership.some((message, index) => message !== projectedMessages[index])) {
+            projectedMessages = membership;
+          }
         }
-        if (structure || update.item_order) projectedMessages = withReadingMessages(projectedMessages);
         components = next; order = nextOrder; acceptedVersion = update.view_version;
         // Historical membership, metadata and turn boundaries do not depend on
         // text growth. Preserve their identities so an append neither sorts the
