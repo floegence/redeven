@@ -3,7 +3,7 @@ type: Architecture Boundary
 title: ReDevPlugin Redeven adapters
 tags: [architecture, plugins, adapters, ui]
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -15,6 +15,30 @@ Redeven owns only the adapters that bind authenticated product sessions, source 
 Redeven constructs the released Host with explicit core, official-release, runtime, connectivity, secrets, capability, and external-package modules. Redeven supplies session, authorization, web-security, trust, official release-source, observability, secret, external source, and business adapters; it never edits registry, inspection, token, lease, revoke-epoch, or plugin-data state directly.
 
 The official signed-release module remains the stricter release-ref path.
+
+## Network adapter
+
+The product-owned hostnetwork package implements current host routing without
+network I/O in its constructor. HTTP_PROXY, HTTPS_PROXY and ALL_PROXY use explicit
+upper/lowercase environment settings, including explicit empty values for direct
+routing; NO_PROXY is evaluated with the standard hostname/IP/CIDR matcher. On
+macOS, requests without applicable environment policy use CFNetwork system
+settings and bounded cancellable PAC resolution. Linux uses environment proxies
+or normal OS routing. Remote Runtimes use their own host network environment.
+
+The adapter respects the ordered configured routes. A bodyless GET/HEAD may try
+the next configured route only after a dial failure before an application
+connection exists. It never invents a direct fallback. TLS, protocol and unknown
+outcome errors do not change routes. Writes use fresh HTTP/1 connections and are
+not automatically replayed, including when the application supplies an idempotency
+header. Read and write requests share a bounded eight-request limit per transport;
+read pools retain at most two idle connections per origin for thirty seconds.
+
+Market services own their default transport. The plugin integration closes its
+caller-owned package transport on failure or shutdown. Each granted connector
+receives an independent transport managed by the upstream pool lifecycle. TLS
+verification and system trust roots remain enabled; proxy credentials stay on the
+proxy hop and never become origin or plugin credentials.
 
 ## Surfaces and interaction ownership
 The product Shell owns one released `PluginPlatformClient`, authenticated transport, and shared surface scope.

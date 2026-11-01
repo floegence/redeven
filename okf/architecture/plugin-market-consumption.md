@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin market consumption
 tags: [architecture, plugins, market, release]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -15,6 +15,15 @@ Redeven atomically refreshes the validated latest-only catalog from `https://plu
 - Keep one current release per plugin/channel. Disabled/revoked market entries constrain discovery/actions; upstream revocation evidence owns install/runtime admission.
 - Installed author/icon presentation must match its generation/identity; mismatches use a generic placeholder rather than newer copy/bytes.
 - Packages and signed trust transport come from GitHub Releases, never market Cloudflare storage. Installation/update requires normal product review and platform lifecycle; installation grants no permission/runtime access.
+
+## Network behavior
+
+The market client uses the same product network adapter as plugin package and
+release-document downloads. It follows current environment/system proxy policy
+and normal OS DNS/VPN routing. Startup remains cache-only; network errors affect
+refresh, detail or icon requests without blocking Runtime or changing verified
+installed state. The service releases only transports it creates; injected HTTP
+clients remain caller-owned.
 
 # Boundaries
 

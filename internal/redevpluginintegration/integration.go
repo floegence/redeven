@@ -2,6 +2,7 @@ package redevpluginintegration
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/hostnetwork"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redevplugin/v3/pkg/connectivity"
@@ -35,6 +37,7 @@ type Options struct {
 	Audit                *auditlog.Store
 	Diagnostics          *diagnostics.Store
 	RuntimeAuthority     *RuntimeProcessAuthority
+	// PluginMarket ownership transfers to New, including construction failure.
 	PluginMarket         *pluginmarket.Service
 	ResolveProcessSecret processruntime.SecretResolver
 }
@@ -65,6 +68,17 @@ type Integration struct {
 }
 
 func New(ctx context.Context, opts Options) (opened *Integration, err error) {
+	var closers []func() error
+	if opts.PluginMarket != nil {
+		closers = append(closers, opts.PluginMarket.Close)
+	}
+	// Own construction resources before validation, including panic unwinding.
+	defer func() {
+		if opened == nil {
+			_ = closeAll(closers)
+		}
+	}()
+
 	if ctx == nil {
 		return nil, errors.New("context is required")
 	}
@@ -104,14 +118,8 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 	}
 	root := stateAbs
 
-	var closers []func() error
-	// Keep all caller-owned resources scoped to construction, including panic
-	// unwinding to the product's plugin availability boundary.
-	defer func() {
-		if opened == nil {
-			_ = closeAll(closers)
-		}
-	}()
+	downloadTransport := hostnetwork.NewTransport(nil)
+	closers = append(closers, func() error { downloadTransport.CloseIdleConnections(); return nil })
 	var releaseModule *host.ReleaseModule
 	var releaseProvider *officialReleaseProvider
 	var marketSnapshot *pluginmarket.Snapshot
@@ -122,7 +130,7 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		}
 		closers = append(closers, releaseStage.Close)
 		releaseFetcher, releaseErr := externalsource.NewFetcher(externalsource.FetcherOptions{
-			Stage: releaseStage, SourceID: "redeven.official-release",
+			Stage: releaseStage, SourceID: "redeven.official-release", Transport: downloadTransport,
 		})
 		if releaseErr != nil {
 			return nil, releaseErr
@@ -183,7 +191,11 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		return nil, err
 	}
 	connectivityBroker := connectivity.NewMemoryBroker()
-	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
+	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{
+		HostHTTPTransport: func(_ connectivity.Destination, config *tls.Config) (connectivity.HTTPTransport, error) {
+			return hostnetwork.NewTransport(config), nil
+		},
+	})
 	processSupervisor, err := newProcessSupervisor(sessions, opts.ResolveProcessSecret)
 	if err != nil {
 		return nil, err
@@ -229,6 +241,7 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		ExternalPackage: &host.ExternalPackageModule{
 			SignatureAssessor: packageTrustVerifier,
 			SourceID:          "redeven.external-package",
+			Transport:         downloadTransport,
 			GitHub:            externalsource.GitHubRESTReleaseClientOptions{UserAgent: "Redeven"},
 		},
 	}

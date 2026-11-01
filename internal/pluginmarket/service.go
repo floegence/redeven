@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/floegence/redeven/internal/hostnetwork"
 )
 
 const (
@@ -44,6 +46,7 @@ type Service struct {
 	origin             *url.URL
 	cachePath          string
 	httpClient         *http.Client
+	closeIdle          func()
 	now                func() time.Time
 	redevenVersion     string
 	redevpluginVersion string
@@ -66,15 +69,18 @@ func NewService(options ServiceOptions) (*Service, error) {
 		return nil, errors.New("plugin market cache path is required")
 	}
 	client := options.HTTPClient
+	var closeIdle func()
 	if client == nil {
-		client = &http.Client{}
+		transport := hostnetwork.NewTransport(nil)
+		client = &http.Client{Transport: transport}
+		closeIdle = transport.CloseIdleConnections
 	}
 	now := options.Now
 	if now == nil {
 		now = time.Now
 	}
 	return &Service{
-		origin: origin, cachePath: cachePath, httpClient: client, now: now,
+		origin: origin, cachePath: cachePath, httpClient: client, now: now, closeIdle: closeIdle,
 		redevenVersion:     compatibilityVersion(options.RedevenVersion, "1.0.0"),
 		redevpluginVersion: compatibilityVersion(options.ReDevPluginVersion, "0.0.0"),
 	}, nil
@@ -449,4 +455,12 @@ func cloneLatestRelease(release *LatestRelease) *LatestRelease {
 		result.InstallPreview = &preview
 	}
 	return &result
+}
+
+// Close releases the connections owned by the service. Injected clients remain caller-owned.
+func (service *Service) Close() error {
+	if service != nil && service.closeIdle != nil {
+		service.closeIdle()
+	}
+	return nil
 }

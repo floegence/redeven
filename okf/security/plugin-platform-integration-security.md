@@ -4,7 +4,7 @@ title: Plugin platform integration security
 tags: [security, plugins, permissions, local-ui]
 quality_exception: Cross-domain plugin security contract spanning authenticated identity, package provenance, execution, updates, routes, runtime isolation, and capability authority.
 lifecycle: contract
-reviewed_at: "2026-10-30"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -38,6 +38,21 @@ Its actual trust badge remains unchanged; only verified catalog trust may receiv
 The retained release install/update path accepts only the exact source policy, revocation evidence, publisher, plugin, version, signed release metadata, package hashes, and Host requirement. Browser-supplied trust state, arbitrary package bytes, rollback, unknown publishers, invalid or revoked signatures, and invented fetch provenance are denied.
 
 Redeven does not add a new authorization workflow; the existing official release-ref verification remains unchanged.
+
+## Network routing and authorization
+
+A VPN, configured proxy or enterprise DNS answer is routing policy, not evidence
+that a user request is malicious. Host package downloads use normal host routing
+while retaining upstream source, redirect and integrity validation. Authorized
+HTTPS hostname connectors use the released host transport contract after grant
+checks. This does not grant undeclared destinations or methods, bypass private
+prefix bindings, or expose ambient host/session credentials.
+
+Proxy discovery failures, timeouts and TLS failures reject only the affected
+operation. Construction performs no network discovery, and plugin readiness does
+not gate core Runtime readiness. Certificate validation stays enabled. Proxy
+credentials apply only to the proxy hop; application writes with unknown outcomes
+are not retried automatically.
 
 ## Capability confirmation plans
 ReDevPlugin validates a capability preflight result against the Host-known capability response schema before it becomes a confirmation plan. Values in the reserved `redevplugin.capability.risk_plan.*` namespace must match the strict v1 risk-plan contract; an unknown or malformed reserved version fails closed instead of falling back to a generic object.

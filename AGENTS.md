@@ -44,7 +44,7 @@ Canonical repository rules. Keep this file within 100 lines, including headings 
 
 ## Ownership And Localization
 
-- Consume published upstream artifacts. Shared platform, UI, terminal, template-format, and Floret mechanics belong to their owning repositories; Redeven implements thin product adapters.
+- Consume published upstream artifacts; use the [ReDevPlugin host boundary](okf/architecture/redevplugin-boundary.md) for plugin integration. Shared platform, UI, terminal, template-format, and Floret mechanics belong to their owning repositories; Redeven implements thin product adapters.
 - Never add sibling source imports, Go `replace`, local package links, or copied upstream implementations. Temporary debugging workspaces/overlays must be untracked, task-owned, and removed before committing or formal validation against published releases with `GOWORK=off`.
 - Redeven migrates only its own databases, automatically before service readiness, through contiguous atomic verified migrations. Preserve released lineages and user records; reject unsupported inputs unchanged and keep upstream stores opaque.
 - Maintain repository content and commits in English; non-English belongs only to scoped localization resources, declared README translations, and language-sensitive fixtures.

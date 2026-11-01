@@ -4,7 +4,7 @@ title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
 quality_exception: Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.
 lifecycle: contract
-reviewed_at: "2026-10-31"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -36,6 +36,25 @@ A failed or panicked plugin generation binding grants no plugin authority and ca
 the host channel. Plugin request panics release their admission while the HTTP
 server contains the request failure. Platform storage remains opaque: isolation
 must not delete, rewrite or silently reauthorize incompatible plugin state.
+
+## Host network policy
+
+ReDevPlugin 3.12.0 separates host-selected routing from package verification and
+plugin network authority. Redeven supplies single-hop transports for market,
+package and release-document downloads. They follow explicit environment proxy
+settings, current macOS system proxy/PAC configuration, and OS DNS/VPN routing.
+VPN synthetic addresses, enterprise DNS and private package sources are not
+rejected merely for belonging to a non-public address range. The platform still
+validates each URL and redirect, exact allowed release origins, byte limits,
+cancellation, hashes and signatures. Downloads do not grant plugin execution.
+
+For granted HTTPS hostname connectors without explicit private-prefix binding,
+Redeven registers the released transport factory. The platform checks target,
+method, grant and revision before dispatch, and owns pool identity, quota and
+revocation. Explicit private-prefix connections, literal addresses and other
+protocols retain their released address-bound contract. Network configuration
+resolution happens only during requests, never during Runtime construction.
+Failures remain inside the plugin boundary.
 
 ## Retained package history
 

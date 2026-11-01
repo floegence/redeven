@@ -24,6 +24,7 @@ import (
 	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/v3/pkg/releasecontract"
 	"github.com/floegence/redevplugin/v3/pkg/releasetrust"
+	platformversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
 
 // TestLiveOfficialMarketReleaseInstallCompletes proves the product integration
@@ -61,7 +62,7 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	}
 	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
 		Origin: "https://plugins.redeven.com", CachePath: cachePath,
-		RedevenVersion: "1.0.0", ReDevPluginVersion: "3.0.31",
+		RedevenVersion: "1.0.0", ReDevPluginVersion: platformversion.CurrentPlatformVersion(),
 	})
 	if err != nil {
 		t.Fatal(err)
