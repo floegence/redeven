@@ -2765,6 +2765,7 @@ export function buildGatewaySourceRowModel(
 ): GatewaySourceRowModel {
   const needsResolution = desktopGatewayNeedsResolution(gateway.status);
   const runtimeStatus = gateway.service_state?.status;
+  const catalogFailed = ['pairing_failed', 'catalog_failed', 'gateway_unreachable'].includes(gateway.sync_state ?? '');
   const primaryAction = gatewaySourcePrimaryAction(gateway);
   const environmentCount = gateway.environments.length;
   return {
@@ -2779,6 +2780,8 @@ export function buildGatewaySourceRowModel(
         ? 'Update available'
         : runtimeStatus === 'needs_reinstall'
           ? 'Needs attention'
+        : catalogFailed
+          ? 'Needs attention'
         : runtimeStatus === 'ready' && gateway.status !== 'online'
           ? 'Service ready'
         : gateway.background_sync_running === true
@@ -2786,6 +2789,8 @@ export function buildGatewaySourceRowModel(
         : desktopGatewayStatusLabel(gateway.status),
     status_tone: gateway.local_enabled === false
       ? 'neutral'
+      : catalogFailed
+        ? 'warning'
       : gateway.status === 'online'
       ? 'success'
       : gateway.status === 'installing' || gateway.status === 'starting' || gateway.status === 'updating'

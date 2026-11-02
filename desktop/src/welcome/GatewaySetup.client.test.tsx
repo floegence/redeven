@@ -69,6 +69,22 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway product navigation', () => {
+  it('keeps catalog errors in the existing status area instead of appending a row', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    await mount({ ...source, connection_kind: 'local_host', status: 'error', sync_state: 'pairing_failed', environments: [],
+      last_sync_error_code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED',
+      service_state: { status: 'ready', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: true } });
+    button('Gateways').click(); await settle();
+    const card = document.querySelector('.redeven-gateway-card')!;
+    expect(card.querySelector('.redeven-gateway-card__empty')).toBeNull();
+    expect(card.querySelector('.redeven-gateway-card__status-row')?.textContent).not.toContain('Gateway service ready');
+    const help = card.querySelector<HTMLButtonElement>('.redeven-gateway-card__help')!;
+    help.click(); await settle();
+    const details = document.querySelector('[role="dialog"]')!;
+    expect(details.textContent).toContain('Gateway');
+    expect(card.contains(details)).toBe(false);
+  });
+
   it('uses a single client toolbar, illustrated navigation and disclosed identity', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host', endpoints: [], environments: [], identity_fingerprint: 'SHA256:gateway-fixture',

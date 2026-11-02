@@ -11373,8 +11373,6 @@ function GatewaySourceOwner(props: Readonly<{
   const [environmentsOpen, setEnvironmentsOpen] = createSignal(false);
   const environmentListID = createUniqueId();
   const [directoryHelpOpen, setDirectoryHelpOpen] = createSignal(false);
-  const directoryHelpID = createUniqueId();
-  const directoryHelpPresence = createFloatingPresence({ open: directoryHelpOpen, exitDurationMs: 160 });
   const PrimaryActionIcon = (iconProps: { class?: string }) => (
     <Show when={progressPresentation()} fallback={<GatewaySourceActionIcon intent={displayedPrimaryAction().intent} class={iconProps.class} />}>
       {presentation => renderProgressPresentationIcon(presentation())}
@@ -11382,6 +11380,10 @@ function GatewaySourceOwner(props: Readonly<{
   );
   const catalogReady = createMemo(() => props.gateway.sync_state === 'ready' || (props.gateway.last_synced_at_ms ?? 0) > 0);
   const catalogFailed = createMemo(() => ['gateway_unreachable', 'pairing_failed', 'catalog_failed'].includes(props.gateway.sync_state ?? ''));
+  const directoryDetail = () => props.i18n.t(!props.available ? 'gatewayWorkspace.accessChanged'
+    : props.gateway.last_sync_error_code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' ? 'gatewayAccess.protocolMismatch'
+    : catalogFailed() ? (row().environment_count > 0 ? 'gatewayAccess.environmentListStale' : 'gatewayAccess.unavailable')
+    : !catalogReady() ? 'gatewayAccess.directoryPending' : 'gatewayAccess.directoryIntro');
   const transportLabel = createMemo(() => props.i18n.t({
     url: 'connectionDialog.gatewayTransportUrl', local_host: 'gatewayAccess.localService',
     local_container: 'connectionDialog.localContainer', ssh_host: 'connectionDialog.gatewayTransportSshHost',
@@ -11995,7 +11997,7 @@ function GatewaySourceOwner(props: Readonly<{
   onCleanup(() => props.registerGatewayService(registeredGatewayID));
 
   function GatewaySourceCard() { return (
-    <section class="redeven-gateway-card" data-gateway-id={props.gateway.connection_id} aria-labelledby={gatewayHeadingID}><Show when={!props.available}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p></Show>
+    <section class="redeven-gateway-card" data-gateway-id={props.gateway.connection_id} aria-labelledby={gatewayHeadingID}>
       <div class="redeven-gateway-card__main">
         <div class="redeven-gateway-card__identity">
           <span class="redeven-gateway-card__mark" aria-hidden="true"><GatewayMark /></span>
@@ -12032,9 +12034,9 @@ function GatewaySourceOwner(props: Readonly<{
       </Show>
       <div class="redeven-gateway-card__statusbar">
         <div class="redeven-gateway-card__status-row">
-          <EnvironmentStatusIndicator tone={row().status_tone}>
-            {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
-          </EnvironmentStatusIndicator>
+          <span class="redeven-gateway-card__status" aria-live="polite"><EnvironmentStatusIndicator tone={props.available ? row().status_tone : 'warning'} title={directoryDetail()}>
+            {props.available ? localizedGatewaySourceStatusLabel(props.i18n, row().status_label) : props.i18n.t('progress.needsAttention')}
+          </EnvironmentStatusIndicator></span>
           <span class="redeven-gateway-card__trust">{trustLabel()}</span>
           <div class="redeven-gateway-card__directory">
             <div class="redeven-gateway-card__directory-row">
@@ -12047,10 +12049,13 @@ function GatewaySourceOwner(props: Readonly<{
                   <Show when={row().environment_count > 0}><ChevronRight class="redeven-gateway-card__disclosure h-3 w-3" /></Show>
                 </span>
               </button>
-              <button type="button" class="redeven-gateway-card__help"
-                aria-label={props.i18n.t('gatewayAccess.directoryHelpLabel')}
-                aria-expanded={directoryHelpOpen()} aria-controls={directoryHelpPresence.mounted() ? directoryHelpID : undefined}
-                onClick={() => setDirectoryHelpOpen(value => !value)}><HelpIcon class="h-3.5 w-3.5" /></button>
+              <DesktopActionPopover open={directoryHelpOpen()} onOpenChange={setDirectoryHelpOpen}
+                popoverAriaLabel={props.i18n.t('gatewayAccess.directoryHelpLabel')}
+                content={<div class="redeven-gateway-card__explanation"><p>{trustLabel()}</p><p>{directoryDetail()}</p><p>{props.i18n.t('gatewayAccess.directoryAccessHint')}</p></div>}>
+                <button type="button" class="redeven-gateway-card__help"
+                  aria-label={props.i18n.t('gatewayAccess.directoryHelpLabel')} aria-haspopup="dialog" aria-expanded={directoryHelpOpen()}
+                  onClick={() => setDirectoryHelpOpen(value => !value)}><Show when={!props.available || catalogFailed()} fallback={<HelpIcon class="h-3.5 w-3.5" />}><AlertTriangle class="h-3.5 w-3.5 text-warning" /></Show></button>
+              </DesktopActionPopover>
             </div>
           </div>
         </div>
@@ -12084,7 +12089,8 @@ function GatewaySourceOwner(props: Readonly<{
             )}
             icon={PrimaryActionIcon}
             aria-busy={progressPresentation()?.kind === 'progress_trigger' || primaryBusy()}
-            aria-label={progressPresentation()?.ariaLabel}
+            aria-label={progressPresentation()?.ariaLabel ?? primaryActionLabel()}
+            data-gateway-action={displayedPrimaryAction().intent}
             data-floe-progress-shimmer={progressPresentation()?.kind === 'progress_trigger' || primaryBusy() ? 'surface' : undefined}
             disabled={!props.available || !progressPresentation() && !displayedPrimaryAction().enabled && !primaryBlocked()}
             aria-disabled={!progressPresentation() && primaryBlocked() ? true : undefined}
@@ -12092,21 +12098,10 @@ function GatewaySourceOwner(props: Readonly<{
             aria-expanded={progressPresentation() || primaryHasGuide() ? props.actionPopoverOpen : undefined}
             onClick={runPrimaryAction}
           >
-            <span>{progressPresentation()?.label ?? primaryActionLabel()}</span>
+            <span class="redeven-gateway-card__primary-label">{progressPresentation()?.label ?? primaryActionLabel()}</span>
           </Button>
         </DesktopActionPopover>
-        <Show when={catalogFailed() || !catalogReady() && row().environment_count === 0}>
-          <p class="redeven-gateway-card__empty">{props.i18n.t(catalogFailed() ? (row().environment_count > 0 ? 'gatewayAccess.environmentListStale' : 'gatewayAccess.unavailable')
-            : 'gatewayAccess.directoryPending')}</p>
-        </Show>
       </div>
-      <Show when={directoryHelpPresence.mounted()}>
-        <div id={directoryHelpID} class="redeven-gateway-card__explanation" data-state={directoryHelpPresence.state()}
-          inert={directoryHelpPresence.exiting()} aria-hidden={directoryHelpPresence.exiting()}>
-          <p>{props.i18n.t('gatewayAccess.directoryIntro')}</p>
-          <p>{props.i18n.t('gatewayAccess.directoryAccessHint')}</p>
-        </div>
-      </Show>
       <EnvironmentSettingsReveal open={environmentsOpen() && row().environment_count > 0}>
         <div id={environmentListID} class="redeven-gateway-card__environments">
           <GatewayEnvironmentList i18n={props.i18n} environments={props.gatewayEntries} progress={props.actionProgress} revealProgress={() => props.onActionPopoverOpenChange(true)}

@@ -60,6 +60,26 @@ try {
         await card.waitFor();
         const query = page.getByRole('textbox', { name: i18n.t('environmentCenter.gatewaySearchPlaceholder'), exact: true });
         await query.fill('Office');
+        await settleVisuals(page);
+        const cardHeight = await card.evaluate(element => element.getBoundingClientRect().height);
+        for (const syncState of ['pairing_failed', 'catalog_failed', 'gateway_unreachable', 'syncing']) {
+          await page.evaluate(({ snapshot, syncState }) => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...snapshot.gateway_sources[0], status: 'error', sync_state: syncState,
+            last_sync_error_code: syncState === 'pairing_failed' ? 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' : '', background_sync_running: syncState === 'syncing' }] }), { snapshot, syncState });
+          await settleVisuals(page);
+          const height = await card.evaluate(element => element.getBoundingClientRect().height);
+          assert.ok(Math.abs(height - cardHeight) < 1, locale + '/' + width + '/' + syncState + ' keeps card height: ' + JSON.stringify({cardHeight, height}));
+          assert.equal(await card.locator('.redeven-gateway-card__empty').count(), 0);
+          assert.equal(await card.locator('.redeven-gateway-card__primary-button svg').isVisible(), true, 'Compact primary action retains its icon');
+        }
+        await page.evaluate(snapshot => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...snapshot.gateway_sources[0], status: 'error', sync_state: 'pairing_failed', last_sync_error_code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' }] }), snapshot);
+        await settleVisuals(page);
+        await page.screenshot({ path: output + '/' + locale + '-' + width + '-card-error.png' });
+        await card.locator('.redeven-gateway-card__help').click();
+        await page.getByRole('dialog', { name: i18n.t('gatewayAccess.directoryHelpLabel'), exact: true }).waitFor();
+        assert.ok(Math.abs(await card.evaluate(element => element.getBoundingClientRect().height) - cardHeight) < 1, 'Error details do not reflow the card');
+        await page.keyboard.press('Escape');
+        await page.getByRole('dialog').waitFor({state:'detached'});
+        await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), snapshot);
         await button(card, 'gatewayExperience.manage').click();
         const workspace = page.locator('[data-gateway-management-page]');
         const nav = workspace.locator('[data-gateway-management-nav]');

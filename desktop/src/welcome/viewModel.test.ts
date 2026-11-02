@@ -3892,6 +3892,15 @@ describe('Gateway view models', () => {
     }
   });
 
+  it('does not mask catalog failures with process readiness', () => {
+    for (const sync_state of ['pairing_failed', 'catalog_failed', 'gateway_unreachable'] as const) {
+      const row = buildGatewaySourceRowModel(gatewaySource({ status: 'error', sync_state,
+        service_state: { status: 'ready', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: true } }));
+      expect(row.status_label).toBe('Needs attention');
+      expect(row.status_tone).toBe('warning');
+    }
+  });
+
   it('projects disabled Gateway source rows as locally paused without contributing environments', () => {
     const row = buildGatewaySourceRowModel(gatewaySource({
       local_enabled: false,
