@@ -8,7 +8,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across view/layout changes. Visible panes paint independently; active session owns input/search/commands.
+Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across views. Visible panes paint independently; active session owns input/search/commands.
 
 # Contract
 
@@ -28,7 +28,7 @@ Pane chrome follows terminal foreground/background, never ANSI blue; sidebar fol
 
 ## View projection
 
-One environment-scoped provider serializes debounced saves with captured per-view base revisions. In-flight edits survive acknowledgment. Conflicts retain drafts with explicit reload/discard, never blind retries. Reconnect recovers loading; permission loss clears metadata. Layout edits wait for catalog readiness.
+One environment provider serializes debounced saves with captured per-view revisions. Edits survive acknowledgment; conflicts retain drafts for explicit reload/discard. One lifecycle resets scope/access before loading; unchanged permissions preserve readiness/drafts, and retired connections cannot publish. Layout edits wait for readiness.
 
 Active view stays local per panel. Legacy v1 local splits import once and clear after backend acknowledgment. Missing sessions disappear from rendering, never stored layouts; empty views offer session creation. Views do not restart PTYs.
 

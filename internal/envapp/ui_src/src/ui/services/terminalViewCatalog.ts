@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 import { isSplitWorkspaceLayout, splitWorkspaceItems, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1/contract';
 import type { TerminalView, TerminalViewSnapshot } from '../protocol/redeven_v1/sdk/terminalViews';
@@ -69,22 +69,33 @@ export function createTerminalViewCatalog(options: {
     } catch { if (!disposed && epoch === generation) setError('save'); }
     finally { if (!disposed && epoch === generation) setSaving(false); }
   };
-  createEffect(on(() => [options.scope(), options.enabled?.() !== false] as const, () => {
-    generation++; baseRevisions.clear(); setSnapshot({ revision: 0, views: [] }); setDrafts(new Map()); setReady(false); setSaving(false); setError(null);
-  }));
+  const scope = createMemo(options.scope);
+  const enabled = createMemo(() => options.enabled?.() !== false);
+  let previousScope: string | undefined;
+  let previousEnabled: boolean | undefined;
   createEffect(() => {
-    options.scope();
-    if (!options.connected() || options.enabled?.() === false) return;
+    const currentScope = scope();
+    const currentEnabled = enabled();
+    const connected = options.connected();
+    // Reset authority before starting its request in the same lifecycle owner.
+    // Independent effects can invalidate the newly issued request on hydration.
+    if (currentScope !== previousScope || currentEnabled !== previousEnabled) {
+      previousScope = currentScope;
+      previousEnabled = currentEnabled;
+      generation++; baseRevisions.clear(); setSnapshot({ revision: 0, views: [] }); setDrafts(new Map()); setReady(false); setSaving(false); setError(null);
+    }
+    if (!connected || !currentEnabled) return;
     const epoch = generation;
+    let active = true;
     void options.rpc.listViews().then(next => {
-      if (disposed || epoch !== generation) return;
+      if (!active || disposed || epoch !== generation) return;
       accept(next); setReady(true); setError(current => current === 'load' ? null : current);
-    }).catch(() => { if (!disposed && epoch === generation) setError(current => current === 'save' || drafts().size > 0 ? 'save' : 'load'); });
+    }).catch(() => { if (active && !disposed && epoch === generation) setError(current => current === 'save' || drafts().size > 0 ? 'save' : 'load'); });
     const unsubscribe = options.rpc.onViewsChanged(next => {
-      if (epoch !== generation) return;
+      if (!active || disposed || epoch !== generation) return;
       try { accept(next); } catch { setError(current => current === 'save' || drafts().size > 0 ? 'save' : 'load'); }
     });
-    onCleanup(unsubscribe);
+    onCleanup(() => { active = false; unsubscribe(); });
   });
   createEffect(() => {
     drafts(); saving(); error(); ready(); options.connected();

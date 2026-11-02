@@ -8,7 +8,7 @@ import { startRuntime, stopRuntime, readTLSServerSPKIHash, openEnvPage, selectSu
 const tempDir = await mkdtemp('/tmp/redeven-terminal-workspace-');
 const evidence = path.resolve('node_modules/.cache/terminal-workspace');
 await mkdir(evidence, { recursive: true });
-let runtime, browser, page;
+let runtime, browser, page, releasePermissions;
 const report = { status: 'running', checks: [] };
 try {
   runtime = await startRuntime(tempDir);
@@ -16,12 +16,24 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--ignore-certificate-errors-spki-list=' + spki] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 940 } });
   const entryURL = new URL('_redeven_proxy/env/', runtime.startup.local_ui_url).toString();
+  let permissionRequests = 0;
+  const permissionRefresh = new Promise(resolve => { releasePermissions = resolve; });
+  await context.route('**/api/local/environment', async route => {
+    permissionRequests++;
+    if (permissionRequests === 2) await permissionRefresh;
+    await route.continue();
+  });
   const opened = await openEnvPage(context, entryURL);
   page = opened.page;
   const { problems } = opened;
+  await expect.poll(() => permissionRequests).toBe(2);
+  releasePermissions();
+  await context.unrouteAll({ behavior: 'wait' });
   const panel = await selectSurface(page, 'panel');
   const created = await createSession(page, panel);
   const firstId = created.sessionID;
+  await expect(panel.getByRole('button', { name: 'New view', exact: true })).toBeEnabled();
+  report.checks.push('view catalog is ready after delayed permission hydration');
   await expect(panel.locator('.terminal-workspace-toolbar')).toHaveCount(0);
   await expect(panel.locator('[data-terminal-session-row] .absolute.left-0')).toHaveCount(0);
   assert.equal(await panel.locator('[data-terminal-session-avatar]').first().evaluate(node => window.getComputedStyle(node).borderRadius), '7px');
@@ -53,6 +65,16 @@ try {
   await panel.locator('[data-terminal-session-drag-handle="' + secondId + '"]').dragTo(groupSessions.first(), { targetPosition: { x: 90, y: 2 } });
   await expect(groupSessions.first()).toHaveAttribute('data-terminal-session-id', secondId);
   report.checks.push('catalog group creation, scoped sessions, cross-group moves and protected Default order');
+  const initialPane = panel.locator('[data-floe-split-pane="' + secondId + '"]');
+  const initialBounds = await initialPane.boundingBox();
+  await panel.locator('[data-terminal-session-id="' + firstId + '"]').dragTo(initialPane, {
+    sourcePosition: { x: 100, y: 16 }, targetPosition: { x: initialBounds.width - 4, y: initialBounds.height / 2 },
+  });
+  await expect(panel.locator('[data-floe-split-pane]:visible')).toHaveCount(2);
+  await expect(panel.locator('[data-terminal-view-id]')).toHaveCount(1);
+  await expect(panel.getByRole('status', { name: 'Saving views', exact: true })).toHaveCount(0);
+  report.checks.push('native sidebar dragging creates the first split and persists its view after permission hydration');
+
   await expect(panel.getByText('Quick switch', { exact: true })).toHaveCount(0);
   const sidebar = panel.locator('.redeven-terminal-session-sidebar');
   const sidebarHandle = panel.locator('[data-terminal-sidebar-resizer]');
@@ -208,6 +230,7 @@ try {
   throw error;
 }
 finally {
+  releasePermissions?.();
   await writeFile(path.join(evidence, 'report.json'), JSON.stringify(report, null, 2));
   await browser?.close(); if (runtime) await stopRuntime(runtime);
   await rm(tempDir, { recursive: true, force: true });

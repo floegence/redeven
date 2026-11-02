@@ -101,3 +101,66 @@ it('retains drafts when reload returns an invalid layout', async () => {
   await catalog.reload();
   expect(catalog.views()[0].name).toBe('Local'); expect(catalog.pending()).toBe(true);
 });
+
+it.each(['connection-first', 'permissions-first'])('preserves drafts across permission refreshes (%s)', async order => {
+  const [connected, setConnected] = createSignal(false);
+  const [permission, setPermission] = createSignal({ allowed: false });
+  const listViews = vi.fn(async () => ({ revision: 2, views: [view] }));
+  let catalog!: ReturnType<typeof createTerminalViewCatalog>;
+  dispose = render(() => { catalog = createTerminalViewCatalog({ scope: () => 'env', connected,
+    enabled: () => permission().allowed, rpc: {
+      listViews, putView: vi.fn().mockRejectedValue(new Error('conflict')), deleteView: vi.fn(), onViewsChanged: () => () => undefined,
+    },
+  }); return <div />; }, document.body);
+  expect(listViews).not.toHaveBeenCalled();
+  if (order === 'connection-first') { setConnected(true); setPermission({ allowed: true }); }
+  else { setPermission({ allowed: true }); setConnected(true); }
+  await expect.poll(catalog.ready).toBe(true);
+  catalog.put({ ...view, name: 'Local draft' });
+  setPermission({ allowed: true });
+  expect(catalog.ready()).toBe(true);
+  expect(catalog.pending()).toBe(true);
+  expect(catalog.views()[0].name).toBe('Local draft');
+  expect(listViews).toHaveBeenCalledTimes(1);
+});
+
+it('keeps reload ordered when scope and permission dependencies change together', async () => {
+  const [state, setState] = createSignal({ id: '', allowed: false, connected: false });
+  const listViews = vi.fn(async () => ({ revision: 2, views: [view] }));
+  let catalog!: ReturnType<typeof createTerminalViewCatalog>;
+  dispose = render(() => { catalog = createTerminalViewCatalog({ scope: () => state().id, connected: () => state().connected,
+    enabled: () => state().allowed, rpc: { listViews, putView: vi.fn(), deleteView: vi.fn(), onViewsChanged: () => () => undefined },
+  }); return <div />; }, document.body);
+  for (const [index, next] of [
+    { id: 'env', allowed: false, connected: false },
+    { id: 'env', allowed: false, connected: true },
+    { id: 'env', allowed: true, connected: true },
+    { id: 'env', allowed: true, connected: true },
+    { id: 'env', allowed: true, connected: false },
+    { id: 'env', allowed: true, connected: true },
+    { id: 'other', allowed: true, connected: true },
+  ].entries()) {
+    setState(next);
+    if (next.allowed && next.connected) await expect.poll(catalog.ready, { message: JSON.stringify({ index, ...next, calls: listViews.mock.calls.length }) }).toBe(true);
+    else await Promise.resolve();
+  }
+});
+
+it('ignores list responses and notifications from a retired connection', async () => {
+  const [connected, setConnected] = createSignal(true);
+  let resolveOld!: (snapshot: TerminalViewSnapshot) => void;
+  const handlers: Array<(snapshot: TerminalViewSnapshot) => void> = [];
+  const listViews = vi.fn().mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }))
+    .mockResolvedValue({ revision: 2, views: [view] });
+  let catalog!: ReturnType<typeof createTerminalViewCatalog>;
+  dispose = render(() => { catalog = createTerminalViewCatalog({ scope: () => 'env', connected, rpc: {
+    listViews, putView: vi.fn(), deleteView: vi.fn(),
+    onViewsChanged: handler => { handlers.push(handler); return () => undefined; },
+  } }); return <div />; }, document.body);
+  setConnected(false); setConnected(true);
+  await expect.poll(catalog.ready).toBe(true);
+  resolveOld({ revision: 5, views: [] });
+  handlers[0]({ revision: 6, views: [] });
+  await Promise.resolve();
+  expect(catalog.views()).toEqual([view]);
+});

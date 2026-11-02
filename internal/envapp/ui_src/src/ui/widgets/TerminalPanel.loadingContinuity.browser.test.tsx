@@ -10,6 +10,7 @@ const protocolState = vi.hoisted(() => ({
   client: (() => null) as () => object | null,
   status: (() => 'connected') as () => string,
 }));
+const envState = vi.hoisted(() => ({ allowed: (() => true) as () => boolean, id: (() => 'env-1') as () => string }));
 const rpcState = vi.hoisted(() => ({
   sessions: [] as any[],
   views: [] as any[],
@@ -41,11 +42,11 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => {
     const env = Object.assign(
-      () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
+      () => ({ permissions: { can_read: true, can_write: envState.allowed(), can_execute: envState.allowed() } }),
       { state: 'ready' },
     );
     return {
-      env_id: () => 'env-1',
+      env_id: () => envState.id(),
       env,
       viewMode: () => 'activity',
       setViewMode: vi.fn(),
@@ -227,6 +228,8 @@ describe('TerminalPanel loading continuity', () => {
     const [status] = createSignal('connected');
     protocolState.client = client;
     protocolState.status = status;
+    envState.allowed = () => true;
+    envState.id = () => 'env-1';
     layoutState.mobile = false;
     layoutState.active = () => true;
     rpcState.sessions = [];
@@ -331,6 +334,47 @@ describe('TerminalPanel loading continuity', () => {
     expect(host.querySelector('[data-terminal-runtime-session="dock-a"]')).toBe(original);
     expect(host.querySelector('.terminal-workspace-toolbar')).toBeNull();
     expect(host.querySelector('[data-floe-split-header]')!.getBoundingClientRect().top).toBe(host.querySelector('[data-terminal-work-area]')!.getBoundingClientRect().top);
+  });
+
+  it('docks sidebar sessions after connection precedes permission hydration and after reconnect', async () => {
+    await page.viewport(1280, 800);
+    const [environment, setEnvironment] = createSignal({ id: '', allowed: false, status: 'connecting' });
+    protocolState.status = () => environment().status;
+    envState.allowed = () => environment().allowed;
+    envState.id = () => environment().id;
+    rpcState.sessions = ['hydrate-a', 'hydrate-b', 'hydrate-c'].map(id => ({ ...createdSession(id), isActive: id === 'hydrate-a' }));
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '1100px', height: '700px' });
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    setEnvironment({ id: 'env-1', allowed: false, status: 'connecting' });
+    await Promise.resolve();
+    setEnvironment({ id: 'env-1', allowed: false, status: 'connected' });
+    await Promise.resolve();
+    setEnvironment({ id: 'env-1', allowed: true, status: 'connected' });
+    await expect.poll(() => runtimeState.propsBySession.has('hydrate-a')).toBe(true);
+    runtimeState.propsBySession.get('hydrate-a').onInteractive?.('hydrate-a');
+    setEnvironment({ id: 'env-1', allowed: true, status: 'connected' });
+    await Promise.resolve();
+    const original = host.querySelector('[data-terminal-runtime-session="hydrate-a"]');
+    const native = commands as unknown as { dragTerminalSessionToPane: (source: string, target: string, edge: string) => Promise<void> };
+    await native.dragTerminalSessionToPane('hydrate-b', 'hydrate-a', 'right');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    runtimeState.propsBySession.get('hydrate-b').onInteractive?.('hydrate-b');
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    const viewId = rpcState.views[0].id;
+    setEnvironment({ id: 'env-1', allowed: true, status: 'connected' });
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    expect(host.querySelector('[data-terminal-view-id="' + viewId + '"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[data-terminal-runtime-session="hydrate-a"]')).toBe(original);
+    setEnvironment({ id: 'env-1', allowed: true, status: 'reconnecting' });
+    setEnvironment({ id: 'env-1', allowed: true, status: 'connected' });
+    await Promise.resolve();
+    setEnvironment({ id: 'env-1', allowed: true, status: 'connected' });
+    await native.dragTerminalSessionToPane('hydrate-c', 'hydrate-b', 'bottom');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
+    await expect.poll(() => JSON.stringify(rpcState.views[0].layout)).toContain('hydrate-c');
+    expect(rpcState.views.map(view => view.id)).toEqual([viewId]);
   });
 
   it('supports native row dragging, center replacement, maximize docking and cancellation', async () => {

@@ -1488,7 +1488,7 @@
               "terminal",
               "ui"
             ],
-            "summary": "Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across view/layout changes. Visible panes paint independently; active session owns input/search/commands.",
+            "summary": "Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across views. Visible panes paint independently; active session owns input/search/commands.",
             "section_count": 2
           },
           {
@@ -12517,15 +12517,15 @@
         "title": "Env App terminal and surface composition",
         "type": "Frontend Contract"
       },
-      "body_length": 3157,
-      "summary": "Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across view/layout changes. Visible panes paint independently; active session owns input/search/commands.",
+      "body_length": 3169,
+      "summary": "Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across views. Visible panes paint independently; active session owns input/search/commands.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "File preview defaults to the main surface. Chunked history remains one atomic snapshot with canonical dimensions. Compound controls use Floe CSS.\n\n## Terminal workspace placement\n\nPublished SplitWorkspace owns splits, presets, docking, swaps and accessible resizing. Splitting creates a backend view; later placement edits update it. Users manage independent named views through thumbnails, rename/delete and creation above Directories.\n\nSelecting a member focuses it and restores maximized panes. Selecting an outside session shows it alone and deselects the view; only explicit view selection restores saved splits. Closing panes/deleting views preserves sessions. Explicit splitting creates a session in the target group at its verified local cwd or group startup directory; dragging places an existing session. Placement, membership and cwd remain independent.\n\nDesktop starts at pane headers, with preference-controlled Workbench activity indicators. Its footer retains presets, search, clear, settings and creation. Groups retain scoped creation; overlays keep toolbar/drawer controls. Maximize changes to restore.\n\nSplit creation/attachment never covers existing panes with global loading. Environment/view changes fence async placement. Mobile shows active-pane tabs without rewriting desktop trees. Maximize is transient; Alt+Shift+Left/Right cycles panes.\n\nPane chrome follows terminal foreground/background, never ANSI blue; sidebar follows shell tokens. Rounded session tiles use contrasting border/fill mixes. Idle hover uses pointer; only active drags show grabbing.\n\n## View projection\n\nOne environment-scoped provider serializes debounced saves with captured per-view base revisions. In-flight edits survive acknowledgment. Conflicts retain drafts with explicit reload/discard, never blind retries. Reconnect recovers loading; permission loss clears metadata. Layout edits wait for catalog readiness.\n\nActive view stays local per panel. Legacy v1 local splits import once and clear after backend acknowledgment. Missing sessions disappear from rendering, never stored layouts; empty views offer session creation. Views do not restart PTYs.",
-          "char_count": 2155
+          "body": "File preview defaults to the main surface. Chunked history remains one atomic snapshot with canonical dimensions. Compound controls use Floe CSS.\n\n## Terminal workspace placement\n\nPublished SplitWorkspace owns splits, presets, docking, swaps and accessible resizing. Splitting creates a backend view; later placement edits update it. Users manage independent named views through thumbnails, rename/delete and creation above Directories.\n\nSelecting a member focuses it and restores maximized panes. Selecting an outside session shows it alone and deselects the view; only explicit view selection restores saved splits. Closing panes/deleting views preserves sessions. Explicit splitting creates a session in the target group at its verified local cwd or group startup directory; dragging places an existing session. Placement, membership and cwd remain independent.\n\nDesktop starts at pane headers, with preference-controlled Workbench activity indicators. Its footer retains presets, search, clear, settings and creation. Groups retain scoped creation; overlays keep toolbar/drawer controls. Maximize changes to restore.\n\nSplit creation/attachment never covers existing panes with global loading. Environment/view changes fence async placement. Mobile shows active-pane tabs without rewriting desktop trees. Maximize is transient; Alt+Shift+Left/Right cycles panes.\n\nPane chrome follows terminal foreground/background, never ANSI blue; sidebar follows shell tokens. Rounded session tiles use contrasting border/fill mixes. Idle hover uses pointer; only active drags show grabbing.\n\n## View projection\n\nOne environment provider serializes debounced saves with captured per-view revisions. Edits survive acknowledgment; conflicts retain drafts for explicit reload/discard. One lifecycle resets scope/access before loading; unchanged permissions preserve readiness/drafts, and retired connections cannot publish. Layout edits wait for readiness.\n\nActive view stays local per panel. Legacy v1 local splits import once and clear after backend acknowledgment. Missing sessions disappear from rendering, never stored layouts; empty views offer session creation. Views do not restart PTYs.",
+          "char_count": 2181
         },
         {
           "id": "boundaries",
@@ -12535,7 +12535,7 @@
           "char_count": 343
         }
       ],
-      "snippet": "Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across view/layout changes. Visible panes paint independently; active sess",
+      "snippet": "Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across views. Visible panes paint independently; active session owns input",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -31530,5 +31530,5 @@
       ]
     }
   ],
-  "source_sha256": "1926e03e69694f9ce667fe8bee17ec28ded35e447766a3805fe552c98f056c9b"
+  "source_sha256": "c08ba2a51e71077d0ba5831f18a456fc27bfc13e6a06b55d313ac19a5378e009"
 }
