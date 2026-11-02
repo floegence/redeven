@@ -36,9 +36,9 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@floegence/floe-webapp-boot": "0.86.74",
-    "@floegence/floe-webapp-core": "0.86.74",
-    "@floegence/floe-webapp-protocol": "0.86.74",
+    "@floegence/floe-webapp-boot": "0.87.0",
+    "@floegence/floe-webapp-core": "0.87.0",
+    "@floegence/floe-webapp-protocol": "0.87.0",
     "@floegence/floebrowser": "0.1.28",
     "@floegence/floeterm-terminal-web": "0.19.2",
     "@floegence/flowersec-core": "5.11.1",
@@ -66,7 +66,8 @@
     "shiki": "^3.22.0",
     "solid-js": "^1.9.17",
     "solid-motionone": "^1.0.4",
-    "thinking-orbs": "0.3.1"
+    "thinking-orbs": "0.3.1",
+    "pele": "1.13.0"
   },
   "overrides": {
     "@floegence/flowersec-core": "5.11.1",

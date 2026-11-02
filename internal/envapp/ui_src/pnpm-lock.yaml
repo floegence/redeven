@@ -43,14 +43,14 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: 0.86.74
-        version: 0.86.74
+        specifier: 0.87.0
+        version: 0.87.0
       '@floegence/floe-webapp-core':
-        specifier: 0.86.74
-        version: 0.86.74(solid-js@1.9.17)
+        specifier: 0.87.0
+        version: 0.87.0(katex@0.18.10)(pele@1.13.0)(solid-js@1.9.17)
       '@floegence/floe-webapp-protocol':
-        specifier: 0.86.74
-        version: 0.86.74(solid-js@1.9.17)
+        specifier: 0.87.0
+        version: 0.87.0(solid-js@1.9.17)
       '@floegence/floebrowser':
         specifier: 0.1.28
         version: 0.1.28
@@ -117,6 +117,9 @@ importers:
       monaco-editor:
         specifier: ^0.57.0
         version: 0.57.0
+      pele:
+        specifier: 1.13.0
+        version: 1.13.0
       quickjs-emscripten:
         specifier: 0.32.0
         version: 0.32.0
@@ -573,18 +576,25 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-boot@0.86.74':
-    resolution: {integrity: sha512-h9n9C/9l4myLBnNn2KtoXR1eXtMPao6qNmjVIxtU6od2JzX0b+BHSDpYaTJfHXpBy1oCyoM4vvZEDW/BFMN/hQ==}
+  '@floegence/floe-webapp-boot@0.87.0':
+    resolution: {integrity: sha512-iY1r7mildIpK4EVTNelLfUA/YcvZ95n5CUQyw0lbMc493XoyXVFDWw2mGkcQbgr0Vi6UGsTVlWy0AJJxMV/3AA==}
     engines: {node: '>=24.20.0'}
 
-  '@floegence/floe-webapp-core@0.86.74':
-    resolution: {integrity: sha512-ssAChJd/mTspFNedw3EQWfeInaL6XgwQi3j+L/5NQeqKGWkukU/p9vvFLtFlpVBP1xF4XPcpeCZ2oIghwVZ1wg==}
+  '@floegence/floe-webapp-core@0.87.0':
+    resolution: {integrity: sha512-PPwSNPzyG5j7bF1MSycbwUJGJWWDb2dXBPM0X4yugdYMCaSPKIFf88qf4SjwxwMYzwi9ufGAlAkHM1NCe17vDg==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
+      katex: 0.18.10
+      pele: 1.13.0
       solid-js: ^1.9.17
+    peerDependenciesMeta:
+      katex:
+        optional: true
+      pele:
+        optional: true
 
-  '@floegence/floe-webapp-protocol@0.86.74':
-    resolution: {integrity: sha512-cyfloucbpgnqGCTzCbr8coPygtjLEdRmPut92dGbo2SGFcZNKU58AOrHaYkvLfq59YuispkISFffnCL+7mfoTg==}
+  '@floegence/floe-webapp-protocol@0.87.0':
+    resolution: {integrity: sha512-pb+rh18E7tsl4wMQn1h94e9XtLje5unp2tNrABbVXgkO1IOVMdVjdO8dO+IRajtr/dqczcTb4DrKdWLmKN0EEQ==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.9.17
@@ -2306,6 +2316,10 @@ packages:
     resolution: {integrity: sha512-ZHjSVpDa3D6izMq8/04lvkhkATUmL9px6ChPaXc1k6nU2Mrhlg1/7F0bdUqCwUjw3NsPTfPZsMDUU6ZIcRaeQw==}
     engines: {node: '>=22.13.0 || >=24'}
 
+  pele@1.13.0:
+    resolution: {integrity: sha512-Ie8UKY9x00MsuR3jO6AzUwzK2Z6MIV3Tf4EDdITiuk8Uaz8K7g0R082WqsqNaSU8DdgkrRvZThzhit83mi/uiw==}
+    engines: {node: '>=20'}
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -3130,7 +3144,7 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 2.4.0
 
-  '@floegence/floe-webapp-boot@0.86.74':
+  '@floegence/floe-webapp-boot@0.87.0':
     dependencies:
       '@floegence/flowersec-core': 5.11.1
       '@noble/hashes': 2.4.0
@@ -3138,7 +3152,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.86.74(solid-js@1.9.17)':
+  '@floegence/floe-webapp-core@0.87.0(katex@0.18.10)(pele@1.13.0)(solid-js@1.9.17)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -3147,15 +3161,17 @@ snapshots:
       libavoid-js: 0.5.0-beta.5
       marked: 17.0.6
       marked-cjk-friendly: 0.1.2(marked@17.0.6)
-      mermaid: 11.17.2
       monaco-editor: 0.57.0
       pdfjs-dist: 6.3.289
       shiki: 3.23.0
       solid-js: 1.9.17
       solid-motionone: 1.0.4(solid-js@1.9.17)
       tailwind-merge: 3.7.0
+    optionalDependencies:
+      katex: 0.18.10
+      pele: 1.13.0
 
-  '@floegence/floe-webapp-protocol@0.86.74(solid-js@1.9.17)':
+  '@floegence/floe-webapp-protocol@0.87.0(solid-js@1.9.17)':
     dependencies:
       '@floegence/flowersec-core': 5.11.1
       solid-js: 1.9.17
@@ -4886,6 +4902,8 @@ snapshots:
   pdfjs-dist@6.3.289:
     optionalDependencies:
       '@napi-rs/canvas': 1.0.9
+
+  pele@1.13.0: {}
 
   picocolors@1.1.1: {}
 

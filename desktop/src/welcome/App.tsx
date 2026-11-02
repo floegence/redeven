@@ -1,3 +1,4 @@
+import { DesktopFloeLocaleProvider } from './DesktopFloeLocaleProvider';
 import { createDownloadManager } from '../../../internal/envapp/ui_src/src/ui/downloads/createDownloadManager';
 import { createDesktopCenterHost, createDesktopCenterProgressAdapter } from './envCenterAdapter';
 import { createEnvironmentOpenController } from '../envcenter/controller';
@@ -14184,16 +14185,18 @@ export function DesktopWelcomeShell(props: DesktopWelcomeShellProps) {
     document.title = i18n().t('desktop.title');
   });
   return (
-    <FloeProvider config={floeConfig()}>
-      <div data-redeven-desktop-locale={languageSnapshot().resolved_locale}>
-        <Show when={recoverySnapshot().credential_recovery} fallback={<DesktopWelcomeShellInner {...props} snapshot={recoverySnapshot()} />}>
-          {recovery => <DevelopmentCredentialRecovery recovery={recovery()} i18n={i18n()}
-            migrate={() => props.runtime.launcher.performAction({ kind: 'migrate_development_credentials' })}
-            quit={() => props.runtime.launcher.performAction({ kind: 'close_launcher_or_quit' })} />}
-        </Show>
-        <CommandPalette />
-      </div>
-    </FloeProvider>
+    <DesktopFloeLocaleProvider locale={languageSnapshot().resolved_locale}>
+      <FloeProvider config={floeConfig()}>
+        <div data-redeven-desktop-locale={languageSnapshot().resolved_locale}>
+          <Show when={recoverySnapshot().credential_recovery} fallback={<DesktopWelcomeShellInner {...props} snapshot={recoverySnapshot()} />}>
+            {recovery => <DevelopmentCredentialRecovery recovery={recovery()} i18n={i18n()}
+              migrate={() => props.runtime.launcher.performAction({ kind: 'migrate_development_credentials' })}
+              quit={() => props.runtime.launcher.performAction({ kind: 'close_launcher_or_quit' })} />}
+          </Show>
+          <CommandPalette />
+        </div>
+      </FloeProvider>
+    </DesktopFloeLocaleProvider>
   );
 }
 

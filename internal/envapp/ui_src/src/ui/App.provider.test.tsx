@@ -8,6 +8,7 @@ vi.mock('./services/desktopShellBridge', () => ({ desktopShellBridgeAvailable: (
 
 vi.mock('@floegence/floe-webapp-core', async () => {
   const { createContext, useContext } = await import('solid-js');
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
   const NotificationContext = createContext<any>();
   const notification = { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() };
 
@@ -20,6 +21,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   }
 
   return {
+    LocaleProvider: actual.LocaleProvider,
     BUILT_IN_SHELL_THEME_DEFAULTS: {
       light: 'classic-light',
       dark: 'classic-dark',

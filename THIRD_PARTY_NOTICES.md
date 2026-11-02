@@ -2918,7 +2918,7 @@ SOFTWARE.
 
 | Component | Version | License | Used by | Source | Notes |
 | --- | --- | --- | --- | --- | --- |
-| @antfu/install-pkg | 1.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40antfu%2Finstall-pkg/v/1.1.0 |  |
+| @antfu/install-pkg | 1.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40antfu%2Finstall-pkg/v/1.1.0 |  |
 | @asamuzakjp/css-color | 5.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.1 |  |
 | @asamuzakjp/css-color | 5.1.11 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.11 | License verified from the exact registry package manifest. |
 | @asamuzakjp/dom-selector | 7.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fdom-selector/v/7.0.4 |  |
@@ -2947,13 +2947,13 @@ SOFTWARE.
 | @babel/traverse | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Ftraverse/v/7.29.7 |  |
 | @babel/types | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Ftypes/v/7.29.7 |  |
 | @blazediff/core | 1.9.1 | MIT | Env App UI | https://www.npmjs.com/package/%40blazediff%2Fcore/v/1.9.1 |  |
-| @braintree/sanitize-url | 7.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40braintree%2Fsanitize-url/v/7.1.2 |  |
+| @braintree/sanitize-url | 7.1.2 | MIT | Env App UI | https://www.npmjs.com/package/%40braintree%2Fsanitize-url/v/7.1.2 |  |
 | @bramus/specificity | 2.4.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40bramus%2Fspecificity/v/2.4.2 |  |
 | @bramus/specificity | 2.4.3 | MIT | Env App UI | https://www.npmjs.com/package/%40bramus%2Fspecificity/v/2.4.3 |  |
 | @cacheable/memory | 2.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40cacheable%2Fmemory/v/2.2.0 |  |
 | @cacheable/utils | 2.5.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40cacheable%2Futils/v/2.5.0 |  |
 | @chenglou/pretext | 0.0.5 | MIT | Env App UI | https://www.npmjs.com/package/%40chenglou%2Fpretext/v/0.0.5 |  |
-| @chevrotain/types | 11.1.2 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40chevrotain%2Ftypes/v/11.1.2 |  |
+| @chevrotain/types | 11.1.2 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/%40chevrotain%2Ftypes/v/11.1.2 |  |
 | @csstools/color-helpers | 6.0.2 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcolor-helpers/v/6.0.2 |  |
 | @csstools/color-helpers | 6.1.2 | MIT-0 | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcolor-helpers/v/6.1.2 |  |
 | @csstools/css-calc | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/3.1.1 |  |
@@ -3046,9 +3046,9 @@ SOFTWARE.
 | @exodus/bytes | 1.15.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.0 |  |
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @exodus/bytes | 1.16.0 | MIT | Env App UI | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.16.0 |  |
-| @floegence/floe-webapp-boot | 0.86.74 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.74 |  |
-| @floegence/floe-webapp-core | 0.86.74 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.74 |  |
-| @floegence/floe-webapp-protocol | 0.86.74 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.86.74 |  |
+| @floegence/floe-webapp-boot | 0.87.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.87.0 |  |
+| @floegence/floe-webapp-core | 0.87.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.87.0 |  |
+| @floegence/floe-webapp-protocol | 0.87.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.87.0 |  |
 | @floegence/floebrowser | 0.1.28 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.28 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.11.1 |  |
@@ -3070,10 +3070,9 @@ SOFTWARE.
 | @humanfs/types | 0.15.0 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Ftypes/v/0.15.0 | License verified from the pnpm-installed package manifest. |
 | @humanwhocodes/module-importer | 1.0.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanwhocodes%2Fmodule-importer/v/1.0.1 |  |
 | @humanwhocodes/retry | 0.4.3 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanwhocodes%2Fretry/v/0.4.3 |  |
-| @iconify/types | 2.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Ftypes/v/2.0.0 |  |
+| @iconify/types | 2.0.0 | MIT | Env App UI | https://www.npmjs.com/package/%40iconify%2Ftypes/v/2.0.0 |  |
 | @iconify/utils | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.0 |  |
-| @iconify/utils | 3.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.3 | License verified from the exact registry package manifest. |
-| @iconify/utils | 3.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.4 |  |
+| @iconify/utils | 3.1.3 | MIT | Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.3 | License verified from the exact registry package manifest. |
 | @isaacs/fs-minipass | 4.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/%40isaacs%2Ffs-minipass/v/4.0.1 |  |
 | @isaacs/nonrecursive-glob-match | 1.0.3 | BlueOak-1.0.0 | Env App UI | https://www.npmjs.com/package/%40isaacs%2Fnonrecursive-glob-match/v/1.0.3 |  |
 | @jitl/quickjs-ffi-types | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-ffi-types/v/0.32.0 |  |
@@ -3091,7 +3090,7 @@ SOFTWARE.
 | @keyv/serialize | 1.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40keyv%2Fserialize/v/1.1.1 |  |
 | @malept/cross-spawn-promise | 2.0.0 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/%40malept%2Fcross-spawn-promise/v/2.0.0 |  |
 | @malept/flatpak-bundler | 0.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40malept%2Fflatpak-bundler/v/0.4.0 |  |
-| @mermaid-js/parser | 1.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40mermaid-js%2Fparser/v/1.2.1 |  |
+| @mermaid-js/parser | 1.2.1 | MIT | Env App UI | https://www.npmjs.com/package/%40mermaid-js%2Fparser/v/1.2.1 |  |
 | @motionone/animation | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Fanimation/v/10.18.0 |  |
 | @motionone/dom | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Fdom/v/10.18.0 |  |
 | @motionone/easing | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Feasing/v/10.18.0 |  |
@@ -3195,45 +3194,44 @@ SOFTWARE.
 | @types/cacheable-request | 6.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fcacheable-request/v/6.0.3 |  |
 | @types/chai | 5.2.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fchai/v/5.2.3 |  |
 | @types/css-font-loading-module | 0.0.7 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fcss-font-loading-module/v/0.0.7 |  |
-| @types/d3-array | 3.2.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-array/v/3.2.2 |  |
-| @types/d3-axis | 3.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-axis/v/3.0.6 |  |
-| @types/d3-brush | 3.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-brush/v/3.0.6 |  |
-| @types/d3-chord | 3.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-chord/v/3.0.6 |  |
-| @types/d3-color | 3.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-color/v/3.1.3 |  |
-| @types/d3-contour | 3.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-contour/v/3.0.6 |  |
-| @types/d3-delaunay | 6.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-delaunay/v/6.0.4 |  |
-| @types/d3-dispatch | 3.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-dispatch/v/3.0.7 |  |
-| @types/d3-drag | 3.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-drag/v/3.0.7 |  |
-| @types/d3-dsv | 3.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-dsv/v/3.0.7 |  |
-| @types/d3-ease | 3.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-ease/v/3.0.2 |  |
-| @types/d3-fetch | 3.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-fetch/v/3.0.7 |  |
-| @types/d3-force | 3.0.10 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-force/v/3.0.10 |  |
-| @types/d3-format | 3.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-format/v/3.0.4 |  |
-| @types/d3-geo | 3.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-geo/v/3.1.0 |  |
-| @types/d3-hierarchy | 3.1.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-hierarchy/v/3.1.7 |  |
-| @types/d3-interpolate | 3.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-interpolate/v/3.0.4 |  |
-| @types/d3-path | 3.1.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-path/v/3.1.1 |  |
-| @types/d3-polygon | 3.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-polygon/v/3.0.2 |  |
-| @types/d3-quadtree | 3.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-quadtree/v/3.0.6 |  |
-| @types/d3-random | 3.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-random/v/3.0.3 |  |
-| @types/d3-random | 3.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fd3-random/v/3.0.4 |  |
-| @types/d3-scale-chromatic | 3.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-scale-chromatic/v/3.1.0 |  |
-| @types/d3-scale | 4.0.9 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-scale/v/4.0.9 |  |
-| @types/d3-selection | 3.0.11 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-selection/v/3.0.11 |  |
-| @types/d3-shape | 3.1.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-shape/v/3.1.8 |  |
-| @types/d3-time-format | 4.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-time-format/v/4.0.3 |  |
-| @types/d3-time | 3.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-time/v/3.0.4 |  |
-| @types/d3-timer | 3.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-timer/v/3.0.2 |  |
-| @types/d3-transition | 3.0.9 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-transition/v/3.0.9 |  |
-| @types/d3-zoom | 3.0.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-zoom/v/3.0.8 |  |
-| @types/d3 | 7.4.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3/v/7.4.3 |  |
+| @types/d3-array | 3.2.2 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-array/v/3.2.2 |  |
+| @types/d3-axis | 3.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-axis/v/3.0.6 |  |
+| @types/d3-brush | 3.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-brush/v/3.0.6 |  |
+| @types/d3-chord | 3.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-chord/v/3.0.6 |  |
+| @types/d3-color | 3.1.3 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-color/v/3.1.3 |  |
+| @types/d3-contour | 3.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-contour/v/3.0.6 |  |
+| @types/d3-delaunay | 6.0.4 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-delaunay/v/6.0.4 |  |
+| @types/d3-dispatch | 3.0.7 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-dispatch/v/3.0.7 |  |
+| @types/d3-drag | 3.0.7 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-drag/v/3.0.7 |  |
+| @types/d3-dsv | 3.0.7 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-dsv/v/3.0.7 |  |
+| @types/d3-ease | 3.0.2 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-ease/v/3.0.2 |  |
+| @types/d3-fetch | 3.0.7 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-fetch/v/3.0.7 |  |
+| @types/d3-force | 3.0.10 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-force/v/3.0.10 |  |
+| @types/d3-format | 3.0.4 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-format/v/3.0.4 |  |
+| @types/d3-geo | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-geo/v/3.1.0 |  |
+| @types/d3-hierarchy | 3.1.7 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-hierarchy/v/3.1.7 |  |
+| @types/d3-interpolate | 3.0.4 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-interpolate/v/3.0.4 |  |
+| @types/d3-path | 3.1.1 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-path/v/3.1.1 |  |
+| @types/d3-polygon | 3.0.2 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-polygon/v/3.0.2 |  |
+| @types/d3-quadtree | 3.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-quadtree/v/3.0.6 |  |
+| @types/d3-random | 3.0.3 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-random/v/3.0.3 |  |
+| @types/d3-scale-chromatic | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-scale-chromatic/v/3.1.0 |  |
+| @types/d3-scale | 4.0.9 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-scale/v/4.0.9 |  |
+| @types/d3-selection | 3.0.11 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-selection/v/3.0.11 |  |
+| @types/d3-shape | 3.1.8 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-shape/v/3.1.8 |  |
+| @types/d3-time-format | 4.0.3 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-time-format/v/4.0.3 |  |
+| @types/d3-time | 3.0.4 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-time/v/3.0.4 |  |
+| @types/d3-timer | 3.0.2 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-timer/v/3.0.2 |  |
+| @types/d3-transition | 3.0.9 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-transition/v/3.0.9 |  |
+| @types/d3-zoom | 3.0.8 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3-zoom/v/3.0.8 |  |
+| @types/d3 | 7.4.3 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fd3/v/7.4.3 |  |
 | @types/debug | 4.1.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fdebug/v/4.1.13 |  |
 | @types/deep-eql | 4.0.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fdeep-eql/v/4.0.2 |  |
 | @types/esrecurse | 4.3.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fesrecurse/v/4.3.1 |  |
 | @types/estree | 1.0.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Festree/v/1.0.8 |  |
 | @types/estree | 1.0.9 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Festree/v/1.0.9 |  |
 | @types/fs-extra | 9.0.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Ffs-extra/v/9.0.13 |  |
-| @types/geojson | 7946.0.16 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fgeojson/v/7946.0.16 |  |
+| @types/geojson | 7946.0.16 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fgeojson/v/7946.0.16 |  |
 | @types/hast | 3.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fhast/v/3.0.4 |  |
 | @types/hast | 3.0.5 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fhast/v/3.0.5 |  |
 | @types/http-cache-semantics | 4.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fhttp-cache-semantics/v/4.2.0 |  |
@@ -3284,7 +3282,7 @@ SOFTWARE.
 | @ungap/structured-clone | 1.3.0 | ISC | Desktop shell | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.3.0 |  |
 | @ungap/structured-clone | 1.3.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.3.1 | License verified from the exact registry package manifest. |
 | @ungap/structured-clone | 1.4.0 | ISC | Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.4.0 |  |
-| @upsetjs/venn.js | 2.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40upsetjs%2Fvenn.js/v/2.0.0 |  |
+| @upsetjs/venn.js | 2.0.0 | MIT | Env App UI | https://www.npmjs.com/package/%40upsetjs%2Fvenn.js/v/2.0.0 |  |
 | @vitest/browser-playwright | 4.1.12 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser-playwright/v/4.1.12 |  |
 | @vitest/browser | 4.1.12 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser/v/4.1.12 |  |
 | @vitest/expect | 4.1.12 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fexpect/v/4.1.12 |  |
@@ -3359,63 +3357,63 @@ SOFTWARE.
 | combined-stream | 1.0.8 | MIT | Desktop shell | https://www.npmjs.com/package/combined-stream/v/1.0.8 |  |
 | comma-separated-tokens | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/comma-separated-tokens/v/2.0.3 |  |
 | commander | 15.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/commander/v/15.0.0 |  |
-| commander | 7.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/commander/v/7.2.0 |  |
+| commander | 7.2.0 | MIT | Env App UI | https://www.npmjs.com/package/commander/v/7.2.0 |  |
 | commander | 9.5.0 | MIT | Desktop shell | https://www.npmjs.com/package/commander/v/9.5.0 |  |
 | compare-version | 0.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/compare-version/v/0.1.2 |  |
 | confbox | 0.1.8 | MIT | Env App UI | https://www.npmjs.com/package/confbox/v/0.1.8 |  |
 | convert-source-map | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/convert-source-map/v/2.0.0 |  |
 | core-util-is | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/core-util-is/v/1.0.2 | License verified from the exact registry package manifest. |
 | core-util-is | 1.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/core-util-is/v/1.0.3 |  |
-| cose-base | 1.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cose-base/v/1.0.3 |  |
-| cose-base | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cose-base/v/2.2.0 |  |
+| cose-base | 1.0.3 | MIT | Env App UI | https://www.npmjs.com/package/cose-base/v/1.0.3 |  |
+| cose-base | 2.2.0 | MIT | Env App UI | https://www.npmjs.com/package/cose-base/v/2.2.0 |  |
 | cross-dirname | 0.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/cross-dirname/v/0.1.0 |  |
 | cross-spawn | 7.0.6 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/cross-spawn/v/7.0.6 |  |
 | css-tree | 3.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/css-tree/v/3.2.1 |  |
 | cssesc | 3.0.0 | MIT | Env App UI | https://www.npmjs.com/package/cssesc/v/3.0.0 |  |
 | csstype | 3.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/csstype/v/3.2.3 |  |
-| cytoscape-cose-bilkent | 4.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape-cose-bilkent/v/4.1.0 |  |
-| cytoscape-fcose | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape-fcose/v/2.2.0 |  |
-| cytoscape | 3.34.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape/v/3.34.0 |  |
-| cytoscape | 3.34.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape/v/3.34.3 | License verified from the exact registry package manifest. |
-| d3-array | 2.12.1 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-array/v/2.12.1 |  |
-| d3-array | 3.2.4 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-array/v/3.2.4 |  |
-| d3-axis | 3.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-axis/v/3.0.0 |  |
-| d3-brush | 3.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-brush/v/3.0.0 |  |
-| d3-chord | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-chord/v/3.0.1 |  |
-| d3-color | 3.1.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-color/v/3.1.0 |  |
-| d3-contour | 4.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-contour/v/4.0.2 |  |
-| d3-delaunay | 6.0.4 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-delaunay/v/6.0.4 |  |
-| d3-dispatch | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-dispatch/v/3.0.1 |  |
-| d3-drag | 3.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-drag/v/3.0.0 |  |
-| d3-dsv | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-dsv/v/3.0.1 |  |
-| d3-ease | 3.0.1 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-ease/v/3.0.1 |  |
-| d3-fetch | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-fetch/v/3.0.1 |  |
-| d3-force | 3.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-force/v/3.0.0 |  |
-| d3-format | 3.1.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-format/v/3.1.2 |  |
-| d3-geo | 3.1.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-geo/v/3.1.1 |  |
-| d3-hierarchy | 3.1.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-hierarchy/v/3.1.2 |  |
-| d3-interpolate | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-interpolate/v/3.0.1 |  |
-| d3-path | 1.0.9 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-path/v/1.0.9 |  |
-| d3-path | 3.1.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-path/v/3.1.0 |  |
-| d3-polygon | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-polygon/v/3.0.1 |  |
-| d3-quadtree | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-quadtree/v/3.0.1 |  |
-| d3-random | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-random/v/3.0.1 |  |
-| d3-sankey | 0.12.3 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-sankey/v/0.12.3 |  |
-| d3-scale-chromatic | 3.1.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-scale-chromatic/v/3.1.0 |  |
-| d3-scale | 4.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-scale/v/4.0.2 |  |
-| d3-selection | 3.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-selection/v/3.0.0 |  |
-| d3-shape | 1.3.7 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-shape/v/1.3.7 |  |
-| d3-shape | 3.2.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-shape/v/3.2.0 |  |
-| d3-time-format | 4.1.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-time-format/v/4.1.0 |  |
-| d3-time | 3.1.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-time/v/3.1.0 |  |
-| d3-timer | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-timer/v/3.0.1 |  |
-| d3-transition | 3.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-transition/v/3.0.1 |  |
-| d3-zoom | 3.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-zoom/v/3.0.0 |  |
-| d3 | 7.9.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3/v/7.9.0 |  |
-| dagre-d3-es | 7.0.14 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dagre-d3-es/v/7.0.14 |  |
+| cytoscape-cose-bilkent | 4.1.0 | MIT | Env App UI | https://www.npmjs.com/package/cytoscape-cose-bilkent/v/4.1.0 |  |
+| cytoscape-fcose | 2.2.0 | MIT | Env App UI | https://www.npmjs.com/package/cytoscape-fcose/v/2.2.0 |  |
+| cytoscape | 3.34.0 | MIT | Env App UI | https://www.npmjs.com/package/cytoscape/v/3.34.0 |  |
+| cytoscape | 3.34.3 | MIT | Env App UI | https://www.npmjs.com/package/cytoscape/v/3.34.3 | License verified from the exact registry package manifest. |
+| d3-array | 2.12.1 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/d3-array/v/2.12.1 |  |
+| d3-array | 3.2.4 | ISC | Env App UI | https://www.npmjs.com/package/d3-array/v/3.2.4 |  |
+| d3-axis | 3.0.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-axis/v/3.0.0 |  |
+| d3-brush | 3.0.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-brush/v/3.0.0 |  |
+| d3-chord | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-chord/v/3.0.1 |  |
+| d3-color | 3.1.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-color/v/3.1.0 |  |
+| d3-contour | 4.0.2 | ISC | Env App UI | https://www.npmjs.com/package/d3-contour/v/4.0.2 |  |
+| d3-delaunay | 6.0.4 | ISC | Env App UI | https://www.npmjs.com/package/d3-delaunay/v/6.0.4 |  |
+| d3-dispatch | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-dispatch/v/3.0.1 |  |
+| d3-drag | 3.0.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-drag/v/3.0.0 |  |
+| d3-dsv | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-dsv/v/3.0.1 |  |
+| d3-ease | 3.0.1 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/d3-ease/v/3.0.1 |  |
+| d3-fetch | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-fetch/v/3.0.1 |  |
+| d3-force | 3.0.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-force/v/3.0.0 |  |
+| d3-format | 3.1.2 | ISC | Env App UI | https://www.npmjs.com/package/d3-format/v/3.1.2 |  |
+| d3-geo | 3.1.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-geo/v/3.1.1 |  |
+| d3-hierarchy | 3.1.2 | ISC | Env App UI | https://www.npmjs.com/package/d3-hierarchy/v/3.1.2 |  |
+| d3-interpolate | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-interpolate/v/3.0.1 |  |
+| d3-path | 1.0.9 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/d3-path/v/1.0.9 |  |
+| d3-path | 3.1.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-path/v/3.1.0 |  |
+| d3-polygon | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-polygon/v/3.0.1 |  |
+| d3-quadtree | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-quadtree/v/3.0.1 |  |
+| d3-random | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-random/v/3.0.1 |  |
+| d3-sankey | 0.12.3 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/d3-sankey/v/0.12.3 |  |
+| d3-scale-chromatic | 3.1.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-scale-chromatic/v/3.1.0 |  |
+| d3-scale | 4.0.2 | ISC | Env App UI | https://www.npmjs.com/package/d3-scale/v/4.0.2 |  |
+| d3-selection | 3.0.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-selection/v/3.0.0 |  |
+| d3-shape | 1.3.7 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/d3-shape/v/1.3.7 |  |
+| d3-shape | 3.2.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-shape/v/3.2.0 |  |
+| d3-time-format | 4.1.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-time-format/v/4.1.0 |  |
+| d3-time | 3.1.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-time/v/3.1.0 |  |
+| d3-timer | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-timer/v/3.0.1 |  |
+| d3-transition | 3.0.1 | ISC | Env App UI | https://www.npmjs.com/package/d3-transition/v/3.0.1 |  |
+| d3-zoom | 3.0.0 | ISC | Env App UI | https://www.npmjs.com/package/d3-zoom/v/3.0.0 |  |
+| d3 | 7.9.0 | ISC | Env App UI | https://www.npmjs.com/package/d3/v/7.9.0 |  |
+| dagre-d3-es | 7.0.14 | MIT | Env App UI | https://www.npmjs.com/package/dagre-d3-es/v/7.0.14 |  |
 | data-urls | 7.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/data-urls/v/7.0.0 |  |
-| dayjs | 1.11.21 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.21 |  |
-| dayjs | 1.11.23 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.23 | License verified from the exact registry package manifest. |
+| dayjs | 1.11.21 | MIT | Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.21 |  |
+| dayjs | 1.11.23 | MIT | Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.23 | License verified from the exact registry package manifest. |
 | debug | 4.4.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/debug/v/4.4.3 |  |
 | decimal.js | 10.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/decimal.js/v/10.6.0 |  |
 | decompress-response | 6.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/decompress-response/v/6.0.0 |  |
@@ -3423,7 +3421,7 @@ SOFTWARE.
 | defer-to-connect | 2.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/defer-to-connect/v/2.0.1 |  |
 | define-data-property | 1.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/define-data-property/v/1.1.4 |  |
 | define-properties | 1.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/define-properties/v/1.2.1 |  |
-| delaunator | 5.1.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/delaunator/v/5.1.0 |  |
+| delaunator | 5.1.0 | ISC | Env App UI | https://www.npmjs.com/package/delaunator/v/5.1.0 |  |
 | delayed-stream | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/delayed-stream/v/1.0.0 |  |
 | dequal | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dequal/v/2.0.3 |  |
 | detect-libc | 2.1.2 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/detect-libc/v/2.1.2 |  |
@@ -3462,8 +3460,7 @@ SOFTWARE.
 | es-object-atoms | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/es-object-atoms/v/1.1.2 |  |
 | es-set-tostringtag | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/es-set-tostringtag/v/2.1.0 |  |
 | es-toolkit | 1.46.1 | MIT | Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.46.1 |  |
-| es-toolkit | 1.47.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.47.0 | License verified from the exact registry package manifest. |
-| es-toolkit | 1.49.0 | MIT | Desktop shell | https://www.npmjs.com/package/es-toolkit/v/1.49.0 |  |
+| es-toolkit | 1.47.0 | MIT | Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.47.0 | License verified from the exact registry package manifest. |
 | esbuild | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/esbuild/v/0.28.1 |  |
 | esbuild | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/esbuild/v/0.28.2 |  |
 | escalade | 3.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/escalade/v/3.2.0 |  |
@@ -3486,7 +3483,7 @@ SOFTWARE.
 | fast-json-stable-stringify | 2.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-json-stable-stringify/v/2.1.0 |  |
 | fast-levenshtein | 2.0.6 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-levenshtein/v/2.0.6 |  |
 | fast-uri | 3.1.9 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/fast-uri/v/3.1.9 |  |
-| fastdom | 1.0.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/fastdom/v/1.0.12 |  |
+| fastdom | 1.0.12 | MIT | Env App UI | https://www.npmjs.com/package/fastdom/v/1.0.12 |  |
 | fdir | 6.5.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fdir/v/6.5.0 |  |
 | file-entry-cache | 11.1.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/file-entry-cache/v/11.1.5 |  |
 | filelist | 2.0.2 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/filelist/v/2.0.2 |  |
@@ -3519,7 +3516,7 @@ SOFTWARE.
 | gopd | 1.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/gopd/v/1.2.0 |  |
 | got | 11.8.6 | MIT | Desktop shell | https://www.npmjs.com/package/got/v/11.8.6 |  |
 | graceful-fs | 4.2.11 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/graceful-fs/v/4.2.11 |  |
-| hachure-fill | 0.5.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/hachure-fill/v/0.5.2 |  |
+| hachure-fill | 0.5.2 | MIT | Env App UI | https://www.npmjs.com/package/hachure-fill/v/0.5.2 |  |
 | has-flag | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/has-flag/v/4.0.0 |  |
 | has-property-descriptors | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/has-property-descriptors/v/1.0.2 |  |
 | has-symbols | 1.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/has-symbols/v/1.1.0 |  |
@@ -3540,17 +3537,17 @@ SOFTWARE.
 | http-proxy-agent | 7.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/http-proxy-agent/v/7.0.2 |  |
 | http2-wrapper | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/http2-wrapper/v/1.0.3 |  |
 | https-proxy-agent | 7.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/https-proxy-agent/v/7.0.6 |  |
-| iconv-lite | 0.6.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/iconv-lite/v/0.6.3 |  |
+| iconv-lite | 0.6.3 | MIT | Env App UI | https://www.npmjs.com/package/iconv-lite/v/0.6.3 |  |
 | ignore | 5.3.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ignore/v/5.3.2 |  |
 | ignore | 7.0.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ignore/v/7.0.5 |  |
 | immediate | 3.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/immediate/v/3.0.6 |  |
-| import-meta-resolve | 4.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/import-meta-resolve/v/4.2.0 |  |
+| import-meta-resolve | 4.2.0 | MIT | Env App UI | https://www.npmjs.com/package/import-meta-resolve/v/4.2.0 |  |
 | imurmurhash | 0.1.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/imurmurhash/v/0.1.4 |  |
 | inflight | 1.0.6 | ISC | Desktop shell | https://www.npmjs.com/package/inflight/v/1.0.6 |  |
 | inherits | 2.0.4 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/inherits/v/2.0.4 |  |
 | inline-style-parser | 0.2.7 | MIT | Env App UI | https://www.npmjs.com/package/inline-style-parser/v/0.2.7 |  |
-| internmap | 1.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/internmap/v/1.0.1 |  |
-| internmap | 2.0.3 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/internmap/v/2.0.3 |  |
+| internmap | 1.0.1 | ISC | Env App UI | https://www.npmjs.com/package/internmap/v/1.0.1 |  |
+| internmap | 2.0.3 | ISC | Env App UI | https://www.npmjs.com/package/internmap/v/2.0.3 |  |
 | is-extglob | 2.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/is-extglob/v/2.1.1 |  |
 | is-fullwidth-code-point | 3.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/is-fullwidth-code-point/v/3.0.0 |  |
 | is-glob | 4.0.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/is-glob/v/4.0.3 |  |
@@ -3583,10 +3580,10 @@ SOFTWARE.
 | kebab-case | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/kebab-case/v/1.0.2 |  |
 | keyv | 4.5.4 | MIT | Desktop shell | https://www.npmjs.com/package/keyv/v/4.5.4 |  |
 | keyv | 5.6.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/keyv/v/5.6.0 |  |
-| khroma | 2.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/khroma/v/2.1.0 | The published README declares MIT copyright for the package authors. |
+| khroma | 2.1.0 | MIT | Env App UI | https://www.npmjs.com/package/khroma/v/2.1.0 | The published README declares MIT copyright for the package authors. |
 | known-css-properties | 0.30.0 | MIT | Env App UI | https://www.npmjs.com/package/known-css-properties/v/0.30.0 |  |
-| layout-base | 1.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/layout-base/v/1.0.2 |  |
-| layout-base | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/layout-base/v/2.0.1 |  |
+| layout-base | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/layout-base/v/1.0.2 |  |
+| layout-base | 2.0.1 | MIT | Env App UI | https://www.npmjs.com/package/layout-base/v/2.0.1 |  |
 | lazy-val | 1.0.5 | MIT | Desktop shell | https://www.npmjs.com/package/lazy-val/v/1.0.5 |  |
 | levn | 0.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/levn/v/0.4.1 |  |
 | libavoid-js | 0.5.0-beta.5 | LGPL-2.1-or-later | Desktop shell, Env App UI | https://www.npmjs.com/package/libavoid-js/v/0.5.0-beta.5 | Reviewed as an unmodified, independently replaceable WASM library; exact artifacts, corresponding source, and license are verified below. |
@@ -3616,7 +3613,7 @@ SOFTWARE.
 | lightningcss | 1.32.0 | MPL-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss/v/1.32.0 |  |
 | lightningcss | 1.33.0 | MPL-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/lightningcss/v/1.33.0 |  |
 | locate-path | 6.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/locate-path/v/6.0.0 |  |
-| lodash-es | 4.18.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/lodash-es/v/4.18.1 |  |
+| lodash-es | 4.18.1 | MIT | Env App UI | https://www.npmjs.com/package/lodash-es/v/4.18.1 |  |
 | lodash.escaperegexp | 4.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/lodash.escaperegexp/v/4.1.2 |  |
 | lodash.isequal | 4.5.0 | MIT | Desktop shell | https://www.npmjs.com/package/lodash.isequal/v/4.5.0 |  |
 | lodash | 4.18.1 | MIT | Desktop shell | https://www.npmjs.com/package/lodash/v/4.18.1 |  |
@@ -3633,14 +3630,14 @@ SOFTWARE.
 | marked-cjk-friendly | 0.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked-cjk-friendly/v/0.1.2 |  |
 | marked-footnote | 1.4.0 | MIT | Env App UI | https://www.npmjs.com/package/marked-footnote/v/1.4.0 |  |
 | marked | 14.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/14.0.0 |  |
-| marked | 16.4.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/16.4.2 |  |
+| marked | 16.4.2 | MIT | Env App UI | https://www.npmjs.com/package/marked/v/16.4.2 |  |
 | marked | 17.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/17.0.6 |  |
 | matcher | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/matcher/v/4.0.0 |  |
 | math-intrinsics | 1.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/math-intrinsics/v/1.1.0 |  |
 | mdast-util-to-hast | 13.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/mdast-util-to-hast/v/13.2.1 |  |
 | mdn-data | 2.27.1 | CC0-1.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/mdn-data/v/2.27.1 |  |
 | merge-anything | 5.1.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/merge-anything/v/5.1.7 |  |
-| mermaid | 11.17.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/mermaid/v/11.17.2 |  |
+| mermaid | 11.17.2 | MIT | Env App UI | https://www.npmjs.com/package/mermaid/v/11.17.2 |  |
 | micromark-util-character | 2.1.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/micromark-util-character/v/2.1.1 |  |
 | micromark-util-encode | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/micromark-util-encode/v/2.0.1 |  |
 | micromark-util-sanitize-uri | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/micromark-util-sanitize-uri/v/2.0.1 |  |
@@ -3690,13 +3687,12 @@ SOFTWARE.
 | p-cancelable | 2.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/p-cancelable/v/2.1.1 |  |
 | p-limit | 3.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/p-limit/v/3.1.0 |  |
 | p-locate | 5.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/p-locate/v/5.0.0 |  |
-| package-manager-detector | 1.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/package-manager-detector/v/1.6.0 |  |
-| package-manager-detector | 1.7.0 | MIT | Desktop shell | https://www.npmjs.com/package/package-manager-detector/v/1.7.0 |  |
+| package-manager-detector | 1.6.0 | MIT | Env App UI | https://www.npmjs.com/package/package-manager-detector/v/1.6.0 |  |
 | pako | 1.0.11 | (MIT AND Zlib) | Desktop shell, Env App UI | https://www.npmjs.com/package/pako/v/1.0.11 |  |
 | parse5 | 7.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/parse5/v/7.3.0 |  |
 | parse5 | 8.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/parse5/v/8.0.0 |  |
 | parse5 | 8.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/parse5/v/8.0.1 | License verified from the exact registry package manifest. |
-| path-data-parser | 0.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/path-data-parser/v/0.1.0 |  |
+| path-data-parser | 0.1.0 | MIT | Env App UI | https://www.npmjs.com/package/path-data-parser/v/0.1.0 |  |
 | path-exists | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/path-exists/v/4.0.0 |  |
 | path-is-absolute | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/path-is-absolute/v/1.0.1 |  |
 | path-key | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/path-key/v/3.1.1 |  |
@@ -3704,6 +3700,7 @@ SOFTWARE.
 | pathe | 2.0.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/pathe/v/2.0.3 |  |
 | pdfjs-dist | 6.3.289 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/pdfjs-dist/v/6.3.289 |  |
 | pe-library | 0.4.1 | MIT | Desktop shell | https://www.npmjs.com/package/pe-library/v/0.4.1 |  |
+| pele | 1.13.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/pele/v/1.13.0 |  |
 | picocolors | 1.1.1 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/picocolors/v/1.1.1 |  |
 | picomatch | 4.0.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/picomatch/v/4.0.4 |  |
 | picomatch | 4.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/picomatch/v/4.0.7 | License verified from the exact registry package manifest. |
@@ -3714,8 +3711,8 @@ SOFTWARE.
 | plist | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.0 |  |
 | plist | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.1 | License verified from the exact registry package manifest. |
 | pngjs | 7.0.0 | MIT | Env App UI | https://www.npmjs.com/package/pngjs/v/7.0.0 |  |
-| points-on-curve | 0.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/points-on-curve/v/0.2.0 |  |
-| points-on-path | 0.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/points-on-path/v/0.2.1 |  |
+| points-on-curve | 0.2.0 | MIT | Env App UI | https://www.npmjs.com/package/points-on-curve/v/0.2.0 |  |
+| points-on-path | 0.2.1 | MIT | Env App UI | https://www.npmjs.com/package/points-on-path/v/0.2.1 |  |
 | postcss-safe-parser | 7.1.0 | MIT | Env App UI | https://www.npmjs.com/package/postcss-safe-parser/v/7.1.0 |  |
 | postcss-selector-parser | 7.1.6 | MIT | Env App UI | https://www.npmjs.com/package/postcss-selector-parser/v/7.1.6 |  |
 | postcss-value-parser | 4.2.0 | MIT | Env App UI | https://www.npmjs.com/package/postcss-value-parser/v/4.2.0 |  |
@@ -3755,15 +3752,15 @@ SOFTWARE.
 | responselike | 2.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/responselike/v/2.0.1 |  |
 | retry | 0.12.0 | MIT | Desktop shell | https://www.npmjs.com/package/retry/v/0.12.0 |  |
 | rimraf | 2.6.3 | ISC | Desktop shell | https://www.npmjs.com/package/rimraf/v/2.6.3 |  |
-| robust-predicates | 3.0.3 | Unlicense | Desktop shell, Env App UI | https://www.npmjs.com/package/robust-predicates/v/3.0.3 |  |
+| robust-predicates | 3.0.3 | Unlicense | Env App UI | https://www.npmjs.com/package/robust-predicates/v/3.0.3 |  |
 | rolldown | 1.2.15 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/rolldown/v/1.2.15 |  |
-| roughjs | 4.6.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/roughjs/v/4.6.6 |  |
+| roughjs | 4.6.6 | MIT | Env App UI | https://www.npmjs.com/package/roughjs/v/4.6.6 |  |
 | rrdom | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/rrdom/v/2.1.7 |  |
 | rrweb-snapshot | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/rrweb-snapshot/v/2.1.7 |  |
 | rrweb | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/rrweb/v/2.1.7 |  |
-| rw | 1.3.3 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/rw/v/1.3.3 |  |
+| rw | 1.3.3 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/rw/v/1.3.3 |  |
 | safe-buffer | 5.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.1.2 |  |
-| safer-buffer | 2.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/safer-buffer/v/2.1.2 |  |
+| safer-buffer | 2.1.2 | MIT | Env App UI | https://www.npmjs.com/package/safer-buffer/v/2.1.2 |  |
 | sanitize-filename | 1.6.4 | WTFPL OR ISC | Desktop shell | https://www.npmjs.com/package/sanitize-filename/v/1.6.4 |  |
 | sax | 1.6.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.0 | License verified from the exact registry package manifest. |
 | sax | 1.6.1 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.1 |  |
@@ -3796,14 +3793,14 @@ SOFTWARE.
 | stat-mode | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/stat-mode/v/1.0.0 |  |
 | std-env | 4.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/std-env/v/4.1.0 |  |
 | std-env | 4.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/std-env/v/4.2.0 | License verified from the exact registry package manifest. |
-| strictdom | 1.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/strictdom/v/1.0.1 |  |
+| strictdom | 1.0.1 | MIT | Env App UI | https://www.npmjs.com/package/strictdom/v/1.0.1 |  |
 | string_decoder | 1.1.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/string_decoder/v/1.1.1 |  |
 | string-width | 4.2.3 | MIT | Desktop shell | https://www.npmjs.com/package/string-width/v/4.2.3 |  |
 | stringify-entities | 4.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/stringify-entities/v/4.0.4 |  |
 | strip-ansi | 6.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/strip-ansi/v/6.0.1 |  |
 | style-to-object | 1.0.14 | MIT | Env App UI | https://www.npmjs.com/package/style-to-object/v/1.0.14 |  |
 | stylis | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/stylis/v/4.3.6 |  |
-| stylis | 4.4.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/stylis/v/4.4.0 |  |
+| stylis | 4.4.0 | MIT | Env App UI | https://www.npmjs.com/package/stylis/v/4.4.0 |  |
 | sumchecker | 3.0.1 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/sumchecker/v/3.0.1 |  |
 | supports-color | 7.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/supports-color/v/7.2.0 |  |
 | symbol-tree | 3.2.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/symbol-tree/v/3.2.4 |  |
@@ -3841,8 +3838,7 @@ SOFTWARE.
 | truncate-utf8-bytes | 1.0.2 | WTFPL | Desktop shell | https://www.npmjs.com/package/truncate-utf8-bytes/v/1.0.2 |  |
 | ts-api-utils | 2.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ts-api-utils/v/2.4.0 |  |
 | ts-api-utils | 2.5.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ts-api-utils/v/2.5.0 | License verified from the exact registry package manifest. |
-| ts-dedent | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ts-dedent/v/2.2.0 |  |
-| ts-dedent | 2.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/ts-dedent/v/2.3.0 |  |
+| ts-dedent | 2.2.0 | MIT | Env App UI | https://www.npmjs.com/package/ts-dedent/v/2.2.0 |  |
 | tslib | 2.8.1 | 0BSD | Desktop shell, Env App UI | https://www.npmjs.com/package/tslib/v/2.8.1 |  |
 | type-check | 0.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/type-check/v/0.4.0 |  |
 | type-fest | 0.20.2 | (MIT OR CC0-1.0) | Desktop shell | https://www.npmjs.com/package/type-fest/v/0.20.2 |  |
@@ -3863,8 +3859,7 @@ SOFTWARE.
 | uri-js | 4.4.1 | BSD-2-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/uri-js/v/4.4.1 |  |
 | utf8-byte-length | 1.0.5 | (WTFPL OR MIT) | Desktop shell | https://www.npmjs.com/package/utf8-byte-length/v/1.0.5 |  |
 | util-deprecate | 1.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/util-deprecate/v/1.0.2 |  |
-| uuid | 14.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/uuid/v/14.0.0 |  |
-| uuid | 14.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/uuid/v/14.0.1 |  |
+| uuid | 14.0.0 | MIT | Env App UI | https://www.npmjs.com/package/uuid/v/14.0.0 |  |
 | vfile-message | 4.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vfile-message/v/4.0.3 |  |
 | vfile | 6.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vfile/v/6.0.3 |  |
 | vite-plugin-solid | 2.11.11 | MIT | Desktop shell | https://www.npmjs.com/package/vite-plugin-solid/v/2.11.11 |  |
@@ -7527,7 +7522,7 @@ libavoid-js is maintained by Vladyslav Hnatiuk.
 
 Corresponding source, build scripts, and license are included at
 `dist/licenses/libavoid-sources.tar.gz` in the exact published Floe package:
-https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.86.74.tgz
+https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.87.0.tgz
 The source revisions are
 https://github.com/Aksem/libavoid-js/tree/5062a42fbd82fff562afeebcbb7b1ed45eed8e75
 and https://github.com/Aksem/adaptagrams/tree/0ab3467b4ed3523bb3e404a0dd7da7647d9eb13d.
@@ -8048,7 +8043,7 @@ That's all there is to it!
 Floe supplies the standalone browser artifact of @aiden0z/pptx-renderer 1.3.0 under Apache-2.0. Its embedded mtx-decompressor 1.4.2 remains MPL-2.0; that license applies to the covered files and does not replace Redeven's license. The renderer is used without source changes. System fonts are not redistributed.
 
 The exact unmodified MPL source and original notices are included under dist/licenses/pptx/ in the published Floe package:
-https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.86.74.tgz
+https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.87.0.tgz
 Corresponding source: https://github.com/ChristopherVR/mtx-decompressor/archive/refs/tags/v1.4.2.tar.gz
 Source archive SHA-256: e4edf429b1614a8f7366a55cffe58b35c58e784f0d4719d209cc3aa28ef3d970
 

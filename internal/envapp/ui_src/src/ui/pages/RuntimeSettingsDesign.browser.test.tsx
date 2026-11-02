@@ -438,8 +438,8 @@ it('switches Flower groups without losing permissions or health access and respe
 
 it('navigates through the mobile section picker and exposes storage recovery from the model page', async () => {
   await mount(390);
-  await page.getByRole('button', { name: 'Config File', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Flower', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Runtime Settings', exact: true }).click();
+  await page.getByRole('option', { name: 'Flower', exact: true }).click();
   await expect.element(page.getByTestId('settings-section-ai').getByRole('heading', { level: 1 })).toBeVisible();
   fixture.setReadinessSnapshot({ state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false });
   const recovery = page.getByRole('button', { name: 'Health & storage', exact: true });
@@ -451,8 +451,8 @@ it('navigates through the mobile section picker and exposes storage recovery fro
 it('submits logging and port values using the flat settings API contract', async () => {
   await mount();
   await openSection('logging');
-  await page.getByRole('button', { name: 'json', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'text', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Format', exact: true }).click();
+  await page.getByRole('option', { name: 'text', exact: true }).click();
   await expect.poll(() => fixture.settings().logging.log_format).toBe('text');
   await openSection('codespaces');
   await page.getByRole('spinbutton', { name: 'Starting port', exact: true }).fill('22000');

@@ -49,6 +49,10 @@ it('supports directional selection and restores focus on apply or Escape', async
   const trigger = mount(5);
   await userEvent.click(trigger);
   await expect.poll(() => document.activeElement).toBe(options()[0]);
+  expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+  expect(trigger.getAttribute('aria-expanded')).toBe('true');
+  const panel = document.getElementById(trigger.getAttribute('aria-controls')!);
+  expect(panel?.contains(gallery())).toBe(true);
   await userEvent.keyboard('{ArrowRight}');
   expect(document.activeElement).toBe(options()[1]);
   await userEvent.keyboard('{ArrowDown}');

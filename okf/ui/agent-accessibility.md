@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Product accessibility for AI agents
 tags: [ui, accessibility, computer-use, workbench]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -15,6 +15,11 @@ Redeven owns names, descriptions, state and relationships while preserving geome
 Flower composer fields expose explicit localized names in both ordinary and private-input forms. Existing thread status, controls, menus, live announcements and collapsed/inactive view boundaries remain authoritative.
 
 Adding roles must not claim keyboard behavior that a surface does not implement.
+
+## Shared business-control localization
+Env App, Desktop and Code App consume the coordinated Floe 0.87.0 release set. Env App I18nProvider supplies the published Floe LocaleProvider from its atomically activated locale dictionary. DesktopWelcomeShell uses DesktopFloeLocaleProvider over the existing launcher language snapshot and explicit Desktop catalogs. Desktop core remains a build-only dependency; both renderers pin the same published release and declare its optional Pele/KaTeX peers to preserve diagram rendering. Every shipped locale explicitly defines the full floeControls catalog; keys and placeholders match the upstream public vocabulary. Count labels use neutral labels plus a number so one template does not imply incorrect plural inflection. Language switches update mounted controls without a second locale owner. The product keeps document language/direction and existing domain-specific string adapters.
+
+Select uses combobox/listbox/option semantics; Dropdown remains an action menu. Form identity, validation relationships, popup keyboard ownership, native submission/reset, and civil-date mechanics belong upstream. Product adapters must consume released APIs rather than clone controls. TerminalLayoutPicker spreads the published Popover trigger binding onto its real button so the panel relationship follows upstream identity. Generic Calendar and Breadcrumb come from /ui; legacy umbrella meanings remain unchanged.
 
 # Boundaries
 
@@ -28,3 +33,8 @@ Tests that deliberately filter cases qualify only the cases executed, never the 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - existing path guidance and per-instance description association.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - composer names and existing hidden/inert interaction boundaries.
+
+- `redeven:internal/envapp/ui_src/src/ui/i18n/floeControls.test.ts` - complete locale catalog and placeholder parity with the published framework.
+- `redeven:internal/envapp/ui_src/src/ui/i18n/FloeControls.browser.test.tsx` - published controls, reactive language changes, field identity and keyboard selection.
+
+- `redeven:desktop/src/welcome/DesktopFloeLocaleProvider.client.test.tsx` - Desktop catalog parity and mounted field value/focus retention during language switches.

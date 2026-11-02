@@ -58,9 +58,9 @@ export function TerminalLayoutPicker(props: {
     </div>;
   };
   return <Popover open={open()} onOpenChange={next => { if (!disabled()) setOpen(next); }} placement="bottom-end" ariaLabel={label()} class="terminal-layout-popover"
-    trigger={<Button ref={trigger} size="sm" variant="ghost" class={props.compact ? 'terminal-view-layout-action' : 'terminal-layout-trigger'}
+    trigger={binding => <Button {...binding} ref={trigger} size="sm" variant="ghost" class={props.compact ? 'terminal-view-layout-action' : 'terminal-layout-trigger'}
       data-testid={props.viewId ? undefined : 'terminal-workspace-layout'} data-terminal-view-layout={props.viewId}
-      aria-label={label()} title={label()} aria-haspopup="dialog" aria-expanded={open()} disabled={disabled()}>
+      aria-label={label()} title={label()} disabled={disabled()}>
       <Show when={props.layout} fallback={<Grid class="h-3.5 w-3.5" />}>{layout => <TerminalLayoutPreview layout={layout()} />}</Show>
     </Button>}>
     <Show when={open()}><Gallery /></Show>

@@ -1,3 +1,4 @@
+import { LocaleProvider, type FloeLocale } from '@floegence/floe-webapp-core';
 import { Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, useContext, type Accessor, type JSX } from 'solid-js';
 
 import { createI18nHelpers, type I18nHelpers } from './createI18n';
@@ -163,9 +164,15 @@ export function I18nProvider(props: Readonly<{ children: JSX.Element }>) {
     setLocalePreference,
   };
 
+  const floeLocale: FloeLocale = {
+    get locale() { return value.locale(); },
+    get direction() { return LOCALE_META[value.locale()].textDirection; },
+    get messages() { return (loadedState()?.dictionary ?? enUS).floeControls; },
+  };
+
   return (
     <EnvAppI18nSolidContext.Provider value={value}>
-      <Show when={loadedState()}>{props.children}</Show>
+      <Show when={loadedState()}><LocaleProvider value={floeLocale}>{props.children}</LocaleProvider></Show>
     </EnvAppI18nSolidContext.Provider>
   );
 }

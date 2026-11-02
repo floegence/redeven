@@ -458,6 +458,7 @@ function MockDisplayModeSurface(props: Readonly<{ testId: string; children?: JSX
 vi.mock('@floegence/floe-webapp-core', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
   return {
+  LocaleProvider: actual.LocaleProvider,
   secureRandomUUID: actual.secureRandomUUID,
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   useResizeObserver: () => () => ({ width: 1024, height: 768 }),

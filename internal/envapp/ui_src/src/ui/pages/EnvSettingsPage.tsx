@@ -144,7 +144,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
           value={sectionSelection.visual()}
           onChange={(v) => v && sectionSelection.request(v as EnvSettingsSection)}
           options={localizedItems().map((it) => ({ value: it.id, label: it.label }))}
-          aria-label={i18n.t('settings.runtimeTitle')} class="w-full"
+          ariaLabel={i18n.t('settings.runtimeTitle')} class="w-full"
         /></div>
         </div>
         <Button size="sm" variant="outline" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">

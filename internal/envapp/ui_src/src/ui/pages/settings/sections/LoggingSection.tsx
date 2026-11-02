@@ -68,6 +68,7 @@ export function LoggingSection() {
           description={i18n.t('loggingSettings.defaultJson')}
           control={
           <Select
+            ariaLabel={i18n.t('loggingSettings.formatLabel')}
             value={logFormat()} onChange={(v) => { setLogFormat(v); setError(null); setDirty(true); }} disabled={!canEdit()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultJson') }, { value: 'json', label: 'json' }, { value: 'text', label: 'text' }]}
             class="w-44"
@@ -80,6 +81,7 @@ export function LoggingSection() {
           description={i18n.t('loggingSettings.defaultInfo')}
           control={
           <Select
+            ariaLabel={i18n.t('loggingSettings.levelLabel')}
             value={logLevel()} onChange={(v) => { setLogLevel(v); setError(null); setDirty(true); }} disabled={!canEdit()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultInfo') }, { value: 'debug', label: 'debug' }, { value: 'info', label: 'info' }, { value: 'warn', label: 'warn' }, { value: 'error', label: 'error' }]}
             class="w-44"
