@@ -21,6 +21,8 @@ Desktop owns each CodeSpace window, browser profile, protected loopback listener
 
 Compatibility remains defined by the current protocol and published manifests, not historical dependency pins. Electron qualification covers document handoff, readiness, redirects, Workers, Service Workers, WebSockets and unauthenticated rejection. HTTP tests cover generation, authorization, bytes, upgrades, cookies and origin conflicts.
 
+Descriptor acquisition uses the real environment Electron session and its [private bridge request policy](../security/plugin-platform-integration-security.md), including the global request hook. A mocked `fetch` or raw socket route alone cannot qualify this boundary.
+
 # Evidence
 
 - `redeven:desktop/src/main/codespaceNativeWindows.ts` - Single-window navigation/readiness/cancel and bounded diagnostics.
@@ -28,3 +30,5 @@ Compatibility remains defined by the current protocol and published manifests, n
 - `redeven:desktop/src/main/codespaceNativeWindows.test.ts` - Ordering, Retry, concurrent Open and late-close regressions.
 
 - `redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts` - ID-only trusted shell request contract.
+
+- `redeven:desktop/scripts/check-codespace-native-electron.mjs` - Supervised Electron descriptor/forwarding qualification. Run from `desktop`; `--real-editor` builds the Local UI test fixture and verifies workbench loading, file edit/save, terminal execution and reopen through the real private bridge. Build embedded assets first and provide an installed published editor via `REDEVEN_CODE_SERVER_BIN` when needed. `REDEVEN_NATIVE_ACCEPTANCE_REPORT` optionally retains the final scenario/cleanup report.

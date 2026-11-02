@@ -42,11 +42,23 @@ export type DesktopPrivateBridgeRequestScope = Readonly<{
 export function desktopRequestSourceScope(details: Readonly<{
   url: string;
   resourceType: string;
+  webContentsId?: number;
   frame?: { url: string } | null;
   initiatorOrigin?: string;
-}>): Pick<DesktopPrivateBridgeRequestScope, 'requestingFrameURL' | 'requestingInitiatorOrigin'> {
+  requestHeaders?: DesktopRequestHeaders;
+}>, startup?: Pick<StartupReport, 'local_ui_bridge_token'>): Pick<DesktopPrivateBridgeRequestScope, 'requestingFrameURL' | 'requestingInitiatorOrigin'> {
   if (details.resourceType === 'mainFrame') return { requestingFrameURL: details.url };
   if (details.frame) return { requestingFrameURL: details.frame.url };
+  // session.fetch has no browser source. Preserve only authority main already
+  // supplied for this owner; absent metadata alone never grants credentials.
+  if (details.resourceType === 'other' && (details.webContentsId === undefined || details.webContentsId === -1)
+      && details.initiatorOrigin === undefined) {
+    const token = normalizeDesktopPrivateBridgeToken(startup?.local_ui_bridge_token);
+    const presented = Object.entries(details.requestHeaders ?? {}).filter(
+      ([name]) => name.toLowerCase() === DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER.toLowerCase(),
+    );
+    if (token && presented.length === 1 && presented[0]![1] === token) return {};
+  }
   return { requestingInitiatorOrigin: details.initiatorOrigin ?? '' };
 }
 

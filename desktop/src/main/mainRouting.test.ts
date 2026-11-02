@@ -1962,7 +1962,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n  graphicalWindow = false,\n  ownerPartition?: string,\n): void');
     expect(mainSrc).toContain('if (contentsID >= 0) return sessionRecordForWebContentsID(contentsID);');
     expect(mainSrc).toContain('record.session_partition === ownerPartition');
-    expect(mainSrc).toContain('...desktopRequestSourceScope(details),');
+    expect(mainSrc).toContain('...desktopRequestSourceScope(details, sessionRecord.startup),');
     expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
     expect(mainSrc).toContain('shouldFailDesktopSessionMainDocument({');
     expect(mainSrc).toContain('details.resourceType');

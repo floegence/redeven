@@ -6,36 +6,40 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createNativeFixtureWindow } from './codespace-native-window';
+import { createFixtureBridgeSession } from './codespace-bridge-session';
 app.on('window-all-closed', () => {});
 void app
   .whenReady()
   .then(async () => {
-    const fixture = spawn(process.env.REDEVEN_NATIVE_EDITOR_FIXTURE!, [], {
+    const bridgeReady = process.env.REDEVEN_NATIVE_BRIDGE_READY
+      ? JSON.parse(process.env.REDEVEN_NATIVE_BRIDGE_READY) as { bridge_url: string; workspace: string } : undefined;
+    const fixture = bridgeReady ? undefined : spawn(process.env.REDEVEN_NATIVE_EDITOR_FIXTURE!, [], {
       env: process.env,
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     process.once('SIGTERM', () => {
-      fixture.kill('SIGTERM');
+      fixture?.kill('SIGTERM');
       app.exit(1);
     });
-    app.once('before-quit', () => fixture.kill('SIGTERM'));
+    app.once('before-quit', () => fixture?.kill('SIGTERM'));
     let line = '';
-    const ready = await new Promise<{ port: number; workspace: string }>(
+    const ready = bridgeReady ? { port: 0, workspace: bridgeReady.workspace } : await new Promise<{ port: number; workspace: string }>(
       (resolve, reject) => {
-        fixture.stdout.on('data', (chunk) => {
+        fixture!.stdout.on('data', (chunk) => {
           line += chunk.toString();
           for (const text of line.split('\n'))
             if (text.startsWith('NATIVE_EDITOR_READY '))
               resolve(JSON.parse(text.slice(20)));
         });
-        fixture.once('exit', () =>
+        fixture!.once('exit', () =>
           reject(new Error('editor fixture exited before ready')),
         );
       },
     );
+    const bridge = bridgeReady ? await createFixtureBridgeSession(bridgeReady.bridge_url, 'A'.repeat(43)) : undefined;
     const createWindow = () => createNativeFixtureWindow({
       identity: 'b'.repeat(64), profileFile: path.join(app.getPath('userData'), 'codespace-profiles.json'), show: true,
-      route: async () => ({ pathPrefix: '', authority: '', headers: {}, openConnection: async () => net.connect(ready.port, '127.0.0.1'), close: async () => {} }),
+      route: bridge ? bridge.route : async () => ({ pathPrefix: '', authority: '', headers: {}, openConnection: async () => net.connect(ready.port, '127.0.0.1'), close: async () => {} }),
     });
     const native = createWindow();
     const { window, owner } = native;
@@ -46,14 +50,14 @@ void app
       await owner.showLoading({});
       await owner.open();
       assert.equal(native.ready, true);
-      console.log('Owned editor fixture:', JSON.stringify({ ...ready, fixture_pid: fixture.pid }));
+      console.log('Owned editor fixture:', JSON.stringify({ ...ready, fixture_pid: fixture?.pid, private_bridge: !!bridge }));
       console.log(
         'Native real editor origin:',
         native.gateway.origin,
         'workspace:',
         ready.workspace,
         'fixture PID:',
-        fixture.pid,
+        fixture?.pid,
       );
       await window.webContents.executeJavaScript(
         `new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('workbench timed out: '+document.body.innerText.slice(0,1000))),25000);const check=()=>{if(document.querySelector('.monaco-workbench')){clearTimeout(timer);resolve(true)}else setTimeout(check,100)};check()})`,
@@ -193,8 +197,8 @@ void app
       throw error;
     } finally {
       await owner.close();
-      fixture.kill('SIGTERM');
-      await once(fixture, 'exit');
+      bridge?.dispose();
+      if (fixture) { fixture.kill('SIGTERM'); await once(fixture, 'exit'); }
     }
     app.exit(0);
   })

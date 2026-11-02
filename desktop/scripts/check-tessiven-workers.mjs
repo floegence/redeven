@@ -59,7 +59,7 @@ await session.run(async () => {
     "  network.webRequest.onBeforeSendHeaders((details, callback) => {",
     "    const scope = process.env.TESSIVEN_LEGACY === '1'",
     "      ? { requestingFrameURL: details.resourceType === 'mainFrame' ? details.url : details.frame?.url ?? '' }",
-    "      : desktopRequestSourceScope(details);",
+    "      : desktopRequestSourceScope(details, startup);",
     "    const requestHeaders = desktopPrivateBridgeRequestHeaders(transport, startup, details.url, details.requestHeaders, scope);",
     "    globalThis.workerRequests.push({ path: new URL(details.url).pathname, frame: !!details.frame, initiatorOrigin: details.initiatorOrigin, authorized: !!requestHeaders['X-Redeven-Desktop-Bridge-Token'] });",
     "    callback({ requestHeaders });",

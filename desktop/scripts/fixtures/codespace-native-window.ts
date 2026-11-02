@@ -10,7 +10,7 @@ import { desktopSemanticPaletteForShellTheme, desktopWindowThemeSnapshotForShell
 export function createNativeFixtureWindow(options: {
   identity: string;
   profileFile: string;
-  route: () => Promise<NativeCodeSpaceRoute>;
+  route: (signal: AbortSignal) => Promise<NativeCodeSpaceRoute>;
   show?: boolean;
 }) {
   const partition = `persist:native-fixture:${options.identity}`;
@@ -43,9 +43,9 @@ export function createNativeFixtureWindow(options: {
       shellThemes: { version: 1, light: 'mist', dark: 'forest' },
       window: desktopWindowThemeSnapshotForShellTheme('mist'), semantic: desktopSemanticPaletteForShellTheme('mist'),
     }, copy),
-    createRoute: () => {
+    createRoute: (signal) => {
       if (!loadingFinished) throw new Error('editor route started before the loading document finished');
-      return options.route();
+      return options.route(signal);
     },
     createGateway: async (route, port) => {
       gateway = await createNativeCodeSpaceGateway(route, port);

@@ -73,6 +73,8 @@ Plugin documents use a distinct product-allocated origin and the published Web s
 
 The application owns its DOM and browser rendering. These freedoms do not grant product session, filesystem, process, credential or management authority. The released platform remains responsible for asset sessions, bridge binding, permissions and revocation.
 
+Main-process `session.fetch` requests also pass through Electron's request hook. A contextless `other` request may retain authorization only when it already carries exactly one matching private bridge token from the owning Runtime session and has no frame, WebContents owner or initiator origin. Missing provenance alone grants nothing. Destination checks still bind the exact private origin; renderer and worker provenance remains authoritative, and frame-only claims are never inherited.
+
 # Boundaries
 
 Desktop runtime-control tokens, direct-session artifacts, Gateway credentials, RCPP credentials, and Flower grants are not plugin ambient authority.
@@ -88,3 +90,5 @@ Redeven security adapters may narrow authority; they may not mint platform token
 - `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Exact worker/frame origin authority and plugin/unknown denial.
 
 - `redeven:desktop/scripts/check-tessiven-workers.mjs` - Electron nested ELK auth failure reproduced; protected cold render/zoom/reload verified.
+
+- `redeven:desktop/scripts/fixtures/codespace-bridge-session.ts` - Real Electron main fetch and native route use the production request policy; native qualification checks authenticated and denied requests.

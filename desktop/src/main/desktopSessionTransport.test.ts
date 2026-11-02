@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   desktopPrivateBridgeRequestHeaders,
+  type DesktopRequestHeaders,
   desktopRequestSourceScope,
   resolveDesktopSessionTransport,
   shouldFailDesktopSessionMainDocument,
@@ -199,6 +200,46 @@ describe('shouldFailDesktopSessionMainDocument', () => {
 });
 
 describe('desktopPrivateBridgeRequestHeaders', () => {
+  it.each(['native_local_bridge', 'placement_bridge'] as const)('preserves authenticated main-process fetches on the exact %s origin', (kind) => {
+    const transport = { ...resolveDesktopSessionTransport(localTarget, localStartup), kind };
+    const url = `${transport.baseURL}api/local/codespaces/demo`;
+    const requestHeaders = desktopPrivateBridgeRequestHeaders(transport, localStartup, url, { Accept: 'application/json' });
+    const details = { url, resourceType: 'other', requestHeaders };
+    const scope = desktopRequestSourceScope(details, localStartup);
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, requestHeaders, scope)).toEqual(requestHeaders);
+    expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, requestHeaders, {
+      ...scope, verifiedLocalHost: true, tessivenSource: 'a'.repeat(72),
+    })).toEqual(requestHeaders);
+    for (const target of ['http://127.0.0.1:43124/', 'https://127.0.0.1:43123/', 'http://example.com:43123/',
+      `http://${'a'.repeat(48)}.localhost:43123/`]) {
+      expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, target, requestHeaders, scope))
+        .toEqual({ Accept: 'application/json' });
+    }
+  });
+
+  it('requires one exact owner credential for a contextless main-process request', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    const url = `${transport.baseURL}api/local/codespaces/demo`;
+    const header = 'X-Redeven-Desktop-Bridge-Token';
+    const token = localStartup.local_ui_bridge_token!;
+    const invalidHeaders: DesktopRequestHeaders[] = [{}, { [header]: 'forged' }, { [header]: Buffer.alloc(32, 7).toString('base64url') }, { [header]: [token] },
+      { [header]: token, [header.toLowerCase()]: token }];
+    for (const requestHeaders of invalidHeaders) {
+      const scope = desktopRequestSourceScope({ url, resourceType: 'other', requestHeaders }, localStartup);
+      expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, requestHeaders, scope)).toEqual({});
+    }
+    const requestHeaders = { [header.toLowerCase()]: token };
+    expect(desktopRequestSourceScope({ url, resourceType: 'other', requestHeaders, webContentsId: -1 }, localStartup)).toEqual({});
+    expect(desktopRequestSourceScope({ url, resourceType: 'other', requestHeaders })).not.toEqual({});
+    expect(desktopRequestSourceScope({ url, resourceType: 'other', requestHeaders }, { local_ui_bridge_token: 'forged' })).not.toEqual({});
+    for (const source of [{ webContentsId: 12 }, { initiatorOrigin: '' }, { initiatorOrigin: 'null' },
+      { initiatorOrigin: 'https://example.com' }, { frame: { url: 'about:blank' } },
+      { frame: { url: `http://${'a'.repeat(48)}.localhost:43123/` } }, { resourceType: 'script' }]) {
+      const scope = desktopRequestSourceScope({ url, resourceType: 'other', requestHeaders, ...source }, localStartup);
+      expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, requestHeaders, scope)).toEqual({});
+    }
+  });
+
   it('authorizes frame-less workers only from their browser-reported private origin', () => {
     const transport = resolveDesktopSessionTransport(localTarget, localStartup);
     const url = `${transport.baseURL}_redeven_proxy/env/assets/elk-worker.js`;
