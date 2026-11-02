@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.
+Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service, with independently verified device access and host authority. Cloud machine management and publication are absent.
 
 # Contract
 
@@ -20,6 +20,8 @@ Host-only routes issue invitations/client codes, list/revoke devices, update add
 
 ## Freshness and state
 Runtime metadata versions do not gate attachment admission. Wire/authority mismatches fail explicitly; no old protocol translator or Cloud fallback is installed. Schema 6 attachment state rejects unsupported input unchanged. Expected attachment and policy versions fence relevant mutations; operation IDs recover known results and preserve uncertainty.
+
+# Boundaries
 
 [Device trust and operations](../gateway/gateway-client-access.md) owns credential bootstrap and private result recovery. [Optional Runtime Cloud egress](../gateway/gateway-cloud-access.md) owns network policy and route isolation.
 

@@ -2306,8 +2306,8 @@
               "networking",
               "validation"
             ],
-            "summary": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. These checks are separate from the aggregate main push gate and release packaging.",
-            "section_count": 1
+            "summary": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. It verifies production handlers, host placements and multilingual management flows. These checks are separate from the aggregate main push gate and release packaging.",
+            "section_count": 2
           }
         ]
       },
@@ -4602,8 +4602,8 @@
               "identity",
               "protocol"
             ],
-            "summary": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.",
-            "section_count": 1
+            "summary": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service, with independently verified device access and host authority. Cloud machine management and publication are absent.",
+            "section_count": 2
           },
           {
             "concept_id": "protocol.rcpp-v5-cloud-api",
@@ -20565,8 +20565,8 @@
         "title": "Independent Gateway qualification",
         "type": "Gateway Contract"
       },
-      "body_length": 4650,
-      "summary": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. These checks are separate from the aggregate main push gate and release packaging.",
+      "body_length": 4748,
+      "summary": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. It verifies production handlers, host placements and multilingual management flows. These checks are separate from the aggregate main push gate and release packaging.",
       "sections": [
         {
           "id": "contract",
@@ -20574,9 +20574,16 @@
           "level": 1,
           "body": "## Product paths\nscripts/check_gateway_access_browser.sh starts the production public Gateway and Runtime handlers with no Runtime inbound TCP listener or Cloud credentials. A real Electron client pairs through the advertised HTTPS endpoint using scoped trust, then exercises password, MFA/recovery, files, terminal, CodeSpace edit/save, cookies, service forwarding and inner certificate rejection. The editor fixture waits for focus in the document editor and verifies inserted document text before saving, so a chat input cannot satisfy the edit step. Setting REDEVEN_PLUGIN_WEB_QUALIFICATION=1 adds seven published Web plugin cases covering direct private resources, conditional writes, binary files, isolation and Surface lifetimes.\n\nscripts/check_center.sh --browser exercises the actual Web Center UI in Chromium, Firefox and WebKit: single-administrator entry setup, fresh Gateway pairing, owner-approved Runtime bindings, real terminal/files/Git/editor/services, origin boundaries and independent device/Runtime/Gateway revocation. The fixture uses the same unified Gateway public listener, not a private-handler TCP shortcut. Setup recovery assertions wait for the visible sign-in transition after commit before reading delivery counts, including WebKit.\n\nscripts/check_gateway_cloud_isolation.sh creates task-owned isolated Docker networks. Runtime cannot reach Cloud IPs, public routing or public DNS. Local Gateway egress policy alone admits authenticated inner HTTPS and Flowersec RPC. No Gateway Cloud identity exists. Fixture-only private destinations are explicit; product destination safety remains enabled.\n\n## Presentation and state\nGateway management qualification covers ten locales at 390, 430, 768 and 1280 pixels, explicit issuance, preserved drafts, revocation, keyboard menus and active-only scroll extent. Focused contracts verify wrong-purpose/expired trust packages, public management rejection, read-only old-state rejection, persisted connection migration and operation recovery.",
           "char_count": 2010
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "These results certify the exercised source-build paths, not installers, native Windows/WSL deployment or production Cloud. Main push qualification is intentionally excluded from this local-only delivery.",
+          "char_count": 203
         }
       ],
-      "snippet": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. These checks are separate from the aggregate main push gate and release packaging.",
+      "snippet": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. It verifies production handlers, host placements and multilingual management flows. These checks are s",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -23331,18 +23338,25 @@
         "title": "Gateway v6 independent device protocol",
         "type": "Gateway Contract"
       },
-      "body_length": 2851,
-      "summary": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.",
+      "body_length": 2927,
+      "summary": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service, with independently verified device access and host authority. Cloud machine management and publication are absent.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Identities and wire fields\nThe stable gateway_id is independent of Desktop connection_id. RuntimeAttachment uses attachment_id and attachment_version. Catalogs contain attachments; Gateway metadata contains endpoints and tls_root_pem shared by clients and Runtimes. Device identities are not user memberships. Internal package/file names do not add a Cloud or user authority.\n\nClient public routes are pairing/challenge, pairing/complete, identity, catalog, access/open and access/service under /gateway/v6. Runtime-owned routes use /v6/attachment for invitation-exchange, join, cancel-join, update-endpoints, rotate, leave and connect. Current attachment certificate/version and signed Runtime service identity are required.\n\nHost-only routes issue invitations/client codes, list/revoke devices, update addresses/network/egress policy, remove or reevaluate attachments and query operation results. They are not registered on the public listener. ManageAttachments and ManageNetwork are request capabilities from verified host context, never device roles. Host proof grants both together; network settings, shared endpoint edits and attachment egress reevaluation consistently check ManageNetwork. Client trust administration requires current private host proof. OpenAPI declares each route surface explicitly. This alignment changes no route or signed payload, so protocol v6, epoch 70 and attachment schema 6 remain unchanged. Trust schema 4 retires historical host classification without replacing identities. Private host authentication is independent of device access; supplied signatures must still verify and address proofs retain their requested binding audience.\n\n## Freshness and state\nRuntime metadata versions do not gate attachment admission. Wire/authority mismatches fail explicitly; no old protocol translator or Cloud fallback is installed. Schema 6 attachment state rejects unsupported input unchanged. Expected attachment and policy versions fence relevant mutations; operation IDs recover known results and preserve uncertainty.\n\n[Device trust and operations](../gateway/gateway-client-access.md) owns credential bootstrap and private result recovery. [Optional Runtime Cloud egress](../gateway/gateway-cloud-access.md) owns network policy and route isolation.",
-          "char_count": 2283
+          "body": "## Identities and wire fields\nThe stable gateway_id is independent of Desktop connection_id. RuntimeAttachment uses attachment_id and attachment_version. Catalogs contain attachments; Gateway metadata contains endpoints and tls_root_pem shared by clients and Runtimes. Device identities are not user memberships. Internal package/file names do not add a Cloud or user authority.\n\nClient public routes are pairing/challenge, pairing/complete, identity, catalog, access/open and access/service under /gateway/v6. Runtime-owned routes use /v6/attachment for invitation-exchange, join, cancel-join, update-endpoints, rotate, leave and connect. Current attachment certificate/version and signed Runtime service identity are required.\n\nHost-only routes issue invitations/client codes, list/revoke devices, update addresses/network/egress policy, remove or reevaluate attachments and query operation results. They are not registered on the public listener. ManageAttachments and ManageNetwork are request capabilities from verified host context, never device roles. Host proof grants both together; network settings, shared endpoint edits and attachment egress reevaluation consistently check ManageNetwork. Client trust administration requires current private host proof. OpenAPI declares each route surface explicitly. This alignment changes no route or signed payload, so protocol v6, epoch 70 and attachment schema 6 remain unchanged. Trust schema 4 retires historical host classification without replacing identities. Private host authentication is independent of device access; supplied signatures must still verify and address proofs retain their requested binding audience.\n\n## Freshness and state\nRuntime metadata versions do not gate attachment admission. Wire/authority mismatches fail explicitly; no old protocol translator or Cloud fallback is installed. Schema 6 attachment state rejects unsupported input unchanged. Expected attachment and policy versions fence relevant mutations; operation IDs recover known results and preserve uncertainty.",
+          "char_count": 2051
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "[Device trust and operations](../gateway/gateway-client-access.md) owns credential bootstrap and private result recovery. [Optional Runtime Cloud egress](../gateway/gateway-cloud-access.md) owns network policy and route isolation.",
+          "char_count": 230
         }
       ],
-      "snippet": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.",
+      "snippet": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service, with independently verified device access and host authorit",
       "links": [
         {
           "label": "Device trust and operations",
@@ -31616,5 +31630,5 @@
       ]
     }
   ],
-  "source_sha256": "92b45c41a8cc7a4cb3cd5d1bd5bc06fd802e69166dd3c4343043d9aa1207e1bc"
+  "source_sha256": "1ce4a98c88edb9314d6b3e4257d73147e3485369a9a3e3dc8e61f97dba35826b"
 }
