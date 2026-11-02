@@ -104,3 +104,43 @@ func TestComputerScriptProtocolMethodSurvivesWithoutCode(t *testing.T) {
 		t.Fatalf("lost method-only failure: %+v %v calls=%d", p, err, calls)
 	}
 }
+
+func TestComputerEvaluationDiagnosticRetainsOnlyClosedFacts(t *testing.T) {
+	for _, method := range []string{"Runtime.evaluate", "Runtime.callFunctionOn"} {
+		for _, reason := range []string{"exception", "invalid_result"} {
+			want := map[string]any{"phase": "evaluation", "method": method, "reason": reason}
+			raw := map[string]any{"phase": "evaluation", "method": method, "reason": reason, "code": -32000, "message": "private content", "exceptionDetails": "private stack"}
+			if got := computerOperationDiagnostic(raw); !reflect.DeepEqual(got, want) {
+				t.Fatalf("invalid evaluation diagnostic: %+v", got)
+			}
+			for _, field := range []string{"method", "reason"} {
+				invalid := cloneAnyMap(raw)
+				invalid[field] = "private content"
+				if computerOperationDiagnostic(invalid) != nil {
+					t.Fatal("accepted unbounded evaluation diagnostic")
+				}
+			}
+		}
+	}
+}
+
+func TestComputerScriptEvaluationFailureKeepsConfirmedPrefix(t *testing.T) {
+	for _, stage := range []string{"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata", "hit_test"} {
+		t.Run(stage, func(t *testing.T) {
+			calls := 0
+			want := map[string]any{"phase": "evaluation", "method": "Runtime.evaluate", "reason": "exception"}
+			runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+				calls++
+				if calls == 1 {
+					return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("confirmed")}}, nil
+				}
+				return computerObservationFailure(inner, map[string]any{"action_executed": false, "observation_stage": stage, "diagnostic": map[string]any{"phase": "evaluation", "method": "Runtime.evaluate", "reason": "exception", "message": "private"}}, "fixture")
+			})
+			result, err := executeTestScript(t.Context(), runtime, call, "await ui.snapshot({emit:false}); log('confirmed'); try { await ui.snapshot(); } catch {} await ui.click(1,2);")
+			p := result.Result.(map[string]any)
+			if err == nil || calls != 2 || p["completed"] != false || p["context_reset"] != true || p["script_error"] != "TARGET_OBSERVATION_UNAVAILABLE" || !reflect.DeepEqual(p["diagnostic"], want) || !reflect.DeepEqual(p["completed_actions"], []string{"snapshot"}) || !reflect.DeepEqual(p["logs"], []any{[]any{"confirmed"}}) {
+				t.Fatalf("evaluation failure lost facts or continued: %+v %v calls=%d", p, err, calls)
+			}
+		})
+	}
+}

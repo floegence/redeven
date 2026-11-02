@@ -188,7 +188,7 @@ export class BrowserComputerController {
       }
       const metadata = await this.readObservation(async () => {
         const { frameTree } = await this.transport.send('Page.getFrameTree');
-        const title = await page.inFrame({ session: this.transport, frame: frameTree.frame }, 'document.title');
+        const title = await page.inFrame({ session: this.transport, frame: frameTree.frame }, 'document.title', value => typeof value === 'string');
         return { url: redactedNavigationURL(frameTree.frame.url), title };
       }, 'metadata');
       if (frame?.geometry) this.frameAnchor = frame.geometry;

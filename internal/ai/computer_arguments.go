@@ -52,6 +52,13 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 // Closed product-authored diagnostics. Never retain raw page errors or arguments.
 func computerOperationDiagnostic(value any) map[string]any {
 	raw, _ := value.(map[string]any)
+	if raw["phase"] == "evaluation" {
+		method, reason := anyToString(raw["method"]), anyToString(raw["reason"])
+		if !slices.Contains([]string{"Runtime.evaluate", "Runtime.callFunctionOn"}, method) || !slices.Contains([]string{"exception", "invalid_result"}, reason) {
+			return nil
+		}
+		return map[string]any{"phase": "evaluation", "method": method, "reason": reason}
+	}
 	if raw["phase"] == "protocol" {
 		method := anyToString(raw["method"])
 		if !computerProtocolMethod.MatchString(method) {

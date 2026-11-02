@@ -11,6 +11,9 @@ type selectionObservationExecutor struct{ scriptTestExecutor }
 func TestComputerCoreHelpExplainsAutomaticScreenshotsAndDocumentRefs(t *testing.T) {
 	for _, browser := range []bool{false, true} {
 		help, ok := computerScriptHelp("core", browser)
+		if !strings.Contains(help, "Use roles and refs from the current observation") || strings.Contains(help, "Search fields have role searchbox") || strings.Contains(help, "pagination landmarks use navigation") {
+			t.Fatal("help must describe observed roles, not infer business semantics")
+		}
 		for _, text := range []string{"SCRIPT_NO_PROGRESS", "no pending supported host operation", "do not establish who changed the interface", "automatically returns the image", "not PNG bytes or a filesystem path", "Refs identify the observed node, role and complete name within a document"} {
 			if !ok || !strings.Contains(help, text) {
 				t.Fatalf("missing lifecycle contract %q", text)

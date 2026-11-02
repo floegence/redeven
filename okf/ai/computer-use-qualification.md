@@ -36,6 +36,8 @@ Use default tools except explicit legacy-wait case. Cover bounded text/limits/bu
 | download | One export/save identity, exact bytes and terminal-created project file; no anonymous reads after acquisition |
 | native entry | Discovery/confirmed selection, exact text, one click/screenshot |
 | optional/caught | Zero/timeout may branch; failed unique lookup cannot resume input even when caught |
+| observed roles | Search-purpose controls with different observed roles; exact three values and one submit |
+| evaluation error | One injected execution failure retains method/reason/prefix; zero later input, fresh screenshot |
 | output loss | Prior explicit output retained; one fault/zero later input; actual method without invented code |
 | drag | Independent press/release/moves/endpoints/duration; invalid integer_0_5000 rejects before input |
 
@@ -58,6 +60,8 @@ checkDesktopSystemBrowser.mjs combines built Desktop/Runtime/extension/Native Me
 This contract grants no target authority and does not replace [media](computer-use-media.md) or [takeover](computer-use-takeover.md). Native disposable-app results do not qualify arbitrary applications/accounts. Freeze source hashes and rerun affected checks after integration; fixture scope never substitutes for the exact-main gate.
 
 # Evidence
+
+November 2: evaluation-contract qualification passes 222 Node tests, 372 Go test/subtest records and two relocated-bundle checks. Final configured DeepSeek Flash 1017 run: 12 tasks × 2, 23/24 strict passes; one scroll task references an undefined variable before later issuing exactly one wheel. Both observed-role and execution-diagnostic tasks pass twice. Preserve the earlier 22/24 run separately (guessed wait text and premature scroll conclusion); no production task heuristics or assertion relaxation. Fault cases qualify canonical diagnostic delivery, while deterministic Chromium tests inject actual CDP responses and verify installation state, privacy and no replay. Native desktop is outside this change.
 
 October 29: 12 scenarios × 2, 23/24 strict passes and 142 actual deepseek-flash requests. Six new fault tasks preserve prior logs, stop later input and retain one-save/one-navigation effects; method-only errors keep Runtime.evaluate. Existing content_wait fails after invalid requireState arity and unqualified value observation. Do not widen signatures. Other visual/form/table/batch/download/wait/read scopes pass. Faults inject one reply after a real operation; transport tests separately qualify diagnostics. Credentials/profile unchanged; no personal thread continued.
 

@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script read and validation boundaries
 tags: [ai, computer-use, scripts, validation]
 lifecycle: contract
-reviewed_at: "2026-10-28"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -36,6 +36,26 @@ It supplies the required semantic_read failure stage, retains the live source,
 and uses the existing bounded read retry only; inputs never enter that retry.
 A rejected read cannot become a malformed transport response that disconnects
 the target. A later explicitly requested read can recover on the same page.
+
+## Controlled browser evaluation
+One result checker owns Runtime.evaluate and Runtime.callFunctionOn responses.
+A transport acknowledgement is not successful script execution: exceptionDetails,
+missing results and invalid operation-specific values fail explicitly. Empty text,
+false, zero, arrays and null remain valid when promised; void installation/reset
+operations explicitly accept undefined. Optional scroll offsets may remain null
+without changing confirmed input outcomes.
+
+Only confirmed observer installation on the same document updates the existing
+prepared-frame map. Failed installation leaves it unprepared; a later explicit
+observation may prepare it again. No input, navigation or whole invocation is
+replayed. Internal observer readiness does not imply application readiness.
+
+Evaluation failures retain diagnostic phase evaluation, actual method and reason
+exception or invalid_result through the helper, Runtime and canonical tool result.
+These are distinct from protocol rejection codes. Raw exception text, stacks and
+page values do not enter diagnostics. Confirmed output survives later read failure;
+privacy takeover still discards content. Core help directs models to observed roles
+and refs instead of assigning roles from a control's business purpose.
 
 ## Validated inputs and bounded browser reads
 The browser adapter validates the complete operation before virtual focus,

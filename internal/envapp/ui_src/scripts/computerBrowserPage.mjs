@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { validateBrowserAction } from './computerBrowserArguments.mjs';
 import { documentHitPoint } from './computerBrowserFrame.mjs';
+import { evaluate, evaluationValue } from './computerBrowserEvaluation.mjs';
 
 // Display budgets never define reference or collection identity.
 const nameIdentity = text => createHash('sha256').update(text).digest('hex');
@@ -273,22 +274,20 @@ export class BrowserComputerPage {
       if (previous) this.invalidate([frame.frame.id]);
       const revision = this.revision;
       const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
-      await frame.session.send('Runtime.evaluate', { contextId: executionContextId, expression: privacyObserverSource });
+      await evaluate(frame.session, 'Runtime.evaluate', { contextId: executionContextId, expression: privacyObserverSource }, value => value === undefined);
       if (revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
       this.observedFrames.set(frame.frame.id, {...frame, revision});
     }
     return result;
   }
 
-  async inFrame(frame, expression) {
+  async inFrame(frame, expression, accepts) {
     const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
-    const result = await frame.session.send('Runtime.evaluate', { contextId: executionContextId, expression, returnByValue: true });
-    if (result.exceptionDetails) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'semantic_read' });
-    return result.result.value;
+    return evaluate(frame.session, 'Runtime.evaluate', { contextId: executionContextId, expression, returnByValue: true }, accepts);
   }
 
   async beginObservation() {
-    for (const frame of await this.frames()) await this.inFrame(frame, 'globalThis.__flowerPrivacyObserver.begin()');
+    for (const frame of await this.frames()) await this.inFrame(frame, 'globalThis.__flowerPrivacyObserver.begin()', value => value === undefined);
   }
 
   async safety({ authorizedNavigation = false } = {}) {
@@ -346,7 +345,7 @@ export class BrowserComputerPage {
           if (inputs.some(x => x.type === 'password')) reasons.push('secret_input');
           if (inputs.some(x => (x.autocomplete || '').split(/\\s+/u).includes('one-time-code'))) reasons.push('otp', 'secret_input');
           return reasons;
-        })()`);
+        })()`, value => Array.isArray(value) && value.every(reason => ['secret_input', 'otp'].includes(reason)));
         for (const reason of found) reasons.add(reason);
       } catch (error) {
         // A destroyed document makes its privacy scan obsolete. The caller
@@ -628,13 +627,12 @@ export class BrowserComputerPage {
     const {executionContextId} = await session.send('Page.createIsolatedWorld', {frameId:element.frame.frame.id, worldName:'flower-observation'});
     const {object} = await session.send('DOM.resolveNode', {backendNodeId:element.backendNodeId, executionContextId});
     try {
-      const result = await session.send('Runtime.callFunctionOn', {objectId:object.objectId, returnByValue:true,
-        functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.getClientRects().length&&getComputedStyle(this).visibility!=="hidden"?this.innerText||"":"";let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"rendered_element"};text+=character;}return {text,truncated:false,scope:"rendered_element"};}'});
-      if (result.exceptionDetails || !result.result?.value) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-      if (result.result.value.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
+      const result = await evaluate(session, 'Runtime.callFunctionOn', {objectId:object.objectId, returnByValue:true,
+        functionDeclaration:'function(){if(!(this instanceof HTMLElement))return {unsupported:true};const source=this.getClientRects().length&&getComputedStyle(this).visibility!=="hidden"?this.innerText||"":"";let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"rendered_element"};text+=character;}return {text,truncated:false,scope:"rendered_element"};}'}, value => value?.unsupported === true || (typeof value?.text === 'string' && typeof value.truncated === 'boolean' && value.scope === 'rendered_element'));
+      if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
         diagnostic: {phase:'read', method:'locator.text', expected:'html_element', recovery:'choose_supported_read'},
       });
-      return result.result.value;
+      return result;
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }
   }
 
@@ -658,9 +656,8 @@ export class BrowserComputerPage {
             const {executionContextId}=await element.frame.session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
             const {object}=await element.frame.session.send('DOM.resolveNode',{backendNodeId:element.backendNodeId,executionContextId});
             try {
-              const result=await element.frame.session.send('Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,arguments:[{value:state},{value:equals}],functionDeclaration:'function(state,expected){return (state==="value"?this.value:this.textContent)===expected;}'});
-              if (result.exceptionDetails) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-              matches=result.result?.value===true;
+              const result=await evaluate(element.frame.session, 'Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,arguments:[{value:state},{value:equals}],functionDeclaration:'function(state,expected){return (state==="value"?this.value:this.textContent)===expected;}'}, value => typeof value === 'boolean');
+              matches=result;
             } finally {if(object.objectId)await element.frame.session.send('Runtime.releaseObject',{objectId:object.objectId});}
           }
         } catch (error) {
@@ -680,10 +677,9 @@ export class BrowserComputerPage {
     const { executionContextId } = await session.send('Page.createIsolatedWorld', { frameId: element.frame.frame.id, worldName: 'flower-observation' });
     const { object } = await session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId });
     try {
-      const result = await session.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true,
-        functionDeclaration: 'function(){const e=this.nodeType===9?this.documentElement:this;if(!e?.isConnected||!e.getBoundingClientRect)return {visible:false,enabled:false};const r=e.getBoundingClientRect();let visible=r.width>0&&r.height>0;for(let p=e;p;p=p.parentElement||p.getRootNode()?.host){const s=getComputedStyle(p);if(s.visibility==="hidden"||s.display==="none"||Number(s.opacity)===0)visible=false;}const x=r.left+r.width/2;const y=r.top+r.height/2;let hit=document.elementFromPoint(x,y);while(hit?.shadowRoot?.elementFromPoint){const inner=hit.shadowRoot.elementFromPoint(x,y);if(!inner||inner===hit)break;hit=inner;}let receives=false;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===e){receives=true;break;}return {visible,enabled:!e.matches(":disabled")&&!e.closest("[inert],[aria-disabled=true]"),readonly:e.readOnly===true,receives,bounds:[r.x,r.y,r.width,r.height]};}' });
-      if (result.exceptionDetails || !result.result?.value) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-      return result.result.value;
+      const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true,
+        functionDeclaration: 'function(){const e=this.nodeType===9?this.documentElement:this;if(!e?.isConnected||!e.getBoundingClientRect)return {visible:false,enabled:false};const r=e.getBoundingClientRect();let visible=r.width>0&&r.height>0;for(let p=e;p;p=p.parentElement||p.getRootNode()?.host){const s=getComputedStyle(p);if(s.visibility==="hidden"||s.display==="none"||Number(s.opacity)===0)visible=false;}const x=r.left+r.width/2;const y=r.top+r.height/2;let hit=document.elementFromPoint(x,y);while(hit?.shadowRoot?.elementFromPoint){const inner=hit.shadowRoot.elementFromPoint(x,y);if(!inner||inner===hit)break;hit=inner;}let receives=false;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===e){receives=true;break;}return {visible,enabled:!e.matches(":disabled")&&!e.closest("[inert],[aria-disabled=true]"),readonly:e.readOnly===true,receives,bounds:[r.x,r.y,r.width,r.height]};}' }, value => typeof value?.visible === 'boolean' && typeof value.enabled === 'boolean' && (!value.visible || (typeof value.readonly === 'boolean' && typeof value.receives === 'boolean' && Array.isArray(value.bounds) && value.bounds.length === 4 && value.bounds.every(Number.isFinite))));
+      return result;
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', { objectId: object.objectId }); }
   }
 
@@ -697,9 +693,9 @@ export class BrowserComputerPage {
       const {executionContextId}=await session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
       const {object}=await session.send('DOM.resolveNode',{backendNodeId:element.backendNodeId,executionContextId});
       try {
-        const result=await session.send('Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,
-          functionDeclaration:'function(){for(let e=this;e;e=e.parentElement){if(e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth)return {x:e.scrollLeft,y:e.scrollTop};}return {x:scrollX,y:scrollY};}'});
-        if (!result.exceptionDetails && result.result?.value) return {scope:'nearest_scroll_container',...result.result.value};
+        const result=await evaluate(session, 'Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,
+          functionDeclaration:'function(){for(let e=this;e;e=e.parentElement){if(e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth)return {x:e.scrollLeft,y:e.scrollTop};}return {x:scrollX,y:scrollY};}'}, value => value && [value.x,value.y].every(Number.isFinite));
+        return {scope:'nearest_scroll_container',...result};
       } finally { if(object.objectId) await session.send('Runtime.releaseObject',{objectId:object.objectId}); }
     } catch { /* Missing offsets are not evidence that an input failed. */ }
     return null;
@@ -729,7 +725,7 @@ export class BrowserComputerPage {
       ({ object } = await session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId }));
       // Let the browser own ancestor/frame clipping and transforms. The one-shot
       // observation does not search alternative points or repeat wheel input.
-      const result = await session.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, awaitPromise: true,
+      const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, awaitPromise: true,
         functionDeclaration: `async function(){
           const root=this.nodeType===9, element=root?this.documentElement:this;
           if(!element?.isConnected||!element.getBoundingClientRect)return null;
@@ -748,11 +744,9 @@ export class BrowserComputerPage {
             left=Math.max(left,r.left);top=Math.max(top,r.top);right=Math.min(right,r.right);bottom=Math.min(bottom,r.bottom);
           }
           return right>left&&bottom>top?{x:(left+right)/2,y:(top+bottom)/2,width,height}:null;
-        }` });
-      if (result.exceptionDetails || !result.result || !Object.hasOwn(result.result,'value')) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-      const point=result.result.value;
+        }` }, value => value === null || (value && [value.x,value.y,value.width,value.height].every(Number.isFinite) && value.width > 0 && value.height > 0));
+      const point=result;
       if (!point) throw new Error('ELEMENT_NOT_ACTIONABLE');
-      if (![point.x,point.y,point.width,point.height].every(Number.isFinite) || point.width<=0 || point.height<=0) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
       const {frameTree}=await session.send('Page.getFrameTree');
       if(frameTree.frame.id===element.frame.frame.id)return {x:point.x,y:point.y};
       // Same-process child frames use their session root's input coordinates.
@@ -779,10 +773,9 @@ export class BrowserComputerPage {
         const { object } = await session.send('DOM.resolveNode', { backendNodeId, executionContextId });
         objects.push(object.objectId);
       }
-      const result = await session.send('Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
-        functionDeclaration: 'function(hit){const target=this.nodeType===9?this.documentElement:this;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===target)return true;return false;}' });
-      if (result.exceptionDetails) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
-      if (result.result?.value !== true) return false;
+      const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
+        functionDeclaration: 'function(hit){const target=this.nodeType===9?this.documentElement:this;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===target)return true;return false;}' }, value => typeof value === 'boolean');
+      if (!result) return false;
       // An OOPIF session cannot see an overlay in its embedding document.
       // Validate the same point through each embedding session before input.
       let current=session;
@@ -805,8 +798,8 @@ export class BrowserComputerPage {
         if (hit.backendNodeId!==backendNodeId && hit.frameId!==root.id) return false;
         current=parent.session;
       }
-    } catch {
-      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test' });
+    } catch (error) {
+      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test', protocolDiagnostic: error.protocolDiagnostic });
     }
     finally { for (const objectId of objects) if (objectId) await session.send('Runtime.releaseObject', { objectId }); }
   }
@@ -882,7 +875,7 @@ export class BrowserComputerPage {
       // hasFocus() includes ancestor documents. The deepest focused document
       // owns typing, including private sign-in fields inside an iframe.
       for (const candidate of [...frames].reverse()) {
-        if (await this.inFrame(candidate, "document.hasFocus() && !['IFRAME','FRAME'].includes(document.activeElement?.tagName)")) { frame = candidate; break; }
+        if (await this.inFrame(candidate, "document.hasFocus() && !['IFRAME','FRAME'].includes(document.activeElement?.tagName)", value => typeof value === 'boolean')) { frame = candidate; break; }
       }
       if (!frame) throw new Error('ELEMENT_NOT_FOUND');
     }
@@ -893,7 +886,7 @@ export class BrowserComputerPage {
       const result = await this.effect(() => frame.session.send('Runtime.callFunctionOn', { executionContextId: node ? undefined : executionContextId, ...(node ? { objectId: node.objectId } : {}),
         functionDeclaration: `function(text,replace){const element=replace?this:document.activeElement;if(!element)return false;element.focus();if(replace){if(typeof element.select==='function')element.select();else{const range=document.createRange();range.selectNodeContents(element);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);}}return document.execCommand(text===''&&replace?'delete':'insertText',false,text);}`,
         arguments: [{ value: text }, { value: replace }], returnByValue: true }));
-      if (result.exceptionDetails || result.result.value !== true) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
+      if (!evaluationValue(result, 'Runtime.callFunctionOn', value => typeof value === 'boolean')) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
     } finally { if (node?.objectId) await frame.session.send('Runtime.releaseObject', { objectId: node.objectId }); }
   }
 

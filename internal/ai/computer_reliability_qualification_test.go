@@ -87,8 +87,8 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 			}
 		}
 		wanted := f.scenario == "read_failure_recovery" && action == "text" || f.scenario == "missing_snapshot" && call.ToolName == "computer.observe" || f.scenario == "missing_text" && action == "text" || f.scenario == "missing_wait" && action == "wait"
-		wanted = wanted || f.scenario == "read_output_prefix" && call.ToolName == "computer.observe" || f.scenario == "navigation_output_prefix" && call.ToolName == "browser.navigate" || f.scenario == "protocol_without_code" && action == "text" && f.reads.Load() == 2
-		if (f.ready.Load() || f.scenario == "read_failure_recovery" || f.scenario == "protocol_without_code") && wanted && f.injected.CompareAndSwap(0, 1) {
+		wanted = wanted || f.scenario == "read_output_prefix" && call.ToolName == "computer.observe" || f.scenario == "navigation_output_prefix" && call.ToolName == "browser.navigate" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception") && action == "text" && f.reads.Load() == 2
+		if (f.ready.Load() || f.scenario == "read_failure_recovery" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception")) && wanted && f.injected.CompareAndSwap(0, 1) {
 			reply.Result.Result = map[string]any{"action_executed": false, "observation_invalidated": true}
 			reply.Result.Safety = &InteractionSafetyDecision{Level: "routine", SafeToCapture: false, SafeToSendToModel: false}
 			reply.Result.Screenshot = nil
@@ -102,10 +102,13 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 				reply.Result.Result = map[string]any{"action_executed": true, "navigation_stage": "load"}
 				reply.Result.Safety = nil
 			}
-			if f.scenario == "protocol_without_code" {
+			if f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" {
 				reply.Result.Error = "TARGET_OBSERVATION_UNAVAILABLE"
 				reply.Result.Result = map[string]any{"action_executed": false, "observation_stage": "semantic_read", "diagnostic": map[string]any{"phase": "protocol", "method": "Runtime.evaluate"}}
 				reply.Result.Safety = nil
+				if f.scenario == "evaluation_exception" {
+					reply.Result.Result["diagnostic"] = map[string]any{"phase": "evaluation", "method": "Runtime.callFunctionOn", "reason": "exception"}
+				}
 			}
 			// Preserve the host's lowercase framing and exact invocation IDs.
 			body, err = json.Marshal(map[string]any{"id": reply.ID, "result": reply.Result})
@@ -195,7 +198,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"observed_roles", "evaluation_exception", "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				if !strings.HasPrefix(scenario, "native_") {
@@ -287,6 +290,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					if scenario == "visual_natural" {
 						_, _ = fmt.Fprintf(w, "<title>Visual fixture</title><p>Click the green square exactly once.</p><canvas width='600' height='240' aria-label='Color exercise'></canvas><output aria-label='Result'></output><script>const c=document.querySelector('canvas'),x=c.getContext('2d');for(let i=0;i<3;i++){x.fillStyle=i===%d?'#008a00':'#e02020';x.fillRect(30+180*i,40,120,120)}c.onclick=e=>{const b=c.getBoundingClientRect(),i=Math.floor((e.clientX-b.left-30)/180);fetch('/pointer',{method:'POST'});document.querySelector('output').textContent=i===%d?'Correct square':'Wrong square';if(i===%d)fetch('/entered',{method:'POST'})};</script>", (repeat+1)%3, (repeat+1)%3, (repeat+1)%3)
+						return
+					}
+					if scenario == "observed_roles" {
+						_, _ = io.WriteString(w, `<!doctype html><title>Search workspace</title><label>Catalog search<input aria-label="Catalog search"></label><label>Archive search<input type="search" aria-label="Archive search"></label><label>Suggested search<input role="combobox" aria-label="Suggested search" aria-expanded="false"></label><button onclick="const values=[...document.querySelectorAll('input')].map(x=>x.value);fetch('/typed?value='+encodeURIComponent(values.join(' / ')));fetch('/submit',{method:'POST'});document.querySelector('output').textContent=values.join(' / ')">Apply</button><output aria-label="Receipt"></output>`)
 						return
 					}
 					if scenario == "form_natural" {
@@ -461,6 +468,8 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Attempt one semantic locator scroll of the Reading pane region by 300 pixels and report the actual outcome. If blocked, take a fresh observation and stop. Do not retry, click, press keys, navigate or alter the page."
 				case "visual_natural":
 					prompt = "Capture the selected page, inspect the image and click its green square exactly once. Verify and report the displayed result. Use only Computer Use; do not use DOM evaluation, network or terminal. The colored squares are drawn inside one canvas."
+				case "observed_roles":
+					prompt = "Use the selected search workspace. Enter Cedar in Catalog search, Maple in Archive search, and Pine in Suggested search. Apply exactly once and report the receipt. Use only the documented Computer Use interface and the page you observe."
 				case "form_natural":
 					prompt = fmt.Sprintf("Enter reference Orchard-%d in this form and submit it exactly once. Read and report its receipt. Use the visible page and documented Computer Use APIs only.", repeat)
 				case "table_natural":
@@ -493,7 +502,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('button',{name:'Save once',exact:true}).click(); await ui.snapshot(); await ui.key('PageDown'); . The post-save observation has an intentional one-time failure. Report the retained output and completed actions, then observe Save status in a separate call. Never repeat the save or send the key."
 				case "navigation_output_prefix":
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . A one-time navigation-load timeout is intentional and does not undo the navigation. Report the retained output and navigation facts, then observe the current page in a separate call. Never repeat navigation or send the key."
-				case "protocol_without_code":
+				case "protocol_without_code", "evaluation_exception":
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); await ui.key('PageDown'); . The second read has an intentional one-time failure. Report its returned diagnostic and retained output, then capture a screenshot in a separate call. Do not input, navigate, or repeat the diagnostic script."
 				case "read_failure_recovery":
 					prompt = "Use locator.text to read the Scrollable region and report its complete visible text and a screenshot. This disposable fixture can have a one-time read failure. Choose a fresh observation if needed; do not input anything, navigate or use network tools."
@@ -587,7 +596,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Wait for the Ready button to become enabled using locator.waitFor({state:'enabled',timeout_ms:5000}). Log the returned state and read the button. Do not click any buttons. Report the observed enabled state."
 				}
 
-				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "protocol_without_code" {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
 					client := runtime.browserHost.client
 					transport := client.Transport
 					client.Transport = &qualificationReadFaultTransport{RoundTripper: transport, scenario: scenario, injected: &injected, inputs: &blockedInputs}
@@ -742,7 +751,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				report["injected_read_failures"] = injected.Load()
 				report["inputs_after_failed_read"] = blockedInputs.Load()
-				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "protocol_without_code" {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
 					report["scope"] = "real-provider-real-browser-single-read-fault-injection"
 				}
 				if scenario == "wait_default" {
@@ -797,6 +806,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					report["capture_before_input"] = capturedBeforeInput
 					if !capturedBeforeInput || entered.Load() != 1 || pointerClicks.Load() != 1 || !strings.Contains(finalText, "Correct square") {
 						t.Errorf("visual task failed: captured=%v correct=%d clicks=%d", capturedBeforeInput, entered.Load(), pointerClicks.Load())
+					}
+				case "observed_roles":
+					if submissions.Load() != 1 || typedValue.Load() != "Cedar / Maple / Pine" || !strings.Contains(finalText, "Cedar / Maple / Pine") {
+						t.Errorf("observed-role task failed: submits=%d", submissions.Load())
 					}
 				case "form_natural":
 					want := fmt.Sprintf("Orchard-%d", repeat)
@@ -997,7 +1010,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if !strings.Contains(finalText, "violet-73") || !captured || scriptErrors["TAKEOVER_REQUIRED"] != 0 || pointerClicks.Load() != 0 {
 						t.Error("ordinary article was not read and captured safely")
 					}
-				case "read_output_prefix", "navigation_output_prefix", "protocol_without_code":
+				case "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "evaluation_exception":
 					wantCode := "TARGET_OBSERVATION_UNAVAILABLE"
 					if scenario == "navigation_output_prefix" {
 						wantCode = "NAVIGATION_TIMEOUT"
@@ -1019,9 +1032,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							wantActions = "[text click]"
 						}
 						verified = prefix && fmt.Sprint(fact["completed_actions"]) == wantActions && fact["context_reset"] == true
-						if scenario == "protocol_without_code" {
+						if scenario == "protocol_without_code" || scenario == "evaluation_exception" {
 							d, _ := fact["diagnostic"].(map[string]any)
 							verified = verified && d["phase"] == "protocol" && d["method"] == "Runtime.evaluate" && d["code"] == nil
+							if scenario == "evaluation_exception" {
+								verified = prefix && fmt.Sprint(fact["completed_actions"]) == wantActions && fact["context_reset"] == true && d["phase"] == "evaluation" && d["method"] == "Runtime.callFunctionOn" && d["reason"] == "exception" && d["code"] == nil
+							}
 						}
 					}
 					wantSaves, wantNavigations := int32(0), int32(0)
