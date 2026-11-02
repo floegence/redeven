@@ -3907,6 +3907,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           visible={embedded ? workbenchPluginCenterOpen() && viewMode() === 'workbench' : viewMode() === 'activity' && layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID}
           pluginWidgetCounts={pluginWidgetCounts()}
           projection={pluginInventoryProjection() ?? { items: [] }}
+          activityPinnedInventoryKeys={pluginPlacementPins().activityInventoryKeys}
+          onSetActivityPin={(inventoryKey, pinned) => setPluginPin('activity', inventoryKey, pinned)}
           loading={pluginInventoryInitialPending()}
           preparing={isLocalMode() && protocol.status() === 'connected' && !pluginSessionReady() && !pluginSessionRetired()}
           error={pluginInventoryError()}
@@ -5371,6 +5373,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             refreshInventory={refreshPluginSurfaceInventory}
             instanceID={window.instanceID}
             target={window.target()}
+            activityPinned={hasPluginPlacementPin(pluginPlacementPins(), 'activity', 'instance:' + window.target().pluginInstanceID)}
+            onSetActivityPin={(pinned) => setPluginPin('activity', 'instance:' + window.target().pluginInstanceID, pinned)}
             coordinator={pluginSurfaceCoordinator}
             confirmationQueue={pluginConfirmationQueue}
             visible={viewMode() === 'activity'}

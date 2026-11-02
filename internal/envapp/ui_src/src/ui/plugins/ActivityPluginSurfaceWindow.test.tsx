@@ -22,11 +22,14 @@ vi.mock('../context/EnvAppFloatingWindowStackContext', () => ({
   useEnvAppFloatingWindowStack: () => ({ activate: harness.activateFloatingWindow }),
 }));
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
+  useNotification: () => ({ error: vi.fn() }),
   useLayout: () => ({ isMobile: () => harness.mobile }),
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  Pin: () => <span aria-hidden="true" />,
   AlertTriangle: () => <span aria-hidden="true" />,
   Refresh: () => <span aria-hidden="true" />,
 }));
@@ -75,6 +78,7 @@ vi.mock('../i18n', () => ({
 vi.mock('../widgets/PersistentFloatingWindow', () => ({
   PersistentFloatingWindow: (props: {
     title: string;
+    headerActions?: JSX.Element;
     surfaceRef?: (element: HTMLElement | null) => void;
     onOpenChange: (open: boolean) => void;
     children: JSX.Element;
@@ -89,6 +93,7 @@ vi.mock('../widgets/PersistentFloatingWindow', () => ({
         <button type="button" data-window-close onClick={() => props.onOpenChange(false)}>
           {props.title}
         </button>
+        {props.headerActions}
         {props.children}
       </div>
     </section>
@@ -150,13 +155,32 @@ function mountWindow(overrides: Partial<Parameters<typeof ActivityPluginSurfaceW
     onClosed: vi.fn(),
     onEndPluginSession: vi.fn(async () => true),
     onRetirementError: vi.fn(),
-    ...overrides,
   };
-  dispose = render(() => <ActivityPluginSurfaceWindow {...props} />, mount);
+  dispose = render(() => <ActivityPluginSurfaceWindow {...props} {...overrides} />, mount);
   return { mount, props };
 }
 
 describe('ActivityPluginSurfaceWindow', () => {
+  it('pins from the window header without retiring or remounting its live surface', async () => {
+    const [pinned, setPinned] = createSignal(false);
+    const onSetActivityPin = vi.fn((value: boolean) => { setPinned(value); });
+    const { mount, props } = mountWindow({ get activityPinned() { return pinned(); }, onSetActivityPin });
+    const iframe = mount.querySelector('iframe');
+    const pin = mount.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
+    pin.click();
+    await Promise.resolve();
+    expect(onSetActivityPin).toHaveBeenCalledWith(true);
+    expect(pin.getAttribute('aria-pressed')).toBe('true');
+    expect(mount.querySelector('iframe')).toBe(iframe);
+    expect(harness.closeBody).not.toHaveBeenCalled();
+    expect(props.onClosed).not.toHaveBeenCalled();
+    pin.click();
+    await Promise.resolve();
+    expect(onSetActivityPin).toHaveBeenLastCalledWith(false);
+    expect(mount.querySelector('iframe')).toBe(iframe);
+    expect(harness.closeBody).not.toHaveBeenCalled();
+  });
+
   it('binds modal semantics and moves initial focus into the plugin iframe', async () => {
     const shell = document.createElement('main');
     const preExistingInert = document.createElement('aside');

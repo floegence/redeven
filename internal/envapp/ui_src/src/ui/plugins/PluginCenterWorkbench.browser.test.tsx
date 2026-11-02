@@ -1,6 +1,7 @@
 import '../../index.css';
 
 import { createSignal } from 'solid-js';
+import { NotificationProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
@@ -53,7 +54,7 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
     setLauncher(false);
     setOpen(true);
   };
-  dispose = render(() => <>
+  dispose = render(() => <NotificationProvider>
     <div data-test-workbench-background inert={open() || present()} aria-hidden={open() || present() || undefined}>
       <div class="workbench-surface" data-floe-dialog-surface-host="true" data-floe-surface-portal-layer="true"
         onWheel={onWheel} style={{ position: 'relative', height: '100vh' }}>
@@ -71,7 +72,7 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
         projection={{ items }} loading={false} canManagePlugins canOpenPluginSurfaces
         onRefresh={onRefresh} onCommand={onCommand} onClose={() => setOpen(false)} />
     </PluginCenterDrawer>
-  </>, host);
+  </NotificationProvider>, host);
   const enter = async (details = false) => {
     await page.elementLocator(host.querySelector('[data-test-launcher]')!).click();
     const selector = details ? `[data-plugin-panel-tile="${item.inventoryKey}"]` : '[data-plugin-center-market-action]';

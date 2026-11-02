@@ -33,6 +33,7 @@ import type {
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PLUGIN_PACKAGE_DIALOG_CLASS, PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginLifecycleLabel, pluginPendingActionLabels, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PluginPinButton } from './PluginPinButton';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader, PluginProcessStatusBadge } from './PluginPresentationPrimitives';
 import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
@@ -46,6 +47,8 @@ export type PluginCenterViewProps = {
   visible?: boolean;
   pluginWidgetCounts?: Readonly<Record<string, number>>;
   projection: PluginInventoryProjection;
+  activityPinnedInventoryKeys?: readonly string[];
+  onSetActivityPin?: (inventoryKey: string, pinned: boolean) => void | Promise<void>;
   loading: boolean;
   preparing?: boolean;
   error?: unknown;
@@ -839,6 +842,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               {(item, index) => (
                 <PluginCenterItem
                   item={item}
+                  activityPinned={(props.activityPinnedInventoryKeys ?? []).includes(item.inventoryKey)}
+                  onSetActivityPin={props.onSetActivityPin ? (pinned) => props.onSetActivityPin?.(item.inventoryKey, pinned) : undefined}
                   tab={activeTab()}
                   selected={selectedItem()?.inventoryKey === item.inventoryKey}
                   canManage={canManage()}
@@ -912,6 +917,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           {(item) => (
             <PluginCenterDetails
               item={item}
+              activityPinned={(props.activityPinnedInventoryKeys ?? []).includes(item.inventoryKey)}
+              onSetActivityPin={props.onSetActivityPin ? (pinned) => props.onSetActivityPin?.(item.inventoryKey, pinned) : undefined}
               split={splitDetails()}
               headingId={`${idPrefix}-detail-heading`}
               detailHeadingRef={(element) => { detailHeadingRef = element; }}
@@ -1542,6 +1549,8 @@ export function PluginCenterShell(props: {
 }
 
 export function PluginCenterDetails(props: {
+  activityPinned?: boolean;
+  onSetActivityPin?: (pinned: boolean) => void | Promise<void>;
   item?: PluginInventoryItem;
   marketDetail?: PluginMarketDetail;
   marketDetailLoading?: boolean;
@@ -1635,6 +1644,8 @@ export function PluginCenterDetails(props: {
 
               <PluginActions
                 item={item()}
+                activityPinned={props.activityPinned}
+                onSetActivityPin={props.onSetActivityPin}
                 canManage={props.canManage}
                 canOpenSurfaces={props.canOpenSurfaces}
                 managementPending={props.managementPending}
@@ -2220,6 +2231,8 @@ function CenterFilterMenu(props: {
 }
 
 function PluginActions(props: {
+  activityPinned?: boolean;
+  onSetActivityPin?: (pinned: boolean) => void | Promise<void>;
   item: PluginInventoryItem;
   canManage: boolean;
   canOpenSurfaces: boolean;
@@ -2361,6 +2374,10 @@ function PluginActions(props: {
               ? pluginPendingCommandLabel(props.commandPendingType, i18n, props.installOperation?.observation)
               : primaryActionLabel(presentation().primaryAction)}</StableText>
         </Button>
+        <Show when={props.onSetActivityPin && (presentation().canOpenSurface || props.activityPinned)}>
+          <PluginPinButton pluginName={(props.item.presentation ? resolveAuthorPresentation(props.item.presentation, i18n.locale()).plugin_name : undefined) ?? props.item.displayName} pinned={Boolean(props.activityPinned)}
+            onSetPinned={(pinned) => props.onSetActivityPin?.(pinned)} />
+        </Show>
         <Show when={overflowItems().length > 0}>
           <Dropdown
             align="end"

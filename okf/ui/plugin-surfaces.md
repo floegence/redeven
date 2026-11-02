@@ -4,7 +4,7 @@ title: Plugin surfaces
 tags: [ui, plugins, activity, workbench, plugin-center]
 quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -14,6 +14,11 @@ Redeven owns plugin discovery, navigation and placement; released ReDevPlugin ow
 
 ## Discovery and exact inventory
 Activity Bar Plugins opens a Shell-root Launcher without changing the normal surface. Search intersects category with NFKC/locale-case-folded display names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay the grid without reflow and restore originating-row focus.
+
+## Quick pinning
+The Launcher exposes a visible pin toggle on each plugin tile; its destination follows the current mode (Activity Bar or Workbench Dock). Right-click, ContextMenu and Shift+F10 expose plugin information and the same pin/unpin action. Pinning leaves the Launcher open, and menu dismissal restores tile focus. Touch controls retain a 44px target, including tablets.
+
+Plugin Center cards/details and Activity window headers also expose Activity Bar pinning. Every entry reads and updates the Shell's existing environment-scoped placement preferences; Activity and Workbench pins remain independent. Selected state and accessible action labels update together. Pinning does not launch, enable or authorize a plugin. Unpinning an Activity page completes its exact existing surface retirement first; a failed close retains the pin and reports the failure. Floating windows and sibling surfaces retain their own lifetimes.
 
 ## Session recovery
 An authenticated session-ready transition invokes idempotent Host `recoverEnabled` without a stability timer. All placements consume Host `action_state`; trust, grants, policy or recovery flags cannot derive `can_open`.
@@ -46,6 +51,9 @@ Manifest surface kinds remain `view|command|background` with semantic roles. Act
 It does not verify packages or releases, mint tokens, serve assets, grant permissions implicitly, or call business adapters directly.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginQuickPin.browser.test.tsx` - Visible pin, pointer/keyboard menus, focus restoration and responsive hit targets; Plugin Center actions remain synchronized.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinButton.test.tsx` - Pending operations reject duplicate clicks; failed updates preserve authoritative selection and remain retryable.
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Inventory refresh and sibling removal retain the registered page component while presentation metadata updates.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx` - Equivalent target updates retain the live document; authority changes retire it.

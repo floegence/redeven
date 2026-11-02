@@ -4111,6 +4111,43 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   }, 10000);
 
+  it('persists quick pins from the real launcher and synchronizes Plugin Center and Activity navigation', async () => {
+    pluginPanelState.renderActual = true;
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      const inventoryKey = 'instance:plugin_example_metrics';
+      const activityID = 'redeven.plugin.activity:instance%3Aplugin_example_metrics';
+      await flushUntil(() => window.sessionStorage.getItem('redeven_env_public_id') === 'env_local'
+        && pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-quick-pin]')));
+      const pin = document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
+      pin.click();
+      await flushUntil(() => findActivityButton(host, activityID) !== null);
+      expect(pin.getAttribute('aria-pressed')).toBe('true');
+      expect(pluginPanelState.lastProps.open).toBe(true);
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBeNull();
+      expect(JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}'))
+        .toMatchObject({ activityInventoryKeys: [inventoryKey], workbenchInventoryKeys: [] });
+      (document.querySelector('[data-plugin-center-market-action]') as HTMLButtonElement).click();
+      await flushUntil(() => pluginCenterViewState.lastProps?.activityPinnedInventoryKeys?.includes(inventoryKey));
+      await pluginCenterViewState.lastProps.onSetActivityPin(inventoryKey, false);
+      await flushUntil(() => findActivityButton(host, activityID) === null);
+      expect(JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}').activityInventoryKeys).toEqual([]);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-quick-pin]')));
+      expect(document.querySelector('[data-plugin-quick-pin]')?.getAttribute('aria-pressed')).toBe('false');
+    } finally { dispose(); }
+  }, 10000);
+
   it('keeps an Activity pin when exact close fails and removes it after a successful retry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

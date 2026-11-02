@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { createSignal } from 'solid-js';
+import { NotificationProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -121,7 +122,7 @@ function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
   document.body.append(mount);
   const trigger = props.trigger ?? (!props.mobile && props.placement !== 'workbench' ? createTrigger() : undefined);
   dispose = render(() => (
-    <PluginPanel
+    <NotificationProvider><PluginPanel
       open
       model={panelModel()}
       onClose={vi.fn()}
@@ -130,7 +131,7 @@ function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
       onOpenPluginSurface={vi.fn()}
       {...props}
       trigger={trigger}
-    />
+    /></NotificationProvider>
   ), mount);
 }
 
@@ -268,6 +269,33 @@ describe('PluginPanel', () => {
     expect(dialog.querySelector('[data-floe-dropdown]')).toBeNull();
     center[0]?.click();
     expect(onOpenCenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('pins from a visible tile control without opening the plugin or dismissing the launcher', async () => {
+    const onOpenPluginSurface = vi.fn();
+    const onClose = vi.fn();
+    const onSetPluginPin = vi.fn();
+    mountPanel({ placement: 'activity', onOpenPluginSurface, onClose, onSetPluginPin });
+    const pin = document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
+    expect(pin).not.toBeNull();
+    expect(pin.getAttribute('aria-label')).toBe('Metrics: Pin to Activity Bar');
+    expect(pin.getAttribute('aria-pressed')).toBe('false');
+    pin.click();
+    await Promise.resolve();
+    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_metrics', true);
+    expect(onOpenPluginSurface).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('shows pinned state and toggles the selected placement only', async () => {
+    const onSetPluginPin = vi.fn();
+    mountPanel({ trigger: createWorkbenchTrigger().trigger, placement: 'workbench', pinnedInventoryKeys: ['instance:plugininst_metrics'], onSetPluginPin });
+    const pin = document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
+    expect(pin.getAttribute('aria-pressed')).toBe('true');
+    expect(pin.title).toBe('Unpin from Workbench Dock');
+    pin.click();
+    await Promise.resolve();
+    expect(onSetPluginPin).toHaveBeenCalledWith('workbench', 'instance:plugininst_metrics', false);
   });
 
   it('opens the mode-specific Activity pin action without closing the panel', async () => {

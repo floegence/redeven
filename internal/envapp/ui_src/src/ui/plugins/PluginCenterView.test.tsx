@@ -4,6 +4,7 @@ import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
+import { NotificationProvider } from '@floegence/floe-webapp-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
@@ -326,6 +327,39 @@ describe('PluginCenterView', () => {
     expect(controlText(card)).not.toContain('Available');
     openInventoryDetails(mount);
     expect(controlText(mount.querySelector('[data-plugin-center-details]'))).toContain('Metrics');
+  });
+
+  it('synchronizes card and detail pins without opening or managing the plugin', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const installed = {
+      ...metricsPlugin, inventoryKey: 'instance:plugininst_metrics', pluginInstanceID: 'plugininst_metrics',
+      lifecycleState: 'enabled' as const, version: '2.0.0', managementRevision: 23,
+      defaultLaunchTarget: { pluginID: metricsPlugin.pluginID, pluginInstanceID: 'plugininst_metrics', surfaceID: 'metrics.dashboard', expectedManagementRevision: 23 },
+    };
+    const [pins, setPins] = createSignal<string[]>([]);
+    const onCommand = vi.fn();
+    const onSetActivityPin = vi.fn((key: string, pinned: boolean) => { setPins(pinned ? [key] : []); });
+    dispose = render(() => <NotificationProvider><PluginCenterView
+      projection={{ items: [installed] }} loading={false} onRefresh={vi.fn()} onCommand={onCommand}
+      canManagePlugins canOpenPluginSurfaces activityPinnedInventoryKeys={pins()} onSetActivityPin={onSetActivityPin}
+    /></NotificationProvider>, mount);
+    const cardPin = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-actions] [data-plugin-quick-pin]')!;
+    expect(cardPin.getAttribute('aria-pressed')).toBe('false');
+    cardPin.click();
+    await Promise.resolve();
+    expect(onSetActivityPin).toHaveBeenCalledWith(installed.inventoryKey, true);
+    expect(cardPin.getAttribute('aria-pressed')).toBe('true');
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
+    openInventoryDetails(mount, installed.inventoryKey);
+    const detailPin = mount.querySelector<HTMLButtonElement>('[data-plugin-center-details] [data-plugin-quick-pin]')!;
+    expect(detailPin.getAttribute('aria-pressed')).toBe('true');
+    detailPin.click();
+    await Promise.resolve();
+    expect(onSetActivityPin).toHaveBeenLastCalledWith(installed.inventoryKey, false);
+    expect(cardPin.getAttribute('aria-pressed')).toBe('false');
+    expect(detailPin.getAttribute('aria-pressed')).toBe('false');
+    expect(onCommand).not.toHaveBeenCalled();
   });
 
   it('opens a real card action menu instead of treating the ellipsis as a detail button', async () => {

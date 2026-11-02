@@ -8,6 +8,7 @@ import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventory
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginPendingActionLabels, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginProcessStatusBadge, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
+import { PluginPinButton } from './PluginPinButton';
 import { PluginInstallSummary } from './PluginInstallStatus';
 
 export function PluginCenterItem(props: {
@@ -30,6 +31,8 @@ export function PluginCenterItem(props: {
   onDisable: () => void;
   onUninstall: () => void;
   onOpenSurface: () => void;
+  activityPinned?: boolean;
+  onSetActivityPin?: (pinned: boolean) => void | Promise<void>;
   onRetryInstall?: () => void;
   onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
@@ -204,6 +207,10 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           <button type="button" data-plugin-runtime-recovery-retry={props.item.pluginInstanceID} class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={i18n.t('common.actions.retry')} title={i18n.t('common.actions.retry')} onClick={() => void props.onRetryRuntimeRecovery?.()}>
             <RefreshIcon class="h-4 w-4" />
           </button>
+        </Show>
+        <Show when={props.onSetActivityPin && (actions().canOpenSurface || props.activityPinned)}>
+          <PluginPinButton pluginName={displayName()} pinned={Boolean(props.activityPinned)}
+            onSetPinned={(pinned) => props.onSetActivityPin?.(pinned)} />
         </Show>
         <Dropdown
           align="end"
