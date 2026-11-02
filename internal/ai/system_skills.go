@@ -6,6 +6,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	platformversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
 
 //go:embed system_skills/*/SKILL.md
@@ -32,9 +34,13 @@ func embeddedSystemSkills() []embeddedSkill {
 		if name == "" {
 			continue
 		}
+		resolved := string(content)
+		if name == "redeven-plugin-authoring" {
+			resolved = strings.ReplaceAll(resolved, "{{REDEVPLUGIN_PLATFORM_VERSION}}", platformversion.CurrentPlatformVersion())
+		}
 		out = append(out, embeddedSkill{
 			Path:    "system:" + name + "/SKILL.md",
-			Content: string(content),
+			Content: resolved,
 		})
 	}
 	return out

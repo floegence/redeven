@@ -72,6 +72,20 @@ unchanged and unavailable only within the plugin boundary.
 
 The released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.
 
+## Local author workflow
+
+ReDevPlugin owns project configuration and manifest validation, generated bindings,
+the shared build/test/package pipeline, diagnostics, filesystem watching,
+persistent preview state, manual update candidates, controlled connection review,
+and verified development runtime preparation. Redeven invokes the released CLI
+through its discoverable application-authoring skill and derives the CLI version
+from its imported platform package. It does not duplicate those mechanisms.
+
+Development evidence does not replace the host product's runtime build, signature,
+SBOM or publication evidence. The product remains responsible for user intent,
+placement, package review and explicit installation approval. Authoring does not
+implicitly grant execution permissions or automatic-update trust.
+
 ## Platform execution boundaries
 
 ReDevPlugin 3.13.0 owns manifest-derived action bindings and direct Surface

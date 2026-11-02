@@ -82,6 +82,10 @@
     {
       "path": "internal/ai/system_skills/redeven-tessiven/SKILL.md",
       "reason": "This is a machine-consumed runtime skill source, not maintained repository knowledge documentation."
+    },
+    {
+      "path": "internal/ai/system_skills/redeven-plugin-authoring/SKILL.md",
+      "reason": "Embedded runtime skill that guides application authoring through the exact published ReDevPlugin toolchain."
     }
   ],
   "locales": [
