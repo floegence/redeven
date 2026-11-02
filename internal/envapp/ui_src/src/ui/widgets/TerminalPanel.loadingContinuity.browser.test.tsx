@@ -254,6 +254,34 @@ describe('TerminalPanel loading continuity', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([false, true])('opens group creation from the labeled plus without changing sessions (mobile=%s)', async (mobile) => {
+    await page.viewport(mobile ? 393 : 1280, mobile ? 740 : 800);
+    layoutState.mobile = mobile;
+    rpcState.sessions = [createdSession('existing-session')];
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: mobile ? '393px' : '960px', height: '640px' });
+    document.body.append(host);
+    disposeRendered = render(() => (
+      <TerminalSessionCatalogProvider accessReady>
+        <TerminalPanel variant="panel" mobileSessionsOpen={mobile} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await expect.poll(() => visibleElements(host, '[data-terminal-session-id]').length).toBe(1);
+    expect(host.textContent).toContain('Groups');
+    const session = host.querySelector('[data-terminal-session-id="existing-session"]');
+    const trigger = page.getByRole('button', { name: 'New group', exact: true });
+    await userEvent.click(trigger);
+    const dialog = page.getByRole('dialog', { name: 'New group', exact: true });
+    await expect.element(dialog).toBeVisible();
+    await expect.element(dialog.getByLabelText('Group name', { exact: true })).toBeVisible();
+    await expect.element(dialog.getByLabelText('Startup directory', { exact: false })).toBeVisible();
+    await page.screenshot({ path: '../../../node_modules/.cache/terminal-workspace/group-editor-' + (mobile ? 'mobile' : 'desktop') + '.png' });
+    await userEvent.click(dialog.getByRole('button', { name: 'Cancel', exact: true }));
+    await expect.element(dialog).not.toBeInTheDocument();
+    expect(host.querySelector('[data-terminal-session-id="existing-session"]')).toBe(session);
+    expect(rpcState.sessions).toHaveLength(1);
+  });
+
   it('rearranges only current view members without adding or removing sessions', async () => {
     rpcState.sessions = ['layout-a', 'layout-b', 'layout-c', 'outside'].map(id => ({ ...createdSession(id), isActive: id === 'layout-a' }));
     const { presetSplitWorkspace, splitWorkspaceItems } = await import('@floegence/floe-webapp-core/layout');

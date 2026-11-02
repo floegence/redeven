@@ -4,7 +4,7 @@ title: Env App terminal and surface composition
 tags: [architecture, env-app, terminal, ui]
 quality_exception: Cross-surface composition, placement, loading and renderer boundaries.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -16,7 +16,7 @@ File preview defaults to the main surface. Chunked history remains one atomic sn
 
 ## Terminal workspace placement
 
-Published SplitWorkspace owns splits, adaptive arrangements, docking, swaps and accessible resizing. Splitting creates a backend view; later placement edits update it. Users manage independent named views through thumbnails, per-view layout pickers, rename/delete and creation above Directories.
+Published SplitWorkspace owns splits, adaptive arrangements, docking, swaps and accessible resizing. Splitting creates a backend view; later placement edits update it. Users manage independent named views through thumbnails, per-view layout pickers, rename/delete and creation above Groups.
 
 Each session has at most one owning view. Selecting a member activates its owner and focuses the pane, including from another view or standalone session. Unowned sessions display alone. Cross-view dragging moves membership atomically and leaves the source slot vacant. Pane and sidebar close buttons terminate the named session; they never delete a view or collapse its geometry. Only the view action deletes a view, releasing its sessions without closing them. New views create fresh sessions. Layout selection rearranges only its target saved view: the footer targets the current view, and each view-row picker targets its own view without activating it. It preserves all members (including temporarily unavailable sessions), vacant slots, visual reading order and selected session. Published adaptive arrangements offer deduplicated balanced rows/columns, grids and four main-pane directions for 2–32 slots; standalone and single-slot views disable the picker. The compact gallery uses geometry thumbnails with an Adjust layout heading, accessible option names, current-shape selection and keyboard navigation. Choosing an option resolves the latest target membership before committing; it never applies a stale membership snapshot. Adding sessions requires explicit splitting, dragging or creation in a vacant slot. Explicit splitting uses the target group and verified local cwd or group startup directory. Group membership and cwd remain independent.
 

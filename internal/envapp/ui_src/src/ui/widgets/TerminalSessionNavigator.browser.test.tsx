@@ -3,8 +3,8 @@ import '../../index.css';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
-import { page } from 'vitest/browser';
-import { afterEach, describe, expect, it } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   TerminalSessionNavigator,
@@ -22,7 +22,10 @@ afterEach(() => {
   document.documentElement.classList.toggle('dark', initialDark);
 });
 
-function mountNavigator(mobile: boolean, scale = 1, width = 258) {
+function mountNavigator(mobile: boolean, scale = 1, width = 258, actions?: {
+  onCreateGroup?: () => void;
+  onCreateSessionInGroup?: (groupId: string) => void;
+}) {
   const host = document.createElement('div');
   Object.assign(host.style, {
     position: 'relative',
@@ -90,6 +93,8 @@ function mountNavigator(mobile: boolean, scale = 1, width = 258) {
         group.id === id ? { ...group, expanded: !group.expanded } : group
       )))}
       onCloseDrawer={() => undefined}
+      onCreateGroup={actions?.onCreateGroup}
+      onCreateSessionInGroup={actions?.onCreateSessionInGroup}
       onRefresh={() => undefined}
       onFilterQueryChange={() => undefined}
       onPreviewSession={() => undefined}
@@ -128,7 +133,7 @@ const surfaces = [
 ];
 
 describe.each(['light', 'dark'])('TerminalSessionNavigator %s tree geometry', (theme) => {
-  it.each(surfaces)('renders one-line directory groups with canonical folder artwork on $surface', async ({ mobile, scale }) => {
+  it.each(surfaces)('renders one-line session groups with canonical folder artwork on $surface', async ({ mobile, scale }) => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     const host = mountNavigator(mobile, scale);
     await settleLayout();
@@ -143,6 +148,38 @@ describe.each(['light', 'dark'])('TerminalSessionNavigator %s tree geometry', (t
     expectCompactGroup(host, 'workspace', scale);
     for (const row of host.querySelectorAll('[data-terminal-session-row]')) expect(row.getBoundingClientRect().height / scale).toBeCloseTo(32, 1);
   });
+});
+
+it.each([false, true])('keeps group and session creation distinct and keyboard accessible (mobile=%s)', async (mobile) => {
+  const onCreateGroup = vi.fn();
+  const onCreateSessionInGroup = vi.fn();
+  const host = mountNavigator(mobile, 1, 220, { onCreateGroup, onCreateSessionInGroup });
+  await settleLayout();
+  if (mobile) await new Promise(resolve => setTimeout(resolve, 260));
+
+  const addGroup = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-group"]')!;
+  expect(host.textContent).toContain('Groups');
+  expect(host.textContent).not.toContain('Directories');
+  expect(addGroup.textContent?.trim()).toBe('');
+  expect(addGroup.getAttribute('aria-label')).toBe('New group');
+  expect(addGroup.getAttribute('title')).toBe('New group');
+  const bounds = addGroup.getBoundingClientRect();
+  const sidebar = host.querySelector('.redeven-terminal-session-sidebar')!.getBoundingClientRect();
+  expect(bounds.width).toBe(mobile ? 44 : 24);
+  expect(bounds.height).toBe(mobile ? 44 : 24);
+  expect(bounds.left).toBeGreaterThanOrEqual(sidebar.left);
+  expect(bounds.right).toBeLessThanOrEqual(sidebar.right);
+  addGroup.focus();
+  expect(document.activeElement).toBe(addGroup);
+  await userEvent.keyboard('{Enter}');
+  expect(onCreateGroup).toHaveBeenCalledOnce();
+  expect(onCreateSessionInGroup).not.toHaveBeenCalled();
+
+  const addSession = host.querySelector<HTMLButtonElement>('[aria-label="New session in Default"]')!;
+  expect(addSession.getAttribute('title')).toBe('New session in Default');
+  await userEvent.click(addSession);
+  expect(onCreateSessionInGroup).toHaveBeenCalledExactlyOnceWith('default');
+  expect(onCreateGroup).toHaveBeenCalledOnce();
 });
 
 it.each(['light', 'dark'])('uses rounded session tiles and a clean selected row in %s', async (theme) => {

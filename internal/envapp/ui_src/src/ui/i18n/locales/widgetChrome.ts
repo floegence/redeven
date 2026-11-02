@@ -634,7 +634,7 @@ export const enUSWidgetChrome = defineDictionary({
     deleteGroupConfirm: 'Delete group and close sessions',
     deleteGroupDescription: 'Delete “{group}” and close all {count} sessions in this Environment? The sessions will close in Activity and every Workbench terminal.',
     groupName: 'Group name',
-    groupDefaultPath: 'Default path',
+    groupDefaultPath: 'Startup directory',
     browseGroupPath: 'Choose path',
     selectGroupPath: 'Select group path',
     groupDefaultPathHint: 'New sessions start here. Changing directory inside a session does not change this default.',

@@ -52,6 +52,26 @@ afterEach(() => {
 });
 
 describe('TerminalGroupEditorDialog', () => {
+  it.each([false, true])('labels the startup directory when editing=%s', (editing) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <TerminalGroupEditorDialog
+        open
+        group={editing ? { id: 'services', name: 'Services', defaultWorkingDir: '/workspace/services', isDefault: false, sortOrder: 1, createdAtMs: 1, updatedAtMs: 1 } : null}
+        defaultWorkingDir="/workspace"
+        onCancel={() => undefined}
+        onSubmit={() => undefined}
+      />
+    ), host);
+
+    const pathInput = host.querySelector<HTMLInputElement>('[data-testid="terminal-group-path-input"]')!;
+    expect(pathInput.closest('label')?.textContent).toContain('Startup directory');
+    expect(pathInput.closest('label')?.textContent).not.toContain('Default path');
+    expect(host.textContent).toContain(editing ? 'Edit group' : 'New group');
+    dispose();
+  });
+
   it('derives a new group name from the selected path until the user edits the name', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

@@ -3,7 +3,7 @@ import './terminal-workspace.css';
 import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { ResizeHandle, Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Input, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
-import { ChevronRight, FolderPlus, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
 
 import { FolderIcon, FolderOpenIcon } from '@floegence/floe-webapp-core/file-browser';
 
@@ -917,19 +917,21 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
 
             {props.viewList}
             <SidebarSection
-              title={props.mobile ? undefined : i18n.t('terminalWorkspace.directories')}
+              title={i18n.t('terminalWorkspace.groups')}
               actions={(
-                <button
+                <Button
                   type="button"
-                  class="flex h-6 max-w-[96px] cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-semibold normal-case tracking-normal text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  variant="ghost"
+                  size="sm"
+                  class="h-6 w-6 cursor-pointer p-0 disabled:cursor-not-allowed"
                   data-testid="terminal-sidebar-add-group"
                   onClick={() => props.onCreateGroup?.()}
                   disabled={!props.connected}
                   title={i18n.t('terminal.newGroup')}
+                  aria-label={i18n.t('terminal.newGroup')}
                 >
-                  <FolderPlus class="h-3.5 w-3.5 shrink-0" />
-                  <span class="truncate">{i18n.t('terminal.newGroup')}</span>
-                </button>
+                  <Plus class="h-3.5 w-3.5" />
+                </Button>
               )}
               class="min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden"
             >

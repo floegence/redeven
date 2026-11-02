@@ -3,7 +3,7 @@ type: UI Contract
 title: Terminal session groups
 tags: [ui, terminal, groups, activity, workbench, sqlite]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -20,6 +20,8 @@ Each view thumbnail opens its compact graphical layout picker; the adjacent name
 Views use schema kind terminal_view_catalog, version 3. RPC 2024–2027 list/put/delete/notify and 2028 atomic batch update use process-launch permission and the access gate. Records store ID, name, published SplitWorkspace geometry with product occupancy metadata, revision and timestamps. Pane-only empty:true marks a vacant slot and does not claim a session. Bounds: 64 views, 32 panes, depth 16, 64KiB layout, 128-byte IDs, 64-character names. Validate shape, unique nodes, axis and ratio. Atomic writes check every touched view and database catalog revision, rejecting duplicate session ownership. A transfer updates both source and destination in one transaction and emits one full snapshot. Stale writes reject the entire transfer. Deleting views preserves sessions. The contiguous v1→v2 migration keeps each session in the highest-revision view (then newest creation time, then lexical ID), prunes duplicate leaves from older trees and deletes empty aliases without modifying sessions or PTYs. The contiguous v2→v3 migration verifies existing records unchanged and enables vacant slots. Session closure vacates its owned slot atomically with a fresh identity, retaining geometry and emitting a catalog snapshot before the closure notification. Invalid stores fail unchanged.
 
 ## Projection and interaction
+
+Desktop and mobile navigation label the session collection Groups. Its icon-only plus action creates a group, matching the Views action and exposing the localized New group tooltip and accessible name. Each group retains its scoped New session in {group} action. Group editors label the default working path Startup directory; membership remains independent of a session's current directory.
 
 One Terminal Session Catalog Provider owns membership/display order. Sessions, groups and views wait for current-channel access confirmation from EnvAppShell as well as ready process-launch permissions. Connected transport or cached environment metadata alone cannot start protected catalog RPCs. Access restoration automatically hydrates all catalogs; retiring access fences pending responses and retains the existing presentation. Lifecycle fences prevent stale replies overwriting moves/deletes; unknown groups refresh without reassignment. Group deletion closes/hides members first; failures identify sessions without fabricated success or silent retry.
 

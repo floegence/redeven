@@ -21,6 +21,8 @@ afterEach(() => {
 });
 
 function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = vi.fn(), options?: {
+  connected?: boolean;
+  onCreateGroup?: () => void;
   groups?: Parameters<typeof TerminalSessionNavigator>[0]['groups'];
   additionalItems?: readonly TerminalSessionNavigationItem[];
   onRelocateSession?: (sessionId: string, groupId: string, beforeSessionId: string | null) => void;
@@ -39,7 +41,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       accessibilityIdPrefix="terminal-panel-test"
       mobile={false}
       drawerOpen={false}
-      connected
+      connected={options?.connected ?? true}
       refreshing={false}
       activeTitle={item.title}
       activeAvatar={item.avatar}
@@ -57,6 +59,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       onOpenGroupContextMenu={options?.onOpenGroupContextMenu}
       onOpenTreeContextMenu={options?.onOpenTreeContextMenu}
       onCreateSessionInGroup={options?.onCreateSessionInGroup}
+      onCreateGroup={options?.onCreateGroup}
       onToggleGroup={options?.onToggleGroup}
       onRefresh={() => undefined}
       onFilterQueryChange={() => undefined}
@@ -587,18 +590,37 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-tree-child="session-2"]')).not.toBeNull();
   });
 
-  it('keeps group creation explicit without a competing global session action', () => {
-    const { host } = renderNavigator(navigationItem());
+  it('labels groups consistently and keeps icon-only creation accessible', () => {
+    const onCreateGroup = vi.fn();
+    const onCreateSessionInGroup = vi.fn();
+    const { host } = renderNavigator(navigationItem(), vi.fn(), { onCreateGroup, onCreateSessionInGroup });
     const newSession = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]');
     const newGroup = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-group"]');
     const boundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]');
     const filter = host.querySelector<HTMLInputElement>('[data-testid="terminal-session-filter"]');
 
     expect(newSession).toBeNull();
-    expect(newGroup?.textContent).toContain('New group');
+    expect(host.textContent).toContain('Groups');
+    expect(host.textContent).not.toContain('Directories');
+    expect(newGroup?.textContent?.trim()).toBe('');
+    expect(newGroup?.getAttribute('aria-label')).toBe('New group');
+    expect(newGroup?.getAttribute('title')).toBe('New group');
     expect(newGroup?.querySelector('svg')).not.toBeNull();
+    newGroup?.click();
+    expect(onCreateGroup).toHaveBeenCalledOnce();
+    expect(onCreateSessionInGroup).not.toHaveBeenCalled();
     expect(boundary?.className).toContain('select-none');
     expect(filter?.className).toContain('select-text');
+  });
+
+  it('disables group creation while disconnected', () => {
+    const onCreateGroup = vi.fn();
+    const { host } = renderNavigator(navigationItem(), vi.fn(), { connected: false, onCreateGroup });
+    const newGroup = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-group"]');
+
+    expect(newGroup?.disabled).toBe(true);
+    newGroup?.click();
+    expect(onCreateGroup).not.toHaveBeenCalled();
   });
 
   it('keeps click selection while allowing drag from the full row and avatar', () => {
