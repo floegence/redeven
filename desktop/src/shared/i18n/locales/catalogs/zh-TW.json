@@ -1,4 +1,17 @@
 {
+  "gatewayWorkspace": {
+    "addresses": "存取位址",
+    "editAddress": "編輯",
+    "connectionSaved": "連線已儲存",
+    "addressMissing": "尚未設定存取位址",
+    "setAddress": "設定位址",
+    "emptyClients": "尚無用戶端",
+    "emptyRuntimes": "尚無執行階段",
+    "hostRequired": "需要主機存取權限",
+    "accessChanged": "存取權限已變更，請重新驗證。",
+    "identityDetails": "身分詳細資料",
+    "maintenanceNav": "維護"
+  },
   "gatewayMaintenance": {
     "reset": "重建設定並重新安裝",
     "resetConfirm": "重建 Gateway 設定並重新安裝，將重設執行環境連線、網路設定與本機對外連線原則。現有裝置身分與用戶端權限保持不變，舊設定會保留在主機上。完成後需要重新接入執行環境並設定網路存取。",

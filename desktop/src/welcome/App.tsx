@@ -35,6 +35,7 @@ import { KeyedFor, handleMenuKeyboardNavigation } from '@floegence/floe-webapp-c
 import { GatewayMark } from './GatewayMark';
 import { GatewayEnvironmentList } from '../envcenter/GatewayEnvironmentList';
 import { GatewayClientsPanel } from './GatewayClientsPanel';
+import { GatewayOverviewPanel } from './GatewayOverviewPanel';
 import { GatewayMaintenancePanel } from './GatewayMaintenancePanel';
 import { RuntimeAttachmentsPanel } from './GatewayMembersDialog';
 import { EnvironmentAccessWorkflow } from './EnvironmentAccessWorkflow';
@@ -7839,7 +7840,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
       <main id="redeven-desktop-main" class="w-full px-4 py-5 sm:px-6 lg:px-8">
         <div class="mx-auto w-full redeven-welcome-shell">
           <header class="redeven-header-separator mb-5 space-y-4">
-            <div class="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between" hidden={props.activeTab === 'gateways' && !!props.managedGatewayID}>
               <div class="min-w-0 space-y-1">
                 <h1 class="text-base font-medium tracking-normal text-foreground">{props.i18n.t(headerCopy().titleKey)}</h1>
                 <p class="text-xs text-muted-foreground">
@@ -7943,7 +7944,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                   )}
                 </For>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2" hidden={props.activeTab === 'gateways' && !!props.managedGatewayID}>
                 <Show when={props.activeTab === 'environments'}>
                   <>
                     <button
@@ -13425,6 +13426,8 @@ function GatewayWorkspace(props: Readonly<{
   const managedSession = () => props.state?.mode === 'edit';
   const hostManaged = () => connectionKind() !== 'url';
   const canManage = () => props.available && hostManaged() && props.gateway?.permissions?.manage_attachments === true;
+  const canManageNetwork = () => props.available && hostManaged() && props.gateway?.permissions?.manage_network === true;
+  const sectionIcons = { overview: LayoutDashboard, clients: Monitor, runtimes: Terminal, network: Globe, maintenance: Settings };
   const choosingIntent = () => props.state?.mode === 'create' && !props.state.onboarding_intent;
   const tabs = ['overview', 'clients', 'runtimes', 'network', 'maintenance'] as const;
   const activeTab = () => props.state?.settings_tab ?? 'overview';
@@ -13447,7 +13450,7 @@ function GatewayWorkspace(props: Readonly<{
   const connectRuntime = () => { selectTab('runtimes'); props.updateField('runtime_enrollment', true); };
   const serviceAction = (operation: string): GatewaySourceActionModel => ({ intent: (operation + '_gateway') as GatewaySourceActionModel['intent'], label: operation[0].toUpperCase() + operation.slice(1) + ' Gateway', variant: 'outline', enabled: props.available });
   const notices = () => <>
-    <Show when={!props.available}><div role="alert" class="redeven-gateway-workspace-notice"><p>{props.i18n.t('interactionContinuity.unavailable')}</p><Button variant="outline" size="sm" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></div></Show>
+    <Show when={!props.available}><div role="alert" class="redeven-gateway-workspace-notice"><p><AlertTriangle aria-hidden="true" />{props.i18n.t('gatewayWorkspace.accessChanged')}</p><Button variant="outline" size="sm" icon={Refresh} disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></div></Show>
     <Show when={props.recovery}>{recovery => <GatewayActionRecoveryNotice i18n={props.i18n} recovery={recovery()} busy={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onStart={props.onStart} />}</Show>
     <Show when={props.error && !props.recovery}><p role="alert" class="text-sm text-destructive">{props.error}</p></Show>
     <Show when={props.technicalDetail && props.technicalDetail !== props.error}><details class="text-xs"><summary>{props.i18n.t('progress.technicalErrorDetails')}</summary><pre class="whitespace-pre-wrap break-words">{props.technicalDetail}</pre></details></Show>
@@ -13467,24 +13470,21 @@ function GatewayWorkspace(props: Readonly<{
         </header>
         <div class="redeven-gateway-workspace-layout">
           <nav data-gateway-management-nav class="redeven-gateway-workspace-nav" aria-label={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}>
-            <For each={tabs}>{tab => <button type="button" aria-current={activeTab() === tab ? 'page' : undefined} aria-controls={'gateway-management-' + tab} onClick={() => selectTab(tab)}>{sectionLabel(tab)}</button>}</For>
+            <For each={tabs}>{tab => <button type="button" aria-current={activeTab() === tab ? 'page' : undefined} aria-controls={'gateway-management-' + tab} aria-label={sectionLabel(tab)} onClick={() => selectTab(tab)}><Dynamic component={sectionIcons[tab]} aria-hidden="true" /><span>{tab === 'maintenance' ? props.i18n.t('gatewayWorkspace.maintenanceNav') : sectionLabel(tab)}</span></button>}</For>
           </nav>
           <div class="redeven-gateway-workspace-content">
             {notices()}
+            <Show when={props.available && hostManaged() && ['clients', 'runtimes', 'network'].includes(activeTab()) && !(activeTab() === 'network' ? canManageNetwork() : canManage())}><div role="status" class="redeven-gateway-access-notice"><Shield aria-hidden="true" /><span>{props.i18n.t('gatewayWorkspace.hostRequired')}</span><Button size="sm" variant="ghost" icon={Refresh} onClick={() => void props.refresh()}>{props.i18n.t('common.refresh')}</Button></div></Show>
             <For each={tabs}>{tab => <section id={'gateway-management-' + tab} aria-label={sectionLabel(tab)} hidden={activeTab() !== tab} inert={activeTab() !== tab} class="redeven-gateway-workspace-section">
               <Show when={tab === 'overview'}>
-                <div class="redeven-gateway-section-heading"><h3>{sectionLabel(tab)}</h3><Show when={row()?.primary_action}>{action => <Button variant="outline" size="sm" disabled={!props.available || !action().enabled} onClick={() => props.onService(action())}>{localizedGatewaySourceActionLabel(props.i18n, action())}</Button>}</Show></div>
-                <Show when={props.state?.onboarding_complete}><p role="status" class="redeven-gateway-help">{props.i18n.t('gatewayExperience.saved')}</p></Show>
-                <Show when={hostManaged()}><div class="redeven-gateway-enrollment-actions"><Button size="sm" variant="outline" icon={Monitor} disabled={!canManage()} onClick={connectClient}><span>{props.i18n.t('gatewayExperience.connectClient')}</span></Button><Button size="sm" variant="outline" icon={Terminal} data-gateway-add-environment disabled={!canManage()} onClick={connectRuntime}><span>{props.i18n.t('gatewayExperience.connectRuntime')}</span></Button></div></Show>
-                <dl class="redeven-gateway-overview-facts"><div><dt>{props.i18n.t('gatewayJoin.address')}</dt><dd>{props.gateway?.endpoints?.map(endpoint => endpoint.address).join(', ') || props.gateway?.gateway_url || props.i18n.t('gatewayMembers.noConnectionAddresses')}</dd></div><div><dt>{props.i18n.t('gatewayExperience.identity')}</dt><dd>{props.gateway?.identity_fingerprint || '—'}</dd></div></dl>
-                <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayMembers.members')}</h3><Button variant="ghost" size="sm" onClick={() => selectTab('runtimes')}>{props.i18n.t('environmentCenter.viewEnvironments')}</Button></div>
-                <Show when={props.gateway?.environments.length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.empty')}</p>}><ul class="redeven-gateway-overview-members"><For each={props.gateway?.environments}>{member => <li><strong>{member.display_name}</strong><EnvironmentStatusIndicator tone={member.connected ? 'success' : 'neutral'}>{props.i18n.t(member.connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</EnvironmentStatusIndicator></li>}</For></ul></Show>
+                <GatewayOverviewPanel gateway={props.gateway} i18n={props.i18n} available={props.available} hostManaged={hostManaged()} canManage={canManage()}
+                  saved={props.state?.onboarding_complete === true} action={<Show when={row()?.primary_action}>{action => <Button variant="ghost" size={action().intent === 'refresh_gateway' ? 'icon' : 'sm'} icon={() => <GatewaySourceActionIcon intent={action().intent} />} aria-label={localizedGatewaySourceActionLabel(props.i18n, action())} title={localizedGatewaySourceActionLabel(props.i18n, action())} disabled={!props.available || !action().enabled} onClick={() => props.onService(action())}><Show when={action().intent !== 'refresh_gateway'}>{localizedGatewaySourceActionLabel(props.i18n, action())}</Show></Button>}</Show>} onNetwork={() => selectTab('network')} onClients={connectClient} onRuntimes={() => selectTab('runtimes')} onConnectRuntime={connectRuntime} />
               </Show>
               <Show when={tab !== 'overview' && !hostManaged()}><p class="redeven-gateway-help">{props.i18n.t('gatewayClients.clientOnly')}</p></Show>
               <Show when={hostManaged() && sectionSession()?.visited.has(tab)}>
-                <Show when={tab === 'clients'}><GatewayClientsPanel suspended={props.hidden} onPresenceChange={present => dialogPresence('clients', present)} available={canManage()} gatewayID={props.state?.connection_id ?? ''} currentClientKeyID={props.gateway?.client_key_id} endpoints={props.gateway?.endpoints} enrolling={props.state?.client_enrollment ?? false} onEnrollmentChange={value => props.updateField('client_enrollment', value)} i18n={props.i18n} /></Show>
-                <Show when={tab === 'runtimes'}><RuntimeAttachmentsPanel suspended={props.hidden} onPresenceChange={present => dialogPresence('runtimes', present)} available={props.available} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onEnroll={props.onEnroll} enrolling={props.state?.runtime_enrollment} onEnrollmentChange={value => props.updateField('runtime_enrollment', value)} onNetwork={() => selectTab('network')} section="runtimes" /></Show>
-                <Show when={tab === 'network'}><RuntimeAttachmentsPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onRestart={() => props.onService(serviceAction('restart'))} section="connection" /><RuntimeAttachmentsPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} section="policy" /></Show>
+                <Show when={tab === 'clients'}><GatewayClientsPanel showAvailabilityNotice={false} suspended={props.hidden} onPresenceChange={present => dialogPresence('clients', present)} available={canManage()} gatewayID={props.state?.connection_id ?? ''} currentClientKeyID={props.gateway?.client_key_id} endpoints={props.gateway?.endpoints} enrolling={props.state?.client_enrollment ?? false} onEnrollmentChange={value => props.updateField('client_enrollment', value)} i18n={props.i18n} /></Show>
+                <Show when={tab === 'runtimes'}><RuntimeAttachmentsPanel showAvailabilityNotice={false} suspended={props.hidden} onPresenceChange={present => dialogPresence('runtimes', present)} available={props.available} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onEnroll={props.onEnroll} enrolling={props.state?.runtime_enrollment} onEnrollmentChange={value => props.updateField('runtime_enrollment', value)} onNetwork={() => selectTab('network')} section="runtimes" /></Show>
+                <Show when={tab === 'network'}><RuntimeAttachmentsPanel showAvailabilityNotice={false} available={canManageNetwork()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onRestart={() => props.onService(serviceAction('restart'))} section="connection" /><RuntimeAttachmentsPanel showAvailabilityNotice={false} available={canManageNetwork()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} section="policy" /></Show>
                 <Show when={tab === 'maintenance' && props.gateway}>{gateway => <GatewayMaintenancePanel gateway={gateway()} i18n={props.i18n} available={props.available} busy={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onAction={props.onService} />}</Show>
               </Show>
             </section>}</For>

@@ -1,4 +1,17 @@
 {
+  "gatewayWorkspace": {
+    "addresses": "Adresses d’accès",
+    "editAddress": "Modifier",
+    "connectionSaved": "Connexion enregistrée",
+    "addressMissing": "Aucune adresse d’accès",
+    "setAddress": "Définir l’adresse",
+    "emptyClients": "Aucun client",
+    "emptyRuntimes": "Aucun environnement d’exécution",
+    "hostRequired": "Accès à l’hôte requis",
+    "accessChanged": "L’accès a changé. Vérifiez-le à nouveau.",
+    "identityDetails": "Détails d’identité",
+    "maintenanceNav": "Maintenance"
+  },
   "gatewayMaintenance": {
     "reset": "Réinitialiser la configuration et réinstaller",
     "resetConfirm": "La configuration Gateway sera réinitialisée et le service réinstallé. Les connexions environnements d’exécution, les paramètres réseau et la politique locale de trafic sortant seront réinitialisés. L’identité de l’appareil et les autorisations des clients sont conservées. L’ancienne configuration reste sur l’hôte. Reconnectez ensuite les environnements d’exécution et configurez l’accès réseau.",

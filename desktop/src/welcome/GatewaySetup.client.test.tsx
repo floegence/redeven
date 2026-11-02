@@ -25,7 +25,7 @@ async function openGatewayAccess(section = 'edit') {
     button('Edit connection').click(); await settle();
   } else {
     document.querySelector<HTMLButtonElement>('.redeven-gateway-card__name button')!.click(); await settle();
-    [...document.querySelectorAll<HTMLButtonElement>('[data-gateway-management-nav] button')].find(element => controlText(element) === section)!.click(); await settle();
+    [...document.querySelectorAll<HTMLButtonElement>('[data-gateway-management-nav] button')].find(element => (controlText(element) === section || element.getAttribute('aria-label') === section))!.click(); await settle();
   }
 }
 function selectedSection(section: string) {
@@ -69,6 +69,26 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway product navigation', () => {
+  it('uses a single client toolbar, illustrated navigation and disclosed identity', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    await mount({ ...source, connection_kind: 'local_host', endpoints: [], environments: [], identity_fingerprint: 'SHA256:gateway-fixture',
+      permissions: { access: true, manage_attachments: true, manage_network: true } });
+    await openGatewayAccess('Overview');
+    const workspace = document.querySelector('[data-gateway-management-page]')!;
+    expect([...workspace.querySelectorAll('[data-gateway-management-nav] button')].every(button => button.querySelector('svg'))).toBe(true);
+    expect(workspace.querySelector<HTMLDetailsElement>('.redeven-gateway-identity-details')?.open).toBe(false);
+    expect(workspace.textContent).not.toContain('New invitations are disabled');
+    button('Set address').click(); await settle();
+    expect(selectedSection('network')).toBe('page');
+    expect(workspace.querySelectorAll('.redeven-gateway-setting-row')).toHaveLength(2);
+    expect(workspace.querySelector('.redeven-gateway-help-trigger')?.getAttribute('aria-label')).toContain('HTTPS');
+    button('Clients').click(); await settle();
+    const panel = workspace.querySelector('#gateway-management-clients')!;
+    expect(panel.querySelectorAll('h3')).toHaveLength(1);
+    expect(panel.querySelector('.redeven-gateway-quiet-empty svg')).not.toBeNull();
+    expect(panel.textContent).not.toContain('Authorized clients');
+  });
+
   it.each(['not_started', 'needs_reinstall', 'ssh_unreachable'] as const)('offers host maintenance despite stale %s status and client permissions', async status => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, connection_kind: 'ssh_host', management_capability: 'managed_ssh_host',
@@ -144,13 +164,13 @@ describe('Gateway product navigation', () => {
     expect(perform).toHaveBeenCalledOnce();
   });
 
-  it('opens a full management page with six sections and no duplicate Desktop connection area', async () => {
+  it('opens a full management page with five sections and no duplicate Desktop connection area', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: true, manage_network: true } });
     button('Gateways').click(); await settle();
     document.querySelector<HTMLButtonElement>('.redeven-gateway-card__name button')!.click(); await settle();
     expect(document.querySelector('[data-gateway-management-page]')).toBeTruthy();
-    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Service maintenance']);
+    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Maintenance']);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     button('All Gateways').click(); await settle();
     expect(document.querySelector('[data-gateway-management-page]')?.hasAttribute('hidden')).toBe(true);
@@ -208,7 +228,7 @@ describe('Gateway product navigation', () => {
   it('keeps Welcome navigation alongside five management sections', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host' }); await openGatewayAccess('Overview');
-    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Service maintenance']);
+    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Maintenance']);
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
     button('Overview').click(); await settle();
     expect(document.querySelector('[data-gateway-add-environment]')).toBeTruthy();
@@ -286,7 +306,7 @@ describe('Gateway product navigation', () => {
     button('Save Gateway').click(); await settle();
     await vi.waitFor(() => expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0));
     expect(selectedSection('overview')).toBe('page');
-    expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain('Gateway connection saved.');
+    expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain('Connection saved');
     expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain(source.display_name);
     document.querySelector<HTMLButtonElement>('[data-gateway-management-page] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click(); await settle();
     await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());

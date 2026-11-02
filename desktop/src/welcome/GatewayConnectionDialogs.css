@@ -1020,12 +1020,6 @@
 .redeven-gateway-transport-help { margin: 0 0 14px; color: var(--muted-foreground); font-size: var(--floe-type-supporting); line-height: 1.65; }
 .redeven-gateway-workspace [hidden], .redeven-center-content [hidden] { display: none !important; }
 .redeven-gateway-workspace-notice { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; font-size: var(--floe-type-control); }
-/* Labels and values share a stable reading edge across overview and maintenance. */
-.redeven-gateway-overview-facts { display: grid; gap: 0; margin: 0; }
-.redeven-gateway-overview-facts > div { display: grid; grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr); gap: .5rem 1.25rem; align-items: baseline; padding-block: .75rem; font-size: var(--floe-type-control); }
-.redeven-gateway-overview-facts > div + div { border-top: 1px solid var(--border); }
-.redeven-gateway-overview-facts dt { color: var(--muted-foreground); }
-.redeven-gateway-overview-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .redeven-gateway-overview-members { margin: 0; padding: 0; list-style: none; }
 .redeven-gateway-overview-members li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding-block: .75rem; border-top: 1px solid var(--border); font-size: var(--floe-type-control); }
 .redeven-gateway-overview-members strong { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
@@ -1043,9 +1037,6 @@
 }
 
 .redeven-welcome-surface [hidden] { display: none !important; }
-@media (max-width: 480px) {
-  .redeven-gateway-overview-facts > div { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
-}
 
 @media (pointer: coarse) {
   .redeven-gateway-workspace-back { min-width: 2.75rem; }
@@ -1072,4 +1063,76 @@
 .redeven-gateway-maintenance-recovery svg { height: 1rem; width: 1rem; flex-shrink: 0; color: var(--warning, var(--destructive)); }
 @media (max-width: 1050px) {
   .redeven-gateway-maintenance-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Gateway pages use one reading column, one toolbar and aligned setting rows. */
+.redeven-gateway-workspace-content > .redeven-gateway-workspace-section { max-width: 58rem; }
+.redeven-gateway-workspace-nav button { display: flex; align-items: center; gap: .5rem; padding-inline: .625rem; }
+.redeven-gateway-workspace-nav button svg { width: .875rem; height: .875rem; flex: none; opacity: .75; }
+.redeven-gateway-workspace :is(.redeven-gateway-section-heading h3, .redeven-gateway-setting-label h3) { display: flex; align-items: center; gap: .625rem; margin: 0; font-size: var(--floe-type-control); font-weight: 600; }
+.redeven-gateway-workspace :is(.redeven-gateway-section-heading h3, .redeven-gateway-item-name) > svg { width: 1rem; height: 1rem; flex: none; color: var(--muted-foreground); }
+.redeven-gateway-count { color: var(--muted-foreground); font-weight: 400; font-variant-numeric: tabular-nums; }
+.redeven-gateway-toolbar-actions { display: flex; align-items: center; gap: .5rem; }
+.redeven-gateway-item-name { display: inline-flex; align-items: center; gap: .625rem; min-width: 0; }
+.redeven-gateway-overview { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
+.redeven-gateway-address-summary { display: flex; align-items: center; gap: 1rem; min-width: 0; padding-block: .5rem; }
+.redeven-gateway-address-summary > svg { flex: none; width: 1.5rem; height: 1.5rem; color: var(--primary); }
+.redeven-gateway-address-summary > div { display: grid; gap: .375rem; min-width: 0; flex: 1; }
+.redeven-gateway-address-summary strong { font-size: var(--floe-type-body); font-weight: 500; overflow-wrap: anywhere; }
+.redeven-gateway-overview-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.redeven-gateway-overview-runtime-section { border-top: 1px solid var(--border); padding-top: 1.25rem; }
+.redeven-gateway-overview-runtime-section .redeven-gateway-section-heading { margin-bottom: .5rem; }
+.redeven-gateway-quiet-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .75rem; padding: 2.5rem 1rem; min-height: 10rem; color: var(--muted-foreground); font-size: var(--floe-type-control); text-align: center; }
+.redeven-gateway-quiet-empty > svg { width: 2rem; height: 2rem; stroke-width: 1.25; opacity: .55; }
+.redeven-gateway-clients-panel > .redeven-gateway-settings-section { border-top: 1px solid var(--border); padding-top: .5rem; }
+.redeven-gateway-clients-panel .redeven-gateway-quiet-empty { min-height: 14rem; }
+.redeven-gateway-identity-details { border-top: 1px solid var(--border); padding-block: .75rem; font-size: var(--floe-type-control); color: var(--muted-foreground); }
+.redeven-gateway-identity-details > summary { display: flex; align-items: center; gap: .625rem; list-style: none; cursor: pointer; min-height: 2rem; }
+.redeven-gateway-identity-details > summary::-webkit-details-marker { display: none; }
+.redeven-gateway-identity-details > summary > svg { flex: none; width: 1rem; height: 1rem; }
+.redeven-gateway-identity-details > summary > svg:last-child { margin-inline-start: auto; }
+.redeven-gateway-identity-details[open] > summary > svg:last-child { transform: rotate(180deg); }
+.redeven-gateway-identity-details > div { display: flex; align-items: center; gap: .75rem; padding-top: .75rem; }
+.redeven-gateway-identity-details code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--floe-type-supporting); }
+.redeven-gateway-access-notice, .redeven-gateway-workspace-notice { display: flex; align-items: center; gap: .625rem; max-width: 58rem; color: var(--muted-foreground); font-size: var(--floe-type-control); }
+.redeven-gateway-access-notice > svg, .redeven-gateway-workspace-notice svg { width: 1rem; height: 1rem; flex: none; }
+.redeven-gateway-access-notice > button { margin-inline-start: auto; }
+.redeven-gateway-workspace-notice p { display: flex; align-items: center; gap: .625rem; }
+.redeven-gateway-workspace-content > .redeven-gateway-access-notice { margin-bottom: 1.25rem; }
+[data-gateway-panel='connection'] { gap: 0; }
+.redeven-gateway-setting-row { display: grid; grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr); gap: 1rem 2rem; padding-block: 1.5rem; border-bottom: 1px solid var(--border); }
+.redeven-gateway-setting-row:first-child { padding-top: .25rem; }
+.redeven-gateway-setting-label { display: flex; align-items: center; align-self: start; gap: .625rem; min-height: 2.25rem; }
+.redeven-gateway-setting-label > svg { width: 1rem; height: 1rem; color: var(--muted-foreground); flex: none; }
+.redeven-gateway-help-trigger { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; color: var(--muted-foreground); border-radius: .25rem; cursor: help; }
+.redeven-gateway-help-trigger svg { height: .875rem; width: .875rem; }
+.redeven-gateway-help-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.redeven-gateway-setting-value { display: flex; flex-direction: column; align-items: stretch; gap: .75rem; min-width: 0; }
+.redeven-gateway-inline-empty { display: block; padding-block: .5rem; color: var(--muted-foreground); font-size: var(--floe-type-control); }
+.redeven-gateway-listener-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .375rem 1rem; color: var(--muted-foreground); font-size: var(--floe-type-supporting); }
+.redeven-gateway-listener-status code { overflow-wrap: anywhere; }
+[data-gateway-panel='connection'] .redeven-gateway-network-advanced { border-top: 0; padding-block: 1rem; }
+[data-gateway-panel='connection'] .redeven-gateway-network-actions { padding-top: 1.25rem; }
+.redeven-gateway-workspace .redeven-gateway-policy { border-block: 1px solid var(--border); border-radius: 0; background: transparent; padding: 1rem 0; }
+.redeven-gateway-setting-value .redeven-gateway-endpoint { padding: 0; border: 0; background: transparent; border-radius: 0; }
+@media (max-width: 1050px) {
+  .redeven-gateway-setting-row { grid-template-columns: minmax(0, 1fr); gap: .625rem; }
+}
+@media (max-width: 767px) {
+  .redeven-gateway-workspace-nav button { justify-content: center; }
+}
+@media (max-width: 480px) {
+  .redeven-gateway-workspace-nav button { flex-direction: column; gap: .375rem; }
+  .redeven-gateway-toolbar-actions { margin-inline-start: auto; }
+  .redeven-gateway-address-summary { flex-wrap: wrap; gap: .75rem; }
+  .redeven-gateway-address-summary > button { margin-inline-start: 2.25rem; }
+  .redeven-gateway-overview-actions { display: grid; grid-template-columns: 1fr; }
+}
+.redeven-gateway-saved { display: flex; align-items: center; gap: .5rem; color: var(--success); font-size: var(--floe-type-supporting); }
+.redeven-gateway-saved svg { width: 1rem; height: 1rem; }
+.redeven-gateway-workspace-content > .redeven-gateway-workspace-section .redeven-gateway-clients-panel { gap: 1rem; }
+@media (max-width: 767px) {
+  .redeven-gateway-workspace-nav { display: flex; flex-direction: row; overflow-x: auto; }
+  .redeven-gateway-workspace-nav button { flex: 1 0 auto; flex-direction: column; justify-content: flex-start; gap: .375rem; min-width: 4rem; padding: .5rem .625rem; font-size: var(--floe-type-supporting); }
+  .redeven-gateway-workspace-nav button span { white-space: nowrap; overflow-wrap: normal; }
 }

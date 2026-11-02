@@ -24,7 +24,7 @@ function button(label: string) {
     document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')?.click();
     document.querySelector<HTMLButtonElement>('[aria-label="' + i18n.t('gatewayExperience.otherRuntime') + '"]')?.click();
   }
-  const found = [...document.querySelectorAll('button')].find(el => controlText(el) === label && !el.closest('[hidden], [aria-hidden="true"]'));
+  const found = [...document.querySelectorAll('button')].find(el => (controlText(el) === label || el.getAttribute('aria-label') === label) && !el.closest('[hidden], [aria-hidden="true"]'));
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
@@ -47,6 +47,19 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { showMembers = undefined; dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('Gateway member management', () => {
+  it('retains drafts while availability recovers without leaving stale alerts', async () => {
+    const root = document.createElement('div'); document.body.append(root);
+    const [available, setAvailable] = createSignal(true);
+    dispose = render(() => <RuntimeAttachmentsPanel gateway={gateway} available={available()} section="connection" i18n={i18n} refresh={async () => {}} />, root);
+    await settle();
+    const field = document.getElementById('gateway-listen-addresses') as HTMLInputElement;
+    field.value = '127.0.0.1:7555'; field.dispatchEvent(new Event('input', { bubbles: true }));
+    setAvailable(false); await settle();
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    setAvailable(true); await settle();
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    expect(field.value).toBe('127.0.0.1:7555');
+  });
   it('uses network capability for listener settings independently of attachment capability', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_endpoints_updated' });
     mount(perform, undefined, { ...gateway, permissions: { access: true, manage_attachments: false, manage_network: true } }, 'connection');

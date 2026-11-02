@@ -57,6 +57,19 @@ export const enUS = {
     "endDate": "End date",
     "today": "Today"
   },
+  gatewayWorkspace: {
+    "addresses": "Access addresses",
+    "editAddress": "Edit",
+    "connectionSaved": "Connection saved",
+    "addressMissing": "No access address",
+    "setAddress": "Set address",
+    "emptyClients": "No clients",
+    "emptyRuntimes": "No Runtimes",
+    "hostRequired": "Host access required",
+    "accessChanged": "Access changed. Verify to continue.",
+    "identityDetails": "Identity details",
+    "maintenanceNav": "Maintenance"
+  },
   gatewayExperience: {
     serviceVersion: "Service version",
     allGateways: "All Gateways",

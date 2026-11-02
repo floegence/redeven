@@ -1,4 +1,17 @@
 {
+  "gatewayWorkspace": {
+    "addresses": "アクセスアドレス",
+    "editAddress": "編集",
+    "connectionSaved": "接続を保存しました",
+    "addressMissing": "アクセスアドレス未設定",
+    "setAddress": "アドレスを設定",
+    "emptyClients": "クライアントなし",
+    "emptyRuntimes": "ランタイムなし",
+    "hostRequired": "ホストへのアクセスが必要",
+    "accessChanged": "アクセスが変更されました。再確認してください。",
+    "identityDetails": "識別情報",
+    "maintenanceNav": "保守"
+  },
   "gatewayMaintenance": {
     "reset": "設定を再構築して再インストール",
     "resetConfirm": "Gateway の設定を再構築して再インストールします。ランタイム 接続、ネットワーク設定、ローカルの外向き通信ポリシーがリセットされます。既存のデバイス ID とクライアント権限は保持され、以前の設定はホストに保存されます。完了後、ランタイム の再接続とネットワーク設定が必要です。",

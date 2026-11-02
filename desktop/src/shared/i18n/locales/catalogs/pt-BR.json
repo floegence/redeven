@@ -1,4 +1,17 @@
 {
+  "gatewayWorkspace": {
+    "addresses": "Endereços de acesso",
+    "editAddress": "Editar",
+    "connectionSaved": "Conexão salva",
+    "addressMissing": "Sem endereço de acesso",
+    "setAddress": "Definir endereço",
+    "emptyClients": "Nenhum cliente",
+    "emptyRuntimes": "Nenhum ambiente de execução",
+    "hostRequired": "Acesso ao host necessário",
+    "accessChanged": "O acesso mudou. Verifique novamente.",
+    "identityDetails": "Detalhes de identidade",
+    "maintenanceNav": "Manutenção"
+  },
   "gatewayMaintenance": {
     "reset": "Redefinir configuração e reinstalar",
     "resetConfirm": "A configuração do Gateway será redefinida e o serviço reinstalado. As conexões de ambientes de execução, as configurações de rede e a política local de tráfego de saída serão redefinidas. A identidade do dispositivo e as permissões dos clientes serão preservadas. A configuração anterior ficará no host. Depois, reconecte os ambientes de execução e configure o acesso à rede.",

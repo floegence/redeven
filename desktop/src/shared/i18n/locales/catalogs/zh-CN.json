@@ -1,4 +1,17 @@
 {
+  "gatewayWorkspace": {
+    "addresses": "访问地址",
+    "editAddress": "编辑",
+    "connectionSaved": "连接已保存",
+    "addressMissing": "未设置访问地址",
+    "setAddress": "设置地址",
+    "emptyClients": "暂无客户端",
+    "emptyRuntimes": "暂无运行时",
+    "hostRequired": "需要主机访问权限",
+    "accessChanged": "访问权限已变更，请重新验证。",
+    "identityDetails": "身份详情",
+    "maintenanceNav": "维护"
+  },
   "gatewayMaintenance": {
     "reset": "重建配置并重装",
     "resetConfirm": "重建 Gateway 配置并重装，将重置运行时连接、网络设置及本地出站策略。现有设备身份和客户端权限保持不变，旧配置会保留在主机上。完成后需要重新接入运行时并配置网络访问。",

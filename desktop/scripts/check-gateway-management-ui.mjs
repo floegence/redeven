@@ -66,10 +66,15 @@ try {
         await workspace.waitFor();
         assert.equal(await page.getByRole('dialog').count(), 0);
         const keys = ['gatewayExperience.overview', 'gatewayExperience.clients', 'gatewayClients.runtimes', 'gatewayExperience.network', 'gatewayExperience.maintenance'];
-        assert.deepEqual(await nav.getByRole('button').allTextContents(), keys.map(key => i18n.t(key)));
+        assert.deepEqual(await nav.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), keys.map(key => i18n.t(key)));
         for (const [index, key] of keys.entries()) {
           await button(nav, key).click();
           assert.equal(await button(nav, key).getAttribute('aria-current'), 'page');
+          assert.equal(await button(nav, key).evaluate(element => getComputedStyle(element).boxShadow), 'none', 'Selected navigation has no decorative edge marker');
+          if (width < 768) {
+            const label = button(nav, key).locator('span');
+            assert.equal(await label.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap', 'Compact navigation keeps labels intact');
+          }
           const panel = workspace.locator('.redeven-gateway-workspace-section:visible');
           assert.equal(await panel.count(), 1);
           const metrics = await workspace.evaluate(element => {
@@ -168,10 +173,39 @@ try {
         await settleVisuals(page);
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-overview.png' });
         assert.equal(await page.locator('select').count(), 0);
+        assert.equal(await nav.locator('button svg').count(), keys.length, 'Every navigation destination has an icon');
+        assert.equal(await workspace.locator('.redeven-gateway-identity-details').getAttribute('open'), null, 'Identity is disclosed on demand');
+        const emptySnapshot = { ...snapshot, gateway_sources: [{ ...gateway, endpoints: [], environments: [], gateway_url: '', listener_running: true, listener_address: ':7443', active_listener_addresses: ['[::]:7443'] }] };
+        await page.addInitScript(snapshot => { window.settingsFixtureSnapshot = snapshot; }, emptySnapshot);
+        await page.reload({ timeout: 60000 });
+        await page.evaluate(async dark => {
+          document.documentElement.classList.toggle('dark', dark); document.documentElement.classList.toggle('light', !dark);
+          await document.fonts.ready;
+          window.settingsFixture.actionResult = request => request.kind === 'list_gateway_clients' ? { ok: true, gateway_clients: [] } : { ok: true, outcome: 'saved_gateway' };
+        }, dark);
+        await button(page, 'environmentCenter.gatewaysSection').click();
+        await button(page.locator('.redeven-gateway-card'), 'gatewayExperience.manage').click();
+        await button(nav, 'gatewayExperience.overview').click();
+        await workspace.getByText(i18n.t('gatewayWorkspace.addressMissing'), { exact: true }).waitFor();
+        await settleVisuals(page);
+        await page.screenshot({ path: output + '/' + locale + '-' + width + '-overview-empty.png' });
+        await button(nav, 'gatewayExperience.clients').click();
+        await button(workspace, 'common.refresh').click();
+        await workspace.getByText(i18n.t('gatewayWorkspace.emptyClients'), { exact: true }).waitFor();
+        assert.equal(await workspace.locator('#gateway-management-clients h3').count(), 1, 'Client page has one heading and toolbar');
+        assert.equal(await workspace.locator('#gateway-management-clients [role=alert]').count(), 0, 'No stale access error');
+        await settleVisuals(page);
+        await page.screenshot({ path: output + '/' + locale + '-' + width + '-clients-empty.png' });
+        await button(nav, 'gatewayExperience.network').click();
+        assert.equal(await workspace.locator('[data-gateway-panel=connection] .redeven-gateway-setting-row').count(), 2);
+        assert.equal(await workspace.locator('[data-gateway-panel=connection] .redeven-gateway-help-trigger').count(), 2, 'Help is available on demand');
+        await settleVisuals(page);
+        await page.screenshot({ path: output + '/' + locale + '-' + width + '-network-empty.png' });
+
         await page.evaluate(snapshot => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{
           ...snapshot.gateway_sources[0], status: 'offline', permissions: { access: false, manage_attachments: false, manage_network: false },
           service_state: { status: 'needs_reinstall', can_start: false, can_stop: false, can_restart: false, can_update: true, can_pair_after_start: false },
-        }] }), snapshot);
+        }] }), emptySnapshot);
         await button(nav, 'gatewayExperience.maintenance').click();
         await button(workspace, 'gatewayMaintenance.reset').waitFor();
         assert.ok(await button(workspace, 'environmentCenter.gatewayActionUpdate').isEnabled());
@@ -187,7 +221,7 @@ try {
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-recovery-confirmation.png' });
         await button(dialog, 'common.close').first().click();
         await page.locator('[data-floe-dialog-panel].redeven-gateway-dialog').waitFor({ state: 'detached' });
-        report.cases.push({ locale, width, dark, sections: 6, draftsRetained: true, explicitIssuance: true, serviceConfirmed: true, revocationConfirmed: true, keyboardMenu: true });
+        report.cases.push({ locale, width, dark, sections: keys.length, draftsRetained: true, explicitIssuance: true, serviceConfirmed: true, revocationConfirmed: true, keyboardMenu: true });
       } catch (error) {
         await page.screenshot({ path: output + '/failure-' + locale + '-' + width + '.png', fullPage: true });
         throw error;

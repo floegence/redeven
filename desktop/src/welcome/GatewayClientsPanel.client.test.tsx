@@ -9,7 +9,7 @@ const i18n = createDesktopI18n('en-US');
 let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 25));
 function button(key: Parameters<typeof i18n.t>[0]) {
-  const found = [...document.querySelectorAll<HTMLButtonElement>('button')].find(element => controlText(element) === i18n.t(key));
+  const found = [...document.querySelectorAll<HTMLButtonElement>('button')].find(element => (controlText(element) === i18n.t(key) || element.getAttribute('aria-label') === i18n.t(key)));
   if (!found) throw new Error('Missing button ' + key);
   return found;
 }
@@ -24,6 +24,25 @@ function mount(perform: ReturnType<typeof vi.fn>, currentClientKeyID?: string) {
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway client enrollment', () => {
+  it('clears availability feedback after access returns without restoring issued credentials', async () => {
+    const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [] });
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    const root = document.createElement('div'); document.body.append(root);
+    const [available, setAvailable] = createSignal(true);
+    const [enrolling, setEnrolling] = createSignal(false);
+    dispose = render(() => <GatewayClientsPanel gatewayID="gateway-one" available={available()} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
+    await settle(); button('gatewayExperience.connectClient').click(); await settle();
+    perform.mockResolvedValueOnce({ ok: true, gateway_access_code: { access_code: 'invalidated-code', expires_at_unix_ms: Date.now() + 600000 } });
+    button('gatewayClients.createCode').click(); await settle();
+    expect(document.querySelector('.redeven-gateway-access-code')?.textContent).toContain('invalidated-code');
+    setAvailable(false); await settle();
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    setAvailable(true); await settle();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(document.querySelector('.redeven-gateway-access-code')).toBeNull();
+    expect(perform.mock.calls.filter(([request]) => request.kind === 'issue_gateway_access_code')).toHaveLength(1);
+    expect(perform.mock.calls.at(-1)?.[0].kind).toBe('list_gateway_clients');
+  });
   it('keeps an unknown operation fenced until explicit review without reissuing', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [] });
     mount(perform); await settle(); button('gatewayExperience.connectClient').click(); await settle();

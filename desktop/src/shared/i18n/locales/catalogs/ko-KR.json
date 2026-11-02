@@ -1,4 +1,17 @@
 {
+  "gatewayWorkspace": {
+    "addresses": "접속 주소",
+    "editAddress": "편집",
+    "connectionSaved": "연결 저장됨",
+    "addressMissing": "접속 주소 없음",
+    "setAddress": "주소 설정",
+    "emptyClients": "클라이언트 없음",
+    "emptyRuntimes": "런타임 없음",
+    "hostRequired": "호스트 접근 권한 필요",
+    "accessChanged": "접근 권한이 변경되었습니다. 다시 확인하세요.",
+    "identityDetails": "식별 정보",
+    "maintenanceNav": "유지 관리"
+  },
   "gatewayMaintenance": {
     "reset": "구성 재설정 및 재설치",
     "resetConfirm": "Gateway 구성을 재설정하고 다시 설치합니다. 런타임 연결, 네트워크 설정 및 로컬 외부 통신 정책이 초기화됩니다. 기존 기기 ID와 클라이언트 권한은 유지되고 이전 구성은 호스트에 보관됩니다. 완료 후 런타임을 다시 연결하고 네트워크 접근을 설정해야 합니다.",

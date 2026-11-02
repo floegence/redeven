@@ -1,12 +1,12 @@
 import { KeyedFor, Button, Input, Dialog } from '@floegence/floe-webapp-core/ui';
-import { Copy, Plus, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Copy, Monitor, Plus, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from 'solid-js';
 import { gatewayConnectionOrigin } from '../shared/gatewayNetworkSettings';
 import type { DesktopI18n } from '../shared/i18n';
 import type { GatewayAuthorizedClient, GatewayClientAccessCode, GatewayEndpoint } from '../shared/gatewayMembership';
 import type { DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 
-export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspended?: boolean; onPresenceChange?: (present: boolean) => void; gatewayID: string; currentClientKeyID?: string; endpoints?: readonly GatewayEndpoint[]; enrolling: boolean; onEnrollmentChange: (value: boolean) => void; i18n: DesktopI18n }>) {
+export function GatewayClientsPanel(props: Readonly<{ available?: boolean; showAvailabilityNotice?: boolean; suspended?: boolean; onPresenceChange?: (present: boolean) => void; gatewayID: string; currentClientKeyID?: string; endpoints?: readonly GatewayEndpoint[]; enrolling: boolean; onEnrollmentChange: (value: boolean) => void; i18n: DesktopI18n }>) {
   const enrolling = () => props.enrolling;
   let enrollmentTrigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined;
   const setEnrollment = (value: boolean) => {
@@ -68,9 +68,9 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
     untrack(() => void perform({ kind: 'list_gateway_clients', connection_id: gatewayID }));
   });
   createEffect(on(() => props.available, value => {
-    if (value !== false) return;
+    if (value !== false) { untrack(() => void perform({ kind: 'list_gateway_clients', connection_id: props.gatewayID })); return; }
     generation++; setBusy(false); setCode(undefined); setRevoking('');
-    setError(props.i18n.t('interactionContinuity.unavailable'));
+    setError('');
   }, { defer: true }));
   const remaining = () => Math.max(0, Math.ceil(((code()?.expires_at_unix_ms ?? 0) - now()) / 1000));
   async function copyCode(kind: 'code' | 'address' | 'all' = 'code') {
@@ -83,7 +83,7 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
     } catch { if (current === generation) setError(props.i18n.t('gatewayMembers.failed')); }
   }
   return <div class="redeven-gateway-clients-panel">
-    <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayExperience.clients')}</h3><Button ref={enrollmentTrigger} size="sm" icon={Plus} disabled={props.available === false} onClick={() => setEnrollment(true)}>{props.i18n.t('gatewayExperience.connectClient')}</Button></div>
+    <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayExperience.clients')}<span class="redeven-gateway-count">{clients().length}</span></h3><div class="redeven-gateway-toolbar-actions"><Button variant="ghost" size="icon" icon={Refresh} aria-label={props.i18n.t('common.refresh')} title={props.i18n.t('common.refresh')} disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', connection_id: props.gatewayID })} /><Button ref={enrollmentTrigger} size="sm" icon={Monitor} disabled={props.available === false} onClick={() => setEnrollment(true)}>{props.i18n.t('gatewayExperience.connectClient')}</Button></div></div>
     <Dialog open={enrolling() && !props.suspended} onOpenChange={setEnrollment} onPresenceChange={props.onPresenceChange} title={props.i18n.t('gatewayExperience.connectClient')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog redeven-gateway-task-dialog"><section class="redeven-gateway-client-access" data-gateway-client-enrollment>
       <div class="redeven-gateway-section-heading">
         <div><h3>{props.i18n.t('gatewayClients.createCode')}</h3></div>
@@ -99,25 +99,25 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
         <p class="basis-full text-xs text-muted-foreground" role="status">{remaining() ? props.i18n.t('gatewayClients.codeExpires', { time: `${Math.floor(remaining() / 60)}:${String(remaining() % 60).padStart(2, '0')}` }) : props.i18n.t('gatewayClients.codeExpired')}</p>
       </div>}</Show>
     </section><Show when={uncertainOperation()}><Button variant="outline" size="sm" disabled={busy() || props.available === false} onClick={() => void acknowledgeOperation()}>{props.i18n.t('gatewayMembers.operationReviewed')}</Button></Show>
+      <Show when={props.available === false}><p role="alert" class="redeven-gateway-access-notice"><AlertTriangle aria-hidden="true" />{props.i18n.t('gatewayWorkspace.accessChanged')}</p></Show>
       <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show></Dialog>
     <section class="redeven-gateway-settings-section">
-      <div class="redeven-gateway-section-heading"><div><h3>{props.i18n.t('gatewayClients.authorizedClients')}</h3></div>
-        <Button variant="ghost" size="sm" disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', connection_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>
-      <Show when={clients().length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayClients.emptyClients')}</p>}>
+      <Show when={clients().length} fallback={<div class="redeven-gateway-quiet-empty"><Monitor aria-hidden="true" /><span>{props.i18n.t('gatewayWorkspace.emptyClients')}</span></div>}>
         <ul class="redeven-gateway-authorized-client-list"><KeyedFor each={clients()} by={client => client.client_key_id}>{client => <li class="redeven-gateway-content-enter redeven-gateway-authorized-client-row">
-          <div class="flex flex-wrap items-center justify-between gap-3"><strong class="text-sm font-semibold">{client().client_name || props.i18n.t('gatewayClients.unnamedClient')}<Show when={client().client_key_id === props.currentClientKeyID}><span class="ml-2 text-xs font-normal text-muted-foreground">{props.i18n.t('gatewayClients.currentDevice')}</span></Show></strong>
-            <Show when={!client().revoked_at_unix_ms} fallback={<><span class="text-xs text-muted-foreground">{props.i18n.t('gatewayClients.revoked')}</span><Show when={client().client_key_id === props.currentClientKeyID}><Button size="xs" variant="outline" disabled={props.available === false || busy()} onClick={() => void perform({kind:'pair_gateway',connection_id:props.gatewayID})}>{props.i18n.t('gatewayClients.reauthorize')}</Button></Show></>}>
-              <Button variant="outline" size="xs" icon={Trash} disabled={props.available === false || busy()} onClick={() => {
+          <div class="flex flex-wrap items-center justify-between gap-3"><strong class="redeven-gateway-item-name text-sm font-semibold"><Monitor aria-hidden="true" />{client().client_name || props.i18n.t('gatewayClients.unnamedClient')}<Show when={client().client_key_id === props.currentClientKeyID}><span class="ml-2 text-xs font-normal text-muted-foreground">{props.i18n.t('gatewayClients.currentDevice')}</span></Show></strong>
+            <Show when={!client().revoked_at_unix_ms} fallback={<><span class="text-xs text-muted-foreground">{props.i18n.t('gatewayClients.revoked')}</span><Show when={client().client_key_id === props.currentClientKeyID}><Button size="sm" variant="outline" disabled={props.available === false || busy()} onClick={() => void perform({kind:'pair_gateway',connection_id:props.gatewayID})}>{props.i18n.t('gatewayClients.reauthorize')}</Button></Show></>}>
+              <Button variant="outline" size="sm" icon={Trash} disabled={props.available === false || busy()} onClick={() => {
                 if (revoking() !== client().client_key_id) { setRevoking(client().client_key_id); return; }
                 void perform({ kind: 'revoke_gateway_client', connection_id: props.gatewayID, client_key_id: client().client_key_id });
               }}>{props.i18n.t(revoking() === client().client_key_id ? 'gatewayClients.confirmRevoke' : 'gatewayClients.revoke')}</Button>
             </Show>
           </div>
           <dl class="redeven-gateway-client-metadata"><div><dt>{props.i18n.t('gatewayClients.authorizedAt')}</dt><dd>{new Date(client().paired_at_unix_ms).toLocaleString(props.i18n.locale)}</dd></div><div><dt>{props.i18n.t('gatewayClients.lastSeen')}</dt><dd>{client().last_verified_at_unix_ms ? new Date(client().last_verified_at_unix_ms).toLocaleString(props.i18n.locale) : '—'}</dd></div></dl>
-          <Show when={revoking() === client().client_key_id}><div class="redeven-gateway-content-enter space-y-2"><p role="alert" class="text-xs text-warning">{props.i18n.t('gatewayClients.revokeHelp')}</p><Button variant="ghost" size="xs" onClick={() => setRevoking('')}>{props.i18n.t('common.cancel')}</Button></div></Show>
+          <Show when={revoking() === client().client_key_id}><div class="redeven-gateway-content-enter space-y-2"><p role="alert" class="text-xs text-warning">{props.i18n.t('gatewayClients.revokeHelp')}</p><Button variant="ghost" size="sm" onClick={() => setRevoking('')}>{props.i18n.t('common.cancel')}</Button></div></Show>
         </li>}</KeyedFor></ul>
       </Show>
     </section>
+    <Show when={props.available === false && props.showAvailabilityNotice !== false && !enrolling()}><p role="alert" class="redeven-gateway-access-notice"><AlertTriangle aria-hidden="true" />{props.i18n.t('gatewayWorkspace.accessChanged')}</p></Show>
     <Show when={error() && !enrolling()}><p role="alert" class="redeven-gateway-content-enter text-sm text-error">{error()}</p></Show>
   </div>;
 }

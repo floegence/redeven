@@ -1,4 +1,17 @@
 {
+  "gatewayWorkspace": {
+    "addresses": "Zugriffsadressen",
+    "editAddress": "Bearbeiten",
+    "connectionSaved": "Verbindung gespeichert",
+    "addressMissing": "Keine Zugriffsadresse",
+    "setAddress": "Adresse festlegen",
+    "emptyClients": "Keine Clients",
+    "emptyRuntimes": "Keine Laufzeitumgebungen",
+    "hostRequired": "Hostzugriff erforderlich",
+    "accessChanged": "Zugriff geändert. Erneut bestätigen.",
+    "identityDetails": "Identitätsdetails",
+    "maintenanceNav": "Wartung"
+  },
   "gatewayMaintenance": {
     "reset": "Konfiguration neu erstellen und neu installieren",
     "resetConfirm": "Gateway-Konfiguration neu erstellen und neu installieren. Laufzeitumgebungen-Verbindungen, Netzwerkeinstellungen und lokale Regeln für ausgehenden Verkehr werden zurückgesetzt. Geräteidentität und Clientberechtigungen bleiben erhalten. Die bisherige Konfiguration wird auf dem Host aufbewahrt. Verbinden Sie anschließend die Laufzeitumgebungen erneut und richten Sie den Netzwerkzugriff ein.",

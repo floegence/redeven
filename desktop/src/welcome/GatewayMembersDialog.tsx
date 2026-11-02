@@ -1,7 +1,7 @@
 import { GatewayPicker } from './GatewayPicker';
 import { gatewayAllowedHost, gatewayConnectionOrigin, gatewayListenAddress } from '../shared/gatewayNetworkSettings';
 import { KeyedFor, Button, Checkbox, Input, StableText, Dialog } from '@floegence/floe-webapp-core/ui';
-import { ChevronDown, Plus, Trash, Copy } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ChevronDown, Globe, HelpIcon, Plus, Refresh, Save, Shield, Terminal, Trash, Copy } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionSuccess } from '../shared/desktopLauncherIPC';
@@ -12,6 +12,7 @@ import { DesktopTooltip } from './DesktopTooltip';
 
 export function RuntimeAttachmentsPanel(props: Readonly<{
   available?: boolean;
+  showAvailabilityNotice?: boolean;
   suspended?: boolean;
   onPresenceChange?: (present: boolean) => void;
   gateway?: DesktopGatewaySource; i18n: DesktopI18n;
@@ -84,7 +85,7 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
   createEffect(on(() => props.available, value => {
     if (value !== false) return;
     generation++; setBusy(false); setInvitationInvalidated(true); setRemoving(''); setSavingPolicy(false);
-    setError(props.i18n.t('interactionContinuity.unavailable'));
+    setError('');
   }, { defer: true }));
   const currentMembers = () => props.gateway?.environments.filter(member => member.state === 'active') ?? [];
   const members = createMemo<ReturnType<typeof currentMembers>>(previous => {
@@ -227,18 +228,16 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
     }, 180);
   }
   return (
-    <div class="redeven-gateway-members-panel">
+    <div class="redeven-gateway-members-panel" data-gateway-panel={props.section}>
       <Show when={props.section === 'connection'}>
-      <section class="redeven-gateway-settings-section">
-        <div>
-          <h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.connectionAddresses')}</h3>
-          <p class="redeven-gateway-help mt-1">{props.i18n.t('gatewayMembers.connectionAddressesHelp')}</p>
-        </div>
+      <section class="redeven-gateway-settings-section redeven-gateway-setting-row">
+        <div class="redeven-gateway-setting-label"><Globe aria-hidden="true" /><h3>{props.i18n.t('gatewayWorkspace.addresses')}</h3><DesktopTooltip content={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><button type="button" class="redeven-gateway-help-trigger" aria-label={props.i18n.t('gatewayMembers.connectionAddressesHelp')}><HelpIcon aria-hidden="true" /></button></DesktopTooltip></div>
+        <div class="redeven-gateway-setting-value">
         <div class="redeven-gateway-endpoint-list">
           <KeyedFor each={endpointDraft()} by={endpoint => endpoint.endpoint_id}>{endpoint => <div class="redeven-gateway-endpoint-shell" data-endpoint-id={endpoint().endpoint_id} classList={{ 'redeven-gateway-endpoint-shell--removing': removingEndpointID() === endpoint().endpoint_id }} inert={removingEndpointID() === endpoint().endpoint_id}>
             <div class="redeven-gateway-endpoint">
             <div class="redeven-gateway-endpoint__address">
-              <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayMembers.address')}</span>
+              <label class="redeven-gateway-field"><span class="sr-only">{props.i18n.t('gatewayMembers.address')}</span>
                 <Input aria-label={props.i18n.t('gatewayMembers.address')} disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_network} size="sm" class="w-full min-w-0 font-mono" value={endpoint().address} placeholder={props.i18n.t('gatewayNetwork.addressPlaceholder')} autocomplete="off" spellcheck={false}
                   onInput={event => setEndpointDraft(current => current.map(item => item.endpoint_id === endpoint().endpoint_id ? { ...item, address: event.currentTarget.value.trim() } : item))} />
               </label>
@@ -247,22 +246,25 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
             <Show when={props.gateway?.endpoint_last_used_at?.[endpoint().endpoint_id]}>{lastUsedAt => <span class="redeven-gateway-endpoint__meta">{props.i18n.t('gatewayMembers.usedByRuntime')} · {new Date(lastUsedAt()).toLocaleString(props.i18n.locale)}</span>}</Show>
             </div>
           </div>}</KeyedFor>
-          <Show when={!endpointDraft().length}><p class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
+          <Show when={!endpointDraft().length}><span class="redeven-gateway-inline-empty">{props.i18n.t('gatewayWorkspace.addressMissing')}</span></Show>
         </div>
         <div class="flex flex-wrap gap-2">
-          <Button class="cursor-pointer" size="xs" variant="outline" icon={Plus} disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_network || endpointDraft().length >= 16} onClick={() => setEndpointDraft(current => [...current, { endpoint_id: `endpoint_${crypto.randomUUID().replaceAll('-', '')}`, address: '', scope: 'lan', priority: current.length }])}>{props.i18n.t('gatewayMembers.addAddress')}</Button>
+          <Button class="cursor-pointer" size="sm" variant="outline" icon={Plus} disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_network || endpointDraft().length >= 16} onClick={() => setEndpointDraft(current => [...current, { endpoint_id: `endpoint_${crypto.randomUUID().replaceAll('-', '')}`, address: '', scope: 'lan', priority: current.length }])}>{props.i18n.t('gatewayMembers.addAddress')}</Button>
+        </div>
         </div>
       </section>
-      <section class="redeven-gateway-settings-section redeven-gateway-section-divider">
-        <div class="redeven-gateway-section-heading"><div><h3>{props.i18n.t('gatewayNetwork.listenTitle')}</h3><p>{props.i18n.t('gatewayNetwork.listenHelp')}</p></div><span class="redeven-gateway-setting-badge">{props.i18n.t('gatewayNetwork.nextStart')}</span></div>
-        <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayNetwork.listenAddress')}</span><Input ref={listenInput} aria-invalid={networkFieldError() === 'listen' || undefined} id="gateway-listen-addresses" class="font-mono" value={listenDraft()} placeholder={props.i18n.t('gatewayNetwork.listenAddressPlaceholder')} size="sm" spellcheck={false} disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_network} onInput={event => { setListenDraft(event.currentTarget.value); setNetworkSaved(false); setNetworkFieldError(undefined); setError(''); }} /></label>
-        <Show when={props.gateway?.listener_running}><p class="redeven-gateway-help text-xs">{props.i18n.t('gatewayNetwork.active')} <code class="break-all">{(props.gateway?.active_listener_addresses ?? props.gateway?.listener_addresses ?? [props.gateway?.listener_address]).join(', ')}</code></p></Show>
+      <section class="redeven-gateway-settings-section redeven-gateway-setting-row">
+        <div class="redeven-gateway-setting-label"><Terminal aria-hidden="true" /><h3>{props.i18n.t('gatewayNetwork.listenTitle')}</h3><DesktopTooltip content={props.i18n.t('gatewayNetwork.listenHelp')}><button type="button" class="redeven-gateway-help-trigger" aria-label={props.i18n.t('gatewayNetwork.listenHelp')}><HelpIcon aria-hidden="true" /></button></DesktopTooltip></div>
+        <div class="redeven-gateway-setting-value">
+          <label class="redeven-gateway-field"><span class="sr-only">{props.i18n.t('gatewayNetwork.listenAddress')}</span><Input ref={listenInput} aria-invalid={networkFieldError() === 'listen' || undefined} id="gateway-listen-addresses" class="font-mono" value={listenDraft()} placeholder={props.i18n.t('gatewayNetwork.listenAddressPlaceholder')} size="sm" spellcheck={false} disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_network} onInput={event => { setListenDraft(event.currentTarget.value); setNetworkSaved(false); setNetworkFieldError(undefined); setError(''); }} /></label>
+          <div class="redeven-gateway-listener-status"><Show when={props.gateway?.listener_running}><span>{props.i18n.t('gatewayNetwork.active')} <code>{(props.gateway?.active_listener_addresses ?? props.gateway?.listener_addresses ?? [props.gateway?.listener_address]).join(', ')}</code></span></Show><span>{props.i18n.t('gatewayNetwork.nextStart')}</span></div>
+        </div>
       </section>
       <details ref={networkAdvanced} data-gateway-network-advanced class="redeven-gateway-disclosure redeven-gateway-network-advanced group">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayNetwork.advanced')}</span><span class="ml-auto text-xs font-normal text-muted-foreground">{props.i18n.t(entries(hostsDraft()).length ? 'gatewayNetwork.restrictedHosts' : 'gatewayNetwork.allHosts',{count:entries(hostsDraft()).length})}</span><ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"><span class="redeven-gateway-item-name"><Shield aria-hidden="true" />{props.i18n.t('gatewayNetwork.advanced')}</span><span class="ml-auto text-xs font-normal text-muted-foreground">{props.i18n.t(entries(hostsDraft()).length ? 'gatewayNetwork.restrictedHosts' : 'gatewayNetwork.allHosts',{count:entries(hostsDraft()).length})}</span><ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
         <div class="redeven-gateway-network-advanced__content"><label class="redeven-gateway-field"><span>{props.i18n.t('gatewayNetwork.allowedHosts')}</span><Input ref={hostsInput} aria-invalid={networkFieldError() === 'hosts' || undefined} id="gateway-allowed-hosts" class="font-mono" value={hostsDraft()} placeholder={props.i18n.t('gatewayNetwork.allowedHostsPlaceholder')} size="sm" spellcheck={false} disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_network} onInput={event => { setHostsDraft(event.currentTarget.value); setNetworkSaved(false); setNetworkFieldError(undefined); setError(''); }} /></label><p class="redeven-gateway-help">{props.i18n.t('gatewayNetwork.hostsHelp')}</p></div>
       </details>
-      <div class="redeven-gateway-network-actions"><Show when={networkSaved() || restartRequired()}><p role="status" class="redeven-gateway-help">{props.i18n.t(restartRequired() ? 'gatewayNetwork.restartRequired' : 'gatewayNetwork.saved')}</p></Show><Show when={restartRequired() && props.onRestart}><Button variant="outline" size="sm" onClick={() => props.onRestart?.()}>{props.i18n.t('gatewayExperience.reviewRestart')}</Button></Show><Button class="ml-auto cursor-pointer whitespace-nowrap" size="sm" disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_network || !networkDirty()} onClick={() => void saveEndpoints()}><StableText reserve={[props.i18n.t('gatewayNetwork.save'),props.i18n.t('gatewayNetwork.saving')]}>{props.i18n.t(busy() ? 'gatewayNetwork.saving' : 'gatewayNetwork.save')}</StableText></Button></div>
+      <div class="redeven-gateway-network-actions"><Show when={networkSaved() || restartRequired()}><p role="status" class="redeven-gateway-help">{props.i18n.t(restartRequired() ? 'gatewayNetwork.restartRequired' : 'gatewayNetwork.saved')}</p></Show><Show when={restartRequired() && props.onRestart}><Button variant="outline" size="sm" icon={Refresh} onClick={() => props.onRestart?.()}>{props.i18n.t('gatewayExperience.reviewRestart')}</Button></Show><Button class="ml-auto cursor-pointer whitespace-nowrap" size="sm" icon={Save} aria-label={props.i18n.t('gatewayNetwork.save')} disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_network || !networkDirty()} onClick={() => void saveEndpoints()}><StableText reserve={[props.i18n.t('common.save'),props.i18n.t('gatewayNetwork.saving')]}>{props.i18n.t(busy() ? 'gatewayNetwork.saving' : 'common.save')}</StableText></Button></div>
       </Show>
       <Show when={props.section === 'runtimes'}>
       <Dialog open={enrolling() && !props.suspended} onOpenChange={open => props.onEnrollmentChange?.(open)} onPresenceChange={present => { props.onPresenceChange?.(present); if (present) requestAnimationFrame(() => (enrollmentStep() === 'invite' ? invitationHeading : ownedRuntimeChoice)?.focus()); }} title={props.i18n.t('gatewayExperience.connectRuntime')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog redeven-gateway-task-dialog"><div data-gateway-runtime-enrollment>
@@ -299,6 +301,7 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
         </Show>
       </div></section>
       <Show when={uncertainOperation()}><Button variant="outline" size="sm" disabled={busy() || props.available === false} onClick={() => void acknowledgeOperation()}>{props.i18n.t('gatewayMembers.operationReviewed')}</Button></Show>
+      <Show when={props.available === false}><p role="alert" class="redeven-gateway-access-notice"><AlertTriangle aria-hidden="true" />{props.i18n.t('gatewayWorkspace.accessChanged')}</p></Show>
       <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show></Dialog>
       <div>
       <section class="redeven-gateway-settings-section">
@@ -346,7 +349,7 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
       </Show>
       <Show when={props.section === 'policy'}>
       <Show when={policy()}>{current => <details class="redeven-gateway-disclosure redeven-gateway-policy group">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">{props.i18n.t('gatewayMembers.policy')}<ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"><span class="redeven-gateway-item-name"><Globe aria-hidden="true" />{props.i18n.t('gatewayMembers.policy')}</span><ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
         <div class="redeven-gateway-policy-content">
         <Checkbox label={props.i18n.t('gatewayMembers.defaultAllow')} checked={current().default_egress_allowed}
           disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_network}
@@ -374,6 +377,7 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
 
       </Show>
       <Show when={uncertainOperation()}><Button variant="outline" size="sm" disabled={busy() || props.available === false} onClick={() => void acknowledgeOperation()}>{props.i18n.t('gatewayMembers.operationReviewed')}</Button></Show>
+      <Show when={props.available === false && props.showAvailabilityNotice !== false}><p role="alert" class="redeven-gateway-access-notice"><AlertTriangle aria-hidden="true" />{props.i18n.t('gatewayWorkspace.accessChanged')}</p></Show>
       <Show when={error()}><p role="alert" class="redeven-gateway-content-enter text-sm text-error">{error()}</p></Show>
     </div>
   );
