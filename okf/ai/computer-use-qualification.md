@@ -41,6 +41,9 @@ Use default tools except explicit legacy-wait case. Cover bounded text/limits/bu
 | output loss | Prior explicit output retained; one fault/zero later input; actual method without invented code |
 | host rejection | Real empty helper rejects before controller dispatch; canonical non-execution and prior text survive, with zero later input |
 | drag | Independent press/release/moves/endpoints/duration; invalid integer_0_5000 rejects before input |
+| observation lifetime | Complete content/image/metadata/safety through cleanup; child-frame waits, fixed refs, privacy, cancellation and unknown faults |
+| dynamic content | Natural and explicit waits, same-document SPA updates, shadow form and continuously updating unrelated content |
+| public reads | MDN, Wikipedia and GitHub title/heading/screenshot; actual adapter evidence even with emit:false; reject forbidden non-Computer tools |
 
 Also cover >2,800 nodes, complete totals, account/tab separation, older same-name download and save followed by diagnostic failure without replay. Retain wire IDs/errors/history/events/answers. Scope success proves neither weights nor universal reliability.
 
@@ -61,6 +64,27 @@ checkDesktopSystemBrowser.mjs combines built Desktop/Runtime/extension/Native Me
 This contract grants no target authority and does not replace [media](computer-use-media.md) or [takeover](computer-use-takeover.md). Native disposable-app results do not qualify arbitrary applications/accounts. Freeze source hashes and rerun affected checks after integration; fixture scope never substitutes for the exact-main gate.
 
 # Evidence
+
+November 2, observation-lifetime implementation at 2627dbced: 335 browser Node
+checks pass, with only the native Chrome installation-picker lane skipped;
+381 Go test/subtest records pass with browser integration enabled, while eight
+separate opt-in scopes remain skipped. Native Messaging, installed-browser
+sandbox, two relocated-bundle tests, four host-safety fixtures and documented
+script examples pass. Existing Runtime invalid-read tests verify the model-facing
+failure barrier; deterministic Chromium tests verify the actual lifecycle races.
+The final configured Flash 1017 matrix runs 20 categories twice with 291 actual
+deepseek-flash requests: 34/40 strict passes. Both explicit dynamic waits, both
+natural dynamic reports, SPA, shadow form and batched pagination pass. Five
+failures are model deviations (wrong optional locator, invalid wait signatures,
+unresolved promise before visual confirmation, splitting a required one-call
+ref test, forbidden terminal use); one Wikipedia attempt reaches Chromium's
+network-timeout page. Preserve all six as failures; no input replay or target
+substitution is added. Public reads pass 4/6 strict tasks, with actual content
+observed on 5/6. Earlier 29/38 and 32/38 runs include a measurement defect that
+missed emit:false snapshots; the separate corrected public run passes 6/6 before
+the final cleanup fix. Keep all runs distinct. These data qualify the named
+browser contracts and tasks, not universal website success or native applications.
+
 
 After integration onto the concurrent Floret v7.100.1 adoption, the same 12 categories run twice again with 132 actual deepseek-flash requests: 22/24 strict passes. Both empty-helper rejections pass. The remaining failures reuse a navigation-invalidated ref or omit the required optional-element wait; unsupported snapshot options and an invented visual namespace are rejected. Preserve this new-baseline run independently of the earlier 26 executions. The Go regression records 480 passes; seven browser integration records initially lack the required installation path, then pass with that prerequisite supplied. Nine other opt-in scopes remain skipped. Production Computer sources are unchanged by the rebase; generated knowledge bundles are rebuilt.
 
