@@ -13,7 +13,7 @@ func TestPendingGatewayJoinCanStartWithoutCloudAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := (&Config{}).PrepareGatewayJoin(invitation, gp.MemberMetadata{}, "")
+	cfg, err := (&Config{}).PrepareGatewayJoin(invitation, gp.MemberMetadata{})
 	if err != nil {
 		t.Fatal(err)
 	}

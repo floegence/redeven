@@ -98,12 +98,17 @@ try {
     };
     console.log('Checking host CLI authorization: ' + placement.name);
     assert.equal(JSON.parse(await invokeCLI(['clients', 'access-code'])).access_code.length > 0, true, 'Host CLI issues a ten-minute code');
-    console.log('Checking signed host identity: ' + placement.name);
+    const previousClients = JSON.parse(await invokeCLI(['clients', 'list'])).clients.length;
+    console.log('Checking host management and device identity: ' + placement.name);
     const record = await enroll({ schema_version: 5, connection_id: randomUUID(), display_name: placement.name, local_enabled: true, connection, created_at_ms: 1, updated_at_ms: 1 }, client);
     await client.verifyAddress(record);
     const catalog = await client.catalog(record);
     assert.deepEqual(catalog.gateway.permissions, { access: true, manage_attachments: true, manage_network: true });
-    assert.equal((await client.listClients(record)).length, 0, 'Host management is not a revocable URL grant');
+    assert.equal((await client.listClients(record)).length, previousClients + 1, 'Every device credential stays visible after host management');
+    await client.revokeClient(record, record.trust_profile.paired_client_key_id);
+    assert.equal((await client.listClients(record)).find(item => item.client_key_id === record.trust_profile.paired_client_key_id).revoked_at_unix_ms > 0, true, 'Current device is revocable');
+    assert.equal((await client.catalog(record)).gateway.permissions.manage_network, true, 'Host management survives current device revocation');
+    await assert.rejects(client.openMember(record, 'nonexistent'), { code: 'UNAUTHORIZED' });
     if (placement.baseURL) {
       const code = await client.issueAccessCode(record);
       const persisted = placement.name === 'local' ? await readFile(path.join(state, 'gateway-trust.json'), 'utf8') : docker('exec', sshHost, 'cat', '/root/gateway-state/gateway-trust.json');
@@ -122,14 +127,14 @@ try {
         request.on('error', reject); request.end(JSON.stringify({ protocol_version: 'redeven-gateway-v6' }));
       });
       assert.equal(forbidden, 404, 'Public TLS listener does not mount host administration');
-      assert.equal((await client.listClients(record)).length, 1);
-      assert.equal(JSON.parse(await invokeCLI(['clients', 'list'])).clients.length, 1, 'Host CLI lists the same authorized client');
+      assert.equal((await client.listClients(record)).length, previousClients + 2);
+      assert.equal(JSON.parse(await invokeCLI(['clients', 'list'])).clients.length, previousClients + 2, 'Host CLI lists every device credential');
       await client.revokeClient(record, consumer.trust_profile.paired_client_key_id);
       await assert.rejects(urlClient.catalog(consumer), { code: 'UNAUTHORIZED' });
-      assert.equal((await client.listClients(record))[0].revoked_at_unix_ms > 0, true);
+      assert.equal((await client.listClients(record)).find(item => item.client_key_id === consumer.trust_profile.paired_client_key_id).revoked_at_unix_ms > 0, true);
       assert.equal((await client.catalog(record)).gateway.permissions.manage_attachments, true);
       await invokeCLI(['clients', 'revoke', '--client', consumer.trust_profile.paired_client_key_id]);
-      assert.equal((await client.listClients(record))[0].revoked_at_unix_ms > 0, true, 'Host CLI revocation is idempotent');
+      assert.equal((await client.listClients(record)).find(item => item.client_key_id === consumer.trust_profile.paired_client_key_id).revoked_at_unix_ms > 0, true, 'Host CLI revocation is idempotent');
     }
     report.cases.push({ placement: placement.name, privateHostProof: true, identityRetained: true, consumerOnly: Boolean(placement.baseURL), revocation: Boolean(placement.baseURL) });
     await bridge.disconnect();

@@ -136,6 +136,7 @@ export type DesktopGatewayDiagnosis = Readonly<{
 }>;
 
 export type DesktopGatewaySource = Readonly<{
+  client_key_id?: string;
   identity_fingerprint?: string;
   connection_id: string;
   display_name: string;

@@ -198,7 +198,7 @@ func TestGatewayPairingDoesNotSelectRouteOrReplaceCloudAssociation(t *testing.T)
 	}
 	a := routeAgentFixture(t)
 	previous := a.remoteConfigSnapshot()
-	if err := a.changeGateway(invitation, "", false); err != nil {
+	if err := a.changeGateway(invitation, false); err != nil {
 		t.Fatal(err)
 	}
 	if !sameCloudOwner(previous, a.remoteConfigSnapshot()) || a.cfg.CloudAssociation.Binding.Generation != 7 {
@@ -224,7 +224,7 @@ func TestGatewayReplacementClosesOldRouteWithoutMigratingCloud(t *testing.T) {
 	oldSession, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	a.sessions["old"] = &activeSession{cancel: cancel, cloudRouteRevision: 1}
-	if err := a.changeGateway(invitation, "", true); err != nil {
+	if err := a.changeGateway(invitation, true); err != nil {
 		t.Fatal(err)
 	}
 	saved, err := config.Load(a.configPath)
@@ -245,5 +245,16 @@ func TestGatewayReplacementClosesOldRouteWithoutMigratingCloud(t *testing.T) {
 	}
 	if _, err := gatewayProxy(saved); err == nil {
 		t.Fatal("replacement restored direct fallback")
+	}
+}
+
+func TestOfflineAttachmentsNeverReportConnectedAggregate(t *testing.T) {
+	firstStore, _ := gatewayfixture.NewWithID(t, "first", "https://first.internal:7443", "127.0.0.1:7443")
+	secondStore, _ := gatewayfixture.NewWithID(t, "second", "https://second.internal:7443", "127.0.0.1:7443")
+	a := routeAgentFixture(t)
+	a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{gatewayfixture.Enroll(t, firstStore, "runtime"), gatewayfixture.Enroll(t, secondStore, "runtime")}
+	status := a.GatewayAttachmentStatus()
+	if status.Counts.Connected != 0 || status.Counts.Joined != 2 {
+		t.Fatalf("offline attachments reported connected: %+v", status)
 	}
 }

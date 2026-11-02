@@ -94,8 +94,8 @@ func (a *Agent) CurrentRuntimeServiceSnapshot() runtimeservice.Snapshot {
 
 func (a *Agent) gatewayMembershipSummaries() []runtimeservice.GatewayAttachment {
 	status := a.GatewayAttachmentStatus()
-	out := make([]runtimeservice.GatewayAttachment, 0, len(status.Memberships))
-	for _, item := range status.Memberships {
+	out := make([]runtimeservice.GatewayAttachment, 0, len(status.Attachments))
+	for _, item := range status.Attachments {
 		member := a.GatewayAttachment(item.GatewayID)
 		if member == nil || member.Leaving {
 			continue

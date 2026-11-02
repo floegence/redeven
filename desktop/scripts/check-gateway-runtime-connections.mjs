@@ -88,10 +88,13 @@ try {
     await page.goto(new URL('environment-settings.html',server.resolvedUrls.local[0]).href);
     await page.evaluate(()=>document.fonts.ready);
     await page.evaluate(({memberships,runtime})=>{
+     const attachments=memberships.map(item=>({...item,attachment_state:'joined',connection_state:'connected',
+      endpoints:item.endpoints.map((endpoint,index)=>({...endpoint,endpoint_id:`endpoint-${index}`,scope:'lan',priority:index}))}));
      window.settingsFixture.actionResult=request=>{
       if(request.kind!=='manage_runtime_gateway')return undefined;
-      if(request.operation==='preview')return {ok:true,gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'next',gateway_name:'Gateway',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+300000,existing_environment_id:'existing'}};
-      return {ok:true,gateway_membership:{joined:true,phase:'joined',existing_environment_id:'existing',memberships:memberships.map(item=>({...item,joined:true}))}};
+      if(request.operation==='preview')return {ok:true,gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'next',gateway_name:'Gateway',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+300000}};
+      if(request.operation==='join')attachments.push({gateway_id:'next',gateway_name:'Gateway',attachment_id:'next-attachment',attachment_state:'joined',connection_state:'connected',phase:'joined',route_selected:false,endpoints:[]});
+      return {ok:true,gateway_membership:{attachments,counts:{total:attachments.length,joined:attachments.length,connected:attachments.length,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()}};
      };
      window.gatewayAcceptanceRuntime=runtime;
     },{memberships,runtime});
@@ -245,7 +248,8 @@ try {
        if(request.kind==='manage_runtime_gateway') {
         if(request.operation==='status' && window.gatewayAcceptanceFailConnection)return {ok:false,code:'gateway_attachment_failed',gateway_error_code:'RUNTIME_CONTROL_UNREACHABLE'};
         if(request.operation==='preview')return {ok:true,gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'office',gateway_name:'Office',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+300000}};
-        return {ok:true,gateway_membership:{joined:false,phase:'not_joined'}};
+        const attachments=request.operation==='join'?[{gateway_id:'office',gateway_name:'Office',attachment_id:'office-attachment',attachment_state:'joined',connection_state:'connected',phase:'joined',route_selected:false,endpoints:[]}]:[];
+        return {ok:true,gateway_membership:{attachments,counts:{total:attachments.length,joined:attachments.length,connected:attachments.length,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()}};
        }
        return undefined;
       };

@@ -2344,7 +2344,8 @@ describe('main routing', () => {
     const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
     const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
     const syncSrc = mainSrc.slice(syncStart, syncEnd);
-    expect(syncSrc).toContain('if (!currentRecord.trust_profile)');
+    expect(syncSrc).toContain("if (!currentRecord.trust_profile || (options.reauthorizeDevice === true && currentRecord.connection.kind !== 'url'))");
+    expect(syncSrc).toContain('if (currentRecord.trust_profile) await client.verifyAddress(currentRecord);');
     expect(syncSrc).toContain('options.allowPairing !== true');
     expect(syncSrc).toContain("classification: 'pairing_required'");
     expect(syncSrc).not.toContain('gatewayReinstallPairingRequired');

@@ -1,3 +1,5 @@
+import { gatewaySnapshot } from '../testSupport/gatewayAttachments';
+import type { GatewayAttachmentStatus } from '../shared/gatewayJoin';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -7,11 +9,11 @@ import { controlText } from '../testSupport/controlText';
 const i18n=createDesktopI18n('en-US');
 const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
 let dispose:(()=>void)|undefined;
-const one={joined:true,phase:'joined',gateway_id:'one',gateway_name:'Office',attachment_id:'member-one',route_selected:false,endpoints:[{address:'https://office.internal:7443',endpoint_id:'lan',scope:'lan',priority:0}]};
+const one: GatewayAttachmentStatus={attachment_state:'joined',connection_state:'connected',phase:'joined',gateway_id:'one',gateway_name:'Office',attachment_id:'member-one',route_selected:false,endpoints:[{address:'https://office.internal:7443',endpoint_id:'lan',scope:'lan',priority:0}]};
 const two={...one,gateway_id:'two',gateway_name:'Lab',attachment_id:'member-two',route_selected:true};
 function button(label:string){const found=[...document.querySelectorAll('button')].find(el=>controlText(el)===label);if(!found)throw new Error(label);return found;}
-function mount(members:unknown[],mode:'leave'='leave',existing?:string,gatewayID?:string){
- const perform=vi.fn().mockImplementation(async request=> request.operation==='status'?{ok:true,gateway_membership:{joined:true,phase:'joined',memberships:members,existing_environment_id:existing}}:{ok:true,gateway_membership:{joined:false,phase:'not_joined'}});
+function mount(members:GatewayAttachmentStatus[],mode:'leave'='leave',gatewayID?:string){
+ const perform=vi.fn().mockImplementation(async request=> request.operation==='status'?{ok:true,gateway_membership:gatewaySnapshot(members)}:{ok:true,gateway_membership:gatewaySnapshot()});
  vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
  const close=vi.fn(),changed=vi.fn(),root=document.createElement('div');document.body.append(root);
  const [open,setOpen]=createSignal<'leave'|undefined>(mode);
@@ -27,7 +29,7 @@ it('revokes consent without losing selection and ignores a late revoked completi
  let complete!:(result:unknown)=>void;f.perform.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
  button(i18n.t('gatewayConnections.unpair')).click();f.setAvailable(false);await settle();
  expect(select.value).toBe('two');expect(button(i18n.t('common.cancel')).disabled).toBe(false);
- complete({ok:true,gateway_membership:{joined:false,phase:'not_joined'}});await settle();
+ complete({ok:true,gateway_membership:gatewaySnapshot()});await settle();
  expect(f.close).not.toHaveBeenCalled();expect(f.changed).not.toHaveBeenCalled();
  f.setAvailable(true);await settle();expect(button(i18n.t('gatewayConnections.unpair')).disabled).toBe(true);
  button(i18n.t('interactionContinuity.revalidate')).click();await settle();
@@ -63,7 +65,7 @@ it.each(['leave'] as const)('retains the %s confirmation during the closing tran
  expect(dialog.textContent).toContain(i18n.t('gatewayConnections.unpairTitle'));
 });
 it('confirms the already selected Gateway without asking the user to choose again',async()=>{
- const f=mount([one,two],'leave',undefined,'two');await settle();
+ const f=mount([one,two],'leave','two');await settle();
  expect(document.querySelector('select')).toBeNull();
  expect(document.body.textContent).toContain('Lab');
  expect(document.body.textContent).toContain(i18n.t('gatewayConnections.cloudImpact'));
@@ -72,7 +74,7 @@ it('confirms the already selected Gateway without asking the user to choose agai
  expect(f.perform.mock.calls.at(-1)?.[0]).toMatchObject({gateway_id:'two',route_impact_acknowledged:true});
 });
 it('does not substitute another Gateway when the selected pairing has disappeared',async()=>{
- const f=mount([one],'leave',undefined,'two');await settle();
+ const f=mount([one],'leave','two');await settle();
  expect(document.querySelector('select')).toBeNull();
  expect(button(i18n.t('gatewayConnections.unpair')).disabled).toBe(true);
  expect(f.perform).toHaveBeenCalledOnce();
@@ -84,7 +86,7 @@ it('keeps failed unpair consent and does not report completion',async()=>{
 });
 
 it('requires revalidation after membership identity changes without replacing the selected member',async()=>{
- const f=mount([one,two],'leave',undefined,'two');await settle();
+ const f=mount([one,two],'leave','two');await settle();
  const dialog=document.querySelector('[role="dialog"]');
  f.setAuthority('replacement-member');await settle();
  expect(document.querySelector('[role="dialog"]')).toBe(dialog);

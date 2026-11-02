@@ -1,5 +1,5 @@
 import {normalizeRuntimeCloudStatus, normalizeCloudRouteOperation, type RuntimeCloudOperation} from '../shared/runtimeCloud';
-import { normalizeGatewayJoinPreview, type GatewayJoinPreview, type GatewayPreviewInput, type GatewayAttachmentStatus, type GatewayAttachmentOperation } from '../shared/gatewayJoin';
+import { normalizeGatewayJoinPreview, type GatewayJoinPreview, type GatewayPreviewInput, type GatewayAttachmentStatus, type GatewayAttachmentSnapshot, type GatewayAttachmentOperation } from '../shared/gatewayJoin';
 import { parseSecurityResult, type SecurityRequest, type SecurityResult } from '../shared/runtimeSecurity';
 import http from 'node:http';
 import https from 'node:https';
@@ -312,26 +312,49 @@ export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpo
   return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
 }
 
-export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayAttachmentOperation, previewID?: string, gatewayID?: string, routeImpactAcknowledged?: boolean): Promise<GatewayAttachmentStatus> {
+export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayAttachmentOperation, previewID?: string, gatewayID?: string, routeImpactAcknowledged?: boolean): Promise<GatewayAttachmentSnapshot> {
   const confirming = ['join','replace','update-endpoints'].includes(operation);
   if (confirming !== Boolean(previewID)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Confirmation requires a verified preview.');
   const result = (await requestRuntimeControl(endpoint, `v2/gateway/${operation}`, {
     method: operation === 'status' ? 'GET' : 'POST',
     ...(operation === 'status' ? {} : {body: { ...(confirming ? {preview_id: previewID} : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(routeImpactAcknowledged ? {route_impact_acknowledged: true} : {}) }}), timeoutMs: 30_000,
   })).data;
-  function parse(value: unknown, child = false): GatewayAttachmentStatus {
-    const data = value as Record<string, unknown> | undefined;
-    if (!data || !['not_joined','joining','gateway_offline','joined','reauthorization_required','removal_pending'].includes(String(data.phase)) || typeof data.joined !== 'boolean'
-      || child && (typeof data.gateway_id !== 'string' || typeof data.attachment_id !== 'string' || data.memberships !== undefined)
-      || data.memberships !== undefined && (!Array.isArray(data.memberships) || data.memberships.length > 16)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE','The Runtime did not return Gateway membership status.');
-    return {joined: data.joined, phase: data.phase as GatewayAttachmentStatus['phase'],
-      ...Object.fromEntries(['gateway_id','gateway_name','last_endpoint_id','attachment_id','existing_environment_id'].filter(key => typeof data[key] === 'string').map(key => [key,data[key]])),
-      ...(Array.isArray(data.endpoints) ? {endpoints: data.endpoints as GatewayAttachmentStatus['endpoints']} : {}),
-      ...(typeof data.route_selected === 'boolean' ? {route_selected:data.route_selected} : {}),
-      ...(Array.isArray(data.memberships) ? {memberships:data.memberships.map(item => parse(item,true))} : {}),
-    };
-  }
-  return parse(result);
+  const data = result as Record<string, unknown> | undefined;
+  const invalid = (): never => { throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE', 'The Runtime did not return a current Gateway attachment snapshot.'); };
+  if (!data || typeof data.runtime_running !== 'boolean' || !Number.isSafeInteger(data.observed_at_unix_ms) || Number(data.observed_at_unix_ms) <= 0
+    || !Array.isArray(data.attachments) || data.attachments.length > 16 || !data.counts || typeof data.counts !== 'object') return invalid();
+  const ids = new Set<string>();
+  const attachments = data.attachments.map((value: unknown): GatewayAttachmentStatus => {
+    if (!value || typeof value !== 'object') return invalid();
+    const item = value as Record<string, unknown>;
+    if (typeof item.gateway_id !== 'string' || !item.gateway_id || ids.has(item.gateway_id)
+      || typeof item.attachment_id !== 'string' || !item.attachment_id || typeof item.gateway_name !== 'string'
+      || typeof item.route_selected !== 'boolean' || !Array.isArray(item.endpoints) || item.endpoints.length > 16
+      || !['joining','joined','removal_pending'].includes(String(item.attachment_state))
+      || !['unknown','stopped','connecting','connected','disconnected','failed'].includes(String(item.connection_state))
+      || !['joining','joined','removal_pending','unknown','runtime_stopped','connecting','disconnected','connection_failed','reauthorization_required'].includes(String(item.phase))) return invalid();
+    if (!data.runtime_running && item.connection_state !== 'stopped') return invalid();
+    if (data.runtime_running && item.connection_state === 'stopped') return invalid();
+    const expectedPhase = item.attachment_state !== 'joined' ? item.attachment_state
+      : ({unknown:'unknown',stopped:'runtime_stopped',connecting:'connecting',connected:'joined',disconnected:'disconnected',failed:'connection_failed'} as Record<string,string>)[String(item.connection_state)];
+    if (item.phase !== expectedPhase && !(item.attachment_state === 'joined' && item.connection_state === 'failed' && item.phase === 'reauthorization_required')) return invalid();
+    const endpointIDs = new Set<string>(), addresses = new Set<string>();
+    for (const endpoint of item.endpoints) {
+      if (!endpoint || typeof endpoint !== 'object' || typeof endpoint.endpoint_id !== 'string' || !endpoint.endpoint_id
+        || typeof endpoint.address !== 'string' || endpointIDs.has(endpoint.endpoint_id) || addresses.has(endpoint.address)
+        || !['lan','overlay','public'].includes(endpoint.scope) || !Number.isInteger(endpoint.priority) || endpoint.priority < 0 || endpoint.priority > 1000) return invalid();
+      try { const url = new URL(endpoint.address); if (url.protocol !== 'https:' || url.origin !== endpoint.address || url.username || url.password) return invalid(); } catch { return invalid(); }
+      endpointIDs.add(endpoint.endpoint_id); addresses.add(endpoint.address);
+    }
+    if (item.last_endpoint_id !== undefined && typeof item.last_endpoint_id !== 'string') return invalid();
+    ids.add(item.gateway_id);
+    return item as GatewayAttachmentStatus;
+  });
+  const counts = { total: attachments.length, joined: attachments.filter(item => item.attachment_state === 'joined').length,
+    connected: attachments.filter(item => item.attachment_state === 'joined' && item.connection_state === 'connected').length,
+    joining: attachments.filter(item => item.attachment_state === 'joining').length, removing: attachments.filter(item => item.attachment_state === 'removal_pending').length };
+  for (const [key, count] of Object.entries(counts)) if ((data.counts as Record<string, unknown>)[key] !== count) return invalid();
+  return { attachments, counts, runtime_running: data.runtime_running, observed_at_unix_ms: Number(data.observed_at_unix_ms) };
 }
 
 export async function previewRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, input: GatewayPreviewInput): Promise<GatewayJoinPreview> {

@@ -406,12 +406,9 @@ func (s *Server) authenticated(w http.ResponseWriter, r *http.Request, value any
 		}
 	}
 	if hostAdmin && !signed {
-		verified = gatewayauth.VerifiedRequest{ClientKeyID: "gateway_host"}
+		verified = gatewayauth.VerifiedRequest{ClientKeyID: "gateway_host", BindingAudience: audience}
 	} else {
 		verified, err = s.auth.Verify(r.Context(), r, raw, audience)
-	}
-	if err == nil && hostAdmin && signed {
-		err = s.trust.RecordVerified(verified.ClientKeyID, true)
 	}
 	if err == nil && hostAdmin {
 		verified.Permissions = gp.GatewayPermissions{Access: true, ManageAttachments: true, ManageNetwork: true}
@@ -589,7 +586,7 @@ func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !client.Permissions.Access {
+	if !client.Permissions.Access || !s.trust.ClientPermissions(client.ClientKeyID).Access {
 		writeError(w, http.StatusForbidden, "ACCESS_REQUIRED")
 		return
 	}
@@ -610,7 +607,7 @@ func (s *Server) handleServiceIdentity(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !client.Permissions.Access {
+	if !client.Permissions.Access || !s.trust.ClientPermissions(client.ClientKeyID).Access {
 		writeError(w, http.StatusForbidden, "ACCESS_REQUIRED")
 		return
 	}
@@ -629,7 +626,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, value any) bool {
 }
 func memberErrorCode(err error) string {
 	switch err.Error() {
-	case "ACCESS_CODE_INVALID_OR_EXPIRED", "ACCESS_CODE_USED", "CLIENT_ACCESS_REVOKED", "HOST_CONNECTION_MANAGED_ON_HOST":
+	case "ACCESS_CODE_INVALID_OR_EXPIRED", "ACCESS_CODE_USED", "CLIENT_ACCESS_REVOKED":
 		return err.Error()
 	}
 	switch {
@@ -665,8 +662,8 @@ func (s *Server) handleReevaluate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !client.Permissions.ManageAttachments {
-		writeError(w, http.StatusForbidden, "ATTACHMENT_MANAGEMENT_REQUIRED")
+	if !client.Permissions.ManageNetwork {
+		writeError(w, http.StatusForbidden, "NETWORK_MANAGEMENT_REQUIRED")
 		return
 	}
 	writeResult(w, struct{}{}, s.members.ReevaluateEgress(r.Context(), request.AttachmentID, request.ExpectedAttachmentVersion))

@@ -147,6 +147,8 @@ export const enUS = {
     "restartRequired": "Restart Gateway to apply the saved bind addresses."
 },
   gatewayClients: {
+    currentDevice: "This device",
+    reauthorize: "Authorize this device again",
     "connectionSettings": "Connection settings",
     "runtimes": "Runtimes",
     "hostAccess": "You are connected to the device running this Gateway. You can manage Gateway settings here.",
@@ -158,7 +160,7 @@ export const enUS = {
     "codeExpires": "Expires in {time}",
     "codeExpired": "Expired. Create a new code.",
     "authorizedClients": "Authorized clients",
-    "emptyClients": "No clients have been authorized with an access code.",
+    "emptyClients": "No client devices have been authorized.",
     "unnamedClient": "Unnamed client",
     "revoked": "Access revoked",
     "revoke": "Revoke access",
@@ -229,14 +231,8 @@ export const enUS = {
 
     replace: "Change Gateway",
     confirmReplace: "Confirm and change",
-    replaceHelp: "This replaces the selected Gateway connection and interrupts traffic using it, including any selected network egress. Runtime data and Cloud ownership remain unchanged.",
+    replaceHelp: "This replaces the sole paired Gateway and interrupts its traffic, including selected network egress. With multiple Gateways, add and verify the new connection, explicitly change the Cloud route if needed, then remove the old connection.",
     pauseDetail: "Closing this dialog leaves the saved operation running. Reopen it to check status. Changing Gateway is an explicit action and may disconnect sessions.",
-
-    existingEnvironment: "Existing Cloud environment",
-    preserve: "Keep this environment",
-    createNew: "Create a new environment",
-    preserveHelp: "Keeping this environment requires Cloud approval. Existing sessions may be interrupted.",
-    newHelp: "Your current Cloud environment remains listed. Disconnect it from Cloud before approving a new environment.",
     rejoin: "Gateway access has changed. Ask its administrator for a new code and verify again.",
 
     "title": "Add Gateway access",
@@ -244,9 +240,7 @@ export const enUS = {
     "currentStatus": "Current status",
     "connectTitle": "Add access",
     "aboutConnection": "What is a Gateway?",
-    "choiceDetails": "About these choices",
     "impactDetails": "Connection details",
-    "existingEnvironmentHelp": "This Runtime is already associated with an environment. Choose whether to keep that environment or start a separate one.",
     "startTitle": "Start the Runtime first",
     "approve": "Enable Gateway access",
     "gateway": "Gateway",
@@ -265,7 +259,11 @@ export const enUS = {
 
     "not_joined": "Not connected",
     "joining": "Joining Gateway",
-    "gateway_offline": "Joined · Gateway offline",
+    "disconnected": "Joined \u00b7 Disconnected",
+    "connecting": "Joined \u00b7 Connecting",
+    "connection_failed": "Connection failed",
+    "unknown": "Connection not observed",
+    "runtime_stopped": "Runtime stopped",
     "joined": "Joined · Connected",
     "reauthorization_required": "Authorization required",
     "removal_pending": "Leaving · Revocation pending"
@@ -280,7 +278,10 @@ export const enUS = {
     hookMemberAdmission: "Runtime connection admission",
     hookSessionAccess: 'Session access',
     "hookEgress": "Network egress",
-    reevaluate: 'Recheck access',
+    reevaluate: "Reevaluate egress policy",
+    egressAllowed: "Egress policy allows access",
+    egressDenied: "Egress policy denies access",
+    egressPolicyHelp: "Policy permission does not verify destination reachability.",
     refreshFailed: "The operation succeeded, but the connection list could not be refreshed. Refresh to see the latest state.",
     "title": "Gateway access",
     "permissions": "Gateway access",

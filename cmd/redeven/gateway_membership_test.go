@@ -71,12 +71,28 @@ func TestStoppedGatewayUnpairPreservesOtherCloudOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	code, output, stderr := runCLITestWithStdin(t, "", "gateway", "status", "--state-root", root)
+	if code != 0 {
+		t.Fatal(stderr)
+	}
+	var observation gatewaymembership.AttachmentSnapshot
+	if err := json.Unmarshal([]byte(output), &observation); err != nil {
+		t.Fatal(err)
+	}
+	if observation.RuntimeRunning || observation.Counts.Joined != 2 || observation.Counts.Connected != 0 || observation.ObservedAtUnixMS <= 0 {
+		t.Fatalf("stopped status claimed connectivity: %+v", observation)
+	}
+	for _, item := range observation.Attachments {
+		if item.ConnectionState != "stopped" || item.Phase != "runtime_stopped" {
+			t.Fatal(item)
+		}
+	}
 	cloud := cfg.RuntimeAttachment(ids[1]).Clone()
 	cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: cloud.AttachmentID, Revision: 1}
 	if err := config.Save(layout.ConfigPath, cfg); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr := runCLITestWithStdin(t, "", "gateway", "leave", "--state-root", root, "--gateway-id", ids[0], "--yes")
+	code, _, stderr = runCLITestWithStdin(t, "", "gateway", "leave", "--state-root", root, "--gateway-id", ids[0], "--yes")
 	if code != 0 {
 		t.Fatalf("leave: %s", stderr)
 	}
@@ -111,12 +127,12 @@ func TestRunningGatewayUnpairAcknowledgesOnlyObservedCloudImpact(t *testing.T) {
 			}
 			acknowledgments <- body.Acknowledged
 		}
-		_, _ = w.Write([]byte(`{"ok":true,"data":{"joined":true,"phase":"joined","memberships":[{"gateway_id":"one","attachment_id":"member","phase":"joined","joined":true}]}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"runtime_running":true,"observed_at_unix_ms":1900000000000,"counts":{"total":1,"joined":1,"connected":1,"joining":0,"removing":0},"attachments":[{"gateway_id":"one","attachment_id":"member","phase":"joined","attachment_state":"joined","connection_state":"connected"}]}}`))
 	})}
 	go func() { _ = server.Serve(listener) }()
 	defer server.Close()
 	c := &cli{stdin: strings.NewReader(""), stdout: io.Discard, stderr: io.Discard}
-	if code := c.gatewayRunningCommand(t.Context(), socket, "leave", "", "", "", "one", true); code != 0 {
+	if code := c.gatewayRunningCommand(t.Context(), socket, "leave", "", "", "one", true); code != 0 {
 		t.Fatal("leave failed")
 	}
 	if <-acknowledgments {

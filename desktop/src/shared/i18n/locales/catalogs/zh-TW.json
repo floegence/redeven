@@ -3693,23 +3693,16 @@
     "currentStatus": "目前狀態",
     "connectTitle": "新增存取路徑",
     "aboutConnection": "Gateway 是什麼？",
-    "choiceDetails": "了解選項",
     "impactDetails": "連線說明",
-    "existingEnvironmentHelp": "此執行階段已經關聯一個環境。你可以保留現有環境，或建立獨立的新環境。",
     "startTitle": "先啟動執行階段",
     "approve": "啟用 Gateway 存取",
     "pauseDetail": "關閉對話框後，已儲存的操作會繼續。可重新開啟查看狀態。更換 Gateway 必須明確操作，可能導致工作階段中斷。",
     "invalid": "無法使用此碼驗證 Gateway。請與管理員核對位址和碼後重試。",
     "failed": "操作未完成。請檢查 Gateway 連線後重試。已儲存的同意記錄和輸入會保留。",
-    "existingEnvironment": "現有 Cloud 環境",
-    "preserve": "保留此環境",
-    "createNew": "建立新環境",
-    "preserveHelp": "保留此環境需要在 Cloud 中核准，現有連線可能會中斷。",
-    "newHelp": "目前的 Cloud 環境會保留。核准新環境前，請先中斷它與 Cloud 的連線。",
     "rejoin": "Gateway 存取已變更。請向管理員取得新碼並重新驗證。",
     "replace": "更換 Gateway",
     "confirmReplace": "確認更換",
-    "replaceHelp": "這會替換選取的 Gateway 連線，並中斷經過該連線的流量，包括已選用的網路出口。執行階段資料與 Cloud 歸屬保持不變。",
+    "replaceHelp": "此操作會替換唯一已配對的 Gateway，並中斷經由它的流量，包括已選用的網路出口。若已配對多個 Gateway，請先新增並驗證連線，視需要明確切換 Cloud 路由，再移除舊連線。",
     "notNow": "暫不加入",
     "joinGateway": "設定完成後新增 Gateway 存取",
     "setupHelp": "儲存後先啟動執行階段，再驗證 Gateway 位址和邀請碼。",
@@ -3772,13 +3765,17 @@
   "gatewayMembership": {
     "not_joined": "未連線",
     "joining": "正在加入 Gateway",
-    "gateway_offline": "已加入 · Gateway 離線",
     "joined": "已加入 · 已連線",
     "reauthorization_required": "需要重新授權",
-    "removal_pending": "正在離開 · 撤銷待確認"
+    "removal_pending": "正在離開 · 撤銷待確認",
+    "disconnected": "已接入 · 連線已中斷",
+    "connecting": "已接入 · 正在連線",
+    "connection_failed": "連線失敗",
+    "unknown": "尚未觀測到連線狀態",
+    "runtime_stopped": "執行階段已停止"
   },
   "gatewayMembers": {
-    "reevaluate": "重新檢查存取",
+    "reevaluate": "重新評估連外策略",
     "title": "Gateway 存取",
     "permissions": "Gateway 存取",
     "grantAccess": "授予存取權限",
@@ -3840,7 +3837,10 @@
     "operationReviewed": "我已核對目前狀態，允許開始新操作",
     "egressPermission": "出口存取",
     "hookEgress": "網路出口",
-    "egressImpact": "出口變更只影響經過此代理的流量，獨立 Gateway 存取維持可用。"
+    "egressImpact": "出口變更只影響經過此代理的流量，獨立 Gateway 存取維持可用。",
+    "egressAllowed": "連外策略允許存取",
+    "egressDenied": "連外策略拒絕存取",
+    "egressPolicyHelp": "策略授權不代表已驗證目標位址的連通性。"
   },
   "gatewayClients": {
     "connectionSettings": "連線設定",
@@ -3853,7 +3853,7 @@
     "codeExpires": "剩餘 {time}",
     "codeExpired": "已過期，請建立新的存取碼。",
     "authorizedClients": "已授權用戶端",
-    "emptyClients": "尚無透過存取碼授權的用戶端。",
+    "emptyClients": "尚未授權任何用戶端裝置。",
     "unnamedClient": "未命名用戶端",
     "revoked": "存取已撤銷",
     "revoke": "撤銷存取",
@@ -3861,7 +3861,9 @@
     "revokeHelp": "將關閉此用戶端的 Gateway 存取；執行階段成員、其他用戶端及主機權限不變。",
     "authorizedAt": "授權時間",
     "lastSeen": "最近存取",
-    "codeHelpTitle": "如何使用存取碼"
+    "codeHelpTitle": "如何使用存取碼",
+    "currentDevice": "目前裝置",
+    "reauthorize": "重新授權此裝置"
   },
   "gatewayDiscovery": {
     "savedGateway": "已儲存的 Gateway",

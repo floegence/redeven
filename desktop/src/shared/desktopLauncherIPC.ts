@@ -3,7 +3,7 @@ import {normalizeRuntimeCloudOperation, type RuntimeCloudOperation, type CloudRo
 import { normalizeGatewayNetworkSettings } from './gatewayNetworkSettings';
 import type { GatewayNetworkSettings } from './gatewayMembership';
 import type { GatewayEndpoint, RuntimeAttachment, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayInvitationCodeDelivery, RuntimeAttachmentOperationResult, GatewayEgressPermission } from './gatewayMembership';
-import { type GatewayAttachmentStatus, type GatewayAttachmentOperation, type GatewayEnrollmentPurpose, type GatewayJoinPreview } from './gatewayJoin';
+import { type GatewayAttachmentSnapshot, type GatewayAttachmentOperation, type GatewayEnrollmentPurpose, type GatewayJoinPreview } from './gatewayJoin';
 import type { EnvironmentAccessRoute } from './environmentAccess';
 import type { DesktopControlPlaneSummary } from './cloud';
 import { normalizeControlPlaneOrigin } from './cloud';
@@ -253,7 +253,7 @@ export type DesktopLauncherActionKind =
   | 'update_gateway_endpoints'
   | 'update_gateway_network_settings'
   | 'remove_gateway_member'
-  | 'reevaluate_gateway_member'
+  | 'reevaluate_gateway_egress'
   | 'update_gateway_policy'
   | 'update_gateway_members'
 
@@ -869,7 +869,7 @@ export type DesktopLauncherActionRequest = Readonly<
   | { kind: 'update_gateway_network_settings'; connection_id: string; settings: GatewayNetworkSettings }
   | { kind: 'update_gateway_endpoints'; connection_id: string; endpoints: readonly GatewayEndpoint[] }
   | { kind: 'remove_gateway_member'; connection_id: string; attachment_id: string; attachment_version: number }
-  | { kind: 'reevaluate_gateway_member'; connection_id: string; attachment_id: string; attachment_version: number }
+  | { kind: 'reevaluate_gateway_egress'; connection_id: string; attachment_id: string; attachment_version: number }
   | { kind: 'update_gateway_policy'; connection_id: string; policy: GatewayPolicy }
   | { kind: 'update_gateway_members'; connection_id: string; items: readonly { attachment_id: string; expected_attachment_version: number; egress_permission: GatewayEgressPermission }[] }
   | { kind: 'set_environment_access_route'; environment_id: string; route_id: string }
@@ -910,7 +910,7 @@ export type DesktopLauncherActionSuccess = Readonly<{
  cloud_route_operation?: CloudRouteOperation;
  gateway_preview?: GatewayJoinPreview;
   gateway_member_results?: readonly RuntimeAttachmentOperationResult[];
-  gateway_membership?: GatewayAttachmentStatus;
+  gateway_membership?: GatewayAttachmentSnapshot;
   gateway_endpoints?: readonly GatewayEndpoint[];
   gateway_network_settings?: Readonly<{ settings: GatewayNetworkSettings; restart_required: boolean }>;
   ok: true;
@@ -1220,7 +1220,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         ? { kind, connection_id, endpoints } : null;
     }
     case 'remove_gateway_member':
-    case 'reevaluate_gateway_member': {
+    case 'reevaluate_gateway_egress': {
       const input = candidate as Record<string, unknown>;
       const connection_id = compact(input.connection_id), attachment_id = compact(input.attachment_id);
       const attachment_version = input.attachment_version;

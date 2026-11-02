@@ -32,7 +32,7 @@ try {
       window.redevenDesktopLauncher = { performAction: async request => {
         window.gatewayRequests.push({ kind: request.kind, runtime_target_id: request.runtime_target_id, operation: request.operation });
         if (request.operation === 'status') {
-          return { ok: true, outcome: 'runtime_gateway_status', gateway_membership: { joined: false } };
+          return { ok: true, outcome: 'runtime_gateway_status', gateway_membership: {attachments:[],counts:{total:0,joined:0,connected:0,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()} };
         }
         return { ok: false, code: 'GATEWAY_JOIN_FAILED' };
       } };
@@ -46,10 +46,10 @@ try {
     assert.deepEqual(await page.evaluate(() => window.gatewayRequests[0]), {
       kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:qualification', operation: 'status',
     }, 'opening must inspect membership without submitting consent');
-    assert.equal(await dialog.getByText(i18n.t('gatewayJoin.codeHelp'), { exact: true }).count() > 0, true);
+    await dialog.getByLabel(i18n.t('gatewayJoin.code'), { exact: true }).waitFor();
     assert.equal(await dialog.locator('input').count(), 2, `${locale}: address and code inputs must be visible`);
     assert.equal(await dialog.locator('input[type="file"]').count(), 0);
-    assert.equal(await dialog.getByRole('radio').count(), 0, 'Cloud choice requires a verified preview');
+    assert.equal(await dialog.getByRole('radio').count(), 0, 'Gateway enrollment does not change Cloud ownership');
     const inputs = dialog.locator('input');
     await inputs.nth(0).fill('https://gateway.internal:7443');
     await inputs.nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
@@ -80,11 +80,9 @@ try {
         window.gatewayRequests.push(request);
         if (request.operation === 'preview') return { ok: true, outcome: 'gateway_previewed', gateway_preview: {
           preview_id: 'p'.repeat(43), purpose: request.purpose, gateway_id: 'gateway-qualification', gateway_name: 'Office Gateway',
-          target_runtime_id: 'ssh:qualification', expires_at_unix_ms: Date.now() + 300_000, existing_environment_id: 'environment-qualification',
+          target_runtime_id: 'ssh:qualification', expires_at_unix_ms: Date.now() + 300_000,
         } };
-        return { ok: true, outcome: 'runtime_gateway_status', gateway_membership: {
-          joined: false, phase: 'not_joined', existing_environment_id: 'environment-qualification',
-        } };
+        return { ok: true, outcome: 'runtime_gateway_status', gateway_membership: {attachments:[],counts:{total:0,joined:0,connected:0,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()} };
       } };
     });
     await page.goto(new URL(`gateway-cloud.html?locale=${locale}`, server.resolvedUrls.local[0]).href);
@@ -98,10 +96,10 @@ try {
     await dialog.getByRole('textbox').nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
     await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).click();
     await dialog.getByText(i18n.t('gatewayJoin.verified'), { exact: true }).waitFor();
-    assert.equal(await dialog.getByRole('radio').count(), 2);
-    assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.confirmEnable'), exact: true }).isDisabled(), true);
+    assert.equal(await dialog.getByRole('radio').count(), 0);
+    assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.confirmEnable'), exact: true }).isEnabled(), true);
     await captureDialog(page, `${locale}-existing-environment.png`);
-    report.cases.push(`${locale}: verified preview requires an explicit existing environment choice`);
+    report.cases.push(`${locale}: verified preview leaves Cloud association unchanged`);
     await page.close();
   }
   assert.deepEqual(report.errors, []);

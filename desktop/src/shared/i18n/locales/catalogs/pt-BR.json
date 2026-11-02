@@ -3699,23 +3699,16 @@
     "currentStatus": "Status atual",
     "connectTitle": "Adicionar acesso",
     "aboutConnection": "O que é um Gateway?",
-    "choiceDetails": "Sobre estas opções",
     "impactDetails": "Detalhes da conexão",
-    "existingEnvironmentHelp": "Este ambiente de execução já está associado a um ambiente. Escolha mantê-lo ou iniciar um ambiente separado.",
     "startTitle": "Inicie o ambiente primeiro",
     "approve": "Ativar acesso via Gateway",
     "pauseDetail": "Fechar esta caixa de diálogo mantém a operação salva em andamento. Reabra para consultar o status. A troca de Gateway exige uma ação explícita e pode desconectar as sessões.",
     "invalid": "Este código não conseguiu autenticar o Gateway. Confirme o endereço e o código com o administrador e tente novamente.",
     "failed": "Não foi possível concluir a operação. Verifique a conexão com o Gateway e tente novamente. O consentimento salvo e os dados inseridos são preservados.",
-    "existingEnvironment": "Ambiente Cloud existente",
-    "preserve": "Manter este ambiente",
-    "createNew": "Criar um novo ambiente",
-    "preserveHelp": "Manter este ambiente exige aprovação no Cloud. As sessões atuais podem ser interrompidas.",
-    "newHelp": "O ambiente atual do Cloud será mantido. Desconecte-o do Cloud antes de aprovar um novo ambiente.",
     "rejoin": "O acesso Gateway mudou. Peça um novo código ao administrador e verifique novamente.",
     "replace": "Trocar Gateway",
     "confirmReplace": "Confirmar troca",
-    "replaceHelp": "Isso substitui a conexão Gateway selecionada e interrompe seu tráfego, incluindo a saída de rede escolhida. Os dados do ambiente de execução e o vínculo com o Cloud permanecem inalterados.",
+    "replaceHelp": "Isso substitui o único Gateway pareado e interrompe seu tráfego, incluindo a saída de rede selecionada. Com vários Gateways, adicione e verifique a nova conexão, altere explicitamente a rota do Cloud se necessário e remova a conexão antiga.",
     "notNow": "Agora não",
     "joinGateway": "Adicionar acesso Gateway após a configuração",
     "setupHelp": "Após salvar, inicie o ambiente de execução e verifique o endereço do Gateway e o código de convite.",
@@ -3780,13 +3773,17 @@
   "gatewayMembership": {
     "not_joined": "Não conectado",
     "joining": "Ingressando no Gateway",
-    "gateway_offline": "Associado · Gateway offline",
     "joined": "Associado · Conectado",
     "reauthorization_required": "Nova autorização necessária",
-    "removal_pending": "Saindo · Revogação pendente"
+    "removal_pending": "Saindo · Revogação pendente",
+    "disconnected": "Associado · Desconectado",
+    "connecting": "Associado · Conectando",
+    "connection_failed": "Falha na conexão",
+    "unknown": "Estado da conexão não observado",
+    "runtime_stopped": "Ambiente de execução parado"
   },
   "gatewayMembers": {
-    "reevaluate": "Verificar acesso novamente",
+    "reevaluate": "Reavaliar a política de saída",
     "title": "Acesso ao Gateway",
     "permissions": "Acesso ao Gateway",
     "grantAccess": "Conceder acesso",
@@ -3848,7 +3845,10 @@
     "operationReviewed": "Revisei o estado atual; permitir uma nova operação",
     "egressPermission": "Acesso de saída",
     "hookEgress": "Saída de rede",
-    "egressImpact": "As alterações afetam o tráfego deste proxy. O acesso independente ao Gateway continua disponível."
+    "egressImpact": "As alterações afetam o tráfego deste proxy. O acesso independente ao Gateway continua disponível.",
+    "egressAllowed": "Acesso permitido pela política de saída",
+    "egressDenied": "Acesso negado pela política de saída",
+    "egressPolicyHelp": "A permissão não confirma que o destino esteja acessível."
   },
   "gatewayClients": {
     "connectionSettings": "Configurações de conexão",
@@ -3861,7 +3861,7 @@
     "codeExpires": "Expira em {time}",
     "codeExpired": "Expirado. Crie um novo código.",
     "authorizedClients": "Clientes autorizados",
-    "emptyClients": "Nenhum cliente autorizado com um código de acesso.",
+    "emptyClients": "Nenhum dispositivo cliente foi autorizado.",
     "unnamedClient": "Cliente sem nome",
     "revoked": "Acesso revogado",
     "revoke": "Revogar acesso",
@@ -3869,7 +3869,9 @@
     "revokeHelp": "O acesso deste cliente ao Gateway será encerrado. Os membros dos ambientes de execução, outros clientes e as permissões do host não serão alterados.",
     "authorizedAt": "Autorizado",
     "lastSeen": "Último acesso",
-    "codeHelpTitle": "Como usar este código"
+    "codeHelpTitle": "Como usar este código",
+    "currentDevice": "Este dispositivo",
+    "reauthorize": "Autorizar este dispositivo novamente"
   },
   "gatewayDiscovery": {
     "savedGateway": "Gateway salvo",

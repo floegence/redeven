@@ -157,8 +157,8 @@ function envelope(raw: string, status: number): unknown {
   return data.data;
 }
 
-/** One signed v6 client for URL and trusted host transports. The optional bridge
- * changes only byte delivery; it never grants Runtime lifecycle permissions.
+/** Device access stays signed; private management uses current host proof.
+ * Neither authority grants Runtime lifecycle permissions.
  */
 export class GatewayClient {
   constructor(private readonly secretStore: GatewaySecretStore, private readonly bridge?: RuntimePlacementBridgeSessionHandle) {}
@@ -200,7 +200,8 @@ export class GatewayClient {
       }
     };
     if (pendingID && mutation) return recover();
-    const headers = authenticated ? await createGatewayAuthHeaders({ record, method: 'POST', route: path, body, secret_store: this.secretStore }) : {};
+    const hostRequest = !!this.bridge && !['access/open', 'access/service'].includes(route);
+    const headers = authenticated && !hostRequest ? await createGatewayAuthHeaders({ record, method: 'POST', route: path, body, secret_store: this.secretStore }) : hostRequest && record.trust_profile ? { 'X-Redeven-Gateway-Binding-Audience': record.trust_profile.binding_audience } : {};
     signal.throwIfAborted();
     let url: URL;
     let agent: http.Agent | undefined;

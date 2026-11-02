@@ -23,6 +23,10 @@ Admission requires the current Runtime attachment certificate, current local pol
 
 Disabled egress closes only egress reservations. Independent reverse application streams remain available. Removing an attachment closes all streams depending on that attachment. Credential expiry and stale timers cannot restore withdrawn policy. Policy snapshots copy destination lists so callers cannot widen authority by mutating them.
 
+The catalog's effective_egress_allowed is a policy decision, not a reachability result. It combines the active attachment, inherit/allow/deny and the hook decision for the current policy revision. Admission still requires a connected eligible attachment, unexpired credentials and an allowed destination. Only a completed route preflight proves the tested destination was reachable at that time. Empty destinations disable forwarding even when policy permission is true.
+
+Reevaluate egress policy uses manage_network, applies only the selected attachment version and committed policy, and runs no application-health or Cloud-registration test. Unsaved editor changes remain drafts. Access.open hooks continue to evaluate individual sessions; this action does not reevaluate that domain.
+
 ## No fallback or cross-path revocation
 Runtime registration, recovery, Cloud transport and enabled official-platform traffic use the explicitly chosen route. Route failure reports unavailable; it never silently dials Cloud directly. Cloud logout, user removal or binding revocation cannot alter Gateway device trust, attachments or environment passwords/MFA. Cloud sessions remain subject to their own authorization and Runtime security checks.
 

@@ -6,8 +6,8 @@ import (
 )
 
 // PrepareGatewayJoin adds local access only. Cloud authority is unchanged.
-func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata, choice string) (*Config, error) {
-	if c == nil || choice != "" {
+func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata) (*Config, error) {
+	if c == nil {
 		return nil, gatewaymembership.ErrState
 	}
 	if current := c.RuntimeAttachment(invitation.GatewayID); current != nil {
@@ -33,12 +33,12 @@ func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata
 }
 
 // Replacement is retained only as an explicit single-member operation.
-func (c *Config) PrepareGatewayReplacement(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata, choice string) (*Config, error) {
-	if c == nil || len(c.Gateways) != 1 || choice != "" {
+func (c *Config) PrepareGatewayReplacement(invitation gp.EnrollmentDescriptor, metadata gp.MemberMetadata) (*Config, error) {
+	if c == nil || len(c.Gateways) != 1 {
 		return nil, gatewaymembership.ErrConflict
 	}
 	if c.Gateways[0].Delegation.InvitationID == invitation.InvitationID {
-		return c.PrepareGatewayJoin(invitation, metadata, choice)
+		return c.PrepareGatewayJoin(invitation, metadata)
 	}
 	if len(c.GatewayRemovalOutbox) >= 16 {
 		return nil, gatewaymembership.ErrCapacity
@@ -46,5 +46,5 @@ func (c *Config) PrepareGatewayReplacement(invitation gp.EnrollmentDescriptor, m
 	next := *c
 	next.GatewayRemovalOutbox = append(append([]gatewaymembership.RemovalDelivery(nil), c.GatewayRemovalOutbox...), c.Gateways[0].RemovalDelivery())
 	next.Gateways = nil
-	return next.PrepareGatewayJoin(invitation, metadata, "")
+	return next.PrepareGatewayJoin(invitation, metadata)
 }

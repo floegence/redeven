@@ -1,3 +1,4 @@
+import { gatewaySnapshot } from '../testSupport/gatewayAttachments';
 import { desktopRuntimeTargetKindFromID, desktopRuntimeTargetKey, type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -32,7 +33,7 @@ function fixture() {
   const targets = new Set<string>();
   const versions = new Map([['ssh:runtime', 7]]);
   const release = vi.fn(async () => undefined);
-  const manage = vi.fn(async () => ({ joined: false, phase: 'not_joined' }));
+  const manage = vi.fn(async () => gatewaySnapshot());
   const context = { explicitCloudLinkTargets: targets, cloudLinkIntentVersions: versions,
     resolveRuntimeManagementTarget: vi.fn(async () => ({ record: { startup: { runtime_control: { token: 'private' } } }, bridge_lease: { release } })),
     loadDesktopPreferencesCached: vi.fn(async () => ({})), manageRuntimeGateway: manage, runtimeManagementTargetIsCurrent: () => true,

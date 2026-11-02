@@ -2,7 +2,7 @@ import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { Button, Dialog, StableText, KeyedFor } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 
-import type { GatewayAttachmentStatus } from '../shared/gatewayJoin';
+import type { GatewayAttachmentSnapshot } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
 
 /** The Runtime owns the selected member and verifies Cloud interruption consent. */
@@ -18,14 +18,14 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   focusOwner?: () => void;
 }>) {
   const unavailable = () => props.available === false;
-  const [status, setStatus] = createSignal<GatewayAttachmentStatus>();
+  const [status, setStatus] = createSignal<GatewayAttachmentSnapshot>();
   const [selected, setSelected] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const targetID = createMemo(() => props.targetID);
   const mode = createMemo(() => props.mode);
   const gatewayID = createMemo(() => props.gatewayID);
-  const members = () => status()?.memberships ?? [];
+  const members = () => status()?.attachments ?? [];
   const member = () => members().find(item => item.gateway_id === selected());
   const text = props.i18n.t;
   let generation = 0;
@@ -51,7 +51,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
       if (current !== generation || unavailable()) return;
       if (!result?.ok || !result.gateway_membership) { setError(text('gatewayJoin.failed')); return; }
       setStatus(result.gateway_membership);
-      const available = result.gateway_membership.memberships ?? [];
+      const available = result.gateway_membership.attachments ?? [];
       if (requestedGateway) setSelected(requestedGateway);
       else if (available.length === 1) setSelected(available[0]!.gateway_id!);
       setInvalidated(false);

@@ -68,7 +68,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := runtime.a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil {
+		if err := runtime.a.ConfirmGatewayPreview(preview.PreviewID, "join"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -84,7 +84,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		t.Fatal("Gateway connections did not settle")
 	}
 	waitFor(func() bool {
-		members := runtime.a.GatewayAttachmentStatus().Memberships
+		members := runtime.a.GatewayAttachmentStatus().Attachments
 		return len(members) == 2 && members[0].Phase == "joined" && members[1].Phase == "joined"
 	})
 	saved, err := config.Load(runtime.configPath)
@@ -99,14 +99,14 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(func() bool {
-		members := runtime.a.GatewayAttachmentStatus().Memberships
+		members := runtime.a.GatewayAttachmentStatus().Attachments
 		return len(members) == 2 && members[0].Phase == "joined" && members[1].Phase == "joined"
 	})
 	if err := runtime.a.LeaveGateway(deliveries[0].GatewayID); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(func() bool {
-		members := runtime.a.GatewayAttachmentStatus().Memberships
+		members := runtime.a.GatewayAttachmentStatus().Attachments
 		return len(members) == 1 && members[0].GatewayID == deliveries[1].GatewayID && members[0].Phase == "joined"
 	})
 	saved, err = config.Load(runtime.configPath)

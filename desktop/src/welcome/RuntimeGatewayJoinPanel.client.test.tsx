@@ -1,3 +1,4 @@
+import { gatewayAttachment, gatewaySnapshot } from '../testSupport/gatewayAttachments';
 import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
@@ -5,7 +6,7 @@ import { render } from 'solid-js/web';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { createDesktopI18n } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
-import type { GatewayJoinPreview, GatewayAttachmentStatus } from '../shared/gatewayJoin';
+import type { GatewayJoinPreview, GatewayAttachmentSnapshot } from '../shared/gatewayJoin';
 import type { DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 
@@ -23,7 +24,7 @@ function addressTab(label: string) {
  if (!found) throw new Error(`Missing address tab: ${label}`); return found;
 }
 function activeAddressPanel() { return document.querySelector<HTMLElement>('[role="tabpanel"]:not([aria-hidden="true"])'); }
-function status(value: GatewayAttachmentStatus): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_membership:value}; }
+function status(value: GatewayAttachmentSnapshot): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_membership:value}; }
 function verified(value=preview): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_preview:value}; }
 function mount(perform: ReturnType<typeof vi.fn>, gateways: readonly DesktopGatewaySource[] = [], initialAddress = "https://gateway.internal:7443") {
  vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
@@ -63,7 +64,7 @@ it('queries the exact membership after an uncertain join without consuming the i
  const perform=vi.fn(async request => {
   if(request.operation==='preview')return verified();
   if(request.operation==='join')throw new Error('Connection lost after submission');
-  if(request.operation==='status')return status(++checks===1 ? {joined:false,phase:'not_joined'} : {joined:true,phase:'joined',gateway_id:preview.gateway_id,gateway_name:preview.gateway_name});
+  if(request.operation==='status')return status(++checks===1 ? gatewaySnapshot() : gatewaySnapshot([gatewayAttachment()]));
   return {ok:true};
  });
  mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
@@ -75,11 +76,22 @@ it('queries the exact membership after an uncertain join without consuming the i
  expect(perform.mock.calls.filter(([request])=>request.operation==='join')).toHaveLength(1);
 });
 
+it.each([{attachments:[]}, {attachments:[gatewayAttachment({gateway_id:'other'})]}, {attachments:[gatewayAttachment({attachment_state:'removal_pending',phase:'removal_pending'})]}])('does not declare enrollment complete without the exact admitted attachment: %j',async ({attachments})=>{
+ const perform=vi.fn(async request=>request.operation==='preview'?verified():status(gatewaySnapshot(request.operation==='join'?attachments:[])));
+ mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
+ button(i18n.t('gatewayJoin.confirmEnable')).click();await settle();
+ expect(document.querySelector('[data-gateway-enrollment-result]')?.textContent).toContain(i18n.t('gatewayExperience.confirming'));
+ expect(perform.mock.calls.filter(([request])=>request.operation==='join')).toHaveLength(1);
+ button(i18n.t('common.refresh')).click();await settle();
+ expect(document.querySelector('[data-gateway-enrollment-result]')).toBeNull();
+ expect(perform.mock.calls.filter(([request])=>request.operation==='join')).toHaveLength(1);
+});
+
 describe('Runtime Gateway address and code interaction',()=>{
  it('pauses status polling while the user restores SSH authentication',async()=>{
   vi.useFakeTimers();
   const perform=vi.fn(async request=>request.operation==='preview'
-   ? {ok:false,gateway_error_code:'SSH_AUTHENTICATION_REQUIRED'} : status({joined:false,phase:'not_joined'}));
+   ? {ok:false,gateway_error_code:'SSH_AUTHENTICATION_REQUIRED'} : status(gatewaySnapshot()));
   mount(perform);await vi.advanceTimersByTimeAsync(50);
   button(i18n.t('gatewayJoin.verify')).click();await vi.advanceTimersByTimeAsync(50);
   const password=document.querySelector<HTMLInputElement>('input[type="password"]')!;
@@ -91,7 +103,7 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(true);
  });
  it('retains typed input, DOM identity and focus across fresh parent snapshots and polling',async()=>{
-  vi.useFakeTimers();const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  vi.useFakeTimers();const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   const {refreshSnapshot}=mount(perform);await vi.advanceTimersByTimeAsync(50);
   edit(0,'https://draft.example:7443');edit(1,'draft-code');
   const inputs=[...document.querySelectorAll<HTMLInputElement>('input')];inputs[1]!.focus();
@@ -101,7 +113,7 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(document.activeElement).toBe(inputs[1]);
  });
  it('retains verified consent across fresh snapshots without issuing another preview',async()=>{
-  vi.useFakeTimers();const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified({...preview,existing_environment_id:'existing'}):status({joined:false,phase:'not_joined'}));
+  vi.useFakeTimers();const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified(preview):status(gatewaySnapshot()));
   const {refreshSnapshot}=mount(perform);await vi.advanceTimersByTimeAsync(50);
   button(i18n.t('gatewayJoin.verify')).click();await vi.advanceTimersByTimeAsync(50);
   const option=button(i18n.t('gatewayJoin.confirmEnable'));option.focus();
@@ -111,14 +123,14 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(perform.mock.calls.filter(([request])=>request.operation==='preview')).toHaveLength(1);
  });
  it('preserves the active invitation when parent invitation seeds change',async()=>{
-  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status(gatewaySnapshot()));
   const {setInvitation}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
   setInvitation('https://new.example:7443','regenerated-code');await settle();
   expect([...document.querySelectorAll<HTMLInputElement>('input')].map(input=>input.value)).toEqual(['https://gateway.internal:7443','123456789ABCDEFGHJKMNPQRSTV']);
   expect(document.querySelector('.redeven-gateway-join-summary')).not.toBeNull();expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
  });
  it('does not restore a consumed invitation code when the inventory refreshes',async()=>{
-  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:request.operation!=='status',phase:request.operation==='status'?'not_joined':'joined'}));
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status(gatewaySnapshot(request.operation==='status'?[]:[gatewayAttachment()])));
   const {refreshSnapshot}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();button(i18n.t('gatewayJoin.confirmEnable')).click();await settle();
   refreshSnapshot();await settle();button(i18n.t('gatewayJoin.title')).click();await settle();
   expect(document.querySelectorAll<HTMLInputElement>('input')[1]?.value).toBe('');
@@ -128,23 +140,23 @@ describe('Runtime Gateway address and code interaction',()=>{
   const perform=vi.fn().mockImplementation(request=>{
    if(request.operation==='preview')return new Promise(resolve=>{completePreview=resolve;});
    if(request.runtime_target_id==='ssh:chosen')return new Promise(resolve=>{completeStatus=resolve;});
-   return Promise.resolve(status({joined:false,phase:'not_joined'}));
+   return Promise.resolve(status(gatewaySnapshot()));
   });
   const {setTarget}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
-  setTarget('ssh:other');await settle();completeStatus(status({joined:true,phase:'joined'}));completePreview(verified());await settle();
+  setTarget('ssh:other');await settle();completeStatus(status(gatewaySnapshot([gatewayAttachment()])));completePreview(verified());await settle();
   expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
   expect(document.querySelector('[role="status"]')).toBeNull();
  });
  it('keeps verification pending through a parent refresh and accepts its current response',async()=>{
   let complete!:(value:DesktopLauncherActionResult)=>void;
-  const perform=vi.fn().mockImplementation(request=>request.operation==='preview'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(status({joined:false,phase:'not_joined'})));
+  const perform=vi.fn().mockImplementation(request=>request.operation==='preview'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(status(gatewaySnapshot())));
   const {refreshSnapshot}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
   refreshSnapshot();await settle();expect(button(i18n.t('gatewayJoin.verifying')).disabled).toBe(true);
   expect([...document.querySelectorAll<HTMLInputElement>('input')].every(input=>input.disabled)).toBe(true);
   complete(verified());await settle();expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
  });
  it('retains the address but clears the code and consent on close and reopen',async()=>{
-  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified({...preview,existing_environment_id:'existing'}):status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified(preview):status(gatewaySnapshot()));
   const {trigger,refreshSnapshot}=mount(perform);await settle();edit(0,'https://draft.example:7443');
   button(i18n.t('gatewayJoin.verify')).click();await settle();button(i18n.t('gatewayJoin.confirmEnable')).focus();
   button(i18n.t('common.cancel')).click();await settle();refreshSnapshot();trigger.click();await settle();
@@ -152,7 +164,7 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(document.querySelector('input[type="radio"]')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(true);
  });
  it('only reads status on open and verifies before presenting explicit consent',async()=>{
-  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified()).mockResolvedValueOnce(status({joined:true,phase:'joined'}));
+  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status(gatewaySnapshot())).mockResolvedValueOnce(verified()).mockResolvedValueOnce(status(gatewaySnapshot([gatewayAttachment()])));
   const {trigger}=mount(perform);await settle();
   expect(perform).toHaveBeenCalledExactlyOnceWith({kind:'manage_runtime_gateway',connection_token:expect.any(Number),runtime_target_id:'ssh:chosen',operation:'status'});
   expect(document.querySelector('input[type="file"]')).toBeNull();expect(document.querySelector('input[type="radio"]')).toBeNull();
@@ -166,24 +178,23 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();expect(document.activeElement).toBe(trigger);
  });
  it('adds another Gateway without Cloud ownership choices and retains failed consent',async()=>{
-  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:true,phase:'joined',memberships:[{joined:true,phase:'joined',gateway_id:'previous',attachment_id:'previous'}]})).mockResolvedValueOnce(verified({...preview,existing_environment_id:'existing'})).mockResolvedValueOnce({ok:false,gateway_error_code:'GATEWAY_UNREACHABLE'});
+  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status(gatewaySnapshot([gatewayAttachment({gateway_id:'previous',attachment_id:'previous'})]))).mockResolvedValueOnce(verified(preview)).mockResolvedValueOnce({ok:false,gateway_error_code:'GATEWAY_UNREACHABLE'});
   mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
   expect(document.querySelector('input[type="radio"]')).toBeNull();expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
-  expect(document.body.textContent).not.toContain(i18n.t('gatewayJoin.preserveHelp'));
   button(i18n.t('gatewayJoin.confirmEnable')).click();await settle();
   expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({operation:'join',preview_id:preview.preview_id});
   expect(perform.mock.calls.at(-1)?.[0]).not.toHaveProperty('environment_choice');
   expect(document.querySelectorAll('input')[1]?.value).toBe('123456789ABCDEFGHJKMNPQRSTV');
  });
  it.each([0,1])('invalidates verification when input %s changes',async index=>{
-  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified());mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();edit(index,index===0?'https://other.example':'new-code');await settle();
+  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status(gatewaySnapshot())).mockResolvedValueOnce(verified());mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();edit(index,index===0?'https://other.example':'new-code');await settle();
   expect(document.body.textContent).not.toContain(preview.gateway_name);expect(button(i18n.t('gatewayJoin.verify'))).toBeDefined();
  });
  it('invalidates verification when the target changes',async()=>{
-  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified()).mockResolvedValue(status({joined:false,phase:'not_joined'}));const {setTarget}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();setTarget('ssh:other');await settle();expect(document.body.textContent).toContain(preview.gateway_name);expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(true);expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
+  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status(gatewaySnapshot())).mockResolvedValueOnce(verified()).mockResolvedValue(status(gatewaySnapshot()));const {setTarget}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();setTarget('ssh:other');await settle();expect(document.body.textContent).toContain(preview.gateway_name);expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(true);expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
  });
  it.each([['GATEWAY_INVITATION_EXPIRED','expired'],['GATEWAY_INVITATION_USED','used'],['GATEWAY_UNREACHABLE','unreachable'],['GATEWAY_IDENTITY_FAILED','identityFailed'],['INVITATION_AUTHENTICATION_FAILED','invalid']] as const)('preserves input and explains %s',async(error,key)=>{
-  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValue({ok:false,code:'gateway_attachment_failed',gateway_error_code:error});mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t(`gatewayJoin.${key}`));expect(document.querySelectorAll('input')[1]?.value).toBe('123456789ABCDEFGHJKMNPQRSTV');
+  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status(gatewaySnapshot())).mockResolvedValue({ok:false,code:'gateway_attachment_failed',gateway_error_code:error});mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t(`gatewayJoin.${key}`));expect(document.querySelectorAll('input')[1]?.value).toBe('123456789ABCDEFGHJKMNPQRSTV');
  });
 
 });
@@ -195,7 +206,7 @@ const localGateway: DesktopGatewaySource = {
 };
 describe('saved Gateway selection',()=>{
  it('uses a themed field trigger instead of a native saved Gateway select',async()=>{
-  mount(vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'})),[localGateway],'');await settle();
+  mount(vi.fn().mockResolvedValue(status(gatewaySnapshot())),[localGateway],'');await settle();
   const picker=document.querySelector('[data-gateway-picker]')!;
   expect(picker.tagName).not.toBe('SELECT');
   const trigger=picker.querySelector('[data-floe-dropdown-trigger]');
@@ -203,7 +214,7 @@ describe('saved Gateway selection',()=>{
   expect(trigger?.getAttribute('data-floe-input-surface')).toBe('true');
  });
  it('shows the real local and SSH registrations even before publishing any endpoint',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   mount(perform,['local_host','ssh_host'].map((connection_kind,index)=>({...localGateway,
    connection_id:`saved-${index}`,display_name:index?'Gateway-gzcom':'Gateway-local',
    connection_kind:connection_kind as DesktopGatewaySource['connection_kind'],endpoints:[],
@@ -220,7 +231,7 @@ describe('saved Gateway selection',()=>{
  });
 
  it.each(['url','local_host','local_container','ssh_host','ssh_container'] as const)('offers a saved %s Gateway independently of live status',async connection_kind=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   const gateway={...localGateway,connection_kind,status:'unknown' as const,listener_running:false};
   const {setGateways}=mount(perform,[gateway],'');await settle();
   await chooseSavedGateway('local-gateway');await settle();
@@ -234,13 +245,13 @@ describe('saved Gateway selection',()=>{
   expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({operation:'preview',address:'https://office.local:7443'});
  });
  it('offers a saved URL before its first catalog sync',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   mount(perform,[{...localGateway,connection_kind:'url',status:'unknown',trust_state:undefined,endpoints:undefined,gateway_url:'https://saved.example:7443/'}],'');await settle();
   await chooseSavedGateway('local-gateway');await settle();
   expect(document.querySelector<HTMLElement>('[data-gateway-picker]')?.dataset.value).toBe('local-gateway');
  });
  it('retains verified consent through status refreshes and revokes it when the saved address is removed',async()=>{
-  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status(gatewaySnapshot()));
   const {setGateways}=mount(perform,[localGateway],'');await settle();await chooseSavedGateway('local-gateway');
   button(i18n.t('gatewayJoin.verify')).click();await settle();
   setGateways([{...localGateway,status:'offline',listener_running:false}]);await settle();
@@ -252,14 +263,14 @@ describe('saved Gateway selection',()=>{
   expect(document.querySelector<HTMLInputElement>('input[placeholder]')?.value).toBe('');
  });
  it('defaults to saved selection when inventory arrives before address interaction',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   const {setGateways}=mount(perform,[],'');await settle();
   setGateways([localGateway]);await settle();
   expect(addressTab(i18n.t('gatewayDiscovery.savedGateway')).getAttribute('aria-selected')).toBe('true');
   expect(activeAddressPanel()?.querySelector('[data-gateway-picker]')).not.toBeNull();
  });
  it('preserves the manual input node, caret and focus when inventory arrives',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   const {setGateways}=mount(perform,[],'');await settle();
   const input=document.querySelector<HTMLInputElement>('input[placeholder]')!;
   input.focus();edit(0,'https://draft.example');input.setSelectionRange(12,12);
@@ -270,7 +281,7 @@ describe('saved Gateway selection',()=>{
   expect(input.selectionStart).toBe(12);expect(document.activeElement).toBe(input);
  });
  it('separates saved Gateway selection from manual entry and preserves each draft',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   const {refreshSnapshot}=mount(perform,[localGateway],'');await settle();
   expect(document.querySelectorAll('[role="tab"]')).toHaveLength(2);
   expect(addressTab(i18n.t('gatewayDiscovery.savedGateway')).getAttribute('aria-selected')).toBe('true');
@@ -302,7 +313,7 @@ describe('saved Gateway selection',()=>{
   expect(perform.mock.calls.some(([request])=>request.operation==='join')).toBe(false);
  });
  it('invalidates verified consent when switching to a different address source',async()=>{
-  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status(gatewaySnapshot()));
   mount(perform,[localGateway],'');await settle();await chooseSavedGateway('local-gateway');
   button(i18n.t('gatewayJoin.verify')).click();await settle();
   expect(document.querySelector('.redeven-gateway-join-summary')).not.toBeNull();
@@ -312,7 +323,7 @@ describe('saved Gateway selection',()=>{
   expect(document.querySelector<HTMLInputElement>('[role="tabpanel"] input')?.value).toBe('');
  });
  it('distinguishes confirmed endpoints and reflects only the currently filled address',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   const alternate={endpoint_id:'public',address:'https://office.example:7443',scope:'public' as const,priority:1};
   mount(perform,[{...localGateway,endpoints:[...localGateway.endpoints!,alternate]}],'');await settle();
   const picker=document.querySelector<HTMLElement>('[data-gateway-picker]');
@@ -328,14 +339,14 @@ describe('saved Gateway selection',()=>{
   expect(perform.mock.calls.every(call=>call[0].operation==='status')).toBe(true);
  });
  it('selects a matching saved endpoint for an invitation address seed',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   mount(perform,[localGateway],'https://office.local:7443');await settle();
   expect(addressTab(i18n.t('gatewayDiscovery.savedGateway')).getAttribute('aria-selected')).toBe('true');
   expect(document.querySelector<HTMLElement>('[data-gateway-picker]')?.dataset.value).toBe('local-gateway');
   expect(activeAddressPanel()?.querySelector('input')).toBeNull();
  });
  it('keeps registrations visible when Host restrictions reject their addresses',async()=>{
-  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockResolvedValue(status(gatewaySnapshot()));
   mount(perform,[{...localGateway,allowed_hosts:['other.example']},{...localGateway,connection_id:'disabled',local_enabled:false}],'');await settle();
   const picker=document.querySelector<HTMLElement>('[data-gateway-picker]')!;
   expect(await pickerOptions(picker)).toHaveLength(1);await chooseSavedGateway('local-gateway');await settle();
@@ -352,7 +363,7 @@ describe('saved Gateway address completion',()=>{
   const perform=vi.fn().mockImplementation(async request=>{
    if(request.kind==='update_gateway_endpoints')return {ok:true,gateway_endpoints:request.endpoints};
    if(request.kind==='invite_gateway_runtime')return {ok:true,gateway_invitation_code:{code:'generated-code',share_addresses:['https://office.example:7443']}};
-   return request.operation==='preview'?verified():status({joined:request.operation==='join',phase:request.operation==='join'?'joined':'not_joined'});
+   return request.operation==='preview'?verified():status(gatewaySnapshot(request.operation==='join'?[gatewayAttachment()]:[]));
   });
   const {refreshSnapshot}=mount(perform,[unconfiguredGateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();
   const input=editEndpoint('https://office.example:7443/');input.focus();refreshSnapshot();await settle();
@@ -374,7 +385,7 @@ describe('saved Gateway address completion',()=>{
   let endpoints: unknown;
   const perform=vi.fn().mockImplementation(async request=>{
    if(request.kind==='update_gateway_endpoints'){endpoints=request.endpoints;return {ok:true,gateway_endpoints:endpoints};}
-   return status({joined:false,phase:'not_joined'});
+   return status(gatewaySnapshot());
   });
   const {setGateways}=mount(perform,[unconfiguredGateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();
   editEndpoint('https://office.example');button(i18n.t('gatewayDiscovery.saveAddress')).click();await settle();
@@ -386,7 +397,7 @@ describe('saved Gateway address completion',()=>{
  });
  it('rejects a delayed invitation after management permission is revoked',async()=>{
   let complete!:(value:unknown)=>void;
-  const perform=vi.fn().mockImplementation(request=>request.kind==='invite_gateway_runtime'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(status({joined:false,phase:'not_joined'})));
+  const perform=vi.fn().mockImplementation(request=>request.kind==='invite_gateway_runtime'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(status(gatewaySnapshot())));
   const gateway={...localGateway,permissions:unconfiguredGateway.permissions};
   const {setGateways}=mount(perform,[gateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();
   button(i18n.t('gatewayMembers.createInvitation')).click();await settle();
@@ -395,24 +406,24 @@ describe('saved Gateway address completion',()=>{
   expect(document.querySelector<HTMLInputElement>('input[autocomplete=off]:not([placeholder])')?.value).not.toBe('late-code');
  });
  it.each(['https://localhost:7443','https://0.0.0.0:7443','http://office.example','https://office.example/path'])('blocks unusable remote address %s',async address=>{
-  mount(vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'})),[unconfiguredGateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();editEndpoint(address);await settle();
+  mount(vi.fn().mockResolvedValue(status(gatewaySnapshot())),[unconfiguredGateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();editEndpoint(address);await settle();
   expect(button(i18n.t('gatewayDiscovery.saveAddress')).disabled).toBe(true);
  });
  it('preserves the address draft and permits retry after a failed save',async()=>{
-  const perform=vi.fn().mockImplementation(async request=>request.kind==='update_gateway_endpoints'?{ok:false}:status({joined:false,phase:'not_joined'}));
+  const perform=vi.fn().mockImplementation(async request=>request.kind==='update_gateway_endpoints'?{ok:false}:status(gatewaySnapshot()));
   mount(perform,[unconfiguredGateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();editEndpoint('https://office.example');button(i18n.t('gatewayDiscovery.saveAddress')).click();await settle();
   expect(document.querySelector<HTMLInputElement>('[data-gateway-endpoint-draft]')?.value).toBe('https://office.example');
   expect(button(i18n.t('gatewayDiscovery.saveAddress')).disabled).toBe(false);expect(document.querySelector('[role=alert]')).not.toBeNull();
  });
  it('does not apply a late save after target authority changes',async()=>{
   let complete!:(value:unknown)=>void;
-  const perform=vi.fn().mockImplementation(request=>request.kind==='update_gateway_endpoints'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(status({joined:false,phase:'not_joined'})));
+  const perform=vi.fn().mockImplementation(request=>request.kind==='update_gateway_endpoints'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(status(gatewaySnapshot())));
   const {setTarget}=mount(perform,[unconfiguredGateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();editEndpoint('https://office.example');button(i18n.t('gatewayDiscovery.saveAddress')).click();await settle();
   setTarget('ssh:other');await settle();complete({ok:true,gateway_endpoints:[{endpoint_id:'new',address:'https://office.example',scope:'lan',priority:0}]});await settle();
   expect(document.querySelector('[data-gateway-selected-address]')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(true);
  });
  it.each(['url','local_host'] as const)('explains missing management authority for %s without hiding the Gateway',async connection_kind=>{
-  mount(vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'})),[{...unconfiguredGateway,connection_kind,permissions:{access:true,manage_attachments:false,manage_network:false}}],'');await settle();await chooseSavedGateway('local-gateway');await settle();
+  mount(vi.fn().mockResolvedValue(status(gatewaySnapshot())),[{...unconfiguredGateway,connection_kind,permissions:{access:true,manage_attachments:false,manage_network:false}}],'');await settle();await chooseSavedGateway('local-gateway');await settle();
   expect(document.body.textContent).toContain(i18n.t('gatewayDiscovery.cannotManage'));
   expect(document.querySelector('[data-gateway-endpoint-draft]')).toBeNull();
  });

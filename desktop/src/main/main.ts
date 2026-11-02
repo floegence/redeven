@@ -5444,6 +5444,7 @@ function mergeGatewaySourceRecord(
     container_ref: base.container_ref,
     container_label: base.container_label,
     trust_state: source.trust_state ?? base.trust_state,
+    client_key_id: base.client_key_id,
     capabilities: source.capabilities ?? base.capabilities,
     service_state: serviceState ?? source.service_state ?? base.service_state,
     created_at_ms: base.created_at_ms,
@@ -5797,6 +5798,7 @@ async function syncGatewayRecord(
   options: Readonly<{
     force?: boolean;
     allowPairing?: boolean;
+    reauthorizeDevice?: boolean;
     mode?: GatewaySyncOperationMode;
     priority?: GatewaySyncOperationPriority;
     startPolicy?: GatewayStartPolicy;
@@ -5878,7 +5880,7 @@ async function syncGatewayRecord(
         onProgress: options.progress?.onGatewayServiceProgress,
       });
       currentRecord = await assertSyncActive();
-      if (!currentRecord.trust_profile) {
+      if (!currentRecord.trust_profile || (options.reauthorizeDevice === true && currentRecord.connection.kind !== 'url')) {
         if (options.allowPairing !== true) {
           const source = gatewayRecordToSource(currentRecord);
           const diagnosis: DesktopGatewayDiagnosis = {
@@ -5905,6 +5907,7 @@ async function syncGatewayRecord(
           });
           return source;
         }
+        if (currentRecord.trust_profile) await client.verifyAddress(currentRecord);
         currentRecord = await pairGatewayWithClient(currentRecord, client, secretStore, {
           signal,
           onStage: options.progress?.onStage,
@@ -6119,7 +6122,7 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
 }
 
 async function manageRuntimeAttachmentFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'acknowledge_gateway_operation' | 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' }>,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'acknowledge_gateway_operation' | 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_egress' | 'update_gateway_policy' | 'update_gateway_members' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.connection_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
@@ -6146,7 +6149,7 @@ async function manageRuntimeAttachmentFromLauncher(
       for (const session of liveGatewayEnvironmentSessions(record.connection_id, request.attachment_id)) {
         failGatewaySessionTransport(session, new GatewayClientError('ATTACHMENT_REMOVED', 'Gateway membership was removed.'));
       }
-    } else if (request.kind === 'reevaluate_gateway_member') await client.reevaluateMember(record, request.attachment_id, request.attachment_version);
+    } else if (request.kind === 'reevaluate_gateway_egress') await client.reevaluateMember(record, request.attachment_id, request.attachment_version);
     else if (request.kind === 'update_gateway_policy') await client.updatePolicy(record, request.policy);
     else if (request.kind === 'update_gateway_members') results = await client.updateMembers(record, request.items);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
@@ -6682,7 +6685,7 @@ async function setGatewayEnabledFromLauncher(
 
 async function refreshGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'refresh_gateway' }>,
-  options: Readonly<{ allowPairing?: boolean }> = {},
+  options: Readonly<{ allowPairing?: boolean; reauthorizeDevice?: boolean }> = {},
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.connection_id);
   if (!record) {
@@ -6771,6 +6774,7 @@ async function refreshGatewayFromLauncher(
     await syncGatewayRecord(record, {
       force: true,
       allowPairing: options.allowPairing === true,
+      reauthorizeDevice: options.reauthorizeDevice === true,
       mode: 'sync',
       priority: 'foreground',
       progress: {
@@ -6984,7 +6988,7 @@ async function pairGatewayFromLauncher(
   return refreshGatewayFromLauncher({
     kind: 'refresh_gateway',
     connection_id: request.connection_id,
-  }, { allowPairing: true });
+  }, { allowPairing: true, reauthorizeDevice: request.kind === 'pair_gateway' });
 }
 
 function reinstallTargetFailureCode(error: unknown): DesktopLauncherActionFailureCode {
@@ -18937,7 +18941,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'update_gateway_endpoints':
     case 'update_gateway_network_settings':
     case 'remove_gateway_member':
-    case 'reevaluate_gateway_member':
+    case 'reevaluate_gateway_egress':
     case 'update_gateway_policy':
     case 'update_gateway_members':
       return manageRuntimeAttachmentFromLauncher(request);
@@ -20525,7 +20529,7 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
       return { ...launcherActionSuccess('gateway_membership_updated'), gateway_preview: preview };
     }
     const leavingMember = request.operation === 'leave'
-      ? (await manageRuntimeGateway(endpoint, 'status')).memberships?.find(member => member.gateway_id === request.gateway_id)
+      ? (await manageRuntimeGateway(endpoint, 'status')).attachments.find(member => member.gateway_id === request.gateway_id)
       : undefined;
     const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.gateway_id, request.route_impact_acknowledged);
     if (!runtimeManagementTargetIsCurrent(target)) return launcherActionFailure('gateway_attachment_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');

@@ -24,6 +24,8 @@ The native Gateway packages support Linux and macOS. Administration uses a tempo
 ## State and lifecycle
 Gateway state schema 6 owns local attachments and policy; authority epoch 70 owns the independent Gateway wire break. Unsupported attachment state and retired cloud-access.json fail before creating identities or rewriting data. Desktop saved-connection schema 5 migrates its local locator to connection_id while retaining the independently pinned gateway_id and device credentials.
 
+Trust schema 4 removes historical host classification while preserving every device identity and revocation. Attachment schema 6 and saved-connection schema 5 do not change. Runtime epoch 71 owns its new observation response; it does not advance Gateway epoch 70.
+
 Saving, refresh, pairing and attachment management never implicitly start a stopped service. Removing a Desktop connection does not remove remote attachments or stop its service. Release/build metadata is diagnostic; unrelated Runtime releases do not change Gateway authority.
 
 # Boundaries

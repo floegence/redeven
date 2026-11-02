@@ -24,6 +24,8 @@ The catalog alone does not authorize service or Runtime process operations.
 ## Limits and revocation
 The shared budget admits at most 32 business connections per member and 1,024 in total, including pending opens. One member exceeding a limit cannot consume another member's allocation.
 
+Revoking a client closes its live streams and fences its pending artifacts. Other clients and the Runtime attachment stay connected. Reauthorization uses a fresh key, so previous artifacts never regain admission. These effects use published Flowersec session cancellation and relay primitives.
+
 Cloud authorization never closes independent Gateway streams. Local egress cancellation is scoped separately by [Optional Runtime Cloud egress](gateway-cloud-access.md).
 
 # Boundaries
@@ -35,3 +37,5 @@ Gateway owns reverse-stream admission and bounded forwarding only. No path in th
 - `redeven:internal/gatewaymembership/listener.go` — Fixed stream dispatch and SDK relay.
 
 - `redeven:internal/gatewayflow/budget.go` — Shared admission accounting.
+
+- redeven:internal/gatewaymembership/reverse_access_test.go — Exact live/pending device revocation, other-client access and Runtime continuity.

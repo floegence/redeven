@@ -3693,23 +3693,16 @@
     "currentStatus": "현재 상태",
     "connectTitle": "액세스 추가",
     "aboutConnection": "Gateway란?",
-    "choiceDetails": "선택지 안내",
     "impactDetails": "연결 세부 정보",
-    "existingEnvironmentHelp": "이 런타임은 이미 환경에 연결되어 있습니다. 기존 환경을 유지할지 별도 환경을 만들지 선택하세요.",
     "startTitle": "먼저 런타임 시작",
     "approve": "Gateway 액세스 활성화",
     "pauseDetail": "이 대화 상자를 닫아도 저장된 작업은 계속됩니다. 다시 열어 상태를 확인하세요. Gateway 변경은 명시적으로 수행해야 하며 세션이 끊길 수 있습니다.",
     "invalid": "이 코드로 Gateway를 인증할 수 없습니다. 관리자에게 주소와 코드를 확인한 후 다시 시도하세요.",
     "failed": "작업을 완료하지 못했습니다. Gateway 연결을 확인하고 다시 시도하세요. 저장된 동의와 입력은 유지됩니다.",
-    "existingEnvironment": "기존 Cloud 환경",
-    "preserve": "이 환경 유지",
-    "createNew": "새 환경 만들기",
-    "preserveHelp": "이 환경을 유지하려면 Cloud 승인이 필요합니다. 현재 연결이 끊길 수 있습니다.",
-    "newHelp": "현재 Cloud 환경은 유지됩니다. 새 환경을 승인하기 전에 기존 환경의 Cloud 연결을 해제하세요.",
     "rejoin": "Gateway 접근 정보가 변경되었습니다. 관리자에게 새 코드를 요청하고 다시 검증하세요.",
     "replace": "Gateway 변경",
     "confirmReplace": "확인 후 변경",
-    "replaceHelp": "선택한 Gateway 연결을 교체하고 선택된 네트워크 출구를 포함하여 해당 연결을 통한 트래픽을 중단합니다. 런타임 데이터와 Cloud 소속은 변경되지 않습니다.",
+    "replaceHelp": "유일하게 페어링된 Gateway를 교체하고 선택한 네트워크 출구를 포함한 트래픽을 중단합니다. Gateway가 여러 개라면 새 연결을 추가하고 확인한 다음, 필요에 따라 Cloud 경로를 명시적으로 변경하고 기존 연결을 제거하세요.",
     "notNow": "나중에",
     "joinGateway": "설정 후 Gateway 접근 추가",
     "setupHelp": "저장 후 런타임을 시작하고 Gateway 주소와 초대 코드를 검증하세요.",
@@ -3772,13 +3765,17 @@
   "gatewayMembership": {
     "not_joined": "연결되지 않음",
     "joining": "Gateway 가입 중",
-    "gateway_offline": "가입됨 · Gateway 오프라인",
     "joined": "가입됨 · 연결됨",
     "reauthorization_required": "재승인 필요",
-    "removal_pending": "탈퇴 중 · 취소 확인 대기"
+    "removal_pending": "탈퇴 중 · 취소 확인 대기",
+    "disconnected": "가입됨 · 연결 끊김",
+    "connecting": "가입됨 · 연결 중",
+    "connection_failed": "연결 실패",
+    "unknown": "연결 상태가 확인되지 않음",
+    "runtime_stopped": "런타임 중지됨"
   },
   "gatewayMembers": {
-    "reevaluate": "액세스 다시 확인",
+    "reevaluate": "아웃바운드 정책 재평가",
     "title": "Gateway 액세스",
     "permissions": "Gateway 액세스",
     "grantAccess": "액세스 권한 부여",
@@ -3840,7 +3837,10 @@
     "operationReviewed": "현재 상태를 확인했습니다. 새 작업 허용",
     "egressPermission": "출구 접근",
     "hookEgress": "네트워크 출구",
-    "egressImpact": "변경은 이 프록시의 트래픽에만 적용됩니다. 독립 Gateway 접근은 계속 사용할 수 있습니다."
+    "egressImpact": "변경은 이 프록시의 트래픽에만 적용됩니다. 독립 Gateway 접근은 계속 사용할 수 있습니다.",
+    "egressAllowed": "아웃바운드 정책이 접근을 허용함",
+    "egressDenied": "아웃바운드 정책이 접근을 거부함",
+    "egressPolicyHelp": "정책 권한은 대상에 연결할 수 있는지 확인한 결과가 아닙니다."
   },
   "gatewayClients": {
     "connectionSettings": "연결 설정",
@@ -3853,7 +3853,7 @@
     "codeExpires": "만료까지 {time}",
     "codeExpired": "만료되었습니다. 새 코드를 생성하세요.",
     "authorizedClients": "승인된 클라이언트",
-    "emptyClients": "접근 코드로 승인된 클라이언트가 없습니다.",
+    "emptyClients": "승인된 클라이언트 기기가 없습니다.",
     "unnamedClient": "이름 없는 클라이언트",
     "revoked": "접근 취소됨",
     "revoke": "접근 취소",
@@ -3861,7 +3861,9 @@
     "revokeHelp": "이 클라이언트의 Gateway 접근을 종료합니다. 런타임 등록, 다른 클라이언트와 호스트 권한은 변경되지 않습니다.",
     "authorizedAt": "승인 시간",
     "lastSeen": "최근 접근",
-    "codeHelpTitle": "접근 코드 사용 방법"
+    "codeHelpTitle": "접근 코드 사용 방법",
+    "currentDevice": "현재 기기",
+    "reauthorize": "이 기기 다시 승인"
   },
   "gatewayDiscovery": {
     "savedGateway": "저장된 Gateway",

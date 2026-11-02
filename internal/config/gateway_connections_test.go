@@ -17,11 +17,11 @@ func TestGatewayPairingPreservesCloudAndAcceptsAnotherGateway(t *testing.T) {
 	first, _ := one.Invite("admin")
 	second, _ := two.Invite("admin")
 	original := &Config{EnvironmentID: "environment", LocalEnvironmentPublicID: "runtime", CloudAssociation: testCloudAssociation(), CloudRoute: &CloudRoute{Kind: CloudRouteDirect, Revision: 3}, ControlArtifactPool: NewControlArtifactPool(7)}
-	next, err := original.PrepareGatewayJoin(first, gp.MemberMetadata{}, "")
+	next, err := original.PrepareGatewayJoin(first, gp.MemberMetadata{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	joined, err := next.PrepareGatewayJoin(second, gp.MemberMetadata{}, "")
+	joined, err := next.PrepareGatewayJoin(second, gp.MemberMetadata{})
 	if err != nil {
 		t.Fatal(err)
 	}

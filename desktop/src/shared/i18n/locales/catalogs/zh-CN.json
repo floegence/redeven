@@ -3693,23 +3693,16 @@
     "currentStatus": "当前状态",
     "connectTitle": "添加访问路径",
     "aboutConnection": "Gateway 是什么？",
-    "choiceDetails": "了解选项",
     "impactDetails": "连接说明",
-    "existingEnvironmentHelp": "此运行时已经关联一个环境。你可以保留现有环境，也可以创建一个独立的新环境。",
     "startTitle": "先启动运行时",
     "approve": "启用 Gateway 访问",
     "pauseDetail": "关闭对话框后，已保存的操作会继续。可重新打开查看状态。更换 Gateway 必须显式操作，可能导致会话中断。",
     "invalid": "无法使用此码验证 Gateway。请与管理员核对地址和码后重试。",
     "failed": "操作未完成。请检查 Gateway 连接后重试。已保存的同意记录和输入会保留。",
-    "existingEnvironment": "现有 Cloud 环境",
-    "preserve": "保留此环境",
-    "createNew": "创建新环境",
-    "preserveHelp": "保留此环境需要在 Cloud 中获得批准，现有连接可能会中断。",
-    "newHelp": "现有 Cloud 环境会保留。批准新环境前，请先断开它与 Cloud 的连接。",
     "rejoin": "Gateway 访问已变更。请向管理员获取新码并重新验证。",
     "replace": "更换 Gateway",
     "confirmReplace": "确认更换",
-    "replaceHelp": "这会替换选中的 Gateway 连接，并中断经过该连接的流量，包括已选用的网络出口。运行时数据和 Cloud 归属保持不变。",
+    "replaceHelp": "此操作替换唯一已配对的 Gateway，并中断经由它的流量，包括已选用的网络出口。如果已配对多个 Gateway，请先添加并验证新连接，按需明确切换 Cloud 路由，再移除旧连接。",
     "notNow": "暂不加入",
     "joinGateway": "设置完成后添加 Gateway 访问",
     "setupHelp": "保存后先启动运行时，再验证 Gateway 地址和邀请码。",
@@ -3772,13 +3765,17 @@
   "gatewayMembership": {
     "not_joined": "未连接",
     "joining": "正在加入 Gateway",
-    "gateway_offline": "已加入 · Gateway 离线",
     "joined": "已加入 · 已连接",
     "reauthorization_required": "需要重新授权",
-    "removal_pending": "正在离开 · 撤销待确认"
+    "removal_pending": "正在离开 · 撤销待确认",
+    "disconnected": "已接入 · 连接已断开",
+    "connecting": "已接入 · 正在连接",
+    "connection_failed": "连接失败",
+    "unknown": "尚未观测到连接状态",
+    "runtime_stopped": "运行时已停止"
   },
   "gatewayMembers": {
-    "reevaluate": "重新检查访问",
+    "reevaluate": "重新评估出站策略",
     "title": "Gateway 访问",
     "permissions": "Gateway 访问",
     "grantAccess": "授予访问权限",
@@ -3840,7 +3837,10 @@
     "operationReviewed": "我已核对当前状态，允许开始新操作",
     "egressPermission": "出口访问",
     "hookEgress": "网络出口",
-    "egressImpact": "出口变更只影响经过此代理的流量，独立 Gateway 访问保持可用。"
+    "egressImpact": "出口变更只影响经过此代理的流量，独立 Gateway 访问保持可用。",
+    "egressAllowed": "出站策略允许访问",
+    "egressDenied": "出站策略拒绝访问",
+    "egressPolicyHelp": "策略授权不代表已验证目标地址的连通性。"
   },
   "gatewayClients": {
     "connectionSettings": "连接设置",
@@ -3853,7 +3853,7 @@
     "codeExpires": "剩余 {time}",
     "codeExpired": "已过期，请创建新的访问码。",
     "authorizedClients": "已授权客户端",
-    "emptyClients": "尚无通过访问码授权的客户端。",
+    "emptyClients": "尚未授权任何客户端设备。",
     "unnamedClient": "未命名客户端",
     "revoked": "访问已撤销",
     "revoke": "撤销访问",
@@ -3861,7 +3861,9 @@
     "revokeHelp": "将关闭此客户端的 Gateway 访问；运行时成员、其他客户端及主机权限不变。",
     "authorizedAt": "授权时间",
     "lastSeen": "最近访问",
-    "codeHelpTitle": "如何使用访问码"
+    "codeHelpTitle": "如何使用访问码",
+    "currentDevice": "当前设备",
+    "reauthorize": "重新授权此设备"
   },
   "gatewayDiscovery": {
     "savedGateway": "已保存的 Gateway",

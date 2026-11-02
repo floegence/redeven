@@ -1,3 +1,4 @@
+import { gatewayAttachment, gatewaySnapshot } from '../testSupport/gatewayAttachments';
 import http from 'node:http';
 import net from 'node:net';
 import { startRuntimePlacementLoopbackProxy } from './runtimePlacementLoopbackProxy';
@@ -115,13 +116,13 @@ afterEach(async () => {
 
 describe('runtimeControlClient', () => {
   it('sends explicit Gateway targets and isolates Cloud consent from pairing confirmation', async () => {
-    const membership = { joined: true, phase: 'joined', gateway_id: 'one', attachment_id: 'member-one', route_selected: false };
+    const membership = gatewayAttachment({gateway_id:'one',attachment_id:'member-one'});
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ ok: true, data: { joined: true, phase: 'joined', memberships: [membership] } }));
+      response.end(JSON.stringify({ ok: true, data: gatewaySnapshot([membership]) }));
     });
     const control = endpoint(server.origin);
-    expect((await manageRuntimeGateway(control, 'status')).memberships).toEqual([membership]);
+    expect((await manageRuntimeGateway(control, 'status')).attachments).toEqual([membership]);
     await manageRuntimeGateway(control, 'leave', undefined, 'one', false);
     await manageRuntimeGateway(control, 'leave', undefined, 'one', true);
     await manageRuntimeGateway(control, 'join', 'a'.repeat(43));
@@ -132,6 +133,25 @@ describe('runtimeControlClient', () => {
     ]);
     await expect(manageRuntimeGateway(control, 'join')).rejects.toMatchObject({ code: 'GATEWAY_JOIN_INVALID' });
     expect(server.requests).toHaveLength(4);
+  });
+  it('rejects legacy aggregates and contradictory observations before rendering', async () => {
+    const current = gatewaySnapshot([gatewayAttachment()]);
+    const malformed = [
+      {joined:true,phase:'joined',memberships:[]},
+      {...current,counts:{...current.counts,connected:0}},
+      {...current,runtime_running:false},
+      {...current,attachments:[...current.attachments,...current.attachments]},
+      gatewaySnapshot([gatewayAttachment({connection_state:'unknown'})]),
+      gatewaySnapshot([gatewayAttachment({endpoints:[{endpoint_id:'bad',address:'http://gateway.example',scope:'lan',priority:0}]})]),
+    ];
+    let body: unknown = current;
+    const server = await startServer((_request,_body,response)=>{response.setHeader('Content-Type','application/json');response.end(JSON.stringify({ok:true,data:body}));});
+    for (const invalid of malformed) {
+      body=invalid;
+      await expect(manageRuntimeGateway(endpoint(server.origin),'status')).rejects.toMatchObject({code:'GATEWAY_JOIN_INVALID_RESPONSE'});
+    }
+    body=gatewaySnapshot([gatewayAttachment({connection_state:'stopped',phase:'runtime_stopped'})],false);
+    expect(await manageRuntimeGateway(endpoint(server.origin),'status')).toEqual(body);
   });
   it('uses one typed route operation across preflight, query, commit and cancellation',async()=>{
     const operationID='a'.repeat(43);

@@ -23,6 +23,8 @@ Epoch 65 requires the model directory's backend-owned default_fetch_source field
 
 Epoch 67 requires complete changed pin metadata in Flower pin confirmations. New pins append to the endpoint's existing order; Desktop and Runtime must agree on the changed ranks and revisions before a confirmation is accepted. See [sidebar pin ordering](../ui/flower-thread-sidebar.md).
 
+Epoch 71 requires truthful per-attachment Gateway connection phases and a collection-only owner status API. Durable joining/joined/removal state is separate from live controller observations. A stopped Runtime cannot report a connected attachment. The shared projection, strict Desktop admission and independent Gateway epoch are defined by [Gateway interactions](../gateway/gateway-desktop-interactions.md).
+
 # Boundaries
 
 Portal control-channel fences protect Provider authorization. Gateway attachment versions fence only their corresponding attachment and transport authority. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.

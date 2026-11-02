@@ -100,7 +100,7 @@ func TestIndependentGatewayBrowserSession(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := runtime.a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil {
+		if err := runtime.a.ConfirmGatewayPreview(preview.PreviewID, "join"); err != nil {
 			t.Fatal(err)
 		}
 		if err := runtime.StartGatewayOnly(ctx); err != nil {
@@ -111,10 +111,10 @@ func TestIndependentGatewayBrowserSession(t *testing.T) {
 			t.Fatal("Runtime opened TCP ingress")
 		}
 		deadline := time.Now().Add(15 * time.Second)
-		for time.Now().Before(deadline) && runtime.a.GatewayAttachmentStatus().Phase != "joined" {
+		for time.Now().Before(deadline) && runtime.a.GatewayAttachmentStatus().Counts.Connected != 1 {
 			time.Sleep(25 * time.Millisecond)
 		}
-		if runtime.a.GatewayAttachmentStatus().Phase != "joined" {
+		if runtime.a.GatewayAttachmentStatus().Counts.Connected != 1 {
 			t.Fatal("outbound membership did not connect")
 		}
 		var recovery []string

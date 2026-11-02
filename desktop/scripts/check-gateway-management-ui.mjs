@@ -24,7 +24,7 @@ try {
   const { createDesktopI18n } = await load('../src/shared/i18n/index.ts');
   const source = compactEnvironmentPreviewFixture().coverage;
   const gateway = { ...source.gateway_sources[0], display_name: 'Office Gateway', connection_kind: 'local_host', management_capability: 'managed_local_host',
-    status: 'online', trust_state: 'paired', sync_state: 'ready', local_enabled: true, policy: catalogFixture.policy, endpoints: catalogFixture.gateway.endpoints,
+    client_key_id:'studio', status: 'online', trust_state: 'paired', sync_state: 'ready', local_enabled: true, policy: catalogFixture.policy, endpoints: catalogFixture.gateway.endpoints,
     permissions: { access: true, manage_attachments: true, manage_network: true }, environments: [catalogFixture.attachments[0]],
     service_state: { status: 'ready', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } };
   const snapshot = { ...source, gateway_sources: [gateway], open_windows: [] };
@@ -113,6 +113,13 @@ try {
         assert.equal(await page.evaluate(() => window.settingsFixture.requests.length), beforeRevoke, 'Revocation awaits explicit confirmation');
         await button(workspace, 'gatewayClients.confirmRevoke').click();
         await workspace.getByText(i18n.t('gatewayClients.revoked'), { exact: true }).waitFor();
+        await workspace.getByText(i18n.t('gatewayClients.currentDevice'),{exact:true}).waitFor();
+        const reauthorize=button(workspace,'gatewayClients.reauthorize');await reauthorize.waitFor();
+        assert.ok(await reauthorize.evaluate(element=>element.scrollWidth<=element.clientWidth+1),'Reauthorization text must fit');
+        await settleVisuals(page);
+        await page.screenshot({path:output+'/'+locale+'-'+width+'-revoked-device.png'});
+        await reauthorize.click();
+        assert.equal(await page.evaluate(()=>window.settingsFixture.requests.filter(request=>request.kind==='pair_gateway').length),1);
         await button(nav, 'gatewayClients.runtimes').click(); await button(workspace, 'gatewayExperience.connectRuntime').click();
         await button(dialog, 'gatewayExperience.otherRuntime').click();
         await button(dialog, 'gatewayMembers.createInvitation').click();

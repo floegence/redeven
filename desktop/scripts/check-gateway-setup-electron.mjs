@@ -150,6 +150,23 @@ await session.run(async () => {
       manage_attachments: true,
       manage_network: true,
     });
+    assert.ok(paired.client_key_id, 'Snapshot identifies this Desktop access key');
+    const originalKey = paired.client_key_id;
+    const listed = await action({kind:'list_gateway_clients',connection_id:id});
+    assert.equal(listed.ok,true);
+    assert.ok(listed.gateway_clients.some(client=>client.client_key_id===originalKey && !client.revoked_at_unix_ms));
+    assert.equal((await action({kind:'revoke_gateway_client',connection_id:id,client_key_id:originalKey})).ok,true);
+    await run('refresh_gateway_catalog');
+    await run('sync_gateway');
+    assert.equal((await snapshot()).gateway_sources.find(item=>item.connection_id===id).client_key_id,originalKey,'Refresh must not silently restore revoked access');
+    await run('pair_gateway');
+    const reauthorized = (await snapshot()).gateway_sources.find(item=>item.connection_id===id);
+    assert.ok(reauthorized.client_key_id);
+    assert.notEqual(reauthorized.client_key_id,originalKey,'Explicit reauthorization must use a fresh key');
+    const authorizedClients = (await action({kind:'list_gateway_clients',connection_id:id})).gateway_clients;
+    assert.ok(authorizedClients.some(client=>client.client_key_id===originalKey && client.revoked_at_unix_ms));
+    assert.ok(authorizedClients.some(client=>client.client_key_id===reauthorized.client_key_id && !client.revoked_at_unix_ms));
+    report.cases.push('Current-device revocation preserves host management; only explicit reauthorization creates a fresh access key');
     assert.equal(
       (await action({ kind: 'invite_gateway_runtime', connection_id: id })).ok,
       false,

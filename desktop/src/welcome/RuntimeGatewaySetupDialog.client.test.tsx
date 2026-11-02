@@ -1,3 +1,4 @@
+import { gatewayAttachment, gatewaySnapshot } from '../testSupport/gatewayAttachments';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -36,7 +37,7 @@ it('authenticates inside the wizard and keeps one connection through verificatio
   const perform = vi.fn(async (request) => {
     if (request.operation === 'status' && !request.ssh_password) return { ok: false, gateway_error_code: 'SSH_AUTHENTICATION_REQUIRED' };
     if (request.operation === 'preview') return { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 600000 } };
-    return { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } };
+    return { ok: true, gateway_membership: gatewaySnapshot(request.operation==='join'?[gatewayAttachment({gateway_id:'office'})]:[]) };
   });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
@@ -97,7 +98,7 @@ it('recovers authentication without losing invitation drafts and starts a fresh 
   const perform = vi.fn(async request => {
     if (request.kind === 'close_runtime_gateway') { connected = false; return { ok: true }; }
     if (request.operation === 'status' && (connected || request.ssh_password === 'correct')) {
-      connected = true; return { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } };
+      connected = true; return { ok: true, gateway_membership: gatewaySnapshot() };
     }
     return { ok: false, gateway_error_code: 'SSH_AUTHENTICATION_REQUIRED' };
   });
@@ -151,7 +152,7 @@ it.each(['ssh', 'ssh_container'] as const)('tries the current %s connection befo
   }).environments.find(entry => entry.id === target.id)!;
   const [current, setCurrent] = createSignal(entry);
   const refresh = vi.fn(async () => true);
-  const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+  const perform = vi.fn(async () => ({ ok: true, gateway_membership: gatewaySnapshot() }));
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
@@ -173,7 +174,7 @@ it.each(['ssh', 'ssh_container'] as const)('tries the current %s connection befo
 it.each([false, true])('preserves invitation drafts across settings with changed registration identity: %s', async replaced => {
   const [suspended, setSuspended] = createSignal(false);
   const [current, setCurrent] = createSignal(readyEnvironment);
-  const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+  const perform = vi.fn(async () => ({ ok: true, gateway_membership: gatewaySnapshot() }));
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} suspended={suspended()} i18n={i18n}
@@ -215,7 +216,7 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
     runtime_connection_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'auth_required' as const, message: 'Authenticate.' } } };
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry>(selected);
   const perform = vi.fn().mockResolvedValueOnce({ ok: false, gateway_error_code: 'runtime_not_started' })
-    .mockResolvedValue(connected ? { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }
+    .mockResolvedValue(connected ? { ok: true, gateway_membership: gatewaySnapshot() }
       : { ok: false, gateway_error_code: 'SSH_AUTHENTICATION_REQUIRED' });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const recover = vi.fn(async () => {
@@ -254,7 +255,7 @@ it.each(['start', 'restart', 'update'] as const)('uses one authentication field 
     if (password !== ' temporary ') return { ok: false, authenticationRequired: true };
     setCurrent({ ...readyEnvironment, runtime_started_at_unix_ms: 200 }); return { ok: true };
   });
-  const perform = vi.fn(async (_request: object) => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+  const perform = vi.fn(async (_request: object) => ({ ok: true, gateway_membership: gatewaySnapshot() }));
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
@@ -283,7 +284,7 @@ it.each(['status', 'preview'] as const)('rejects late %s results after settings 
   const [current, setCurrent] = createSignal(readyEnvironment);
   let complete!: (value: object) => void;
   const perform = vi.fn(async (request: { operation?: string }) => request.operation === operation
-    ? new Promise<object>(resolve => { complete = resolve; }) : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    ? new Promise<object>(resolve => { complete = resolve; }) : { ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} suspended={suspended()} i18n={i18n}
@@ -298,7 +299,7 @@ it.each(['status', 'preview'] as const)('rejects late %s results after settings 
   }
   setSuspended(true); await settle();
   setCurrent({ ...readyEnvironment, managed_runtime_placement: { ...readyEnvironment.managed_runtime_placement!, runtime_root: '/changed' } });
-  complete(operation === 'status' ? { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }
+  complete(operation === 'status' ? { ok: true, gateway_membership: gatewaySnapshot() }
     : { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 } });
   await settle(); setSuspended(false); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe(operation === 'status' ? '0' : '1');
@@ -332,7 +333,7 @@ it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects t
   expect(button('gatewayJoin.connecting')).toBe(connection);
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
   expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: selected.runtime_connection_target!.id, operation: 'status' });
-  complete({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }); await settle();
+  complete({ ok: true, gateway_membership: gatewaySnapshot() }); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
   expect(document.querySelector('input')?.closest('[hidden]')).toBeNull();
   expect(button('gatewayJoin.verify').closest('.redeven-gateway-join-scroll')).not.toBeNull();
@@ -343,7 +344,7 @@ it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects t
 it('keeps connection failure in the first step with Retry and settings, then continues after success', async () => {
   const selected = runtimeGatewayAccessFixture('ssh', 'connection_required').environment;
   const perform = vi.fn().mockResolvedValue({ ok: true }).mockResolvedValueOnce({ ok: false, gateway_error_code: 'RUNTIME_CONTROL_UNREACHABLE' })
-    .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    .mockResolvedValueOnce({ ok: true, gateway_membership: gatewaySnapshot() });
   const edit = vi.fn(); vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={selected} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={edit} close={() => {}} />, root);
@@ -361,7 +362,7 @@ it('keeps connection failure in the first step with Retry and settings, then con
 it('separates invitation entry from consent and preserves the draft when navigating back', async () => {
   const perform = vi.fn(async (request: { operation: string }) => request.operation === 'preview'
     ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 600000 } }
-    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    : { ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={readyEnvironment} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
@@ -402,9 +403,9 @@ it('explains unsupported Runtime versions and requires an explicit update', asyn
 });
 
 it('starts the selected Runtime, verifies an administrator code, then requires local consent', async () => {
-  const perform = vi.fn().mockResolvedValue({ ok: true }).mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } })
+  const perform = vi.fn().mockResolvedValue({ ok: true }).mockResolvedValueOnce({ ok: true, gateway_membership: gatewaySnapshot() })
     .mockResolvedValueOnce({ ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'gateway', gateway_name: invitationFixture.gateway_name, target_runtime_id: 'runtime', expires_at_unix_ms: invitationFixture.expires_at_unix_ms } })
- .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: true, phase: 'joining' } });
+ .mockResolvedValueOnce({ ok: true, gateway_membership: gatewaySnapshot([gatewayAttachment({attachment_state:'joining',connection_state:'connecting',phase:'joining'})]) });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(environment);
   const start = vi.fn(async () => { setCurrent(readyEnvironment); return { ok: true }; });
@@ -442,7 +443,7 @@ it('keeps the saved registration after startup failure and supports cancellation
 });
 
 it('preserves enrollment input and focus when the selected environment snapshot refreshes', async () => {
-  const perform = vi.fn().mockResolvedValue({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  const perform = vi.fn().mockResolvedValue({ ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(readyEnvironment);
   const root = document.createElement('div'); document.body.append(root);
@@ -470,7 +471,7 @@ it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('s
     setCurrent(runtimeGatewayAccessFixture(kind).environment);
     return { ok: true };
   });
-  const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+  const perform = vi.fn(async () => ({ ok: true, gateway_membership: gatewaySnapshot() }));
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => setCurrent(undefined)} />, root);
@@ -485,7 +486,7 @@ it('keeps drafts and verified consent across a failed management retry', async (
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(readyEnvironment);
   const perform = vi.fn(async (request: { operation: string }) => request.operation === 'preview' ? { ok: true,
     gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 600000 },
-  } : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  } : { ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const refresh = vi.fn().mockResolvedValueOnce(false).mockImplementationOnce(async () => { setCurrent(readyEnvironment); return true; });
   const root = document.createElement('div'); document.body.append(root);
@@ -514,7 +515,7 @@ it('keeps drafts and verified consent across a failed management retry', async (
 it.each(['restart', 'update'] as const)('retains the enrollment session across failed and successful %s recovery', async operation => {
   const preview = { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 600000 };
   const perform = vi.fn(async (request: { operation: string }) => request.operation === 'preview'
-    ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(readyEnvironment);
   const recover = vi.fn().mockResolvedValueOnce({ ok: false }).mockImplementationOnce(async () => { setCurrent(structuredClone(readyEnvironment)); return { ok: true }; });
@@ -585,7 +586,7 @@ it.each(['preview', 'join', 'join_rejection'] as const)('invalidates replaced Ru
   const preview = { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 };
   const perform = vi.fn(async (request: { operation: string }) => request.operation === requestedOperation
     ? new Promise<object>((done, failed) => { complete = done; reject = failed; }) : request.operation === 'preview'
-      ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+      ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
@@ -612,7 +613,7 @@ it('returns expired consent to invitation verification after explicit reconnecti
   const [current, setCurrent] = createSignal(readyEnvironment);
   const perform = vi.fn(async (request: { operation: string }) => request.operation === 'preview'
     ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 30000 } }
-    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    : { ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={async () => { setCurrent(readyEnvironment); return true; }} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);

@@ -133,7 +133,7 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
   }
   async function perform(request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionSuccess | undefined> {
     const permissions = props.gateway?.permissions;
-    const networkMutation = request.kind === 'update_gateway_members' || request.kind === 'update_gateway_policy' || request.kind === 'update_gateway_network_settings' || request.kind === 'update_gateway_endpoints';
+    const networkMutation = request.kind === 'reevaluate_gateway_egress' || request.kind === 'update_gateway_members' || request.kind === 'update_gateway_policy' || request.kind === 'update_gateway_network_settings' || request.kind === 'update_gateway_endpoints';
     if (busy() || !props.gateway || props.available === false || !(networkMutation ? permissions?.manage_network : permissions?.manage_attachments)) return;
     const current = generation;
     setBusy(true); setError('');
@@ -308,13 +308,14 @@ export function RuntimeAttachmentsPanel(props: Readonly<{
             <div class="flex flex-wrap items-center justify-between gap-2"><strong class="break-all text-sm">{member().display_name}</strong>
               <span class="text-xs">{props.i18n.t(member().connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</span></div>
             <p class="break-all text-xs text-muted-foreground">{member().attachment_id}</p>
+            <p class="text-xs text-muted-foreground" title={props.i18n.t('gatewayMembers.egressPolicyHelp')}>{props.i18n.t(member().effective_egress_allowed ? 'gatewayMembers.egressAllowed' : 'gatewayMembers.egressDenied')}</p>
             <GatewayPicker label={props.i18n.t('gatewayMembers.egressPermission')} placeholder=""
               disabled={props.available === false || busy() || !currentMember(member().attachment_id) || !props.gateway?.permissions?.manage_network}
               value={overrides()[member().attachment_id] ?? member().egress_permission}
               options={(['inherit', 'allow', 'deny'] as const).map(value => ({ value, label: props.i18n.t('gatewayMembers.' + value as 'gatewayMembers.inherit') }))}
               onChange={value => setOverrides(current => ({ ...current, [member().attachment_id]: value as GatewayEgressPermission }))} />
-            <Button class="cursor-pointer" size="xs" variant="outline" disabled={props.available === false || busy() || !currentMember(member().attachment_id) || !props.gateway?.permissions?.manage_attachments}
-              onClick={() => props.gateway && void perform({ kind: 'reevaluate_gateway_member', connection_id: props.gateway.connection_id,
+            <Button class="cursor-pointer" size="xs" variant="outline" disabled={props.available === false || busy() || !currentMember(member().attachment_id) || !props.gateway?.permissions?.manage_network}
+              onClick={() => props.gateway && void perform({ kind: 'reevaluate_gateway_egress', connection_id: props.gateway.connection_id,
                 attachment_id: member().attachment_id, attachment_version: member().attachment_version })}>{props.i18n.t('gatewayMembers.reevaluate')}</Button>
             <Show when={results()?.find(result => result.attachment_id === member().attachment_id)}>{result => <>
               <p role="status" class="text-xs">{props.i18n.t(!result().error_code ? 'gatewayMembers.saved'

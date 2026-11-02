@@ -41,6 +41,7 @@ func TestGatewayAddressProofUsesPersistentMachineKey(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, endpoint+"/gateway/v6/identity", strings.NewReader(`{"protocol_version":"redeven-gateway-v6","nonce":"caller-challenge-with-entropy"}`))
 		request.RemoteAddr = "127.0.0.1:12345"
 		request.Header.Set(HostAdminHeader, token)
+		request.Header.Set("X-Redeven-Gateway-Binding-Audience", "host-binding")
 		request.Header.Set(OperationIDHeader, rand.Text())
 		request = request.WithContext(context.WithValue(request.Context(), hostSocketKey{}, server))
 		response := httptest.NewRecorder()
@@ -55,6 +56,9 @@ func TestGatewayAddressProofUsesPersistentMachineKey(t *testing.T) {
 			t.Fatal(err)
 		}
 		proof := result.Data
+		if proof.BindingAudience != "host-binding" {
+			t.Fatal("unsigned host proof lost request audience")
+		}
 		if proof.CompatibilityEpoch != gp.CompatibilityEpoch {
 			t.Fatal("identity proof must use the independent Gateway authority epoch")
 		}

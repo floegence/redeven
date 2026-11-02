@@ -27,7 +27,7 @@ function mockActions({ environment, connected, gateways }) {
       preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office Gateway',
       target_runtime_id: 'udesk26', expires_at_unix_ms: Date.now() + 600000,
     } };
-    return { ok: true, gateway_membership: { joined: request.operation === 'join', phase: request.operation === 'join' ? 'joined' : 'not_joined' } };
+    return { ok: true, gateway_membership: (request.operation==='join'?{attachments:[{gateway_id:'office',gateway_name:'Office Gateway',attachment_id:'attachment',attachment_state:'joined',connection_state:'connected',phase:'joined',route_selected:false,endpoints:[]}],counts:{total:1,joined:1,connected:1,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()}:{attachments:[],counts:{total:0,joined:0,connected:0,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()}) };
   } };
 }
 try {

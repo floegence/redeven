@@ -29,11 +29,11 @@ func TestGatewayReplacementConfirmationRecoversLostResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "replace", ""); err != nil {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "replace"); err != nil {
 		t.Fatal(err)
 	}
 	confirmed := a.remoteConfigSnapshot()
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "replace", ""); err != nil {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "replace"); err != nil {
 		t.Fatalf("lost response recovery: %v", err)
 	}
 	if !reflect.DeepEqual(confirmed, a.remoteConfigSnapshot()) {
@@ -41,11 +41,11 @@ func TestGatewayReplacementConfirmationRecoversLostResponse(t *testing.T) {
 	}
 	other, _ := gatewayfixture.NewWithID(t, "other", "https://other.internal:7443", "127.0.0.1:7443")
 	invitation, _ := other.Invite("admin")
-	a.cfg, err = a.cfg.PrepareGatewayJoin(invitation, gp.MemberMetadata{}, "")
+	a.cfg, err = a.cfg.PrepareGatewayJoin(invitation, gp.MemberMetadata{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "replace", ""); !errors.Is(err, ErrGatewayPreviewChanged) {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "replace"); !errors.Is(err, ErrGatewayPreviewChanged) {
 		t.Fatal("replacement recovery ignored a changed collection")
 	}
 }
@@ -62,11 +62,11 @@ func TestGatewayEndpointConfirmationRecoversLostResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints", ""); err != nil {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints"); err != nil {
 		t.Fatal(err)
 	}
 	staged := a.remoteConfigSnapshot()
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints", ""); err != nil {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints"); err != nil {
 		t.Fatalf("lost confirmation response: %v", err)
 	}
 	if !reflect.DeepEqual(staged, a.remoteConfigSnapshot()) {
@@ -81,7 +81,7 @@ func TestGatewayEndpointConfirmationRecoversLostResponse(t *testing.T) {
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	a.gatewayMember.ctx = canceled
-	if err := a.ConfirmGatewayPreview(repeated.PreviewID, "update-endpoints", ""); err != nil {
+	if err := a.ConfirmGatewayPreview(repeated.PreviewID, "update-endpoints"); err != nil {
 		t.Fatalf("repeated consent attempted a second network delivery: %v", err)
 	}
 	if !reflect.DeepEqual(staged, a.remoteConfigSnapshot()) {
@@ -95,7 +95,7 @@ func TestGatewayEndpointConfirmationRecoversLostResponse(t *testing.T) {
 	if current.PendingEndpointUpdate != nil {
 		t.Fatal("controller delivery remained pending")
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints", ""); err != nil {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints"); err != nil {
 		t.Fatalf("confirmation recovery after asynchronous delivery: %v", err)
 	}
 	if !reflect.DeepEqual(delivered, a.remoteConfigSnapshot()) {
@@ -106,7 +106,7 @@ func TestGatewayEndpointConfirmationRecoversLostResponse(t *testing.T) {
 	if err := a.persistRuntimeAttachment(leaving); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints", ""); !errors.Is(err, ErrGatewayPreviewChanged) {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints"); !errors.Is(err, ErrGatewayPreviewChanged) {
 		t.Fatalf("confirmation recovery ignored removed consent: %v", err)
 	}
 }
@@ -168,20 +168,17 @@ func TestGatewayPreviewSelfSignedExchangeAndExplicitConsent(t *testing.T) {
 	if !bytes.Equal(before, after) || a.cfg != cfg || control.Err() != nil || len(members) != 0 {
 		t.Fatal("preview changed configuration, membership, or the existing controller")
 	}
-	if preview.TargetRuntimeID != "runtime" || preview.ExistingEnvironmentID != "existing" || len(preview.PreviewID) != 43 || preview.ExpiresAtUnixMS > time.Now().Add(5*time.Minute).UnixMilli() {
+	if preview.TargetRuntimeID != "runtime" || len(preview.PreviewID) != 43 || preview.ExpiresAtUnixMS > time.Now().Add(5*time.Minute).UnixMilli() {
 		t.Fatal("preview did not bind the target and consent boundary")
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join", "preserve"); err == nil || a.cfg != cfg {
-		t.Fatal("pairing accepted a Cloud ownership change")
-	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join"); err != nil {
 		t.Fatal(err)
 	}
 	saved := a.GatewayAttachment()
 	if saved == nil || saved.PendingJoin == nil || a.cfg.EnvironmentID != "existing" || control.Err() != nil {
 		t.Fatal("confirmation did not persist consent before selecting the Gateway path")
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil || !reflect.DeepEqual(saved, a.GatewayAttachment()) {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join"); err != nil || !reflect.DeepEqual(saved, a.GatewayAttachment()) {
 		t.Fatalf("lost confirmation response could not be retried: %v", err)
 	}
 	if _, err := gatewaymembership.PreviewInvitation(t.Context(), address, delivery.Code); err != nil {
@@ -230,7 +227,7 @@ func TestGatewayPreviewRejectsChangedContextAndSaveFailure(t *testing.T) {
 			case "save_failure":
 				a.configPath = t.TempDir()
 			}
-			err = a.ConfirmGatewayPreview(preview.PreviewID, purpose, "")
+			err = a.ConfirmGatewayPreview(preview.PreviewID, purpose)
 			if err == nil || change != "save_failure" && !errors.Is(err, expected) {
 				t.Fatalf("context was accepted: %v", err)
 			}

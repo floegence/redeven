@@ -41,7 +41,7 @@ func (s *runtimeControlServer) handleGatewayJoin(w http.ResponseWriter, r *http.
 	case "/v2/gateway/replace":
 		purpose = "replace"
 	}
-	if err := s.agent.ConfirmGatewayPreview(body.PreviewID, purpose, ""); err != nil {
+	if err := s.agent.ConfirmGatewayPreview(body.PreviewID, purpose); err != nil {
 		code := gatewayEnrollmentErrorCode(err)
 		writeRuntimeControlError(w, http.StatusConflict, code, "Gateway confirmation failed. Verify the address and a fresh invitation code, then confirm again.")
 		return

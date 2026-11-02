@@ -149,7 +149,7 @@ describe('Gateway host operation recovery', () => {
       paired_client_key_id: material.client_key_id, paired_client_private_key_ref: material.private_key_ref,
       gateway_public_key: material.client_public_key, gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(material.client_public_key),
       binding_audience: material.binding_audience, created_at_unix_ms: 1, last_verified_at_unix_ms: 1 } };
-    const secrets = new Map([[material.private_key_ref, material.client_private_key]]);
+    const secrets = new Map<string,string>();
     const requests: string[] = [];
     const bridge: RuntimePlacementBridgeSessionHandle = { openStream: () => {
       let receive!: (chunk: Buffer) => void | Promise<void>, end!: () => void;
@@ -174,6 +174,8 @@ describe('Gateway host operation recovery', () => {
     if (outcome === 'completed') expect(await client.issueAccessCode(record)).toEqual({ access_code: 'access', expires_at_unix_ms: 1 });
     else await expect(client.issueAccessCode(record)).rejects.toMatchObject({ code: outcome === 'failed' ? 'CONFLICT' : 'OPERATION_RESULT_UNKNOWN' });
     expect(requests).toHaveLength(2);
+    expect(requests.every(request => !/X-Redeven-(?:Request-Signature|Client-Key-ID):/i.test(request))).toBe(true);
+    expect(requests.every(request => request.includes(record.trust_profile!.binding_audience))).toBe(true);
     expect(requests[0]).toContain('/clients/access-codes'); expect(requests[1]).toContain('/operations/query');
     const operationID = (value: string) => /X-Redeven-Operation-ID: ([^\r]+)/i.exec(value)?.[1];
     expect(operationID(requests[0])).toBeTruthy(); expect(operationID(requests[1])).toBe(operationID(requests[0]));

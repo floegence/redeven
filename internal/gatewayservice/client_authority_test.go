@@ -89,6 +89,47 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 	if !ok || verified.ClientKeyID != id || !verified.Permissions.ManageAttachments {
 		t.Fatal("signed host identity was replaced or not verified", response.Body.String())
 	}
+	clients, err := server.trust.ListClients()
+	if err != nil || len(clients) != 1 || clients[0].ClientKeyID != id {
+		t.Fatal("host verification hid public device authority", err)
+	}
+	revoke := request("/gateway/v6/clients/revoke", gp.ClientRevokeRequest{ProtocolVersion: gp.Version, ClientKeyID: id}, true, "127.0.0.1:1234")
+	operationID := revoke.Header.Get(OperationIDHeader)
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, revoke)
+	if response.Code != 200 {
+		t.Fatal("self revocation failed", response.Body.String())
+	}
+	for _, route := range []string{"catalog", "clients/list", "operations/query"} {
+		req := httptest.NewRequest(http.MethodPost, "http://gateway.example/gateway/v6/"+route, strings.NewReader("{\"protocol_version\":\"redeven-gateway-v6\"}"))
+		req = req.WithContext(context.WithValue(req.Context(), hostSocketKey{}, server))
+		req.Header.Set(HostAdminHeader, token)
+		req.Header.Set(OperationIDHeader, operationID)
+		response = httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatal("host recovery after device revocation failed", route, response.Body.String())
+		}
+	}
+	denied := httptest.NewRecorder()
+	server.PublicHandler().ServeHTTP(denied, request("/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, false, "127.0.0.1:1234"))
+	if denied.Code != 401 {
+		t.Fatal("revoked device still has public access", denied.Code)
+	}
+	for _, route := range []string{"access/open", "access/service"} {
+		req := httptest.NewRequest(http.MethodPost, "http://gateway.example/gateway/v6/"+route, strings.NewReader(`{"protocol_version":"redeven-gateway-v6"}`))
+		req = req.WithContext(context.WithValue(req.Context(), hostSocketKey{}, server))
+		req.Header.Set(HostAdminHeader, token)
+		response = httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, req)
+		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "ACCESS_REQUIRED") {
+			t.Fatal("host proof substituted for device access", route, response.Code, response.Body.String())
+		}
+	}
+	if _, err := server.trust.CompletePairing(complete, false); err == nil {
+		t.Fatal("old completion restored access")
+	}
+
 	host = request("/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, true, "127.0.0.1:1234")
 	host.Header.Set("X-Redeven-Request-Signature", "invalid")
 	response = httptest.NewRecorder()
@@ -98,7 +139,7 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 	}
 	consumer := httptest.NewRecorder()
 	server.Handler().ServeHTTP(consumer, request("/gateway/v6/clients/list", gp.ClientListRequest{ProtocolVersion: gp.Version}, false, "127.0.0.1:1234"))
-	if consumer.Code != http.StatusForbidden {
+	if consumer.Code != http.StatusUnauthorized {
 		t.Fatal("host proof persisted as client management grant")
 	}
 }

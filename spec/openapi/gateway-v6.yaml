@@ -172,7 +172,7 @@
     "/gateway/v6/attachments/reevaluate": {
       "post": {
         "operationId": "gateway_v6_members_reevaluate",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
+        "description": "Reevaluate the committed local egress policy for one exact attachment version. Requires private host proof and manage_network. This is not an application, Cloud or destination reachability check.",
         "security": [
           {
             "HostAdministrator": []
@@ -2465,7 +2465,8 @@
             "$ref": "#/components/schemas/EgressPermission"
           },
           "effective_egress_allowed": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Current local policy permission, including the egress hook decision. It does not prove connection, credential readiness, allowed destinations or destination reachability."
           },
           "metadata": {
             "$ref": "#/components/schemas/MemberMetadata"

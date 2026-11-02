@@ -13,12 +13,12 @@ function button(key: Parameters<typeof i18n.t>[0]) {
   if (!found) throw new Error('Missing button ' + key);
   return found;
 }
-function mount(perform: ReturnType<typeof vi.fn>) {
+function mount(perform: ReturnType<typeof vi.fn>, currentClientKeyID?: string) {
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   const [id, setID] = createSignal('gateway-one');
   const [enrolling, setEnrolling] = createSignal(false);
-  dispose = render(() => <GatewayClientsPanel gatewayID={id()} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
+  dispose = render(() => <GatewayClientsPanel gatewayID={id()} currentClientKeyID={currentClientKeyID} enrolling={enrolling()} onEnrollmentChange={setEnrolling} endpoints={[{ endpoint_id: 'lan', address: 'https://gateway.example:7443', scope: 'lan', priority: 0 }]} i18n={i18n} />, root);
   return setID;
 }
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -77,6 +77,18 @@ describe('Gateway client enrollment', () => {
     button('gatewayClients.confirmRevoke').click(); await settle();
     expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'revoke_gateway_client', connection_id: 'gateway-one', client_key_id: 'client-one' });
     expect(document.body.textContent).toContain(i18n.t('gatewayClients.revoked'));
+  });
+
+  it('identifies this device and reauthorizes only after an explicit action', async () => {
+    const revoked = {client_key_id:'self',client_name:'Desktop',paired_at_unix_ms:1,last_verified_at_unix_ms:2,revoked_at_unix_ms:3};
+    const perform=vi.fn().mockResolvedValue({ok:true,gateway_clients:[revoked]});
+    mount(perform,'self');await settle();
+    expect(document.body.textContent).toContain(i18n.t('gatewayClients.currentDevice'));
+    expect(perform).toHaveBeenCalledExactlyOnceWith({kind:'list_gateway_clients',connection_id:'gateway-one'});
+    button('common.refresh').click();await settle();
+    expect(perform.mock.calls.every(([request])=>request.kind==='list_gateway_clients')).toBe(true);
+    button('gatewayClients.reauthorize').click();await settle();
+    expect(perform.mock.calls.slice(-2).map(([request])=>request.kind)).toEqual(['pair_gateway','list_gateway_clients']);
   });
 
   it('hides explanation by default and disables expired code copying', async () => {

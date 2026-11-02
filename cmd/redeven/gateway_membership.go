@@ -83,7 +83,7 @@ func (c *cli) gatewayCmd(args []string) int {
 	ctx := context.Background()
 	_, err = runtimemanagement.LoadStatus(ctx, layout.RuntimeControlSocketPath, 2*time.Second)
 	if err == nil {
-		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, *address, code, "", *gatewayID, *yes)
+		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, *address, code, *gatewayID, *yes)
 	}
 	if err := os.MkdirAll(layout.StateDir, 0700); err != nil {
 		fmt.Fprintln(c.stderr, "Cannot open Runtime state.")
@@ -125,7 +125,7 @@ func (c *cli) gatewayCmd(args []string) int {
 			fmt.Fprintln(c.stderr, "Gateway verification failed:", err)
 			return 1
 		}
-		_, err = c.confirmGatewayEnrollment(invitation.GatewayName, cfg.LocalEnvironmentPublicID, invitation.ExpiresAtUnixMS, "", action, "", *yes)
+		err = c.confirmGatewayEnrollment(invitation.GatewayName, cfg.LocalEnvironmentPublicID, invitation.ExpiresAtUnixMS, action, *yes)
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
@@ -137,7 +137,7 @@ func (c *cli) gatewayCmd(args []string) int {
 		if action == "replace" {
 			prepare = cfg.PrepareGatewayReplacement
 		}
-		next, err := prepare(invitation, gp.MemberMetadata{Hostname: hostname, OS: runtime.GOOS, Arch: runtime.GOARCH, Version: Version}, "")
+		next, err := prepare(invitation, gp.MemberMetadata{Hostname: hostname, OS: runtime.GOOS, Arch: runtime.GOARCH, Version: Version})
 		if err != nil {
 			fmt.Fprintln(c.stderr, err.Error())
 			return 1
@@ -204,21 +204,11 @@ func (c *cli) gatewayCmd(args []string) int {
 			return 1
 		}
 	}
-	result := agent.GatewayAttachmentStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID}
-	for _, member := range cfg.Gateways {
-		item := agent.GatewayAttachmentStatus{Joined: member.PendingJoin == nil && !member.Leaving, GatewayID: member.GatewayID, GatewayName: member.GatewayName, RouteSelected: cfg.CloudGateway() != nil && cfg.CloudGateway().AttachmentID == member.AttachmentID, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, AttachmentID: member.AttachmentID, Phase: "gateway_offline"}
-		if member.PendingJoin != nil {
-			item.Phase = "joining"
-		}
-		if member.Leaving {
-			item.Phase = "removal_pending"
-		}
-		result.Memberships = append(result.Memberships, item)
+	selected := ""
+	if cfg.CloudRoute != nil && cfg.CloudRoute.Kind == config.CloudRouteGateway {
+		selected = cfg.CloudRoute.AttachmentID
 	}
-	if len(result.Memberships) > 0 {
-		result.Joined = true
-		result.Phase = "joined"
-	}
+	result := gatewaymembership.ObserveAttachments(cfg.Gateways, selected, false, nil, time.Now())
 	_ = json.NewEncoder(c.stdout).Encode(result)
 	return 0
 }
@@ -244,22 +234,22 @@ func (c *cli) readGatewayCode(fromStdin bool) (string, error) {
 	return string(raw), err
 }
 
-func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, environment, action, choice string, yes bool) (string, error) {
+func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, action string, yes bool) error {
 	fmt.Fprintf(c.stdout, "Gateway: %s\nTarget Runtime: %s\nExpires: %s\n", name, target, time.UnixMilli(expires).Format(time.RFC3339))
 	switch action {
 	case "update-endpoints":
 		fmt.Fprintln(c.stdout, "Update this Gateway's endpoints while preserving member identity.")
 	case "replace":
-		fmt.Fprintln(c.stdout, "Replace the current Gateway and interrupt its connections, including any Cloud access through it. Cloud enrollment is configured separately on the Runtime.")
+		fmt.Fprintln(c.stdout, "Replace the sole paired Gateway and interrupt its connections, including any Cloud access through it. Cloud enrollment is configured separately on the Runtime.")
 	default:
 		fmt.Fprintln(c.stdout, "Add Gateway access. Cloud ownership and other Gateway pairings stay unchanged.")
 	}
 	if yes {
-		return choice, nil
+		return nil
 	}
 	tty, err := openTTYForPasswordPrompt()
 	if err != nil {
-		return "", err
+		return err
 	}
 	if tty.shouldClose {
 		defer tty.file.Close()
@@ -268,29 +258,29 @@ func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, envir
 	fmt.Fprint(tty.file, "Confirm and enable? [y/N]: ")
 	answer, err := reader.ReadString('\n')
 	if err != nil {
-		return "", err
+		return err
 	}
 	if !strings.EqualFold(strings.TrimSpace(answer), "y") {
-		return "", errors.New("gateway enrollment canceled")
+		return errors.New("gateway enrollment canceled")
 	}
 	if expires <= time.Now().UnixMilli() {
-		return "", gatewaymembership.ErrInvitationExpired
+		return gatewaymembership.ErrInvitationExpired
 	}
-	return choice, nil
+	return nil
 }
 
-func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, address, code, choice, gatewayID string, yes bool) int {
+func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, address, code, gatewayID string, yes bool) int {
 	var body any = struct{}{}
 	if action == "retry" || action == "leave" {
-		var status agent.GatewayAttachmentStatus
+		var status gatewaymembership.AttachmentSnapshot
 		if err := gatewayRuntimeRequest(ctx, socketPath, "status", struct{}{}, &status); err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
 		}
-		var target *agent.GatewayAttachmentStatus
-		for i := range status.Memberships {
-			if status.Memberships[i].GatewayID == gatewayID || gatewayID == "" && len(status.Memberships) == 1 {
-				target = &status.Memberships[i]
+		var target *gatewaymembership.AttachmentStatus
+		for i := range status.Attachments {
+			if status.Attachments[i].GatewayID == gatewayID || gatewayID == "" && len(status.Attachments) == 1 {
+				target = &status.Attachments[i]
 			}
 		}
 		if target == nil {
@@ -318,7 +308,7 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, add
 			return 1
 		}
 		var err error
-		_, err = c.confirmGatewayEnrollment(preview.GatewayName, preview.TargetRuntimeID, preview.ExpiresAtUnixMS, "", action, choice, yes)
+		err = c.confirmGatewayEnrollment(preview.GatewayName, preview.TargetRuntimeID, preview.ExpiresAtUnixMS, action, yes)
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
@@ -327,7 +317,7 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, add
 			PreviewID string `json:"preview_id"`
 		}{preview.PreviewID}
 	}
-	var status agent.GatewayAttachmentStatus
+	var status gatewaymembership.AttachmentSnapshot
 	if err := gatewayRuntimeRequest(ctx, socketPath, action, body, &status); err != nil {
 		fmt.Fprintln(c.stderr, "Gateway operation failed:", err)
 		return 1

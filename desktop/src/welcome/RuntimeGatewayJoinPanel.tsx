@@ -6,7 +6,7 @@ import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 
-import type { GatewayJoinPreview, GatewayAttachmentOperation, GatewayEnrollmentPurpose, GatewayAttachmentStatus } from '../shared/gatewayJoin';
+import type { GatewayJoinPreview, GatewayAttachmentOperation, GatewayEnrollmentPurpose, GatewayAttachmentStatus, GatewayAttachmentSnapshot } from '../shared/gatewayJoin';
 import type { GatewayEndpoint } from '../shared/gatewayMembership';
 import { gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import type { DesktopI18n } from '../shared/i18n';
@@ -318,13 +318,13 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     const request = props.connectionRequest ?? 0;
     if (canConnect() && !blocked() && !busy() && request > lastConnectionRequest) { lastConnectionRequest = request; void connect(); }
   });
-  function reconcileMembership(status: GatewayAttachmentStatus) {
+  function reconcileMembership(status: GatewayAttachmentSnapshot) {
     const id = joined()?.gateway_id ?? uncertainGateway();
     if (!id) return;
-    const member = status.memberships?.find(value => value.gateway_id === id) ?? (status.gateway_id === id ? status : undefined);
-    if (member?.joined) { setJoined(member); setUncertainGateway(undefined); setPreview(undefined); setCode(''); }
-    else if (uncertainGateway() && (status.phase === 'not_joined' || status.memberships)) {
-      setUncertainGateway(undefined); setPreview(undefined); setCode(''); setStep(1);
+    const member = status.attachments.find(value => value.gateway_id === id);
+    if (member) { setJoined(member); setUncertainGateway(undefined); setPreview(undefined); setCode(''); }
+    else {
+      setJoined(undefined); setUncertainGateway(undefined); setPreview(undefined); setCode(''); setStep(1);
       setError(text('gatewayJoin.failed'));
     }
   }
@@ -376,8 +376,13 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         }
         return;
       }
+      const member = result.gateway_membership.attachments.find(item => item.gateway_id === consent.gateway_id);
+      if (!member || member.attachment_state === 'removal_pending') {
+        setUncertainGateway(consent.gateway_id); setPreviewInvalidated(true); setCode(''); setError(text('gatewayJoin.failed'));
+        return;
+      }
       setPreview(undefined); setCode('');
-      if (props.wizard) { setJoined(result.gateway_membership.memberships?.find(member => member.gateway_id === consent.gateway_id) ?? result.gateway_membership); setStep(3); } else { setPending(null); close(); }
+      if (props.wizard) { setJoined(member); setStep(3); } else { setPending(null); close(); }
     } catch { if (current === generation) { setUncertainGateway(consent.gateway_id); setPreviewInvalidated(true); setCode(''); setError(text('gatewayJoin.failed')); } }
     finally {
       if (current === generation) {
@@ -516,7 +521,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   </div>;
   const body = () => <Show when={joined() || uncertainGateway()} fallback={formBody()}>
     <div class="redeven-gateway-settings-section" data-gateway-enrollment-result>
-      <h3 role="status">{text(uncertainGateway() ? 'gatewayExperience.confirming' : joined()?.phase === 'joined' ? 'gatewayExperience.joined' : 'gatewayExperience.waiting')}</h3>
+      <h3 role="status">{text(uncertainGateway() ? 'gatewayExperience.confirming' : joined()?.phase === 'joined' ? 'gatewayExperience.joined' : `gatewayMembership.${joined()?.phase ?? 'unknown'}`)}</h3>
       <p class="redeven-gateway-help">{text(uncertainGateway() ? 'gatewayExperience.confirmingHelp' : 'gatewayExperience.joinedHelp')}</p>
       <p class="font-medium">{joined()?.gateway_name ?? preview()?.gateway_name ?? props.targetLabel}</p>
       <Show when={statusError()}><p role="alert">{statusError()}</p></Show>

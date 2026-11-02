@@ -134,7 +134,7 @@ function normalizeGatewayAttachments(value: unknown): readonly RuntimeGatewayAtt
  if (!Array.isArray(value) || value.length > 16) return [];
  return value.filter((item): item is RuntimeGatewayAttachment => !!item && typeof item === 'object'
    && ['gateway_id','attachment_id','runtime_public_id','identity_fingerprint','phase'].every(key => typeof item[key] === 'string' && item[key].length > 0 && item[key].length <= 256)
-   && ['joining','joined','gateway_offline','reauthorization_required','removal_pending'].includes(item.phase)
+   && ['joining','joined','disconnected','connecting','connection_failed','unknown','runtime_stopped','reauthorization_required','removal_pending'].includes(item.phase)
    && /^SHA256:[A-Za-z0-9_-]{43}$/u.test(item.identity_fingerprint)
    && typeof item.gateway_name === 'string'
    && Array.isArray(item.endpoints) && item.endpoints.length <= 16 && item.endpoints.every((endpoint: unknown) => {
@@ -170,7 +170,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 70;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 71;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';

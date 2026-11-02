@@ -6,7 +6,7 @@ import type { DesktopI18n } from '../shared/i18n';
 import type { GatewayAuthorizedClient, GatewayClientAccessCode, GatewayEndpoint } from '../shared/gatewayMembership';
 import type { DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 
-export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspended?: boolean; onPresenceChange?: (present: boolean) => void; gatewayID: string; endpoints?: readonly GatewayEndpoint[]; enrolling: boolean; onEnrollmentChange: (value: boolean) => void; i18n: DesktopI18n }>) {
+export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspended?: boolean; onPresenceChange?: (present: boolean) => void; gatewayID: string; currentClientKeyID?: string; endpoints?: readonly GatewayEndpoint[]; enrolling: boolean; onEnrollmentChange: (value: boolean) => void; i18n: DesktopI18n }>) {
   const enrolling = () => props.enrolling;
   let enrollmentTrigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined;
   const setEnrollment = (value: boolean) => {
@@ -49,6 +49,12 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
       if (!result?.ok) {
         if (result?.gateway_error_code === 'OPERATION_RESULT_UNKNOWN') { setUncertainOperation(result.gateway_operation_id ?? ''); setError(props.i18n.t('gatewayMembers.operationUnknown', { id: result.gateway_operation_id ?? '' })); return; }
         throw new Error();
+      }
+      if (request.kind === 'pair_gateway') {
+        const refreshed = await window.redevenDesktopLauncher?.performAction({kind:'list_gateway_clients',connection_id:props.gatewayID});
+        if (current !== generation) return;
+        if (!refreshed?.ok || !refreshed.gateway_clients) {setError(props.i18n.t('gatewayMembers.refreshFailed'));return;}
+        setClients(refreshed.gateway_clients);
       }
       if (result.gateway_clients) setClients(result.gateway_clients);
       if (result.gateway_access_code) { setNow(Date.now()); setCode(result.gateway_access_code); setCopied(undefined); }
@@ -99,8 +105,8 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
         <Button variant="ghost" size="sm" disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', connection_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>
       <Show when={clients().length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayClients.emptyClients')}</p>}>
         <ul class="redeven-gateway-authorized-client-list"><KeyedFor each={clients()} by={client => client.client_key_id}>{client => <li class="redeven-gateway-content-enter redeven-gateway-authorized-client-row">
-          <div class="flex flex-wrap items-center justify-between gap-3"><strong class="text-sm font-semibold">{client().client_name || props.i18n.t('gatewayClients.unnamedClient')}</strong>
-            <Show when={!client().revoked_at_unix_ms} fallback={<span class="text-xs text-muted-foreground">{props.i18n.t('gatewayClients.revoked')}</span>}>
+          <div class="flex flex-wrap items-center justify-between gap-3"><strong class="text-sm font-semibold">{client().client_name || props.i18n.t('gatewayClients.unnamedClient')}<Show when={client().client_key_id === props.currentClientKeyID}><span class="ml-2 text-xs font-normal text-muted-foreground">{props.i18n.t('gatewayClients.currentDevice')}</span></Show></strong>
+            <Show when={!client().revoked_at_unix_ms} fallback={<><span class="text-xs text-muted-foreground">{props.i18n.t('gatewayClients.revoked')}</span><Show when={client().client_key_id === props.currentClientKeyID}><Button size="xs" variant="outline" disabled={props.available === false || busy()} onClick={() => void perform({kind:'pair_gateway',connection_id:props.gatewayID})}>{props.i18n.t('gatewayClients.reauthorize')}</Button></Show></>}>
               <Button variant="outline" size="xs" icon={Trash} disabled={props.available === false || busy()} onClick={() => {
                 if (revoking() !== client().client_key_id) { setRevoking(client().client_key_id); return; }
                 void perform({ kind: 'revoke_gateway_client', connection_id: props.gatewayID, client_key_id: client().client_key_id });

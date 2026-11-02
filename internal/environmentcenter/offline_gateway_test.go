@@ -2,6 +2,7 @@ package environmentcenter
 
 import (
 	"context"
+	"crypto/rand"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -85,8 +86,18 @@ func TestFreshOfflineGatewayPairingUsesScopedTrustAndRevocation(t *testing.T) {
 			t.Fatalf("management route exposed: %s", route)
 		}
 	}
-	if err := host.Request(ctx, "/gateway/v6/clients/revoke", gp.ClientRevokeRequest{ProtocolVersion: gp.Version, ClientKeyID: record.ClientKeyID}, nil); err != nil {
+	operationID := rand.Text()
+	if err := host.RequestWithOperation(ctx, "/gateway/v6/clients/revoke", gp.ClientRevokeRequest{ProtocolVersion: gp.Version, ClientKeyID: record.ClientKeyID}, nil, operationID); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := host.Catalog(ctx); err != nil {
+		t.Fatal("revocation blocked private host management", err)
+	}
+	if err := host.RequestWithOperation(ctx, "/gateway/v6/operations/query", gp.CatalogRequest{ProtocolVersion: gp.Version}, nil, operationID); err != nil {
+		t.Fatal("revocation receipt unavailable", err)
+	}
+	if _, err := pair.complete(ctx); err == nil {
+		t.Fatal("old completion restored revoked access")
 	}
 	if _, err := client.catalog(ctx); err == nil {
 		t.Fatal("revoked device retained admission")

@@ -307,7 +307,19 @@ func TestRuntimeReconnectsWhenDomainIPChanges(t *testing.T) {
 	firstDone, secondDone := make(chan struct{}), make(chan struct{})
 	go func() { defer close(firstDone); _ = firstServer.Serve(first) }()
 	go func() { defer close(secondDone); _ = secondServer.Serve(second) }()
-	t.Cleanup(func() { _ = firstServer.Close(); _ = secondServer.Close(); <-firstDone; <-secondDone })
+	t.Cleanup(func() {
+		// SDK Shutdown drains session callbacks before the fixture removes its store.
+		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if err := firstServer.Shutdown(shutdown); err != nil {
+			t.Error(err)
+		}
+		if err := secondServer.Shutdown(shutdown); err != nil {
+			t.Error(err)
+		}
+		<-firstDone
+		<-secondDone
+	})
 	invitation, err := store.Invite("admin")
 	if err != nil {
 		t.Fatal(err)

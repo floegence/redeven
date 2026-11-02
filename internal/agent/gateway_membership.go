@@ -5,6 +5,7 @@ import (
 	"errors"
 	"runtime"
 	"sync"
+	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/config"
@@ -165,7 +166,7 @@ func (a *Agent) updateGatewayEndpoints(invitation gp.EnrollmentDescriptor) error
 	return restartErr
 }
 
-func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string, replace bool) error {
+func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, replace bool) error {
 	a.mu.Lock()
 	if a.cfg == nil {
 		a.mu.Unlock()
@@ -176,7 +177,7 @@ func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string,
 	if replace {
 		prepare = a.cfg.PrepareGatewayReplacement
 	}
-	next, err := prepare(invitation, gp.MemberMetadata{Hostname: hostnameBestEffort(), OS: runtime.GOOS, Arch: runtime.GOARCH, Version: a.version}, choice)
+	next, err := prepare(invitation, gp.MemberMetadata{Hostname: hostnameBestEffort(), OS: runtime.GOOS, Arch: runtime.GOARCH, Version: a.version})
 	if err != nil {
 		a.mu.Unlock()
 		return err
@@ -199,57 +200,22 @@ func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string,
 	return a.startRuntimeAttachmentLocked()
 }
 
-type GatewayAttachmentStatus struct {
-	RouteSelected bool `json:"route_selected"`
-
-	Joined                bool                      `json:"joined"`
-	GatewayID             string                    `json:"gateway_id,omitempty"`
-	GatewayName           string                    `json:"gateway_name,omitempty"`
-	Endpoints             []gp.GatewayEndpoint      `json:"endpoints,omitempty"`
-	LastEndpointID        string                    `json:"last_endpoint_id,omitempty"`
-	AttachmentID          string                    `json:"attachment_id,omitempty"`
-	Phase                 string                    `json:"phase"`
-	ExistingEnvironmentID string                    `json:"existing_environment_id,omitempty"`
-	Memberships           []GatewayAttachmentStatus `json:"memberships,omitempty"`
-}
-
-func (a *Agent) GatewayAttachmentStatus() GatewayAttachmentStatus {
+func (a *Agent) GatewayAttachmentStatus() gatewaymembership.AttachmentSnapshot {
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
 	cfg := a.remoteConfigSnapshot()
 	if cfg == nil {
-		return GatewayAttachmentStatus{Phase: "not_joined"}
+		return gatewaymembership.ObserveAttachments(nil, "", true, nil, time.Now())
 	}
-	out := GatewayAttachmentStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID}
-	for _, member := range cfg.Gateways {
-		status := GatewayAttachmentStatus{Joined: true, GatewayID: member.GatewayID, GatewayName: member.GatewayName, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, AttachmentID: member.AttachmentID, Phase: "gateway_offline"}
-		status.RouteSelected = cfg.CloudRoute != nil && cfg.CloudRoute.Kind == config.CloudRouteGateway && cfg.CloudRoute.AttachmentID == member.AttachmentID
-		if member.PendingJoin != nil {
-			status.Phase = "joining"
-		}
-		if member.Leaving {
-			status.Phase = "removal_pending"
-		} else if running := a.gatewayMember.connections[member.GatewayID]; running != nil {
-			switch running.connection.Snapshot().State {
-			case flowersec.ConnectionConnected:
-				status.Phase = "joined"
-			case flowersec.ConnectionFailed:
-				status.Phase = "reauthorization_required"
-			}
-		}
-		out.Memberships = append(out.Memberships, status)
+	connections := make(map[string]flowersec.ConnectionSnapshot, len(a.gatewayMember.connections))
+	for id, running := range a.gatewayMember.connections {
+		connections[id] = running.connection.Snapshot()
 	}
-	if len(out.Memberships) > 0 {
-		out.Joined = true
-		out.Phase = "joined"
+	selected := ""
+	if cfg.CloudRoute != nil && cfg.CloudRoute.Kind == config.CloudRouteGateway {
+		selected = cfg.CloudRoute.AttachmentID
 	}
-	if len(out.Memberships) == 1 {
-		members := out.Memberships
-		out = members[0]
-		out.Memberships = members
-		out.ExistingEnvironmentID = cfg.EnvironmentID
-	}
-	return out
+	return gatewaymembership.ObserveAttachments(cfg.Gateways, selected, true, connections, time.Now())
 }
 
 func (a *Agent) RetryGatewayAttachment(ids ...string) error {

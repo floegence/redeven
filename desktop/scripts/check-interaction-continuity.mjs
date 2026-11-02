@@ -70,7 +70,7 @@ try {
       await page.evaluate(() => {
         window.settingsFixture.beforeAction = undefined;
         window.settingsFixture.actionResult = request => request.kind === 'manage_runtime_gateway'
-          ? { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } } : undefined;
+          ? { ok: true, gateway_membership: {attachments:[],counts:{total:0,joined:0,connected:0,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()} } : undefined;
       });
       await toggle.click(); await menu.getByRole('menuitem', { name: i18n.t('gatewayJoin.menuAction'), exact: true }).click();
       const dialog = page.getByRole('dialog'); await dialog.waitFor();

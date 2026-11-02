@@ -16,13 +16,12 @@ var ErrGatewayPreviewExpired = errors.New("GATEWAY_PREVIEW_EXPIRED")
 var ErrGatewayPreviewChanged = errors.New("GATEWAY_PREVIEW_CHANGED")
 
 type GatewayPreview struct {
-	PreviewID             string `json:"preview_id"`
-	Purpose               string `json:"purpose"`
-	GatewayID             string `json:"gateway_id"`
-	GatewayName           string `json:"gateway_name"`
-	TargetRuntimeID       string `json:"target_runtime_id"`
-	ExpiresAtUnixMS       int64  `json:"expires_at_unix_ms"`
-	ExistingEnvironmentID string `json:"existing_environment_id,omitempty"`
+	PreviewID       string `json:"preview_id"`
+	Purpose         string `json:"purpose"`
+	GatewayID       string `json:"gateway_id"`
+	GatewayName     string `json:"gateway_name"`
+	TargetRuntimeID string `json:"target_runtime_id"`
+	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms"`
 }
 
 type gatewayPreview struct {
@@ -45,7 +44,7 @@ func (a *Agent) PreviewGateway(ctx context.Context, address, code, purpose strin
 		a.mu.Unlock()
 		return GatewayPreview{}, gatewaymembership.ErrState
 	}
-	runtimeID, environmentID := a.cfg.LocalEnvironmentPublicID, a.cfg.EnvironmentID
+	runtimeID := a.cfg.LocalEnvironmentPublicID
 	current := a.cfg.RuntimeAttachment("").Clone()
 	a.mu.Unlock()
 	if runtimeID == "" || purpose == "replace" && current == nil {
@@ -66,7 +65,7 @@ func (a *Agent) PreviewGateway(ctx context.Context, address, code, purpose strin
 		return GatewayPreview{}, err
 	}
 	expires := min(descriptor.ExpiresAtUnixMS, time.Now().Add(5*time.Minute).UnixMilli())
-	preview := gatewayPreview{GatewayPreview: GatewayPreview{PreviewID: base64.RawURLEncoding.EncodeToString(raw), Purpose: purpose, GatewayID: descriptor.GatewayID, GatewayName: descriptor.GatewayName, TargetRuntimeID: runtimeID, ExpiresAtUnixMS: expires, ExistingEnvironmentID: environmentID}, descriptor: descriptor}
+	preview := gatewayPreview{GatewayPreview: GatewayPreview{PreviewID: base64.RawURLEncoding.EncodeToString(raw), Purpose: purpose, GatewayID: descriptor.GatewayID, GatewayName: descriptor.GatewayName, TargetRuntimeID: runtimeID, ExpiresAtUnixMS: expires}, descriptor: descriptor}
 	if current != nil {
 		preview.memberID, preview.revision, preview.previousGatewayID = current.AttachmentID, current.Revision, current.GatewayID
 	}
@@ -87,7 +86,7 @@ func (a *Agent) PreviewGateway(ctx context.Context, address, code, purpose strin
 	return preview.GatewayPreview, nil
 }
 
-func (a *Agent) ConfirmGatewayPreview(previewID, purpose, choice string) error {
+func (a *Agent) ConfirmGatewayPreview(previewID, purpose string) error {
 	a.cloudLinkMu.Lock()
 	defer a.cloudLinkMu.Unlock()
 	a.gatewayMember.mu.Lock()
@@ -111,16 +110,12 @@ func (a *Agent) ConfirmGatewayPreview(previewID, purpose, choice string) error {
 			a.mu.Unlock()
 			return ErrGatewayPreviewChanged
 		}
-		if committed := a.cfg.RuntimeAttachment(preview.GatewayID); committed != nil && committed.Delegation.InvitationID == preview.descriptor.InvitationID && choice == "" {
+		if committed := a.cfg.RuntimeAttachment(preview.GatewayID); committed != nil && committed.Delegation.InvitationID == preview.descriptor.InvitationID {
 			a.mu.Unlock()
 			return nil
 		}
 	}
 	current := a.cfg.RuntimeAttachment(id).Clone()
-	if choice != "" {
-		a.mu.Unlock()
-		return gatewaymembership.ErrState
-	}
 	a.mu.Unlock()
 	if purpose != "update-endpoints" && current != nil && current.Delegation.InvitationID == preview.descriptor.InvitationID {
 		return nil
@@ -136,9 +131,9 @@ func (a *Agent) ConfirmGatewayPreview(previewID, purpose, choice string) error {
 	}
 	switch purpose {
 	case "join":
-		return a.changeGateway(preview.descriptor, choice, false)
+		return a.changeGateway(preview.descriptor, false)
 	case "replace":
-		return a.changeGateway(preview.descriptor, choice, true)
+		return a.changeGateway(preview.descriptor, true)
 	case "update-endpoints":
 		if err := a.updateGatewayEndpoints(preview.descriptor); err != nil {
 			return err

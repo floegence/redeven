@@ -521,7 +521,7 @@ describe('Desktop shared i18n dictionaries', () => {
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
       const dictionary = DESKTOP_I18N_DICTIONARIES[locale];
       const gatewayHelp = [
-        dictionary.gatewayJoin.preserveHelp,
+        dictionary.gatewayJoin.replaceHelp,
         dictionary.gatewayJoin.replaceHelp,
         dictionary.gatewayJoin.bindingProofRequired,
       ].join(' ').toLowerCase();

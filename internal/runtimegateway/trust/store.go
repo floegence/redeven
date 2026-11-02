@@ -59,7 +59,6 @@ type clientKey struct {
 	ClientPublicKey    string `json:"client_public_key"`
 	BindingAudience    string `json:"binding_audience"`
 	Access             bool   `json:"access"`
-	HostManaged        bool   `json:"host_managed,omitempty"`
 	ClientName         string `json:"client_name"`
 	RevokedAtUnixMS    int64  `json:"revoked_at_unix_ms,omitempty"`
 	PairedAtUnixMS     int64  `json:"paired_at_unix_ms"`
@@ -242,6 +241,10 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest, hostAdmin b
 	}
 	pairedAt := time.Now().UnixMilli()
 	previous, exists := s.state.Clients[req.ClientKeyID]
+	// Reauthorization uses a fresh key so old tickets cannot acquire a new grant.
+	if exists && (!previous.Access || previous.RevokedAtUnixMS != 0) {
+		return protocol.PairingCompleteResponse{}, errors.New("CLIENT_ACCESS_REVOKED")
+	}
 	if exists && previous.Access {
 		pairedAt = previous.PairedAtUnixMS
 	}
@@ -259,7 +262,7 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest, hostAdmin b
 	next := s.state
 	next.Clients = maps.Clone(next.Clients)
 	next.AccessCodes = maps.Clone(next.AccessCodes)
-	next.Clients[req.ClientKeyID] = clientKey{ClientKeyID: req.ClientKeyID, ClientPublicKey: challenge.ClientPublicKey, BindingAudience: req.BindingAudience, Access: true, HostManaged: challenge.HostAdmin, ClientName: challenge.ClientName, PairedAtUnixMS: pairedAt, LastVerifiedUnixMS: previous.LastVerifiedUnixMS}
+	next.Clients[req.ClientKeyID] = clientKey{ClientKeyID: req.ClientKeyID, ClientPublicKey: challenge.ClientPublicKey, BindingAudience: req.BindingAudience, Access: true, ClientName: challenge.ClientName, PairedAtUnixMS: pairedAt, LastVerifiedUnixMS: previous.LastVerifiedUnixMS}
 	if !challenge.HostAdmin {
 		code := next.AccessCodes[challenge.AccessCodeHash]
 		code.ClientKeyID = req.ClientKeyID
@@ -282,9 +285,6 @@ func (s *Store) ListClients() ([]protocol.GatewayClientRecord, error) {
 	}
 	result := make([]protocol.GatewayClientRecord, 0, len(state.Clients))
 	for _, client := range state.Clients {
-		if client.HostManaged {
-			continue
-		}
 		result = append(result, protocol.GatewayClientRecord{ClientKeyID: client.ClientKeyID, ClientName: client.ClientName, PairedAtUnixMS: client.PairedAtUnixMS, LastVerifiedUnixMS: client.LastVerifiedUnixMS, RevokedAtUnixMS: client.RevokedAtUnixMS})
 	}
 	sort.Slice(result, func(first, second int) bool { return result[first].PairedAtUnixMS > result[second].PairedAtUnixMS })
@@ -301,9 +301,6 @@ func (s *Store) RevokeClient(clientKeyID string) error {
 	if !ok {
 		return errors.New("client is unknown")
 	}
-	if client.HostManaged {
-		return errors.New("HOST_CONNECTION_MANAGED_ON_HOST")
-	}
 	if client.RevokedAtUnixMS != 0 {
 		return nil
 	}
@@ -315,7 +312,7 @@ func (s *Store) RevokeClient(clientKeyID string) error {
 	return s.saveStateLocked(next)
 }
 
-func (s *Store) RecordVerified(clientKeyID string, hostAdmin bool) error {
+func (s *Store) RecordVerified(clientKeyID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	client, ok := s.state.Clients[clientKeyID]
@@ -323,11 +320,10 @@ func (s *Store) RecordVerified(clientKeyID string, hostAdmin bool) error {
 		return errors.New("CLIENT_ACCESS_REVOKED")
 	}
 	now := time.Now().UnixMilli()
-	if now-client.LastVerifiedUnixMS < 60_000 && (!hostAdmin || client.HostManaged) {
+	if now-client.LastVerifiedUnixMS < 60_000 {
 		return nil
 	}
 	client.LastVerifiedUnixMS = now
-	client.HostManaged = client.HostManaged || hostAdmin
 	next := s.state
 	next.Clients = maps.Clone(next.Clients)
 	next.Clients[clientKeyID] = client
@@ -489,10 +485,14 @@ func (s *Store) loadState() (fileState, error) {
 			state.Clients[id] = client
 		}
 		state.SchemaVersion = 3
+	}
+	if state.SchemaVersion == 3 {
+		// Retire historical host classification without changing device access.
+		state.SchemaVersion = 4
 		if err := s.persistState(state); err != nil {
 			return fileState{}, err
 		}
-	} else if state.SchemaVersion != 3 {
+	} else if state.SchemaVersion != 4 {
 		return fileState{}, errors.New("unsupported Gateway trust schema")
 	}
 	if state.Clients == nil {
@@ -502,7 +502,7 @@ func (s *Store) loadState() (fileState, error) {
 }
 
 func (s *Store) saveStateLocked(state fileState) error {
-	state.SchemaVersion = 3
+	state.SchemaVersion = 4
 	if state.Clients == nil {
 		state.Clients = map[string]clientKey{}
 	}
@@ -531,7 +531,7 @@ func newFileState(_ string) (fileState, error) {
 	}
 	gatewayID = "gw_" + gatewayID
 	return fileState{
-		SchemaVersion: 3,
+		SchemaVersion: 4,
 		Gateway: gatewayIdentity{
 			GatewayID:   gatewayID,
 			DisplayName: "Redeven Gateway",

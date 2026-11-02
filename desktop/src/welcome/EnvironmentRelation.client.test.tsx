@@ -1,3 +1,4 @@
+import { gatewayAttachment, gatewaySnapshot } from '../testSupport/gatewayAttachments';
 import { runtimeConnectionFixture } from '../testSupport/runtimeConnectionFixture';
 import { runtimeGatewayAccessFixture } from '../testSupport/runtimeGatewayAccessFixture';
 import { runtimeGatewayBackgroundProbeFixture } from '../testSupport/runtimeGatewayBackgroundProbeFixture';
@@ -121,7 +122,7 @@ it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('k
   const h = await mount(f.snapshot());
   const perform = vi.fn(async (request: DesktopLauncherActionRequest) => request.kind === 'manage_runtime_gateway' && request.operation === 'preview'
     ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 } }
-    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    : { ok: true, gateway_membership: gatewaySnapshot() });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
   button(card, 'Actions').click(); await settle();
@@ -160,7 +161,7 @@ it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('k
 it('retains invitation focus across scheduled five-second production probes for thirty seconds', async () => {
   const f = await runtimeGatewayBackgroundProbeFixture('ssh');
   const h = await mount(f.snapshot());
-  const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+  const perform = vi.fn(async () => ({ ok: true, gateway_membership: gatewaySnapshot() }));
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
   button(card, 'Actions').click(); await settle(); button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
@@ -197,7 +198,7 @@ it.each([['status', false, false], ['preview', false, false], ['join', false, fa
   const h = await mount(f.snapshot());
   let complete!: (value: object) => void;
   const preview = { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 };
-  const resultFor = (operation: string) => operation === 'preview' ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: { joined: operation === 'join', phase: operation === 'join' ? 'joined' : 'not_joined' } };
+  const resultFor = (operation: string) => operation === 'preview' ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: gatewaySnapshot(operation==='join'?[gatewayAttachment({gateway_id:preview.gateway_id})]:[]) };
   const perform = vi.fn(async (request: DesktopLauncherActionRequest) => request.kind === 'manage_runtime_gateway'
     ? request.operation === operation ? new Promise<object>(done => { complete = done; }) : resultFor(request.operation) : { ok: false });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
@@ -241,7 +242,7 @@ it.each(['stopped', 'management_unavailable', 'update_required', 'failed'] as co
   const h = await mount(f.snapshot());
   vi.stubGlobal('redevenDesktopLauncher', { performAction: vi.fn(async (request: { operation: string }) => request.operation === 'preview'
     ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 } }
-    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }) });
+    : { ok: true, gateway_membership: gatewaySnapshot() }) });
   const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
   button(card, 'Actions').click(); await settle(); button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
   const dialog = document.querySelector('[role="dialog"]')!;
@@ -350,7 +351,7 @@ describe('linked environment owner interactions', () => {
   it.each([0, 1, 2])('enrolls only the original Runtime from access perspective %s', async perspective => {
     const fixture = runtimeConnectionFixture({ kind: 'ssh_environment' });
     const runtime = fixture.snapshot.environments.find(entry => entry.kind === 'ssh_environment')!;
-    const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    const perform = vi.fn(async () => ({ ok: true, gateway_membership: gatewaySnapshot() }));
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const h = await mount(fixture.snapshot);
     const card = document.querySelector(`[data-environment-group="${runtime.id}"]`)!;
@@ -370,7 +371,7 @@ describe('linked environment owner interactions', () => {
     const f = runtimeGatewayAccessFixture('ssh', operation === 'start' ? 'stopped' : operation === 'restart' ? 'control_missing' : 'update_required', 100);
     const ready = runtimeGatewayAccessFixture('ssh', 'ready', 200);
     const h = await mount(f.snapshot);
-    const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    const perform = vi.fn(async () => ({ ok: true, gateway_membership: gatewaySnapshot() }));
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     h.performAction.mockImplementation(async request => {
       if (request.kind === 'refresh_environment_runtime') return { ok: true, outcome: 'refreshed_environment_runtime' };
@@ -405,7 +406,7 @@ describe('linked environment owner interactions', () => {
   it('resumes a dismissed enrollment through its existing card action without adding Welcome content', async () => {
     const f = runtimeGatewayAccessFixture('ssh');
     await mount(f.snapshot);
-    const perform = vi.fn(async (_request: DesktopLauncherActionRequest) => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    const perform = vi.fn(async (_request: DesktopLauncherActionRequest) => ({ ok: true, gateway_membership: gatewaySnapshot() }));
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const page = document.querySelector('[data-desktop-page="environments"]')!;
     const content = [...page.children];
@@ -440,7 +441,7 @@ describe('linked environment owner interactions', () => {
     await mount(f.snapshot);
     const perform = vi.fn(async (request: DesktopLauncherActionRequest) => request.kind === 'manage_runtime_gateway' && request.operation === 'preview'
       ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 } }
-      : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+      : { ok: true, gateway_membership: gatewaySnapshot() });
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     button(document.querySelector(`[data-environment-group="${f.environment.id}"]`)!, 'Actions').click(); await settle();
     button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
@@ -530,7 +531,7 @@ describe('linked environment owner interactions', () => {
     const snapshot = { ...fixture.snapshot, gateway_sources: [{ ...gateway, endpoints: method === 'saved URL' ? undefined : gateway.endpoints }],
       environments: fixture.snapshot.environments.map(entry => entry.id === runtime.id ? runtime : entry),
     };
-    const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    const perform = vi.fn(async () => ({ ok: true, gateway_membership: gatewaySnapshot() }));
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const harness = await mount(snapshot);
     const owner = document.querySelector<HTMLElement>(`[data-owner-id="${runtime.id}"]`)!;
@@ -575,9 +576,7 @@ describe('linked environment owner interactions', () => {
       cloudDirectoryAccessPointOrigin: 'https://rotated-region.example.invalid' });
     const snapshot = fixture.snapshot;
     const runtime = snapshot.environments.find(entry => entry.kind === 'local_environment')!;
-    const perform = vi.fn(async (_request: DesktopLauncherActionRequest) => ({ ok: true, gateway_membership: {
-      joined: true, phase: 'joined', memberships: fixture.memberships.map(member => ({ ...member, joined: true })),
-    } }));
+    const perform = vi.fn(async (_request: DesktopLauncherActionRequest) => ({ ok: true, gateway_membership: gatewaySnapshot(fixture.memberships.map(member => gatewayAttachment({...member,endpoints:[]}))) }));
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const h = await mount(snapshot);
     const card = document.querySelector(`[data-environment-group="${runtime.id}"]`)!;

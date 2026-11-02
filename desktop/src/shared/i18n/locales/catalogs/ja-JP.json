@@ -3693,23 +3693,16 @@
     "currentStatus": "現在の状態",
     "connectTitle": "アクセスを追加",
     "aboutConnection": "Gateway とは？",
-    "choiceDetails": "選択肢について",
     "impactDetails": "接続の詳細",
-    "existingEnvironmentHelp": "このランタイムはすでに環境に関連付けられています。既存の環境を保持するか、別の環境を作成するか選択してください。",
     "startTitle": "先にランタイムを起動",
     "approve": "Gateway アクセスを有効化",
     "pauseDetail": "このダイアログを閉じても保存済みの操作は続行します。再度開くと状態を確認できます。Gateway の変更には明示的な操作が必要で、セッションが切断される場合があります。",
     "invalid": "このコードで Gateway を認証できませんでした。管理者にアドレスとコードを確認して再試行してください。",
     "failed": "操作を完了できませんでした。Gateway 接続を確認して再試行してください。保存済みの同意と入力は保持されます。",
-    "existingEnvironment": "既存の Cloud 環境",
-    "preserve": "この環境を保持",
-    "createNew": "新しい環境を作成",
-    "preserveHelp": "この環境を保持するには Cloud での承認が必要です。現在の接続が中断される場合があります。",
-    "newHelp": "現在の Cloud 環境は残ります。新しい環境を承認する前に、現在の環境を Cloud から切断してください。",
     "rejoin": "Gateway アクセスが変更されました。管理者から新しいコードを入手して再検証してください。",
     "replace": "Gateway を変更",
     "confirmReplace": "確認して変更",
-    "replaceHelp": "選択した Gateway 接続を置き換え、その接続を経由する通信と選択済みのネットワーク出口を中断します。ランタイムのデータと Cloud の所属は変更されません。",
+    "replaceHelp": "唯一のペアリング済み Gateway を置き換え、選択中のネットワーク出口を含む通信を中断します。複数の Gateway がある場合は、新しい接続を追加して確認し、必要に応じて Cloud ルートを明示的に切り替えてから、古い接続を削除してください。",
     "notNow": "後で設定",
     "joinGateway": "設定後に Gateway アクセスを追加",
     "setupHelp": "保存後にランタイムを起動し、Gateway アドレスと招待コードを検証してください。",
@@ -3772,13 +3765,17 @@
   "gatewayMembership": {
     "not_joined": "未接続",
     "joining": "Gateway に参加中",
-    "gateway_offline": "参加済み · Gateway オフライン",
     "joined": "参加済み · 接続済み",
     "reauthorization_required": "再承認が必要",
-    "removal_pending": "離脱中 · 失効確認待ち"
+    "removal_pending": "離脱中 · 失効確認待ち",
+    "disconnected": "参加済み · 未接続",
+    "connecting": "参加済み · 接続中",
+    "connection_failed": "接続に失敗しました",
+    "unknown": "接続状態は未確認",
+    "runtime_stopped": "ランタイムは停止中"
   },
   "gatewayMembers": {
-    "reevaluate": "アクセスを再確認",
+    "reevaluate": "送信ポリシーを再評価",
     "title": "Gateway アクセス",
     "permissions": "Gateway アクセス",
     "grantAccess": "アクセスを許可",
@@ -3840,7 +3837,10 @@
     "operationReviewed": "現在の状態を確認しました。新しい操作を許可する",
     "egressPermission": "出口へのアクセス",
     "hookEgress": "ネットワーク出口",
-    "egressImpact": "変更はこのプロキシ経由の通信にのみ適用されます。独立した Gateway アクセスは引き続き利用できます。"
+    "egressImpact": "変更はこのプロキシ経由の通信にのみ適用されます。独立した Gateway アクセスは引き続き利用できます。",
+    "egressAllowed": "送信ポリシーでアクセスを許可",
+    "egressDenied": "送信ポリシーでアクセスを拒否",
+    "egressPolicyHelp": "ポリシーによる許可は、宛先への到達確認を意味しません。"
   },
   "gatewayClients": {
     "connectionSettings": "接続設定",
@@ -3853,7 +3853,7 @@
     "codeExpires": "有効期限まで {time}",
     "codeExpired": "期限切れです。新しいコードを作成してください。",
     "authorizedClients": "承認済みクライアント",
-    "emptyClients": "アクセスコードで承認されたクライアントはありません。",
+    "emptyClients": "承認されたクライアントデバイスはありません。",
     "unnamedClient": "名前のないクライアント",
     "revoked": "アクセス取り消し済み",
     "revoke": "アクセスを取り消す",
@@ -3861,7 +3861,9 @@
     "revokeHelp": "このクライアントの Gateway アクセスを閉じます。ランタイムの登録、他のクライアント、ホスト権限は変更されません。",
     "authorizedAt": "承認日時",
     "lastSeen": "最終アクセス",
-    "codeHelpTitle": "アクセスコードの使い方"
+    "codeHelpTitle": "アクセスコードの使い方",
+    "currentDevice": "このデバイス",
+    "reauthorize": "このデバイスを再承認"
   },
   "gatewayDiscovery": {
     "savedGateway": "保存済み Gateway",

@@ -15,10 +15,10 @@ function mockGatewayActions() {
  window.gatewayRequests=[];
  window.redevenDesktopLauncher={performAction:async request=>{
   window.gatewayRequests.push(request);
-  if(request.operation==='status')return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{joined:false,phase:'not_joined'}};
+  if(request.operation==='status')return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{attachments:[],counts:{total:0,joined:0,connected:0,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()}};
   if(request.operation==='preview')return {ok:true,outcome:'gateway_membership_updated',gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'gateway',gateway_name:'Office Gateway',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+600000}};
   if(request.kind==='update_gateway_network_settings')return {ok:true,outcome:'gateway_members_updated',gateway_network_settings:{settings:request.settings,restart_required:true}};
-  return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{joined:true,phase:'joined'}};
+  return {ok:true,outcome:'gateway_membership_updated',gateway_membership:{attachments:[{gateway_id:'gateway',gateway_name:'Office Gateway',attachment_id:'attachment',attachment_state:'joined',connection_state:'connected',phase:'joined',route_selected:false,endpoints:[]}],counts:{total:1,joined:1,connected:1,joining:0,removing:0},runtime_running:true,observed_at_unix_ms:Date.now()}};
  }};
 }
 try {

@@ -173,12 +173,21 @@ describe('Gateway member management', () => {
     expect(document.querySelector('[data-endpoint-id="replacement_endpoint"]')).toBeTruthy();
     expect(document.querySelector('.redeven-gateway-endpoint-shell--removing')).toBeNull();
   });
+  it.each([true,false])('requires network authority for reevaluation: %s',async manageNetwork=>{
+    const perform=vi.fn().mockResolvedValue({ok:true});
+    mount(perform,undefined,{...gateway,permissions:{access:true,manage_network:manageNetwork,manage_attachments:!manageNetwork}});await settle();
+    const action=button(i18n.t('gatewayMembers.reevaluate'));
+    expect(action.disabled).toBe(!manageNetwork);
+    action.click();await settle();
+    expect(perform).toHaveBeenCalledTimes(manageNetwork?1:0);
+    expect(document.body.textContent).toContain(i18n.t(memberFixture.effective_egress_allowed?'gatewayMembers.egressAllowed':'gatewayMembers.egressDenied'));
+  });
   it('reevaluates the selected member without applying an unsaved policy edit', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated' });
     mount(perform); await settle();
     await select(document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!, 'allow');
     button(i18n.t('gatewayMembers.reevaluate')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', connection_id: gateway.connection_id,
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_egress', connection_id: gateway.connection_id,
       attachment_id: memberFixture.attachment_id, attachment_version: memberFixture.attachment_version });
     expect(document.querySelector('li [data-floe-dropdown-trigger]')?.textContent).toContain(i18n.t('gatewayMembers.allow'));
   });

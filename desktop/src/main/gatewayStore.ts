@@ -503,6 +503,7 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
   const connectionKind = record.connection.kind as DesktopGatewayConnectionKind;
   return {
     identity_fingerprint: record.trust_profile?.gateway_public_key_fingerprint,
+    client_key_id: record.trust_profile?.paired_client_key_id,
     connection_id: record.connection_id,
     display_name: record.display_name,
     local_enabled: record.local_enabled,

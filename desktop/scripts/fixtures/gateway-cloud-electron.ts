@@ -33,7 +33,7 @@ async function run() {
         const preview = await previewRuntimeGateway(bridge.runtime_control!, { address: action.address, code: action.code, purpose: action.purpose });
         return { ok: true, gateway_preview: preview };
       }
-      const result = await manageRuntimeGateway(bridge.runtime_control!, action.operation, action.preview_id, action.environment_choice);
+      const result = await manageRuntimeGateway(bridge.runtime_control!, action.operation, action.preview_id, action.gateway_id, action.route_impact_acknowledged);
       return { ok: true, gateway_membership: result };
     } catch { return { ok: false, code: 'GATEWAY_JOIN_FAILED' }; }
   });
