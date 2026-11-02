@@ -63,7 +63,7 @@ export const FlowerActivityRows: Component<{
                     copiedLabel={props.copy.codeCopied}
                     copyErrorLabel={props.copy.toolActivity.copyFailed}
                   />}>
-                    <FlowerMarkdownBlock content={row().content} streaming={false} copyCodeLabel={props.copy.toolActivity.copy} codeCopiedLabel={props.copy.codeCopied} class="flower-activity-structured-row-markdown" />
+                    <FlowerMarkdownBlock diagramLabels={props.copy.diagram} content={row().content} streaming={false} copyCodeLabel={props.copy.toolActivity.copy} codeCopiedLabel={props.copy.codeCopied} class="flower-activity-structured-row-markdown" />
                   </Show>
                 </Show>
                 </>}>{render => render()()}</Show>

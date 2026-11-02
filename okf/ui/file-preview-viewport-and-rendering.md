@@ -37,7 +37,7 @@ Only original-author releases: no forks, vendoring, patches, model rewrites or s
 [HTML preview](file-preview-html.md) owns page-first opening, explicit editing, bounds/isolation and rejection of incomplete HTML.
 
 ## Markdown enhancements
-Mermaid skips diagramless work, caches themes and fences stale results. Contents starts closed in published right-drawer Dialog, preserving width/nodes/scroll; headings scroll then close it. File changes reset it; headingless files disable it. Main preview keeps its sidebar.
+[Markdown diagrams](markdown-diagrams.md) use the published Floe/Pele renderer with CSS themes and identity-fenced cleanup. Contents starts closed in published right-drawer Dialog, preserving width/nodes/scroll; headings scroll then close it. File changes reset it; headingless files disable it. Main preview keeps its sidebar.
 
 Floe semantic roles: headings/links interaction/info, lower headings/quotes tip, emphasis note, dedicated code ink; dark headings retain hue/lightness floor, tables/metadata subtle tints, GFM alerts semantic roles. Text/inset titles require 4.5:1 across presets/materials/floating windows. Keep underline/focus/readable selection/system forced colors. Theme changes preserve geometry/DOM/selection/focus/scroll.
 

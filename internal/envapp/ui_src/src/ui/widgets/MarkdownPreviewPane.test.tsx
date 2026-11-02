@@ -10,12 +10,6 @@ import { MARKDOWN_PREVIEW_TEXT_SCALE_STORAGE_KEY } from '../services/markdownPre
 import { readUIStorageItem, removeUIStorageItem } from '../services/uiStorage';
 
 vi.mock('../file-markdown/mermaidPlugin', () => ({
-  resolveMermaidThemeContext: vi.fn(() => ({
-    key: 'classic-light|light',
-    mode: 'light',
-    preset: 'classic-light',
-    variables: {},
-  })),
   runMermaid: vi.fn().mockResolvedValue(undefined),
 }));
 

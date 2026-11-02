@@ -1,3 +1,4 @@
+import type { DiagramLabels } from '@floegence/floe-webapp-core/diagrams';
 import { lazy, Suspense, createEffect, createSignal, onCleanup, Show, type Component } from 'solid-js';
 import { SandboxedHtmlFrame } from '@floegence/floe-webapp-core/html-preview';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
@@ -13,7 +14,7 @@ export type FlowerTaskFilePreviewSource = FlowerAttachmentPreviewSource & { path
 
 /** The child Dialog inherits the host layer and owns focus/Escape above the retained list. */
 export function FlowerTaskFilePreview(props: {
-  source: FlowerTaskFilePreviewSource; copy: TaskFilesCopy; onClose: () => void; downloading: boolean; actionError?: string;
+  source: FlowerTaskFilePreviewSource; copy: TaskFilesCopy; diagramLabels?: DiagramLabels; onClose: () => void; downloading: boolean; actionError?: string;
   renderContent?: Component<FlowerTaskFilePreviewContentProps>;
 }) {
   const [blob, setBlob] = createSignal<Blob>();
@@ -50,7 +51,7 @@ export function FlowerTaskFilePreview(props: {
               <Show when={mime().startsWith('text/')} fallback={<div class="flower-task-preview-state">{props.copy.unsupported}</div>}>
                 <Show when={mime().split(';')[0] === 'text/html'} fallback={
                   <Show when={mime().split(';')[0] === 'text/markdown'} fallback={<pre class="flower-attachment-preview-text">{text()}</pre>}>
-                    <div class="flower-task-preview-markdown" data-floe-scroll-viewport><FlowerMarkdownBlock content={text()} copyCodeLabel={props.copy.copyCode} codeCopiedLabel={props.copy.copied} /></div>
+                    <div class="flower-task-preview-markdown" data-floe-scroll-viewport><FlowerMarkdownBlock diagramLabels={props.diagramLabels} content={text()} copyCodeLabel={props.copy.copyCode} codeCopiedLabel={props.copy.copied} /></div>
                   </Show>
                 }><SandboxedHtmlFrame class="flower-task-preview-html" html={text()} title={props.source.name}
                   labels={{ linkUnavailable: props.copy.unavailable, anchorUnavailable: props.copy.unavailable }} /></Show>

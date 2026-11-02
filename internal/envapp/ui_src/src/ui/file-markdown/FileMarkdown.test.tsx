@@ -214,7 +214,7 @@ describe('FileMarkdown', () => {
     }
   });
 
-  it('re-renders diagrams and code blocks when the app theme preset changes', async () => {
+  it('retains diagrams while refreshing code colors when the app theme preset changes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -234,9 +234,8 @@ describe('FileMarkdown', () => {
       await flushAsync();
 
       expect(postProcessMock).toHaveBeenCalledTimes(2);
-      expect(runMermaidMock).toHaveBeenCalledTimes(2);
-      expect(shouldContinueForRun(0)?.()).toBe(false);
-      expect(shouldContinueForRun(1)?.()).toBe(true);
+      expect(runMermaidMock).toHaveBeenCalledTimes(1);
+      expect(shouldContinueForRun(0)?.()).toBe(true);
     } finally {
       dispose();
     }

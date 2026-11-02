@@ -335,13 +335,6 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
       && /terminal(?:Background|Foreground)/u.test(lineSource),
   ),
   exception(
-    'internal/envapp/ui_src/src/ui/file-markdown/mermaidPlugin.ts',
-    'diagram',
-    'Mermaid needs deterministic light and dark fallbacks before computed theme tokens are available.',
-    ({ value, lineSource }) => ['#ffffff', '#171b22', '#1f2937', '#f3f4f6'].includes(value.toLowerCase())
-      && /readSemanticColor\(style/u.test(lineSource),
-  ),
-  exception(
     'internal/envapp/ui_src/src/ui/widgets/GitCommitGraph.tsx',
     'diagram',
     'Git graph lanes use a stable categorical palette to preserve lane identity.',

@@ -1055,6 +1055,22 @@
         "loading": "正在加载…",
         "expand": "查看完整内容",
         "failed": "无法加载内容，请重试。"
+      },
+      "diagram": {
+        "diagram": "图表",
+        "loading": "正在渲染图表…",
+        "unavailable": "图表不可用",
+        "retry": "重试",
+        "source": "源码",
+        "preview": "预览",
+        "copy": "复制源码",
+        "copied": "已复制",
+        "copyFailed": "复制失败",
+        "expand": "放大查看图表",
+        "close": "关闭",
+        "zoomIn": "放大",
+        "zoomOut": "缩小",
+        "fit": "适应窗口"
       }
     },
     "threadList": {

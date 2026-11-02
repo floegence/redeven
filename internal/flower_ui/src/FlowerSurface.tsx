@@ -11201,7 +11201,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   when={fetch().format === 'markdown'}
                   fallback={<pre>{preview()}</pre>}
                 >
-                  <FlowerMarkdownBlock
+                  <FlowerMarkdownBlock diagramLabels={copy().chat.diagram}
                     content={preview()}
                     streaming={false}
                     copyCodeLabel={copy().chat.copyCode}
@@ -12034,7 +12034,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         when={markdown()}
         fallback={<><span class="flower-message-plain-text">{block().content}</span><AnswerFooter /></>}
       >
-        <FlowerMarkdownBlock
+        <FlowerMarkdownBlock diagramLabels={copy().chat.diagram}
           content={block().content}
           textSource={message().text_source}
           footer={assistantCopyLayout() ? <AnswerFooter /> : undefined}
@@ -12633,7 +12633,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={content().block_type === 'markdown'}
               fallback={<span class="flower-message-plain-text">{content().content}</span>}
             >
-              <FlowerMarkdownBlock
+              <FlowerMarkdownBlock diagramLabels={copy().chat.diagram}
                 content={content().content}
                 streaming={false}
                 copyCodeLabel={copy().chat.copyCode}
@@ -14800,7 +14800,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       </div>
       </Show>
-      <FlowerTaskFiles onSource={props.adapter.loadHistory ? itemID => void showTaskMaterialSource(itemID) : undefined} open={taskFilesOpen()} onOpenChange={setTaskFilesOpen} threadID={selectedThreadID()} adapter={props.adapter} copy={copy().taskFiles}
+      <FlowerTaskFiles diagramLabels={copy().chat.diagram} onSource={props.adapter.loadHistory ? itemID => void showTaskMaterialSource(itemID) : undefined} open={taskFilesOpen()} onOpenChange={setTaskFilesOpen} threadID={selectedThreadID()} adapter={props.adapter} copy={copy().taskFiles}
         renderPreviewContent={props.renderTaskFilePreviewContent}
         onOpenFolder={!props.adapter.openLinkedDirectoryBrowser && props.adapter.listWorkingDirectoryEntries ? path => openQueuedPathPreview(
           { kind: 'directory', label: path, path }, { thread_id: selectedThreadID(), message_id: '' }) : undefined} />

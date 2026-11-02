@@ -797,6 +797,22 @@
       "loading": "Loading…",
       "expand": "Show full content",
       "failed": "Could not load this content. Try again."
+    },
+    "diagram": {
+      "diagram": "Diagram",
+      "loading": "Rendering diagram…",
+      "unavailable": "Diagram unavailable",
+      "retry": "Retry",
+      "source": "Source",
+      "preview": "Preview",
+      "copy": "Copy source",
+      "copied": "Copied",
+      "copyFailed": "Could not copy",
+      "expand": "Expand diagram",
+      "close": "Close",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fit": "Fit"
     }
   },
   "threadList": {

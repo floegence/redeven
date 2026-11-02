@@ -1055,6 +1055,22 @@
         "loading": "Wird geladen…",
         "expand": "Vollständigen Inhalt anzeigen",
         "failed": "Der Inhalt konnte nicht geladen werden. Versuchen Sie es erneut."
+      },
+      "diagram": {
+        "diagram": "Diagramm",
+        "loading": "Diagramm wird gerendert…",
+        "unavailable": "Diagramm nicht verfügbar",
+        "retry": "Erneut versuchen",
+        "source": "Quelltext",
+        "preview": "Vorschau",
+        "copy": "Quelltext kopieren",
+        "copied": "Kopiert",
+        "copyFailed": "Kopieren fehlgeschlagen",
+        "expand": "Diagramm vergrößern",
+        "close": "Schließen",
+        "zoomIn": "Vergrößern",
+        "zoomOut": "Verkleinern",
+        "fit": "Einpassen"
       }
     },
     "threadList": {

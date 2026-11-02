@@ -5,7 +5,6 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileMarkdown } from './FileMarkdown';
-import { resolveMermaidThemeContext } from './mermaidPlugin';
 
 const RICH_MARKDOWN = [
   '# Markdown rendering',
@@ -144,37 +143,6 @@ describe('FileMarkdown rich rendering', () => {
     }
   });
 
-  it('projects CSS Color 4 theme tokens to Mermaid-compatible sRGB colors', () => {
-    applyTheme('classic-dark', 'dark');
-    const readback = vi.spyOn(CanvasRenderingContext2D.prototype, 'getImageData');
-
-    const sourceColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--redeven-categorical-graph-6')
-      .trim();
-    const theme = resolveMermaidThemeContext();
-
-    expect(sourceColor).toMatch(/^oklch\(/u);
-    expect(theme.mode).toBe('dark');
-    expect(theme.preset).toBe('classic-dark');
-    expect(Object.values(theme.variables)).not.toHaveLength(0);
-    for (const color of Object.values(theme.variables)) {
-      expect(color).toMatch(/^#[\da-f]{6}(?:[\da-f]{2})?$/u);
-    }
-    expect(readback).toHaveBeenCalled();
-    for (const context of readback.mock.contexts) {
-      expect((context as CanvasRenderingContext2D).getContextAttributes().willReadFrequently).toBe(true);
-    }
-  });
-
-  it('rejects invalid theme colors instead of forwarding or substituting them', () => {
-    applyTheme('classic-dark', 'dark');
-    document.documentElement.style.setProperty('--redeven-categorical-graph-8', 'url("https://example.invalid/color")');
-
-    expect(() => resolveMermaidThemeContext()).toThrow(
-      'Mermaid theme token --redeven-categorical-graph-8 is not a valid browser color.',
-    );
-  });
-
   it('keeps untrusted KaTeX and Markdown content outside executable DOM', () => {
     applyTheme('classic-dark', 'dark');
     const host = document.createElement('div');
@@ -205,10 +173,11 @@ describe('FileMarkdown rich rendering', () => {
         expect(host.querySelector('.mermaid svg')).toBeTruthy();
       }, { timeout: 10_000 });
 
-      expect(host.querySelector('.fm-mermaid-error')).toBeNull();
+      expect(host.querySelector('.floe-diagram-error')).toBeNull();
       expect(host.querySelector('.fm-preview-warning')).toBeNull();
-      const darkSvg = host.querySelector('.mermaid svg')?.outerHTML;
-      expect(darkSvg).toContain('User types');
+      const darkSvg = host.querySelector('.mermaid .floe-diagram-svg > svg')!;
+      const darkColor = getComputedStyle(darkSvg).getPropertyValue('--pele-fg');
+      expect(darkSvg.outerHTML).toContain('User types');
 
       const mathml = Array.from(host.querySelectorAll<HTMLElement>('.katex-mathml'));
       const html = Array.from(host.querySelectorAll<HTMLElement>('.katex-html'));
@@ -228,11 +197,11 @@ describe('FileMarkdown rich rendering', () => {
 
       applyTheme('classic-light', 'light');
       await vi.waitFor(() => {
-        const lightSvg = host.querySelector('.mermaid svg')?.outerHTML;
-        expect(lightSvg).toBeTruthy();
-        expect(lightSvg).not.toBe(darkSvg);
+        const lightSvg = host.querySelector('.mermaid .floe-diagram-svg > svg')!;
+        expect(lightSvg).toBe(darkSvg);
+        expect(getComputedStyle(lightSvg).getPropertyValue('--pele-fg')).not.toBe(darkColor);
       }, { timeout: 10_000 });
-      expect(host.querySelector('.fm-mermaid-error')).toBeNull();
+      expect(host.querySelector('.floe-diagram-error')).toBeNull();
       expect(host.querySelector('.fm-preview-warning')).toBeNull();
     } finally {
       dispose();

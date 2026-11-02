@@ -1,3 +1,4 @@
+import { isClosedMarkdownFence } from '@floegence/floe-webapp-core/markdown';
 import type { RendererObject, Token, Tokens } from 'marked';
 import { markdownMediaKind, markdownMediaPlaceholder } from '@floegence/floe-webapp-core/chat-media';
 
@@ -105,7 +106,7 @@ export function isFlowerHTMLPreviewFence(token: Token): token is Tokens.Code {
   return /^\uFEFF?\s*(?:<!doctype\s+html(?:\s+[^>]*)?\s*>\s*)?<html(?:\s|>)/i.test(token.text);
 }
 
-export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
+export function createFlowerMarkdownRenderer(options: { diagrams?: boolean; media?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
   return {
     text(token: Tokens.Text | Tokens.Escape) {
       if ('tokens' in token && token.tokens) return this.parser.parseInline(token.tokens);
@@ -134,6 +135,9 @@ export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceF
       if (sources) return sources;
       if (options.media && isFlowerHTMLPreviewFence(token)) {
         return markdownMediaPlaceholder({ kind: 'html', html: token.text, title: '' });
+      }
+      if (options.diagrams && token.lang?.trim().toLowerCase() === 'mermaid' && isClosedMarkdownFence(token.raw)) {
+        return '<div data-flower-diagram-source="' + escapeFlowerMarkdownHtml(token.text) + '"></div>';
       }
       const langClass = normalizeLanguageClass(token.lang);
       const language = String(token.lang ?? '').trim().split(/\s+/, 1)[0].toLowerCase();

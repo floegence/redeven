@@ -1,7 +1,8 @@
-import { batch, createEffect, createMemo, createSignal, createRoot, onCleanup, Show, untrack } from 'solid-js';
+import { Diagram, type DiagramLabels } from '@floegence/floe-webapp-core/diagrams';
+import { batch, createEffect, createMemo, createSignal, createRoot, getOwner, onCleanup, Show, untrack } from 'solid-js';
 import type { Component, JSX } from 'solid-js';
 import { render } from 'solid-js/web';
-import { createMarkdownParser } from '@floegence/floe-webapp-core/markdown';
+import { createMarkdownParser, isClosedMarkdownFence } from '@floegence/floe-webapp-core/markdown';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { enhanceCodeBlock } from '@floegence/floe-webapp-core/code-highlight';
@@ -23,6 +24,7 @@ import { markdownMediaEnUS } from './mediaCopy';
 
 export interface FlowerMarkdownBlockProps {
   content: string;
+  diagramLabels?: DiagramLabels;
   textSource?: FlowerMessageTextSource;
   footer?: JSX.Element;
   sources?: readonly FlowerCitationSource[];
@@ -41,6 +43,7 @@ export interface FlowerMarkdownBlockProps {
 }
 
 export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) => {
+  const owner = getOwner();
   const marked = createMarkdownParser({
     gfm: true,
     breaks: false,
@@ -48,6 +51,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   });
   marked.use({ renderer: createFlowerMarkdownRenderer({
     media: props.mediaEnabled === true,
+    diagrams: !!props.diagramLabels,
     sourceFence: token => {
       if (!props.citationLabels) return null;
       const sources = parseFlowerSourceFence(token);
@@ -170,6 +174,10 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     const cleanups: (() => void)[] = [];
     const finishers: (() => void)[] = [];
     let updatePreview: ((next: import('marked').Token, streaming: boolean) => boolean) | undefined;
+    for (const node of element.querySelectorAll<HTMLElement>('[data-flower-diagram-source]')) {
+      const source = node.dataset.flowerDiagramSource ?? '';
+      cleanups.push(render(() => <Diagram source={source} labels={props.diagramLabels!} onCopy={writeTextToClipboard} />, node, undefined, { owner }));
+    }
     const buttons = decorateFlowerMarkdownCodeBlocks(element, copyLabels(), mountCopyIcons);
     for (const node of element.querySelectorAll<HTMLElement>('.flower-chat-source-list')) cleanups.push(enhanceFlowerSourceIcons(node, props.resolveSourceIcon));
     for (const code of element.querySelectorAll<HTMLElement>('pre.flower-chat-md-code-block > code')) {
@@ -207,14 +215,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     return { dispose, update: (next: import('marked').Token, streaming: boolean) => updatePreview?.(next, streaming) ?? false,
       finish: () => { for (const finish of finishers.splice(0)) finish(); } };
   });
-  const isClosedFence = (raw: string) => {
-    const end = raw.trimEnd();
-    const firstLine = end.indexOf('\n');
-    if (firstLine < 0) return false;
-    const opening = end.slice(0, firstLine).match(/^[ \t]{0,3}(\x60{3,}|~{3,})/)?.[1];
-    const closing = end.slice(end.lastIndexOf('\n') + 1).match(/^[ \t]{0,3}(\x60+|~+)[ \t]*$/)?.[1];
-    return !!opening && !!closing && opening[0] === closing[0] && closing.length >= opening.length;
-  };
+  const isClosedFence = isClosedMarkdownFence;
   let dom: ReturnType<typeof createIncrementalMarkdownDOM> | undefined;
   let model: ReturnType<typeof createMarkdownRenderModel> | undefined;
   let priorRenderingKey: string | undefined;

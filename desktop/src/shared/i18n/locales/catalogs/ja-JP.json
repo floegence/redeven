@@ -1055,6 +1055,22 @@
         "loading": "読み込み中…",
         "expand": "全文を表示",
         "failed": "内容を読み込めませんでした。再試行してください。"
+      },
+      "diagram": {
+        "diagram": "図表",
+        "loading": "図表を描画中…",
+        "unavailable": "図表を表示できません",
+        "retry": "再試行",
+        "source": "ソース",
+        "preview": "プレビュー",
+        "copy": "ソースをコピー",
+        "copied": "コピーしました",
+        "copyFailed": "コピーできませんでした",
+        "expand": "図表を拡大表示",
+        "close": "閉じる",
+        "zoomIn": "拡大",
+        "zoomOut": "縮小",
+        "fit": "全体を表示"
       }
     },
     "threadList": {

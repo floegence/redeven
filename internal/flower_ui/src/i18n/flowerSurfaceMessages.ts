@@ -1,3 +1,4 @@
+import { diagramEnUS } from '../chat/markdown/diagramCopy';
 import { taskFilesEnUS } from '../taskFilesCopy';
 import { markdownMediaEnUS } from '../chat/markdown/mediaCopy';
 import { toolActivityEnUS } from '../toolActivityCopy';
@@ -56,6 +57,7 @@ export const flowerSurfaceEnUS = {
     history: {"label": "Conversation history", "older": "Earlier messages", "newer": "Newer messages", "latest": "Back to latest", "loading": "Loading…", "expand": "Show full content", "failed": "Could not load this content. Try again."},
     inspectAndContinue: "Inspect and continue",
     inspectAndContinuePrompt: "The previous turn stopped with unconfirmed effects. First inspect current state and existing artifacts using read-only tools, then continue the remaining task from the evidence. Do not blindly repeat earlier actions.",
+    diagram: diagramEnUS,
     media: markdownMediaEnUS,
     restoredInputTitle: "Input preserved after restore",
     restoredInputDescription: "This input will not run automatically. Copy it into a new task to run it again.",

@@ -16,8 +16,8 @@ export default defineConfig({
     alias: [
       { find: /^docx-preview$/, replacement: path.resolve(desktopDir, 'node_modules/docx-preview/dist/docx-preview.mjs') },
       { find: /^@silurus\/ooxml\/xlsx$/, replacement: path.resolve(desktopDir, 'node_modules/@silurus/ooxml/dist/xlsx.mjs') },
-      { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.resolve(desktopDir, 'node_modules/@floegence/floe-webapp-core/dist/graph.css') },
-      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|html-preview|icons|layout|loading|markdown|pptx|ui)$/, replacement: path.resolve(desktopDir, 'node_modules', '@floegence', 'floe-webapp-core', 'dist', '$1.js') },
+      { find: /^@floegence\/floe-webapp-core\/(graph|diagrams)\.css$/, replacement: path.resolve(desktopDir, 'node_modules/@floegence/floe-webapp-core/dist/$1.css') },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|diagrams|file-browser|graph|html-preview|icons|layout|loading|markdown|pptx|ui)$/, replacement: path.resolve(desktopDir, 'node_modules', '@floegence', 'floe-webapp-core', 'dist', '$1.js') },
       { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(desktopDir, 'node_modules', '@floegence', 'floe-webapp-core', 'dist', 'index.js') },
       { find: /^lucide-solid$/, replacement: path.resolve(desktopDir, 'node_modules/lucide-solid/dist/esm/lucide-solid.mjs') },
       { find: /^marked$/, replacement: path.resolve(desktopDir, 'node_modules', 'marked', 'lib', 'marked.esm.js') },

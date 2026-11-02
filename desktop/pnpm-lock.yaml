@@ -18,7 +18,6 @@ overrides:
   js-yaml: ^4.3.2
   lodash: ^4.18.1
   lodash-es: ^4.18.1
-  mermaid: ^11.17.2
   minimatch: ^10.2.5
   nanoid: ^3.3.18
   picomatch: ^4.0.4

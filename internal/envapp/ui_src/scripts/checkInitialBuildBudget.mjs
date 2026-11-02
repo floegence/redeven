@@ -27,6 +27,7 @@ const forbiddenInitialAssets = [
   'markdown',
   'katex',
   'mermaid',
+  'pele',
   'monaco',
   'excel',
   'pdf',

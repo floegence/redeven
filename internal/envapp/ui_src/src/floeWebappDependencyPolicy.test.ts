@@ -95,6 +95,17 @@ function expectedTarballUrl(packageName: string, version: string): string {
 }
 
 describe('published npm dependency policy', () => {
+  it('consumes the original published Pele engine through the shared diagram API', () => {
+    const dependencies = readDependencySpecifiers();
+    expect(dependencies.pele).toBe('1.13.0');
+    expect(dependencies.mermaid).toBeUndefined();
+    expect(readInstalledFloeWebappCoreDeclaration('dist/diagrams.d.ts')).toContain('renderDiagram');
+    expect(readText('src/ui/file-markdown/mermaidPlugin.tsx')).toContain("@floegence/floe-webapp-core/diagrams");
+    for (const lock of ['package-lock.json', 'pnpm-lock.yaml']) {
+      expect(readText(lock)).not.toMatch(/mermaid(?:@|":)/);
+    }
+  });
+
   it('keeps generic Chat UI upstream instead of restoring a local fork', () => {
     expect(fs.existsSync(path.join(resolvePackageRoot(), 'src/ui/chat'))).toBe(false);
     expect(readText('src/ui/flower-feature.css')).not.toContain("@import './chat/chat.css'");

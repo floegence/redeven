@@ -100,7 +100,7 @@ export default mergeConfig(viteConfig, defineConfig({
       'katex',
       'marked',
       'marked-footnote',
-      'mermaid',
+      'pele/lazy',
       'semver/functions/compare.js',
       'semver/functions/valid.js',
       'shiki',

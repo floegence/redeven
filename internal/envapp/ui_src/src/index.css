@@ -1,6 +1,7 @@
 @import '@fontsource-variable/inter';
 @import 'tailwindcss';
 @import '@floegence/floe-webapp-core/tailwind';
+@import '@floegence/floe-webapp-core/diagrams.css';
 @import '@floegence/floe-webapp-core/window-status.css';
 @import './styles/redeven.css';
 @import './styles/mobile-navigation.css';

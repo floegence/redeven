@@ -1055,6 +1055,22 @@
         "loading": "載入中…",
         "expand": "查看完整內容",
         "failed": "無法載入內容，請重試。"
+      },
+      "diagram": {
+        "diagram": "圖表",
+        "loading": "正在轉譯圖表…",
+        "unavailable": "圖表無法顯示",
+        "retry": "重試",
+        "source": "原始碼",
+        "preview": "預覽",
+        "copy": "複製原始碼",
+        "copied": "已複製",
+        "copyFailed": "複製失敗",
+        "expand": "放大檢視圖表",
+        "close": "關閉",
+        "zoomIn": "放大",
+        "zoomOut": "縮小",
+        "fit": "符合視窗"
       }
     },
     "threadList": {

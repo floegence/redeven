@@ -398,44 +398,16 @@
 .file-markdown-body .fm-frontmatter-bool { color: var(--fm-secondary-ink); font-weight: 600; }
 .file-markdown-body .fm-frontmatter-number { color: var(--fm-inline-code-ink); }
 
-/* Mermaid */
+/* Keep preview geometry stable while the shared diagram loads. */
 .file-markdown-body .mermaid {
   margin: 1em 0;
-  display: flex;
   height: clamp(12rem, 36vw, 24rem);
-  overflow: auto;
-  align-items: flex-start;
-  justify-content: center;
-}
-.file-markdown-body .mermaid > svg { flex-shrink: 0; }
-
-.file-markdown-body .fm-mermaid-error {
-  margin: 1em 0;
-  border: 1px solid var(--redeven-status-error-border, color-mix(in srgb, var(--error) 20%, transparent));
-  border-radius: 8px;
   overflow: hidden;
 }
-
-.file-markdown-body .fm-mermaid-error-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: var(--redeven-status-error-soft, color-mix(in srgb, var(--error) 8%, transparent));
-  color: var(--redeven-status-error-foreground, var(--error));
-  font-size: 0.85em;
-  font-weight: 600;
-}
-
-.file-markdown-body .fm-mermaid-error-msg,
-.file-markdown-body .fm-mermaid-error-src {
-  margin: 0;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--muted-foreground);
-  white-space: pre-wrap;
-}
+.file-markdown-body .mermaid > .floe-diagram { height: 100%; display: flex; flex-direction: column; }
+.file-markdown-body .mermaid > .floe-diagram > div:not(.floe-diagram-toolbar) { flex: 1; min-height: 0; }
+.file-markdown-body .mermaid .floe-diagram-viewport { height: 100%; max-height: none; }
+.file-markdown-body .mermaid .floe-diagram-source { flex: 1; height: auto; min-height: 0; }
 
 .fm-markdown-layout {
   position: relative;

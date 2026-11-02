@@ -1,3 +1,4 @@
+import type { DiagramLabels } from '@floegence/floe-webapp-core/diagrams';
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack, type Component } from 'solid-js';
 import { Button, Dialog, FeedbackIndicator, Input, StableText } from '@floegence/floe-webapp-core/ui';
 import { ArrowLeft, ChevronRight, Download, Folder, FolderOpen, MessageSquare, Refresh, Search, Trash } from '@floegence/floe-webapp-core/icons';
@@ -10,7 +11,7 @@ import type { TaskFilesCopy } from './taskFilesCopy';
 
 export function FlowerTaskFiles(props: {
   open: boolean; onOpenChange: (open: boolean) => void; threadID: string;
-  adapter: FlowerSurfaceAdapter; copy: TaskFilesCopy;
+  adapter: FlowerSurfaceAdapter; copy: TaskFilesCopy; diagramLabels?: DiagramLabels;
   onSource?: (itemID: string) => void;
   renderPreviewContent?: Component<FlowerTaskFilePreviewContentProps>;
   onOpenFolder?: (path: string) => Promise<void>;
@@ -205,6 +206,6 @@ export function FlowerTaskFiles(props: {
       <Show when={working() && listing.data()?.working_files}><div class="flower-task-files-footer"><span>{taskFileSize(listing.data()!.working_bytes)}{listing.data()?.working_truncated ? '+' : ''}</span></div></Show>
       <span class="flower-visually-hidden" role="status"><StableText reserve={[props.copy.loading]}>{listing.loading() ? props.copy.loading : ''}</StableText></span>
     </Dialog>
-    <Show when={preview()} keyed>{source => <FlowerTaskFilePreview source={source} copy={props.copy} downloading={downloadsActive()} actionError={error()} onClose={() => setPreview(null)} renderContent={props.renderPreviewContent} />}</Show>
+    <Show when={preview()} keyed>{source => <FlowerTaskFilePreview diagramLabels={props.diagramLabels} source={source} copy={props.copy} downloading={downloadsActive()} actionError={error()} onClose={() => setPreview(null)} renderContent={props.renderPreviewContent} />}</Show>
   </>;
 }

@@ -5553,3 +5553,17 @@ html.dark .git-content-skeleton__block {
   .redeven-copy-action,
   .redeven-copy-action[data-copied] { color: ButtonText; }
 }
+
+/* Published diagram palette follows product semantic tokens in both hosts. */
+.floe-diagram {
+  --pele-series-1: var(--redeven-categorical-graph-1);
+  --pele-series-2: var(--redeven-categorical-graph-2);
+  --pele-series-3: var(--redeven-categorical-graph-3);
+  --pele-series-4: var(--redeven-categorical-graph-4);
+  --pele-series-5: var(--redeven-categorical-graph-5);
+  --pele-series-6: var(--redeven-categorical-graph-6);
+  --pele-series-7: var(--redeven-categorical-graph-7);
+  --pele-series-8: var(--redeven-categorical-graph-8);
+  --pele-error: var(--error);
+  --pele-critical: var(--error);
+}

@@ -1,3 +1,5 @@
+import type { DiagramLabels } from '@floegence/floe-webapp-core/diagrams';
+import { diagramEnUS } from './chat/markdown/diagramCopy';
 import { taskFilesEnUS, type TaskFilesCopy } from './taskFilesCopy';
 import { kimiCodeCopy, type KimiCodeCopy } from './settings/kimiCodeCopy';
 import type { FlowerContextSource } from './chat/flowerContextPresentation';
@@ -434,6 +436,7 @@ export type FlowerSurfaceCopy = Readonly<{
   }>;
   chat: Readonly<{
     history: Readonly<{ label: string; older: string; newer: string; latest: string; loading: string; expand: string; failed: string }>;
+    diagram: DiagramLabels;
     media: FlowerMarkdownMediaCopy;
     inspectAndContinue: string;
     inspectAndContinuePrompt: string;
@@ -930,6 +933,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   },
   chat: {
     history: {"label": "Conversation history", "older": "Earlier messages", "newer": "Newer messages", "latest": "Back to latest", "loading": "Loading…", "expand": "Show full content", "failed": "Could not load this content. Try again."},
+    diagram: diagramEnUS,
     media: markdownMediaEnUS,
     inspectAndContinue: 'Inspect and continue',
     inspectAndContinuePrompt: 'The previous turn stopped with unconfirmed effects. First inspect current state and existing artifacts using read-only tools, then continue the remaining task from the evidence. Do not blindly repeat earlier actions.',

@@ -270,6 +270,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower live queue CPU qualification](operations/flower-live-queue-performance.md)
 - [Flower request-history CPU qualification](operations/flower-request-history-performance.md)
 - [Flower received output progress](ui/flower-output-progress.md)
+- [Markdown diagrams](ui/markdown-diagrams.md): Consume published Floe/Pele rendering with stable source, ownership, localization and controls.
 - [Flower code highlighting](ui/flower-code-highlighting.md): Verify syntax colors, stable code selection/copy, and bounded background work in both hosts.
 - [Flower message appearance](ui/flower-message-appearance.md)
 - [Flower terminal activity presentation](ui/flower-terminal-activity.md)

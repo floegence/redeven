@@ -8,6 +8,7 @@ import {
   createMemo,
   createSignal,
   createUniqueId,
+  getOwner,
   on,
   onCleanup,
   onMount,
@@ -23,6 +24,7 @@ import 'katex/dist/katex.min.css';
 import './FileMarkdown.css';
 import { extractMath, reinjectMath } from './mathPlugin';
 import { runMermaid } from './mermaidPlugin';
+import { localizedDiagramLabels } from '../../../../../flower_ui/src/chat/markdown/diagramCopy';
 import { extractFrontmatter } from './frontmatterParser';
 import { buildToc, type TocItem } from './tocBuilder';
 import { postProcess } from './postProcess';
@@ -342,6 +344,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
       clearWarningIssue();
     });
     target.innerHTML = html;
+    let disposeDiagrams: (() => void) | undefined;
+    onCleanup(() => disposeDiagrams?.());
     try {
       postProcess(target);
     } catch (error) {
@@ -374,9 +378,15 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
         setActiveTocIdIfChanged('');
       });
     }
+    const diagramOwner = getOwner();
     void (async () => {
       try {
-        await runMermaid(target, { shouldContinue: isCurrentTask });
+        const dispose = await runMermaid(target, {
+          shouldContinue: isCurrentTask,
+          owner: diagramOwner,
+          labels: () => localizedDiagramLabels(key => i18n.t(key)),
+        });
+        if (isCurrentTask()) disposeDiagrams = dispose; else dispose?.();
       } catch (error) {
         if (!isCurrentTask()) return;
         console.error('Markdown preview Mermaid enhancement failed:', error);
@@ -475,32 +485,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   function refreshThemeSensitiveEnhancements(): void {
     if (disposed || fatalIssue() || !containerRef?.isConnected) return;
 
-    const target = containerRef;
-    const taskSeq = (renderTaskSeq += 1);
-    const isCurrentTask = () => (
-      !disposed
-      && taskSeq === renderTaskSeq
-      && target === containerRef
-      && target.isConnected
-    );
-
-    void (async () => {
-      try {
-        await runMermaid(target, { shouldContinue: isCurrentTask });
-      } catch (error) {
-        if (!isCurrentTask()) return;
-        console.error('Markdown preview Mermaid theme refresh failed:', error);
-        commitWarningIssue({
-          severity: 'warning',
-          phase: 'mermaid',
-          message: formatMarkdownPreviewError(error),
-        });
-      } finally {
-        if (isCurrentTask()) {
-          runPostProcessForVisibleDocument();
-        }
-      }
-    })();
+    runPostProcessForVisibleDocument();
   }
 
   function getTocHeadings(): HTMLElement[] {

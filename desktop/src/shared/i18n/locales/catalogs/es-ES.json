@@ -1055,6 +1055,22 @@
         "loading": "Cargando…",
         "expand": "Mostrar contenido completo",
         "failed": "No se pudo cargar el contenido. Inténtalo de nuevo."
+      },
+      "diagram": {
+        "diagram": "Diagrama",
+        "loading": "Renderizando diagrama…",
+        "unavailable": "Diagrama no disponible",
+        "retry": "Reintentar",
+        "source": "Código fuente",
+        "preview": "Vista previa",
+        "copy": "Copiar código fuente",
+        "copied": "Copiado",
+        "copyFailed": "No se pudo copiar",
+        "expand": "Ampliar diagrama",
+        "close": "Cerrar",
+        "zoomIn": "Acercar",
+        "zoomOut": "Alejar",
+        "fit": "Ajustar"
       }
     },
     "threadList": {
