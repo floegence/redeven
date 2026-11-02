@@ -32,8 +32,18 @@ their existing control boundaries.
 
 The browser controller routes node/text/query/table/attribute/condition reads
 through one observation boundary, including direct lower-level read exceptions.
-It supplies the required semantic_read failure stage, retains the live source,
-and uses the existing bounded read retry only; inputs never enter that retry.
+It supplies the required semantic_read failure stage and retains the live source.
+One returned observation binds content, image, metadata and final safety to the
+same document lifecycle through input cleanup and final publication. A private
+invocation token carries the existing revision; no second lifecycle is stored.
+Final safety runs after cleanup, and failed publication retires the image anchor.
+Ordinary content updates do not require page quiescence.
+Condition waits own a deadline and repeatedly obtain independently validated
+read-only samples. Only typed lifecycle invalidation discards a sample; unknown
+protocol/evaluation failures, stale refs, permission changes and cancellation stop.
+A semantic locator keeps its original query scope; a ref never changes identity.
+The adapter owns this ephemeral boundary; Runtime adds no browser-state ledger.
+Confirmed inputs are retained separately and never enter a read retry.
 A rejected read cannot become a malformed transport response that disconnects
 the target. A later explicitly requested read can recover on the same page.
 

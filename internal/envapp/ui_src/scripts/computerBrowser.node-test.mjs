@@ -445,9 +445,11 @@ test('navigation during a safety read preserves the confirmed action without exp
     const result = await controller.execute({ tool_name: 'computer.action', script_operation: true, allowed_origins: [origin],
       args: { action: 'fill', selector: { role: 'textbox', name: 'Entry' }, text: 'confirmed' } });
     assert.equal(invalidated, true);
-    assert.equal(result.error, undefined, JSON.stringify(result));
-    assert.equal(result.safety.level, 'routine', JSON.stringify(result));
-    assert.deepEqual(result.result, { observation_invalidated: true, action_executed: true, execution_mode: 'background' });
+    // The context vanished while a protocol read was pending. Keep the actual
+    // read failure; a concurrent lifecycle event must not make it retryable.
+    assert.equal(result.error, 'TARGET_OBSERVATION_UNAVAILABLE', JSON.stringify(result));
+    assert.equal(result.safety, undefined);
+    assert.deepEqual(result.result, { action_executed: true, needs_observation:true, observation_stage:'safety_scan' });
     assert.equal(result.screenshot, undefined);
     session.send = send;
     const fresh = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });
@@ -528,9 +530,10 @@ test('a detached iframe invalidates a sampled view without inventing user takeov
     };
     const sample = await controller.execute({ tool_name: 'computer.screenshot', full_access: true });
     assert.equal(removed, true);
-    assert.equal(sample.error, undefined);
-    assert.equal(sample.safety.level, 'routine', JSON.stringify(sample));
-    assert.equal(sample.result.observation_invalidated, true);
+    assert.equal(sample.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+    assert.equal(sample.safety, undefined, JSON.stringify(sample));
+    assert.equal(sample.result.observation_stage, 'safety_scan');
+    assert.equal(sample.result.action_executed, false);
     assert.equal(sample.screenshot, undefined);
     session.send = send;
     const fresh = await controller.execute({ tool_name: 'computer.observe', full_access: true });

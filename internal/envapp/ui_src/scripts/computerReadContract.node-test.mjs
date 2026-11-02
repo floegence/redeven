@@ -13,9 +13,10 @@ function fixture(action) {
     inFrame: async () => 'Fixture', releaseInput: async () => { releases++; },
     close: () => { closes++; },
     action: async () => { calls++; return action(page, calls); },
+    conditionState: async () => { calls++; return action(page, calls); },
   });
   const run = operation => controller.execute({ target_id: 'fixture', tool_name: 'computer.action', script_operation: true,
-    args: { action: operation, selector: { role: 'button', name: 'Fixture' }, ...(operation === 'attribute' ? { attribute: 'title' } : {}) } });
+    args: { action: operation, ...(operation === 'wait' ? {timeout_ms:0} : {}), selector: { role: 'button', name: 'Fixture' }, ...(operation === 'attribute' ? { attribute: 'title' } : {}) } });
   return { run, facts: () => ({ calls, closes, releases }) };
 }
 

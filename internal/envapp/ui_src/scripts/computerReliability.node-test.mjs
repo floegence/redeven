@@ -8,12 +8,12 @@ import { chromium } from 'playwright';
 function fixture() {
   const nodes = [];
   const add = (role, name, parent) => {
-    const node = { nodeId: String(nodes.length + 1), backendDOMNodeId: nodes.length + 1, role: { value: role }, name: { value: name }, childIds: [], ...(parent ? { parentId: parent.nodeId } : {}) };
+    const node = { nodeId: String(nodes.length + 1), backendDOMNodeId: nodes.length + 1, ignored: false, role: { value: role }, name: { value: name }, childIds: [], ...(parent ? { parentId: parent.nodeId } : {}) };
     nodes.push(node); parent?.childIds.push(node.nodeId); return node;
   };
   const transport = { send: async (method, args) => {
     if (method === 'Accessibility.getFullAXTree') return { nodes };
-    if (method === 'DOM.describeNode') return { node: { nodeName: 'DIV' } };
+    if (method === 'DOM.describeNode') return { node: { nodeType:1, nodeName:'DIV', backendNodeId:args.backendNodeId } };
     if (method === 'Accessibility.getPartialAXTree') return { nodes: nodes.filter(node => node.backendDOMNodeId === args.backendNodeId) };
     return { documents: [], strings: [] };
   } };

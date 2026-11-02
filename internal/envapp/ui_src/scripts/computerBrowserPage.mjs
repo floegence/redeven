@@ -44,6 +44,11 @@ export class BrowserNavigationError extends Error {
   }
 }
 
+// Typed evidence of a document/frame lifecycle change; never inferred from protocol text.
+export class BrowserObservationInvalidated extends Error {
+  constructor() { super('OBSERVATION_INVALIDATED'); }
+}
+
 // Sensitive-field transitions are observed in a CDP isolated world, including
 // fields that appear and disappear during one action. Incidental user input is
 // not a Flower pause request; explicit control remains owned by the Runtime.
@@ -275,7 +280,7 @@ export class BrowserComputerPage {
       const revision = this.revision;
       const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
       await evaluate(frame.session, 'Runtime.evaluate', { contextId: executionContextId, expression: privacyObserverSource }, value => value === undefined);
-      if (revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
+      if (revision !== this.revision) throw new BrowserObservationInvalidated();
       this.observedFrames.set(frame.frame.id, {...frame, revision});
     }
     return result;
@@ -300,12 +305,7 @@ export class BrowserComputerPage {
     if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (requiredOrigin) reasons.add('site_permission');
     if (this.stopped) reasons.add('user_control');
-    let frames;
-    try { frames = await this.frames(); }
-    catch (error) {
-      if (revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
-      throw error;
-    }
+    const frames = await this.frames();
     for (const frame of frames) {
       // Chromium's error document has an opaque origin. Its failed URL remains
       // the permission boundary; the internal page does not grant any origin.
@@ -357,8 +357,8 @@ export class BrowserComputerPage {
     if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (this.requiredOrigin) { reasons.add('site_permission'); requiredOrigin = this.requiredOrigin; }
     if (this.stopped) reasons.add('user_control');
-    if (!reasons.size && revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
     if (!reasons.size && scanFailure) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), {protocolDiagnostic:scanFailure.protocolDiagnostic});
+    if (!reasons.size && revision !== this.revision) throw new BrowserObservationInvalidated();
     return { level: reasons.size ? 'takeover' : 'routine', reason_codes: [...reasons], safe_to_capture: !reasons.size, safe_to_send_to_model: !reasons.size, ...(requiredOrigin ? { required_origin: requiredOrigin } : {}) };
   }
 
@@ -514,7 +514,7 @@ export class BrowserComputerPage {
           matches.push(entry);
         }
       }
-      if (revision !== this.revision) throw new Error('STALE_REFERENCE');
+      if (revision !== this.revision) throw new BrowserObservationInvalidated();
       if (collect) return matches;
       if (!entry) throw new Error('ELEMENT_NOT_FOUND');
     }
@@ -636,40 +636,25 @@ export class BrowserComputerPage {
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }
   }
 
-  async wait(selector, { state = 'visible', equals, timeout_ms = 10000 } = {}) {
-    validateBrowserAction({action:'wait',selector,state,...(equals===undefined?{}:{equals}),timeout_ms});
-    const deadline = Date.now() + timeout_ms;
-    for (;;) {
-      let changed;
-      const notification = new Promise(resolve => { changed = resolve; this.listeners.add(changed); });
-      let timer;
-      try {
-        let found = false;
-        let enabled = false;
-        let matches = false;
+  async conditionState(selector, { state = 'visible', equals } = {}) {
+    let found = false, enabled = false, matches = false;
+    try {
+      const element = await this.resolve(selector);
+      const current = await this.elementState(element);
+      found = current.visible;
+      enabled = current.visible && current.enabled;
+      if (found && ['text','value'].includes(state)) {
+        const {executionContextId}=await element.frame.session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
+        const {object}=await element.frame.session.send('DOM.resolveNode',{backendNodeId:element.backendNodeId,executionContextId});
         try {
-          const element = await this.resolve(selector);
-          const current = await this.elementState(element);
-          found = current.visible;
-          enabled = current.visible && current.enabled;
-          if (found && ['text','value'].includes(state)) {
-            const {executionContextId}=await element.frame.session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
-            const {object}=await element.frame.session.send('DOM.resolveNode',{backendNodeId:element.backendNodeId,executionContextId});
-            try {
-              const result=await evaluate(element.frame.session, 'Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,arguments:[{value:state},{value:equals}],functionDeclaration:'function(state,expected){return (state==="value"?this.value:this.textContent)===expected;}'}, value => typeof value === 'boolean');
-              matches=result;
-            } finally {if(object.objectId)await element.frame.session.send('Runtime.releaseObject',{objectId:object.objectId});}
-          }
-        } catch (error) {
-          if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
-        }
-        if (matches || (state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled)) return { state };
-        if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
-        if (Date.now() >= deadline) return { state: 'timeout', requested_state: state, last_known: { found, enabled } };
-        // CSS transitions do not necessarily emit accessibility events.
-        await Promise.race([notification, new Promise(resolve => { timer = setTimeout(resolve, Math.min(100, deadline - Date.now())); })]);
-      } finally { clearTimeout(timer); this.listeners.delete(changed); }
+          matches=await evaluate(element.frame.session, 'Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,arguments:[{value:state},{value:equals}],functionDeclaration:'function(state,expected){return (state==="value"?this.value:this.textContent)===expected;}'}, value => typeof value === 'boolean');
+        } finally {if(object.objectId)await element.frame.session.send('Runtime.releaseObject',{objectId:object.objectId});}
+      }
+    } catch (error) {
+      if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
     }
+    const met = matches || (state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled);
+    return met ? {state} : {state:'timeout',requested_state:state,last_known:{found,enabled}};
   }
 
   async elementState(element) {
@@ -991,7 +976,6 @@ export class BrowserComputerPage {
     if (this.invalid) throw new Error('TARGET_CONNECTION_REQUIRED');
     const validated = validateBrowserAction(args, this.privateInput);
     if (args.action === 'query') return this.query(args.selector,args);
-    if (args.action === 'wait') return this.wait(args.selector, args);
     const element = args.selector ? await this.resolve(args.selector) : undefined;
     if (args.action === 'table') return this.table(element,args);
     if (args.action === 'attribute') return this.attribute(element,args.attribute);

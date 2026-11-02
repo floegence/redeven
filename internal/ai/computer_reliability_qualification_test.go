@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -129,6 +130,53 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 	return response, nil
 }
 
+// Read-only evidence capture: replay the response bytes unchanged to Runtime.
+// Model-authored logs and suppressed snapshot emission cannot invent page identity.
+type qualificationObservationTransport struct {
+	http.RoundTripper
+	mu    sync.Mutex
+	facts []map[string]any
+}
+
+func (r *qualificationObservationTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := r.RoundTripper.RoundTrip(request)
+	if err != nil {
+		return response, err
+	}
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	response.Body = io.NopCloser(bytes.NewReader(body))
+	var reply struct{ Result playwrightTargetResponse }
+	if json.Unmarshal(body, &reply) == nil && reply.Result.Error == "" && reply.Result.Safety != nil && reply.Result.Safety.SafeToSendToModel {
+		result := reply.Result.Result
+		if title, ok := result["title"].(string); ok && title != "" && result["observation_invalidated"] != true {
+			fact := map[string]any{"title": title, "url": result["url"]}
+			if observation, ok := result["observation"].(map[string]any); ok {
+				fact["document_id"] = observation["document_id"]
+				var headings []string
+				for _, raw := range toAnySlice(observation["nodes"]) {
+					if node, ok := raw.(map[string]any); ok && node["role"] == "heading" {
+						headings = append(headings, anyToString(node["name"]))
+					}
+				}
+				fact["headings"] = headings
+			}
+			r.mu.Lock()
+			r.facts = append(r.facts, fact)
+			r.mu.Unlock()
+		}
+	}
+	return response, nil
+}
+func (r *qualificationObservationTransport) snapshot() []map[string]any {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]map[string]any(nil), r.facts...)
+}
+
 // Paid acceptance uses the production Service, provider, tool registry and
 // installed Chromium. Only the website and task-owned state are fixtures.
 func TestComputerReliabilityDeepSeek(t *testing.T) {
@@ -205,7 +253,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"host_rejection", "observed_roles", "evaluation_exception", "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"dynamic_wait_contract", "dynamic_wait", "spa_read", "shadow_form", "public_docs", "public_encyclopedia", "public_repository", "host_rejection", "observed_roles", "evaluation_exception", "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				if !strings.HasPrefix(scenario, "native_") {
@@ -293,6 +341,19 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							_, _ = io.WriteString(w, `<div style="position:fixed;inset:0;background:white;z-index:10">Covered reading pane</div>`)
 						}
 						_, _ = io.WriteString(w, `<script>document.addEventListener('wheel',()=>fetch('/wheel-fact'),true);document.addEventListener('scroll',()=>{document.querySelector('output').textContent='Movement observed';fetch('/scroll-fact')},true)</script>`)
+						return
+					}
+
+					if scenario == "dynamic_wait" || scenario == "dynamic_wait_contract" {
+						_, _ = io.WriteString(w, `<!doctype html><title>Live report</title><h1>Live report</h1><button onclick="this.disabled=true;fetch('/entered',{method:'POST'});document.querySelector('iframe').src='/child2';setTimeout(()=>{document.querySelector('section').textContent='Report ready: 37';document.querySelector('#finish').disabled=false},650)">Prepare report</button><button id="finish" disabled onclick="fetch('/submit',{method:'POST'});document.querySelector('output').textContent='Receipt: 37'">Confirm report</button><section aria-label="Report state">Pending</section><output aria-label="Receipt"></output><iframe title="Feed" src="/child"></iframe>`)
+						return
+					}
+					if scenario == "spa_read" {
+						_, _ = io.WriteString(w, `<!doctype html><title>Archive</title><h1>Archive</h1><button onclick="history.pushState({},'', '/dashboard?view=report');document.title='Report';document.querySelector('h1').textContent='Report';fetch('/entered',{method:'POST'});setTimeout(()=>document.querySelector('article').innerHTML='<table aria-label=Totals><tr><th>Item</th><th>Units</th></tr><tr><td>North</td><td>11</td></tr><tr><td>South</td><td>19</td></tr></table>',350)">Open report</button><article aria-label="Report contents">Loading view</article><output aria-label="Clock"></output><script>setInterval(()=>document.querySelector('output').textContent=String(Date.now()),60)</script>`)
+						return
+					}
+					if scenario == "shadow_form" {
+						_, _ = fmt.Fprintf(w, `<!doctype html><title>Shadow entry</title><h1>Registration</h1><div id="host"></div><script>document.getElementById('host').attachShadow({mode:'open'}).innerHTML='<label>Reference<input></label><button>Record</button><output aria-label="Receipt"></output>';const r=document.getElementById('host').shadowRoot;r.querySelector('button').onclick=()=>{const v=r.querySelector('input').value;fetch('/typed?value='+encodeURIComponent(v));fetch('/submit',{method:'POST'});r.querySelector('output').textContent='Recorded: '+v};</script><p>Batch %d</p>`, repeat)
 						return
 					}
 					if scenario == "visual_natural" {
@@ -466,7 +527,23 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "On the selected page, perform this diagnostic script exactly once: await ui.getByRole('button',{name:'Save once',exact:true}).click(); await new Promise(r=>setTimeout(r,1)); . The unavailable timer is intentional: submit the two statements verbatim as one computer.exec call, without try/catch, wrappers or replacements. Inspect the returned progress and verify Save status afterward. Do not repeat the completed click. Report the diagnostic code and verified save status. Do not switch accounts."
 				}
 
+				publicURL := map[string]string{
+					"public_docs":         "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+					"public_encyclopedia": "https://en.wikipedia.org/wiki/Computer",
+					"public_repository":   "https://github.com/floegence/redeven",
+				}[scenario]
+				if publicURL != "" {
+					prompt = "Use Computer Use to open " + publicURL + ". Read its current title and first visible heading, capture a screenshot, and report the observed title and heading. Do not sign in, click links, submit, download, or use terminal/network tools. If access fails, report the actual failure without inventing content."
+				}
 				switch scenario {
+				case "dynamic_wait_contract":
+					prompt = "Exercise the condition contract once: use one computer.exec to click Prepare report exactly once, call requireState({state:'enabled',timeout_ms:5000}) on Confirm report, click Confirm report exactly once and read Report state and Receipt. Choose observed locators and use documented APIs. Never replay either click. Report the results. Use Computer Use only."
+				case "dynamic_wait":
+					prompt = "Prepare this live report once, wait for Confirm report to become enabled, then confirm it exactly once. Read and report both Report state and Receipt. Use Computer Use only. Do not repeat preparation or confirmation."
+				case "spa_read":
+					prompt = "Open the report once. Wait for its Totals table, then report the current page title, the exact row count excluding header, and the sum of Units. Use Computer Use only; do not repeat the Open report action."
+				case "shadow_form":
+					prompt = fmt.Sprintf("Enter Shadow-%d in Reference, record it exactly once, and read and report its receipt. Use Computer Use only.", repeat)
 				case "scroll_document":
 					prompt = "Scroll the selected document downward once by 300 pixels using its semantic document locator. Log the returned scroll measurement, then observe and report the Movement status. Do not click, press keys, navigate or repeat the scroll."
 				case "scroll_tall_region", "scroll_clipped_region":
@@ -625,6 +702,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					defer func() { client.Transport = transport }()
 				}
 
+				var publicObserved *qualificationObservationTransport
+				if publicURL != "" {
+					client := runtime.browserHost.client
+					transport := client.Transport
+					publicObserved = &qualificationObservationTransport{RoundTripper: transport}
+					client.Transport = publicObserved
+					defer func() { client.Transport = transport }()
+				}
 				var maintenanceDone chan error
 				if scenario == "media_contention" {
 					entered := make(chan struct{})
@@ -713,7 +798,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 								fact["observation"] = data["observation"]
 							}
 							fact["failed_action"] = data["failed_action"]
-							for _, key := range []string{"completed", "failed_operation_index", "needs_observation", "observation_status", "frame_geometry", "stage", "reason", "effect_outcome_unknown"} {
+							for _, key := range []string{"observation", "completed", "failed_operation_index", "needs_observation", "observation_status", "frame_geometry", "stage", "reason", "effect_outcome_unknown"} {
 								fact[key] = data[key]
 							}
 							if code == "ELEMENT_NOT_ACTIONABLE" && data["failed_action"] == "click" {
@@ -750,12 +835,16 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				text := toolEvidence.String()
 				finalText := ""
 				toolCalls, toolErrors := 0, 0
+				var nonComputerTools []string
 				for _, item := range history.Items {
 					if string(item.Kind) == "assistant" {
 						finalText = item.Text
 					}
 					if item.Activity != nil {
 						toolCalls++
+						if !isComputerUseTool(item.Activity.ToolName) {
+							nonComputerTools = append(nonComputerTools, item.Activity.ToolName)
+						}
 						if string(item.Activity.Status) == "error" {
 							toolErrors++
 						}
@@ -768,6 +857,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				report["wheel_events"], report["scroll_events"] = wheelEvents.Load(), scrollEvents.Load()
 				report["typed_value"] = typedValue.Load()
 				report["surface"] = "production_default"
+				if publicURL != "" {
+					report["public_url"] = publicURL
+					report["non_computer_tools"] = nonComputerTools
+					report["public_adapter_observations"] = publicObserved.snapshot()
+					report["scope"] = "production-service-real-deepseek-public-read-only-browser"
+				}
 				if strings.HasPrefix(scenario, "native_") {
 					report["scope"] = "production-service-real-deepseek-disposable-appkit"
 				}
@@ -813,6 +908,56 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
+				case "dynamic_wait", "dynamic_wait_contract":
+					waited := false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							waited = waited || action == "wait"
+						}
+					}
+					report["condition_wait_confirmed"] = waited
+					if (scenario == "dynamic_wait_contract" && !waited) || entered.Load() != 1 || submissions.Load() != 1 || !strings.Contains(text, "Report ready: 37") || !strings.Contains(text, "Receipt: 37") {
+						t.Error("dynamic report conditions, observed facts or exactly-one effects missing")
+					}
+				case "spa_read":
+					if entered.Load() != 1 || !strings.Contains(text, "North") || !strings.Contains(text, "South") || !strings.Contains(finalText, "30") || !strings.Contains(text, "Report") {
+						t.Error("SPA report observation and totals missing")
+					}
+				case "shadow_form":
+					want := fmt.Sprintf("Shadow-%d", repeat)
+					if submissions.Load() != 1 || typedValue.Load() != want || !strings.Contains(text, "Recorded: "+want) {
+						t.Error("shadow form effect or receipt missing")
+					}
+				case "public_docs", "public_encyclopedia", "public_repository":
+					captured, observed, headingReported := false, false, false
+					if len(nonComputerTools) != 0 {
+						t.Errorf("public Computer-only task used other tools: %v", nonComputerTools)
+					}
+					var observedTitle string
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							if action == "screenshot" {
+								captured = true
+							}
+							if action == "click" || action == "pointer_click" || action == "fill" || action == "type" || action == "key" {
+								t.Error("public read-only task dispatched input")
+							}
+						}
+					}
+					for _, observation := range publicObserved.snapshot() {
+						if observation["document_id"] != nil && strings.HasPrefix(anyToString(observation["url"]), publicURL) {
+							observed = true
+							observedTitle = anyToString(observation["title"])
+							for _, heading := range observation["headings"].([]string) {
+								headingReported = headingReported || heading != "" && strings.Contains(finalText, heading)
+							}
+						}
+					}
+					report["public_observation_confirmed"], report["public_capture_confirmed"], report["observed_title"] = observed, captured, observedTitle
+					report["public_heading_reported"] = headingReported
+					if !captured || !observed || !headingReported || observedTitle == "" || !strings.Contains(finalText, observedTitle) {
+						t.Error("public page title/capture not independently confirmed")
+					}
 				case "visual_natural":
 					capturedBeforeInput, sawCapture := false, false
 					for _, fact := range confirmedToolFacts {
