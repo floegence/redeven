@@ -16,7 +16,7 @@ Responses hosted search requests include web_search_call.action.sources for cano
 
 ## Provider surface and history
 
-Published Floret v7.96.1 ResponsesOutput owns done-event collection and terminal
+Published Floret v7.97.0 ResponsesOutput owns done-event collection and terminal
 snapshot reconciliation. Repeated done items remain strict; matching reasoning
 items may differ in encrypted_content at the terminal boundary. Completed-item
 ciphertext stays authoritative; only absent, null or empty ciphertext is filled
@@ -26,6 +26,27 @@ snapshots retain ordered completed events. Redeven only maps SDK bytes and typed
 errors, exposing allowlisted conflict fields without provider values. Failed
 validation never advances native history or changes retry policy. Coverage:
 model_gateway_responses_output_test.go and the Floret tool-history restart suite.
+Completed hosted searches retain their done-event bytes when only valid
+search action.sources differ at the terminal boundary. Additions, ordering and
+removal do not overwrite or merge that completed list. Identity, completed
+status, search inputs, unknown fields and repeated done events remain strict.
+Terminal-only items use validated fallback. Activity and native history use the
+same completed record; answer URL annotations remain independent. The search
+list is the completed search record, not a union of all terminal observations.
+CompleteWithDiagnostics supplies safe nested paths, comparison boundary, source
+counts and selected authority. Redeven projects these facts into attempt logs
+and failure details without queries, URLs or native payloads. A confirmed
+response.completed followed by validation failure gets localized guidance;
+expanded/copyable details retain the precise conflict. Attempt epochs remain
+request identity, not a count of failed retries. No automatic whole-turn replay
+or additional tool execution is introduced.
+Acceptance: source variations with citations to terminal-only sources across
+OpenAI, compatible, Qwen and ChatGPT adapters; one Activity result; Goal review,
+restart, Fork and manual Retry with confirmed local tools retained. Explicit
+TestResponsesLiveHostedSearchCompletion uses synthetic hosted searches and
+recreated-adapter continuation against a real configured provider, without a
+production thread or product store.
+
 Published Floret v7.92.2 PrepareResponsesHistory owns API-key OpenAI, compatible Responses, Qwen and ChatGPT native replay: search receipts, encrypted reasoning and function items survive local tools. Activity is no replay source. Disabling searches retains evidence; completed events supply output omitted from terminal snapshots. Confirmed incomplete Responses retain snapshots for length continuation; interrupted/failed streams install none. ChatGPT rejects incomplete responses; content filtering never advances history.
 
 Preparation estimates full native input. API-key OpenAI uses response-ID/suffix continuation only with explicit responses_continuation and Engine permission; others send full input. Freeze selection/request across retries. Rejected IDs never trigger evidence-dropping retries; explicit configuration can select full replay. ChatGPT retains namespace/OAuth/WebSocket/published state.

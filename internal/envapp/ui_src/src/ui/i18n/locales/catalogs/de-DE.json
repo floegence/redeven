@@ -5821,6 +5821,7 @@
       "contextIndicatorDistributionUnavailable": "Nach der nächsten Anfrage verfügbar",
       "inspectAndContinue": "Status prüfen und fortfahren",
       "inspectAndContinuePrompt": "Der vorherige Durchgang wurde wegen unbestätigter Auswirkungen angehalten. Prüfe zuerst mit schreibgeschützten Werkzeugen den aktuellen Zustand und vorhandene Ergebnisse. Setze die restliche Aufgabe anhand dieser Erkenntnisse fort. Wiederhole frühere Aktionen nicht ungeprüft.",
+      "runErrorProviderResponseValidationFailed": "Die Antwort wurde empfangen, aber die abschließende Prüfung ist fehlgeschlagen. Generierte Inhalte bleiben erhalten. Öffnen Sie die Details, um den Konflikt zu sehen.",
       "runErrorProviderRequestFailed": "Die Modellanfrage konnte nicht abgeschlossen werden. Versuchen Sie es erneut oder prüfen Sie bei anhaltenden Problemen die aktuelle Modellquelle.",
       "contextIndicatorSystem": "Systemanweisungen",
       "contextIndicatorToolDefinition": "Tooldefinitionen",

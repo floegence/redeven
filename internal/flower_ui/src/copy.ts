@@ -649,6 +649,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerModelUnavailable: string;
       providerRequestInvalid: string;
       providerRequestFailed: string;
+      providerResponseValidationFailed: string;
       providerRequestRejected: string;
       providerRequestTooLarge: string;
       mediaDimensionLimit: string;
@@ -1167,6 +1168,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
       providerRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
+      providerResponseValidationFailed: 'Response content was received, but final verification failed. Generated content is preserved. Open the details to see the conflict.',
       providerRequestFailed: "The model request could not be completed. Retry, or check the current model source if it keeps happening.",
       providerRequestRejected: "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",
       providerRequestTooLarge: 'This request exceeds the image or request-size limit. Original screenshots and completed actions are saved. Use fewer images or a cropped detail, then retry after changing the input or model.',

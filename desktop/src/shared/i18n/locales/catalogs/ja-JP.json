@@ -561,6 +561,7 @@
       "runErrorProviderStreamInterrupted": "選択中の AI プロバイダーが応答ストリームを予期せず終了しました。再試行し、問題が続く場合はプロバイダーのエンドポイントを確認してください。",
       "runErrorProviderModelUnavailable": "選択したモデルはこのプロバイダーでは利用できません。Local AI Profile で別のモデルを選択してください。",
       "runErrorProviderRequestInvalid": "選択した AI プロバイダーが Flower のリクエスト形式を拒否しました。Redeven を更新して再試行してください。",
+      "runErrorProviderResponseValidationFailed": "回答は受信しましたが、最終検証に失敗しました。生成済みの内容は保持されています。詳細を開いて不整合を確認してください。",
       "runErrorProviderRequestFailed": "モデルへのリクエストを完了できませんでした。再試行し、問題が続く場合は現在のモデルの接続元を確認してください。",
       "runErrorProviderRequestRejected": "選択した AI プロバイダーが Flower のリクエストを拒否しました。診断の詳細を確認し、後でもう一度試してください。",
       "runErrorProviderRequestTooLarge": "画像またはリクエストのサイズ上限を超えています。元のスクリーンショットと完了した操作は保存されています。画像を減らす、必要な部分を切り抜く、またはモデルを変更してから再試行してください。",

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 tags: [flower, streaming, performance, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -35,3 +35,13 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 # Evidence
 
 - [Indexed record tests](../../internal/flower_ui/src/runtimeThreadRecord.test.ts)
+
+## Completed response validation feedback
+
+A structured response_validation failure after response.completed uses localized
+copy stating that content arrived but final verification failed. Existing content
+remains visible. Details stay collapsed, copyable and preserve the safe nested
+conflict evidence. Rendering never interprets peer prose as markup or retries a
+turn automatically. Source-only hosted-search variation accepted by Floret does
+not create an error card. Env App and Desktop ship identical complete catalogs.
+Evidence: FlowerSurface.contextErrors shared/browser tests and i18n contracts.

@@ -2816,7 +2816,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // literal text; it is never rendered as Markdown or executable markup.
     if (code.startsWith('provider_') || code.startsWith('chatgpt_')) {
       try {
-        const diagnostic = JSON.parse(trimString(error?.detail)) as { message?: unknown };
+        const diagnostic = JSON.parse(trimString(error?.detail)) as { message?: unknown; stage?: unknown; attempt?: { terminal_event?: unknown } };
+        if (diagnostic.stage === 'response_validation' && diagnostic.attempt?.terminal_event === 'response.completed') {
+          return copy().chat.runErrors.providerResponseValidationFailed;
+        }
         if (typeof diagnostic.message === 'string' && diagnostic.message.trim()
           && diagnostic.message !== '[redacted]'
           && !/^(provider returned error|provider error|request failed|internal server error)$/i.test(diagnostic.message.trim())) {

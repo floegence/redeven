@@ -237,6 +237,18 @@ func (d *providerAttemptDiagnostic) finish(ctx context.Context, response *http.R
 	result.RawProviderDiag["transport"] = string(safe.Transport)
 	attemptJSON, _ := json.Marshal(safe)
 	attrs := []any{"diagnostic", string(attemptJSON), "failed", err != nil}
+	if details, ok := result.RawProviderDiag["output_reconciliation"].([]responsesOutputDiagnostic); ok {
+		safeDetails := make([]*responsesOutputDiagnostic, 0, len(details))
+		for _, detail := range details {
+			if safe := detail.sanitized(); safe != nil {
+				safeDetails = append(safeDetails, safe)
+			}
+		}
+		if len(safeDetails) > 0 {
+			raw, _ := json.Marshal(safeDetails)
+			attrs = append(attrs, "output_reconciliation", string(raw))
+		}
+	}
 	var failure *providerFailure
 	if errors.As(err, &failure) {
 		diagnostic := failure.diagnostic.sanitized()

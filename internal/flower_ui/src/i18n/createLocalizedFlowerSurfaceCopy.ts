@@ -481,6 +481,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         providerModelUnavailable: t(i18n, k('chat.runErrorProviderModelUnavailable')),
         providerRequestInvalid: t(i18n, k('chat.runErrorProviderRequestInvalid')),
         providerRequestFailed: t(i18n, k('chat.runErrorProviderRequestFailed')),
+        providerResponseValidationFailed: t(i18n, k('chat.runErrorProviderResponseValidationFailed')),
         providerRequestRejected: t(i18n, k('chat.runErrorProviderRequestRejected')),
         providerRequestTooLarge: t(i18n, k('chat.runErrorProviderRequestTooLarge')),
         mediaDimensionLimit: t(i18n, k('chat.mediaDimensionLimit')),

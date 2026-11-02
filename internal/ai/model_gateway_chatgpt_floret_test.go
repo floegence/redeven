@@ -231,7 +231,7 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 		status                                                  int
 		chatGPT                                                 bool
 	}{
-		{"local_output_conflict", "openai", "gpt-6.1-sol", "responses", conflictingCompletedResponseStream, runErrorCodeProviderRequestFailed, "Conflicting completed response output item. Conflicting fields: content.", 200, false},
+		{"local_output_conflict", "openai", "gpt-6.1-sol", "responses", conflictingCompletedResponseStream, runErrorCodeProviderRequestFailed, "Response content was received, but final verification failed. Conflicting paths: content.", 200, false},
 		{"local_usage_invalid", "openai", "gpt-6.1-sol", "responses", `data: {"type":"response.completed","response":{"id":"resp_fixture","status":"completed","usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":101},"output_tokens":2}}}` + "\n\n", runErrorCodeProviderRequestFailed, "Provider cached tokens exceed total input tokens.", 200, false},
 		{"local_history_invalid", "openai", "gpt-6.1-sol", "responses", `data: {"type":"response.completed","response":{"id":"resp_fixture","status":"completed","output":[{"type":"private-output-type","id":"item_fixture"}]}}` + "\n\n", runErrorCodeProviderRequestFailed, "Could not retain the provider response for conversation continuation.", 200, false},
 		{"tool_arguments_stalled", "openai", "gpt-6.1-sol", "responses", "data: " + toolArgumentsStalledFailure + "\n\n", runErrorCodeProviderStreamInterrupted, toolArgumentsStalledMessage, 200, false},

@@ -30,10 +30,11 @@ type providerValidationError struct {
 	cause        error
 	outputIndex  *int64
 	outputFields []string
+	outputDetail *responsesOutputDiagnostic
 }
 
 func (e *providerValidationError) diagnostic(providerType string) providerFailureDiagnostic {
-	d := providerFailureDiagnostic{Provider: providerType, Code: string(e.code), Stage: "response_validation", Shape: "local_validation", OutputIndex: e.outputIndex, OutputFields: e.outputFields}
+	d := providerFailureDiagnostic{Provider: providerType, Code: string(e.code), Stage: "response_validation", Shape: "local_validation", OutputIndex: e.outputIndex, OutputFields: e.outputFields, OutputDetail: e.outputDetail}
 	switch e.code {
 	case responseOutputLimit:
 		d.Message = "Response output exceeds the conversation context state limit."
@@ -41,6 +42,15 @@ func (e *providerValidationError) diagnostic(providerType string) providerFailur
 		d.Message = "Invalid completed response output item."
 	case responseOutputConflict:
 		d.Message = "Conflicting completed response output item."
+		if e.outputDetail != nil && e.outputDetail.CurrentEvent == "terminal_snapshot" {
+			d.Message = "Response content was received, but final verification failed."
+		}
+		if e.outputDetail != nil {
+			if detail := e.outputDetail.sanitized(); detail != nil && len(detail.Paths) > 0 {
+				d.Message += " Conflicting paths: " + strings.Join(detail.Paths, ", ") + "."
+				return d
+			}
+		}
 		if fields := safeOutputConflictFields(e.outputFields); len(fields) > 0 {
 			d.Message += " Conflicting fields: " + strings.Join(fields, ", ") + "."
 		}

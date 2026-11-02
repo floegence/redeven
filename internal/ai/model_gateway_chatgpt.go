@@ -16,7 +16,8 @@ const chatGPTToolNamespace = "redeven"
 // Floret owns output reconciliation; this bridge preserves SDK native bytes and
 // maps typed structural failures into Redeven's durable diagnostic envelope.
 type responsesCompletedItems struct {
-	output flprovider.ResponsesOutput
+	output      flprovider.ResponsesOutput
+	diagnostics []responsesOutputDiagnostic
 }
 
 func (c *responsesCompletedItems) add(index int64, item oresponses.ResponseOutputItemUnion) error {
@@ -28,9 +29,13 @@ func (c *responsesCompletedItems) complete(snapshot []oresponses.ResponseOutputI
 	for i, item := range snapshot {
 		raw[i] = json.RawMessage(item.RawJSON())
 	}
-	output, err := c.output.Complete(raw)
+	output, details, err := c.output.CompleteWithDiagnostics(raw)
 	if err != nil {
 		return nil, responsesOutputFailure(err)
+	}
+	c.diagnostics = nil
+	for _, detail := range details {
+		c.diagnostics = append(c.diagnostics, projectResponsesOutputDiagnostic(detail))
 	}
 	result := make([]oresponses.ResponseOutputItemUnion, len(output))
 	for i, item := range output {
@@ -46,7 +51,12 @@ func responsesOutputFailure(err error) error {
 	if !errors.As(err, &failure) {
 		return err
 	}
-	return &providerValidationError{code: providerValidationCode(failure.Code), cause: err, outputIndex: failure.OutputIndex, outputFields: failure.Fields}
+	result := &providerValidationError{code: providerValidationCode(failure.Code), cause: err, outputIndex: failure.OutputIndex, outputFields: failure.Fields}
+	if failure.Detail != nil {
+		detail := projectResponsesOutputDiagnostic(*failure.Detail)
+		result.outputDetail = &detail
+	}
+	return result
 }
 
 func chatGPTNamespaces(tools []oresponses.ToolUnionParam) ([]oresponses.ToolUnionParam, error) {

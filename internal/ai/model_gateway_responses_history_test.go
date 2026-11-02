@@ -102,7 +102,16 @@ func TestFlowerResponsesSearchSurvivesGoalReviewRestartAndFork(t *testing.T) {
 				map[string]any{"type": "web_search_call", "id": "search", "status": "completed", "opaque_results": "durable-search-receipt", "action": map[string]any{"type": "search", "query": "product films"}},
 				map[string]any{"type": "function_call", "id": "review", "call_id": "review", "name": "goal", "arguments": `{"operation":"review","expected_version":1,"outcome":"completed","evidence":"Verified official product films."}`},
 			}
+			search := output[0].(map[string]any)
+			action := search["action"].(map[string]any)
+			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}}
+			event, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": search})
+			fmt.Fprintf(w, "data: %s\n\n", event)
+			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}, map[string]any{"type": "url", "url": "https://example.com/terminal-only"}}
 		} else {
+			if step < 4 && strings.Contains(string(raw), "terminal-only") {
+				t.Error("persistent native history replaced completed search sources")
+			}
 			if step < 4 && !strings.Contains(string(raw), "durable-search-receipt") {
 				t.Errorf("request %d lost search receipt", step)
 			}
@@ -135,6 +144,23 @@ func TestFlowerResponsesSearchSurvivesGoalReviewRestartAndFork(t *testing.T) {
 	if view.Goal.Status != "completed" {
 		t.Fatalf("Goal review did not complete: %+v", view.Goal)
 	}
+	if view.Failure != nil || len(view.Turns) == 0 {
+		t.Fatal("completed runtime turn missing")
+	}
+	turn := view.Turns[len(view.Turns)-1]
+	if !turn.FinalBoundaryComplete || turn.Outcome == nil || *turn.Outcome != flruntime.TurnOutcomeCompleted {
+		t.Fatalf("final boundary incomplete: %+v", turn)
+	}
+	searches := 0
+	for _, item := range view.Items {
+		if item.Activity != nil && item.Activity.ToolName == "web_search" {
+			searches++
+		}
+	}
+	if searches != 1 {
+		t.Fatalf("search Activity count=%d", searches)
+	}
+
 	mu.Lock()
 	count := len(inputs)
 	mu.Unlock()
@@ -430,6 +456,15 @@ func TestResponsesManualRetryRetainsCanonicalToolsAndResetsNativeState(t *testin
 				map[string]any{"type": "function_call", "id": "item", "call_id": "call", "name": "inspect", "arguments": "{}", "status": "completed"},
 			}
 		}
+		if step == 1 {
+			search := output[0].(map[string]any)
+			action := search["action"].(map[string]any)
+			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}}
+			event, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": search})
+			fmt.Fprintf(w, "data: %s\n\n", event)
+			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}, map[string]any{"type": "url", "url": "https://example.com/extra"}}
+		}
+
 		event, _ := json.Marshal(map[string]any{"type": "response.completed", "response": map[string]any{"id": fmt.Sprintf("response-%d", step), "status": "completed", "output": output}})
 		fmt.Fprintf(w, "data: %s\n\n", event)
 	}))

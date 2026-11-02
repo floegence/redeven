@@ -622,6 +622,9 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			}
 		}
 	}
+	if len(nativeCompletedItems.diagnostics) > 0 {
+		result.RawProviderDiag["output_reconciliation"] = nativeCompletedItems.diagnostics
+	}
 	result.Sources = extractOpenAIURLSources(completed)
 	usage, usageErr := turnUsageFromOpenAIResponse(completed.Usage)
 	if usageErr != nil {

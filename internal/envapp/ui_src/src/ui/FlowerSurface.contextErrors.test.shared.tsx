@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { adapter, deferred, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
@@ -134,6 +135,18 @@ describe('Flower provider failure recovery', () => {
 
 
 describe('Flower upstream error messages', () => {
+  it.each(['en-US', 'zh-CN', 'zh-TW'] as const)('explains final validation in %s without retrying', async (locale) => {
+    const i18n = createTestI18nHelpers(locale);
+    const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+    const diagnostic = JSON.stringify({ stage: 'response_validation', message: 'Private fallback', attempt: { terminal_event: 'response.completed' } });
+    const failed = thread({ status: 'failed', error: { code: 'provider_request_failed', message: 'fallback', detail: diagnostic } });
+    const base = { ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) };
+    const surface = renderSurfaceWithAdapterProps(base, { copy, focusThreadRequest: { request_id: 'validation-' + locale, thread_id: failed.thread_id } });
+    await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+    expect(surface.querySelector('.flower-error-message')?.textContent).toBe(copy.chat.runErrors.providerResponseValidationFailed);
+    expect(base.retryThread).not.toHaveBeenCalled();
+  });
+
   it('shows local response validation and copies the complete attempt evidence', async () => {
     const reason = 'Conflicting completed response output item. Conflicting fields: content.';
     const diagnostic = JSON.stringify({ provider: 'openai', code: 'response_output_conflict', stage: 'response_validation', output_index: 0, output_fields: ['content'], message: reason, response_shape: 'local_validation',
@@ -147,7 +160,7 @@ describe('Flower upstream error messages', () => {
       const surface = renderSurfaceWithAdapterProps(base, { focusThreadRequest: { request_id: 'local-validation', thread_id: failed.thread_id } });
       await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
       const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
-      expect(card.querySelector('.flower-error-message')?.textContent).toBe(reason);
+      expect(card.querySelector('.flower-error-message')?.textContent).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.runErrors.providerResponseValidationFailed);
       const disclosure = card.querySelector<HTMLDetailsElement>('details')!;
       expect(disclosure.open).toBe(false);
       disclosure.querySelector('summary')!.click();

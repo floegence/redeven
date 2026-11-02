@@ -561,6 +561,7 @@
       "runErrorProviderStreamInterrupted": "El proveedor de modelos seleccionado interrumpió inesperadamente el flujo de respuesta. Inténtalo de nuevo; si el problema continúa, revisa el punto de conexión del proveedor.",
       "runErrorProviderModelUnavailable": "El modelo seleccionado no está disponible en este proveedor de modelos. Elige otro modelo en el perfil de IA local.",
       "runErrorProviderRequestInvalid": "El proveedor de IA seleccionado rechazó el formato de la solicitud de Flower. Actualiza Redeven y vuelve a intentarlo.",
+      "runErrorProviderResponseValidationFailed": "Se recibió la respuesta, pero falló la verificación final. El contenido generado se conserva. Abre los detalles para ver el conflicto.",
       "runErrorProviderRequestFailed": "No se pudo completar la solicitud al modelo. Reinténtalo o revisa la fuente del modelo actual si el problema persiste.",
       "runErrorProviderRequestRejected": "El proveedor de IA seleccionado rechazó la solicitud de Flower. Revisa los detalles del diagnóstico e inténtalo más tarde.",
       "runErrorProviderRequestTooLarge": "La solicitud supera el límite de tamaño de las imágenes o del contenido. Las capturas originales y las acciones completadas están guardadas. Usa menos imágenes, recorta el detalle necesario o cambia de modelo antes de volver a intentarlo.",

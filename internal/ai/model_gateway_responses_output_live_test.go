@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	flprovider "github.com/floegence/floret/v7/provider"
 	"io"
 	"net/http"
 	"os"
@@ -132,4 +133,118 @@ func TestResponsesLiveOutputReconciliation(t *testing.T) {
 		t.Fatal("continuation or attempt count failed")
 	}
 	t.Logf("accepted %d ciphertext-only difference(s); displayed answer; retained completed-item native state; recreated adapter continued successfully in two requests", conflicts)
+}
+
+// A fresh synthetic hosted-search task, never a retry of a production thread.
+// The deterministic fixture tests enforce source-difference behavior; a live
+// provider need not emit a difference on every call to qualify its complete path.
+func TestResponsesLiveHostedSearchCompletion(t *testing.T) {
+	endpoint := os.Getenv("REDEVEN_RESPONSES_QUALIFY_ENDPOINT")
+	if endpoint == "" {
+		t.Skip("set explicit endpoint, key and model for live acceptance")
+	}
+	key, model := os.Getenv("REDEVEN_RESPONSES_QUALIFY_KEY"), os.Getenv("REDEVEN_RESPONSES_QUALIFY_MODEL")
+	if key == "" || model == "" {
+		t.Fatal("explicit key and model required")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
+	defer cancel()
+	requests := 0
+	var replayInput []byte
+	makeAdapter := func() *openAIProvider {
+		a, err := newProviderAdapter("openai", endpoint, key, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := a.(*openAIProvider)
+		p.client = openai.NewClient(ooption.WithAPIKey(key), ooption.WithBaseURL(endpoint), ooption.WithMaxRetries(0), ooption.WithMiddleware(func(r *http.Request, next ooption.MiddlewareNext) (*http.Response, error) {
+			requests++
+			if requests == 2 {
+				raw, err := io.ReadAll(r.Body)
+				if err != nil {
+					return nil, err
+				}
+				r.Body = io.NopCloser(bytes.NewReader(raw))
+				var body map[string]json.RawMessage
+				_ = json.Unmarshal(raw, &body)
+				replayInput = body["input"]
+			}
+			return next(r)
+		}))
+		return p
+	}
+	req := ModelGatewayRequest{Model: model, Protocol: "openai-responses", WebSearchMode: providerWebSearchModeOpenAIResponsesBuiltin, Budgets: TurnBudgets{MaxOutputToken: 4096}, ProviderControls: ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelLow}, ReasoningCapability: config.AIReasoningCapabilityForModel("openai", model)}, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Use web search to check current US news headlines and recent technology announcements with at least two searches. Give three short findings with citations. This is a synthetic integration check; do not use local tools."}}}}}
+	results := map[string]*flprovider.HostedToolResult{}
+	var shown strings.Builder
+	result, err := makeAdapter().StreamTurn(ctx, req, func(e StreamEvent) {
+		if e.Type == StreamEventTextDelta {
+			shown.WriteString(e.Text)
+		}
+		if e.HostedToolEvent != nil && e.HostedToolEvent.Type == flprovider.EventHostedToolResult {
+			id := e.HostedToolEvent.HostedToolCall.ID
+			if _, ok := results[id]; ok {
+				t.Error("duplicate hosted result")
+			}
+			results[id] = e.HostedToolEvent.HostedResult
+		}
+	})
+	if err != nil {
+		t.Fatalf("hosted-search qualification failed: %v", err)
+	}
+	if result.Text == "" || shown.String() != result.Text || len(results) == 0 || result.ProviderState == nil || len(result.Sources) == 0 || requests != 1 {
+		t.Fatalf("incomplete final output: searches=%d citations=%d requests=%d", len(results), len(result.Sources), requests)
+	}
+	raw, err := json.Marshal(result.ProviderState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored ModelGatewayState
+	if err = json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	req.PreviousState = &restored
+	req.WebSearchMode = providerWebSearchModeDisabled
+	req.Messages = append(req.Messages, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: result.Text}}}, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Do not search again. Reply with exactly: CONTINUED"}}})
+	next, err := makeAdapter().StreamTurn(ctx, req, nil)
+	if err != nil {
+		t.Fatalf("restored continuation failed: %v", err)
+	}
+	if strings.TrimSpace(next.Text) != "CONTINUED" || requests != 2 {
+		t.Fatal("continuation failed or request replayed")
+	}
+	var input []map[string]any
+	if err = json.Unmarshal(replayInput, &input); err != nil {
+		t.Fatal(err)
+	}
+	matched := 0
+	for _, item := range input {
+		if item["type"] != "web_search_call" {
+			continue
+		}
+		id, _ := item["id"].(string)
+		activity := results[id]
+		if activity == nil {
+			t.Fatal("unknown hosted history")
+		}
+		matched++
+		action, _ := item["action"].(map[string]any)
+		sources, _ := action["sources"].([]any)
+		if len(sources) != len(activity.Results) {
+			t.Fatal("Activity/history source count differs")
+		}
+		for i, raw := range sources {
+			source, _ := raw.(map[string]any)
+			if source["url"] != activity.Results[i].URL {
+				t.Fatal("Activity/history source identity differs")
+			}
+		}
+	}
+	if matched != len(results) {
+		t.Fatal("restored history lost hosted records")
+	}
+	differences := 0
+	if d, ok := result.RawProviderDiag["output_reconciliation"].([]responsesOutputDiagnostic); ok {
+		differences = len(d)
+	}
+	t.Logf("live product adapter: %d hosted results, %d answer citations, %d accepted source variations; identical Activity/native search records; final answer and recreated-adapter continuation succeeded in %d requests", len(results), len(result.Sources), differences, requests)
 }
