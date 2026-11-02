@@ -28,7 +28,7 @@ Pane chrome follows terminal foreground/background, never ANSI blue; sidebar fol
 
 ## View projection
 
-One environment provider batches affected source/destination views in revision-checked atomic saves. Edits survive acknowledgment; conflicts retain drafts for explicit reload/discard. One lifecycle resets scope/access before loading; unchanged permissions preserve readiness/drafts, and retired connections cannot publish. Layout edits wait for readiness.
+One environment provider batches affected source/destination views in revision-checked atomic saves. Edits survive acknowledgment; conflicts retain drafts for explicit reload/discard. Catalog loading waits for shell-confirmed access on the current transport. Reconnecting pauses requests without discarding view drafts, and restored access loads automatically. One lifecycle resets environment/permission authority before loading; unchanged permissions preserve readiness/drafts, and retired connections cannot publish. Layout edits wait for readiness.
 
 Active view stays local per panel. Legacy v1 local splits import unowned members once and clear after backend acknowledgment. Missing sessions render as vacant slots without pruning saved geometry. Closure persists fresh vacant identities; even an entirely vacant view remains selected. Each vacancy offers localized session creation and accepts a dragged session into that exact slot. Moving within a view leaves the source vacant. Slot creation shows local progress and recoverable errors; failed close restores the session. Empty-view selection never falls back to an unrelated session. Views do not restart PTYs.
 

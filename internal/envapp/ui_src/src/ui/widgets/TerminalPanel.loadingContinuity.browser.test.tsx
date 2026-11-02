@@ -187,7 +187,7 @@ function renderCreateFlow(createSession: TerminalPanelSessionOperations['createS
   Object.assign(host.style, { width: '960px', height: '640px' });
   document.body.append(host);
   disposeRendered = render(() => (
-    <TerminalSessionCatalogProvider>
+    <TerminalSessionCatalogProvider accessReady>
       <TerminalPanel
         variant="panel"
         registerPageContext={registerPageContext}
@@ -213,7 +213,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '393px', height: '640px' });
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady>
       <TerminalPanel variant="panel" mobileSessionsOpen={open()} onMobileSessionsOpenChange={setOpen} />
     </TerminalSessionCatalogProvider>, host);
     expect(open()).toBe(true);
@@ -261,7 +261,7 @@ describe('TerminalPanel loading continuity', () => {
       { id: 'other', name: 'Other', layout: { type: 'pane', id: 'outside' }, revision: 3, createdAtMs: 2, updatedAtMs: 2 }];
     rpcState.viewRevision = 3;
     const host = document.createElement('div'); Object.assign(host.style, { width: '1100px', height: '700px' }); document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
     await userEvent.click(page.getByTestId('terminal-workspace-layout'));
     await expect.poll(() => visibleElements(document.body, '[role=menuitem]').map(item => item.textContent)).toEqual(['Three columns', 'Main left']);
@@ -389,7 +389,7 @@ describe('TerminalPanel loading continuity', () => {
     ];
     const host = document.createElement('div');
     Object.assign(host.style, { width: '1100px', height: '700px' }); document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     await expect.poll(() => host.querySelector('[data-terminal-view-id="target"]')).not.toBeNull();
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="target"]')!);
     const slot = host.querySelector<HTMLElement>('[data-floe-split-pane="slot"]')!;
@@ -415,7 +415,7 @@ describe('TerminalPanel loading continuity', () => {
       layout: { type: 'split', id: 'split-mobile', axis: 'x', ratio: 0.5, first: { type: 'pane', id: 'slot-a', empty: true }, second: { type: 'pane', id: 'slot-b', empty: true } } }];
     localStorage.setItem('redeven_terminal_workspace:v1:env-1:terminal_page:active-view', JSON.stringify('empty-mobile'));
     const host = document.createElement('div'); Object.assign(host.style, { width: '393px', height: '640px' }); document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     const panes = () => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'));
     await expect.poll(panes).toEqual(['slot-a']);
     const tabs = host.querySelectorAll<HTMLButtonElement>('nav[aria-label="Terminal panes"] button');
@@ -436,7 +436,7 @@ describe('TerminalPanel loading continuity', () => {
     host.style.transform = 'scale(' + scale + ')';
     host.style.transformOrigin = 'top left';
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     await expect.poll(() => runtimeState.propsBySession.has('dock-a')).toBe(true);
     runtimeState.propsBySession.get('dock-a').onInteractive?.('dock-a');
     const original = host.querySelector('[data-terminal-runtime-session="dock-a"]');
@@ -486,7 +486,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '1100px', height: '700px' });
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     setEnvironment({ id: 'env-1', allowed: false, status: 'connecting' });
     await Promise.resolve();
     setEnvironment({ id: 'env-1', allowed: false, status: 'connected' });
@@ -523,7 +523,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '1100px', height: '700px' });
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     await expect.poll(() => runtimeState.propsBySession.has('native-a')).toBe(true);
     runtimeState.propsBySession.get('native-a').onInteractive?.('native-a');
     const native = commands as unknown as {
@@ -587,7 +587,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '1100px', height: '700px' });
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
     for (const [id, runtime] of runtimeState.propsBySession) runtime.onInteractive?.(id);
     const original = host.querySelector('[data-terminal-runtime-session="browse-a"]');
@@ -616,7 +616,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '1100px', height: '700px', transform: 'scale(' + scale + ')', transformOrigin: 'top left' });
     document.body.append(host);
-    const mount = () => render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    const mount = () => render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     disposeRendered = mount();
     await expect.poll(() => runtimeState.propsBySession.has('resize-a')).toBe(true);
     runtimeState.propsBySession.get('resize-a').onInteractive?.('resize-a');
@@ -648,7 +648,7 @@ describe('TerminalPanel loading continuity', () => {
     rpcState.sessions = ['views-a', 'views-b', 'views-c'].map(id => ({ ...createdSession(id), isActive: id === 'views-a' }));
     const host = document.createElement('div');
     Object.assign(host.style, { width: '1100px', height: '700px' }); document.body.append(host);
-    const mount = () => render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    const mount = () => render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     disposeRendered = mount();
     await expect.poll(() => runtimeState.propsBySession.has('views-a')).toBe(true);
     runtimeState.propsBySession.get('views-a').onInteractive?.('views-a');
@@ -860,7 +860,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '960px', height: '640px' });
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady>
       <TerminalPanel registerActivityFlowerAnchor={enabled() ? register : undefined} />
     </TerminalSessionCatalogProvider>, host);
     await vi.waitFor(() => expect(register).toHaveBeenCalledTimes(1));
@@ -892,7 +892,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '960px', height: '640px' });
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady>
       <TerminalPanel variant={mode === 'workbench' ? 'workbench' : 'panel'} registerActivityFlowerAnchor={register} />
     </TerminalSessionCatalogProvider>, host);
     await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -906,7 +906,7 @@ describe('TerminalPanel loading continuity', () => {
     const host = document.createElement('div');
     Object.assign(host.style, { width: '960px', height: '640px' });
     document.body.append(host);
-    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+    disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady>
       <TerminalPanel registerActivityFlowerAnchor={register} />
     </TerminalSessionCatalogProvider>, host);
     await vi.waitFor(() => expect(runtimeState.propsBySession.has('created-session')).toBe(true));
@@ -1023,7 +1023,7 @@ describe('TerminalPanel loading continuity', () => {
     Object.assign(host.style, { width: '960px', height: '640px' });
     document.body.append(host);
     disposeRendered = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <TerminalPanel
           variant="panel"
           openSessionRequest={request()}

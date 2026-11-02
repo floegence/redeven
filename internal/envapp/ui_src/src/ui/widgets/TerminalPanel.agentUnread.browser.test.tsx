@@ -221,7 +221,7 @@ describe('TerminalPanel stock Agent unread integration', () => {
     const host = document.createElement('div');
     document.body.append(host);
     disposeRendered = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <TerminalPanel variant="workbench" workbenchSelected />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -267,7 +267,7 @@ describe('TerminalPanel stock Agent unread integration', () => {
       host.style.width = '1000px';
       document.body.append(host);
       disposeRendered = render(() => (
-        <TerminalSessionCatalogProvider>
+        <TerminalSessionCatalogProvider accessReady>
           <CatalogProbe />
           <div data-terminal-test-panel="activity" style="height: 320px">
             <TerminalPanel variant="panel" />

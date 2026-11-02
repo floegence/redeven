@@ -16,6 +16,8 @@ The gate alone decides channel authorization when registering the channel and it
 
 Runtime restart clears in-memory sessions and incomplete operations; it preserves committed authentication state.
 
+EnvAppShell binds remote access readiness to the exact connected client after access.status/access.resume succeeds. Each replacement channel must confirm access independently; late success or failure from a retired channel cannot authorize or disconnect its replacement. Protected Terminal catalog loading consumes this readiness, never transport connectivity alone. Local transport retains its Runtime-authorized channel admission contract.
+
 ## Browser Cookie scope and continuity
 Local UI alone issues, reads and clears `redeven_local_access_<http|https>_<port>`. Forwarded headers cannot select the scope.
 

@@ -70,6 +70,9 @@ const activityItemsState = vi.hoisted(() => ({
 }));
 const innerProviderState = vi.hoisted(() => ({
   refreshEnabled: false,
+  useActualCatalog: false,
+  catalog: null as import('./services/terminalSessionCatalog').TerminalSessionCatalogValue | null,
+  accessReady: (() => false) as () => boolean,
   refreshOwner: (() => undefined) as () => void,
 }));
 const activitySurfaceLifecycleState = vi.hoisted(() => ({
@@ -420,6 +423,9 @@ const disconnectMock = vi.fn(() => {
   publishProtocolSnapshot({ state: 'idle', attempt: 0 });
 });
 const accessStatusMock = vi.fn(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
+const terminalListSessionsMock = vi.fn(async () => ({ sessions: [] }));
+const terminalListGroupsMock = vi.fn(async () => ({ revision: 1, groups: [] }));
+const terminalListViewsMock = vi.fn(async () => ({ revision: 1, views: [] }));
 const accessResumeMock = vi.fn(async ({ token }: { token: string }) => {
   resumeCalls.push(token);
 });
@@ -600,19 +606,30 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
   },
 }));
 
-vi.mock('./services/terminalSessionCatalog', () => ({
-  TerminalSessionCatalogProvider: (props: any) => {
-    const [ownerGeneration, setOwnerGeneration] = createSignal({ id: 0 });
-    innerProviderState.refreshOwner = () => {
-      setOwnerGeneration((current) => ({ id: current.id + 1 }));
-    };
-    return innerProviderState.refreshEnabled ? (
-      <For each={[ownerGeneration()]}>
-        {() => <>{props.children}</>}
-      </For>
-    ) : <>{props.children}</>;
-  },
-}));
+vi.mock('./services/terminalSessionCatalog', async () => {
+  const actual = await vi.importActual<typeof import('./services/terminalSessionCatalog')>('./services/terminalSessionCatalog');
+  const Probe = () => {
+    innerProviderState.catalog = actual.useTerminalSessionCatalog();
+    return null;
+  };
+  return {
+    TerminalSessionCatalogProvider: (props: any) => {
+      innerProviderState.accessReady = () => props.accessReady;
+      if (innerProviderState.useActualCatalog) {
+        return <actual.TerminalSessionCatalogProvider accessReady={props.accessReady}><Probe />{props.children}</actual.TerminalSessionCatalogProvider>;
+      }
+      const [ownerGeneration, setOwnerGeneration] = createSignal({ id: 0 });
+      innerProviderState.refreshOwner = () => {
+        setOwnerGeneration((current) => ({ id: current.id + 1 }));
+      };
+      return innerProviderState.refreshEnabled ? (
+        <For each={[ownerGeneration()]}>
+          {() => <>{props.children}</>}
+        </For>
+      ) : <>{props.children}</>;
+    },
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
   AppViewport: (props: any) => <div>{props.children}</div>,
@@ -1186,6 +1203,10 @@ vi.mock('./protocol/redeven_v1', () => ({
       })),
     },
     terminal: {
+      listSessions: terminalListSessionsMock,
+      listGroups: terminalListGroupsMock,
+      listViews: terminalListViewsMock,
+      onViewsChanged: vi.fn(() => () => undefined),
       onSessionsChanged: vi.fn(() => () => undefined),
     },
     ai: {
@@ -1603,6 +1624,9 @@ beforeEach(async () => {
   registeredComponentsState.dynamicComponents = [];
   activityItemsState.items = [];
   innerProviderState.refreshEnabled = false;
+  innerProviderState.useActualCatalog = false;
+  innerProviderState.catalog = null;
+  innerProviderState.accessReady = () => false;
   innerProviderState.refreshOwner = () => undefined;
   activitySurfaceLifecycleState.fileMounts = 0;
   activitySurfaceLifecycleState.fileCleanups = 0;
@@ -6078,6 +6102,7 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(host.textContent).toContain('Preparing secure session');
+      expect(innerProviderState.accessReady()).toBe(false);
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
 
       resumeDeferred.resolve();
@@ -6086,7 +6111,90 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Preparing secure session');
+      expect(innerProviderState.accessReady()).toBe(true);
     } finally {
+      dispose();
+    }
+  });
+
+  it('loads the real terminal catalogs only after each remote channel resumes access', async () => {
+    innerProviderState.useActualCatalog = true;
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+    accessStatusMock.mockResolvedValue({ passwordRequired: true, unlocked: false });
+    const initialResume = deferred<void>();
+    const nextResume = deferred<void>();
+    accessResumeMock.mockImplementationOnce(() => initialResume.promise).mockImplementationOnce(() => nextResume.promise);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    const catalogs = [terminalListSessionsMock, terminalListGroupsMock, terminalListViewsMock];
+    try {
+      await flushAsync();
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement;
+      input.value = 'secret';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushUntil(() => accessResumeMock.mock.calls.length === 1);
+      expect(innerProviderState.accessReady()).toBe(false);
+      for (const list of catalogs) expect(list).not.toHaveBeenCalled();
+      initialResume.resolve();
+      await flushUntil(() => Boolean(innerProviderState.catalog?.hydrated() && innerProviderState.catalog?.viewCatalog.ready()), 40);
+      expect(innerProviderState.catalog?.error()).toBeNull();
+      expect(innerProviderState.accessReady()).toBe(true);
+      const counts = catalogs.map(list => list.mock.calls.length);
+      expect(counts.every(count => count > 0)).toBe(true);
+
+      publishProtocolWaiting(new Error('network interrupted'));
+      await flushAsync();
+      expect(innerProviderState.accessReady()).toBe(false);
+      publishProtocolConnected('replacement-channel');
+      await flushUntil(() => accessResumeMock.mock.calls.length === 2);
+      expect(innerProviderState.accessReady()).toBe(false);
+      expect(catalogs.map(list => list.mock.calls.length)).toEqual(counts);
+      nextResume.resolve();
+      await flushUntil(() => catalogs.every((list, index) => list.mock.calls.length > counts[index]), 40);
+      expect(innerProviderState.accessReady()).toBe(true);
+      expect(innerProviderState.catalog?.error()).toBeNull();
+      expect(innerProviderState.catalog?.viewCatalog.error()).toBeNull();
+    } finally {
+      initialResume.resolve();
+      nextResume.resolve();
+      dispose();
+    }
+  });
+
+  it.each(['confirmed', 'rejected'] as const)('ignores %s access from a retired channel before hydrating the replacement catalogs', async (outcome) => {
+    innerProviderState.useActualCatalog = true;
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+    getEnvAppAccessStatusMock.mockReset().mockResolvedValue({ password_required: false, unlocked: true });
+    const retiredStatus = deferred<{ passwordRequired: boolean; unlocked: boolean }>();
+    const currentStatus = deferred<{ passwordRequired: boolean; unlocked: boolean }>();
+    accessStatusMock.mockImplementationOnce(() => retiredStatus.promise).mockImplementationOnce(() => currentStatus.promise);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    const catalogs = [terminalListSessionsMock, terminalListGroupsMock, terminalListViewsMock];
+    try {
+      await flushUntil(() => accessStatusMock.mock.calls.length === 1);
+      publishProtocolConnected('replacement-channel');
+      if (outcome === 'confirmed') retiredStatus.resolve({ passwordRequired: false, unlocked: true });
+      else retiredStatus.reject(Object.assign(new Error('access password required'), { code: 423 }));
+      await flushUntil(() => accessStatusMock.mock.calls.length === 2);
+      expect(innerProviderState.accessReady()).toBe(false);
+      for (const list of catalogs) expect(list).not.toHaveBeenCalled();
+      currentStatus.resolve({ passwordRequired: false, unlocked: true });
+      await flushUntil(() => Boolean(innerProviderState.catalog?.hydrated() && innerProviderState.catalog?.viewCatalog.ready()), 40);
+      expect(innerProviderState.accessReady()).toBe(true);
+      expect(innerProviderState.catalog?.error()).toBeNull();
+      expect(accessResumeMock).not.toHaveBeenCalled();
+      expect(disconnectMock).not.toHaveBeenCalled();
+    } finally {
+      retiredStatus.resolve({ passwordRequired: false, unlocked: true });
+      currentStatus.resolve({ passwordRequired: false, unlocked: true });
       dispose();
     }
   });

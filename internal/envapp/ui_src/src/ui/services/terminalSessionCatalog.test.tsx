@@ -21,6 +21,7 @@ const rpcState = vi.hoisted(() => ({
   groups: [{ id: 'default', name: 'Default', defaultWorkingDir: '/', sortOrder: 0, createdAtMs: 1, updatedAtMs: 1, isDefault: true }],
   groupRevision: 1,
   list: vi.fn(),
+  listViews: vi.fn(),
   listGroups: vi.fn(),
   createGroup: vi.fn(),
   updateGroup: vi.fn(),
@@ -178,7 +179,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 }));
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({ terminal: {
-    listViews: vi.fn(async () => ({ revision: 1, views: [] })),
+    listViews: rpcState.listViews,
     updateViews: vi.fn(), onViewsChanged: vi.fn(() => () => undefined),
     listSessions: rpcState.list,
     onSessionsChanged: rpcState.onSessionsChanged,
@@ -242,6 +243,8 @@ describe('TerminalSessionCatalogProvider', () => {
     rpcState.sessions = [{ id: 's1', groupId: 'default', name: 'Terminal 1', workingDir: '/', createdAtMs: 1, lastActiveAtMs: 2, isActive: true }];
     rpcState.groups = [{ id: 'default', name: 'Default', defaultWorkingDir: '/', sortOrder: 0, createdAtMs: 1, updatedAtMs: 1, isDefault: true }];
     rpcState.groupRevision = 1;
+    rpcState.listViews.mockReset();
+    rpcState.listViews.mockResolvedValue({ revision: 1, views: [] });
     rpcState.list.mockReset();
     rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
     rpcState.listGroups.mockReset();
@@ -297,7 +300,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -310,6 +313,59 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
+  it('waits for channel access before loading sessions, groups and views, then hydrates automatically', async () => {
+    const [accessReady, setAccessReady] = createSignal(false);
+    let catalog: any;
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider accessReady={accessReady()}>
+        <Consumer onValue={value => { catalog = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), document.createElement('div'));
+    try {
+      await Promise.resolve();
+      await catalog.refresh();
+      await catalog.refreshGroups();
+      await catalog.viewCatalog.reload();
+      expect(catalog.getCoordinator()).toBeNull();
+      expect(rpcState.list).not.toHaveBeenCalled();
+      expect(rpcState.listGroups).not.toHaveBeenCalled();
+      expect(rpcState.listViews).not.toHaveBeenCalled();
+      expect(catalog.error()).toBeNull();
+      setAccessReady(true);
+      await vi.waitFor(() => expect(catalog.hydrated() && catalog.viewCatalog.ready()).toBe(true));
+      expect(rpcState.list).toHaveBeenCalledTimes(1);
+      expect(rpcState.listGroups).toHaveBeenCalledTimes(1);
+      expect(rpcState.listViews).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  });
+
+  it('fences pending catalog responses while channel access is being restored', async () => {
+    const [accessReady, setAccessReady] = createSignal(true);
+    let rejectSessions!: (error: Error) => void;
+    rpcState.list.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSessions = reject; }));
+    let catalog: any;
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider accessReady={accessReady()}>
+        <Consumer onValue={value => { catalog = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), document.createElement('div'));
+    try {
+      await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(1));
+      setAccessReady(false);
+      rejectSessions(Object.assign(new Error('access password required'), { code: 423 }));
+      await Promise.resolve(); await Promise.resolve();
+      expect(catalog.error()).toBeNull();
+      expect(catalog.loading()).toBe(false);
+      expect(catalog.getCoordinator()).toBeNull();
+      setAccessReady(true);
+      await vi.waitFor(() => expect(catalog.hydrated() && catalog.viewCatalog.ready()).toBe(true));
+      expect(catalog.sessions().map((session: any) => session.id)).toEqual(['s1']);
+      expect(catalog.error()).toBeNull();
+      expect(rpcState.list).toHaveBeenCalledTimes(2);
+      expect(rpcState.listViews).toHaveBeenCalledTimes(2);
+    } finally { dispose(); }
+  });
+
   it('keeps one shared in-memory session order for every catalog projection', async () => {
     rpcState.sessions = [
       rpcState.sessions[0],
@@ -320,7 +376,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -343,7 +399,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -388,7 +444,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -437,7 +493,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -481,7 +537,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -506,7 +562,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -540,7 +596,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -573,7 +629,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -601,7 +657,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -646,7 +702,7 @@ describe('TerminalSessionCatalogProvider', () => {
       let latest: any = null;
       const host = document.createElement('div');
       const dispose = render(() => (
-        <TerminalSessionCatalogProvider>
+        <TerminalSessionCatalogProvider accessReady>
           <Consumer onValue={(value) => { latest = value; }} />
         </TerminalSessionCatalogProvider>
       ), host);
@@ -691,7 +747,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -726,7 +782,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -777,7 +833,7 @@ describe('TerminalSessionCatalogProvider', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -799,7 +855,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -820,7 +876,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -853,7 +909,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -869,7 +925,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -892,7 +948,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -918,7 +974,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -945,7 +1001,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -973,7 +1029,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1047,7 +1103,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1102,7 +1158,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1198,7 +1254,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1277,7 +1333,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1326,7 +1382,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1363,7 +1419,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1402,7 +1458,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1426,7 +1482,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1448,7 +1504,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1479,7 +1535,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1528,7 +1584,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1595,7 +1651,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1648,7 +1704,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1694,7 +1750,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1748,7 +1804,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1792,7 +1848,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1824,7 +1880,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);
@@ -1857,7 +1913,7 @@ describe('TerminalSessionCatalogProvider', () => {
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady>
         <Consumer onValue={(value) => { latest = value; }} />
       </TerminalSessionCatalogProvider>
     ), host);

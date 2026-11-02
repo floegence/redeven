@@ -11,7 +11,21 @@ await mkdir(evidence, { recursive: true });
 let runtime, browser, page, releasePermissions;
 const report = { status: 'running', checks: [] };
 try {
-  runtime = await startRuntime(tempDir);
+  const accessPassword = 'terminal-workspace-fixture-password';
+  const unlock = async (targetPage, problems) => {
+    const passwordInput = targetPage.locator('input[type="password"]');
+    await expect(passwordInput).toBeVisible();
+    // The locked Runtime discovery request intentionally returns 423 before
+    // login. Only that pre-unlock challenge is expected; later errors fail.
+    problems.responses = problems.responses.filter(response => response.path !== '/api/local/runtime' || response.status !== 423);
+    problems.console = problems.console.filter(message =>
+      message.location?.url !== new URL('/api/local/runtime', targetPage.url()).toString()
+      || message.text !== 'Failed to load resource: the server responded with a status of 423 (Locked)');
+    await passwordInput.fill(accessPassword);
+    await passwordInput.press('Enter');
+    await expect(passwordInput).toHaveCount(0);
+  };
+  runtime = await startRuntime(tempDir, { accessPassword });
   const spki = await readTLSServerSPKIHash(runtime.startup.local_ui_url, runtime.authorityCertificatePath);
   browser = await chromium.launch({ headless: true, args: ['--ignore-certificate-errors-spki-list=' + spki] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 940 } });
@@ -20,16 +34,19 @@ try {
   const permissionRefresh = new Promise(resolve => { releasePermissions = resolve; });
   await context.route('**/api/local/environment', async route => {
     permissionRequests++;
-    if (permissionRequests === 2) await permissionRefresh;
+    if (permissionRequests >= 2) await permissionRefresh;
     await route.continue();
   });
   const opened = await openEnvPage(context, entryURL);
   page = opened.page;
   const { problems } = opened;
-  await expect.poll(() => permissionRequests).toBe(2);
+  await unlock(page, problems);
+  await expect.poll(() => permissionRequests).toBeGreaterThanOrEqual(2);
   releasePermissions();
   await context.unrouteAll({ behavior: 'wait' });
   const panel = await selectSurface(page, 'panel');
+  await expect(panel).not.toContainText('access password required');
+  report.checks.push('password-protected startup hydrates terminal catalogs without manual refresh');
   const created = await createSession(page, panel);
   const firstId = created.sessionID;
   await expect(panel.getByRole('button', { name: 'New view', exact: true })).toBeEnabled();
@@ -257,6 +274,7 @@ try {
   // A separate browser context has no local storage; the view catalog must come from the backend.
   const otherContext = await browser.newContext({ viewport: { width: 1440, height: 940 } });
   const other = await openEnvPage(otherContext, entryURL);
+  await unlock(other.page, other.problems);
   const otherPanel = await selectSurface(other.page, 'panel');
   await expect(otherPanel.locator('[data-terminal-view-id]')).toHaveCount(2);
   await otherPanel.locator('[data-terminal-view-id="' + secondViewId + '"]').click();
@@ -292,6 +310,7 @@ try {
   await expect(emptyRestored.locator('[data-terminal-view-id]')).toHaveCount(1);
   await expect(restored.locator('[data-terminal-view-id]')).toHaveCount(1);
   await expect(emptyRestored.locator('[data-terminal-session-id]')).toHaveCount(sessionCountBeforeDelete);
+  for (const key of ['page', 'console', 'requests', 'responses']) assert.deepEqual(other.problems[key], [], 'second browser ' + key);
   await otherContext.close();
   report.checks.push('independent views persist, cross-view dragging moves unique membership, clicks follow ownership and deletion preserves sessions');
   for (const key of ['page', 'console', 'requests', 'responses']) assert.deepEqual(problems[key], [], key);

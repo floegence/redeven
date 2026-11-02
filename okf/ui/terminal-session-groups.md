@@ -19,7 +19,7 @@ Views use schema kind terminal_view_catalog, version 3. RPC 2024–2027 list/put
 
 ## Projection and interaction
 
-One Terminal Session Catalog Provider owns membership/display order. Lifecycle fences prevent stale replies overwriting moves/deletes; unknown groups refresh without reassignment. Group deletion closes/hides members first; failures identify sessions without fabricated success or silent retry.
+One Terminal Session Catalog Provider owns membership/display order. Sessions, groups and views wait for current-channel access confirmation from EnvAppShell as well as ready process-launch permissions. Connected transport or cached environment metadata alone cannot start protected catalog RPCs. Access restoration automatically hydrates all catalogs; retiring access fences pending responses and retains the existing presentation. Lifecycle fences prevent stale replies overwriting moves/deletes; unknown groups refresh without reassignment. Group deletion closes/hides members first; failures identify sessions without fabricated success or silent retry.
 
 Search matches group names/paths and session presentation, revealing folded matches temporarily. Views filter by name. Sidebar defaults to 258px, persists per environment/panel within 220–480px and reserves content space. Floe ResizeHandle owns pointer resizing; arrows/Home/End support keyboards. Overlays retain independent width.
 

@@ -200,7 +200,7 @@ async function stopRuntime(runtime) {
   }
 }
 
-async function startRuntime(tempDir, { bind = '127.0.0.1:0' } = {}) {
+async function startRuntime(tempDir, { bind = '127.0.0.1:0', accessPassword } = {}) {
   const binaryPath = path.join(tempDir, 'redeven');
   await runCommand('go', ['build', '-tags', 'floeterm_native', '-o', binaryPath, './cmd/redeven'], {
     env: { ...process.env, GOWORK: 'off', CGO_ENABLED: '1' },
@@ -229,7 +229,7 @@ async function startRuntime(tempDir, { bind = '127.0.0.1:0' } = {}) {
     '--startup-report-file', startupReportPath,
   ], {
     cwd: repoRoot,
-    env: { ...process.env, HOME: homeDir, GOWORK: 'off' },
+    env: { ...process.env, HOME: homeDir, GOWORK: 'off', ...(accessPassword ? { REDEVEN_LOCAL_UI_PASSWORD: accessPassword } : {}) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const state = { exited: false, code: null, signal: null, stdout: '', stderr: '' };

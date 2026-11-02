@@ -2863,14 +2863,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     openSurface('ai', { focus: true, openStrategy: 'focus_latest_or_create' });
   };
 
-  let accessResumeClient: unknown = null;
+  const [accessResumeClient, setAccessResumeClient] = createSignal<unknown>(null);
   let accessRecoverySeq = 0;
   let accessResumeInFlight: { key: number; promise: Promise<void> } | null = null;
 
   const ensureAccessResumed = async (attemptKey: number) => {
     const client = protocol.session?.();
     if (!client || protocol.status() !== 'connected') return;
-    if (accessResumeClient === client) {
+    if (accessResumeClient() === client) {
       setCurrentAccessChannelReady(true);
       setCurrentAccessError(null);
       setManualError(null);
@@ -2884,9 +2884,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         ACCESS_RESUME_TIMEOUT_MS,
         i18n.t('accessGate.secureSessionCheckTimedOutError'),
       );
-      if (accessRecoverySeq !== attemptKey) return;
+      if (accessRecoverySeq !== attemptKey || client !== protocol.session?.() || protocol.status() !== 'connected') return;
       if (!status.passwordRequired || status.unlocked) {
-        accessResumeClient = client;
+        setAccessResumeClient(() => client);
         setCurrentAccessChannelReady(true);
         setCurrentAccessError(null);
         setManualError(null);
@@ -2904,8 +2904,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         ACCESS_RESUME_TIMEOUT_MS,
         i18n.t('accessGate.prepareSecureSessionFailedError'),
       );
-      if (accessRecoverySeq !== attemptKey) return;
-      accessResumeClient = client;
+      if (accessRecoverySeq !== attemptKey || client !== protocol.session?.() || protocol.status() !== 'connected') return;
+      setAccessResumeClient(() => client);
       setCurrentAccessChannelReady(true);
       setCurrentAccessError(null);
       setManualError(null);
@@ -2915,6 +2915,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
     try {
       await promise;
+    } catch (error) {
+      // A retired channel cannot authorize or disconnect its replacement.
+      if (accessRecoverySeq !== attemptKey || client !== protocol.session?.() || protocol.status() !== 'connected') return;
+      throw error;
     } finally {
       if (accessResumeInFlight?.key === attemptKey) {
         accessResumeInFlight = null;
@@ -3059,7 +3063,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     const attemptKey = ++accessRecoverySeq;
     setAccessRecoveryBusy(true);
     setConnectionAttemptSeq((n) => n + 1);
-    accessResumeClient = null;
+    setAccessResumeClient(null);
     accessResumeInFlight = null;
     setCurrentAccessError(null);
     setManualError(null);
@@ -3083,7 +3087,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         configLease = undefined;
         if (accessRecoverySeq !== attemptKey) return;
         observeCurrentPluginSessionReadiness();
-        accessResumeClient = protocol.session?.();
+        setAccessResumeClient(() => protocol.session?.());
         setLocalAccessChannelReady(true);
         setCurrentAccessError(null);
         setManualError(null);
@@ -3157,7 +3161,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       // attempt cannot publish an error or disconnect a later explicit resume.
       accessRecoverySeq += 1;
       setAccessRecoveryBusy(false);
-      accessResumeClient = null;
+      setAccessResumeClient(null);
       accessResumeInFlight = null;
       const closing = protocol.disconnect();
       const desktop = desktopTransportRecovery();
@@ -3546,7 +3550,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       setAuthenticationRevision(value => value + 1);
       setCurrentAccessResumeToken(token);
       setCurrentAccessPassword('');
-      accessResumeClient = null;
+      setAccessResumeClient(null);
 
       if (isLocalMode()) {
         setLocalAccessStatus((current) => ({
@@ -3704,25 +3708,23 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   createEffect(() => {
-    if (accessGateVisible()) {
-      accessResumeClient = null;
-      return;
-    }
-
     const client = protocol.session?.();
     const st = protocol.status();
-    if (st !== 'connected' || !client) {
-      accessResumeClient = null;
+    // A replacement connection must confirm its own access before protected
+    // catalogs start. A pending resume is work to finish, not a reason to skip it.
+    if (st !== 'connected' || !client || accessPending() || accessLocked()) {
+      setAccessResumeClient(null);
       return;
     }
+    if (accessRecoveryBusy()) return;
     if (isLocalMode()) {
-      accessResumeClient = client;
+      setAccessResumeClient(() => client);
       setCurrentAccessChannelReady(true);
       setCurrentAccessError(null);
       setManualError(null);
       return;
     }
-    if (accessResumeClient === client) return;
+    if (accessResumeClient() === client) return;
     const attemptKey = ++accessRecoverySeq;
     accessResumeInFlight = null;
     setAccessRecoveryBusy(true);
@@ -5483,7 +5485,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           return setPluginPin(menu.placement, menu.inventoryKey, false);
         }}
       />
-      <TerminalSessionCatalogProvider>
+      <TerminalSessionCatalogProvider accessReady={
+        !accessGateVisible() && !accessRecoveryBusy() && accessChannelReady()
+        && protocol.status() === 'connected' && accessResumeClient() === protocol.session?.()
+      }>
         <DownloadContext.Provider value={downloadManager}>
         <FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>
           <FilePreviewContext.Provider value={filePreviewContextValue}>
