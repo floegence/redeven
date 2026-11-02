@@ -1365,7 +1365,8 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     expect(card.getAttribute('aria-current')).toBe('true');
-    expect(primary.getBoundingClientRect().height).toBe(initialHeight);
+    // Transformed ancestors can serialize the same CSS pixel height fractionally.
+    expect(primary.getBoundingClientRect().height).toBeCloseTo(initialHeight, 2);
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
     expectNoHorizontalOverflow(actions);
   });
