@@ -76,7 +76,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const searchPolicy = () => store.draft?.type === props.provider?.type && store.draft?.search_policy
     ? store.draft.search_policy : props.searchPolicies?.[store.draft?.type ?? 'openai'];
   const providerSearch = () => store.draft?.web_search ?? (searchPolicy() ? { enabled: searchPolicy()!.enabled, source: searchPolicy()!.source } : undefined);
-  const providerFetchSource = () => store.draft?.web_fetch?.source ?? (providerSearch()?.enabled ? searchPolicy()?.default_fetch_source ?? 'direct' : 'direct');
+  const providerFetchSource = () => store.draft?.web_fetch?.source ?? searchPolicy()?.default_fetch_source ?? 'direct';
   const recommended = (enabled: boolean) => enabled ? copy().catalog.searchRecommendedOn : copy().catalog.searchRecommendedOff;
   const FieldInfo = (info: { label: string; text: string | readonly string[]; alignEnd?: boolean; children?: JSX.Element }) => (
     <span class="relative inline-flex min-w-0 items-center gap-1 [&>div]:static">

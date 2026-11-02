@@ -281,19 +281,18 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		}
 	}
 	required, _ := readSchema["required"].([]any)
-	if !containsAnyString(required, "process_id") || !containsAnyString(required, "description") || !containsAnyString(required, "after_seq") {
-		t.Fatalf("terminal.read required=%#v, want process_id, description, and after_seq", required)
+	if !containsAnyString(required, "process_id") || containsAnyString(required, "description") || !containsAnyString(required, "after_seq") {
+		t.Fatalf("terminal.read required=%#v, want process_id and after_seq only", required)
 	}
 	toolDescription := strings.ToLower(terminalRead.Description)
 	for _, phrase := range []string{
-		"new output after after_seq",
-		fmt.Sprintf("waiting up to %d seconds", terminalProcessModelReadWaitMS/1000),
-		"returning sooner when output arrives or the process ends",
-		"wait_expired means only the read window ended",
-		"if has_more or you still need the running command's result",
-		"running remains active even with empty output and an unchanged cursor",
-		"do not restart the command or add sleeps",
-		"cancellation interrupts the read",
+		"bounded output page after after_seq",
+		fmt.Sprintf("waits up to %d seconds", terminalProcessModelReadWaitMS/1000),
+		"returning sooner on output or exit",
+		"wait_expired does not stop the command",
+		"completion is delivered automatically",
+		"retained final output remains readable after restart",
+		"unavailable observation does not prove the command stopped",
 	} {
 		if !strings.Contains(toolDescription, phrase) {
 			t.Fatalf("terminal.read description missing %q: %q", phrase, terminalRead.Description)
@@ -323,8 +322,8 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		t.Fatalf("terminal.terminate description guidance is incomplete: %q", terminateDescription)
 	}
 	terminateRequired, _ := terminateSchema["required"].([]any)
-	if !containsAnyString(terminateRequired, "process_id") || !containsAnyString(terminateRequired, "description") {
-		t.Fatalf("terminal.terminate required=%#v, want process_id and description", terminateRequired)
+	if !containsAnyString(terminateRequired, "process_id") || containsAnyString(terminateRequired, "description") {
+		t.Fatalf("terminal.terminate required=%#v, want process_id only", terminateRequired)
 	}
 }
 

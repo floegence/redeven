@@ -3,7 +3,7 @@ type: Storage Contract
 title: Flower storage ownership and migrations
 tags: [ai, storage, sqlite, migrations, floret]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -23,6 +23,13 @@ Cancellation, shutdown and execution-context settlement resolve canonical contro
 A read-state failure cannot become a core Runtime constructor failure or a synthetic read record.
 
 Redeven also owns the [Agent Plugins registry](flower-agent-plugins.md), snapshots and installation data. Its schema-1 SQLite store is separate from canonical conversation history; credential references resolve through SecretsStore schema 4. Neither owner decodes Floret records.
+
+## Execution configuration
+Product schema 11 to 12 adds bounded execution configuration to the existing
+admission authority. It retains original provider/model and RunOptions for
+continuations; it is not a second lifecycle table. Historical rows remain valid
+with no inferred configuration. Floret owns host-work facts, final output,
+notice admission, unknown recovery and continuation identity.
 
 ## Readonly checks and owner transactions
 `sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.

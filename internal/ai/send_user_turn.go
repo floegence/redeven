@@ -273,7 +273,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	if err := turnInput.Validate(); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
-	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, "", req.Options.PermissionType); err != nil {
+	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, "", req.Options.PermissionType, req); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
 	s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req, effect: effect})

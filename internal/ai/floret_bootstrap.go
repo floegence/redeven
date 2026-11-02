@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -16,6 +17,7 @@ import (
 // floretBootstrapResult keeps Floret lifecycle, canonical retention, and the
 // typed thread service behind their published runtime contracts.
 type floretBootstrapResult struct {
+	suspend              func(context.Context) error
 	prepareThread        func(context.Context, identity.ThreadID) error
 	threadReadiness      func(context.Context, identity.ThreadID) (flruntime.ThreadReadiness, error)
 	activate             func(context.Context) error
@@ -89,7 +91,7 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 		}
 	}
 	if request.RequestKey != "" && request.TurnID != "" {
-		if err := service.persistExecutionAuthority(ctx, &pending.meta, request.ThreadID.String(), request.RequestKey, request.TurnID.String(), pending.req.Options.PermissionType); err != nil {
+		if err := service.persistExecutionAuthority(ctx, &pending.meta, request.ThreadID.String(), request.RequestKey, request.TurnID.String(), pending.req.Options.PermissionType, pending.req); err != nil {
 			return nil, err
 		}
 	}
@@ -168,6 +170,21 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	// Admission requires RWX session authority. Tool policy is resolved at each
 	// authorization boundary independently of this durable identity.
 	meta := sessionMetaFromExecutionAuthority(authority)
+	options := RunOptions{NoUserInteraction: strings.TrimSpace(settings.ParentThreadID) != "", PermissionType: authority.PermissionType}
+	modelID := settings.ModelID
+	if authority.ExecutionConfigJSON != "" {
+		var execution struct {
+			Model   string
+			Options RunOptions
+		}
+		if err := json.Unmarshal([]byte(authority.ExecutionConfigJSON), &execution); err != nil {
+			return floretEffectRequest{}, err
+		}
+		options = execution.Options
+		if execution.Model != "" {
+			modelID = execution.Model
+		}
+	}
 	var canonicalInput RunInput
 	if request.TurnKind == "" {
 		canonicalInput, err = canonicalRunInputFromFloret(request)
@@ -176,10 +193,8 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 		}
 	}
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
-		ClientRequestID: request.RequestKey, ThreadID: request.ThreadID.String(), Model: settings.ModelID,
-		Input: canonicalInput, Options: RunOptions{
-			NoUserInteraction: strings.TrimSpace(settings.ParentThreadID) != "", PermissionType: authority.PermissionType,
-		},
+		ClientRequestID: request.RequestKey, ThreadID: request.ThreadID.String(), Model: modelID,
+		Input: canonicalInput, Options: options,
 	}}, nil
 }
 
@@ -218,6 +233,9 @@ func (s *Service) executionAuthorityForRequest(ctx context.Context, request flru
 	if request.RetrySource != "" {
 		return db.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.RetrySource.String())
 	}
+	if request.HostWorkSourceTurnID != "" {
+		return db.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.HostWorkSourceTurnID.String())
+	}
 	return nil, nil
 }
 
@@ -234,6 +252,7 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 		return nil, errors.New("published Floret ThreadUpdateSource contract is unavailable")
 	}
 	return &floretBootstrapResult{
+		suspend:              host.SuspendExecution,
 		threadReadiness:      host.Readiness,
 		prepareThread:        host.PrepareThread,
 		activate:             host.Activate,

@@ -810,7 +810,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		return fltools.Result{}, err
 	}
 	var outputPolicy *fltools.OutputPolicy
-	if name := strings.TrimSpace(result.ToolName); completeReportTool(name) || isComputerUseTool(name) {
+	if name := strings.TrimSpace(result.ToolName); completeReportTool(name) || isComputerUseTool(name) || strings.HasPrefix(name, "terminal.") {
 		// Explicit child reports must remain complete through savepoints and retry.
 		// The normal provider request budget still applies to the full result.
 		outputPolicy = &fltools.OutputPolicy{VisibleMaxBytes: len(text) + 1, VisibleMaxLines: strings.Count(string(text), "\n") + 1, Strategy: fltools.OutputHead, PreserveFull: true}
@@ -839,19 +839,29 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 			}
 		}
 	}
+	observedHostWork := ""
+	if r != nil && r.threadRuntime != nil && (result.ToolName == "terminal.exec" || result.ToolName == "terminal.read" || result.ToolName == "terminal.terminate") {
+		if data, ok := result.Data.(map[string]any); ok {
+			status, _ := data["status"].(string)
+			if status == terminalProcessStatusSuccess || status == terminalProcessStatusError || status == terminalProcessStatusCanceled {
+				observedHostWork, _ = data["process_id"].(string)
+			}
+		}
+	}
 	return fltools.Result{
-		CallID:        strings.TrimSpace(result.ToolID),
-		Name:          strings.TrimSpace(result.ToolName),
-		Text:          string(text),
-		Structured:    structured,
-		Metadata:      metadata,
-		Activity:      activity,
-		Attachments:   attachments,
-		IsError:       isError,
-		DispatchErr:   dispatchErr,
-		EffectOutcome: effectOutcome,
-		OutputPolicy:  outputPolicy,
-		BoundedWait:   boundedWait,
+		ObservedHostWork: observedHostWork,
+		CallID:           strings.TrimSpace(result.ToolID),
+		Name:             strings.TrimSpace(result.ToolName),
+		Text:             string(text),
+		Structured:       structured,
+		Metadata:         metadata,
+		Activity:         activity,
+		Attachments:      attachments,
+		IsError:          isError,
+		DispatchErr:      dispatchErr,
+		EffectOutcome:    effectOutcome,
+		OutputPolicy:     outputPolicy,
+		BoundedWait:      boundedWait,
 	}, nil
 }
 
@@ -1289,9 +1299,15 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	}
 	if renderer == fltools.ActivityRendererTerminal {
 		rawPayload["description"] = terminalActivityInput(result.activityInput)["description"]
-		if strings.TrimSpace(anyToString(rawPayload["command"])) == "" && r != nil {
-			if proc, err := r.terminalProcessForTool(anyToString(result.activityInput["process_id"])); err == nil {
-				rawPayload["command"] = proc.Snapshot().Command
+		if r != nil {
+			if proc, err := r.terminalProcessForTool(firstNonEmptyString(anyToString(rawPayload["process_id"]), anyToString(result.activityInput["process_id"]))); err == nil {
+				snapshot := proc.Snapshot()
+				if strings.TrimSpace(anyToString(rawPayload["command"])) == "" {
+					rawPayload["command"] = snapshot.Command
+				}
+				if strings.TrimSpace(anyToString(rawPayload["description"])) == "" {
+					rawPayload["description"] = snapshot.Description
+				}
 			}
 		}
 	}

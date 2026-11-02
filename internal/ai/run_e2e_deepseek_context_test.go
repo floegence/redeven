@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +26,12 @@ import (
 )
 
 type deepSeekContextObservation struct {
+	ReasoningTokens         int64
+	ElapsedMS               int64
+	TransportError          string
+	HTTPStatus              int
+	MaxOutputTokens         int
+	Reasoning               json.RawMessage
 	Kind                    string
 	RequestBytes            int
 	InputTokens             int64
@@ -53,6 +60,7 @@ type deepSeekContextObservation struct {
 }
 
 type deepSeekContextRecorder struct {
+	traceDir     string
 	mu           sync.Mutex
 	markers      []string
 	observations []deepSeekContextObservation
@@ -61,6 +69,8 @@ type deepSeekContextRecorder struct {
 
 func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservation {
 	var envelope struct {
+		MaxOutputTokens    int               `json:"max_output_tokens"`
+		Reasoning          json.RawMessage   `json:"reasoning"`
 		Model              string            `json:"model"`
 		Messages           []json.RawMessage `json:"input"`
 		Tools              []json.RawMessage `json:"tools"`
@@ -84,6 +94,7 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 		kind = "summary"
 	}
 	observation := deepSeekContextObservation{
+		MaxOutputTokens: envelope.MaxOutputTokens, Reasoning: envelope.Reasoning,
 		Kind: kind, RequestBytes: len(body), ResponseMarkerPresence: make([]bool, len(r.markers)),
 		Index:                   -1,
 		HasImageInput:           bytes.Contains(body, []byte(`"type":"input_image"`)),
@@ -182,8 +193,11 @@ func (r *deepSeekContextRecorder) recordUsage(index int, line []byte) {
 		Type     string `json:"type"`
 		Response struct {
 			Usage struct {
-				Input   int64 `json:"input_tokens"`
-				Output  int64 `json:"output_tokens"`
+				Input         int64 `json:"input_tokens"`
+				Output        int64 `json:"output_tokens"`
+				OutputDetails struct {
+					Reasoning int64 `json:"reasoning_tokens"`
+				} `json:"output_tokens_details"`
 				Details struct {
 					Cached int64 `json:"cached_tokens"`
 				} `json:"input_tokens_details"`
@@ -201,6 +215,7 @@ func (r *deepSeekContextRecorder) recordUsage(index int, line []byte) {
 	observation := &r.observations[index]
 	if event.Response.Usage.Input > 0 {
 		observation.InputTokens, observation.OutputTokens, observation.CacheReadTokens = event.Response.Usage.Input, event.Response.Usage.Output, event.Response.Usage.Details.Cached
+		observation.ReasoningTokens = event.Response.Usage.OutputDetails.Reasoning
 	}
 	for i, marker := range r.markers {
 		if bytes.Contains(payload, []byte(marker)) {
@@ -472,7 +487,21 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 			http.Error(w, "request body unavailable", http.StatusBadRequest)
 			return
 		}
+		started := time.Now()
 		observation := recorder.record(body)
+		var trace *os.File
+		if observation != nil && recorder.traceDir != "" {
+			if err := os.WriteFile(filepath.Join(recorder.traceDir, fmt.Sprintf("request-%03d.json", observation.Index)), body, 0600); err != nil {
+				t.Error(err)
+			}
+			var err error
+			trace, err = os.OpenFile(filepath.Join(recorder.traceDir, fmt.Sprintf("response-%03d.sse", observation.Index)), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if err != nil {
+				t.Error(err)
+			} else {
+				defer trace.Close()
+			}
+		}
 		if observation != nil {
 			t.Logf("recorded request model=%s messages=%d system=%s tools=%s markers=%v",
 				observation.Model, len(observation.MessageHashes), shortHash(observation.SystemHash), shortHash(observation.ToolsHash), observation.MarkerPresence)
@@ -490,6 +519,12 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 		request.Header.Del("Accept-Encoding")
 		response, roundTripErr := transport.RoundTrip(request)
 		if roundTripErr != nil {
+			if observation != nil {
+				recorder.mu.Lock()
+				recorder.observations[observation.Index].ElapsedMS = time.Since(started).Milliseconds()
+				recorder.observations[observation.Index].TransportError = roundTripErr.Error()
+				recorder.mu.Unlock()
+			}
 			http.Error(w, "DeepSeek upstream unavailable", http.StatusBadGateway)
 			return
 		}
@@ -513,6 +548,9 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 		scanner.Buffer(make([]byte, 32*1024), 4*1024*1024)
 		for scanner.Scan() {
 			line := append([]byte(nil), scanner.Bytes()...)
+			if trace != nil {
+				_, _ = trace.Write(append(append([]byte(nil), line...), 10))
+			}
 			observeDeepSeekResponseLine(line, &responseToolNames, &responseFinishReasons)
 			if observation != nil {
 				recorder.recordUsage(observation.Index, line)
@@ -524,6 +562,10 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 		}
 		if observation != nil {
 			recorder.recordResponse(observation.Index, responseToolNames, responseFinishReasons)
+			recorder.mu.Lock()
+			recorder.observations[observation.Index].ElapsedMS = time.Since(started).Milliseconds()
+			recorder.observations[observation.Index].HTTPStatus = response.StatusCode
+			recorder.mu.Unlock()
 			t.Logf("observed response model=%s tools=%v finishes=%v", observation.Model, responseToolNames, responseFinishReasons)
 		}
 	}))

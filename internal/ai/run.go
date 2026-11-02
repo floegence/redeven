@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/floegence/floret/v7/identity"
 	"log/slog"
 	"net/http"
 	"os"
@@ -2014,9 +2015,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("invalid args")
 		}
 		description := strings.TrimSpace(p.Description)
-		if description == "" {
-			return nil, errors.New("invalid args: description is required")
-		}
 		if utf8.RuneCountInString(description) > terminalDescriptionMaxRunes {
 			return nil, errors.New("invalid args: description is too long")
 		}
@@ -2035,8 +2033,8 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
 		}
-		if strings.TrimSpace(p.Description) == "" || utf8.RuneCountInString(strings.TrimSpace(p.Description)) > terminalDescriptionMaxRunes {
-			return nil, errors.New("invalid args: description is required")
+		if utf8.RuneCountInString(strings.TrimSpace(p.Description)) > terminalDescriptionMaxRunes {
+			return nil, errors.New("invalid args: description is too long")
 		}
 		return r.toolTerminalWrite(p.ProcessID, p.Input)
 
@@ -2053,9 +2051,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("invalid args")
 		}
 		description := strings.TrimSpace(p.Description)
-		if description == "" {
-			return nil, errors.New("invalid args: description is required")
-		}
 		if utf8.RuneCountInString(description) > terminalDescriptionMaxRunes {
 			return nil, errors.New("invalid args: description is too long")
 		}
@@ -3576,34 +3571,48 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: err.Error()}
 	}
 	startRequest := terminalProcessStartRequest{
-		ProcessID:  processID,
-		EndpointID: strings.TrimSpace(r.endpointID),
-		ThreadID:   canonicalThreadID,
-		RunID:      canonicalRunID,
-		TurnID:     canonicalTurnID,
-		ToolID:     strings.TrimSpace(toolID),
-		ToolName:   "terminal.exec",
-		Command:    parsed.Command,
-		Stdin:      parsed.Stdin,
-		CwdAbs:     cwdAbs,
-		Shell:      shell,
-		Env:        taskEnv,
+		ProcessID:   processID,
+		EndpointID:  strings.TrimSpace(r.endpointID),
+		ThreadID:    canonicalThreadID,
+		RunID:       canonicalRunID,
+		TurnID:      canonicalTurnID,
+		ToolID:      strings.TrimSpace(toolID),
+		ToolName:    "terminal.exec",
+		Command:     parsed.Command,
+		Description: strings.TrimSpace(anyToString(terminalActivityInput(args)["description"])),
+		Stdin:       parsed.Stdin,
+		CwdAbs:      cwdAbs,
+		Shell:       shell,
+		Env:         taskEnv,
 	}
 	r.muExecution.Lock()
 	if r.executionClosed {
 		r.muExecution.Unlock()
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Run was canceled", Retryable: false}
 	}
+	if err := r.bindTerminalWork(ctx, &startRequest); err != nil {
+		r.muExecution.Unlock()
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: err.Error(), Retryable: false}
+	}
 	proc, err := terminalHost.Start(startRequest)
 	r.muExecution.Unlock()
 	if err != nil {
+		err = errors.Join(err, r.settleTerminalStartFailure(startRequest, err))
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal process could not start: " + err.Error(), Retryable: false}
 	}
+	classified := false
+	defer func() {
+		if !classified {
+			proc.initialResult <- false
+		}
+	}()
 	if activityUpdater != nil {
 		snapshot := proc.Snapshot()
 		activityUpdater(terminalProcessActivity(snapshot, terminalProcessResultPayload(snapshot)), nil)
 	}
 	snapshot, waitErr := proc.WaitForYieldContext(ctx, parsed.YieldMS)
+	proc.initialResult <- snapshot.Status == terminalProcessStatusRunning
+	classified = true
 	r.observeTerminalOutputEncodingRepair(snapshot, "exec")
 	result := terminalProcessResultPayload(snapshot)
 	outcome.Result = result
@@ -3664,7 +3673,13 @@ func (r *run) toolTerminalRead(ctx context.Context, processID string, afterSeq i
 func (r *run) toolTerminalReadWithWait(ctx context.Context, processID string, afterSeq int64, waitMS int64) (any, error) {
 	proc, err := r.terminalProcessForTool(processID)
 	if err != nil {
-		return nil, err
+		snapshot, readErr := readSealedTerminal(ctx, r.threadRuntime, identity.ThreadID(r.threadID), processID, afterSeq, terminalProcessModelReadBytes)
+		if readErr != nil {
+			return nil, readErr
+		}
+		payload := terminalProcessResultPayload(snapshot)
+		payload["operation"] = "read"
+		return payload, nil
 	}
 	snapshot, err := proc.ReadAfter(ctx, terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),
@@ -3692,7 +3707,7 @@ func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
 	}
 	proc, err := r.terminalProcessForTool(processID)
 	if err != nil {
-		return nil, err
+		return r.unavailableTerminalControl(context.Background(), processID, "write")
 	}
 	snapshot, err := proc.Write(input)
 	r.observeTerminalOutputEncodingRepair(snapshot, "write")
@@ -3706,9 +3721,12 @@ func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
 func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any, error) {
 	proc, err := r.terminalProcessForTool(processID)
 	if err != nil {
-		return nil, err
+		return r.unavailableTerminalControl(ctx, processID, "terminate")
 	}
 	snapshot, err := proc.Terminate(ctx)
+	proc.mu.Lock()
+	snapshot = proc.readAfterLocked(0, terminalProcessModelReadBytes)
+	proc.mu.Unlock()
 	r.observeTerminalOutputEncodingRepair(snapshot, "terminate")
 	if err != nil {
 		payload := terminalProcessResultPayload(snapshot)
@@ -3719,6 +3737,16 @@ func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any,
 	payload["operation"] = "terminate"
 	payload["terminated"] = true
 	return payload, nil
+}
+
+func (r *run) unavailableTerminalControl(ctx context.Context, id, operation string) (any, error) {
+	snapshot, err := readSealedTerminal(ctx, r.threadRuntime, identity.ThreadID(r.threadID), id, 0, terminalProcessModelReadBytes)
+	if err != nil {
+		return nil, err
+	}
+	payload := terminalProcessResultPayload(snapshot)
+	payload["operation"] = operation
+	return payload, errors.New("terminal control is unavailable; no input or signal was sent")
 }
 
 func (r *run) observeTerminalOutputEncodingRepair(snapshot terminalProcessSnapshot, source string) {

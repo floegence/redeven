@@ -57,7 +57,7 @@ func TestDeepSeekNativeWebToolsExecuteAndKeepErrorsRecoverable(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	p := config.AIProvider{ID: "ds", Type: "deepseek", BaseURL: server.URL + "/proxy/v1"}
+	p := config.AIProvider{ID: "ds", Type: "deepseek", BaseURL: server.URL + "/proxy/v1", WebFetch: &config.AIProviderWebFetch{Source: "deepseek"}}
 	r := &run{cfg: &config.AIConfig{Providers: []config.AIProvider{p}}, resolveProviderKey: func(id string) (string, bool, error) {
 		if id != "ds" {
 			t.Error("wrong connection")
@@ -146,8 +146,8 @@ func TestDeepSeekWebBindingsFollowSearchDefaultsAndExplicitReader(t *testing.T) 
 		wantSearch bool
 		wantFetch  string
 	}{
-		{name: "omitted", wantSearch: true, wantFetch: "deepseek"},
-		{name: "search_on", search: &config.AIProviderWebSearch{Enabled: true, Source: "native"}, wantSearch: true, wantFetch: "deepseek"},
+		{name: "omitted", wantSearch: true, wantFetch: "direct"},
+		{name: "search_on", search: &config.AIProviderWebSearch{Enabled: true, Source: "native"}, wantSearch: true, wantFetch: "direct"},
 		{name: "search_off", search: &config.AIProviderWebSearch{Enabled: false, Source: "native"}, wantFetch: "direct"},
 		{name: "explicit_direct", fetch: &config.AIProviderWebFetch{Source: "direct"}, wantSearch: true, wantFetch: "direct"},
 		{name: "explicit_deepseek_search_off", search: &config.AIProviderWebSearch{Enabled: false, Source: "native"}, fetch: &config.AIProviderWebFetch{Source: "deepseek"}, wantFetch: "deepseek"},

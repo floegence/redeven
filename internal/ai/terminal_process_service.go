@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/floegence/floret/v7/identity"
 	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
@@ -20,7 +21,7 @@ func (s *Service) terminalProcessManager() *terminalProcessManager {
 	return s.terminalProcesses
 }
 
-func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, runID string, processID string, afterSeq int64) (*terminalProcessSnapshot, error) {
+func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, runID string, processID string, afterSeq int64, threadIDs ...string) (*terminalProcessSnapshot, error) {
 	if err := requireRWX(meta); err != nil {
 		return nil, err
 	}
@@ -30,7 +31,26 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	}
 	proc, ok := manager.Get(processID)
 	if !ok || proc == nil {
-		return nil, errors.New("terminal process not found")
+		if len(threadIDs) != 1 || strings.TrimSpace(threadIDs[0]) == "" {
+			return nil, errors.New("terminal process not found")
+		}
+		settings, err := s.threadSettingsForRead(ctx, meta, threadIDs[0])
+		if err != nil || settings == nil {
+			return nil, errors.New("terminal process not found")
+		}
+		snapshot, err := readSealedTerminal(ctx, s.threadRuntime, identity.ThreadID(threadIDs[0]), processID, afterSeq, terminalProcessUIReadBytes)
+		if err != nil {
+			return nil, err
+		}
+		// The authorized product thread supplies endpoint ownership when a crash
+		// left only Floret's pre-dispatch identity, without inventing an exit.
+		if snapshot.EndpointID == "" {
+			snapshot.EndpointID = settings.EndpointID
+		}
+		if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
+			return nil, err
+		}
+		return &snapshot, nil
 	}
 	snapshot, err := proc.ReadAfter(ctx, terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),

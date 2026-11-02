@@ -5326,6 +5326,7 @@
       "terminalExitCodeLabel": "終了コード {code}",
       "terminalWaitingOutput": "出力を待っています…",
       "terminalStartedNoOutput": "コマンドを開始しました。まだ出力はありません。",
+      "terminalObservationUnavailable": "実行状態を確認できません。コマンドの最終結果は不明です。",
       "terminalFinishedNoOutput": "コマンドは出力なしで終了しました。",
       "terminalNoOutput": "出力はありません。",
       "terminalInputSent": "入力を送信しました。",

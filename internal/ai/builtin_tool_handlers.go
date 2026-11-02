@@ -194,26 +194,9 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, err
 	}
 	payload = normalized
 	switch toolName {
-	case "terminal.exec", "terminal.read", "terminal.terminate":
-		m, _ := payload.(map[string]any)
-		if m == nil {
-			return payload, false, nil
-		}
-		m = cloneAnyMap(m)
-		truncated := false
-		if output, ok := m["output"].(string); ok {
-			limit := 4000
-			if toolName == "terminal.read" {
-				limit = terminalProcessModelReadBytes
-			}
-			trimmed, hit := truncateByRunes(output, limit)
-			m["output"] = trimmed
-			truncated = truncated || hit
-		}
-		if truncated {
-			m["truncated"] = true
-		}
-		return m, truncated, nil
+	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
+		// Pagination owns output and cursor together; never truncate this page again.
+		return payload, false, nil
 	case "attachment.read", "attachment.materialize", "image.read":
 		return payload, false, nil
 	case "file.edit", "file.write":
@@ -668,7 +651,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Run a PTY shell locally; defaults to the run working directory. Waits 5 seconds by default; yield_ms changes only the initial wait, not the command's runtime. A completed command returns exit_code; if waiting ends first, the command keeps running with status=running and returns process_id for terminal.read/write/terminate. Keep long-lived commands in the foreground and use that process_id; do not use nohup, disown, setsid, or shell backgrounding to leave a service running. On macOS/Linux, command exit cleans up its PTY process group; escaping that group is unsupported. Use the managed browser for browser previews.",
+			Description:      "Run a PTY shell locally; defaults to the run working directory. Waits 5 seconds by default; yield_ms changes only the initial wait, not the command's runtime. A completed command returns exit_code; if waiting ends first, the command keeps running with status=running and returns process_id for terminal.read/write/terminate. Later completion is delivered automatically; read can inspect progress or remaining pages. Keep long-lived commands in the foreground and use that process_id; do not use nohup, disown, setsid, or shell backgrounding to leave a service running. On macOS/Linux, command exit cleans up its PTY process group; escaping that group is unsupported. Use the managed browser for browser previews.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000, "description": "Interactive PTY input; does not close stdin or send EOF. Echo alone is not command completion."}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Initial wait in milliseconds; omitted or 0 uses 5000. This does not set a command runtime timeout."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -680,8 +663,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.read",
-			Description:      "Read new output after after_seq, waiting up to 60 seconds and returning sooner when output arrives or the process ends. wait_expired means only the read window ended; it does not time out or stop the command. data.status describes the process: running remains active even with empty output and an unchanged cursor. If has_more or you still need the running command's result, call terminal.read again with the same process_id and the returned last_seq. Do not restart the command or add sleeps to wait for it. Cancellation interrupts the read; terminal.terminate explicitly stops the process.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task description in the user's language."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "0 for the first read; then the previous result's last_seq unchanged."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
+			Description:      "Read a bounded output page after after_seq; use the returned last_seq to continue when has_more. Waits up to 60 seconds, returning sooner on output or exit; wait_expired does not stop the command. Completion is delivered automatically. Retained final output remains readable after restart; an unavailable observation does not prove the command stopped.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task description in the user's language."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "0 for the first read; then the previous result's last_seq unchanged."}}, "required": []string{"process_id", "after_seq"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -693,7 +676,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "terminal.write",
 			Description:      "Send PTY input; include a trailing newline to submit a line.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "input": map[string]any{"type": "string", "maxLength": 200000}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing intent in the user's language; omit input values and secrets."}}, "required": []string{"process_id", "input", "description"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "input": map[string]any{"type": "string", "maxLength": 200000}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing intent in the user's language; omit input values and secrets."}}, "required": []string{"process_id", "input"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -705,7 +688,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "terminal.terminate",
 			Description:      "Terminate a terminal process.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task being stopped, in the user's language."}}, "required": []string{"process_id", "description"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task being stopped, in the user's language."}}, "required": []string{"process_id"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,

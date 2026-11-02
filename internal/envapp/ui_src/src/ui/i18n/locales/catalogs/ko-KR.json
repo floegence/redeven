@@ -5326,6 +5326,7 @@
       "terminalExitCodeLabel": "종료 코드 {code}",
       "terminalWaitingOutput": "출력을 기다리는 중…",
       "terminalStartedNoOutput": "명령이 시작되었습니다. 아직 출력이 없습니다.",
+      "terminalObservationUnavailable": "실행 상태를 확인할 수 없습니다. 명령의 최종 결과를 알 수 없습니다.",
       "terminalFinishedNoOutput": "명령이 출력 없이 종료되었습니다.",
       "terminalNoOutput": "반환된 출력이 없습니다.",
       "terminalInputSent": "입력을 전송했습니다.",

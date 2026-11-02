@@ -26,7 +26,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "Searches the web through this connection; service support is required.",
     "Additional charges may apply.",
-    "DeepSeek sends page URLs to this connection; some search results require it."
+    "Direct reading is the default. Select DeepSeek API to send page URLs through this connection."
   ],
   "zh-CN": [
     "网页读取方式",
@@ -34,7 +34,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "通过此连接搜索网页，需接入服务支持。",
     "可能产生额外费用。",
-    "DeepSeek 将网页地址发送至此连接读取；部分搜索结果需要此方式。"
+    "默认直接读取。选择 DeepSeek API 后，将网页地址发送至此连接读取。"
   ],
   "zh-TW": [
     "網頁讀取方式",
@@ -42,7 +42,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "透過此連線搜尋網頁，需連線服務支援。",
     "可能產生額外費用。",
-    "DeepSeek 將網頁網址傳送至此連線讀取；部分搜尋結果需要此方式。"
+    "預設直接讀取。選擇 DeepSeek API 後，會將網頁網址傳送至此連線讀取。"
   ],
   "ja-JP": [
     "ページの読み取り方法",
@@ -50,7 +50,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "この接続でウェブ検索します。接続先の対応が必要です。",
     "追加料金が発生する場合があります。",
-    "DeepSeek はページの URL をこの接続に送信して読み取ります。一部の検索結果にはこの方法が必要です。"
+    "既定では直接取得します。DeepSeek API を選択すると、ページ URL がこの接続に送信されます。"
   ],
   "ko-KR": [
     "페이지 읽기 방식",
@@ -58,7 +58,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "이 연결로 웹을 검색합니다. 연결된 서비스에서 지원해야 합니다.",
     "추가 요금이 발생할 수 있습니다.",
-    "DeepSeek는 페이지 URL을 이 연결로 보내 읽습니다. 일부 검색 결과에는 이 방식이 필요합니다."
+    "기본값은 직접 읽기입니다. DeepSeek API를 선택하면 페이지 URL을 이 연결로 보냅니다."
   ],
   "de-DE": [
     "Seitenabruf",
@@ -66,7 +66,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "Sucht im Web über diese Verbindung; der Dienst muss dies unterstützen.",
     "Es können zusätzliche Kosten entstehen.",
-    "DeepSeek sendet Seiten-URLs an diese Verbindung; einige Suchergebnisse erfordern dies."
+    "Seiten werden standardmäßig direkt abgerufen. Wählen Sie DeepSeek API, um Seiten-URLs über diese Verbindung zu senden."
   ],
   "fr-FR": [
     "Lecture des pages",
@@ -74,7 +74,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "Recherche sur le web via cette connexion, si le service le permet.",
     "Des frais supplémentaires peuvent s’appliquer.",
-    "DeepSeek envoie les URL des pages à cette connexion ; certains résultats de recherche l’exigent."
+    "La lecture directe est utilisée par défaut. Sélectionnez DeepSeek API pour envoyer les URL des pages via cette connexion."
   ],
   "it-IT": [
     "Lettura delle pagine",
@@ -82,7 +82,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "Cerca sul web tramite questa connessione, se il servizio lo supporta.",
     "Potrebbero essere applicati costi aggiuntivi.",
-    "DeepSeek invia gli URL delle pagine a questa connessione; alcuni risultati di ricerca lo richiedono."
+    "La lettura diretta è predefinita. Seleziona DeepSeek API per inviare gli URL delle pagine tramite questa connessione."
   ],
   "es-ES": [
     "Lectura de páginas",
@@ -90,7 +90,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "Busca en la web mediante esta conexión, si el servicio lo admite.",
     "Pueden aplicarse cargos adicionales.",
-    "DeepSeek envía las URL de las páginas a esta conexión; algunos resultados de búsqueda lo requieren."
+    "La lectura directa es la opción predeterminada. Selecciona DeepSeek API para enviar las URL de las páginas mediante esta conexión."
   ],
   "pt-BR": [
     "Leitura de páginas",
@@ -98,7 +98,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "Pesquisa na web por esta conexão, se o serviço oferecer suporte.",
     "Pode haver cobranças adicionais.",
-    "O DeepSeek envia URLs das páginas para esta conexão; alguns resultados de pesquisa exigem esse método."
+    "A leitura direta é o padrão. Selecione DeepSeek API para enviar URLs das páginas por esta conexão."
   ],
   "ru-RU": [
     "Чтение страниц",
@@ -106,7 +106,7 @@ const webServiceMessages: Record<string, readonly string[]> = {
     "DeepSeek API",
     "Ищет в интернете через это подключение, если сервис поддерживает поиск.",
     "Возможна дополнительная плата.",
-    "DeepSeek отправляет URL страниц через это подключение; для некоторых результатов поиска нужен этот способ."
+    "По умолчанию страницы читаются напрямую. Выберите DeepSeek API, чтобы отправлять URL страниц через это подключение."
   ]
 };
 

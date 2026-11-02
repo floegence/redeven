@@ -5326,6 +5326,7 @@
       "terminalExitCodeLabel": "Code de sortie {code}",
       "terminalWaitingOutput": "En attente de sortie…",
       "terminalStartedNoOutput": "Commande lancée. Aucune sortie pour le moment.",
+      "terminalObservationUnavailable": "Le suivi de l’exécution est indisponible. Le résultat de la commande est inconnu.",
       "terminalFinishedNoOutput": "La commande s’est terminée sans sortie.",
       "terminalNoOutput": "Aucune sortie renvoyée.",
       "terminalInputSent": "Entrée envoyée.",

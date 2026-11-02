@@ -138,7 +138,7 @@ export type FlowerRuntimeTransport = Readonly<{
   downloadTaskMaterial?(threadID: string, item: FlowerTaskMaterial): Promise<void>;
   hasActiveTaskFileDownloads?(threadID: string): boolean;
   loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
-  readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }, signal?: AbortSignal): Promise<FlowerTerminalProcessSnapshot>;
+  readTerminalProcess?(runID: string, processID: string, input: { after_seq: number; thread_id?: string }, signal?: AbortSignal): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<RuntimeThreadPatchResponse>;
   movePinnedThread?(threadID: string, input: FlowerThreadPinPosition): Promise<{ pins: readonly RuntimeThreadPinMetadata[] }>;
@@ -784,6 +784,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
 		}
         return options.transport.readTerminalProcess!(runID, processID, {
 		  after_seq: afterSeq,
+          ...(input.thread_id ? { thread_id: input.thread_id } : {}),
         }, signal);
       },
     } : {}),

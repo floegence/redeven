@@ -126,6 +126,7 @@ type Service struct {
 	closeResult            error
 	serviceWorkers         sync.WaitGroup
 	activateFloret         func(context.Context) error
+	suspendFloret          func(context.Context) error
 	floretThreadReadiness  func(context.Context, identity.ThreadID) (flruntime.ThreadReadiness, error)
 	prepareFloretThread    func(context.Context, identity.ThreadID) error
 	prepareFloretRestore   func(context.Context) (flruntime.RestorePreparation, error)
@@ -439,6 +440,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		buildVersion:          strings.TrimSpace(opts.BuildVersion),
 		tessiven:              opts.Tessiven, tessivenResources: opts.TessivenResources,
 		activateFloret:                  floretBootstrap.activate,
+		suspendFloret:                   floretBootstrap.suspend,
 		floretThreadReadiness:           floretBootstrap.threadReadiness,
 		prepareFloretThread:             floretBootstrap.prepareThread,
 		prepareFloretRestore:            floretBootstrap.prepareRestore,
@@ -593,6 +595,10 @@ func (s *Service) closeService() error {
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
 	s.mu.Unlock()
+	var suspendErr error
+	if s.suspendFloret != nil {
+		suspendErr = s.suspendFloret(context.Background())
+	}
 	responsesPool.Close()
 	if lifecycleCancel != nil {
 		lifecycleCancel()
@@ -644,7 +650,7 @@ func (s *Service) closeService() error {
 	if s.agentPlugins != nil {
 		pluginCloseErr = s.agentPlugins.Close()
 	}
-	return flowerGenerationCloseError(errors.Join(pluginCloseErr, terminalCloseErr, targetCloseErr, floretCloseErr, threadCloseErr, readCloseErr))
+	return flowerGenerationCloseError(errors.Join(suspendErr, pluginCloseErr, terminalCloseErr, targetCloseErr, floretCloseErr, threadCloseErr, readCloseErr))
 }
 
 func (s *Service) snapshotThreadStore() *threadstore.Store {

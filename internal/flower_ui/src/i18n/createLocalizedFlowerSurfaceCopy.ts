@@ -156,6 +156,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       terminalExitCodeLabel: (code) => t(i18n, k('chat.terminalExitCodeLabel'), { code }),
       terminalWaitingOutput: t(i18n, k('chat.terminalWaitingOutput')),
       terminalStartedNoOutput: t(i18n, k('chat.terminalStartedNoOutput')),
+      terminalObservationUnavailable: t(i18n, k('chat.terminalObservationUnavailable')),
       terminalFinishedNoOutput: t(i18n, k('chat.terminalFinishedNoOutput')),
       terminalNoOutput: t(i18n, k('chat.terminalNoOutput')),
       terminalInputSent: t(i18n, k('chat.terminalInputSent')),

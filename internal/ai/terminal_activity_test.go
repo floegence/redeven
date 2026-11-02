@@ -11,7 +11,7 @@ import (
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
-func TestTerminalWriteSchemaRequiresSafeDescription(t *testing.T) {
+func TestTerminalWriteSchemaAllowsOptionalSafeDescription(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
 		if def.Name != "terminal.write" {
 			continue
@@ -21,8 +21,8 @@ func TestTerminalWriteSchemaRequiresSafeDescription(t *testing.T) {
 			t.Fatal(err)
 		}
 		required := extractStringSlice(schema["required"])
-		if !strings.Contains(strings.Join(required, ","), "description") {
-			t.Fatal("write description is optional")
+		if strings.Contains(strings.Join(required, ","), "description") {
+			t.Fatal("write description must be optional")
 		}
 		description := schema["properties"].(map[string]any)["description"].(map[string]any)
 		if description["minLength"] != float64(1) || description["maxLength"] != float64(120) {

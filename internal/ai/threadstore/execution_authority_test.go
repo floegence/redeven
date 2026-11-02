@@ -71,3 +71,39 @@ func TestExecutionAuthorityRejectsMissingOrInvalidPermission(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutionConfigurationSurvivesRestartAndRejectsConflict(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := ExecutionAuthority{RequestKey: "request", ThreadID: "thread", TurnID: "turn", EndpointID: "env", UserPublicID: "user", PermissionType: "full_access"}
+	if err := store.PutExecutionAuthority(t.Context(), a); err != nil {
+		t.Fatal(err)
+	}
+	a.ExecutionConfigJSON = "{\"Options\":{\"tool_allowlist\":[\"terminal.read\"],\"max_output_tokens\":8192}}"
+	if err := store.PutExecutionAuthority(t.Context(), a); err != nil {
+		t.Fatal(err)
+	}
+	empty := a
+	empty.ExecutionConfigJSON = ""
+	if err := store.PutExecutionAuthority(t.Context(), empty); err != nil {
+		t.Fatal(err)
+	}
+	changed := a
+	changed.ExecutionConfigJSON = "{}"
+	if err := store.PutExecutionAuthority(t.Context(), changed); !errors.Is(err, ErrExecutionAuthorityConflict) {
+		t.Fatalf("conflict=%v", err)
+	}
+	store.Close()
+	store, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	got, err := store.GetExecutionAuthorityByTurn(t.Context(), a.ThreadID, a.TurnID)
+	if err != nil || got.ExecutionConfigJSON != a.ExecutionConfigJSON {
+		t.Fatalf("lost execution config: %+v %v", got, err)
+	}
+}

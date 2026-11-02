@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -24,7 +25,7 @@ func executionAuthorityFromMeta(meta *session.Meta, threadID, requestKey, turnID
 	return authority, nil
 }
 
-func (s *Service) persistExecutionAuthority(ctx context.Context, meta *session.Meta, threadID, requestKey, turnID, permissionType string) error {
+func (s *Service) persistExecutionAuthority(ctx context.Context, meta *session.Meta, threadID, requestKey, turnID, permissionType string, requests ...SendUserTurnRequest) error {
 	authority, err := executionAuthorityFromMeta(meta, threadID, requestKey, turnID, permissionType)
 	if err != nil {
 		return err
@@ -34,6 +35,16 @@ func (s *Service) persistExecutionAuthority(ctx context.Context, meta *session.M
 	s.mu.Unlock()
 	if db == nil {
 		return errors.New("threads store not ready")
+	}
+	if len(requests) > 0 {
+		raw, err := json.Marshal(struct {
+			Model   string
+			Options RunOptions
+		}{requests[0].Model, requests[0].Options})
+		if err != nil {
+			return err
+		}
+		authority.ExecutionConfigJSON = string(raw)
 	}
 	return db.PutExecutionAuthority(ctxOrBackground(ctx), authority)
 }

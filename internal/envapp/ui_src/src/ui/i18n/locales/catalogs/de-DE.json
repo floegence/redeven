@@ -5326,6 +5326,7 @@
       "terminalExitCodeLabel": "Exit-Code {code}",
       "terminalWaitingOutput": "Warten auf Ausgabe…",
       "terminalStartedNoOutput": "Befehl gestartet. Noch keine Ausgabe zurückgegeben.",
+      "terminalObservationUnavailable": "Der Ausführungsstatus ist nicht verfügbar. Das Ergebnis des Befehls ist unbekannt.",
       "terminalFinishedNoOutput": "Befehl ohne Ausgabe beendet.",
       "terminalNoOutput": "Keine Ausgabe zurückgegeben.",
       "terminalInputSent": "Eingabe gesendet.",

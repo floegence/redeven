@@ -5326,6 +5326,7 @@
       "terminalExitCodeLabel": "退出码 {code}",
       "terminalWaitingOutput": "正在等待输出…",
       "terminalStartedNoOutput": "命令已启动，暂未返回输出。",
+      "terminalObservationUnavailable": "执行观察已中断，命令的最终结果未知。",
       "terminalFinishedNoOutput": "命令已结束，没有输出。",
       "terminalNoOutput": "没有返回输出。",
       "terminalInputSent": "输入已发送。",

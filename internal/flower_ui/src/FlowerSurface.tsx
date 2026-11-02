@@ -10776,6 +10776,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const [liveLastSeq, setLiveLastSeq] = createSignal(0);
     const [processHasMore, setProcessHasMore] = createSignal(false);
     const [liveError, setLiveError] = createSignal('');
+    const [observationUnavailable, setObservationUnavailable] = createSignal(false);
+    const [restoredProcessStatus, setRestoredProcessStatus] = createSignal<FlowerActivityStatus | ''>('');
     const outputViewport = createTerminalOutputViewportController({
       interaction: { root: document.documentElement, attribute: FLOE_HOT_INTERACTION_ATTR },
     });
@@ -10837,11 +10839,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         || processHasMore() || terminal().latest_seq > liveLastSeq()
         || terminal().has_more && liveLastSeq() <= terminal().last_seq)
     ));
-    const displayStatus = detailProps.canonicalStatus;
+    const displayStatus = () => restoredProcessStatus() || detailProps.canonicalStatus();
     const displayCanceled = () => displayStatus() === 'canceled';
     const displayUserRejected = () => detailProps.approvalState() === 'rejected';
     const visibleOutput = liveOutput;
     const resultNotice = () => {
+      if (observationUnavailable() && !restoredProcessStatus()) return copy().chat.terminalObservationUnavailable;
       if (displayUserRejected()) return copy().chat.toolApprovalRejectedDetail;
       if (displayCanceled()) return copy().chat.toolCallCanceled;
       if (terminal().operation === 'write') {
@@ -10910,7 +10913,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       try {
         const publish = await terminalVisibleOutputStore.acknowledgeDeferred(terminalIdentity(), through, async after => {
           if (!props.adapter.readTerminalProcess) throw new Error('Terminal output source is unavailable.');
-          const result = await props.adapter.readTerminalProcess({ run_id: liveRunID(), process_id: processID(), after_seq: after }, signal);
+          const result = await props.adapter.readTerminalProcess({ thread_id: detailProps.context().ownerThreadID, run_id: liveRunID(), process_id: processID(), after_seq: after }, signal);
           return { output: terminalSnapshotOutput(result), first_seq: result.first_seq, last_seq: result.last_seq, truncated: result.truncated };
         }, signal);
         signal.throwIfAborted();
@@ -10952,6 +10955,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (disposed || !canReadLiveOutput() || !props.adapter.readTerminalProcess) return;
         try {
           const snapshot = await props.adapter.readTerminalProcess({
+            thread_id: detailProps.context().ownerThreadID,
             run_id: runID,
             process_id: process,
             after_seq: untrack(() => liveLastSeq()),
@@ -10959,10 +10963,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (disposed) return;
           setLiveError('');
           applyTerminalSnapshot(snapshot);
+          setObservationUnavailable(snapshot.observation === 'unavailable' || snapshot.observation === 'source_thread');
+          setRestoredProcessStatus(normalizeTerminalSnapshotStatus(snapshot.status));
           const processStatus = normalizeTerminalSnapshotStatus(snapshot.status);
           // Process exit and output consumption are independent. A completed
           // process can still have more bounded pages after this response.
-          if (processStatus && processStatus !== 'running' && processStatus !== 'pending' && !snapshot.has_more) {
+          if ((snapshot.observation === 'unavailable' || snapshot.observation === 'source_thread' || processStatus && processStatus !== 'running' && processStatus !== 'pending') && !snapshot.has_more) {
             outputViewport.setOutput(untrack(liveOutput), true);
             return;
           }

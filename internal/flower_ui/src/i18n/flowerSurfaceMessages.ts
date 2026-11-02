@@ -110,6 +110,7 @@ export const flowerSurfaceEnUS = {
     terminalExitCodeLabel: 'Exit code {code}',
     terminalWaitingOutput: "Waiting for output…",
     terminalStartedNoOutput: "Command started. No output returned yet.",
+    terminalObservationUnavailable: "Execution observation is unavailable. The command outcome is unknown.",
     terminalFinishedNoOutput: "Command finished without output.",
     terminalNoOutput: "No output returned.",
     terminalInputSent: "Input sent.",

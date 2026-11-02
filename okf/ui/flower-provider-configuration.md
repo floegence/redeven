@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower provider configuration
 tags: [ai, flower, settings, authentication]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -21,6 +21,12 @@ Use short names and access labels. Explain keys, quotas and saved methods in the
 
 ## Search and secrets
 Provider and model search switches must both be on; preferences remain editable when provider search is off. Backend policies own availability. See [failure recovery](flower-failure-recovery.md). Stored keys use fixed dot placeholders. Null removes a key; omitted/blank patches preserve it. Catalog refresh never selects new models.
+
+## DeepSeek Fetch
+Omitted Fetch configuration uses direct GET fetching. DeepSeek Fetch is opt-in
+inside the DeepSeek provider dialog. Explicit existing DeepSeek selections are
+preserved; this does not disable the separate search capability. HTML Preview
+is described as an available rendering capability without recommending its use.
 
 # Boundaries
 

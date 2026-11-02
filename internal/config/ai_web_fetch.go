@@ -12,9 +12,6 @@ type AIProviderWebFetch struct {
 
 func (p AIProvider) WebFetchSource() string {
 	if p.WebFetch == nil {
-		if policy := ResolveAIWebSearchPolicy(p); policy.Enabled {
-			return policy.DefaultFetchSource
-		}
 		return "direct"
 	}
 	return p.WebFetch.Source

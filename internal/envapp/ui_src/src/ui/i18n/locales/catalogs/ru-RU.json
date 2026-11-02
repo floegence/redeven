@@ -5427,6 +5427,7 @@
       "terminalExitCodeLabel": "Код завершения {code}",
       "terminalWaitingOutput": "Ожидание вывода…",
       "terminalStartedNoOutput": "Команда запущена. Вывода пока нет.",
+      "terminalObservationUnavailable": "Наблюдение за выполнением недоступно. Результат команды неизвестен.",
       "terminalFinishedNoOutput": "Команда завершилась без вывода.",
       "terminalNoOutput": "Вывод не получен.",
       "terminalInputSent": "Ввод отправлен.",

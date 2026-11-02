@@ -632,6 +632,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       readTerminalProcess: (runID, processID, input, signal) => {
         const params = new URLSearchParams();
         params.set('after_seq', String(input.after_seq));
+        if (input.thread_id) params.set('thread_id', input.thread_id);
         return fetchLocalApiJSON<FlowerTerminalProcessSnapshot>(
           `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/read?${params.toString()}`,
           { method: 'GET', signal },

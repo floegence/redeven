@@ -491,6 +491,7 @@ export type FlowerSurfaceCopy = Readonly<{
     terminalExitCodeLabel: (code: number) => string;
     terminalWaitingOutput: string;
     terminalStartedNoOutput: string;
+    terminalObservationUnavailable: string;
     terminalFinishedNoOutput: string;
     terminalNoOutput: string;
     terminalInputSent: string;
@@ -990,6 +991,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     terminalExitCodeLabel: (code) => `Exit code ${code}`,
     terminalWaitingOutput: "Waiting for output…",
     terminalStartedNoOutput: "Command started. No output returned yet.",
+    terminalObservationUnavailable: "Execution observation is unavailable. The command outcome is unknown.",
     terminalFinishedNoOutput: "Command finished without output.",
     terminalNoOutput: "No output returned.",
     terminalInputSent: "Input sent.",

@@ -1567,12 +1567,15 @@ export type FlowerToolPreview = Readonly<{
 }>;
 
 export type FlowerTerminalProcessReadRequest = Readonly<{
+  thread_id?: string;
   run_id: string;
   process_id: string;
   after_seq: number;
 }>;
 
 export type FlowerTerminalProcessSnapshot = Readonly<{
+  observation?: string;
+  output_availability?: string;
   process_id: string;
   status: string;
   command?: string;

@@ -5326,6 +5326,7 @@
       "terminalExitCodeLabel": "結束代碼 {code}",
       "terminalWaitingOutput": "正在等待輸出…",
       "terminalStartedNoOutput": "命令已啟動，尚未傳回輸出。",
+      "terminalObservationUnavailable": "執行觀察已中斷，命令的最終結果未知。",
       "terminalFinishedNoOutput": "命令已結束，沒有輸出。",
       "terminalNoOutput": "沒有傳回輸出。",
       "terminalInputSent": "輸入已傳送。",

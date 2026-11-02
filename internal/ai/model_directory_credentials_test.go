@@ -90,7 +90,7 @@ func TestModelDirectoryPublishesDeepSeekSearchAndFetchDefaults(t *testing.T) {
 		directory := (&Service{}).projectModelDirectory(&config.AIConfig{Providers: []config.AIProvider{p}}, &ModelsResponse{Runtime: &AIRuntimeStatus{}}, nil)
 		defaults := directory.SearchPolicies[p.Type]
 		configured := directory.ProviderSearchPolicies[p.ID]
-		if !defaults.Enabled || !defaults.DefaultEnabled || !defaults.DefaultModelEnabled || defaults.DefaultFetchSource != "deepseek" || configured.Enabled != enabled || configured.DefaultFetchSource != defaults.DefaultFetchSource {
+		if !defaults.Enabled || !defaults.DefaultEnabled || !defaults.DefaultModelEnabled || defaults.DefaultFetchSource != "direct" || configured.Enabled != enabled || configured.DefaultFetchSource != defaults.DefaultFetchSource {
 			t.Fatalf("enabled=%v: defaults=%+v configured=%+v", enabled, defaults, configured)
 		}
 	}

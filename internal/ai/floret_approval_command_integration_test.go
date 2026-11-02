@@ -284,7 +284,7 @@ func TestPublishedFloretSchemaCorrectionDoesNotCreateToolRow(t *testing.T) {
 		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
 		florettest.Step{Events: []flprovider.Event{
 			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{
-				ID: "terminal-read-invalid", Name: "terminal.read", Args: `{"process_id":"proc-1","after_seq":0}`,
+				ID: "terminal-read-invalid", Name: "terminal.read", Args: `{"process_id":"proc-1"}`,
 			}}},
 			{Type: flprovider.EventDone, Reason: "tool_calls"},
 		}},

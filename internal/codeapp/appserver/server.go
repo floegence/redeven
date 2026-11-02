@@ -6373,7 +6373,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		switch terminalAction {
 		case "read":
 			query := r.URL.Query()
-			if len(query) != 1 || len(query["after_seq"]) != 1 || strings.TrimSpace(query.Get("after_seq")) == "" {
+			if len(query) > 2 || len(query["thread_id"]) > 1 || len(query) == 2 && len(query["thread_id"]) != 1 || len(query["after_seq"]) != 1 || strings.TrimSpace(query.Get("after_seq")) == "" {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "after_seq is required"})
 				return
 			}
@@ -6382,7 +6382,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
 				return
 			}
-			out, err := aiSvc.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq)
+			out, err := aiSvc.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq, query.Get("thread_id"))
 			if err != nil {
 				g.appendAudit(meta, "ai_terminal_process_read", "failure", terminalProcessAuditDetail(processID, nil), err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal live output unavailable"})

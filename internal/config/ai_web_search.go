@@ -63,9 +63,6 @@ func ResolveAIWebSearchPolicy(provider AIProvider) AIWebSearchPolicy {
 	editable := (typ == "deepseek" || NativeAIWebSearchMode(typ) != AIWebSearchDisabled) && typ != "redeven_platform"
 	out := AIWebSearchPolicy{Editable: editable, DefaultEnabled: editable && typ != "openai_compatible", DefaultModelEnabled: typ == "openai" || typ == "openai_compatible" || typ == "deepseek", Source: AIWebSearchSourceNative}
 	out.DefaultFetchSource = "direct"
-	if typ == "deepseek" {
-		out.DefaultFetchSource = "deepseek"
-	}
 	if editable {
 		out.SupportedSources = []string{AIWebSearchSourceNative}
 		if typ == "openai_compatible" {

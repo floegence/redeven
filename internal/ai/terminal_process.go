@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/creack/pty"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -43,6 +44,7 @@ const (
 )
 
 type terminalProcessManager struct {
+	closing           bool
 	mu                sync.Mutex
 	processes         map[string]*terminalProcess
 	active            int
@@ -50,18 +52,20 @@ type terminalProcessManager struct {
 }
 
 type terminalProcessStartRequest struct {
-	ProcessID  string
-	EndpointID string
-	ThreadID   string
-	RunID      string
-	TurnID     string
-	ToolID     string
-	ToolName   string
-	Command    string
-	Stdin      string
-	CwdAbs     string
-	Shell      string
-	Env        []string
+	Complete    func(*terminalProcess) error
+	ProcessID   string
+	EndpointID  string
+	ThreadID    string
+	RunID       string
+	TurnID      string
+	ToolID      string
+	ToolName    string
+	Command     string
+	Description string
+	Stdin       string
+	CwdAbs      string
+	Shell       string
+	Env         []string
 }
 
 type terminalProcessReadRequest struct {
@@ -77,35 +81,44 @@ type terminalProcessOutputChunk struct {
 }
 
 type terminalProcessSnapshot struct {
-	InputBytes         int64              `json:"-"`
-	ProcessID          string             `json:"process_id"`
-	EndpointID         string             `json:"endpoint_id,omitempty"`
-	ThreadID           string             `json:"thread_id,omitempty"`
-	RunID              string             `json:"run_id,omitempty"`
-	TurnID             string             `json:"turn_id,omitempty"`
-	ToolID             string             `json:"tool_id,omitempty"`
-	ToolName           string             `json:"tool_name,omitempty"`
-	Command            string             `json:"command"`
-	Cwd                string             `json:"cwd"`
-	Status             string             `json:"status"`
-	Output             string             `json:"output"`
-	FirstSeq           int64              `json:"first_seq"`
-	LastSeq            int64              `json:"last_seq"`
-	LatestSeq          int64              `json:"latest_seq"`
-	HasMore            bool               `json:"has_more"`
-	TotalBytes         int64              `json:"total_bytes"`
-	Truncated          bool               `json:"truncated"`
-	StartedAtUnixMs    int64              `json:"started_at_ms"`
-	EndedAtUnixMs      int64              `json:"ended_at_ms,omitempty"`
-	DurationMS         int64              `json:"duration_ms,omitempty"`
-	ExitCode           int                `json:"exit_code,omitempty"`
-	ExecutionLocation  string             `json:"execution_location"`
-	Error              *aitools.ToolError `json:"error,omitempty"`
-	outputUTF8Repaired bool
-	readWaitExpired    bool
+	InvalidUTF8Replaced bool               `json:"invalid_utf8_replaced,omitempty"`
+	Observation         string             `json:"observation,omitempty"`
+	OutputAvailability  string             `json:"output_availability,omitempty"`
+	InputBytes          int64              `json:"-"`
+	ProcessID           string             `json:"process_id"`
+	EndpointID          string             `json:"endpoint_id,omitempty"`
+	ThreadID            string             `json:"thread_id,omitempty"`
+	RunID               string             `json:"run_id,omitempty"`
+	TurnID              string             `json:"turn_id,omitempty"`
+	ToolID              string             `json:"tool_id,omitempty"`
+	ToolName            string             `json:"tool_name,omitempty"`
+	Command             string             `json:"command"`
+	Description         string             `json:"-"`
+	Cwd                 string             `json:"cwd"`
+	Status              string             `json:"status"`
+	Output              string             `json:"output"`
+	FirstSeq            int64              `json:"first_seq"`
+	LastSeq             int64              `json:"last_seq"`
+	LatestSeq           int64              `json:"latest_seq"`
+	HasMore             bool               `json:"has_more"`
+	TotalBytes          int64              `json:"total_bytes"`
+	Truncated           bool               `json:"truncated"`
+	StartedAtUnixMs     int64              `json:"started_at_ms"`
+	EndedAtUnixMs       int64              `json:"ended_at_ms,omitempty"`
+	DurationMS          int64              `json:"duration_ms,omitempty"`
+	ExitCode            int                `json:"exit_code,omitempty"`
+	ExecutionLocation   string             `json:"execution_location"`
+	Error               *aitools.ToolError `json:"error,omitempty"`
+	outputUTF8Repaired  bool
+	readWaitExpired     bool
 }
 
 type terminalProcess struct {
+	complete             func(*terminalProcess) error
+	initialResult        chan bool
+	completionDone       chan struct{}
+	completionErr        error
+	outputInvalid        bool
 	mu                   sync.Mutex
 	cond                 *sync.Cond
 	manager              *terminalProcessManager
@@ -117,6 +130,7 @@ type terminalProcess struct {
 	toolID               string
 	toolName             string
 	command              string
+	description          string
 	cwd                  string
 	cmd                  *exec.Cmd
 	waitForExit          func() error
@@ -129,6 +143,7 @@ type terminalProcess struct {
 	exitCode             int
 	err                  *aitools.ToolError
 	outputChunks         []terminalProcessOutputChunk
+	outputPending        []byte
 	retainedBytes        int
 	lastSeq              int64
 	total                int64
@@ -197,13 +212,12 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		}
 	}
 	m.mu.Lock()
-	if m.active >= terminalProcessMaxActive {
+	if m.closing || m.active >= terminalProcessMaxActive {
 		m.mu.Unlock()
 		release()
-		return nil, fmt.Errorf("terminal process limit reached")
+		return nil, fmt.Errorf("terminal process admission unavailable")
 	}
 	m.active++
-	m.mu.Unlock()
 
 	cmd := exec.Command(shell, "-lc", command)
 	cmd.Dir = cwd
@@ -211,13 +225,13 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 	configureTerminalExecProcessGroup(cmd)
 	tty, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 100, Rows: 30})
 	if err != nil {
-		m.mu.Lock()
 		m.active--
 		m.mu.Unlock()
 		release()
 		return nil, err
 	}
 	proc := &terminalProcess{
+		complete: req.Complete, initialResult: make(chan bool, 1), completionDone: make(chan struct{}),
 		manager:         m,
 		id:              processID,
 		endpointID:      strings.TrimSpace(req.EndpointID),
@@ -227,6 +241,7 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		toolID:          strings.TrimSpace(req.ToolID),
 		toolName:        firstNonEmptyString(req.ToolName, "terminal.exec"),
 		command:         command,
+		description:     strings.TrimSpace(req.Description),
 		cwd:             cwd,
 		cmd:             cmd,
 		waitForExit:     terminalExecExitWaiter(cmd),
@@ -240,7 +255,6 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 	}
 	proc.cond = sync.NewCond(&proc.mu)
 
-	m.mu.Lock()
 	m.processes[processID] = proc
 	m.mu.Unlock()
 
@@ -378,6 +392,7 @@ func (m *terminalProcessManager) Close(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	m.mu.Lock()
+	m.closing = true
 	processes := make([]*terminalProcess, 0, len(m.processes))
 	for _, proc := range m.processes {
 		if proc != nil {
@@ -385,9 +400,24 @@ func (m *terminalProcessManager) Close(ctx context.Context) error {
 		}
 	}
 	m.mu.Unlock()
-	var errs []error
+	results := make(chan error, len(processes))
 	for _, proc := range processes {
-		if _, err := proc.Terminate(ctx); err != nil {
+		go func(p *terminalProcess) {
+			_, err := p.Terminate(ctx)
+			if p.complete != nil {
+				select {
+				case <-p.completionDone:
+					err = errors.Join(err, p.completionErr)
+				case <-ctx.Done():
+					err = errors.Join(err, ctx.Err())
+				}
+			}
+			results <- err
+		}(proc)
+	}
+	var errs []error
+	for range processes {
+		if err := <-results; err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -491,7 +521,11 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 	for p.status == terminalProcessStatusRunning {
 		if ctx.Err() != nil {
 			p.mu.Unlock()
-			return p.Terminate(context.Background())
+			_, err := p.Terminate(context.Background())
+			p.mu.Lock()
+			snapshot := p.readAfterLocked(0, terminalProcessModelReadBytes)
+			p.mu.Unlock()
+			return snapshot, err
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
@@ -507,9 +541,13 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 	}
 	if ctx.Err() != nil && p.status == terminalProcessStatusRunning {
 		p.mu.Unlock()
-		return p.Terminate(context.Background())
+		_, err := p.Terminate(context.Background())
+		p.mu.Lock()
+		snapshot := p.readAfterLocked(0, terminalProcessModelReadBytes)
+		p.mu.Unlock()
+		return snapshot, err
 	}
-	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
+	snapshot := p.readAfterLocked(0, terminalProcessModelReadBytes)
 	err := p.settlementErr
 	p.mu.Unlock()
 	return snapshot, err
@@ -605,6 +643,7 @@ func (p *terminalProcess) readLoop() {
 		return
 	}
 	defer close(p.readDone)
+	defer p.flushOutput()
 	buf := make([]byte, 16*1024)
 	for {
 		n, err := p.tty.Read(buf)
@@ -709,6 +748,12 @@ func (p *terminalProcess) waitLoop() {
 	p.cond.Broadcast()
 	p.mu.Unlock()
 	close(p.reapedDone)
+	if p.complete != nil {
+		p.completionErr = p.complete(p)
+	}
+	if p.completionDone != nil {
+		close(p.completionDone)
+	}
 }
 
 func (p *terminalProcess) waitForGroupExit(signalErr error) error {
@@ -789,9 +834,46 @@ func (p *terminalProcess) appendOutput(chunk []byte) {
 		return
 	}
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.total += int64(len(chunk))
+	data := append(p.outputPending, chunk...)
+	p.outputPending = nil
+	end := 0
+	for end < len(data) && utf8.FullRune(data[end:]) {
+		_, size := utf8.DecodeRune(data[end:])
+		end += size
+	}
+	p.outputPending = append(p.outputPending, data[end:]...)
+	p.appendOutputLocked(data[:end])
+}
+
+// EOF releases an incomplete final rune as invalid source bytes, never silently
+// discarding it. Valid runes split across PTY reads remain intact.
+func (p *terminalProcess) flushOutput() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.appendOutputLocked(p.outputPending)
+	p.outputPending = nil
+}
+
+func (p *terminalProcess) appendOutputLocked(chunk []byte) {
+	if !utf8.Valid(chunk) {
+		p.outputInvalid = true
+		chunk = []byte(strings.ToValidUTF8(string(chunk), "�"))
+	}
 	for len(chunk) > 0 {
 		size := min(len(chunk), terminalProcessOutputChunkBytes)
+		if size < len(chunk) {
+			end := 0
+			for end < size {
+				_, n := utf8.DecodeRune(chunk[end:])
+				if end+n > size {
+					break
+				}
+				end += n
+			}
+			size = end
+		}
 		data := append([]byte(nil), chunk[:size]...)
 		p.lastSeq++
 		p.outputChunks = append(p.outputChunks, terminalProcessOutputChunk{seq: p.lastSeq, data: data})
@@ -805,7 +887,6 @@ func (p *terminalProcess) appendOutput(chunk []byte) {
 		p.truncated = true
 	}
 	p.cond.Broadcast()
-	p.mu.Unlock()
 }
 
 func (p *terminalProcess) managerProcessEnded() {
@@ -918,30 +999,32 @@ func (p *terminalProcess) snapshotWithOutputLocked(output string, firstSeq int64
 		err = &cp
 	}
 	return terminalProcessSnapshot{
-		ProcessID:          p.id,
-		EndpointID:         p.endpointID,
-		ThreadID:           p.threadID,
-		RunID:              p.runID,
-		TurnID:             p.turnID,
-		ToolID:             p.toolID,
-		ToolName:           p.toolName,
-		Command:            p.command,
-		Cwd:                p.cwd,
-		Status:             p.status,
-		Output:             output,
-		FirstSeq:           firstSeq,
-		LastSeq:            lastSeq,
-		LatestSeq:          latestSeq,
-		HasMore:            hasMore,
-		TotalBytes:         p.total,
-		Truncated:          truncated,
-		StartedAtUnixMs:    startedAtUnixMs,
-		EndedAtUnixMs:      endedAtUnixMs,
-		DurationMS:         duration,
-		ExitCode:           p.exitCode,
-		ExecutionLocation:  ToolTargetModeLocalRuntime,
-		Error:              err,
-		outputUTF8Repaired: outputUTF8Repaired,
+		ProcessID:           p.id,
+		EndpointID:          p.endpointID,
+		ThreadID:            p.threadID,
+		RunID:               p.runID,
+		TurnID:              p.turnID,
+		ToolID:              p.toolID,
+		ToolName:            p.toolName,
+		Command:             p.command,
+		Description:         p.description,
+		Cwd:                 p.cwd,
+		Status:              p.status,
+		Output:              output,
+		FirstSeq:            firstSeq,
+		LastSeq:             lastSeq,
+		LatestSeq:           latestSeq,
+		HasMore:             hasMore,
+		TotalBytes:          p.total,
+		Truncated:           truncated,
+		StartedAtUnixMs:     startedAtUnixMs,
+		EndedAtUnixMs:       endedAtUnixMs,
+		DurationMS:          duration,
+		ExitCode:            p.exitCode,
+		ExecutionLocation:   ToolTargetModeLocalRuntime,
+		Error:               err,
+		InvalidUTF8Replaced: outputUTF8Repaired || p.outputInvalid,
+		outputUTF8Repaired:  outputUTF8Repaired || p.outputInvalid,
 	}
 }
 
@@ -968,7 +1051,19 @@ func terminalProcessResultPayload(snapshot terminalProcessSnapshot) map[string]a
 	if snapshot.EndedAtUnixMs > 0 {
 		out["ended_at_ms"] = snapshot.EndedAtUnixMs
 	}
-	if snapshot.Status != terminalProcessStatusRunning {
+	if snapshot.outputUTF8Repaired || snapshot.InvalidUTF8Replaced {
+		out["invalid_utf8_replaced"] = true
+	}
+	if snapshot.Observation != "" {
+		out["observation"] = snapshot.Observation
+	}
+	if snapshot.OutputAvailability != "" {
+		out["output_availability"] = snapshot.OutputAvailability
+	}
+	if snapshot.Status == "unknown" {
+		out["completed"] = false
+	}
+	if snapshot.Status == terminalProcessStatusSuccess || snapshot.Status == terminalProcessStatusError || snapshot.Status == terminalProcessStatusCanceled {
 		out["exit_code"] = snapshot.ExitCode
 	}
 	return out
