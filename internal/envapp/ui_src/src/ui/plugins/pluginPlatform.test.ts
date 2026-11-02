@@ -526,6 +526,31 @@ describe('createAuthenticatedReDevPluginFetch', () => {
     expect(nativeFetch).not.toHaveBeenCalled();
   });
 
+  it('preserves the released parent SDK execution scope through the authenticated hop', async () => {
+    const binding = replacePendingPluginSessionCredential('channel-execution', 'generation-secret');
+    expect(binding && activatePluginSessionCredential(binding)).toBe(true);
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }));
+    releaseTestTransport?.();
+    releaseTestTransport = await bindTestSessionHTTP(fetchMock);
+    const platformFetch = createAuthenticatedReDevPluginFetch();
+    const surface = {
+      plugin_instance_id: 'plugini_bound',
+      surface_instance_id: 'surface_bound',
+      bridge_channel_id: 'bridge_bound',
+      plugin_gateway_token: 'gateway_bound',
+    };
+    for (const operation of ['query', 'events/query', 'cancel']) {
+      const body = JSON.stringify({ surface, ...(operation === 'events/query' ? { after_cursor: 0 } : {}) });
+      await platformFetch(redevPluginAPIPath + '/executions/execution_bound/' + operation, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+      });
+      const init = fetchMock.mock.calls.at(-1)?.[1] as RequestInit;
+      expect(init.body).toBe(body);
+      expect(new Headers(init.headers).get(redevPluginCSRFHeader)).toBe(redevPluginCSRFProof);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('rejects external origins and non-platform same-origin routes before fetch', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

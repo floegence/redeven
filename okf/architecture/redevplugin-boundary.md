@@ -72,6 +72,22 @@ unchanged and unavailable only within the plugin boundary.
 
 The released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.
 
+## Platform execution boundaries
+
+ReDevPlugin 3.12.2 keeps ordinary Web packaging and application SDK calls unchanged.
+The trusted parent SDK binds execution queries, event reads and cancellation to
+its current surface gateway and plugin. Redeven forwards that scope unchanged
+through its authenticated transport and mounts the released HTTP handler; malformed
+or stale surface authority cannot fall back to broader host management access.
+Direct requests from plugin origins remain denied by the product route boundary.
+
+The released Host also enforces session read/write ceilings and read-only method
+effects before process operations. Its SQLite broker authorizes compiled SQL,
+blocks host database-path metadata and bounds values, statement complexity and
+concurrent operations. Redeven retains session mapping and concrete process
+adapters without duplicating these platform checks. Existing signed manifests
+and durable plugin data remain unchanged; plugin authors need no new flags.
+
 # Boundaries
 
 Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot write opaque state, mint tokens, fabricate trust or grant broker authority. Wrong, legacy, drifted, tampered or future roots fail unchanged.

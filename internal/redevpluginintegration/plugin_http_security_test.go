@@ -258,3 +258,73 @@ func proxyPluginStartupRequest(t *testing.T, options runtimeproxy.Options, endpo
 	}
 	return response.Status, body
 }
+
+func TestPluginExecutionRoutesPreserveSurfaceScope(t *testing.T) {
+	const channel = "execution_scope_channel"
+	const origin = "https://env.example.test"
+	options := ownerScopeTestOptions(t, t.TempDir())
+	options.PermissionPolicy = testPermissionPolicy(t, "execute_read_write")
+	options.ResolveSessionMeta = func(id string) (*session.Meta, bool) {
+		return &session.Meta{
+			ChannelID: channel, EndpointID: "execution_env", UserPublicID: "execution_user",
+			FloeApp: "com.floegence.redeven.agent", CodeSpaceID: "env-ui",
+			CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
+		}, id == channel
+	}
+	integration, err := New(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := integration.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	for _, operation := range []string{"query", "events/query", "cancel"} {
+		for _, tc := range []struct {
+			name    string
+			surface any
+			present bool
+			status  int
+		}{
+			{"host_management", nil, false, http.StatusNotFound},
+			{"complete_scope", map[string]any{"plugin_instance_id": "plugin_test", "surface_instance_id": "surface_test", "bridge_channel_id": "bridge_test", "plugin_gateway_token": "gateway_test"}, true, http.StatusNotFound},
+			{"null_scope", nil, true, http.StatusBadRequest},
+			{"empty_scope", map[string]any{}, true, http.StatusBadRequest},
+			{"partial_scope", map[string]any{"plugin_instance_id": "plugin_test"}, true, http.StatusBadRequest},
+		} {
+			t.Run(operation+"/"+tc.name, func(t *testing.T) {
+				payload := map[string]any{}
+				if tc.present {
+					payload["surface"] = tc.surface
+				}
+				if operation == "events/query" {
+					payload["after_cursor"] = 0
+				}
+				body, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatal(err)
+				}
+				req := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/executions/execution_missing/"+operation, strings.NewReader(string(body)))
+				req.Host = "env.example.test"
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Origin", origin)
+				req.Header.Set(csrfHeader, csrfProof)
+				req.Header.Set(sessionhop.HeaderChannelID, channel)
+				req = WithRouteRole(req, RouteRoleEnvTrusted)
+				req, err = WithTrustedOrigin(req, origin)
+				if err != nil {
+					t.Fatal(err)
+				}
+				response := httptest.NewRecorder()
+				integration.Handler().ServeHTTP(response, req)
+				if response.Code != tc.status {
+					t.Fatalf("execution scope status = %d, want %d: %s", response.Code, tc.status, response.Body.String())
+				}
+				if tc.status == http.StatusBadRequest && !strings.Contains(response.Body.String(), "PLUGIN_INVALID_REQUEST") {
+					t.Fatalf("malformed scope error = %s", response.Body.String())
+				}
+			})
+		}
+	}
+}
