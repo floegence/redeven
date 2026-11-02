@@ -9,6 +9,7 @@ import (
 
 // This is the persisted layout contract, not an interactive layout engine.
 type viewLayoutNode struct {
+	Empty  bool            `json:"empty,omitempty"`
 	Type   string          `json:"type"`
 	ID     string          `json:"id"`
 	Axis   string          `json:"axis,omitempty"`
@@ -27,7 +28,9 @@ func viewSessionIDs(layout string) []string {
 			return
 		}
 		if node.Type == "pane" {
-			ids = append(ids, node.ID)
+			if !node.Empty {
+				ids = append(ids, node.ID)
+			}
 			return
 		}
 		visit(node.First)

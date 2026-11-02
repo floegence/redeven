@@ -59,6 +59,7 @@ func validateView(view TerminalView) error {
 			return errInvalidView
 		}
 		var node struct {
+			Empty  json.RawMessage `json:"empty"`
 			Type   string          `json:"type"`
 			ID     string          `json:"id"`
 			Axis   string          `json:"axis"`
@@ -75,11 +76,11 @@ func validateView(view TerminalView) error {
 		switch node.Type {
 		case "pane":
 			panes++
-			if panes > 32 || node.Axis != "" || node.Ratio != nil || node.First != nil || node.Second != nil {
+			if (len(node.Empty) > 0 && string(node.Empty) != "true") || panes > 32 || node.Axis != "" || node.Ratio != nil || node.First != nil || node.Second != nil {
 				return errInvalidView
 			}
 		case "split":
-			if (node.Axis != "x" && node.Axis != "y") || node.Ratio == nil || *node.Ratio <= 0 || *node.Ratio >= 1 {
+			if len(node.Empty) > 0 || (node.Axis != "x" && node.Axis != "y") || node.Ratio == nil || *node.Ratio <= 0 || *node.Ratio >= 1 {
 				return errInvalidView
 			}
 			if err := visit(node.First, depth+1); err != nil {
@@ -156,14 +157,14 @@ func viewCatalogSchemaSpec() sqliteutil.Spec {
 		}
 		return rows.Err()
 	}
-	return sqliteutil.Spec{Kind: "terminal_view_catalog", CurrentVersion: 2, Pragmas: []string{"PRAGMA journal_mode=WAL;", "PRAGMA busy_timeout=3000;"},
+	return sqliteutil.Spec{Kind: "terminal_view_catalog", CurrentVersion: 3, Pragmas: []string{"PRAGMA journal_mode=WAL;", "PRAGMA busy_timeout=3000;"},
 		Initialize: initialize,
 		Migrations: []sqliteutil.Migration{{FromVersion: 0, ToVersion: 1, Apply: initialize}, {FromVersion: 1, ToVersion: 2, Apply: func(tx *sql.Tx) error {
 			if err := verify(tx); err != nil {
 				return err
 			}
 			return migrateViewOwnership(tx)
-		}}},
+		}}, {FromVersion: 2, ToVersion: 3, Apply: verify}},
 		Verify: func(tx *sql.Tx) error {
 			if err := verify(tx); err != nil {
 				return err
@@ -245,6 +246,9 @@ type terminalViewChange struct {
 func (c *viewCatalog) Update(changes []terminalViewChange) (TerminalViewSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.updateLocked(changes)
+}
+func (c *viewCatalog) updateLocked(changes []terminalViewChange) (TerminalViewSnapshot, error) {
 	if len(changes) == 0 || len(changes) > 64 {
 		return TerminalViewSnapshot{}, errInvalidView
 	}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/floegence/redeven/internal/session"
@@ -72,7 +73,7 @@ func TestTerminalViewsRejectMalformedLayoutsWithoutMutation(t *testing.T) {
 }
 
 func TestTerminalViewDatabaseRejectsFutureAndDriftUnchanged(t *testing.T) {
-	for _, statement := range []string{"PRAGMA user_version=3", "ALTER TABLE terminal_views ADD COLUMN drift TEXT", "CREATE INDEX drift ON terminal_views(name)"} {
+	for _, statement := range []string{"PRAGMA user_version=4", "ALTER TABLE terminal_views ADD COLUMN drift TEXT", "CREATE INDEX drift ON terminal_views(name)"} {
 		t.Run(statement, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "views.sqlite")
 			c, err := openViewCatalog(path)
@@ -195,5 +196,134 @@ func TestTerminalViewsRejectDuplicateSessionOwnership(t *testing.T) {
 	}
 	if got := c.Snapshot(); len(got.Views) != 1 || got.Revision != before.Revision {
 		t.Fatalf("rejected write changed catalog: %#v", got)
+	}
+}
+
+func TestTerminalViewVacanciesPersistWithoutOwningSessions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "views.sqlite")
+	c, err := openViewCatalog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vacant := TerminalView{ID: "empty", Name: "Empty", LayoutJSON: "{\"type\":\"pane\",\"id\":\"session-a\",\"empty\":true}"}
+	if _, err = c.Put(vacant, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.Put(TerminalView{ID: "live", Name: "Live", LayoutJSON: "{\"type\":\"pane\",\"id\":\"session-a\"}"}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	c, err = openViewCatalog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if len(c.Snapshot().Views) != 2 {
+		t.Fatal("vacant view was lost")
+	}
+}
+
+func TestTerminalSessionClosePreservesViewGeometryAndVacancyAfterReopen(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	path := filepath.Join(t.TempDir(), "views.sqlite")
+	if err := m.EnablePersistentViews(path); err != nil {
+		t.Fatal(err)
+	}
+	a, err := m.createSession("A", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := m.createSession("B", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := viewLayoutNode{Type: "split", ID: "split", Axis: "y", Ratio: 0.37,
+		First: &viewLayoutNode{Type: "pane", ID: a.ID}, Second: &viewLayoutNode{Type: "pane", ID: b.ID}}
+	raw, _ := json.Marshal(root)
+	original, err := m.viewCatalog.Put(TerminalView{ID: "view", Name: "Services", LayoutJSON: string(raw)}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{a.ID, b.ID} {
+		if err := m.DeleteSession(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := m.viewCatalog.Snapshot()
+	if len(got.Views) != 1 || got.Views[0].Name != original.Name || got.Views[0].CreatedAtMs != original.CreatedAtMs {
+		t.Fatalf("close removed or changed view identity: %#v", got)
+	}
+	var layout viewLayoutNode
+	if err := json.Unmarshal([]byte(got.Views[0].LayoutJSON), &layout); err != nil {
+		t.Fatal(err)
+	}
+	if layout.ID != root.ID || layout.Axis != root.Axis || layout.Ratio != root.Ratio || !layout.First.Empty || !layout.Second.Empty {
+		t.Fatalf("close changed geometry or failed to vacate: %#v", layout)
+	}
+	if layout.First.ID == a.ID || layout.Second.ID == b.ID || layout.First.ID == layout.Second.ID {
+		t.Fatal("vacancy reused a runtime identity")
+	}
+	unchanged, changed, err := m.viewCatalog.VacateSession(a.ID)
+	if err != nil || changed || !reflect.DeepEqual(unchanged, got) {
+		t.Fatal("repeated closure was not idempotent", err)
+	}
+	reopened, err := openViewCatalog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if !reflect.DeepEqual(got, reopened.Snapshot()) {
+		t.Fatal("empty slots did not persist")
+	}
+}
+
+func TestTerminalViewVacancyRejectsInvalidMetadataUnchanged(t *testing.T) {
+	c := newMemoryViewCatalog()
+	for _, layout := range []string{
+		"{\"type\":\"pane\",\"id\":\"slot\",\"empty\":false}",
+		"{\"type\":\"pane\",\"id\":\"slot\",\"empty\":null}",
+		"{\"type\":\"pane\",\"id\":\"slot\",\"empty\":\"true\"}",
+		"{\"type\":\"split\",\"id\":\"s\",\"axis\":\"x\",\"ratio\":0.5,\"empty\":true,\"first\":{\"type\":\"pane\",\"id\":\"a\"},\"second\":{\"type\":\"pane\",\"id\":\"b\"}}",
+	} {
+		before := c.Snapshot()
+		if _, err := c.Put(TerminalView{ID: "bad", Name: "Bad", LayoutJSON: layout}, 0); !errors.Is(err, errInvalidView) {
+			t.Fatalf("accepted invalid occupancy: %s: %v", layout, err)
+		}
+		if !reflect.DeepEqual(before, c.Snapshot()) {
+			t.Fatal("invalid occupancy changed catalog")
+		}
+	}
+}
+
+func TestTerminalViewVacancyMigrationPreservesVersionTwoRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "views.sqlite")
+	c, err := openViewCatalog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.Put(TerminalView{ID: "existing", Name: "Existing", LayoutJSON: `{"type":"pane","id":"session"}`}, 0); err != nil {
+		t.Fatal(err)
+	}
+	before := c.Snapshot()
+	if _, err = c.db.Exec("PRAGMA user_version=2"); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	c, err = openViewCatalog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if !reflect.DeepEqual(before, c.Snapshot()) {
+		t.Fatal("v2 migration rewrote existing views")
+	}
+	var version int
+	if err = c.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+		t.Fatalf("migration version: %d, %v", version, err)
 	}
 }

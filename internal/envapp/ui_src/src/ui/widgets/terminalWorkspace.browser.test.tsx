@@ -34,10 +34,10 @@ it('waits for hydration, browses unplaced sessions without rewriting splits, and
   expect(JSON.parse(localStorage.getItem('terminal-workspace-test')!)).toEqual(saved);
   setActive('b'); await tick();
   expect(controller.layout()).toEqual(saved);
-  controller.closePane('b'); await tick();
+  setIds(['a', 'c', 'd', 'e']); await tick();
   expect(controller.paneIds()).toEqual(['a','c','d']);
   expect(ids()).toContain('e');
-  expect(active()).toBe('a');
+  setActive('a');
   setIds(['c','d','e']); await tick();
   expect(controller.paneIds()).toEqual(['c','d']);
   const stored = JSON.parse(localStorage.getItem('terminal-workspace-test')!) as SplitWorkspaceLayout;
@@ -110,14 +110,15 @@ it('selects the owning view when browsing a member from another view', async () 
   expect(workspace.activeViewId()).toBeNull();
   expect(workspace.displayedPaneIds()).toEqual(['e']);
   batch(() => { workspace.browseSession('b'); setActive('b'); });
-  workspace.closePane('b');
+  workspace.releaseSession('b');
   expect(catalog.ownerOf('b')).toBeUndefined();
   expect(catalog.ownerOf('a')?.id).toBe('view-ab');
   expect(active()).toBe('a');
-  workspace.closePane('a');
+  workspace.releaseSession('a');
   expect(catalog.ownerOf('a')).toBeUndefined();
-  expect(workspace.activeViewId()).toBeNull();
-  expect(workspace.displayedPaneIds()).toEqual(['a']);
+  expect(workspace.activeViewId()).toBe('view-ab');
+  expect(workspace.displayedPaneIds()).toEqual([]);
+  expect(workspace.vacantPaneIds()).toHaveLength(2);
 });
 
 
@@ -161,4 +162,27 @@ it.each([2, 3, 4, 5])('preserves every saved member and focus when arranging a v
   expect(workspace.activeViewId()).toBeNull();
   expect(workspace.displayedPaneIds()).toEqual(['solo']);
   expect(catalog.views()).toHaveLength(2);
+});
+
+it('keeps saved pane geometry when sessions disappear, including the last session', async () => {
+  const { createTerminalViewCatalog } = await import('../services/terminalViewCatalog');
+  const layout = presetSplitWorkspace('columns', ['a', 'b'], () => 'split-ab')!;
+  const [ids, setIds] = createSignal<readonly string[]>(['a', 'b']);
+  const [active, setActive] = createSignal<string | null>('a');
+  let workspace!: ReturnType<typeof createTerminalWorkspace>;
+  let catalog!: ReturnType<typeof createTerminalViewCatalog>;
+  dispose = render(() => {
+    catalog = createTerminalViewCatalog({ scope: () => 'env', connected: () => true, rpc: {
+      listViews: async () => ({ revision: 2, views: [{ id: 'view', name: 'View', layout, revision: 2, createdAtMs: 1, updatedAtMs: 1 }] }),
+      updateViews: async () => { throw new Error('Not expected'); }, onViewsChanged: () => () => undefined,
+    } });
+    workspace = createTerminalWorkspace({ catalog, storageKey: () => 'terminal-workspace-test', sessionIds: ids, hydrated: () => true, activeId: active, select: setActive });
+    return <div />;
+  }, document.body);
+  await expect.poll(catalog.ready).toBe(true);
+  setIds(['b']); await tick();
+  expect(measureSplitWorkspace(workspace.displayedLayout()).panes.size).toBe(2);
+  setIds([]); await tick();
+  expect(measureSplitWorkspace(workspace.displayedLayout()).panes.size).toBe(2);
+  expect(catalog.views()).toHaveLength(1);
 });

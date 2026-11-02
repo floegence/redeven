@@ -1,5 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
-import { isSplitWorkspaceLayout, reconcileSplitWorkspace, splitWorkspaceItems, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
+import { splitWorkspaceItems, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
+import { isTerminalViewLayout, viewSessionIds, vacateViewSessions } from './terminalViewLayout';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1/contract';
 import type { TerminalView, TerminalViewSnapshot, TerminalViewsUpdateRequest } from '../protocol/redeven_v1/sdk/terminalViews';
 
@@ -33,8 +34,8 @@ export function createTerminalViewCatalog(options: {
     const owners = new Set<string>();
     const views = next.views.map(view => {
       // Layout validation belongs at the UI adapter, using the published owner.
-      if (!isSplitWorkspaceLayout(view.layout) || splitWorkspaceItems(view.layout).length > 32) throw new Error('Invalid terminal view layout');
-      for (const id of splitWorkspaceItems(view.layout)) {
+      if (!isTerminalViewLayout(view.layout) || splitWorkspaceItems(view.layout).length > 32) throw new Error('Invalid terminal view layout');
+      for (const id of viewSessionIds(view.layout)) {
         if (owners.has(id)) throw new Error('Duplicate terminal view membership');
         owners.add(id);
       }
@@ -45,7 +46,7 @@ export function createTerminalViewCatalog(options: {
     // unsaved drafts are retained. Explicit reload discards those drafts.
     owners.clear();
     for (const view of project({ ...next, views }, discardDrafts ? new Map() : drafts())) {
-      for (const id of splitWorkspaceItems(view.layout)) {
+      for (const id of viewSessionIds(view.layout)) {
         if (owners.has(id)) throw new Error('Conflicting terminal view membership');
         owners.add(id);
       }
@@ -121,7 +122,7 @@ export function createTerminalViewCatalog(options: {
   onCleanup(() => { disposed = true; generation++; if (timer) clearTimeout(timer); });
   return {
     views, ready, saving, pending: () => drafts().size > 0, error, reload,
-    ownerOf: (sessionId: string) => views().find(view => splitWorkspaceItems(view.layout).includes(sessionId)),
+    ownerOf: (sessionId: string) => views().find(view => viewSessionIds(view.layout).includes(sessionId)),
     put: (draft: ViewDraft) => {
       if (!ready() || options.enabled?.() === false) return;
       const next = new Map(drafts());
@@ -129,13 +130,13 @@ export function createTerminalViewCatalog(options: {
         if (!baseRevisions.has(id)) baseRevisions.set(id, snapshot().views.find(view => view.id === id)?.revision ?? 0);
         next.set(id, value);
       };
-      const members = new Set(splitWorkspaceItems(draft.layout));
+      const members = new Set(viewSessionIds(draft.layout));
       for (const other of views()) {
         if (other.id === draft.id) continue;
-        const ids = splitWorkspaceItems(other.layout);
+        const ids = viewSessionIds(other.layout);
         if (!ids.some(id => members.has(id))) continue;
-        const layout = reconcileSplitWorkspace(other.layout, ids.filter(id => !members.has(id)));
-        stage(other.id, layout ? { id: other.id, name: other.name, layout } : null);
+        const layout = vacateViewSessions(other.layout, members);
+        stage(other.id, { id: other.id, name: other.name, layout });
       }
       stage(draft.id, draft);
       setDrafts(next);

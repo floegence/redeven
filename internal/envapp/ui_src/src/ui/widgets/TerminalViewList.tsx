@@ -7,7 +7,7 @@ import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 
 function LayoutPreview(props: { layout: SplitWorkspaceLayout }) {
-  return <Show when={props.layout.type === 'split' ? props.layout : undefined} keyed fallback={<span class="terminal-view-preview-pane" />}>
+  return <Show when={props.layout.type === 'split' ? props.layout : undefined} keyed fallback={<span class="terminal-view-preview-pane" data-empty={'empty' in props.layout && props.layout.empty ? 'true' : undefined} />}>
     {node => <div class="terminal-view-preview-split" style={{ 'flex-direction': node.axis === 'y' ? 'column' : 'row' }}>
       <div style={{ flex: node.ratio }}><LayoutPreview layout={node.first} /></div>
       <div style={{ flex: 1 - node.ratio }}><LayoutPreview layout={node.second} /></div>

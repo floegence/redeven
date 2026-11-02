@@ -1191,6 +1191,13 @@ func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
 		release()
 	}
 
+	snapshot, changed, err := h.m.viewCatalog.VacateSession(sessionID)
+	if err != nil {
+		h.m.log.Error("failed to release terminal view occupancy", "session_id", sessionID, "error", err)
+	}
+	if changed {
+		h.m.broadcastTerminalMetadata(TypeID_TERMINAL_VIEWS_CHANGED, snapshot)
+	}
 	reason := h.m.finalizeSessionClosed(sessionID)
 	payload := terminalSessionsChangedPayload{
 		Reason:      reason,

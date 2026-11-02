@@ -182,7 +182,7 @@ function visibleElements(root: ParentNode, selector: string): Element[] {
   ));
 }
 
-function renderCreateFlow(createSession: TerminalPanelSessionOperations['createSession'], registerPageContext?: FlowerPageContextRegistrar) {
+function renderCreateFlow(createSession: TerminalPanelSessionOperations['createSession'], registerPageContext?: FlowerPageContextRegistrar, deleteSession = vi.fn(async (_id: string) => undefined)) {
   const host = document.createElement('div');
   Object.assign(host.style, { width: '960px', height: '640px' });
   document.body.append(host);
@@ -196,7 +196,7 @@ function renderCreateFlow(createSession: TerminalPanelSessionOperations['createS
           workingDir: '/workspace',
           preferredName: 'Workspace',
         }}
-        sessionOperations={{ createSession, deleteSession: vi.fn(async () => undefined) }}
+        sessionOperations={{ createSession, deleteSession }}
       />
     </TerminalSessionCatalogProvider>
   ), host);
@@ -273,7 +273,8 @@ describe('TerminalPanel loading continuity', () => {
     expect(host.querySelectorAll('[data-terminal-session-id]')).toHaveLength(4);
   });
 
-  it('retains terminal instances while applying layouts, focusing panes and removing placement', async () => {
+  it('closes sessions without collapsing slots and fills them without remounting other sessions', async () => {
+    await page.viewport(1280, 800);
     let sequence = 0;
     const create = vi.fn(async () => ({ ...createdSession('split-session-' + ++sequence), name: 'Shell ' + sequence }));
     const host = renderCreateFlow(create);
@@ -300,23 +301,132 @@ describe('TerminalPanel loading continuity', () => {
     second.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
     expect(runtimeState.propsBySession.get('split-session-2').active()).toBe(true);
     expect(host.querySelector('[aria-label="Maximize pane"], [aria-label="Restore panes"]')).toBeNull();
-    await userEvent.click(second.querySelector<HTMLButtonElement>('[aria-label="Remove from view"]')!);
-    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
-    expect(runtimeState.propsBySession.size).toBe(4);
-    expect(host.querySelector('[data-terminal-session-id="split-session-2"]')).not.toBeNull();
+    const before = [second.offsetLeft, second.offsetTop, second.offsetWidth, second.offsetHeight];
+    await userEvent.click(second.querySelector<HTMLButtonElement>('[aria-label="Close"]')!);
+    await expect.poll(() => host.querySelector('[data-terminal-session-id="split-session-2"]')).toBeNull();
+    await expect.poll(() => visibleElements(host, '[data-terminal-vacant-slot]').length).toBe(1);
+    expect(visibleElements(host, '[data-floe-split-pane]')).toHaveLength(4);
+    const vacant = host.querySelector<HTMLElement>('[data-terminal-vacant-slot]')!;
+    const after = vacant.closest<HTMLElement>('[data-floe-split-pane]')!;
+    expect([after.offsetLeft, after.offsetTop, after.offsetWidth, after.offsetHeight]).toEqual(before);
     expect(host.querySelector('[data-terminal-runtime-session="split-session-1"]')).toBe(original);
     await expect.poll(() => rpcState.views.length).toBe(1);
     expect(rpcState.views[0].layout.type).toBe('split');
-    const first = host.querySelector<HTMLElement>('[data-floe-split-pane="split-session-1"]')!;
-    await userEvent.click(first.querySelector<HTMLButtonElement>('[aria-label="Split pane"]')!);
-    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
+    await expect.poll(() => host.querySelector<HTMLButtonElement>('[data-terminal-vacant-slot] button')?.disabled).toBe(false);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-vacant-slot] button')!);
     await expect.poll(() => create.mock.calls.length).toBe(5);
     // No local cwd capability was verified in this fixture; use the group directory.
     expect(create).toHaveBeenLastCalledWith(undefined, '/', 'default');
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).toContain('split-session-5');
     expect(visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).not.toContain('split-session-2');
-    expect(host.querySelector('[data-terminal-runtime-session="split-session-2"]')).not.toBeNull();
+    expect(visibleElements(host, '[data-floe-split-pane]')).toHaveLength(4);
+    expect(host.querySelector('[data-terminal-vacant-slot]')).toBeNull();
     await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/desktop.png' });
+  });
+
+  it('retains an all-empty view and retries slot creation in place after failure', async () => {
+    let sequence = 0;
+    const create = vi.fn(async () => createdSession('recover-' + ++sequence));
+    const remove = vi.fn(async (_id: string) => undefined);
+    const host = renderCreateFlow(create, undefined, remove);
+    await expect.poll(() => runtimeState.propsBySession.has('recover-1')).toBe(true);
+    runtimeState.propsBySession.get('recover-1').onInteractive?.('recover-1');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Split pane"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    const viewId = rpcState.views[0].id;
+    for (const id of ['recover-1', 'recover-2']) {
+      await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="' + id + '"] [aria-label="Close"]')!);
+      await expect.poll(() => host.querySelector('[data-terminal-session-id="' + id + '"]')).toBeNull();
+    }
+    await expect.poll(() => visibleElements(host, '[data-terminal-vacant-slot]').length).toBe(2);
+    await expect.poll(() => rpcState.views[0].layout.first.empty && rpcState.views[0].layout.second.empty).toBe(true);
+    expect(remove.mock.calls.map(call => call[0])).toEqual(['recover-1', 'recover-2']);
+    expect(host.querySelector('[data-terminal-view-id="' + viewId + '"][aria-pressed="true"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('No terminal sessions');
+    const slot = host.querySelector<HTMLElement>('[data-terminal-vacant-slot]')!;
+    const button = slot.querySelector<HTMLButtonElement>('button')!;
+    create.mockRejectedValueOnce(new Error('Start failed; retry'));
+    await userEvent.click(button);
+    await expect.poll(() => slot.querySelector('[role="alert"]')?.textContent).toBe('Start failed; retry');
+    expect(button.disabled).toBe(false);
+    expect(host.querySelector('[data-terminal-session-id]')).toBeNull();
+    await userEvent.click(button);
+    await expect.poll(() => visibleElements(host, '[data-terminal-vacant-slot]').length).toBe(1);
+    expect(visibleElements(host, '[data-floe-split-pane]')).toHaveLength(2);
+    expect(host.querySelector('[data-terminal-vacant-slot] [role="alert"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-view-id="' + viewId + '"][aria-pressed="true"]')).not.toBeNull();
+  });
+
+  it('restores a failed close and lets sidebar close retry the same session', async () => {
+    let sequence = 0;
+    const remove = vi.fn(async (_id: string) => undefined).mockRejectedValueOnce(new Error('Close failed'));
+    const host = renderCreateFlow(vi.fn(async () => createdSession('close-' + ++sequence)), undefined, remove);
+    await expect.poll(() => runtimeState.propsBySession.has('close-1')).toBe(true);
+    runtimeState.propsBySession.get('close-1').onInteractive?.('close-1');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Split pane"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="close-1"] [aria-label="Close"]')!);
+    await expect.poll(() => remove.mock.calls.length).toBe(1);
+    await expect.poll(() => host.querySelector('[data-terminal-session-close="close-1"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-vacant-slot]')).toBeNull();
+    const close = host.querySelector<HTMLButtonElement>('[data-terminal-session-close="close-1"]')!;
+    close.focus();
+    expect(getComputedStyle(close).opacity).toBe('1');
+    await userEvent.click(close);
+    await expect.poll(() => remove.mock.calls.length).toBe(2);
+    await expect.poll(() => visibleElements(host, '[data-terminal-vacant-slot]').length).toBe(1);
+    expect(remove.mock.calls.map(call => call[0])).toEqual(['close-1', 'close-1']);
+    expect(visibleElements(host, '[data-floe-split-pane]')).toHaveLength(2);
+  });
+
+  it('fills an exact vacant slot by native dragging and leaves the source slot recoverable', async () => {
+    rpcState.sessions = ['fill-a', 'fill-b'].map(id => createdSession(id));
+    rpcState.views = [
+      { id: 'source', name: 'Source', revision: 1, createdAtMs: 1, updatedAtMs: 1, layout: { type: 'pane', id: 'fill-a' } },
+      { id: 'target', name: 'Target', revision: 1, createdAtMs: 1, updatedAtMs: 1, layout: { type: 'split', id: 'split', axis: 'x', ratio: 0.4, first: { type: 'pane', id: 'slot', empty: true }, second: { type: 'pane', id: 'fill-b' } } },
+    ];
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '1100px', height: '700px' }); document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    await expect.poll(() => host.querySelector('[data-terminal-view-id="target"]')).not.toBeNull();
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="target"]')!);
+    const slot = host.querySelector<HTMLElement>('[data-floe-split-pane="slot"]')!;
+    const before = slot.getBoundingClientRect();
+    const native = commands as unknown as { dragTerminalSessionToPane: (source: string, target: string, edge: string) => Promise<void> };
+    await native.dragTerminalSessionToPane('fill-a', 'slot', 'left');
+    await expect.poll(() => rpcState.views.find(view => view.id === 'target').layout.first.id).toBe('fill-a');
+    expect(rpcState.views.find(view => view.id === 'target').layout.ratio).toBe(0.4);
+    expect(rpcState.views.find(view => view.id === 'source').layout.empty).toBe(true);
+    expect(host.querySelector('[data-floe-split-drop]')).toBeNull();
+    const after = host.querySelector('[data-floe-split-pane="fill-a"]')!.getBoundingClientRect();
+    expect([after.x, after.y, after.width, after.height]).toEqual([before.x, before.y, before.width, before.height]);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="source"]')!);
+    expect(visibleElements(host, '[data-terminal-vacant-slot]')).toHaveLength(1);
+    expect(visibleElements(host, '[data-terminal-vacant-slot] button')).toHaveLength(1);
+  });
+
+  it('keeps every empty slot reachable on mobile without selecting an unrelated session', async () => {
+    await page.viewport(393, 740);
+    layoutState.mobile = true;
+    rpcState.sessions = [createdSession('unrelated')];
+    rpcState.views = [{ id: 'empty-mobile', name: 'Empty', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+      layout: { type: 'split', id: 'split-mobile', axis: 'x', ratio: 0.5, first: { type: 'pane', id: 'slot-a', empty: true }, second: { type: 'pane', id: 'slot-b', empty: true } } }];
+    localStorage.setItem('redeven_terminal_workspace:v1:env-1:terminal_page:active-view', JSON.stringify('empty-mobile'));
+    const host = document.createElement('div'); Object.assign(host.style, { width: '393px', height: '640px' }); document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    const panes = () => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'));
+    await expect.poll(panes).toEqual(['slot-a']);
+    const tabs = host.querySelectorAll<HTMLButtonElement>('nav[aria-label="Terminal panes"] button');
+    expect(tabs).toHaveLength(2);
+    await userEvent.click(tabs[1]);
+    await expect.poll(panes).toEqual(['slot-b']);
+    expect(visibleElements(host, '[data-terminal-vacant-slot] button')).toHaveLength(1);
+    expect((visibleElements(host, '[data-terminal-vacant-slot] button')[0] as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(tabs[0]);
+    await expect.poll(panes).toEqual(['slot-a']);
+    expect(host.querySelector('[data-floe-split-pane="unrelated"]')?.getAttribute('hidden')).not.toBeNull();
   });
 
   it.each([1, 0.75, 1.25])('docks a full sidebar row without replacing or remounting sessions at scale %s', async (scale) => {
@@ -552,11 +662,12 @@ describe('TerminalPanel loading continuity', () => {
     await native.dragTerminalSessionToPane('views-a', 'views-c', 'bottom');
     await expect.poll(() => rpcState.views.length).toBe(2);
     const secondId = rpcState.views.find(view => view.id !== firstId)!.id;
-    expect(rpcState.views.find(view => view.id === firstId)!.layout).toEqual({ type: 'pane', id: 'views-b' });
+    expect(rpcState.views.find(view => view.id === firstId)!.layout).toMatchObject({ type: 'split', first: { empty: true }, second: { id: 'views-b' } });
     expect(host.querySelectorAll('[data-terminal-view-id]')).toHaveLength(2);
     expect(host.querySelector('[data-terminal-view-count], .terminal-view-pane-count')).toBeNull();
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="' + firstId + '"]')!);
-    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-b']);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    expect(visibleElements(host, '[data-terminal-vacant-slot]')).toHaveLength(1);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for View 1"]')!);
     await userEvent.click(page.getByRole('menuitem', { name: 'Rename view', exact: true }));
     const renameInput = document.querySelector<HTMLInputElement>('[role=dialog] input')!;
@@ -575,7 +686,7 @@ describe('TerminalPanel loading continuity', () => {
     await userEvent.keyboard('{Escape}');
     disposeRendered(); disposeRendered = mount();
     await expect.poll(() => host.querySelectorAll('[data-terminal-view-id]').length).toBe(2);
-    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="' + secondId + '"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-a', 'views-c']);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for View 2"]')!);
@@ -609,6 +720,8 @@ describe('TerminalPanel loading continuity', () => {
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="new-view-2"]')!);
     await expect.poll(() => runtimeState.propsBySession.get('new-view-2').active()).toBe(true);
     expect(visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['new-view-1', 'new-view-2']);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="new-view-1"] [aria-label="Close"]')!);
+    await expect.poll(() => visibleElements(host, '[data-terminal-vacant-slot]').length).toBe(1);
     await userEvent.click(host.querySelector<HTMLButtonElement>('.terminal-navigation-footer [aria-label="More options"]')!);
     await userEvent.click(page.getByRole('menuitem', { name: 'New session', exact: true }));
     await expect.poll(() => create.mock.calls.length).toBe(5);
@@ -667,6 +780,16 @@ describe('TerminalPanel loading continuity', () => {
         await expect.poll(() => getComputedStyle(inactiveHeader.querySelector('button')!).color).toBe(getComputedStyle(inactiveHeader).color);
         const divider = host.querySelector<HTMLElement>('[data-floe-split-divider]')!;
         expect(getComputedStyle(divider).backgroundColor).toBe(getComputedStyle(area).backgroundColor);
+        const target = inactiveHeader.closest<HTMLElement>('[data-floe-split-pane]')!;
+        const box = target.getBoundingClientRect();
+        const transfer = new DataTransfer(); transfer.setData('application/x-redeven-terminal-session', 'palette-1');
+        target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: box.left + 2, clientY: box.top + box.height / 2 }));
+        const preview = target.querySelector<HTMLElement>('[data-floe-split-drop]')!;
+        expect(getComputedStyle(preview).borderWidth).toBe('3px');
+        expect(getComputedStyle(preview).borderColor).toBe(getComputedStyle(area).color);
+        expect(preview.getBoundingClientRect().width).toBeCloseTo(box.width / 2, 0);
+        target.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+        expect(host.querySelector('[data-floe-split-drop]')).toBeNull();
       }
     } finally { preferences.setUserTheme(originalTheme); document.documentElement.className = htmlClass; }
   });
@@ -764,7 +887,7 @@ describe('TerminalPanel loading continuity', () => {
     expect(host.querySelector('[data-terminal-flower-anchor]')).toBeNull();
   });
 
-  it('reserves the center for Flower and keeps geometry and recovery controls on the right in narrow footers', async () => {
+  it('removes geometry information and keeps recovery controls clear of Flower in narrow footers', async () => {
     rpcState.sessions = [createdSession()];
     const register = vi.fn(() => vi.fn());
     const host = document.createElement('div');
@@ -775,16 +898,11 @@ describe('TerminalPanel loading continuity', () => {
     </TerminalSessionCatalogProvider>, host);
     await vi.waitFor(() => expect(runtimeState.propsBySession.has('created-session')).toBe(true));
     const runtime = runtimeState.propsBySession.get('created-session');
-    runtime.onGeometryPresentation('created-session', {
-      lifecycleEpoch: 1, rendererEpoch: 1, requestEpoch: 1,
-      local: { cols: 160, rows: 40 },
-      effective: { cols: 80, rows: 24, lifecycleEpoch: 1, rendererEpoch: 1, generation: 1, presentationSequence: 1 },
-    });
     for (const width of [960, 720, 640]) {
       host.style.width = `${width}px`;
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const anchor = host.querySelector<HTMLElement>('[data-terminal-flower-anchor]')!;
-      const geometry = host.querySelector<HTMLElement>('[data-testid="terminal-shared-geometry-status-notice"]')!;
+      expect(host.querySelector('[data-testid="terminal-shared-geometry-status-notice"]')).toBeNull();
       const footer = anchor.closest<HTMLElement>('[data-testid="terminal-status-bar"]')!;
       const rect = anchor.getBoundingClientRect();
       const bounds = footer.getBoundingClientRect();
@@ -793,11 +911,6 @@ describe('TerminalPanel loading continuity', () => {
       expect(rect.width).toBeGreaterThan(96);
       expect(rect.width).toBeLessThanOrEqual(360);
       expect(Math.abs(rect.left + rect.width / 2 - bounds.left - bounds.width / 2)).toBeLessThan(1);
-      expect(geometry.getBoundingClientRect().left).toBeGreaterThanOrEqual(rect.right);
-      expect(geometry.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
-      expect(geometry.getBoundingClientRect().width).toBe(bounds.width <= 720 ? 28 : 104);
-      const short = geometry.querySelector<HTMLElement>('.terminal-shared-geometry-notice__short')!;
-      expect(getComputedStyle(short).display).toBe(bounds.width <= 720 ? 'none' : 'inline');
       runtime.onRuntimeStatus('created-session', { state: 'degraded', retryable: true });
       const recovery = host.querySelector<HTMLElement>('[data-testid="terminal-recovery-status-actions"]')!;
       expect(recovery.getBoundingClientRect().left).toBeGreaterThanOrEqual(rect.right);

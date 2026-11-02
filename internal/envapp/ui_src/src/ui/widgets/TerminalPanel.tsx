@@ -12,7 +12,7 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 import './adaptive-sidebar.css';
 import './terminal-workspace.css';
-import { SplitWorkspace, dockSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceEdge, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
+import { SplitWorkspace, dockSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceEdge, type SplitWorkspaceLayout, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
 import { createTerminalWorkspace } from './terminalWorkspace';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
@@ -147,9 +147,6 @@ import {
 } from './TerminalSessionNavigator';
 import { TerminalGroupDeleteDialog, TerminalGroupEditorDialog } from './TerminalGroupDialogs';
 import { TerminalSearchOverlay } from './TerminalSearchOverlay';
-import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
-import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
-import { REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR } from '../workbench/surface/workbenchInputRouting';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 
 type pending_terminal_session_status = 'creating' | 'failed';
@@ -1359,11 +1356,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     ReadonlyMap<string, TerminalForegroundPresentation>
   >(new Map());
   const [runtimeStatusBySession, setRuntimeStatusBySession] = createSignal<Record<string, TerminalSessionRuntimeStatus>>({});
-  const [geometryPresentationBySession, setGeometryPresentationBySession] = createSignal<
-    Record<string, TerminalSharedGeometryPresentation>
-  >({});
-  const [sharedGeometryAnnouncement, setSharedGeometryAnnouncement] = createSignal('');
-  const announcedGeometryLifecycles = new Set<string>();
 
   const beginTerminalCreationTransition = (pendingSessionId: string) => {
     setTerminalCreationTransitions((previous) => (
@@ -1730,6 +1722,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const [workspaceBusy, setWorkspaceBusy] = createSignal(false);
+  const [slotCreation, setSlotCreation] = createSignal<{ viewId: string; slotId: string; error: string | null } | null>(null);
+  let vacancyDrop: { slotId: string; sessionId: string } | null = null;
   const workspace = createTerminalWorkspace({
     catalog: terminalCatalog?.viewCatalog,
     viewName: index => i18n.t('terminalWorkspace.viewName', { index }),
@@ -1745,6 +1739,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     'three-columns': i18n.t('terminalWorkspace.threeColumns'), 'main-left': i18n.t('terminalWorkspace.mainLeft'), grid: i18n.t('terminalWorkspace.grid'),
   });
   const selectWorkspacePane = (id: string) => {
+    workspace.activatePane(id);
+    if (workspace.vacantPaneIds().includes(id)) return;
     clearPendingTerminalFocusIntent();
     markSessionMounted(id);
     setActiveSessionId(id);
@@ -1773,16 +1769,41 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       });
     } finally { setWorkspaceBusy(false); }
   };
-  const addSessionToEmptyView = async () => {
+  const addSessionToEmptyView = async (slotId: string) => {
     if (workspaceBusy() || !connected() || (terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready())) return;
     const viewId = workspace.activeViewId();
+    const environment = env.env_id();
     const group = terminalGroups().find(group => group.id === activeGroupId()) ?? terminalGroups()[0];
     if (!group || !viewId) return;
     setWorkspaceBusy(true);
+    setSlotCreation({ viewId, slotId, error: null });
     try {
-      const id = await beginCreateSession(undefined, group.defaultWorkingDir, group.id, false);
-      if (id && workspace.activeViewId() === viewId) batch(() => { workspace.commit(splitWorkspacePane(id)); markSessionMounted(id); setActiveSessionId(id); });
-    } finally { setWorkspaceBusy(false); }
+      const id = await beginCreateSession(undefined, group.defaultWorkingDir, group.id, false, message => {
+        if (env.env_id() === environment && workspace.activeViewId() === viewId) setSlotCreation({ viewId, slotId, error: message });
+      });
+      if (id && env.env_id() === environment && workspace.activeViewId() === viewId) batch(() => { if (workspace.fillVacancy(slotId, id)) { markSessionMounted(id); setActiveSessionId(id); } });
+    } finally { setWorkspaceBusy(false); if (!slotCreation()?.error) setSlotCreation(null); }
+  };
+  const handleVacancyDrop = (event: DragEvent) => {
+    const pane = (event.target as Element).closest<HTMLElement>('[data-floe-split-pane]');
+    const slotId = pane?.dataset.floeSplitPane;
+    if (!slotId || !workspace.vacantPaneIds().includes(slotId)) return;
+    const source = event.dataTransfer?.getData('application/x-redeven-terminal-session') || event.dataTransfer?.getData('application/x-floe-split-workspace');
+    if (!source || !sessions().some(session => session.id === source)) return;
+    // Let Floe finish the native drop lifecycle and clear its preview; only
+    // adapt the resulting placement to product-owned vacant-slot semantics.
+    vacancyDrop = { slotId, sessionId: source };
+    setTimeout(() => { vacancyDrop = null; }, 0);
+  };
+  const commitWorkspaceLayout = (next: SplitWorkspaceLayout | null) => {
+    if (workspaceBusy() || !connected() || !terminalCatalog?.viewCatalog.ready()) return;
+    if (vacancyDrop) {
+      const { slotId, sessionId } = vacancyDrop;
+      vacancyDrop = null;
+      if (!optimisticClosingSessionIds().has(slotId)) workspace.fillVacancy(slotId, sessionId);
+      return;
+    }
+    workspace.commit(next);
   };
   const createWorkspaceView = async () => {
     if (workspaceBusy() || !connected() || !terminalCatalog?.viewCatalog.ready()) return;
@@ -2004,32 +2025,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     ));
   };
 
-  const handleGeometryPresentation = (
-    id: string,
-    presentation: TerminalSharedGeometryPresentation | null,
-  ) => {
-    setGeometryPresentationBySession(current => {
-      if (!presentation) {
-        if (!current[id]) return current;
-        const next = { ...current };
-        delete next[id];
-        return next;
-      }
-      const previous = current[id];
-      if (previous
-        && previous.lifecycleEpoch === presentation.lifecycleEpoch
-        && previous.rendererEpoch === presentation.rendererEpoch
-        && previous.requestEpoch === presentation.requestEpoch
-        && previous.local.cols === presentation.local.cols
-        && previous.local.rows === presentation.local.rows
-        && previous.effective.generation === presentation.effective.generation
-        && previous.effective.presentationSequence === presentation.effective.presentationSequence
-        && previous.effective.cols === presentation.effective.cols
-        && previous.effective.rows === presentation.effective.rows) return current;
-      return { ...current, [id]: presentation };
-    });
-  };
-
   const getActiveTerminalViewportElement = (): HTMLDivElement | null => {
     const sid = activeSessionId();
     if (!sid) return null;
@@ -2111,7 +2106,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const preferredActiveSessionId = placement.activeSessionId && nextVisibleIds.includes(placement.activeSessionId)
         ? placement.activeSessionId
         : null;
-      const resolvedActiveSessionId = preferredActiveSessionId ?? pickPreferredActiveId(visibleSessions, null);
+      const viewMembers = workspace.activeViewId() ? workspace.displayedPaneIds() : null;
+      const resolvedActiveSessionId = viewMembers
+        ? workspace.vacantPaneIds().includes(workspace.activePaneId() ?? '') ? null
+          : viewMembers.includes(preferredActiveSessionId ?? '') ? preferredActiveSessionId : viewMembers[0] ?? null
+        : preferredActiveSessionId ?? pickPreferredActiveId(visibleSessions, null);
       const nextPlacementState: TerminalPanelSessionPlacementState = {
         sessionIds: nextVisibleIds,
         activeSessionId: resolvedActiveSessionId,
@@ -2122,6 +2121,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return;
     }
 
+    // Saved views own selection, including an intentionally empty view.
+    // Do not fall back to unrelated sessions when its final slot is vacated.
+    if (workspace.activeViewId()) return;
     const currentActive = activeDisplaySessionId();
     if (currentActive && pendingTerminalSessionById(currentActive)) {
       return;
@@ -2518,30 +2520,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sid ? runtimeStatusBySession()[sid] ?? { state: 'idle' } : { state: 'idle' };
   });
 
-  const activeGeometryPresentation = createMemo<TerminalSharedGeometryPresentation | null>(() => {
-    if (activeRuntimeStatus().state !== 'idle') return null;
-    const id = activeDisplaySessionId();
-    return id ? geometryPresentationBySession()[id] ?? null : null;
-  });
-
-  createEffect(() => {
-    const presentation = activeGeometryPresentation();
-    const id = activeDisplaySessionId();
-    if (!presentation || !id || !viewActive() || !workbenchSelected()) {
-      setSharedGeometryAnnouncement('');
-      return;
-    }
-    const key = `${id}:${presentation.lifecycleEpoch}`;
-    if (announcedGeometryLifecycles.has(key)) return;
-    setSharedGeometryAnnouncement('');
-    queueMicrotask(() => {
-      if (activeDisplaySessionId() !== id || activeGeometryPresentation()?.lifecycleEpoch !== presentation.lifecycleEpoch) return;
-      if (!viewActive() || !workbenchSelected() || announcedGeometryLifecycles.has(key)) return;
-      announcedGeometryLifecycles.add(key);
-      setSharedGeometryAnnouncement(i18n.t('terminal.sharedGeometry.announcement'));
-    });
-  });
-
   const showActivityFlowerEntry = () => (
     variant === 'panel' && !isMobileLayout() && displayModeSelected()
     && Boolean(props.registerActivityFlowerAnchor)
@@ -2556,7 +2534,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const showTerminalStatusBar = createMemo(() => {
     const hasSession = Boolean(activeSession() || activePendingSession());
-    return hasSession || showActivityFlowerEntry();
+    return hasSession || Boolean(workspace.activeViewId()) || showActivityFlowerEntry();
   });
 
   const activeRuntimeStatusMessage = createMemo(() => {
@@ -2969,6 +2947,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const pickActiveSessionAfterClose = (sessionId: string): string | null => {
     const normalizedSessionId = String(sessionId ?? '').trim();
     const realSessions = sessions();
+    if (workspace.activeViewId()) return workspace.displayedPaneIds().find(id => id !== normalizedSessionId) ?? null;
     const currentIndex = realSessions.findIndex((session) => session.id === normalizedSessionId);
     if (currentIndex >= 0) {
       return realSessions[currentIndex + 1]?.id ?? realSessions[currentIndex - 1]?.id ?? null;
@@ -3102,7 +3081,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return String(session?.id ?? '').trim() || null;
   };
 
-  const beginCreateSession = async (name: string | undefined, workingDir: string, groupId: string, activate = true): Promise<string | null> => {
+  const beginCreateSession = async (name: string | undefined, workingDir: string, groupId: string, activate = true, onFailure?: (message: string) => void): Promise<string | null> => {
     const pendingSession = batch(() => {
       if (activate) workspace.leaveView();
       return createPendingSession(name, workingDir, groupId, activate);
@@ -3162,7 +3141,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         removePendingSession(pendingSession.id);
         return null;
       }
-      failPendingSession(pendingSession.id, e instanceof Error ? e.message : String(e), activate);
+      const message = e instanceof Error ? e.message : String(e);
+      if (onFailure) { removePendingSession(pendingSession.id); onFailure(message); }
+      else failPendingSession(pendingSession.id, message, activate);
       return null;
     }
   };
@@ -3297,12 +3278,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     void (async () => {
       const normalizedSessionId = String(id ?? '').trim();
       let deleteFence: terminal_session_mutation_fence | null = null;
+      const closingSession = sessions().find(session => session.id === normalizedSessionId);
       try {
         if (!normalizedSessionId) return;
         if (pendingTerminalSessionById(normalizedSessionId)) {
           removePendingSession(normalizedSessionId);
           return;
         }
+        if (!connected() || optimisticClosingSessionIds().has(normalizedSessionId)) return;
+        setError(null);
         removeTerminalCreationTransitionBySessionId(normalizedSessionId);
         terminalCatalog?.getCoordinator();
         deleteFence = captureSessionMutationFence();
@@ -3330,6 +3314,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             setOptimisticSessionClosing(normalizedSessionId, false);
             return;
           }
+          workspace.releaseSession(normalizedSessionId);
           terminalCatalog?.removeSession(normalizedSessionId);
         } else {
           const sessionCoordinator = terminalCatalog?.getCoordinator() ?? fallbackSessionsCoordinator;
@@ -3345,7 +3330,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       } catch (e) {
         setOptimisticSessionClosing(normalizedSessionId, false);
         if (deleteFence && !sessionMutationFenceIsCurrent(deleteFence)) return;
-        void (terminalCatalog?.refresh() ?? fallbackSessionsCoordinator?.refresh() ?? Promise.resolve()).catch(() => undefined);
+        if (props.sessionOperations && closingSession) {
+          mergeOptimisticTerminalSession(closingSession);
+          terminalCatalog?.upsertSession(closingSession);
+        } else void (terminalCatalog?.refresh() ?? fallbackSessionsCoordinator?.refresh() ?? Promise.resolve()).catch(() => undefined);
         if (handleExecuteDenied(e)) return;
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -3410,7 +3398,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       .filter((session) => !visibleSessionIds.has(session.id));
     return preserveStableTerminalSessionReferences([...list, ...retainedSessions], previous);
   }, []);
-  const sessionPanelIds = createMemo(() => renderableSessions().map((session) => session.id));
+  const sessionPanelIds = createMemo(() => [...new Set([...renderableSessions().map(session => session.id), ...workspace.vacantPaneIds()])]);
   createEffect(() => {
     for (const id of workspace.paneIds()) {
       if (sessions().some(session => session.id === id)) markSessionMounted(id);
@@ -4902,20 +4890,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
-  const terminalDisclosureFallbackFocus = () => {
-    if (variant === 'workbench') {
-      const widgetRoot = rootEl?.closest<HTMLElement>(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}]`);
-      if (widgetRoot) return widgetRoot;
-    }
-    return (isMobileLayout() ? mobileToolbarEl : null) ?? rootEl;
-  };
-  const terminalDisclosureSurfaceBoundary = () => rootEl;
-  const previousMobileToolbarControl = () => (
-    mobileToolbarEl?.querySelector<HTMLElement>('[data-testid="terminal-session-drawer-open"]') ?? null
-  );
-  const nextMobileToolbarControl = () => (
-    mobileToolbarEl?.querySelector<HTMLElement>('[data-testid="terminal-clear-active-session"]') ?? null
-  );
   const activeSessionListItem = createMemo(() => {
     const activeId = activeDisplaySessionId();
     if (!activeId) return null;
@@ -5251,19 +5225,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     </Show>
                   </span>
                 </Show>
-                <Show when={isMobileLayout() ? activeGeometryPresentation() : null}>
-                  {(presentation) => (
-                    <TerminalSharedGeometryNotice
-                      presentation={presentation()}
-                      mobile
-                      interactive={workbenchSelected()}
-                      fallbackFocus={terminalDisclosureFallbackFocus}
-                      surfaceBoundary={terminalDisclosureSurfaceBoundary}
-                      previousFocus={previousMobileToolbarControl}
-                      nextFocus={nextMobileToolbarControl}
-                    />
-                  )}
-                </Show>
+
                 <Dropdown align="end"
                   trigger={<Button size="sm" variant="ghost" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!workspace.availablePresets().length || workspaceBusy() || !connected()}><Grid class="h-3.5 w-3.5" /><span class="terminal-workspace-layout-label">{i18n.t('terminalWorkspace.layout')}</span></Button>}
                   items={workspace.availablePresets().map(id => ({ id, label: workspaceLabels()[id] }))}
@@ -5296,11 +5258,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               </div>
 
             </Show>
-            <Show when={isMobileLayout() && workspace.displayedPaneIds().length > 1}>
+            <Show when={isMobileLayout() && splitWorkspaceItems(workspace.displayedLayout()).length > 1}>
               <nav aria-label={i18n.t('terminalWorkspace.panes')} class="flex h-9 shrink-0 gap-1 overflow-x-auto border-b border-border px-1">
-                <For each={workspace.displayedPaneIds()}>{id => <button type="button" aria-pressed={activeSessionId() === id}
-                  class="shrink-0 rounded px-2 text-xs" classList={{ 'bg-accent text-accent-foreground': activeSessionId() === id }}
-                  onClick={() => requestSessionSelection(id, true)}>{sessionListItemById().get(id)?.title}</button>}</For>
+                <For each={splitWorkspaceItems(workspace.displayedLayout())}>{id => <button type="button" aria-pressed={workspace.activePaneId() === id}
+                  class="shrink-0 rounded px-2 text-xs" classList={{ 'bg-accent text-accent-foreground': workspace.activePaneId() === id }}
+                  onClick={() => selectWorkspacePane(id)}>{workspace.vacantPaneIds().includes(id) ? i18n.t('terminal.newSession') : sessionListItemById().get(id)?.title}</button>}</For>
               </nav>
             </Show>
             <div
@@ -5327,17 +5289,25 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   onClose={closeSearch}
                 />
               </Show>
-              <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
-                <div class="h-full">
+              <Show when={workspace.activeViewId() || sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
+                <div class="h-full" ref={element => {
+                  element.addEventListener('drop', handleVacancyDrop, true);
+                  const preventVacancyDrag = (event: DragEvent) => {
+                    const id = (event.target as Element).closest<HTMLElement>('[data-floe-split-header]')?.dataset.floeSplitHeader;
+                    if (id && workspace.vacantPaneIds().includes(id)) { event.preventDefault(); event.stopImmediatePropagation(); }
+                  };
+                  element.addEventListener('dragstart', preventVacancyDrag, true);
+                  onCleanup(() => { element.removeEventListener('drop', handleVacancyDrop, true); element.removeEventListener('dragstart', preventVacancyDrag, true); });
+                }}>
                   <SplitWorkspace
-                    itemIds={sessionPanelIds()} layout={workspace.displayedLayout()} activeId={activeDisplaySessionId()}
+                    itemIds={sessionPanelIds()} layout={workspace.displayedLayout()} activeId={workspace.activePaneId() ?? activeDisplaySessionId()}
                     compact={isMobileLayout()}
                     showHeaders={!isMobileLayout()}
                     resizeLabel={i18n.t('terminalWorkspace.resize')}
-                    onLayoutChange={workspace.commit} onActivate={selectWorkspacePane}
+                    onLayoutChange={commitWorkspaceLayout} onActivate={selectWorkspacePane}
                     externalDragType={terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready() ? undefined : "application/x-redeven-terminal-session"}
                     resolveExternalDrag={event => event.dataTransfer?.getData('application/x-redeven-terminal-session') || null}
-                    renderHeader={sessionId => <>
+                    renderHeader={sessionId => <Show when={!workspace.vacantPaneIds().includes(sessionId)} fallback={<span class="text-xs text-muted-foreground">{i18n.t('terminal.newSession')}</span>}>
                       <span class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden" title={sessionListItemById().get(sessionId)?.fullPath}>
                         <TerminalSessionChromeIcon avatar={sessionListItemById().get(sessionId)?.avatar ?? { kind: 'initial' }} class="h-3 w-3 shrink-0" />
                         <span class="truncate text-xs font-medium">{sessionListItemById().get(sessionId)?.title}</span>
@@ -5353,14 +5323,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       <Dropdown align="end" trigger={<Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.split')} disabled={workspaceBusy() || !connected() || (terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready())}><Plus class="h-3 w-3" /></Button>}
                         items={(['left', 'right', 'top', 'bottom'] as const).map(edge => ({ id: edge, label: i18n.t(edge === 'left' ? 'terminalWorkspace.left' : edge === 'right' ? 'terminalWorkspace.right' : edge === 'top' ? 'terminalWorkspace.top' : 'terminalWorkspace.bottom') }))}
                         onSelect={edge => void splitWorkspaceSession(sessionId, edge as SplitWorkspaceEdge)} />
-                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.closePane')} title={i18n.t('terminalWorkspace.closePane')} disabled={!workspace.activeViewId()} onClick={() => workspace.closePane(sessionId)}><X class="h-3 w-3" /></Button>
-                    </>}
+                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminal.close')} title={i18n.t('terminal.close')} disabled={!connected() || optimisticClosingSessionIds().has(sessionId)} onClick={() => closeSession(sessionId)}><X class="h-3 w-3" /></Button>
+                    </Show>}
                     renderItem={(sessionId, visible) => {
                       const sessionForId = createMemo(() => renderableSessions().find((session) => session.id === sessionId) ?? null);
                       const mountedSessionForId = createMemo(() => (
                         mountedSessionIds().has(sessionId) ? sessionForId() : null
                       ));
                       return (
+                        <Show when={!workspace.vacantPaneIds().includes(sessionId)} fallback={
+                          <div class="terminal-vacant-slot" data-terminal-vacant-slot={sessionId} aria-busy={workspaceBusy() && slotCreation()?.slotId === sessionId}>
+                            <Show when={slotCreation()?.viewId === workspace.activeViewId() && slotCreation()?.slotId === sessionId && slotCreation()?.error}>{message => <p role="alert" class="max-w-xs px-4 text-center text-xs text-destructive">{message()}</p>}</Show>
+                            <Button variant="outline" size="sm" disabled={!connected() || workspaceBusy() || optimisticClosingSessionIds().has(sessionId) || !terminalCatalog?.viewCatalog.ready()}
+                              onClick={() => void addSessionToEmptyView(sessionId)}><Show when={workspaceBusy() && slotCreation()?.slotId === sessionId} fallback={<Plus class="h-3.5 w-3.5" />}><Refresh class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /></Show>{i18n.t('terminal.newSession')}</Button>
+                          </div>
+                        }>
                         <Show when={mountedSessionForId()}>
                           {/* Keep runtime identity tied to sessionId; metadata snapshots may replace session objects. */}
                           <div class="h-full">
@@ -5393,7 +5370,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                                 terminalCreationTransitionForSession(sessionId) !== null
                               )}
                               onRuntimeStatus={handleRuntimeStatus}
-                              onGeometryPresentation={handleGeometryPresentation}
                               onSessionGone={handleTerminalSessionGone}
                               onInteractive={handleTerminalInteractive}
                               onLiveOutputObserved={handleLiveOutputObserved}
@@ -5410,6 +5386,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               onNameUpdate={handleNameUpdate}
                             />
                           </div>
+                        </Show>
                         </Show>
                       );
                     }}
@@ -5521,14 +5498,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 }}
               </For>
 
-              <Show when={workspace.activeViewId() && sessionsHydrated() && workspace.displayedPaneIds().length === 0}>
-                <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center">
-                  <Grid class="h-6 w-6 text-muted-foreground" />
-                  <p class="text-xs text-muted-foreground">{i18n.t('terminalWorkspace.viewUnavailable')}</p>
-                  <Button size="sm" disabled={!connected() || workspaceBusy()} onClick={() => void addSessionToEmptyView()}>{i18n.t('terminalWorkspace.addViewSession')}</Button>
-                </div>
-              </Show>
-              <Show when={emptySessionListLoading()}>
+
+              <Show when={!workspace.activeViewId() && emptySessionListLoading()}>
                 <TerminalLoadingPane
                   message={i18n.t('terminal.loadingSessions')}
                   progressLabel={i18n.t('terminal.loadingSessions')}
@@ -5638,17 +5609,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 </div>
                 <Show when={showActivityFlowerEntry()}><ActivityFlowerAnchor /></Show>
                 <div class="terminal-status-bar-right flex min-w-0 items-center justify-end gap-2 whitespace-nowrap">
-                  <Show when={!isMobileLayout() ? activeGeometryPresentation() : null}>
-                    {(presentation) => (
-                      <TerminalSharedGeometryNotice
-                        presentation={presentation()}
-                        mobile={false}
-                        interactive={workbenchSelected()}
-                        fallbackFocus={terminalDisclosureFallbackFocus}
-                        surfaceBoundary={terminalDisclosureSurfaceBoundary}
-                      />
-                    )}
-                  </Show>
+
                   <span
                     data-terminal-history-rows={activeHistoryRows() === null ? '' : String(activeHistoryRows())}
                     class="terminal-shared-geometry-history ml-auto shrink-0"
@@ -5711,15 +5672,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 </div>
               </div>
             </Show>
-            <span
-              class="sr-only"
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              data-testid="terminal-shared-geometry-announcement"
-            >
-              {sharedGeometryAnnouncement()}
-            </span>
+
           </div>
         </div>
       </Show>

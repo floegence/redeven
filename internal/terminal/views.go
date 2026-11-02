@@ -2,6 +2,8 @@ package terminal
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/json"
 	"errors"
 
 	"github.com/floegence/redeven/internal/accessgate"
@@ -109,4 +111,48 @@ func registerTerminalViewRPCs(m *Manager, r *sessionrpc.Router, meta *session.Me
 		m.broadcastTerminalMetadata(TypeID_TERMINAL_VIEWS_CHANGED, snapshot)
 		return &snapshot, nil
 	})
+}
+
+// Release occupancy, never the slot or split geometry, after a PTY closes.
+func (c *viewCatalog) VacateSession(sessionID string) (TerminalViewSnapshot, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var changes []terminalViewChange
+	for _, view := range c.views {
+		var root viewLayoutNode
+		if err := json.Unmarshal([]byte(view.LayoutJSON), &root); err != nil {
+			return TerminalViewSnapshot{}, false, err
+		}
+		changed := false
+		var visit func(*viewLayoutNode)
+		visit = func(node *viewLayoutNode) {
+			if node == nil {
+				return
+			}
+			if node.Type == "pane" {
+				if node.ID == sessionID && !node.Empty {
+					node.ID = "vacant-" + rand.Text()
+					node.Empty = true
+					changed = true
+				}
+				return
+			}
+			visit(node.First)
+			visit(node.Second)
+		}
+		visit(&root)
+		if !changed {
+			continue
+		}
+		raw, err := json.Marshal(root)
+		if err != nil {
+			return TerminalViewSnapshot{}, false, err
+		}
+		changes = append(changes, terminalViewChange{ID: view.ID, Name: view.Name, LayoutJSON: string(raw), BaseRevision: view.Revision})
+	}
+	if len(changes) == 0 {
+		return c.snapshotLocked(), false, nil
+	}
+	snapshot, err := c.updateLocked(changes)
+	return snapshot, err == nil, err
 }

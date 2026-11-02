@@ -1186,8 +1186,8 @@ ${navigationGroup().defaultWorkingDir}`}
                           data-terminal-session-row={sessionId}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
                           class={`group relative grid cursor-pointer items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 ${props.mobile
-                            ? 'min-h-[64px] grid-cols-[36px_minmax(0,1fr)_44px] gap-x-2 px-2.5 py-1'
-                            : 'h-8 grid-cols-[24px_minmax(0,1fr)_24px] gap-x-1.5 pl-[27px] pr-1 py-0'} ${sidebarActive()
+                            ? 'min-h-[64px] grid-cols-[36px_minmax(0,1fr)_44px_44px] gap-x-2 px-2.5 py-1'
+                            : 'h-8 grid-cols-[20px_minmax(0,1fr)_24px_24px] gap-x-1.5 pl-[27px] pr-1 py-0'} ${sidebarActive()
                             ? 'bg-[var(--floe-state-selected)] text-sidebar-accent-foreground'
                             : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
@@ -1366,6 +1366,9 @@ ${navigationGroup().defaultWorkingDir}`}
                               </span>
                             </Show>
                           </span>
+                          <button type="button" class="terminal-session-close relative z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                            disabled={!item().closable || (!props.connected && item().failureKind !== "creation")} data-terminal-session-close={sessionId} aria-label={i18n.t('terminal.close') + ': ' + item().title} title={i18n.t('terminal.close')}
+                            onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); props.onCloseSession(sessionId); }}><X class="h-3 w-3" /></button>
                           <button type="button" class={`terminal-session-more relative z-20 flex cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent ${props.mobile ? 'h-11 w-11' : 'h-6 w-6 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
                             data-testid={`terminal-session-actions-${sessionId}`}
                             aria-label={`${i18n.t('common.actions.more')}: ${item().title}`}

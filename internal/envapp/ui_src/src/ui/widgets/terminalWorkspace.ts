@@ -1,5 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, on, untrack, type Accessor } from 'solid-js';
-import { isSplitWorkspaceLayout, measureSplitWorkspace, presetSplitWorkspace, reconcileSplitWorkspace, removeSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
+import { isSplitWorkspaceLayout, mapSplitWorkspace, measureSplitWorkspace, presetSplitWorkspace, reconcileSplitWorkspace, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
+import { emptyViewSlots, viewSessionIds, vacateViewSessions, type TerminalViewLayout } from '../services/terminalViewLayout';
 import type { TerminalViewCatalog } from '../services/terminalViewCatalog';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 
@@ -12,14 +13,16 @@ export function createTerminalWorkspace(options: {
   hydrated: Accessor<boolean>;
   deferSelectionPlacement?: Accessor<boolean>;
   activeId: Accessor<string | null>;
-  select: (id: string) => void;
+  select: (id: string | null) => void;
 }) {
   const catalog = options.catalog;
+  const [activeVacancy, setActiveVacancy] = createSignal<string | null>(null);
   const [activeViewId, setActiveViewId] = createSignal<string | null>(null);
   const [layout, setLayout] = createSignal<SplitWorkspaceLayout | null>(null);
   let loadedKey = '';
   let legacyImportConsidered = false;
   createEffect(on(options.storageKey, key => {
+    setActiveVacancy(null);
     loadedKey = key;
     legacyImportConsidered = false;
     const saved = readUIStorageJSON<unknown>(key, null);
@@ -33,6 +36,7 @@ export function createTerminalWorkspace(options: {
     return options.viewName?.(index) ?? String(index);
   };
   const selectViewId = (id: string | null) => {
+    if (id !== activeViewId()) setActiveVacancy(null);
     setActiveViewId(id);
     writeUIStorageJSON(options.storageKey() + ':active-view', id);
   };
@@ -95,24 +99,27 @@ export function createTerminalWorkspace(options: {
     const next = presetSplitWorkspace(preset, members, () => 'split-' + crypto.randomUUID());
     const nextMembers = splitWorkspaceItems(next);
     if (!next || nextMembers.length !== members.length || !members.every(id => nextMembers.includes(id))) return;
-    commit(next);
+    let arranged: TerminalViewLayout = next;
+    for (const id of emptyViewSlots(view.layout)) arranged = mapSplitWorkspace(arranged, id, () => ({ type: 'pane', id, empty: true } as TerminalViewLayout));
+    commit(arranged);
   };
   const activateView = (id: string) => {
     const view = catalog?.views().find(view => view.id === id);
     if (!view) return;
-    const available = reconcileSplitWorkspace(view.layout, options.sessionIds());
+    const available = reconcileSplitWorkspace(view.layout, viewSessionIds(view.layout).filter(id => options.sessionIds().includes(id)));
     batch(() => {
+      setActiveVacancy(null);
       selectViewId(id); setLayout(view.layout);
       const ids = splitWorkspaceItems(available);
-      if (ids.length) options.select(ids.includes(options.activeId() ?? '') ? options.activeId()! : ids[0]);
+      options.select(ids.includes(options.activeId() ?? '') ? options.activeId()! : ids[0] ?? null);
     });
   };
   const browseSession = (id: string | null) => {
     if (!catalog || !id) return;
     const owner = catalog.ownerOf(id);
-    batch(() => { selectViewId(owner?.id ?? null); setLayout(owner?.layout ?? splitWorkspacePane(id)); });
+    batch(() => { setActiveVacancy(null); selectViewId(owner?.id ?? null); setLayout(owner?.layout ?? splitWorkspacePane(id)); });
   };
-  const leaveView = () => { selectViewId(null); };
+  const leaveView = () => { batch(() => { selectViewId(null); setLayout(null); }); };
   const newView = (sessionId: string) => {
     const active = sessionId;
     if (!catalog?.ready() || !active) return;
@@ -153,27 +160,38 @@ export function createTerminalWorkspace(options: {
   });
   const paneIds = createMemo(() => splitWorkspaceItems(layout()));
   const displayedLayout = createMemo(() => {
-    if (catalog && activeViewId()) return reconcileSplitWorkspace(layout(), options.sessionIds());
+    if (catalog && activeViewId()) return layout();
     const active = options.activeId();
     return active && options.sessionIds().includes(active) && !paneIds().includes(active)
       ? splitWorkspacePane(active)
       : layout();
   });
-  const displayedPaneIds = createMemo(() => splitWorkspaceItems(displayedLayout()));
+  const displayedPaneIds = createMemo(() => viewSessionIds(displayedLayout()).filter(id => options.sessionIds().includes(id)));
+  const vacantPaneIds = createMemo(() => {
+    const empty = emptyViewSlots(displayedLayout());
+    return splitWorkspaceItems(displayedLayout()).filter(id => empty.has(id) || !options.sessionIds().includes(id));
+  });
+  const activePaneId = createMemo(() => vacantPaneIds().includes(activeVacancy() ?? '') ? activeVacancy() : displayedPaneIds().includes(options.activeId() ?? '') ? options.activeId() : vacantPaneIds()[0] ?? null);
+  const activatePane = (id: string) => {
+    const vacant = vacantPaneIds().includes(id);
+    batch(() => { setActiveVacancy(vacant ? id : null); if (vacant) options.select(null); });
+  };
+  const fillVacancy = (slotId: string, sessionId: string) => {
+    if (!layout() || !activeViewId() || !vacantPaneIds().includes(slotId)) return false;
+    const base = vacateViewSessions(layout()!, new Set([sessionId]));
+    commit(mapSplitWorkspace(base, slotId, () => splitWorkspacePane(sessionId)));
+    setActiveVacancy(null);
+    return true;
+  };
   createEffect(() => {
     if (!catalog || !activeViewId() || !options.hydrated() || options.deferSelectionPlacement?.()) return;
+    if (vacantPaneIds().includes(activeVacancy() ?? '')) return;
     const ids = displayedPaneIds();
-    if (ids.length && !ids.includes(options.activeId() ?? '')) options.select(ids[0]);
+    if (!ids.includes(options.activeId() ?? '')) options.select(ids[0] ?? null);
   });
-  const closePane = (id: string) => {
-    if (!paneIds().includes(id) || (catalog && !activeViewId())) return;
-    if (paneIds().length === 1) { removeView(activeViewId()!); return; }
-    const next = removeSplitWorkspaceItem(layout(), id);
-    batch(() => {
-      commit(next);
-      const available = splitWorkspaceItems(reconcileSplitWorkspace(next, options.sessionIds()));
-      if (options.activeId() === id && available.length) options.select(available[0]);
-    });
+  const releaseSession = (id: string) => {
+    const view = catalog?.ownerOf(id);
+    if (view) catalog?.put({ ...view, layout: vacateViewSessions(view.layout, new Set([id])) });
   };
-  return { layout, displayedLayout, commit, availablePresets, applyPreset, paneIds, displayedPaneIds, closePane, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
+  return { layout, displayedLayout, commit, availablePresets, applyPreset, paneIds, displayedPaneIds, vacantPaneIds, activePaneId, activatePane, fillVacancy, releaseSession, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
 }

@@ -167,11 +167,12 @@ it('ignores list responses and notifications from a retired connection', async (
 });
 
 
-it('moves membership in one revision-checked batch and removes an emptied source view', async () => {
+it('moves membership atomically and retains an emptied source view', async () => {
   let resolveSave!: (snapshot: TerminalViewSnapshot) => void;
   const other = { ...view, id: 'view-b', name: 'B', layout: { type: 'pane' as const, id: 'b' }, revision: 3 };
   const updateViews = vi.fn().mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }))
-    .mockResolvedValue({ revision: 5, views: [{ ...other, name: 'Latest', revision: 5 }] });
+    .mockImplementation(async ({ changes }) => ({ revision: 5, views: [vacated, { ...other, ...changes[0], revision: 5 }] }));
+  let vacated: ReturnType<ReturnType<typeof createTerminalViewCatalog>['views']>[number];
   let catalog!: ReturnType<typeof createTerminalViewCatalog>;
   dispose = render(() => { catalog = createTerminalViewCatalog({ scope: () => 'env', connected: () => true, rpc: {
     listViews: async () => ({ revision: 3, views: [view, other] }), updateViews, onViewsChanged: () => () => undefined,
@@ -179,15 +180,17 @@ it('moves membership in one revision-checked batch and removes an emptied source
   await expect.poll(catalog.ready).toBe(true);
   const layout = presetSplitWorkspace('columns', ['a', 'b'], () => 's')!;
   catalog.put({ ...other, layout });
-  expect(catalog.views()).toHaveLength(1);
+  expect(catalog.views()).toHaveLength(2);
+  vacated = catalog.views().find(item => item.id === view.id)!;
+  expect(vacated.layout).toEqual({ type: 'pane', id: expect.stringMatching(/^vacant-/), empty: true });
   expect(catalog.ownerOf('a')?.id).toBe(other.id);
   await expect.poll(() => updateViews.mock.calls.length).toBe(1);
   expect(updateViews.mock.calls[0][0].changes).toEqual([
-    { id: view.id, baseRevision: 2, delete: true },
+    expect.objectContaining({ id: view.id, baseRevision: 2, layout: vacated.layout }),
     expect.objectContaining({ id: other.id, baseRevision: 3, layout }),
   ]);
   catalog.put({ ...other, name: 'Latest', layout });
-  resolveSave({ revision: 4, views: [{ ...other, layout, revision: 4 }] });
+  resolveSave({ revision: 4, views: [{ ...vacated, revision: 4 }, { ...other, layout, revision: 4 }] });
   await expect.poll(catalog.pending).toBe(false);
   expect(updateViews.mock.calls[1][0].changes).toEqual([expect.objectContaining({ id: other.id, name: 'Latest', baseRevision: 4 })]);
 });
