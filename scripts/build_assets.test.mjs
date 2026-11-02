@@ -88,17 +88,17 @@ appendFileSync(root + '/events', 'notices:finished\n');
 }
 
 for (const profile of ['development', 'release']) {
-  test(profile + ': cold asset builds verify notices after all package tasks finish', t => {
+  test(profile + ': asset builds honor the notice verification boundary', t => {
     const result = fixture(t, profile);
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(result.events.filter(event => event === 'notices:finished').length, 1);
+    assert.equal(result.events.filter(event => event === 'notices:finished').length, profile === 'development' ? 0 : 1);
     for (const label of ['Desktop', 'Env-App', 'Code-App']) {
       assert.equal(result.events.filter(event => event === 'install:' + label + ':started').length, 1);
     }
     assert.match(result.stdout, /All embedded assets built/u);
   });
 
-  for (const failure of ['install:Env-App', 'build:Code-App', 'knowledge:Knowledge', 'notices']) {
+  for (const failure of ['install:Env-App', 'build:Code-App', 'knowledge:Knowledge', ...(profile === 'development' ? [] : ['notices'])]) {
     test(profile + ': preserves ' + failure + ' failure without reporting success', t => {
       const result = fixture(t, profile, failure);
       assert.equal(result.status, failure === 'notices' ? 29 : 23, result.stdout + result.stderr);
@@ -107,3 +107,17 @@ for (const profile of ['development', 'release']) {
     });
   }
 }
+
+test('development: stale notices do not prevent building current assets', t => {
+  const result = fixture(t, 'development', 'notices');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(!result.events.includes('notices:started'));
+  assert.match(result.stdout, /All embedded assets built/u);
+});
+
+test('default: stale notices still reject release assets', t => {
+  const result = fixture(t, '', 'notices');
+  assert.equal(result.status, 29, result.stdout + result.stderr);
+  assert.ok(result.events.includes('notices:started'));
+  assert.doesNotMatch(result.stdout, /All embedded assets built/u);
+});

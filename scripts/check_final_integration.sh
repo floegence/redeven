@@ -202,6 +202,8 @@ run_step "checking synchronized README localizations" node scripts/check_readme_
 run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
 fi
 if [[ "$group" == dependencies ]]; then
+run_step "testing third-party notice metadata" node --test scripts/generate_third_party_notices.test.mjs
+run_step "checking third-party notices" env GOWORK=off node scripts/generate_third_party_notices.mjs --check
 run_step "testing Floeterm dependency consistency" node --test scripts/check_floeterm_dependency_consistency.test.mjs
 run_step "checking Floeterm dependency consistency" node scripts/check_floeterm_dependency_consistency.mjs
 run_step "testing native Runtime build and relink contracts" node --test scripts/floeterm_native_build_contract.test.mjs scripts/build_runtime_binary.test.mjs scripts/collect_runtime_relink.test.mjs

@@ -7,15 +7,15 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-- Authority: the launcher owns Desktop, local Runtime, saved local Gateways, and bundles.
-- Outcome: run current source, stop together, prune obsolete bundles.
-- Invariants: preserve user data, identities, unrelated services, and recent, selected or live bundles.
-- Failure boundary: preparation errors clean up; incomplete inventory prevents pruning.
+- Authority: launcher owns Desktop, local Runtime, saved Gateways and bundles.
+- Outcome: run current source, stop together, prune old bundles.
+- Invariants: preserve data, identities, unrelated services and recent/selected/live bundles.
+- Failure: preparation cleans up; incomplete inventory prevents pruning.
 
 # Contract
 
 ## Source and build identity
-scripts/dev_desktop.sh captures HEAD plus tracked/nonignored source; concurrent mutation fails. Generated OKF/ignored assets are outputs, while authored OKF/builders/Go embeds remain inputs. Profile receipts require identical source, dependencies, toolchains, target/settings and verified Desktop/immutable Runtime bytes. Missing/corrupt/incomplete output rebuilds; failure never launches old bundles. Only pinned Rust installation may change preparation toolchain. --rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests select pnpm/npm and their locks, not another compatibility-lock installer.
+scripts/dev_desktop.sh captures HEAD and tracked/nonignored source; mutation fails. Generated OKF/ignored assets are outputs; authored OKF/builders/Go embeds are inputs. Reuse requires identical source, dependencies, tools, target/settings and verified Desktop/immutable Runtime bytes. Missing/corrupt/incomplete output rebuilds; failure never launches old bundles. Only pinned Rust installation may change tools. --rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests select pnpm/npm and their locks, not compatibility-lock installers.
 
 ## Network and caches
 macOS preparation reads enabled static HTTP/HTTPS system proxies once. Any explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (including lowercase/empty) or REDEVEN_DEV_SYSTEM_PROXY=0 disables discovery. Preserve explicit NO_PROXY, otherwise add loopback/compatible exclusions. PAC/SOCKS-only needs explicit policy. Never log credentials or weaken TLS/artifact checks. Remove only inferred variables before launching services.
@@ -25,7 +25,7 @@ Official Node checksum/archive transfers each get three attempts, 1/2-second bac
 Development may reuse Cargo registry/target caches but freshly stage exact locked public crates and regenerate verified digest/execution/consumption evidence. Complete caches work offline; incomplete caches acquire explicitly. Corruption/compiler errors cannot switch paths. Release directories remain isolated. Source changes rebuild the whole product, without component/watch mode.
 
 ## Scheduling and lifecycle
-Desktop compile overlaps Runtime preparation. Runtime assets/Go, plugins and Computer resources have separate outputs. Env App typecheck overlaps bundling under checkout lock. Notices follow all asset tasks to avoid installed-metadata/parser races. Go waits for embeds; receipts/publication wait for all outputs and unchanged inputs. Release stays sequential. Three dependency workers overlap probes with serial-equivalent digests/order. Supervisors retain phase errors and stop owned descendants on cancellation/failure.
+Desktop compile overlaps Runtime preparation. Runtime assets/Go, plugins and Computer resources own separate outputs. Env App typecheck overlaps bundling under checkout lock. Development builds skip notice freshness; staged/main gates own admission. Sequential release builds check notices after asset tasks. Go waits for embeds; publication waits for complete outputs and unchanged inputs. Three dependency workers overlap probes with serial-equivalent digests/order. Supervisors preserve errors and stop owned descendants on cancellation/failure.
 
 Saved local Gateways reuse intact compatible installs; source changes do not force upgrade. Service owner repairs missing/damaged packages; explicit Update selects current build. Archive cache keys include dirty source; changed inputs discard old cache generation, absent keys create a session cache. Package owner validates archives.
 
@@ -50,6 +50,6 @@ in-progress directories.
 - `redeven:scripts/dev_desktop_build_proxy.test.mjs` and `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Proxy precedence, preparation inheritance and launch isolation.
 - `redeven:scripts/resolve_node_archive.test.mjs` - Bounded HTTPS retry, permanent failure, checksum and partial-file cleanup.
 - `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.
-- `redeven:scripts/build_assets.test.mjs` - Cold-install ordering and asset/notice failure propagation.
+- `redeven:scripts/build_assets.test.mjs` - Development/release notice boundaries and build failures.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.
 - `redeven:desktop/src/main/developmentSecretStorage.test.ts` - Restart, migration, failures, tags and permissions.

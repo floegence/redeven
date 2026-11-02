@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -29,6 +31,48 @@ class IntegrationEntryTests(unittest.TestCase):
     def test_missing_exact_main_context_is_rejected(self):
         result = subprocess.run(["bash", "scripts/check_final_integration.sh"], cwd=self.root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
+
+    def test_main_dependencies_check_notices_and_propagate_staleness(self):
+        # Run the real group dispatcher in an isolated repository with probes;
+        # this does not run the product's main push gate or install dependencies.
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "LOCAL_GATE_"))}
+        def git(*args):
+            return subprocess.check_output(["git", *args], cwd=self.root, env=env, text=True).strip()
+        git("init", "-q", "-b", "main")
+        git("config", "user.name", "Gate Test")
+        git("config", "user.email", "gate@invalid.example")
+        binary = self.root / "bin/node"
+        binary.parent.mkdir()
+        binary.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, pathlib, sys\n"
+            "if sys.argv[1:] == ['scripts/generate_third_party_notices.mjs', '--check']:\n"
+            "    pathlib.Path('.git/notices-probe.json').write_text(json.dumps({'args': sys.argv[1:], 'gowork': os.environ.get('GOWORK')}))\n"
+            "    sys.exit(int(os.environ['TEST_NOTICES_STATUS']))\n"
+        )
+        binary.chmod(0o755)
+        for name in ["test_generate_release_notes.sh", "check_runtime_compatibility_contract.sh", "check_redevplugin_dependency_boundary.sh"]:
+            script = self.root / "scripts" / name
+            script.write_text("#!/usr/bin/env bash\nexit 0\n")
+            script.chmod(0o755)
+        git("add", ".")
+        git("commit", "-qm", "initial")
+        tip = git("rev-parse", "HEAD")
+        env.update(PATH=str(binary.parent) + os.pathsep + env["PATH"], LOCAL_GATE_ACTIVE="1", LOCAL_GATE_BASE=tip, GOWORK="unexpected-workspace")
+        probe = self.root / ".git/notices-probe.json"
+        for status in (0, 29):
+            with self.subTest(notices_status=status):
+                probe.unlink(missing_ok=True)
+                result = subprocess.run(
+                    ["bash", "scripts/check_final_integration.sh", "--group", "dependencies"],
+                    cwd=self.root, env={**env, "TEST_NOTICES_STATUS": str(status)}, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                self.assertTrue(probe.exists(), "main dependency gate must verify third-party notices")
+                self.assertEqual(json.loads(probe.read_text()), {"args": ["scripts/generate_third_party_notices.mjs", "--check"], "gowork": "off"})
+                if status:
+                    self.assertNotIn("final integration gate passed", result.stdout)
+                self.assertEqual(git("status", "--porcelain"), "")
 
 
     def test_ordinary_profiles_exclude_long_thread_qualification(self):

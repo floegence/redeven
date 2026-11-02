@@ -233,6 +233,25 @@ function readJSON(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
+function assertFloeNoticeDependency() {
+  // Attribution includes URLs derived from installed Floe artifacts. An old
+  // node_modules tree must not certify notices against newer staged locks.
+  const packageRoot = path.join(repoRoot, 'internal/envapp/ui_src');
+  const name = '@floegence/floe-webapp-core';
+  const expected = readJSON(path.join(packageRoot, 'package.json')).dependencies?.[name];
+  const lock = parseYAML(fs.readFileSync(path.join(packageRoot, 'pnpm-lock.yaml'), 'utf8'));
+  const locked = lock.importers?.['.']?.dependencies?.[name];
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(expected ?? '')
+      || locked?.specifier !== expected || String(locked?.version ?? '').split('(')[0] !== expected) {
+    throw new Error('Floe notice artifacts require matching manifest and lock versions; prepare the pinned Env App dependencies.');
+  }
+  const manifestPath = path.join(packageRoot, 'node_modules', name, 'package.json');
+  const installed = fs.existsSync(manifestPath) ? readJSON(manifestPath) : undefined;
+  if (installed?.name !== name || installed?.version !== expected) {
+    throw new Error(`Floe notice artifacts require installed ${name}@${expected}; run pnpm install --frozen-lockfile in internal/envapp/ui_src.`);
+  }
+}
+
 function recordInstalledPackageLicense(evidence, packageJSONPath) {
   if (!fs.existsSync(packageJSONPath)) return;
   const manifest = readJSON(packageJSONPath);
@@ -1187,6 +1206,7 @@ The generator fails on missing licenses and on licenses that are not acceptable 
 `;
 }
 
+assertFloeNoticeDependency();
 const goEntries = collectGoEntries();
 const npmEntries = collectJavaScriptEntries();
 const terminalAgentIcons = collectTerminalAgentIconAssets();

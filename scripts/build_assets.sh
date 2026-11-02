@@ -102,10 +102,10 @@ main() {
     build_envapp_ui
     build_codeapp_ui
     build_okf_bundle
+    # Release verification reads installed metadata after every package task.
+    # Development freshness is enforced by staged checks and the main gate.
+    verify_third_party_notices
   fi
-  # Notice verification reads installed package metadata and Env App's js-yaml.
-  # Wait for every package task, including cold installs, before reading them.
-  verify_third_party_notices
 
   ui_pkg_log ""
   ui_pkg_log "All embedded assets built."
