@@ -30167,7 +30167,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-01",
         "tags": [
           "lifecycle",
           "plugins",
@@ -30177,15 +30177,15 @@
         "title": "Official installation progress",
         "type": "UI Contract"
       },
-      "body_length": 1287,
+      "body_length": 1577,
       "summary": "ReDevPlugin owns the durable official-install Execution and its progress, idempotency, and recovery. Redeven observes that authority, presents exact market review and permission setup, and retains the operation when management closes. Response loss never creates a second installation. Only current authoritative inventory can expose a launch target; failed setup cannot revive stale permissions or remove saved canvas components.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Official installation progress\nThe pre-install interaction has one target-owned flow: `idle`, `review_ready`, `installing`, then `installed`; task failure is owned only by the shared install projection.\n\nCards and inspector share the same accessible `aria-busy`, live-status, alert, and progress projection.",
-          "char_count": 310
+          "body": "## Official installation progress\nThe pre-install interaction has one target-owned flow: `idle`, `review_ready`, `installing`, then `installed`; task failure is owned only by the shared install projection.\n\nCards and inspector share the same accessible `aria-busy`, live-status, alert, and progress projection.\n\nInstall and update share one official-access presentation. Review, progress, errors and completion use content-height dialogs with a bounded scroll body and visible footer. Completion retains the current installed identity and setup-attention state instead of implying access was granted.",
+          "char_count": 600
         },
         {
           "id": "boundaries",
@@ -30327,15 +30327,15 @@
         "title": "Plugin package review",
         "type": "UI Contract"
       },
-      "body_length": 3681,
+      "body_length": 4732,
       "summary": "ReDevPlugin owns inspection, validation and atomic mutations. Redeven presents the exact candidate/source/permissions before confirmation. Cancel affects only pre-submit inspection; unknown effects require reconciliation without replay. Updates preserve layout with fresh slots; only confirmed uninstall removes it.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Update review and confirmation\nPlugin Center's Updates card and inspector expose one primary `Review update` action.\n\nOpening it creates an exact update intent, shows the loading review in the same interaction, and never submits a mutation, changes tabs, or replaces the current selection.\n\nClosing completion preserves the Updates tab, clears obsolete exact selection, and shows an `All plugins are up to date` success state when no updates remain.\n\n## External package review\nAdministrators may start installation or update from a compatible public HTTPS package URL, public GitHub repository Release with optional tag, or local `.redevplugin` file. The product submits the source and intent to the released inspection API; it never downloads remote bytes in the browser, parses the package, chooses trust state, or invents provenance.\n\nA refresh failure after a terminal install exposes only an inventory refresh recovery and never a second install action.\n\n## Concise decision surface\n\nThe external review leads with Host-verified, locale-resolved author presentation, publisher and version. Package identifiers are technical evidence, not substitute product names when presentation exists. Verified identity is a quiet inline state; only unverified, blocked or revoked assessments receive a warning. The visual four-step timeline and generic introductory description are omitted; progress remains available to assistive technology.\n\nBefore consent, concrete destinations, requested host permissions, credentials, processes, background activity and host-facing methods remain visible. Ordinary worker methods and plugin-owned storage operations do not become broad \"delete content\" permission counters. Explicitly dangerous and unknown effects remain visible regardless of route. Full declarations, diffs, source evidence, hashes and inspection binding remain under a keyboard-operable package-details disclosure.\n\nNetwork destinations share one access heading, with update changes marked beside the affected destination. Storage, process and background changes remain visible on their access rows. Removed declarations remain available in the full report.\n\nOne short checkbox confirms the exact inspected package. Signature validity never substitutes for consent. The review cannot claim that installation or grants already occurred; completion cannot infer permission grants from enabled state. Unknown outcomes preserve the inspection identity and reconciliation behavior. Long names and translations wrap, mobile controls retain touch targets, and footer actions remain visible.\n\nExternal package installation does not grant permissions. Its detail copy states that access is managed after installation; the separate official-install approval flow retains its existing reviewed-permission contract.",
-          "char_count": 2809
+          "body": "## Update review and confirmation\nPlugin Center's Updates card and inspector expose one primary `Review update` action.\n\nOpening it creates an exact update intent without a mutation or navigation change. Official updates immediately present the validated market preview associated with that release; they do not refresh the whole market or download an external package to prepare review. Missing previews load only the selected plugin detail for the same generation and release. External sources still use the released package-inspection API.\n\nOfficial confirmation carries the reviewed full release reference, including metadata and package digests, plus the installed management revision. A changed generation, release reference or revision invalidates consent; the client never substitutes a same-version replacement. Post-submit reconciliation refreshes installed inventory only. Canceled or superseded reads cannot replace the current dialog.\n\nInstall and update dialogs size to content within viewport bounds. Identity and versions remain visible through preparation, submission and completion; brief states do not reserve a full-height shell. Long review content scrolls independently of the footer. Access requirements appear once, with concrete destinations and process/background authority visible; technical limits expand on demand.\n\nClosing completion preserves the Updates tab, clears obsolete exact selection, and shows an `All plugins are up to date` success state when no updates remain.\n\n## External package review\nAdministrators may start installation or update from a compatible public HTTPS package URL, public GitHub repository Release with optional tag, or local `.redevplugin` file. The product submits the source and intent to the released inspection API; it never downloads remote bytes in the browser, parses the package, chooses trust state, or invents provenance.\n\nA refresh failure after a terminal install exposes only an inventory refresh recovery and never a second install action.\n\n## Concise decision surface\n\nThe external review leads with Host-verified, locale-resolved author presentation, publisher and version. Package identifiers are technical evidence, not substitute product names when presentation exists. Verified identity is a quiet inline state; only unverified, blocked or revoked assessments receive a warning. The visual four-step timeline and generic introductory description are omitted; progress remains available to assistive technology.\n\nBefore consent, concrete destinations, requested host permissions, credentials, processes, background activity and host-facing methods remain visible. Ordinary worker methods and plugin-owned storage operations do not become broad \"delete content\" permission counters. Explicitly dangerous and unknown effects remain visible regardless of route. Full declarations, diffs, source evidence, hashes and inspection binding remain under a keyboard-operable package-details disclosure.\n\nNetwork destinations share one access heading, with update changes marked beside the affected destination. Storage, process and background changes remain visible on their access rows. Removed declarations remain available in the full report.\n\nOne short checkbox confirms the exact inspected package. Signature validity never substitutes for consent. The review cannot claim that installation or grants already occurred; completion cannot infer permission grants from enabled state. Unknown outcomes preserve the inspection identity and reconciliation behavior. Long names and translations wrap, mobile controls retain touch targets, and footer actions remain visible.\n\nExternal package installation does not grant permissions. Its detail copy states that access is managed after installation; the separate official-install approval flow retains its existing reviewed-permission contract.",
+          "char_count": 3860
         },
         {
           "id": "boundaries",
@@ -31550,5 +31550,5 @@
       ]
     }
   ],
-  "source_sha256": "cdfb60996ac8ead479aa0e19c730f90c2a61f12891590f33bee7e326ce5c5d01"
+  "source_sha256": "e36de0d781f0c020d3f25313250407688b860716bfeeaeeadd1331cfb79bdffb"
 }

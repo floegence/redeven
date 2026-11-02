@@ -430,12 +430,12 @@ function mountExternalDialog(
   return host;
 }
 
-function mountUpdateReviewDialog(inspection: ExternalPluginInspection = browserUpdateInspection()): HTMLElement {
+async function mountUpdateReviewDialog(inspection: ExternalPluginInspection = browserUpdateInspection()): Promise<HTMLElement> {
   const host = fixedHost();
   disposers.push(render(() => (
     <PluginUpdateReviewDialog
       open
-      item={updateDialogItem}
+      item={{ ...updateDialogItem, officialCatalog: undefined }}
       canManage
       onOpenChange={() => undefined}
       onInspect={async () => inspection}
@@ -447,6 +447,10 @@ function mountUpdateReviewDialog(inspection: ExternalPluginInspection = browserU
       onViewPermissions={() => undefined}
     />
   ), host));
+  await expect.poll(() => document.querySelector('[data-plugin-update-source-url]')).not.toBeNull();
+  document.querySelector<HTMLInputElement>('[data-plugin-update-source-url]')!.value = 'https://plugins.example.com/package.redevplugin';
+  document.querySelector<HTMLInputElement>('[data-plugin-update-source-url]')!.dispatchEvent(new Event('input', { bubbles: true }));
+  document.querySelector<HTMLButtonElement>('[data-plugin-update-inspect]')!.click();
   return host;
 }
 
@@ -496,12 +500,13 @@ function mountLoadingUpdateReviewDialog(): {
   disposers.push(render(() => (
     <PluginUpdateReviewDialog
       open={open()}
-      item={updateDialogItem}
+      item={{ ...updateDialogItem, officialCatalog: { ...updateDialogItem.officialCatalog!, installPreview: undefined } }}
       canManage
       onOpenChange={setOpen}
-      onInspect={async (_request, signal) => {
+      onInspect={vi.fn()}
+      onLoadMarketDetail={async (_pluginID, _generation, signal) => {
         inspectionSignal = signal;
-        return new Promise<ExternalPluginInspection>(() => undefined);
+        return new Promise<never>(() => undefined);
       }}
       onCommitExternal={async () => unavailableCommit()}
       onOfficialUpdate={async () => undefined}
@@ -821,7 +826,7 @@ describe('plugin management browser geometry and interaction', () => {
       from: [{ version: '4.0.0', shape_sha256: 'b'.repeat(64) }],
       method: 'data.convert', max_bytes: 1048576, max_runtime_ms: 3000,
     };
-    mountUpdateReviewDialog(inspection);
+    await mountUpdateReviewDialog(inspection);
     await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-data-upgrade]')).not.toBeNull());
     expect(document.querySelector('[data-plugin-update-data-upgrade]')!.textContent)
       .toBe('Saved data may be upgraded. The previous data is retained.');
@@ -1742,7 +1747,7 @@ describe('plugin management browser geometry and interaction', () => {
     'keeps the update review footer visible and actions unwrapped at $width x $height',
     async (viewport) => {
       await page.viewport(viewport.width, viewport.height);
-      mountUpdateReviewDialog();
+      await mountUpdateReviewDialog();
       await settle();
 
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -1771,7 +1776,7 @@ describe('plugin management browser geometry and interaction', () => {
 
   it('keeps update review controls operable at the 320 px effective layout of 200 percent zoom', async () => {
     await page.viewport(320, 568);
-    mountUpdateReviewDialog();
+    await mountUpdateReviewDialog();
     await settle();
 
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;

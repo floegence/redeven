@@ -1,5 +1,6 @@
 import { readSessionEvents } from '../services/sessionHTTP';
 import {
+  PluginPlatformRequestError,
   type PluginExecution,
   type PluginPlatformClient,
   type PluginRequestOptions,
@@ -7,6 +8,7 @@ import {
   type PluginRetainedRecoveryInspectOptions,
 } from '@floegence/redevplugin-ui';
 
+import { sameReleaseRef } from './pluginUpdateProjection';
 import { officialPluginCatalog } from './officialPluginCatalog';
 import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
@@ -352,13 +354,14 @@ export function createPluginLifecycleAPI(
         }, options);
       case 'update': {
         const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
-        if (command.targetVersion !== official.distribution.releaseRef.version) {
-          throw new Error('Official plugin update target does not match its signed release reference');
+        if (command.targetVersion !== command.releaseRef.version
+          || !sameReleaseRef(command.releaseRef, official.distribution.releaseRef)) {
+          throw new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', 'Official plugin update target does not match its signed release reference', {}, 'not_committed');
         }
         return client.updateReleaseRef({
           plugin_instance_id: command.pluginInstanceID,
           expected_management_revision: command.expectedManagementRevision,
-          release_ref: official.distribution.releaseRef,
+          release_ref: command.releaseRef,
         }, options);
       }
       case 'grant_permission':

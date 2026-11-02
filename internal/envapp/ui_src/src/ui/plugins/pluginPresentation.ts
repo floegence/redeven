@@ -2,6 +2,7 @@ import type { PluginInstallExecutionProjection, PluginInventoryItem, PluginPendi
 import type { I18nHelpers } from '../i18n';
 
 export const PLUGIN_MOBILE_TOUCH_TARGET_CLASS = 'min-h-[46px] min-w-[46px] sm:min-h-0 sm:min-w-0';
+export const PLUGIN_PACKAGE_DIALOG_CLASS = 'h-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[34rem] rounded-xl bg-background text-foreground';
 export const PLUGIN_ENTER_MOTION_CLASS = 'redeven-plugin-motion redeven-plugin-enter-up animate-in fade-in duration-200 ease-out motion-reduce:animate-none';
 export const PLUGIN_PRESS_MOTION_CLASS = 'redeven-plugin-motion transition-[background-color,border-color,color,box-shadow,opacity] duration-120 ease-out motion-reduce:transition-none';
 export const PLUGIN_UPDATE_ACTION_CLASS = 'bg-[var(--redeven-status-info-foreground)] text-[var(--background)] enabled:hover:bg-[color-mix(in_srgb,var(--redeven-status-info-foreground)_88%,var(--foreground))]';

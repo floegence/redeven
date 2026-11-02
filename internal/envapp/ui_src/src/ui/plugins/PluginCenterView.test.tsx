@@ -27,6 +27,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+const metricsReleaseRef = { ...EXAMPLE_PLUGIN_RELEASE_REF, version: '2.0.0' };
 const metricsPlugin = {
   inventoryKey: 'catalog:metrics',
   pluginID: 'com.example.metrics',
@@ -55,9 +56,9 @@ const metricsPlugin = {
     category: 'infrastructure',
     searchKeywords: ['metrics', 'monitoring'],
     trustedSigningKeyIDs: ['example_signing_key_2026'],
-    installPreview: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.installPreview,
+    installPreview: { ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!.installPreview!, release_ref: metricsReleaseRef },
     distribution: {
-      releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
+      releaseRef: metricsReleaseRef,
       installSource: {
         sourceKind: 'package_url',
         url: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.distribution.installSource.url,
@@ -1943,7 +1944,7 @@ describe('PluginCenterView', () => {
     setCurrentProjection({ items: [{ ...installed, lifecycleState: 'enabled', attentionReason: undefined }] });
     await Promise.resolve();
     const dialog = document.querySelector('[data-plugin-install-review-dialog]')?.closest('[role="dialog"]') as HTMLElement;
-    expect(controlText(dialog)).toContain('Enabled');
+    expect(dialog.querySelector('[data-plugin-install-open]')).not.toBeNull();
     expect(controlText(dialog)).not.toContain('Needs attention');
     expect(controlText(dialog)?.match(/Installation complete\./g)).toHaveLength(1);
 
@@ -2427,154 +2428,50 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-dialog]')).not.toBeNull());
     expect(onCommand).not.toHaveBeenCalled();
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
-    expect(onInspectExternal).toHaveBeenCalledWith({
-      sourceKind: 'package_url',
-      url: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.distribution.installSource.url,
-      intent: {
-        action: 'update',
-        plugin_instance_id: 'plugininst_metrics',
-        expected_management_revision: 13,
-      },
-    }, expect.any(AbortSignal));
+    expect(onInspectExternal).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-submit]')).not.toBeNull());
     expect(onCommand).not.toHaveBeenCalled();
   });
 
-  it('refreshes the market before inspecting the current official release source', async () => {
-    const inspection = externalInspectionForCenter();
-    const oldItem = {
-      ...metricsPlugin,
-      pluginInstanceID: 'plugininst_metrics',
-      version: '1.0.6',
-      managementRevision: 13,
-      lifecycleState: 'update_available' as const,
-      officialCatalog: {
-        ...metricsPlugin.officialCatalog,
-        marketGeneration: 6,
-        distribution: {
-          ...metricsPlugin.officialCatalog.distribution,
-          installSource: {
-            sourceKind: 'package_url' as const,
-            url: 'https://plugins.example.com/weather-1.0.6.redevplugin',
-          },
-        },
-      },
-    };
-    const currentItem = {
-      ...oldItem,
-      officialCatalog: {
-        ...oldItem.officialCatalog,
-        latestVersion: '1.0.7',
-        stableVersion: '1.0.7',
-        marketGeneration: 7,
-        distribution: {
-          ...oldItem.officialCatalog.distribution,
-          installSource: {
-            sourceKind: 'package_url' as const,
-            url: 'https://plugins.example.com/weather-1.0.7.redevplugin',
-          },
-        },
-      },
-    };
-    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [oldItem] });
-    const order: string[] = [];
-    const onRefresh = vi.fn(async () => {
-      order.push('refresh');
-      setCurrentProjection({ items: [currentItem] });
-    });
-    const onInspectExternal = vi.fn(async () => {
-      order.push('inspect');
-      return {
-        ...inspection,
-        intent: {
-          action: 'update' as const,
-          plugin_instance_id: 'plugininst_metrics',
-          expected_management_revision: 13,
-        },
-        plugin_id: metricsPlugin.pluginID,
-        publisher_id: metricsPlugin.officialCatalog.publisherID,
-        version: '1.0.7',
-      };
-    });
-    const mount = document.createElement('div');
-    document.body.append(mount);
-
-    dispose = render(() => (
-      <PluginCenterView
-        projection={currentProjection()}
-        loading={false}
-        error={null}
-        onCommand={vi.fn()}
-        onInspectExternal={onInspectExternal}
-        onRefresh={onRefresh}
-        canManagePlugins
-        canOpenPluginSurfaces={false}
-      />
-    ), mount);
-
+  it('loads only the selected official preview and offers retry after a detail failure', async () => {
+    const item = { ...metricsPlugin, pluginInstanceID: 'plugininst_metrics', version: '1.9.0',
+      managementRevision: 13, lifecycleState: 'update_available' as const,
+      officialCatalog: { ...metricsPlugin.officialCatalog, marketGeneration: 13, installPreview: undefined } };
+    const detail = { ...OFFICIAL_PLUGIN_MARKET_DETAIL, latest: OFFICIAL_PLUGIN_MARKET_DETAIL.latest.map((release) => ({
+      ...release, version: '2.0.0', install_preview: metricsPlugin.officialCatalog.installPreview,
+    })) };
+    const onRefresh = vi.fn();
+    const onInspectExternal = vi.fn();
+    const onLoadMarketDetail = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(detail);
+    const mount = document.createElement('div'); document.body.append(mount);
+    dispose = render(() => <PluginCenterView projection={{ items: [item] }} loading={false} canManagePlugins
+      canOpenPluginSurfaces onCommand={vi.fn()} onRefresh={onRefresh} onInspectExternal={onInspectExternal}
+      onLoadMarketDetail={onLoadMarketDetail} />, mount);
     openInventoryDetails(mount);
-    (mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(onInspectExternal).toHaveBeenCalledOnce());
-    expect(order).toEqual(['refresh', 'inspect']);
-    expect(onInspectExternal).toHaveBeenCalledWith({
-      sourceKind: 'package_url',
-      url: 'https://plugins.example.com/weather-1.0.7.redevplugin',
-      intent: {
-        action: 'update',
-        plugin_instance_id: 'plugininst_metrics',
-        expected_management_revision: 13,
-      },
-    }, expect.any(AbortSignal));
+    mount.querySelector<HTMLButtonElement>('[data-plugin-action="update-external"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-retry]')).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('[data-plugin-update-retry]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-submit]')).not.toBeNull());
+    expect(onLoadMarketDetail).toHaveBeenCalledTimes(2);
+    expect(onLoadMarketDetail).toHaveBeenLastCalledWith(item.pluginID, 13, expect.any(AbortSignal));
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(onInspectExternal).not.toHaveBeenCalled();
   });
 
-  it('shows a retryable catalog error without inspecting a cached official source', async () => {
-    const updatesProjection: PluginInventoryProjection = {
-      items: [{
-        ...metricsPlugin,
-        pluginInstanceID: 'plugininst_metrics',
-        version: '1.9.0',
-        managementRevision: 13,
-        lifecycleState: 'update_available',
-      }],
-    };
-    const onRefresh = vi.fn()
-      .mockRejectedValueOnce(new Error('market offline'))
-      .mockResolvedValue(undefined);
-    const onInspectExternal = vi.fn(async () => ({
-      ...externalInspectionForCenter(),
-      intent: {
-        action: 'update' as const,
-        plugin_instance_id: 'plugininst_metrics',
-        expected_management_revision: 13,
-      },
-      plugin_id: metricsPlugin.pluginID,
-      publisher_id: metricsPlugin.officialCatalog.publisherID,
-      version: '2.0.0',
-    }));
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={updatesProjection}
-        loading={false}
-        error={null}
-        onCommand={vi.fn()}
-        onInspectExternal={onInspectExternal}
-        onRefresh={onRefresh}
-        canManagePlugins
-        canOpenPluginSurfaces={false}
-      />
-    ), mount);
-
+  it('keeps a lost official update response in reconciliation rather than showing completion', async () => {
+    const onCommand = vi.fn(async () => { throw new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', 'response lost', {}, 'unknown'); });
+    const item = { ...metricsPlugin, pluginInstanceID: 'plugininst_metrics', version: '1.9.0',
+      managementRevision: 13, lifecycleState: 'update_available' as const };
+    const mount = document.createElement('div'); document.body.append(mount);
+    dispose = render(() => <PluginCenterView projection={{ items: [item] }} loading={false} canManagePlugins
+      canOpenPluginSurfaces onCommand={onCommand} onRefresh={vi.fn()} />, mount);
     openInventoryDetails(mount);
-    (mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-retry]')).not.toBeNull());
-    expect(controlText(document.querySelector('[data-plugin-update-dialog]'))).toContain('plugin catalog is unavailable');
-    expect(onInspectExternal).not.toHaveBeenCalled();
-
-    (document.querySelector('[data-plugin-update-retry]') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(onInspectExternal).toHaveBeenCalledOnce());
-    expect(onRefresh).toHaveBeenCalledTimes(2);
+    mount.querySelector<HTMLButtonElement>('[data-plugin-action="update-external"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-submit]')).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('[data-plugin-update-submit]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-reconcile]')).not.toBeNull());
+    expect(document.querySelector('[data-plugin-update-complete]')).toBeNull();
+    expect(onCommand).toHaveBeenCalledOnce();
   });
 
   it('submits official catalog updates through the platform release command', async () => {
@@ -2631,6 +2528,7 @@ describe('PluginCenterView', () => {
       pluginID: metricsPlugin.pluginID,
       pluginInstanceID: 'plugininst_metrics',
       targetVersion: '2.0.0',
+      releaseRef: metricsReleaseRef,
       expectedManagementRevision: 13,
     }, expect.any(AbortSignal));
     expect(onCommitExternal).not.toHaveBeenCalled();

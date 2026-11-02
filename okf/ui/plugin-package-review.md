@@ -14,7 +14,11 @@ ReDevPlugin owns inspection, validation and atomic mutations. Redeven presents t
 ## Update review and confirmation
 Plugin Center's Updates card and inspector expose one primary `Review update` action.
 
-Opening it creates an exact update intent, shows the loading review in the same interaction, and never submits a mutation, changes tabs, or replaces the current selection.
+Opening it creates an exact update intent without a mutation or navigation change. Official updates immediately present the validated market preview associated with that release; they do not refresh the whole market or download an external package to prepare review. Missing previews load only the selected plugin detail for the same generation and release. External sources still use the released package-inspection API.
+
+Official confirmation carries the reviewed full release reference, including metadata and package digests, plus the installed management revision. A changed generation, release reference or revision invalidates consent; the client never substitutes a same-version replacement. Post-submit reconciliation refreshes installed inventory only. Canceled or superseded reads cannot replace the current dialog.
+
+Install and update dialogs size to content within viewport bounds. Identity and versions remain visible through preparation, submission and completion; brief states do not reserve a full-height shell. Long review content scrolls independently of the footer. Access requirements appear once, with concrete destinations and process/background authority visible; technical limits expand on demand.
 
 Closing completion preserves the Updates tab, clears obsolete exact selection, and shows an `All plugins are up to date` success state when no updates remain.
 

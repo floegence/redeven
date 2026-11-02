@@ -3,7 +3,7 @@ type: UI Contract
 title: Official installation progress
 tags: [ui, plugins, review, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-01"
 ---
 # Summary
 
@@ -15,6 +15,8 @@ ReDevPlugin owns the durable official-install Execution and its progress, idempo
 The pre-install interaction has one target-owned flow: `idle`, `review_ready`, `installing`, then `installed`; task failure is owned only by the shared install projection.
 
 Cards and inspector share the same accessible `aria-busy`, live-status, alert, and progress projection.
+
+Install and update share one official-access presentation. Review, progress, errors and completion use content-height dialogs with a bounded scroll body and visible footer. Completion retains the current installed identity and setup-attention state instead of implying access was granted.
 
 # Boundaries
 

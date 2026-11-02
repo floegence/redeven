@@ -704,6 +704,7 @@ describe('plugin lifecycle client integration', () => {
       pluginInstanceID: examplePlugin.pluginInstanceID,
       expectedManagementRevision: 17,
       targetVersion: EXAMPLE_PLUGIN_RELEASE_REF.version,
+      releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
     });
 
     expect(mocks.updateReleaseRef).toHaveBeenCalledWith({
@@ -722,7 +723,19 @@ describe('plugin lifecycle client integration', () => {
       pluginInstanceID: examplePlugin.pluginInstanceID,
       expectedManagementRevision: 17,
       targetVersion: '1.9.9',
+      releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
     })).rejects.toThrow('does not match its signed release reference');
+    expect(mocks.updateReleaseRef).not.toHaveBeenCalled();
+  });
+
+  it('rejects a same-version release replacement before invoking the mutation', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const error = await lifecycle.execute({
+      type: 'update', pluginID: examplePlugin.pluginID, pluginInstanceID: examplePlugin.pluginInstanceID,
+      expectedManagementRevision: 17, targetVersion: EXAMPLE_PLUGIN_RELEASE_REF.version,
+      releaseRef: { ...EXAMPLE_PLUGIN_RELEASE_REF, release_metadata_sha256: 'f'.repeat(64) },
+    }).catch((error: unknown) => error);
+    expect(error).toMatchObject({ mutationOutcome: 'not_committed' });
     expect(mocks.updateReleaseRef).not.toHaveBeenCalled();
   });
 

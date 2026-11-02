@@ -189,6 +189,8 @@ export function PluginTrustBadge(props: { item: PluginInventoryItem; class?: str
 export function PluginIdentityHeader(props: {
   item: PluginInventoryItem;
   description?: boolean;
+  review?: boolean;
+  version?: JSX.Element;
   class?: string;
   headingId?: string;
   headingRef?: (element: HTMLHeadingElement) => void;
@@ -214,16 +216,15 @@ export function PluginIdentityHeader(props: {
             data-plugin-center-detail-heading={props.headingRef ? '' : undefined}
             lang={presentation()?.resolved_locale}
             dir="auto"
-            class="min-w-0 truncate text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            class={cn('min-w-0 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', props.review ? 'break-words' : 'truncate')}
           >
             {displayName()}
           </h2>
-          <PluginTrustBadge item={props.item} />
-          <PluginStatusBadge item={props.item} />
+          <Show when={!props.review}><PluginTrustBadge item={props.item} /><PluginStatusBadge item={props.item} /></Show>
         </div>
         <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span class="truncate" lang={presentation()?.resolved_locale} dir="auto">{publisher()}</span>
-          <Show when={props.item.version}><span>v{props.item.version}</span></Show>
+          <Show when={props.version} fallback={<Show when={props.item.version}><span>v{props.item.version}</span></Show>}>{props.version}</Show>
         </div>
         <Show when={props.description}>
           <p class="mt-1.5 text-xs leading-5 text-muted-foreground" lang={presentation()?.resolved_locale} dir="auto">{summary()}</p>

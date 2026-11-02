@@ -1,4 +1,4 @@
-import { PluginBackgroundStatus, backgroundScheduleLabel } from './PluginBackgroundStatus';
+import { PluginBackgroundStatus } from './PluginBackgroundStatus';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 import { FeedbackIndicator, type FeedbackIndicatorEntry, StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
@@ -9,7 +9,7 @@ import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, Filter, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
-import { dataUpgradeFacts } from './externalPluginSecurityProjection';
+import { OfficialPluginAccessReview } from './OfficialPluginAccessReview';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import type {
@@ -22,8 +22,6 @@ import type {
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginMarketDetail,
-  PluginExternalPackageBackgroundSummary,
-  PluginExternalPackageProcessSummary,
   PluginLifecycleCommand,
   PluginLifecycleState,
   PluginPendingCommandType,
@@ -34,7 +32,7 @@ import type {
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginLifecycleLabel, pluginPendingActionLabels, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PLUGIN_PACKAGE_DIALOG_CLASS, PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginLifecycleLabel, pluginPendingActionLabels, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader, PluginProcessStatusBadge } from './PluginPresentationPrimitives';
 import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
@@ -573,6 +571,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const load = props.onLoadMarketDetail
       ? props.onLoadMarketDetail(item.pluginID, item.officialCatalog?.marketGeneration ?? 0, controller.signal)
           .then((detail) => {
+            if (controller.signal.aborted || officialPreviewController !== controller) return;
             const latest = detail.latest.find((candidate) => (
               candidate.channel === 'stable'
               && candidate.availability_status === 'visible'
@@ -596,6 +595,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             setOfficialInstallFlow({ status: 'review_ready', key: officialInstallKey(refreshed), item: refreshed });
           })
       : Promise.resolve().then(() => props.onRefresh()).then(() => {
+        if (controller.signal.aborted || officialPreviewController !== controller) return;
         marketDetailCache.clear();
         setMarketDetailState(undefined);
         const refreshed = allItems().find((candidate) => candidate.pluginID === item.pluginID && !candidate.pluginInstanceID);
@@ -648,7 +648,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       await props.onCommand(command, new AbortController().signal);
       return;
     }
-    if (command.type === 'open_surface' ? pendingCommand() : managementPending()) return;
+    if (command.type === 'open_surface' ? pendingCommand() : managementPending()) {
+      if (command.type === 'update') throw new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', i18n.t('uiCopy.plugin.updateReview.stale'), {}, 'not_committed');
+      return;
+    }
     const controller = new AbortController();
     commandController = controller;
     const pendingTarget = command.pluginInstanceID;
@@ -664,6 +667,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         tabSelection.commitNow('discover');
       }
     } catch (error) {
+      if (command.type === 'update') throw error;
       setCommandError(messageFromUnknown(error));
     } finally {
       if (commandController === controller) commandController = undefined;
@@ -1084,18 +1088,20 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         onCommitExternal={props.onCommitExternal ?? (async () => {
           throw new Error(i18n.t('uiCopy.plugin.external.commitFailed'));
         })}
-        onOfficialUpdate={async (item, targetVersion) => {
-          if (!item.pluginInstanceID || item.managementRevision === undefined) return;
+        onOfficialUpdate={async (item, releaseRef) => {
+          if (!item.pluginInstanceID || item.managementRevision === undefined) throw new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', i18n.t('uiCopy.plugin.updateReview.stale'), {}, 'not_committed');
           await runCommand({
             type: 'update',
             pluginID: item.pluginID,
             pluginInstanceID: item.pluginInstanceID,
-            targetVersion,
+            targetVersion: releaseRef.version,
+            releaseRef,
             expectedManagementRevision: item.managementRevision,
           });
         }}
+        onLoadMarketDetail={props.onLoadMarketDetail}
         onRefresh={async () => {
-          await props.onRefresh();
+          await (props.onRefreshInstalled ?? props.onRefresh)();
         }}
         onCommitted={() => setUpdateSuccess(true)}
         onOpenSurface={() => {
@@ -1135,7 +1141,6 @@ function OfficialPluginInstallDialog(props: {
   onConfirm: () => void;
 }): JSX.Element {
   const i18n = useI18n();
-  const permissions = () => props.installPreview?.security_summary.permissions ?? [];
   const headerItem = () => props.item
     ? { ...props.item, version: props.item.version ?? props.item.officialCatalog?.latestVersion }
     : undefined;
@@ -1146,23 +1151,15 @@ function OfficialPluginInstallDialog(props: {
       : props.installing
     ? i18n.t('uiCopy.plugin.installOperation.installingTitle', { plugin: props.item?.displayName ?? '' })
     : props.installed
-      ? i18n.t('uiCopy.plugin.installOperation.complete')
+      ? props.item?.displayName ?? ''
       : i18n.t('uiCopy.plugin.external.confirmInstall');
   return (
     <Dialog
       open={Boolean(props.item)}
       onOpenChange={props.onOpenChange}
       title={title()}
-      bodyDescription={props.previewLoading
-        ? i18n.t('uiCopy.plugin.external.loadingInstallDescription')
-        : props.previewError
-          ? undefined
-          : props.installing
-        ? i18n.t('uiCopy.plugin.installOperation.backgroundDescription')
-        : props.installed
-          ? undefined
-          : i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
-      class="h-[min(42rem,90dvh)] w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
+      bodyDescription={props.installing ? i18n.t('uiCopy.plugin.installOperation.backgroundDescription') : undefined}
+      class={PLUGIN_PACKAGE_DIALOG_CLASS}
       footer={(
         <div class="flex w-full flex-wrap justify-end gap-2">
           <Show when={props.previewError}>
@@ -1241,11 +1238,11 @@ function OfficialPluginInstallDialog(props: {
       )}
     >
       <Show when={props.item}>
-        {(item) => (
+        {(_item) => (
           <div data-plugin-install-review-dialog class="space-y-4">
-            <PluginIdentityHeader item={headerItem()!} description />
+            <PluginIdentityHeader item={headerItem()!} review />
             <Show when={props.previewLoading}>
-              <div role="status" data-plugin-install-preview-loading class="flex items-center gap-3 rounded-md border bg-muted/10 px-4 py-4 text-[length:var(--floe-type-body)] text-muted-foreground">
+              <div role="status" data-plugin-install-preview-loading class="flex items-center gap-3 border-t pt-4 text-[length:var(--floe-type-body)] text-muted-foreground">
                 <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
                 <span>{i18n.t('uiCopy.plugin.external.loadingInstallDescription')}</span>
               </div>
@@ -1255,73 +1252,14 @@ function OfficialPluginInstallDialog(props: {
             </Show>
             <Show when={!props.previewLoading && !props.previewError}>
               <Show when={props.installing || props.installed} fallback={(
-                <section class="space-y-3 rounded-md border bg-muted/10 px-4 py-3">
-              <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                <span>{i18n.t('uiCopy.plugin.version')}</span>
-                <span class="text-right font-medium text-foreground">{item().officialCatalog?.latestVersion ?? '-'}</span>
-                <span>{i18n.t('uiCopy.plugin.publisher')}</span>
-                <span class="text-right font-medium text-foreground">{item().officialCatalog?.publisher ?? item().publisher}</span>
-                <span>{i18n.t('uiCopy.plugin.source')}</span>
-                <span class="text-right font-medium text-foreground">{i18n.t('uiCopy.plugin.officialSource')}</span>
-              </div>
-              <h3 class="text-[length:var(--floe-type-body)] font-semibold">
-                {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
-              </h3>
-              <Show
-                when={permissions().length > 0}
-                fallback={<p class="mt-2 text-[length:var(--floe-type-body)] leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.noRequiredPermissions')}</p>}
-              >
-                <div class="mt-2 space-y-3">
-                  <For each={[true, false] as const}>
-                    {(required) => {
-                      const grouped = () => permissions().filter((permission) => permission.required === required);
-                      return (
-                        <Show when={grouped().length > 0}>
-                          <div data-plugin-install-permission-group={required ? 'required' : 'optional'}>
-                            <h4 class="text-xs font-semibold text-foreground">{required ? i18n.t('uiCopy.plugin.requiredToOpen') : i18n.t('uiCopy.plugin.optionalPermission')}</h4>
-                            <div class="divide-y">
-                              <For each={grouped()}>
-                                {(permission) => (
-                      <div class="flex items-start gap-3 py-2.5" data-plugin-install-permission={permission.permission_id}>
-                        <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div class="min-w-0 flex-1">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-[length:var(--floe-type-body)] font-medium">{humanizePermissionID(permission.permission_id)}</span>
-                            <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                              {permission.required
-                                ? i18n.t('uiCopy.plugin.requiredToOpen')
-                                : i18n.t('uiCopy.plugin.optionalPermission')}
-                            </span>
-                          </div>
-                          <p class="mt-1 text-xs leading-5 text-muted-foreground">{permission.effects.map((effect) => humanizePermissionID(effect)).join(', ')}</p>
-                        </div>
-                      </div>
-                                )}
-                              </For>
-                            </div>
-                          </div>
-                        </Show>
-                      );
-                    }}
-                  </For>
+                <OfficialPluginAccessReview preview={props.installPreview!} />
+              )}>
+              <Show when={props.installed}>
+                <div role="status" data-plugin-install-complete class="flex items-center gap-2 border-t pt-4 text-sm">
+                  <Show when={props.item?.lifecycleState === 'needs_attention'} fallback={<CheckCircle class="h-4 w-4 text-[var(--redeven-status-success-foreground)]" />}><AlertTriangle class="h-4 w-4 text-[var(--redeven-status-warning-foreground)]" /></Show>
+                  <span>{props.item?.lifecycleState === 'needs_attention' ? pluginLifecycleLabel(props.item, i18n) : i18n.t('uiCopy.plugin.installOperation.complete')}</span>
                 </div>
               </Show>
-              <Show when={props.installPreview?.security_summary.data_upgrade}>
-                <section data-plugin-install-data-upgrade class="space-y-2 border-t pt-3">
-                  <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] font-medium"><RefreshIcon class="h-4 w-4 shrink-0 text-muted-foreground" />{i18n.t('uiCopy.plugin.external.dataUpgrade')}</div>
-                  <details data-plugin-install-data-upgrade-details class="group rounded-md border">
-                    <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 group-open:rotate-180" /></summary>
-                    <ul class="space-y-1 break-all border-t p-3 font-mono text-xs"><For each={dataUpgradeFacts(props.installPreview!.security_summary.data_upgrade!)}>{(fact) => <li>{fact}</li>}</For></ul>
-                  </details>
-                </section>
-              </Show>
-              <OfficialProcessAccessReview
-                process={props.installPreview?.security_summary.process}
-                background={props.installPreview?.security_summary.background}
-              />
-              <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.installOperation.declarationNotice')}</p>
-                </section>
-              )}>
               <Show when={!props.installed}>
                 <Show when={props.operation} fallback={<PluginInstallSteps />}>
                   {(operation) => (
@@ -1344,46 +1282,6 @@ function OfficialPluginInstallDialog(props: {
   );
 }
 
-function OfficialProcessAccessReview(props: {
-  process?: PluginExternalPackageProcessSummary;
-  background?: PluginExternalPackageBackgroundSummary;
-}): JSX.Element {
-  const i18n = useI18n();
-  return (
-    <div class="mt-3 space-y-2.5" data-plugin-install-process-review>
-      <Show when={props.process}>
-        {(process) => (
-          <div class="flex min-w-0 items-start gap-2 rounded-md border border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)] px-3 py-2.5">
-            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-[var(--redeven-status-warning-foreground)]" />
-            <span class="min-w-0 flex-1">
-              <span class="block text-[length:var(--floe-type-control)] font-semibold">{i18n.t('uiCopy.plugin.external.localProcessAccess')}</span>
-              <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.localProcessAccessGuidance')}</span>
-              <code class="mt-1 block break-all text-[11px] text-muted-foreground">{i18n.t('uiCopy.plugin.external.processLimits', {
-                output: process().resource_limits.output_buffer_bytes,
-                runtime: process().resource_limits.max_runtime_ms,
-              })}</code>
-            </span>
-          </div>
-        )}
-      </Show>
-      <Show when={props.background}>
-        {(background) => (
-          <div class="flex min-w-0 items-start gap-2 rounded-md border px-3 py-2.5">
-            <RefreshIcon class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span class="min-w-0 flex-1">
-              <span class="block text-[length:var(--floe-type-control)] font-semibold">{backgroundScheduleLabel(background(), i18n)}</span>
-
-              <details data-plugin-install-background-details class="group mt-2 rounded-md border">
-                <summary class="flex min-h-11 cursor-pointer items-center px-3 text-xs font-medium">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
-                <code class="block break-all border-t p-3 text-[11px] text-muted-foreground">{'strategy=' + background().strategy + '; method=' + (background().method ?? '-') + '; interval_ms=' + (background().interval_ms ?? '-') + '; max_runtime_ms=' + (background().max_runtime_ms ?? '-')}</code>
-              </details>
-            </span>
-          </div>
-        )}
-      </Show>
-    </div>
-  );
-}
 
 export function PluginCenterShell(props: {
   showTitle?: boolean;
@@ -1805,6 +1703,7 @@ export function PluginCenterDetails(props: {
     </aside>
   );
 }
+
 
 function PluginProcessStatusDetails(props: { item: PluginInventoryItem }): JSX.Element {
   const i18n = useI18n();
@@ -2726,14 +2625,6 @@ function officialInstallKey(item: PluginInventoryItem): string {
     release.expected_hashes.manifest_sha256,
     release.expected_hashes.entries_sha256,
   ].join('|');
-}
-
-
-function humanizePermissionID(permissionID: string): string {
-  const words = permissionID.split(/[._:-]+/u).filter(Boolean);
-  if (words.length === 0) return permissionID;
-  const label = words.join(' ');
-  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
 }
 
 

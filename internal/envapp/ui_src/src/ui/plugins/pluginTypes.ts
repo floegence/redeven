@@ -92,7 +92,7 @@ export type PluginMarketInstallPreview = Readonly<{
     min_redeven_version: string;
     min_redevplugin_version: string;
   };
-  security_summary: Readonly<{
+  security_summary: Readonly<Partial<Omit<PluginExternalPackageSecuritySummary, 'permissions'>> & {
     summary_sha256?: string;
     permissions: readonly Readonly<{
       permission_id: string;
@@ -314,7 +314,8 @@ export type PluginUpdateCandidate = Readonly<{
   targetVersion: string;
   kind: 'version_update' | 'replace' | 'noop' | 'blocked';
   target: PluginPackageIdentity;
-  reviewEvidence: Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>;
+  reviewEvidence: Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>
+    | Readonly<{ kind: 'official_preview'; preview: PluginMarketInstallPreview; marketGeneration?: number }>;
 }>;
 
 export type PluginInventoryProjection = {
@@ -430,7 +431,7 @@ export type PluginManagementCommand =
   | { type: 'enable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'disable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'uninstall'; pluginInstanceID: string; expectedManagementRevision: number; dataRetention: 'keep_data' | 'delete_data' }
-  | { type: 'update'; pluginID: string; pluginInstanceID: string; expectedManagementRevision: number; targetVersion: string }
+  | { type: 'update'; pluginID: string; pluginInstanceID: string; expectedManagementRevision: number; targetVersion: string; releaseRef: PluginReleaseRef }
   | {
       type: 'grant_permission';
       pluginInstanceID: string;
