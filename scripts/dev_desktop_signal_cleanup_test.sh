@@ -140,7 +140,7 @@ exports.ensureManagedGatewayServiceReady = async options => {
 exports.gatewayStartupFailureMessage = error => error.message;
 JS
 printf '%s\n' 'exports.DefaultDesktopSSHTransportManager = class { async dispose() {} };' > "$FAKE_DESKTOP/dist/main/sshTransportManager.js"
-node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ schema_version: 4, gateways: [{ gateway_id: "fixture", local_enabled: true, connection: { kind: "local_host", runtime_root: process.argv[2] } }] }))' \
+node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ schema_version: 5, gateways: [{ connection_id: "fixture", local_enabled: true, connection: { kind: "local_host", runtime_root: process.argv[2] } }] }))' \
   "$STATE_ROOT/local-environment/gateway/gateways.json" "$STATE_ROOT"
 node --input-type=module - "$STATE_ROOT" <<'JS'
 import { createHash } from 'node:crypto';

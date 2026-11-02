@@ -11,12 +11,50 @@ async function fixture(context) {
   const root = path.join(directory, 'profile');
   const store = path.join(root, 'local-environment/gateway/gateways.json');
   await mkdir(path.dirname(store), { recursive: true });
-  const save = records => writeFile(store, JSON.stringify({ schema_version: 4, gateways: records }));
-  const record = (gatewayID, connection = { kind: 'local_host', runtime_root: root }, enabled = true) => ({
-    gateway_id: gatewayID, local_enabled: enabled, connection,
+  const save = (records, schemaVersion = 5) => writeFile(store, JSON.stringify({ schema_version: schemaVersion, gateways: records }));
+  const record = (connectionID, connection = { kind: 'local_host', runtime_root: root }, enabled = true) => ({
+    connection_id: connectionID, local_enabled: enabled, connection,
   });
-  return { root, directory, save, record };
+  return { root, directory, store, save, record };
 }
+
+test('uses distinct schema 5 connection IDs without rewriting records or selecting signed service identity', async context => {
+  const { root, store, save, record } = await fixture(context);
+  await save(['first', 'second'].map(id => ({ ...record(id), trust_profile: { gateway_id: 'signed-service' } })));
+  const before = await readFile(store, 'utf8');
+  const targets = await developmentGatewayTargets(root);
+  assert.deepEqual(targets.map(target => target.gatewayID), ['first', 'second']);
+  assert.deepEqual(targets.map(target => target.stateRoot), ['first', 'second'].map(id => path.join(root, 'gateways', id, 'state')));
+  assert.equal(await readFile(store, 'utf8'), before);
+});
+
+test('preserves legacy service locations across the Desktop-owned schema migration', async context => {
+  const { root, store, save, record } = await fixture(context);
+  const current = record('saved-connection');
+  const { connection_id, ...legacy } = current;
+  await save([{ ...legacy, gateway_id: connection_id }], 4);
+  const before = await readFile(store, 'utf8');
+  const targets = await developmentGatewayTargets(root);
+  assert.equal(await readFile(store, 'utf8'), before);
+  await save([current]);
+  assert.deepEqual(await developmentGatewayTargets(root), targets);
+});
+
+test('rejects unsupported schemas and never substitutes legacy or signed IDs for an invalid current connection ID', async context => {
+  const { root, store, save, record } = await fixture(context);
+  for (const schema of [0, 6, null, 'future']) {
+    await save([record('local')], schema);
+    const before = await readFile(store, 'utf8');
+    await assert.rejects(developmentGatewayTargets(root), /Unsupported development Gateway store schema/u);
+    assert.equal(await readFile(store, 'utf8'), before);
+  }
+  for (const connection_id of [undefined, '', '../escape']) {
+    await save([{ ...record('local'), connection_id, gateway_id: 'legacy', trust_profile: { gateway_id: 'signed-service' } }]);
+    await assert.rejects(developmentGatewayTargets(root), /Invalid development Gateway identity/u);
+  }
+  await rm(store);
+  assert.deepEqual(await developmentGatewayTargets(root), []);
+});
 
 test('only manages local host Gateways explicitly saved in the selected profile, including default and symlinked roots', async context => {
   const { root, directory, save, record } = await fixture(context);

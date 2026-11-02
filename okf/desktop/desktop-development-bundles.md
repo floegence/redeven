@@ -3,7 +3,7 @@ type: Development Contract
 title: Desktop development sessions and bundles
 tags: [desktop, development, storage, retention]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -38,6 +38,8 @@ Desktop compile overlaps Runtime preparation. Runtime assets/Go, plugins and Com
 
 Saved local Gateways reuse intact compatible installs; source changes do not force upgrade. Service owner repairs missing/damaged packages; explicit Update selects current build. Archive cache keys include dirty source; changed inputs discard old cache generation, absent keys create a session cache. Package owner validates archives.
 
+Development startup and cleanup locate saved local services by schema 5 connection_id; supported older stores use their legacy gateway_id until Desktop performs migration. Never use trust_profile.gateway_id as a service directory. This read-only discovery preserves stored records, existing service paths and the cleanup ledger's gatewayID field; unsupported schemas and invalid current IDs fail without substituting another identity.
+
 Dev gzip1/Brotli 4 retains identical decoded bytes; normal/release compression stays maximum. Profile is part of identity. Gateway source copies exclude other worktrees/native caches. Log dependency/verification/Desktop/Runtime/Gateway durations. Qualify rebuilt and reused launches with a saved local Gateway, exact Runtime commit and cleanup; empty-profile warm measurements alone are insufficient.
 
 Exit/preparation failure/signals stop only owned services. Electron resolution outputs only its path, logs to stderr, propagates errors and rechecks executable after dependency builds.
@@ -56,6 +58,7 @@ in-progress directories.
 
 - `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Input drift, corruption and toolchain admission.
+- `redeven:scripts/dev_desktop_gateways.test.mjs` - Current/legacy connection IDs, unchanged stores, exact service paths, startup and retained-ledger cleanup.
 - `redeven:scripts/dev_desktop_build_proxy.test.mjs` and `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Proxy precedence, preparation inheritance and launch isolation.
 - `redeven:scripts/resolve_node_archive.test.mjs` - Bounded HTTPS retry, permanent failure, checksum and partial-file cleanup.
 - `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.

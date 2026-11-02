@@ -39,12 +39,17 @@ function validateGatewayID(gatewayID) {
 
 export async function developmentGatewayTargets(stateRoot) {
   const root = await canonicalPath(stateRoot);
-  const snapshot = await readJSON(path.join(root, 'local-environment/gateway/gateways.json'), { gateways: [] });
+  const snapshot = await readJSON(path.join(root, 'local-environment/gateway/gateways.json'), { schema_version: 5, gateways: [] });
+  const schemaVersion = Number(snapshot?.schema_version);
+  if (!Number.isInteger(schemaVersion) || schemaVersion < 1 || schemaVersion > 5) throw new Error('Unsupported development Gateway store schema.');
   if (!Array.isArray(snapshot.gateways)) throw new Error('Invalid development Gateway store.');
   const targets = [];
   for (const record of snapshot.gateways) {
     if (record.connection?.kind !== 'local_host') continue;
-    const gatewayID = record.gateway_id;
+    // Service directories use the saved connection ID, never the signed service
+    // identity in trust_profile. Read legacy IDs before Desktop owns migration;
+    // keep the existing lifecycle/cleanup ledger field and service paths stable.
+    const gatewayID = schemaVersion < 5 ? record.gateway_id : record.connection_id;
     validateGatewayID(gatewayID);
     const configuredRoot = record.connection.runtime_root;
     const resolvedRoot = configuredRoot === 'remote_default' ? path.join(os.homedir(), '.redeven')
