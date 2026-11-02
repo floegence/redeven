@@ -3216,7 +3216,7 @@
             "concept_id": "ui.flower-turn-process-disclosure",
             "path": "ui/flower-turn-process-disclosure.md",
             "type": "UI Contract",
-            "title": "Flower terminal turn process disclosure",
+            "title": "Flower turn status and process disclosure",
             "tags": [
               "accessibility",
               "disclosure",
@@ -6517,7 +6517,7 @@
         "label": "Flower terminal turn process disclosure",
         "path": "ui/flower-turn-process-disclosure.md",
         "concept_id": "ui.flower-turn-process-disclosure",
-        "title": "Flower terminal turn process disclosure"
+        "title": "Flower turn status and process disclosure"
       },
       {
         "label": "Flower working directory navigation",
@@ -27585,7 +27585,7 @@
           "label": "turn disclosure",
           "path": "ui/flower-turn-process-disclosure.md",
           "concept_id": "ui.flower-turn-process-disclosure",
-          "title": "Flower terminal turn process disclosure"
+          "title": "Flower turn status and process disclosure"
         }
       ],
       "backlinks": [
@@ -29320,13 +29320,13 @@
           "label": "Turn folding",
           "path": "ui/flower-turn-process-disclosure.md",
           "concept_id": "ui.flower-turn-process-disclosure",
-          "title": "Flower terminal turn process disclosure"
+          "title": "Flower turn status and process disclosure"
         },
         {
           "label": "whole-turn disclosure",
           "path": "ui/flower-turn-process-disclosure.md",
           "concept_id": "ui.flower-turn-process-disclosure",
-          "title": "Flower terminal turn process disclosure"
+          "title": "Flower turn status and process disclosure"
         }
       ],
       "backlinks": [
@@ -29348,10 +29348,10 @@
           "title": "Flower incremental live state"
         },
         {
-          "label": "Flower terminal turn process disclosure",
+          "label": "Flower turn status and process disclosure",
           "path": "ui/flower-turn-process-disclosure.md",
           "concept_id": "ui.flower-turn-process-disclosure",
-          "title": "Flower terminal turn process disclosure"
+          "title": "Flower turn status and process disclosure"
         }
       ]
     },
@@ -29441,7 +29441,7 @@
       "path": "ui/flower-turn-process-disclosure.md",
       "concept_id": "ui.flower-turn-process-disclosure",
       "type": "UI Contract",
-      "title": "Flower terminal turn process disclosure",
+      "title": "Flower turn status and process disclosure",
       "tags": [
         "accessibility",
         "disclosure",
@@ -29451,7 +29451,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "accessibility",
           "disclosure",
@@ -29459,18 +29459,18 @@
           "turns",
           "ui"
         ],
-        "title": "Flower terminal turn process disclosure",
+        "title": "Flower turn status and process disclosure",
         "type": "UI Contract"
       },
-      "body_length": 5473,
+      "body_length": 7437,
       "summary": "Floret owns turn outcome/timing. Terminal ordinary turns fold eligible process rows once, while pending controls, uncertain effects and inspected work stay visible. Explicit choices persist; user messages/finals remain mounted. Settled question/answer receipts fold with the process and reopen with complete content.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Facts and eligibility\nValidated turn facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Summaries cannot author these facts or trigger folds; unknown prose stays visible. Typed structure determines eligibility, never prompt/time heuristics.\n\nA thinking-only process retains its disclosure/timing without a second duration summary/divider. Other summaries show at most two nonzero units and subsecond copy. Interleaved answers default open with a whole-turn toggle; settled question/answer receipts fold with process rows and retain nested choices. Receipt decoration lives inside the viewport, leaving no folded gap/rail. Counts require complete boundaries, membership and event coverage; otherwise show canonical work duration only. [Sequences](flower-tool-sequences.md) fold settled work independently on either side.\n\n## Disclosure ownership\nRunning/preparing/retrying/finalizing/waiting turns reserve inaccessible header space. Exact outcome/end enables the toggle and one automatic fold of confirmed intermediate/process rows, including latest failed/canceled/interrupted turns. Final/trailing partial output stays visible.\n\nFocus, selection, gestures, open details/thinking and away-from-tail reading protect inspected work; later observations cannot undo protection. Capture an unaffected visible anchor only when automatic folding begins. Explicit choices survive paging/reconnect/regrouping; newly classified inspected rows remain until the next explicit toggle without reopening siblings. Only disclosure/navigation opens a closed group. Retained folded bodies are inert and preserve offsets/choices. Main/embedded/child views share rendering with independent scroll owners.\n\n## Placement and motion\nThe header precedes the first loaded response after the request, independent of fold membership. Canonical intermediate membership spans same-turn executions; engine owns supersession. In-turn Goals retain ownership; final boundaries stay run-scoped. Retained prefixes preserve confirmed intermediate facts; incoming windows replace overlapping classification. Partial windows never fetch earlier history just for presentation. Prepending the actual beginning moves header while preserving choice/focus; disclosure state is independent of anchor visibility.\n\nReserve header geometry before eligibility so the toggle adds no space or width change. Following folds align the real bottom before paint; no stale absolute offset, synthetic trailing space or competing growth animation. Long-to-short content settles at zero with final visible. Existing finals stay mounted during 260 ms fold; reduced motion settles immediately. Paused reading/manual actions retain anchors and necessary temporary insertion room, excluded from distance-to-latest. Input immediately cancels following; motion settlement cannot reclaim it.\n\nIf prose waits for a sequence when the turn ends, the outer row owns motion and releases prose afterward. Nested geometry stays intact; interrupted inner folds transfer painted opacity/transform. Manual reversal retains choice and motion preference. Canonical Path, not timestamps, orders dialogue/receipts; preserve final segments and secret redaction.\n\n## Outcome presentation\nTerminal labels use 13px/20px text and decorative 16px Floe warning, circled-stop or circled-alert icons for failure, cancellation or interruption. Quiet label color, first-row wrap alignment and localized status retain accessibility. Existing current-run diagnostics/recovery do not acquire duplicate outcome labels.",
-          "char_count": 3634
+          "body": "## Facts and eligibility\nValidated turn facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Summaries cannot author these facts or trigger folds; unknown prose stays visible. Typed structure determines eligibility, never prompt/time heuristics.\n\nThe turn header shows lifecycle status and total elapsed time, including user/approval waits; the terminal timing description retains canonical processing/waiting durations. A thinking-only process keeps its own disclosure and never acquires a whole-turn toggle. Durations show at most two nonzero units and subsecond copy. Interleaved answers default open with a whole-turn toggle; settled question/answer receipts fold with process rows and retain nested choices. Receipt decoration lives inside the viewport, leaving no folded gap/rail. Counts require complete boundaries, membership and event coverage; otherwise omit counts. [Sequences](flower-tool-sequences.md) fold settled work independently on either side.\n\n## Disclosure ownership\nRunning/preparing/retrying/finalizing/waiting turns show a non-interactive status header from canonical admission, before provider output. Status text announces changes politely; elapsed seconds do not enter a live region. Exact outcome/end enables the toggle and one automatic fold of confirmed intermediate/process rows, including latest failed/canceled/interrupted turns. Final/trailing partial output stays visible.\n\nFocus, selection, gestures, open details/thinking and away-from-tail reading protect inspected work; later observations cannot undo protection. Capture an unaffected visible anchor only when automatic folding begins. Explicit choices survive paging/reconnect/regrouping; newly classified inspected rows remain until the next explicit toggle without reopening siblings. Only disclosure/navigation opens a closed group. Retained folded bodies are inert and preserve offsets/choices. Main/embedded/child views share rendering with independent scroll owners.\n\n## Placement and motion\nThe header anchors after the initiating request when loaded, otherwise before the first loaded response, independent of fold membership. The request and its header remain mounted as responses arrive. Canonical intermediate membership spans same-turn executions; engine owns supersession. In-turn Goals retain ownership; final boundaries stay run-scoped. Retained prefixes preserve confirmed intermediate facts; incoming windows replace overlapping classification. Partial windows never fetch earlier history just for presentation. Prepending the actual beginning moves header while preserving choice/focus; disclosure state is independent of anchor visibility.\n\nKeep identical header geometry before and after eligibility so the toggle adds no space or width change. One-line status/time/detail slots use tabular digits, bounded width and overflow handling at narrow widths. Following folds align the real bottom before paint; no stale absolute offset, synthetic trailing space or competing growth animation. Long-to-short content settles at zero with final visible. Existing finals stay mounted during 260 ms fold; reduced motion settles immediately. Paused reading/manual actions retain anchors and necessary temporary insertion room, excluded from distance-to-latest. Input immediately cancels following; motion settlement cannot reclaim it.\n\nIf prose waits for a sequence when the turn ends, the outer row owns motion and releases prose afterward. Nested geometry stays intact; interrupted inner folds transfer painted opacity/transform. Manual reversal retains choice and motion preference. Canonical Path, not timestamps, orders dialogue/receipts; preserve final segments and secret redaction.\n\n## Elapsed presentation\nExisting current-view server samples establish a browser-only monotonic anchor, retained across same-turn waits and continuation runs. No sample means status-only; queue time is never counted and browser wall time is not a source of authority. Newer samples reanchor after sleep/reconnect; delayed samples cannot move the live clock backward. Canonical terminal elapsed time always wins. The sample stays in the bounded detail cache and is stripped from thread summaries; it never becomes a wire field, stored lifecycle, or new event.\n\nOnly visible active headers subscribe to the existing Surface one-second clock. Offscreen, hidden, disconnected and terminal headers unsubscribe. Clock ticks update only the time label, never history projections, counts, folding or network demand. Reconnecting shows a status and pauses ticking until existing transport confirmation; no new poll, request, payload or server write is permitted for this presentation.\n\n## Outcome presentation\nTerminal labels use 13px/20px text and decorative 16px Floe warning, circled-stop or circled-alert icons for failure, cancellation or interruption. Quiet label color, first-row wrap alignment and localized status retain accessibility. Existing current-run diagnostics/recovery do not acquire duplicate outcome labels.",
+          "char_count": 5113
         },
         {
           "id": "boundaries",
@@ -31777,5 +31777,5 @@
       ]
     }
   ],
-  "source_sha256": "e24d2e31531972fcc252431a7de892039d2104325cb52163f08bec86a363a72d"
+  "source_sha256": "a807d62af6b4b5191f8c21fa76f0c593ea792f71633a8d5ddfb64ce1885cfbcc"
 }

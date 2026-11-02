@@ -32,7 +32,16 @@ export type FlowerTurnProcessCopy = Readonly<{
   failed: string;
   cancelled: string;
   interrupted: string;
-  worked: (duration: string) => string;
+  inProgress: string;
+  waitingUser: string;
+  waitingApproval: string;
+  reconnecting: string;
+  completed: string;
+  failedShort: string;
+  interruptedShort: string;
+  elapsed: (duration: string) => string;
+  total: (duration: string) => string;
+  timingDetail: (work: string, waiting: string) => string;
   subtaskUpdates: (count: number) => string;
   userResponses: (count: number) => string;
   expand: string;
@@ -1252,7 +1261,16 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
       expandToolsShort: 'Expand', collapseToolsShort: 'Collapse',
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
-      worked: (duration) => `Worked for ${duration}`,
+      inProgress: 'In progress',
+      waitingUser: 'Waiting for your reply',
+      waitingApproval: 'Waiting for approval',
+      reconnecting: 'Reconnecting',
+      completed: 'Completed',
+      failedShort: 'Failed',
+      interruptedShort: 'Interrupted',
+      elapsed: duration => 'Elapsed ' + duration,
+      total: duration => 'Total ' + duration,
+      timingDetail: (work, waiting) => 'Processing: ' + work + ' · Waiting: ' + waiting,
       subtaskUpdates: (count) => count === 1 ? '1 subtask update' : count + ' subtask updates',
       userResponses: (count) => count === 1 ? '1 user response' : count + ' user responses',
       expand: 'Expand work process', collapse: 'Collapse work process', lessThanSecond: 'less than a second',

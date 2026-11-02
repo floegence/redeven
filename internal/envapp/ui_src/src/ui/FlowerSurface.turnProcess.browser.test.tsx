@@ -70,7 +70,7 @@ async function mount(initial = current(), copy?: FlowerSurfaceCopy, overrides: P
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="process"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="process"] button')!.click();
-  await waitFor(() => Boolean(root.querySelector('[data-flower-row-message-id="final-a"]')));
+  await waitFor(() => Boolean(messageRow(root, initial.items!.at(-1)!.id)));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   return { root, live };
 }
@@ -110,11 +110,71 @@ function expectEndedPresentation(notice: HTMLElement, label: string) {
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
-  it('reserves the turn header while running and reveals it without shifting retained content', async () => {
+  it('shows an admitted turn before any provider output and retains its header when output arrives', async () => {
+    const initial = current(false, { items: current().items!.slice(0, 1), run_progress: { phase: 'preparing' } });
+    const { root, live } = await mount(initial);
+    const header = root.querySelector<HTMLElement>('.flower-turn-summary')!;
+    expect(header.textContent).toBe('In progress');
+    expect(header.getBoundingClientRect().top).toBeGreaterThanOrEqual(message(root, 'user').getBoundingClientRect().bottom);
+    expect(header.querySelector('button')).toBeNull();
+    const height = header.getBoundingClientRect().height;
+    live.push({ ...current(), view_version: 2 });
+    await waitFor(() => Boolean(message(root, 'thinking')));
+    expect(root.querySelector('.flower-turn-summary')).toBe(header);
+    expect(header.getBoundingClientRect().height).toBe(height);
+  });
+
+  it('ticks only local elapsed text without requesting more data or replacing process content', async () => {
+    const started = Date.now() - 59000;
+    const source = current(false, { sampled_at_ms: started + 59000,
+      items: current().items!.map(item => ({ ...item, created_at: new Date(started).toISOString() })),
+      turns: [turn({ started_at: new Date(started).toISOString(), ended_at: undefined, outcome: undefined,
+        elapsed_ms: 0, work_duration_ms: 0, waiting_ms: 0, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })] });
+    const loads = vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(thread({ thread_id: 'process', title: 'Process disclosure', messages: [] }), source), current: source }));
+    const lists = vi.fn(async () => [applyFlowerRuntimeCurrentView(thread({ thread_id: 'process', title: 'Process disclosure', messages: [] }), source)]);
+    const { root, live } = await mount(source, undefined, { loadThread: loads, listThreads: lists });
+    const header = root.querySelector<HTMLElement>('.flower-turn-summary')!;
+    header.scrollIntoView();
+    const time = header.querySelector('.flower-turn-header-time')!;
+    await waitFor(() => Boolean(time.textContent?.includes('59 seconds')));
+    const content = message(root, 'progress');
+    const height = header.getBoundingClientRect().height;
+    const loadCount = loads.mock.calls.length, listCount = lists.mock.calls.length;
+    await waitFor(() => Boolean(time.textContent?.includes('1 minute')), 4000);
+    expect(message(root, 'progress')).toBe(content);
+    expect(header.querySelector('.flower-turn-header-time')).toBe(time);
+    expect(header.getBoundingClientRect().height).toBe(height);
+    expect(loads).toHaveBeenCalledTimes(loadCount);
+    expect(lists).toHaveBeenCalledTimes(listCount);
+    expect(time.closest('[aria-live]')).toBeNull();
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-live-turn-header.png' });
+    content.querySelector('button')?.focus();
+    live.push({ ...source, view_version: 2, sampled_at_ms: undefined, interactions: [
+      { id: 'question', turn_id: 'turn', run_id: 'run', kind: 'input', input: { summary: '', questions: [{ id: 'q', prompt: 'Continue?', kind: 'write' }] } },
+    ] });
+    await waitFor(() => Boolean(header.textContent?.includes('Waiting for your reply')));
+    expect(header.querySelector('button')).toBeNull();
+    expect(header.getBoundingClientRect().height).toBe(height);
+    live.push({ ...source, view_version: 3, sampled_at_ms: undefined, interactions: [
+      { id: 'approval', turn_id: 'turn', run_id: 'run', kind: 'approval', approval: { label: 'Inspect', tool_name: 'read_file', tool_call_id: 'call' } },
+    ] });
+    await waitFor(() => Boolean(header.textContent?.includes('Waiting for approval')));
+    expect(header.getBoundingClientRect().height).toBe(height);
+    live.push(current(true, { view_version: 4, turns: [turn({ started_at: new Date(started).toISOString(), ended_at: new Date(started + 70000).toISOString(),
+      elapsed_ms: 70000, work_duration_ms: 10000, waiting_ms: 60000 })] }));
+    await waitFor(() => Boolean(summary(root)));
+    expect(header.textContent).toContain('Completed · Total 1 minute 10 seconds');
+    expect(summary(root)?.getAttribute('aria-description')).toBe('Processing: 10 seconds · Waiting: 1 minute');
+    expect(header.getBoundingClientRect().height).toBe(height);
+  });
+
+  it('shows the live turn header and settles it without shifting retained content', async () => {
     const { root, live } = await mount();
-    const first = messageRow(root, 'thinking');
+    const first = messageRow(root, 'user');
     const header = first.querySelector<HTMLElement>('.flower-turn-summary');
     expect(header).not.toBeNull();
+    expect(getComputedStyle(header!).visibility).toBe('visible');
+    expect(header!.textContent).toContain('In progress');
     expect(summary(root)).toBeNull();
     const height = header!.getBoundingClientRect().height;
     const toolButton = message(root, 'tool').querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
@@ -134,7 +194,7 @@ describe('completed turn process disclosure', () => {
       ...done.items!.slice(1)].map((item, index) => ({ ...item, ordinal: index + 1 })) };
     const { root } = await mount(initial);
     await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
-    expect(summary(root)!.closest('.flower-turn-row')).toBe(messageRow(root, 'unknown-opening'));
+    expect(summary(root)!.closest('.flower-turn-row')).toBe(messageRow(root, 'user'));
     expect(hidden(root, 'unknown-opening')).toBe(false);
     expect(summary(root)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(message(root, 'unknown-opening').getBoundingClientRect().top + 1);
     summary(root)!.click();
@@ -155,7 +215,7 @@ describe('completed turn process disclosure', () => {
     live.push({ ...done, view_version: 3, items: [done.items![0],
       { id: 'earlier-prose', turn_id: 'turn', run_id: 'old-run', kind: 'assistant', ordinal: 2, text: 'Earlier unconfirmed output.' },
       ...initial.items] });
-    await waitFor(() => summary(root)?.closest('.flower-turn-row') === messageRow(root, 'earlier-prose'));
+    await waitFor(() => summary(root)?.closest('.flower-turn-row') === messageRow(root, 'user'));
     expect(document.activeElement).toBe(summary(root));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(hidden(root, 'tool')).toBe(true);
@@ -484,7 +544,7 @@ describe('completed turn process disclosure', () => {
     const final = message(root, 'final-a');
     live.push(current(true));
     await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
-    expect(summary(root)?.textContent).toContain('2 minutes 18 seconds');
+    expect(summary(root)?.textContent).toContain('2 minutes 38 seconds');
     expect(hidden(root, 'progress')).toBe(true);
     expect(hidden(root, 'tool')).toBe(true);
     expect(hidden(root, 'user')).toBe(false);
@@ -966,7 +1026,7 @@ describe('completed turn process disclosure', () => {
     expect(messageRow(root, 'answer').dataset.flowerInputCheckpoint).toBe('true');
     expect(message(root, 'before-one')).not.toBeNull();
     expect(message(root, 'after-one')).not.toBeNull();
-    expect(overview()!.closest('.flower-turn-row')).toBe(messageRow(root, 'old-intro'));
+    expect(overview()!.closest('.flower-turn-row')).toBe(messageRow(root, 'user'));
     overview()!.click();
     await waitFor(() => overview()?.getAttribute('aria-expanded') === 'false');
     expect(hidden(root, 'old-intro')).toBe(true);
@@ -1165,7 +1225,7 @@ describe('completed turn process disclosure', () => {
     await page.viewport(420, 900);
     expectEndedPresentation(root.querySelector<HTMLElement>('.flower-turn-ended')!, copy.chat.turnProcess.failed);
     const button = summary(root)!;
-    const worked = copy.chat.turnProcess.worked(`${copy.chat.turnProcess.minute(2)} ${copy.chat.turnProcess.second(18)}`);
+    const worked = copy.chat.turnProcess.completed + ' · ' + copy.chat.turnProcess.total(`${copy.chat.turnProcess.minute(2)} ${copy.chat.turnProcess.second(38)}`);
     expect(button.textContent).toBe(worked + ' · ' + copy.chat.turnProcess.subtaskUpdates(11));
     expect(button.getAttribute('aria-label')).toContain(copy.chat.turnProcess.expand);
     button.click();

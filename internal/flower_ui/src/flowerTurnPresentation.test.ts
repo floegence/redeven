@@ -170,7 +170,7 @@ describe('canonical turn process presentation', () => {
   it('keeps every explicit final segment and user message outside the process', () => {
     const result = projectFlowerTurnProcess(entries, [turn()]);
     expect(result.groups.get('turn')?.processKeys).toEqual(['progress']);
-    expect(result.groups.get('turn')?.summaryKey).toBe('progress');
+    expect(result.groups.get('turn')?.summaryKey).toBe('user');
     expect(result.groups.get('turn')?.disclosure).toBe('automatic');
   });
   it('reports whole-turn counts only with complete loaded boundaries and no gaps', () => {
@@ -228,7 +228,7 @@ describe('canonical turn process presentation', () => {
       goal: { actor: 'model', operation: 'set', at: '2026-10-18T12:00:00Z', goal: { version: 1, text: 'Inspect', status: 'active', actor: 'model' } } } };
     const rows = [entry('user', 'user'), unknown, intro, goal, withRun(toolEntry('before'), 'run-a'), inputResponse(), withRun(toolEntry('after'), 'run-b')];
     const result = projectFlowerTurnProcess(rows, [turn({ run_id: 'run-b', intermediate_item_ids: ['intro'] })]).groups.get('turn');
-    expect(result?.summaryKey).toBe('unknown');
+    expect(result?.summaryKey).toBe('user');
     expect(result?.processKeys).toEqual(['intro', 'goal', 'before', 'answer', 'after']);
     expect(result?.interleavedInputs).toBe(true);
   });
@@ -238,7 +238,7 @@ describe('canonical turn process presentation', () => {
     const first = projectFlowerTurnProcess(tail, facts, [], undefined, { hasBefore: true, hasAfter: false });
     const next = projectFlowerTurnProcess([entry('user', 'user'), entry('unknown'), ...tail], facts, [], first);
     expect(first.groups.get('turn')?.summaryKey).toBe('tool');
-    expect(next.groups.get('turn')?.summaryKey).toBe('unknown');
+    expect(next.groups.get('turn')?.summaryKey).toBe('user');
     expect(next.groups.get('turn')).not.toBe(first.groups.get('turn'));
   });
   it('allows manual folding and counts work across a continuation run', () => {

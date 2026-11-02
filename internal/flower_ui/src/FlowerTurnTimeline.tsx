@@ -1,8 +1,9 @@
+import { FlowerTurnHeader } from './FlowerTurnHeader';
 import { observeFlowerSequenceDisclosure } from './flowerSequenceDisclosure';
 import { createFlowerKeyedSubscriptions, createFlowerMembershipSubscriptions, createFlowerEntrySubscriptions, createFlowerSequenceSubscriptions, createFlowerProcessSubscriptions } from './flowerPresentationSubscriptions';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { AlertCircle, AlertTriangle, ChevronRight, CircleStop } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, CircleStop } from '@floegence/floe-webapp-core/icons';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { HistoryReadingGap } from './historyReadingWindow';
 import type { FlowerTurnProcessCopy } from './copy';
@@ -13,7 +14,7 @@ import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolS
 import { createFlowerSequenceTokens, projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion, type FlowerActivityDisclosurePresentation } from './activityDisclosure';
 import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
-import { flowerDurationParts, projectFlowerTurnProcess, projectFlowerHistorySections, type FlowerHistorySection, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
+import { projectFlowerTurnProcess, projectFlowerHistorySections, type FlowerHistorySection, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
 import { createFlowerActivityTitleReveal, FlowerActivityTitleRevealContext } from './flowerActivityTitleReveal';
 
 type PendingSequenceContent = Readonly<{
@@ -32,6 +33,8 @@ type TimelineProps = Readonly<{
   scroll: FlowerScrollTailController;
   reducedMotion: Accessor<boolean>;
   liveConfirmed?: Accessor<boolean>;
+  clock: Accessor<number>;
+  visible: Accessor<boolean>;
   receipt?: Readonly<{ live: boolean; restoration: number }>;
   copy: FlowerTurnProcessCopy;
   readingBreaks?: ReadonlySet<string>;
@@ -126,10 +129,6 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   const threadID = createMemo(() => props.thread?.thread_id);
   const identity = (turnID: string) => JSON.stringify([props.runtimeID, threadID(), turnID]);
   const contentID = (key: string) => `flower-process-${encodeURIComponent(`${props.scope}:${threadID()}:${key}`)}`;
-  const duration = (ms: number) => {
-    const parts = flowerDurationParts(ms);
-    return parts.length ? parts.map((part) => props.copy[part.unit](part.count)).join(' ') : props.copy.lessThanSecond;
-  };
   const startGesture = (target: Element) => {
     if (gestureFrame !== undefined) cancelAnimationFrame(gestureFrame);
     gestureFrame = undefined;
@@ -451,17 +450,6 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     // Decide protection and capture the anchor before inserting summary height.
     const summary = createMemo(() => Boolean(state()?.summary) && state()?.disclosure !== 'none'
       && props.choices.settled(identity(state()!.turnID)));
-    const summaryLabel = () => {
-      const current = state()!.summary!;
-      const worked = props.copy.worked(duration(current.turn!.work_duration_ms));
-      const details = !current.countsComplete ? [] : current.interleavedInputs ? [
-        current.toolCallCount ? props.copy.toolCalls(current.toolCallCount) : '',
-        current.inputResponseCount ? props.copy.userResponses(current.inputResponseCount) : '',
-        current.failedCallCount ? props.copy.failedCalls(current.failedCallCount) : '',
-        current.parentEventCount ? props.copy.subtaskUpdates(current.parentEventCount) : '',
-      ].filter(Boolean) : current.parentEventCount ? [props.copy.subtaskUpdates(current.parentEventCount)] : [];
-      return [worked, ...details].join(' · ');
-    };
     const interactionCheckpoint = createMemo(() => {
       const current = entry();
       return state()?.interleavedInputs === true && current.type === 'message'
@@ -520,6 +508,17 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         <FlowerToolSequenceNode nodeKey={key}>{content}</FlowerToolSequenceNode>
       </Show>;
     };
+    const requestRow = createMemo(() => {
+      const current = entry();
+      return current.type === 'message' && current.message.role === 'user'
+        && !current.blocks.some(block => block.type === 'input_response');
+    });
+    const Header = () => <Show when={state()?.summary?.turn}><FlowerTurnHeader
+      group={state()!.summary!} copy={props.copy} tick={props.clock} visible={props.visible}
+      connected={() => props.liveConfirmed?.() ?? true} viewport={props.scroll.viewport}
+      status={props.thread?.current_execution?.turn_id === state()?.turnID ? props.thread?.status : undefined}
+      sample={props.thread?.turn_clock} toggleable={summary()} expanded={turnExpanded()}
+      controls={state()!.summary!.processKeys.map(contentID).join(' ')} onToggle={toggle} /></Show>;
     return (
       <div class="flower-turn-row" data-flower-turn-id={state()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}
         data-flower-input-checkpoint={interactionCheckpoint() ? 'true' : undefined}
@@ -528,19 +527,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         data-flower-row-decoration-id={entry().type === 'context_compaction' ? (entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>).decoration.decoration_id : undefined}
         data-flower-sequence-continues={continuation() ? 'true' : undefined}
         data-flower-turn-settled={settled() ? 'true' : undefined}>
-        <Show when={Boolean(state()?.summary)}>
-          <div class="flower-turn-summary" data-reserved={!summary() ? 'true' : undefined} aria-hidden={!summary() ? 'true' : undefined}>
-            <Show when={summary()}>
-            <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
-              aria-expanded={turnExpanded()} aria-controls={state()!.summary!.processKeys.map(contentID).join(' ')}
-              aria-label={`${turnExpanded() ? props.copy.collapse : props.copy.expand}: ${summaryLabel()}`}
-              onClick={(event) => toggle(event.currentTarget)}>
-              <span>{summaryLabel()}</span>
-              <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
-            </button>
-            </Show>
-          </div>
-        </Show>
+        <Show when={!requestRow()}><Header /></Show>
         <div id={contentID(key)} class="flower-turn-row-viewport" ref={motion.bindViewport}
           data-state={motion.state()} aria-hidden={!expanded() ? 'true' : undefined} inert={!expanded()}
           style={{ height: motion.height(), display: motion.state() === 'closed' ? 'none' : undefined }}>
@@ -551,6 +538,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
             {props.renderInside?.(entry)}<Show when={contentMounted()}><Content /></Show>
           </div>
         </div>
+        <Show when={requestRow()}><Header /></Show>
         <Show when={ended()}>{(label) => (
           <div class="flower-turn-ended" role="status">
             <span class="flower-turn-ended-icon" aria-hidden="true">

@@ -2,6 +2,7 @@ import { mapFlowerActivitySummary } from './flowerLiveMapper';
 import { validateParentEventPage } from './parentEventPage';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
 import { mapFlowerProviderRequestProgress, mapFlowerProviderTransportProgress } from './providerRequestProgress';
+import { sampleFlowerTurnClock } from './flowerTurnClock';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
 import { mapFlowerGoal, mapFlowerGoalChange, mapFlowerCancellation } from './flowerLiveMapper';
 import type {
@@ -530,6 +531,7 @@ export function projectFlowerRuntimeComponents(
     goal: changed && !changed.goal ? base.goal : current.goal === undefined ? undefined : mapFlowerGoal(current.goal),
     updated_at_ms: base.updated_at_ms,
     status,
+    turn_clock: sampleFlowerTurnClock(trim(current.turn_id), current.sampled_at_ms, base.turn_clock),
     active_run_id: activeRunID || undefined,
     current_execution: retainEqualValue(base.current_execution, trim(current.turn_id) && trim(current.run_id)
       ? { turn_id: trim(current.turn_id), run_id: trim(current.run_id), status, ...(current.turn_kind ? { turn_kind: current.turn_kind } : {}) }

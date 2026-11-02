@@ -797,6 +797,8 @@ export type FlowerQueuedTurnAttachment = Readonly<{
 export type FlowerThreadSummary = Omit<FlowerThreadSnapshot, 'read_status'> & { readonly read_status?: FlowerThreadReadStatus };
 
 export type FlowerThreadSnapshot = Readonly<{
+  // Browser-only presentation sample; not part of the runtime wire contract.
+  turn_clock?: import('../flowerTurnClock').FlowerTurnClockSample;
   history_window?: FlowerHistoryWindow;
   goal?: FlowerGoal;
   parent_events?: FlowerParentEventPage;

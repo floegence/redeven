@@ -42,6 +42,7 @@ function mount(entries: Accessor<readonly FlowerTimelineEntry[]>, overrides: Par
       loading: false, error: '', detailAvailable: true, entries: [],
       renderTimeline: () => <FlowerTurnTimeline thread={null} entries={entries()} failureNoticeVisible={false}
         runtimeID="test" scope="subagent" choices={choices} scroll={scroll} reducedMotion={() => true}
+        clock={() => 0} visible={() => true}
         copy={DEFAULT_FLOWER_SURFACE_COPY.chat.turnProcess}
         renderEntry={item => <p data-entry={item().key}>{item().type === 'message' ? (item() as Extract<FlowerTimelineEntry, { type: 'message' }>).message.content : ''}</p>} />,
       bindScroll: scroll.bind, onScroll: scroll.onScroll, onWheel: scroll.onWheel,

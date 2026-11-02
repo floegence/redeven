@@ -260,6 +260,7 @@ function summaryOnly(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
   const summary = { ...thread, messages: [] };
   delete summary.history_window;
   delete summary.current_execution;
+  delete summary.turn_clock;
   delete summary.turns;
   delete summary.queued_turns;
   delete summary.restored_inputs;

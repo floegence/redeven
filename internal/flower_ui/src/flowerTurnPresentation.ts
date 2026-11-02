@@ -51,10 +51,9 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     if (bounds) bounds.last = index;
     else turnBounds.set(id, { first: index, last: index });
     rowTurns.set(entry.key, id);
-    // Header placement follows turn order, independently of which rows fold.
-    const request = entry.type === 'message' && message!.role === 'user'
-      && !entry.blocks.some(block => block.type === 'input_response');
-    if (!request && !summaryKeys.has(id)) summaryKeys.set(id, entry.key);
+    // Anchor after the initiating request when loaded, otherwise before the first response.
+    // The same header exists before any provider output and never follows a live row.
+    if (!summaryKeys.has(id)) summaryKeys.set(id, entry.key);
     if (!groups.has(id)) groups.set(id, []);
     if (entry.type === 'parent_event') {
       const event = entry.event;

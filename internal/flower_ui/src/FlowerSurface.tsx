@@ -13121,6 +13121,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
         receipt={subagentTimelineReceipt()} copy={copy().chat.turnProcess}
+        clock={activityClockNow} visible={() => documentVisible() && surfaceEngaged() && !companionCollapsed()}
         renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia, visible, subagentParentEventReading)} /></>}
       bindScroll={bindSubagentDetailViewport}
       onScroll={updateSubagentHistoryScroll}
@@ -14928,6 +14929,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
                 receipt={selectedTimelineReceipt()} copy={copy().chat.turnProcess}
+                clock={activityClockNow} visible={() => foregroundEngagementRequested() && !companionCollapsed()}
                 renderEntry={(entry, visible) => timelineEntry(entry, transcriptScroll, selectedThread, selectedThreadMedia, visible)} />
               {threadLevelApprovalPanel()}
             </Show>

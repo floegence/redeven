@@ -15,6 +15,29 @@ const summary = (): FlowerThreadSnapshot => ({
   read_status: { is_unread: false, snapshot: { activity_revision: 0 }, read_state: { last_seen_activity_revision: 0 } },
 });
 
+it('retains a detail-only turn clock across sampled requests, waits and continuation runs', () => {
+  const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', turn_id: 'turn', run_id: 'run', view_version: 1,
+    activity: 'active', run_progress: { phase: 'preparing' }, items: [] };
+  const source = JSON.stringify(current);
+  const first = applyFlowerRuntimeCurrentView(summary(), current);
+  expect(first.turn_clock).toBeUndefined();
+  const sampled = applyFlowerRuntimeCurrentView(first, { ...current, view_version: 2, sampled_at_ms: 10000 });
+  expect(sampled.turn_clock).toMatchObject({ turnID: 'turn', serverMS: 10000 });
+  const waited = applyFlowerRuntimeCurrentView(sampled, { ...current, view_version: 3, interactions: [
+    { id: 'input', turn_id: 'turn', run_id: 'run', kind: 'input', input: { summary: '', questions: [{ id: 'q', prompt: 'Reply', kind: 'write' }] } },
+  ] });
+  expect(waited.status).toBe('waiting_user');
+  expect(waited.turn_clock).toBe(sampled.turn_clock);
+  const continued = applyFlowerRuntimeCurrentView(waited, { ...current, view_version: 4, run_id: 'next' });
+  expect(continued.turn_clock).toBe(sampled.turn_clock);
+  const cache = createThreadCache().receiveView({ thread: continued, version: 4 }).cache;
+  expect(cache.views.get('thread-a')?.thread.turn_clock).toEqual(sampled.turn_clock);
+  expect(cache.summaries.get('thread-a')?.turn_clock).toBeUndefined();
+  const next = applyFlowerRuntimeCurrentView(continued, { ...current, view_version: 5, turn_id: 'other' });
+  expect(next.turn_clock).toBeUndefined();
+  expect(JSON.stringify(current)).toBe(source);
+});
+
 describe('streamed tool argument presentation', () => {
   const call: FlowerToolCallPreview = {
     thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', logical_request_id: 'request-a', attempt_id: 'attempt-a', attempt_epoch: 1,
@@ -1054,7 +1077,7 @@ describe('canonical original and Fork process regression', () => {
     const entries = buildFlowerTimelineEntries(snapshot);
     const group = projectFlowerTurnProcess(entries, snapshot.turns).groups.get('research-turn')!;
     expect(entries[0]).toMatchObject({ type: 'message', message: { id: 'research-user' } });
-    expect(entries.findIndex(row => row.key === group.summaryKey)).toBe(1);
+    expect(entries.findIndex(row => row.key === group.summaryKey)).toBe(0);
     expect(group.disclosure).toBe('automatic');
     expect(group.parentEventCount).toBe(6);
     expect(group.processKeys).toHaveLength(10);

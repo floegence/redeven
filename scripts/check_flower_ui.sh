@@ -176,6 +176,7 @@ main() {
       internal/flower_ui/src/flowerScrollTail.test.ts \
       internal/flower_ui/src/threadSelectionSchedule.test.ts \
       internal/flower_ui/src/flowerTurnPresentation.test.ts \
+      internal/flower_ui/src/flowerTurnClock.test.ts \
       internal/flower_ui/src/flowerTurnDisclosure.test.ts \
       internal/flower_ui/src/flowerToolSequences.test.ts \
       internal/flower_ui/src/subagentAvatarCatalog.test.ts \
@@ -232,6 +233,7 @@ main() {
         src/ui/FlowerSurface.liveRecovery.browser.test.tsx
         src/ui/FlowerSurface.goal.browser.test.tsx
         src/ui/FlowerSurface.turnProcess.browser.test.tsx
+        src/ui/FlowerTurnHeader.browser.test.tsx
         src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx
         src/ui/FlowerMarkdown.softReveal.browser.test.tsx
