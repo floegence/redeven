@@ -50,11 +50,7 @@ import {
   type DesktopRuntimePlacement,
   type DesktopRuntimeTargetID,
 } from './desktopRuntimePlacement';
-import type {
-  DesktopCloudEnvironmentCandidate,
-  DesktopCloudRuntimeLinkTarget,
-  DesktopCloudRuntimeLinkTargetID,
-} from './providerRuntimeLinkTarget';
+import type { DesktopCloudEnvironmentCandidate, DesktopRuntimeConnectionTarget } from "./runtimeConnectionTarget";
 import { normalizeDesktopCloudRuntimeLinkRequestTarget } from './environmentManagementPrinciples';
 
 export type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
@@ -181,6 +177,7 @@ export type DesktopLauncherActionFailureCode =
   | 'provider_unreachable'
   | 'provider_invalid_response'
   | 'cloud_link_failed'
+  | 'gateway_attachment_failed'
   | 'runtime_start_failed'
   | 'gateway_start_required'
   | 'gateway_update_required'
@@ -316,18 +313,18 @@ export type DesktopGatewayStartPolicy = 'require_ready' | 'start_if_needed';
 export type DesktopGatewayStartRequiredRetryAction = Readonly<
   | {
       kind: 'sync_gateway';
-      gateway_id: string;
+      connection_id: string;
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
   | {
       kind: 'pair_gateway';
-      gateway_id: string;
+      connection_id: string;
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
   | {
       kind: 'open_gateway_environment';
       environment_id: string;
-      gateway_id: string;
+      connection_id: string;
       gateway_env_id: string;
       label: string;
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
@@ -341,7 +338,7 @@ export type DesktopGatewayResolveFocus =
   | 'identity_trust';
 
 export type DesktopGatewayStartRequiredPayload = Readonly<{
-  gateway_id: string;
+  connection_id: string;
   gateway_label: string;
   reason: 'sync_gateway' | 'pair_gateway' | 'open_gateway_environment';
   service_state?: DesktopGatewayServiceState;
@@ -352,7 +349,7 @@ export type EnvironmentRegistrationRef =
   | Readonly<{ kind: 'local_environment'; id: string }>
   | Readonly<{ kind: 'runtime_target'; id: DesktopRuntimeTargetID }>
   | Readonly<{ kind: 'saved_environment'; id: string }>
-  | Readonly<{ kind: 'gateway_environment'; gateway_id: string; gateway_env_id: string }>;
+  | Readonly<{ kind: 'gateway_environment'; connection_id: string; gateway_env_id: string }>;
 
 export type DesktopEnvironmentRegistrationUpsert = Readonly<
   | {
@@ -402,7 +399,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   open_local_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_remote_session_key?: string;
   open_remote_session_lifecycle?: DesktopLauncherSessionLifecycle;
-  provider_runtime_link_target?: DesktopCloudRuntimeLinkTarget;
+  runtime_connection_target?: DesktopRuntimeConnectionTarget;
   provider_environment_candidates?: readonly DesktopCloudEnvironmentCandidate[];
   managed_runtime_target_id?: DesktopRuntimeTargetID;
   managed_runtime_placement_target_id?: DesktopRuntimeTargetID;
@@ -410,8 +407,8 @@ export type DesktopEnvironmentEntry = Readonly<{
   managed_runtime_placement?: DesktopRuntimePlacement;
   managed_runtime_open_connection_required?: boolean;
   cloud_linked_runtime_summary?: Readonly<{
-    runtime_target_id: DesktopCloudRuntimeLinkTargetID;
-    runtime_kind: DesktopCloudRuntimeLinkTarget['kind'];
+    runtime_target_id: DesktopRuntimeTargetID;
+    runtime_kind: DesktopRuntimeConnectionTarget['kind'];
     label: string;
     provider_connection_state: RuntimeServiceProviderConnectionState;
   }>;
@@ -430,7 +427,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   remote_state_reason?: string;
   ssh_details?: DesktopSSHEnvironmentDetails;
   ssh_password_configured?: boolean;
-  gateway_id?: string;
+  connection_id?: string;
   gateway_label?: string;
   gateway_env_id?: string;
   gateway_status?: DesktopGatewayStatus;
@@ -533,7 +530,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   subject_generation: number;
   environment_id?: string;
   environment_label?: string;
-  gateway_id?: string;
+  connection_id?: string;
   gateway_environment_id?: string;
   cloud_origin?: string;
   cloud_id?: string;
@@ -576,23 +573,23 @@ export type DesktopLauncherOperationNextAction = Readonly<
     }
   | {
       kind: 'refresh_gateway';
-      gateway_id: string;
+      connection_id: string;
     }
   | {
       kind: 'check_gateway';
-      gateway_id: string;
+      connection_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'refresh_gateway_status';
-      gateway_id: string;
+      connection_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'refresh_gateway_catalog';
-      gateway_id: string;
+      connection_id: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
       label: string;
       label_key?: DesktopTranslationKey;
@@ -617,25 +614,25 @@ export type DesktopLauncherOperationNextAction = Readonly<
     }
   | {
       kind: 'start_gateway';
-      gateway_id: string;
+      connection_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'stop_gateway';
-      gateway_id: string;
+      connection_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'restart_gateway';
-      gateway_id: string;
+      connection_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'update_gateway';
-      gateway_id: string;
+      connection_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
     }
@@ -650,14 +647,14 @@ export type DesktopLauncherOperationNextAction = Readonly<
     }
   | {
       kind: 'resolve_gateway';
-      gateway_id: string;
+      connection_id: string;
       resolve_focus?: DesktopGatewayResolveFocus;
       label: string;
       label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'open_gateway_environment';
-      gateway_id: string;
+      connection_id: string;
       environment_id: string;
       gateway_env_id: string;
       label: string;
@@ -673,10 +670,10 @@ export type DesktopLauncherOperationNextAction = Readonly<
 >;
 
 export type DesktopLauncherActionRequest = Readonly<
-  | ({kind: 'manage_runtime_cloud'; runtime_target_id: DesktopCloudRuntimeLinkTargetID} & RuntimeCloudOperation)
-  | { kind: 'close_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token: number }
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token?: number; operation: 'preview'; address: string; code: string; purpose: GatewayEnrollmentPurpose }
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token?: number; ssh_password?: string; operation: GatewayAttachmentOperation; preview_id?: string; gateway_id?: string; route_impact_acknowledged?: boolean }
+  | ({kind: 'manage_runtime_cloud'; runtime_target_id: DesktopRuntimeTargetID} & RuntimeCloudOperation)
+  | { kind: 'close_runtime_gateway'; runtime_target_id: DesktopRuntimeTargetID; connection_token: number }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopRuntimeTargetID; connection_token?: number; operation: 'preview'; address: string; code: string; purpose: GatewayEnrollmentPurpose }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopRuntimeTargetID; connection_token?: number; ssh_password?: string; operation: GatewayAttachmentOperation; preview_id?: string; gateway_id?: string; route_impact_acknowledged?: boolean }
   | {
       kind: 'open_local_environment';
       environment_id: string;
@@ -691,7 +688,7 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'open_gateway_environment';
       environment_id: string;
-      gateway_id: string;
+      connection_id: string;
       gateway_env_id: string;
       label: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
@@ -727,12 +724,12 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'connect_cloud_runtime';
       provider_environment_id: string;
-      runtime_target_id: DesktopCloudRuntimeLinkTargetID;
+      runtime_target_id: DesktopRuntimeTargetID;
   }
   | {
       kind: 'disconnect_cloud_runtime';
       provider_environment_id?: string;
-      runtime_target_id: DesktopCloudRuntimeLinkTargetID;
+      runtime_target_id: DesktopRuntimeTargetID;
   }
   | ({
       kind: 'stop_environment_runtime';
@@ -784,7 +781,7 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'upsert_gateway';
-      gateway_id?: string;
+      connection_id?: string;
       display_name: string;
       connection_kind: 'url';
       gateway_url: string;
@@ -793,7 +790,7 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'upsert_gateway';
-      gateway_id?: string;
+      connection_id?: string;
       display_name: string;
       connection_kind: Exclude<DesktopGatewayConnectionKind, 'url'>;
       host_access: DesktopRuntimeHostAccess;
@@ -803,44 +800,44 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'refresh_gateway';
-      gateway_id: string;
+      connection_id: string;
     }
   | {
       kind: 'check_gateway';
-      gateway_id: string;
+      connection_id: string;
     }
   | {
       kind: 'pair_gateway';
-      gateway_id: string;
+      connection_id: string;
       start_policy?: DesktopGatewayStartPolicy;
     }
   | {
       kind: 'sync_gateway';
-      gateway_id: string;
+      connection_id: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
   | {
       kind: 'set_gateway_enabled';
-      gateway_id: string;
+      connection_id: string;
       enabled: boolean;
     }
   | {
       kind: 'start_gateway';
-      gateway_id: string;
+      connection_id: string;
     }
   | {
       kind: 'stop_gateway';
-      gateway_id: string;
+      connection_id: string;
       impact_acknowledged?: boolean;
     }
   | {
       kind: 'restart_gateway';
-      gateway_id: string;
+      connection_id: string;
       impact_acknowledged?: boolean;
     }
   | {
       kind: 'update_gateway';
-      gateway_id: string;
+      connection_id: string;
       impact_acknowledged?: boolean;
     }
   | {
@@ -858,23 +855,23 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'refresh_gateway_status';
-      gateway_id: string;
+      connection_id: string;
     }
   | {
       kind: 'upsert_environment_registration';
       registration: DesktopEnvironmentRegistrationUpsert;
     }
-  | { kind: 'invite_gateway_runtime'; gateway_id: string }
-  | { kind: 'acknowledge_gateway_operation'; gateway_id: string; operation_id: string }
-  | { kind: 'issue_gateway_access_code'; gateway_id: string }
-  | { kind: 'list_gateway_clients'; gateway_id: string }
-  | { kind: 'revoke_gateway_client'; gateway_id: string; client_key_id: string }
-  | { kind: 'update_gateway_network_settings'; gateway_id: string; settings: GatewayNetworkSettings }
-  | { kind: 'update_gateway_endpoints'; gateway_id: string; endpoints: readonly GatewayEndpoint[] }
-  | { kind: 'remove_gateway_member'; gateway_id: string; attachment_id: string; attachment_version: number }
-  | { kind: 'reevaluate_gateway_member'; gateway_id: string; attachment_id: string; attachment_version: number }
-  | { kind: 'update_gateway_policy'; gateway_id: string; policy: GatewayPolicy }
-  | { kind: 'update_gateway_members'; gateway_id: string; items: readonly { attachment_id: string; expected_attachment_version: number; egress_permission: GatewayEgressPermission }[] }
+  | { kind: 'invite_gateway_runtime'; connection_id: string }
+  | { kind: 'acknowledge_gateway_operation'; connection_id: string; operation_id: string }
+  | { kind: 'issue_gateway_access_code'; connection_id: string }
+  | { kind: 'list_gateway_clients'; connection_id: string }
+  | { kind: 'revoke_gateway_client'; connection_id: string; client_key_id: string }
+  | { kind: 'update_gateway_network_settings'; connection_id: string; settings: GatewayNetworkSettings }
+  | { kind: 'update_gateway_endpoints'; connection_id: string; endpoints: readonly GatewayEndpoint[] }
+  | { kind: 'remove_gateway_member'; connection_id: string; attachment_id: string; attachment_version: number }
+  | { kind: 'reevaluate_gateway_member'; connection_id: string; attachment_id: string; attachment_version: number }
+  | { kind: 'update_gateway_policy'; connection_id: string; policy: GatewayPolicy }
+  | { kind: 'update_gateway_members'; connection_id: string; items: readonly { attachment_id: string; expected_attachment_version: number; egress_permission: GatewayEgressPermission }[] }
   | { kind: 'set_environment_access_route'; environment_id: string; route_id: string }
   | {
       kind: 'delete_environment_registration';
@@ -883,12 +880,12 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'refresh_gateway_catalog';
-      gateway_id: string;
+      connection_id: string;
       start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
   | {
       kind: 'delete_gateway';
-      gateway_id: string;
+      connection_id: string;
     }
   | {
       kind: 'cancel_launcher_operation';
@@ -905,7 +902,7 @@ export type DesktopLauncherActionRequest = Readonly<
 >;
 
 export type DesktopLauncherActionSuccess = Readonly<{
-  gateway_id?: string;
+  connection_id?: string;
   gateway_access_code?: GatewayClientAccessCode;
   gateway_clients?: readonly GatewayAuthorizedClient[];
   gateway_invitation_code?: GatewayInvitationCodeDelivery;
@@ -968,7 +965,7 @@ export type DesktopLauncherActionFailure = Readonly<{
   scope: DesktopLauncherActionFailureScope;
   message: string;
   environment_id?: string;
-  gateway_id?: string;
+  connection_id?: string;
   gateway_label?: string;
   gateway_environment_id?: string;
   operation_key?: string;
@@ -989,7 +986,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   action: DesktopLauncherActionKind;
   environment_id?: string;
   environment_label?: string;
-  gateway_id?: string;
+  connection_id?: string;
   gateway_environment_id?: string;
   operation_key?: string;
   subject_kind?: DesktopLauncherOperationSubjectKind;
@@ -1055,10 +1052,10 @@ function normalizeEnvironmentRegistrationRef(
   const kind = compact(candidate.kind);
   const allowEmptyID = options.allow_empty_id === true;
   if (kind === 'gateway_environment') {
-    const gatewayID = compact(candidate.gateway_id);
+    const gatewayID = compact(candidate.connection_id);
     const gatewayEnvID = compact(candidate.gateway_env_id);
     return gatewayID !== '' && (allowEmptyID || gatewayEnvID !== '')
-      ? { kind, gateway_id: gatewayID, gateway_env_id: gatewayEnvID }
+      ? { kind, connection_id: gatewayID, gateway_env_id: gatewayEnvID }
       : null;
   }
   if (kind === 'local_environment' || kind === 'runtime_target' || kind === 'saved_environment') {
@@ -1183,30 +1180,31 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
 
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
+  if (kind !== 'manage_runtime_gateway' && 'gateway_id' in candidate) return null;
   switch (kind) {
     case 'acknowledge_gateway_operation': {
-      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id), operation_id = compact(input.operation_id);
-      return gateway_id && /^[A-Za-z0-9_-]{16,128}$/u.test(operation_id) ? { kind, gateway_id, operation_id } : null;
+      const input = candidate as Record<string, unknown>, connection_id = compact(input.connection_id), operation_id = compact(input.operation_id);
+      return connection_id && /^[A-Za-z0-9_-]{16,128}$/u.test(operation_id) ? { kind, connection_id, operation_id } : null;
     }
     case 'revoke_gateway_client': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const gatewayID = compact((candidate as { connection_id?: unknown }).connection_id);
       const clientKeyID = compact((candidate as { client_key_id?: unknown }).client_key_id);
-      return gatewayID && /^[A-Za-z0-9_-]{1,160}$/u.test(clientKeyID) ? { kind, gateway_id: gatewayID, client_key_id: clientKeyID } : null;
+      return gatewayID && /^[A-Za-z0-9_-]{1,160}$/u.test(clientKeyID) ? { kind, connection_id: gatewayID, client_key_id: clientKeyID } : null;
     }
     case 'issue_gateway_access_code':
     case 'list_gateway_clients':
     case 'invite_gateway_runtime': {
-      const gateway_id = compact((candidate as { gateway_id?: unknown }).gateway_id);
-      return gateway_id ? { kind, gateway_id } : null;
+      const connection_id = compact((candidate as { connection_id?: unknown }).connection_id);
+      return connection_id ? { kind, connection_id } : null;
     }
     case 'update_gateway_network_settings': {
-      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);
+      const input = candidate as Record<string, unknown>, connection_id = compact(input.connection_id);
       const settings = normalizeGatewayNetworkSettings(input.settings);
-      return gateway_id && settings ? {kind, gateway_id, settings} : null;
+      return connection_id && settings ? {kind, connection_id, settings} : null;
     }
     case 'update_gateway_endpoints': {
-      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);
-      if (!gateway_id || !Array.isArray(input.endpoints) || input.endpoints.length > 16) return null;
+      const input = candidate as Record<string, unknown>, connection_id = compact(input.connection_id);
+      if (!connection_id || !Array.isArray(input.endpoints) || input.endpoints.length > 16) return null;
       const endpoints: GatewayEndpoint[] = [];
       for (const raw of input.endpoints) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -1219,26 +1217,26 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       }
       return new Set(endpoints.map(item => item.endpoint_id)).size === endpoints.length
         && new Set(endpoints.map(item => item.address)).size === endpoints.length
-        ? { kind, gateway_id, endpoints } : null;
+        ? { kind, connection_id, endpoints } : null;
     }
     case 'remove_gateway_member':
     case 'reevaluate_gateway_member': {
       const input = candidate as Record<string, unknown>;
-      const gateway_id = compact(input.gateway_id), attachment_id = compact(input.attachment_id);
+      const connection_id = compact(input.connection_id), attachment_id = compact(input.attachment_id);
       const attachment_version = input.attachment_version;
-      return gateway_id && attachment_id && Number.isSafeInteger(attachment_version) && Number(attachment_version) > 0
-        ? { kind, gateway_id, attachment_id, attachment_version: Number(attachment_version) } : null;
+      return connection_id && attachment_id && Number.isSafeInteger(attachment_version) && Number(attachment_version) > 0
+        ? { kind, connection_id, attachment_id, attachment_version: Number(attachment_version) } : null;
     }
     case 'update_gateway_policy': {
       const input = candidate as Record<string, unknown>, policy = input.policy as Partial<GatewayPolicy> | undefined;
-      const gateway_id = compact(input.gateway_id);
-      if (!gateway_id || !policy || !Number.isSafeInteger(policy.revision) || Number(policy.revision) < 1
+      const connection_id = compact(input.connection_id);
+      if (!connection_id || !policy || !Number.isSafeInteger(policy.revision) || Number(policy.revision) < 1
         || typeof policy.default_egress_allowed !== 'boolean' || (!Array.isArray(policy.destinations) || policy.destinations.length > 64 || policy.destinations.some(value => typeof value !== 'string' || value.length > 260))) return null;
-      return { kind, gateway_id, policy: { revision: Number(policy.revision), default_egress_allowed: policy.default_egress_allowed, destinations: [...policy.destinations!] } };
+      return { kind, connection_id, policy: { revision: Number(policy.revision), default_egress_allowed: policy.default_egress_allowed, destinations: [...policy.destinations!] } };
     }
     case 'update_gateway_members': {
-      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);
-      if (!gateway_id || !Array.isArray(input.items) || !input.items.length || input.items.length > 1024) return null;
+      const input = candidate as Record<string, unknown>, connection_id = compact(input.connection_id);
+      if (!connection_id || !Array.isArray(input.items) || !input.items.length || input.items.length > 1024) return null;
       const items: { attachment_id: string; expected_attachment_version: number; egress_permission: GatewayEgressPermission }[] = [];
       for (const raw of input.items) {
         if (!raw || typeof raw !== 'object') return null;
@@ -1247,7 +1245,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           || !['inherit', 'allow', 'deny'].includes(String(item.egress_permission))) return null;
         items.push({ attachment_id, expected_attachment_version: Number(item.expected_attachment_version), egress_permission: item.egress_permission as GatewayEgressPermission });
       }
-      return new Set(items.map(item => item.attachment_id)).size === items.length ? { kind, gateway_id, items } : null;
+      return new Set(items.map(item => item.attachment_id)).size === items.length ? { kind, connection_id, items } : null;
     }
     case 'set_environment_access_route': {
       const input = candidate as { environment_id?: unknown; route_id?: unknown };
@@ -1313,7 +1311,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     }
     case 'open_gateway_environment': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const gatewayID = compact((candidate as { connection_id?: unknown }).connection_id);
       const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
       const label = compact((candidate as { label?: unknown }).label);
       if (environmentID === '' || gatewayID === '' || gatewayEnvID === '' || label === '') {
@@ -1326,7 +1324,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         environment_id: environmentID,
-        gateway_id: gatewayID,
+        connection_id: gatewayID,
         gateway_env_id: gatewayEnvID,
         label,
         ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
@@ -1479,7 +1477,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'upsert_gateway': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id) || undefined;
+      const gatewayID = compact((candidate as { connection_id?: unknown }).connection_id) || undefined;
       const displayName = compact((candidate as { display_name?: unknown }).display_name);
       if ((candidate as { permissions?: unknown }).permissions !== undefined) return null;
       const connectionKind = compact((candidate as { connection_kind?: unknown }).connection_kind);
@@ -1490,7 +1488,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         }
         return {
           kind,
-          gateway_id: gatewayID,
+          connection_id: gatewayID,
           display_name: displayName,
           connection_kind: 'url',
           gateway_url: gatewayURL,
@@ -1516,7 +1514,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         if (connectionKind !== expected) return null;
         const passwordMode = compact(raw.ssh_password_mode);
         if (passwordMode && !['keep', 'replace', 'clear'].includes(passwordMode)) return null;
-        return { kind, gateway_id: gatewayID, display_name: displayName, connection_kind: expected,
+        return { kind, connection_id: gatewayID, display_name: displayName, connection_kind: expected,
           host_access: hostAccess, placement,
           ssh_password: typeof raw.ssh_password === 'string' ? raw.ssh_password : undefined,
           ssh_password_mode: (passwordMode || 'keep') as 'keep' | 'replace' | 'clear' };
@@ -1530,7 +1528,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
     case 'delete_gateway': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const gatewayID = compact((candidate as { connection_id?: unknown }).connection_id);
       if (gatewayID === '') {
         return null;
       }
@@ -1541,28 +1539,28 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         );
         return {
           kind,
-          gateway_id: gatewayID,
+          connection_id: gatewayID,
           ...(startPolicy ? { start_policy: startPolicy } : {}),
         };
       }
       if (kind === 'refresh_gateway' || kind === 'check_gateway') {
         return {
           kind,
-          gateway_id: gatewayID,
+          connection_id: gatewayID,
         };
       }
       if (kind === 'sync_gateway') {
         const startPolicy = normalizeGatewayStartPolicy((candidate as { start_policy?: unknown }).start_policy, ['start_if_needed']);
         return {
           kind,
-          gateway_id: gatewayID,
+          connection_id: gatewayID,
           ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
         };
       }
       if (kind === 'set_gateway_enabled') {
         return {
           kind,
-          gateway_id: gatewayID,
+          connection_id: gatewayID,
           enabled: (candidate as { enabled?: unknown }).enabled !== false,
         };
       }
@@ -1570,19 +1568,19 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         const startPolicy = normalizeGatewayStartPolicy((candidate as { start_policy?: unknown }).start_policy, ['start_if_needed']);
         return {
           kind,
-          gateway_id: gatewayID,
+          connection_id: gatewayID,
           ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
         };
       }
       if (kind === 'refresh_gateway_status') {
         return {
           kind,
-          gateway_id: gatewayID,
+          connection_id: gatewayID,
         };
       }
       return {
         kind,
-        gateway_id: gatewayID,
+        connection_id: gatewayID,
       };
     }
     case 'manage_runtime_cloud': {
@@ -1591,14 +1589,14 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID)) return null;
       const {kind: _kind, runtime_target_id: _target, ...operation} = input;
       const request = normalizeRuntimeCloudOperation(operation);
-      return request ? {kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, ...request} : null;
+      return request ? {kind, runtime_target_id: runtimeTargetID as DesktopRuntimeTargetID, ...request} : null;
     }
     case 'close_runtime_gateway': {
       const input = candidate as Record<string, unknown>;
       if (Object.keys(input).some(key => !['kind', 'runtime_target_id', 'connection_token'].includes(key))
         || typeof input.runtime_target_id !== 'string' || !/^(local|ssh|wsl):.+$/u.test(input.runtime_target_id)
         || !Number.isSafeInteger(input.connection_token) || Number(input.connection_token) <= 0) return null;
-      return { kind, runtime_target_id: input.runtime_target_id as DesktopCloudRuntimeLinkTargetID, connection_token: Number(input.connection_token) };
+      return { kind, runtime_target_id: input.runtime_target_id as DesktopRuntimeTargetID, connection_token: Number(input.connection_token) };
     }
     case 'manage_runtime_gateway': {
       const input = candidate as Record<string, unknown>;
@@ -1612,7 +1610,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','purpose','address','code','connection_token'].includes(key))
           || !['join','replace','update-endpoints'].includes(String(input.purpose)) || typeof input.address !== 'string' || input.address.length > 512 || typeof input.code !== 'string' || !input.code.trim() || input.code.length > 128) return null;
         try { const url = new URL(input.address); if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null; } catch { return null; }
-        return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation, ...connection, address: input.address, code: input.code, purpose: input.purpose as GatewayEnrollmentPurpose };
+        return { kind, runtime_target_id: runtimeTargetID as DesktopRuntimeTargetID, operation, ...connection, address: input.address, code: input.code, purpose: input.purpose as GatewayEnrollmentPurpose };
       }
       const confirming = operation === 'join' || operation === 'replace' || operation === 'update-endpoints';
       if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','preview_id','gateway_id','route_impact_acknowledged','connection_token','ssh_password'].includes(key))
@@ -1621,17 +1619,17 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       const gatewayID = compact(input.gateway_id);
       if (input.gateway_id !== undefined && (!['retry','leave'].includes(operation) || !gatewayID || gatewayID.length > 256)) return null;
       if (input.route_impact_acknowledged !== undefined && (operation !== 'leave' || typeof input.route_impact_acknowledged !== 'boolean')) return null;
-      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayAttachmentOperation, ...connection,
+      return { kind, runtime_target_id: runtimeTargetID as DesktopRuntimeTargetID, operation: operation as GatewayAttachmentOperation, ...connection,
         ...(typeof input.ssh_password === 'string' ? { ssh_password: input.ssh_password } : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(input.route_impact_acknowledged === true ? {route_impact_acknowledged: true} : {}), ...(confirming ? { preview_id: input.preview_id as string } : {}) };
     }
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const gatewayID = compact((candidate as { connection_id?: unknown }).connection_id);
       if (!gatewayID) return null;
-      if (kind === 'start_gateway') return { kind, gateway_id: gatewayID };
-      return { kind, gateway_id: gatewayID, impact_acknowledged: (candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true };
+      if (kind === 'start_gateway') return { kind, connection_id: gatewayID };
+      return { kind, connection_id: gatewayID, impact_acknowledged: (candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true };
     }
     case 'preview_reinstall_target': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);

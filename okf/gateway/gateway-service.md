@@ -12,7 +12,7 @@ Gateway is an independent Runtime attachment, client-device admission and relay 
 # Contract
 
 ## Authority ownership
-Gateway owns its stable identity, paired client keys, Runtime attachments, local network policy and active transports. Runtime explicitly consents to each attachment and owns its application TLS identity, environment password/MFA, sessions and host execution restrictions. Gateway administration grants no Runtime lifecycle or application authority.
+Gateway owns its stable identity, paired client keys, Runtime attachments, local network policy and active transports. Runtime explicitly consents to each attachment and owns its application TLS identity, environment password/MFA, sessions and host execution restrictions. Gateway administration grants no Runtime lifecycle or application authority. Device access, host administration and Runtime application authorization are independently verified. Desktop and Web Center hold their own client identities; saved host coordinates and client observations confer no management authority.
 
 Gateway has no Cloud machine registration, Namespace assignment, management renewal, delegated Runtime publication or Cloud command receiver. Runtime may independently enroll with Cloud. Gateway failure affects only traffic using that Gateway.
 

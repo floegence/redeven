@@ -948,7 +948,7 @@ describe('main routing', () => {
   it('observes runtime liveness without taking bridge lifecycle ownership', () => {
     const mainSrc = readMainSource();
 
-    const providerStart = mainSrc.indexOf('async function resolveCloudRuntimeLinkTarget(');
+    const providerStart = mainSrc.indexOf('async function resolveRuntimeManagementTarget(');
     const providerEnd = mainSrc.indexOf('function updateProviderRuntimeTargetStartup(', providerStart);
     expect(providerStart).toBeGreaterThanOrEqual(0);
     expect(providerEnd).toBeGreaterThan(providerStart);
@@ -968,7 +968,7 @@ describe('main routing', () => {
     const providerOccupancySrc = mainSrc.slice(providerOccupancyStart, providerOccupancyEnd);
     expect(providerOccupancySrc).toContain('preferences: DesktopPreferences');
     expect(providerOccupancySrc).toContain('desktopPlatformCapabilities.native_host_runtime');
-    expect(providerOccupancySrc).toContain('providerRuntimeLinkKindForHostAccess(record.session.host_access)');
+    expect(providerOccupancySrc).toContain('runtimeTargetKindForHostAccess(record.session.host_access)');
     expect(providerOccupancySrc).toContain(
       'await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)',
     );
@@ -1063,7 +1063,7 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('async function ensureRuntimePlacementReadyRecordFromLauncherUncoordinated(');
 
     const bridgeHelperStart = mainSrc.indexOf('async function acquireRuntimePlacementBridgeForReadyRecord(');
-    const bridgeHelperEnd = mainSrc.indexOf('type CloudRuntimeLinkTargetRecord', bridgeHelperStart);
+    const bridgeHelperEnd = mainSrc.indexOf('type RuntimeManagementTargetRecord', bridgeHelperStart);
     expect(bridgeHelperStart).toBeGreaterThanOrEqual(0);
     expect(bridgeHelperEnd).toBeGreaterThan(bridgeHelperStart);
     const bridgeHelperSrc = mainSrc.slice(bridgeHelperStart, bridgeHelperEnd);
@@ -1579,7 +1579,7 @@ describe('main routing', () => {
     expect(openSrc).not.toContain('startDesktopModelSourceForStartup');
     expect(openSrc).not.toContain('runEnvironmentRuntimeLifecycleFromLauncher');
     expect(openSrc).not.toContain('startRuntimePlacementBridgeSession');
-    expect(openSrc).not.toContain('resolveCloudRuntimeLinkTarget');
+    expect(openSrc).not.toContain('resolveRuntimeManagementTarget');
   });
 
   it('routes Welcome Flower through one selected Runtime API without provider-session shortcuts', () => {
@@ -2182,7 +2182,7 @@ describe('main routing', () => {
     expect(scheduleSrc).toContain('gatewaySyncStateByID.delete(gatewayID);');
     expect(scheduleSrc).toContain('supersedeGatewaySyncTask(gatewayID);');
     expect(scheduleSrc).toContain('broadcastDesktopWelcomeSnapshots();');
-    expect(toggleSrc).toContain('gatewayStore().setLocalEnabled(request.gateway_id, request.enabled)');
+    expect(toggleSrc).toContain('gatewayStore().setLocalEnabled(request.connection_id, request.enabled)');
     expect(toggleSrc).toContain('if (!request.enabled) {');
     expect(toggleSrc).toContain('gatewaySyncStateByID.delete(record.connection_id);');
     expect(toggleSrc).toContain('supersedeGatewaySyncTask(record.connection_id);');
@@ -2394,7 +2394,7 @@ describe('main routing', () => {
     expect(serviceSrc).toContain('manager.stopGateway');
     expect(serviceSrc).not.toContain('executeDirectManagedEnvironmentLifecycle');
     expect(serviceSrc).not.toContain('runtimeLifecycleSession');
-    expect(serviceSrc).toContain("session.target.gateway_id === record.connection_id");
+    expect(serviceSrc).toContain("session.target.connection_id === record.connection_id");
   });
 
   it('opens Gateway members through their reverse transport without Runtime lifecycle authority', () => {

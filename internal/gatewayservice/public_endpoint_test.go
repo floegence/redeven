@@ -51,7 +51,7 @@ func TestPublicEndpointPairsClientsWithoutCloud(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("public pairing returned %d", response.StatusCode)
 	}
-	for _, route := range []string{"clients/access-codes", "clients/revoke", "invitation-codes", "attachments/remove", "network-settings", "cloud/configure"} {
+	for _, route := range []string{"clients/access-codes", "clients/revoke", "invitation-codes", "attachments/remove", "network-settings", "endpoints", "policy", "attachments/policy", "operations/query", "cloud/configure"} {
 		request, _ := http.NewRequest(http.MethodPost, origin+"/gateway/v6/"+route, strings.NewReader(`{"protocol_version":"redeven-gateway-v6"}`))
 		request.Header.Set(HostAdminHeader, server.hostAdminToken)
 		request.Header.Set(OperationIDHeader, rand.Text())

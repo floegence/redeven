@@ -1,3 +1,4 @@
+import { normalizeDesktopRuntimeTargetID, type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { matchesEnvironmentSearch, filterEnvironmentFacts } from '../envcenter/core';
 import { buildRuntimeConnectionRows, connectionAddressRows, reportedRuntimeURLs, type DesktopConnectionRow } from '../shared/desktopEnvironmentConnection';
 import type {
@@ -25,11 +26,7 @@ import {
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
 import { buildDesktopCloudRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
-import {
-  normalizeDesktopCloudRuntimeLinkTargetID,
-  type DesktopCloudRuntimeLinkTarget,
-  type DesktopCloudRuntimeLinkTargetID,
-} from '../shared/providerRuntimeLinkTarget';
+import { type DesktopRuntimeConnectionTarget } from "../shared/runtimeConnectionTarget";
 import {
   desktopEntryKindSupportsDirectRuntimeOperations,
   desktopCloudEnvironmentOpenRoute,
@@ -211,7 +208,7 @@ export type EnvironmentActionModel = Readonly<{
   route?: DesktopLocalEnvironmentStateRoute;
   cloud_origin?: string;
   cloud_id?: string;
-  gateway_id?: string;
+  connection_id?: string;
   runtime_operation?: DesktopRuntimeOperation;
   runtime_operation_method?: DesktopRuntimeOperationMethod;
   disabled_reason?: string;
@@ -624,7 +621,7 @@ function orderEnvironmentCardFacts(
 
 export function environmentControlPlaneLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'provider_environment'
-    || environment.provider_runtime_link_target?.cloud_origin_supported === true) {
+    || environment.runtime_connection_target?.cloud_origin_supported === true) {
     return 'Redeven Cloud';
   }
   return compact(environment.control_plane_label) || compact(environment.cloud_origin);
@@ -633,7 +630,7 @@ export function environmentControlPlaneLabel(environment: DesktopEnvironmentEntr
 export function runtimeHasUnsupportedLegacyControlPlaneLink(
   environment: DesktopEnvironmentEntry,
 ): boolean {
-  const target = environment.provider_runtime_link_target;
+  const target = environment.runtime_connection_target;
   return Boolean(
     target
     && target.provider_connection_state !== 'unlinked'
@@ -744,7 +741,7 @@ function legacyControlPlaneFact(environment: DesktopEnvironmentEntry): Environme
 
 export function buildEnvironmentCardFactsModel(environment: DesktopEnvironmentEntry): readonly EnvironmentCardFactModel[] {
   const facts = baseEnvironmentCardFactsModel(environment);
-  const target = environment.provider_runtime_link_target;
+  const target = environment.runtime_connection_target;
   if (target?.cloud_link_state !== 'linked') return facts;
   const state = target.provider_connection_state;
   const valueKey: DesktopTranslationKey = state === 'authorization_required'
@@ -1273,7 +1270,7 @@ function runtimeCloudLinkMenuAction(
   if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     return null;
   }
-  const target = environment.provider_runtime_link_target;
+  const target = environment.runtime_connection_target;
   if (!target) {
     return {
       id: 'connect_cloud_runtime',
@@ -1406,7 +1403,7 @@ function runtimeCloudLinkMenuAction(
 
 function runtimeCloudLinkCanConnect(
   environment: DesktopEnvironmentEntry,
-  target: DesktopCloudRuntimeLinkTarget,
+  target: DesktopRuntimeConnectionTarget,
 ): boolean {
   const plans = (environment.provider_environment_candidates ?? []).map((candidate) => (
     buildDesktopCloudRuntimeLinkPlan(target, candidate)
@@ -1443,7 +1440,7 @@ function runtimeOperationIntent(operation: DesktopRuntimeOperation): Environment
 function runtimeCloudLinkDisconnectMenuAction(
   environment: DesktopEnvironmentEntry,
 ): EnvironmentActionMenuItemModel | null {
-  const target = environment.provider_runtime_link_target;
+  const target = environment.runtime_connection_target;
   if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind) || !target || runtimeHasUnsupportedLegacyControlPlaneLink(environment)
     || target.cloud_link_state !== 'linked' || !target.can_disconnect_cloud) {
     return null;
@@ -2314,9 +2311,9 @@ export function environmentProviderFilterValue(environment: DesktopEnvironmentEn
 }
 
 export function runtimeTargetEnvironmentLibraryFilterValue(
-  runtimeTargetID: DesktopCloudRuntimeLinkTargetID,
+  runtimeTargetID: DesktopRuntimeTargetID,
 ): string {
-  const normalizedTargetID = normalizeDesktopCloudRuntimeLinkTargetID(runtimeTargetID);
+  const normalizedTargetID = normalizeDesktopRuntimeTargetID(runtimeTargetID);
   return normalizedTargetID
     ? `${RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX}${normalizedTargetID}`
     : '';
@@ -2324,12 +2321,12 @@ export function runtimeTargetEnvironmentLibraryFilterValue(
 
 export function runtimeTargetEnvironmentLibraryFilterTargetID(
   providerFilter: string,
-): DesktopCloudRuntimeLinkTargetID | null {
+): DesktopRuntimeTargetID | null {
   const activeFilter = compact(providerFilter);
   if (!activeFilter.startsWith(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX)) {
     return null;
   }
-  return normalizeDesktopCloudRuntimeLinkTargetID(
+  return normalizeDesktopRuntimeTargetID(
     activeFilter.slice(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX.length),
   );
 }
@@ -2344,7 +2341,7 @@ export function environmentMatchesProviderFilter(
   }
   if (activeFilter.startsWith(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX)) {
     const runtimeTargetID = runtimeTargetEnvironmentLibraryFilterTargetID(activeFilter);
-    return runtimeTargetID !== null && environment.provider_runtime_link_target?.id === runtimeTargetID;
+    return runtimeTargetID !== null && environment.runtime_connection_target?.id === runtimeTargetID;
   }
   if (activeFilter === LOCAL_ENVIRONMENT_LIBRARY_FILTER) {
     return environment.kind === 'local_environment';
@@ -2455,7 +2452,7 @@ export function gatewaySourceFilterOptions(
 
 export type GatewayRowModel = Readonly<{
   id: string;
-  gateway_id: string;
+  connection_id: string;
   gateway_label: string;
   environment_label: string;
   source_label: string;
@@ -2497,7 +2494,7 @@ export function buildGatewayRowModel(environment: DesktopEnvironmentEntry): Gate
   const action = buildProviderBackedEnvironmentActionModel(environment).action_presentation.primary_action;
   return {
     id: environment.id,
-    gateway_id: compact(environment.gateway_id),
+    connection_id: compact(environment.connection_id),
     gateway_label: compact(environment.gateway_label) || 'Gateway',
     environment_label: environment.label,
     source_label: environmentSourceLabel(environment),
@@ -2512,7 +2509,7 @@ export function buildGatewayRowModel(environment: DesktopEnvironmentEntry): Gate
 }
 
 export type GatewaySourceRowModel = Readonly<{
-  gateway_id: string;
+  connection_id: string;
   label: string;
   transport_label: string;
   status_label: string;
@@ -2769,7 +2766,7 @@ export function buildGatewaySourceRowModel(
   const primaryAction = gatewaySourcePrimaryAction(gateway);
   const environmentCount = gateway.environments.length;
   return {
-    gateway_id: gateway.connection_id,
+    connection_id: gateway.connection_id,
     label: gateway.display_name || gateway.connection_id,
     transport_label: desktopGatewayConnectionKindLabel(gateway.connection_kind),
     status_label: gateway.local_enabled === false

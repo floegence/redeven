@@ -2,7 +2,7 @@ import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,11 +77,13 @@ await session.run(async () => {
     const action = (request) => page.evaluate((request) => window.redevenDesktopLauncher.performAction(request), request);
     await page.getByRole('button', { name: 'Gateways', exact: true }).click();
     await page.getByRole('button', { name: 'Add Gateway', exact: true }).first().click();
+    await page.getByRole('button', { name: /^Deploy a new Gateway/ }).click();
     await page.getByRole('button', { name: 'Local host', exact: true }).click();
     const dataRoot = path.join(state, 'gateway-data');
     await page.locator('#gateway-name').fill('Local qualification');
     await page.getByRole('button', { name: 'Save Gateway', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'detached' });
+    await page.getByRole('button', { name: 'All Gateways', exact: true }).click();
     let current = await snapshot();
     const source = current.gateway_sources.find((item) => item.display_name === 'Local qualification');
     assert.ok(source, 'Saved Local Gateway must appear in the production snapshot');
@@ -104,12 +106,12 @@ await session.run(async () => {
     };
     assert.equal((await action(registration)).ok, true);
     assert.equal(
-      (await snapshot()).gateway_sources.find((item) => item.gateway_id === id).runtime_root,
+      (await snapshot()).gateway_sources.find((item) => item.connection_id === id).runtime_root,
       dataRoot,
       'Editing the Gateway data root must be reflected in the authoritative snapshot',
     );
     report.cases.push('Editing the default data root updates the saved source');
-    const needsStart = await action({
+    const injectedPermissions = await action({
       ...registration,
       permissions: {
         access: true,
@@ -117,14 +119,12 @@ await session.run(async () => {
         manage_network: true,
       },
     });
-    assert.equal(needsStart.ok, false);
-    assert.equal(needsStart.code, 'gateway_start_required');
-    assert.equal(needsStart.gateway_id, id);
-    assert.deepEqual(needsStart.continuation_action, {
-      kind: 'start_gateway',
-      gateway_id: id,
-    });
-    report.cases.push('Authorization on a stopped service preserves the registration and offers explicit Start');
+    assert.equal(injectedPermissions.ok, false);
+    assert.equal(injectedPermissions.code, 'action_invalid');
+    const retained = (await snapshot()).gateway_sources.find((item) => item.connection_id === id);
+    assert.equal(retained.runtime_root, dataRoot);
+    assert.notEqual(retained.service_state?.status, 'ready');
+    report.cases.push('Caller-supplied permissions are rejected without changing the saved connection or starting its service');
     serviceRoot = path.join(dataRoot, 'gateways', id, 'state');
     execFileSync('go', ['build', '-o', fixtureBinary, './cmd/redeven-gateway'], {
       cwd: path.resolve(root, '..'),
@@ -137,35 +137,21 @@ await session.run(async () => {
       stdio: 'pipe',
     });
     const run = async (kind) => {
-      const result = await action({ kind, gateway_id: id });
+      const result = await action({ kind, connection_id: id });
       assert.equal(result.ok, true, `${kind}: ${JSON.stringify(result)}`);
       report.cases.push(kind);
     };
     await run('start_gateway');
     await run('pair_gateway');
     await run('refresh_gateway_catalog');
-    assert.equal((await action({ kind: 'invite_gateway_runtime', gateway_id: id })).ok, false, 'Basic pairing grants access only');
-    assert.equal(
-      (
-        await action({
-          ...registration,
-          permissions: {
-            access: true,
-            manage_attachments: true,
-            manage_network: true,
-          },
-        })
-      ).ok,
-      true,
-    );
-    const paired = (await snapshot()).gateway_sources.find((item) => item.gateway_id === id);
+    const paired = (await snapshot()).gateway_sources.find((item) => item.connection_id === id);
     assert.deepEqual(paired.permissions, {
       access: true,
       manage_attachments: true,
       manage_network: true,
     });
     assert.equal(
-      (await action({ kind: 'invite_gateway_runtime', gateway_id: id })).ok,
+      (await action({ kind: 'invite_gateway_runtime', connection_id: id })).ok,
       false,
       'Invitations require administrator-confirmed endpoints',
     );
@@ -187,7 +173,7 @@ await session.run(async () => {
       (
         await action({
           kind: 'update_gateway_endpoints',
-          gateway_id: id,
+          connection_id: id,
           endpoints,
         })
       ).ok,
@@ -195,7 +181,7 @@ await session.run(async () => {
     );
     const invited = await action({
       kind: 'invite_gateway_runtime',
-      gateway_id: id,
+      connection_id: id,
     });
     assert.equal(invited.ok, true);
     assert.equal(invited.gateway_invitation_code.protocol_version, 'redeven-gateway-v6');
@@ -212,17 +198,17 @@ await session.run(async () => {
       'Invitation does not manufacture a member',
     );
     const policy = { ...paired.policy, default_egress_allowed: true };
-    assert.equal((await action({ kind: 'update_gateway_policy', gateway_id: id, policy })).ok, true);
+    assert.equal((await action({ kind: 'update_gateway_policy', connection_id: id, policy })).ok, true);
     await run('restart_gateway');
-    const restored = (await snapshot()).gateway_sources.find((item) => item.gateway_id === id);
+    const restored = (await snapshot()).gateway_sources.find((item) => item.connection_id === id);
     assert.equal(restored.policy.default_egress_allowed, true);
     assert.equal(restored.permissions.manage_attachments, true);
-    report.cases.push('Access-only pairing denies invitations; explicit permissions and policy survive restart');
+    report.cases.push('Verified host access grants management; policy and host permissions survive restart');
     assert.equal(
       (
         await action({
           kind: 'update_gateway_endpoints',
-          gateway_id: id,
+          connection_id: id,
           endpoints: [],
         })
       ).ok,
@@ -230,7 +216,7 @@ await session.run(async () => {
     );
     await run('restart_gateway');
     assert.equal(
-      (await action({ kind: 'invite_gateway_runtime', gateway_id: id })).ok,
+      (await action({ kind: 'invite_gateway_runtime', connection_id: id })).ok,
       false,
       'Restart must not restore deleted endpoints',
     );
@@ -242,13 +228,16 @@ await session.run(async () => {
     await run('restart_gateway');
     await run('stop_gateway');
     await run('delete_gateway');
+    assert.ok((await stat(serviceRoot)).isDirectory(), 'Removing a Desktop connection preserves the service data');
     assert.equal(
-      (await snapshot()).gateway_sources.some((item) => item.gateway_id === id),
+      (await snapshot()).gateway_sources.some((item) => item.connection_id === id),
       false,
     );
     await page.getByRole('button', { name: 'Add Gateway', exact: true }).first().click();
+    await page.getByRole('button', { name: /^Connect an existing Gateway/ }).click();
     await page.getByRole('button', { name: 'URL', exact: true }).click();
     await page.locator('#gateway-url').fill('ftp://invalid.example/');
+    await page.locator('#gateway-access-code').fill('QUALIFICATION-ONLY-INVALID-CODE');
     await page.getByRole('button', { name: 'Save Gateway', exact: true }).click();
     await page
       .getByText('Gateway setup could not finish. Review the details, correct the connection, and retry.', { exact: true })

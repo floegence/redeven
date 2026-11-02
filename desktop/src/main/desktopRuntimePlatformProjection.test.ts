@@ -1,10 +1,11 @@
+import { desktopRuntimeConnectionTargetID } from '../shared/desktopRuntimePlacement';
 import { expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from './desktopWelcomeState';
 import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
 import { testDesktopPreferences } from '../testSupport/desktopTestHelpers';
 import { resolveDesktopPlatformCapabilities } from '../shared/desktopPlatformCapabilities';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import { desktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 import { normalizeDesktopCloudEnvironmentRuntimeHealth } from '../shared/cloud';
 import type { DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 import { buildExternalLocalUIDesktopTarget } from './desktopTarget';
@@ -36,7 +37,7 @@ it.each(['ssh', 'local_container', 'ssh_container'] as const)('uses reported OS 
   const target = { ...original, id, host_access, placement };
   const source = Object.values(inputs.managedRuntimePresenceByTargetID).find(presence => presence.environment_id === original.id)!;
   const presence = { ...source, environment_id: id, placement_target_id: id, host_access, placement };
-  const targetID = desktopCloudRuntimeLinkTargetID(kind === 'local_container' ? 'local_environment' : 'ssh_environment', id);
+  const targetID = desktopRuntimeConnectionTargetID(kind === 'local_container' ? 'local_environment' : 'ssh_environment', id);
   for (const runtime_platform of ['macos', 'linux', 'windows', undefined] as const) {
     const snapshot = buildDesktopWelcomeSnapshot({ ...inputs,
       preferences: { ...inputs.preferences, saved_runtime_targets: [target] },

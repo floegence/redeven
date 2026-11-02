@@ -2616,7 +2616,7 @@
     "directory": "已加入的运行时",
     "directoryPending": "刷新 Gateway 以加载已加入的运行时。",
     "directoryIntro": "Gateway 是已加入运行时共享使用的访问入口。",
-    "directoryAccessHint": "Redeven Cloud 和其他获准客户端都可以使用此 Gateway；运行时服务仍由各自主机独立管理。",
+    "directoryAccessHint": "已配对的设备可通过此 Gateway 访问已接入的运行时。用户和会话由各运行时独立验证。",
     "environmentListStale": "刷新失败，正在显示上次保存的成员列表。",
     "viaNamedGateway": "通过 {gateway}",
     "registeredConnection": "已保存的直连",
@@ -3817,13 +3817,11 @@
     "automaticHelp": "只允许列出的目标；目标列表为空时禁止转发。",
     "affected": "受影响的连接",
     "none": "无",
-    "cloudImpact": "出口变更只影响经过此代理的流量，独立 Gateway 访问保持可用。",
     "confirmSave": "确认并保存",
     "hookConfigured": "已在 Gateway 主机配置",
     "hookAbsent": "未配置",
     "members": "运行时 连接",
     "empty": "尚无运行时加入此 Gateway。",
-    "cloudPermission": "出口访问",
     "inherit": "继承默认",
     "allow": "允许",
     "deny": "禁止",
@@ -3837,10 +3835,12 @@
     "memberCapacity": "此 Gateway 的 运行时 连接数量已达上限。",
     "hookMemberAdmission": "运行时 连接准入",
     "hookSessionAccess": "会话访问",
-    "hookCloudPublication": "网络出口",
     "destinations": "允许的目标（主机:端口，每行一个）",
     "operationUnknown": "操作结果暂未确认。请刷新检查 Gateway 状态。重试只查询原操作结果，不会重复执行变更。操作编号：{id}",
-    "operationReviewed": "我已核对当前状态，允许开始新操作"
+    "operationReviewed": "我已核对当前状态，允许开始新操作",
+    "egressPermission": "出口访问",
+    "hookEgress": "网络出口",
+    "egressImpact": "出口变更只影响经过此代理的流量，独立 Gateway 访问保持可用。"
   },
   "gatewayClients": {
     "connectionSettings": "连接设置",
@@ -3903,13 +3903,9 @@
     "unpairImpact": "将停止通过此 Gateway 访问，其他连接不受影响。",
     "cloudImpact": "通过此 Gateway 的 Redeven Cloud 访问也将中断。",
     "cloudChanged": "Cloud 访问已变更，请重新打开以确认影响。",
-    "publishTitle": "通过 Gateway 发布到 Cloud",
-    "publish": "确认发布",
-    "publishHelp": "通过此 Gateway 将运行时发布到 Redeven Cloud，需要 Cloud 审批。",
     "empty": "尚未配对 Gateway。",
     "unavailable": "授权 Desktop 访问此网关后，即可打开环境窗口。",
-    "tab": "Gateway",
-    "useRouteChange": "此运行时已关联 Cloud。请使用“更改通路”切换连接，环境身份和归属会保留。"
+    "tab": "Gateway"
   },
   "tessivenRuntime": {
     "confirmTitle": "确认{action}",

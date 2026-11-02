@@ -68,7 +68,7 @@ describe('buildGatewayActionPresentation', () => {
     const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action(intent),
       affected_sessions: [{ session_key: 'gateway-session', label: 'Private environment' }] });
     expect(panel.execution_mode).toBe('confirm');
-    expect(panel.continuation_action).toEqual({ kind: intent, gateway_id: source.connection_id, impact_acknowledged: true });
+    expect(panel.continuation_action).toEqual({ kind: intent, connection_id: source.connection_id, impact_acknowledged: true });
     expect(panel.affected_sessions).toHaveLength(1);
   });
 
@@ -278,7 +278,7 @@ describe('buildGatewayActionPresentation', () => {
         operation_key: 'gateway:gw-demo:refresh',
         subject_kind: 'gateway',
         subject_id: 'gw-demo',
-        gateway_id: 'gw-demo',
+        connection_id: 'gw-demo',
         started_at_unix_ms: 100,
         status: 'failed',
         phase: 'failed',
@@ -303,7 +303,7 @@ describe('buildGatewayActionPresentation', () => {
       kind: 'disabled_gateway',
       title: 'Gateway disabled on this Desktop',
       primary_action: { intent: 'enable_gateway', label: 'Enable Gateway' },
-      continuation_action: { kind: 'set_gateway_enabled', gateway_id: 'gw-demo', enabled: true },
+      continuation_action: { kind: 'set_gateway_enabled', connection_id: 'gw-demo', enabled: true },
     });
     expect(JSON.stringify(model)).not.toContain('manage_gateway');
     expect(JSON.stringify(model)).not.toContain('delete_gateway');
@@ -319,7 +319,7 @@ describe('buildGatewayActionPresentation', () => {
 
     expect(runGatewayLauncherAction).toHaveBeenCalledWith({
       kind: 'refresh_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     expect(runGatewayLauncherAction).toHaveBeenCalledTimes(1);
     expect(openCreateGatewaySetup).not.toHaveBeenCalled();

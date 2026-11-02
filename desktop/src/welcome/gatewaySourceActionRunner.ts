@@ -19,13 +19,13 @@ export function runGatewaySourceAction(
     case 'enable_gateway':
       return runGatewayLauncherAction({
         kind: 'set_gateway_enabled',
-        gateway_id: gateway.connection_id,
+        connection_id: gateway.connection_id,
         enabled: true,
       });
     case 'disable_gateway':
       return runGatewayLauncherAction({
         kind: 'set_gateway_enabled',
-        gateway_id: gateway.connection_id,
+        connection_id: gateway.connection_id,
         enabled: false,
       });
     case 'setup_gateway':
@@ -35,17 +35,17 @@ export function runGatewaySourceAction(
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-      return runGatewayLauncherAction({ kind: action.intent, gateway_id: gateway.connection_id });
+      return runGatewayLauncherAction({ kind: action.intent, connection_id: gateway.connection_id });
     case 'refresh_gateway':
       return runGatewayLauncherAction({
         kind: 'refresh_gateway',
-        gateway_id: gateway.connection_id,
+        connection_id: gateway.connection_id,
       });
     case 'pair_gateway':
       if (gateway.connection_kind === 'url') { openCreateGatewaySetup(gateway); return; }
       return runGatewayLauncherAction({
         kind: 'pair_gateway',
-        gateway_id: gateway.connection_id,
+        connection_id: gateway.connection_id,
       });
   }
 }

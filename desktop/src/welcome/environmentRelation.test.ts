@@ -37,7 +37,7 @@ describe('environment relationship contract', () => {
     for (const filter of [PROVIDER_ENVIRONMENT_LIBRARY_FILTER, environmentProviderFilterValue(cloud)]) {
       expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', filter)[0].provider_entry?.id).toBe(cloud.id);
     }
-    expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', runtimeTargetEnvironmentLibraryFilterValue(runtime.provider_runtime_link_target!.id))[0].primary_entry.id).toBe(runtime.id);
+    expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', runtimeTargetEnvironmentLibraryFilterValue(runtime.runtime_connection_target!.id))[0].primary_entry.id).toBe(runtime.id);
     for (const query of [runtime.label, cloud.label, cloud.env_public_id!, cloud.remote_environment_url!]) {
       expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), query)).toBe(1);
     }
@@ -65,7 +65,7 @@ describe('environment relationship contract', () => {
   });
   it.each(['connecting', 'disconnecting', 'error'] as const)('preserves the pair and original owner state during %s', state => {
     const { runtime, cloud } = linkedEnvironmentFixture();
-    const changedRuntime = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, provider_connection_state: state } };
+    const changedRuntime = { ...runtime, runtime_connection_target: { ...runtime.runtime_connection_target!, provider_connection_state: state } };
     const offlineCloud = { ...cloud, remote_route_state: 'offline' as const };
     const group = buildEnvironmentLibraryDisplayGroups([changedRuntime, offlineCloud])[0];
     expect(group.primary_entry).toBe(changedRuntime);
@@ -77,12 +77,12 @@ describe('environment relationship contract', () => {
     expect(buildEnvironmentLibraryDisplayGroups([runtime])[0].provider_entry).toBeUndefined();
     expect(buildEnvironmentLibraryDisplayGroups([cloud])[0].primary_entry).toBe(cloud);
     expect(buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([runtime, { ...cloud, cloud_linked_runtime_summary: undefined }], testDesktopPreferences()))).toHaveLength(2);
-    const unbound = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' as const } };
+    const unbound = { ...runtime, runtime_connection_target: { ...runtime.runtime_connection_target!, cloud_link_state: 'unbound' as const } };
     expect(buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([unbound, { ...cloud, cloud_linked_runtime_summary: undefined }], testDesktopPreferences()))).toHaveLength(2);
   });
   it('does not retain a stale pair after unlinking', () => {
     const { runtime, cloud } = linkedEnvironmentFixture();
-    const unlinked = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' as const } };
+    const unlinked = { ...runtime, runtime_connection_target: { ...runtime.runtime_connection_target!, cloud_link_state: 'unbound' as const } };
     expect(buildEnvironmentLibraryDisplayGroups(decorateEnvironmentAccess([unlinked, cloud], testDesktopPreferences()))).toHaveLength(2);
   });
 });
@@ -127,7 +127,7 @@ describe('verified Gateway access beside Cloud ownership', () => {
   it('retains both established Cloud owners and places Gateway only in access membership', () => {
     const { runtime, cloud } = linkedEnvironmentFixture();
     const gateway = { ...runtime, id: 'gateway-route', kind: 'gateway_environment' as const,
-      provider_runtime_link_target: undefined, verified_runtime_identity: 'runtime:verified', access_group_id: runtime.id, gateway_label: 'Office' };
+      runtime_connection_target: undefined, verified_runtime_identity: 'runtime:verified', access_group_id: runtime.id, gateway_label: 'Office' };
     const direct = { ...runtime, verified_runtime_identity: 'runtime:verified', access_group_id: runtime.id };
     for (const entries of [[gateway, cloud, direct], [direct, gateway, cloud]]) {
       const groups = buildEnvironmentLibraryDisplayGroups(entries);

@@ -9,7 +9,7 @@ import { memberFixture } from '../testSupport/gatewayMembershipFixture';
 const identity = `runtime:${'a'.repeat(64)}`;
 const direct = { id: 'direct', kind: 'external_local_ui', label: 'Same', local_ui_url: 'https://runtime.example', created_at_ms: 1 } as DesktopEnvironmentEntry;
 const other = { ...direct, id: 'other', created_at_ms: 2 };
-const gateway = { id: 'gateway:gw:env:member', kind: 'gateway_environment', label: 'Same', gateway_id: 'gw', gateway_env_id: 'member',
+const gateway = { id: 'gateway:gw:env:member', kind: 'gateway_environment', label: 'Same', connection_id: 'gw', gateway_env_id: 'member',
   gateway_identity_fingerprint: 'fingerprint', gateway_member: memberFixture, created_at_ms: 2 } as DesktopEnvironmentEntry;
 
 describe('environment access ownership', () => {
@@ -76,7 +76,7 @@ describe('access preference persistence', () => {
 });
 
 it('groups only membership proven by the trusted Runtime and the paired Gateway key',()=>{
- const runtime={...direct,kind:'ssh_environment',runtime_service:{gateway_memberships:[{gateway_id:'remote-server-id',gateway_name:'Office',identity_fingerprint:'fingerprint',attachment_id:'member',runtime_public_id:memberFixture.runtime_public_id,phase:'joined',cloud_publication:false,endpoints:[]}]}} as unknown as DesktopEnvironmentEntry;
+ const runtime={...direct,kind:'ssh_environment',runtime_service:{gateway_memberships:[{connection_id:'remote-server-id',gateway_name:'Office',identity_fingerprint:'fingerprint',attachment_id:'member',runtime_public_id:memberFixture.runtime_public_id,phase:'joined',cloud_publication:false,endpoints:[]}]}} as unknown as DesktopEnvironmentEntry;
  const preferences=rememberEnvironmentIdentity(defaultDesktopPreferences(),runtime,identity);
  expect(decorateEnvironmentAccess([runtime,gateway],preferences)[1]?.access_group_id).toBe(runtime.id);
  expect(decorateEnvironmentAccess([runtime,gateway],defaultDesktopPreferences())[1]?.access_group_id).toBe(runtime.id);

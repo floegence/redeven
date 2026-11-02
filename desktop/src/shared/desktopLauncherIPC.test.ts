@@ -306,14 +306,14 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       display_name: ' Lab Gateway ',
       gateway_url: ' https://gateway.example/path?token=leak ',
       allow_loopback_http: true,
       user_confirmed: true,
     })).toEqual({
       kind: 'upsert_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       display_name: 'Lab Gateway',
       connection_kind: 'url',
       gateway_url: 'https://gateway.example/path?token=leak',
@@ -322,7 +322,7 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_gateway',
-      gateway_id: ' gw-ssh ',
+      connection_id: ' gw-ssh ',
       display_name: ' SSH Gateway ',
       connection_kind: 'ssh_host',
       ssh_destination: ' dev@bastion ',
@@ -340,7 +340,7 @@ describe('desktopLauncherIPC', () => {
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_gateway',
-      gateway_id: ' gw-container ',
+      connection_id: ' gw-container ',
       display_name: ' Container Gateway ',
       connection_kind: 'ssh_container',
       ssh_destination: ' bastion ',
@@ -357,17 +357,17 @@ describe('desktopLauncherIPC', () => {
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'pair_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       user_confirmed: true,
       proof: 'renderer-proof-must-not-cross',
     })).toEqual({
       kind: 'pair_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_gateway_environment',
       environment_id: ' gateway:gw-demo:env:env-demo ',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       gateway_env_id: ' env-demo ',
       label: ' Demo Gateway Env ',
       connect_artifact: {
@@ -381,16 +381,16 @@ describe('desktopLauncherIPC', () => {
     })).toEqual({
       kind: 'open_gateway_environment',
       environment_id: 'gateway:gw-demo:env:env-demo',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       gateway_env_id: 'env-demo',
       label: 'Demo Gateway Env',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
     })).toEqual({
       kind: 'delete_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_control_plane_connect',
@@ -608,32 +608,32 @@ describe('desktopLauncherIPC', () => {
       environment_id: '   ',
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'upsert_gateway', gateway_url: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'pair_gateway', gateway_id: '   ', user_confirmed: true })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'pair_gateway', connection_id: '   ', user_confirmed: true })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_gateway_environment',
       environment_id: 'gateway:gw-demo:env:env-demo',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       gateway_env_id: '',
       label: 'Demo',
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_gateway_environment',
       environment_id: 'gateway:gw-demo:env:env-demo',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       gateway_env_id: 'env-demo',
       label: 'Demo',
       start_policy: 'require_ready',
     })).toEqual({
       kind: 'open_gateway_environment',
       environment_id: 'gateway:gw-demo:env:env-demo',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       gateway_env_id: 'env-demo',
       label: 'Demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_gateway_environment',
       environment_id: 'gateway:gw-demo:env:env-demo',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       gateway_env_id: 'env-demo',
       label: 'Demo',
       start_policy: 'start_if_needed',
@@ -642,97 +642,97 @@ describe('desktopLauncherIPC', () => {
     })).toEqual({
       kind: 'open_gateway_environment',
       environment_id: 'gateway:gw-demo:env:env-demo',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       gateway_env_id: 'env-demo',
       label: 'Demo',
       start_policy: 'start_if_needed',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'pair_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       start_policy: 'prompt_if_needed',
       user_confirmed: true,
     })).toEqual({
       kind: 'pair_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'pair_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       start_policy: 'start_if_needed',
       user_confirmed: true,
     })).toEqual({
       kind: 'pair_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       start_policy: 'start_if_needed',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'sync_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       start_policy: 'require_ready',
     })).toEqual({
       kind: 'sync_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'sync_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       start_policy: 'start_if_needed',
     })).toEqual({
       kind: 'sync_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       start_policy: 'start_if_needed',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'check_gateway',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       start_policy: 'start_if_needed',
-      retry_action: { kind: 'sync_gateway', gateway_id: 'unsafe' },
+      retry_action: { kind: 'sync_gateway', connection_id: 'unsafe' },
     })).toEqual({
       kind: 'check_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_gateway_enabled',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       enabled: false,
     })).toEqual({
       kind: 'set_gateway_enabled',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       enabled: false,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_gateway_enabled',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
     })).toEqual({
       kind: 'set_gateway_enabled',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       enabled: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'refresh_gateway_catalog',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       start_policy: 'prompt_if_needed',
     })).toEqual({
       kind: 'refresh_gateway_catalog',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'refresh_gateway_catalog',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
       start_policy: 'start_if_needed',
       connect_artifact: { leak: true },
     })).toEqual({
       kind: 'refresh_gateway_catalog',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
       start_policy: 'start_if_needed',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'refresh_gateway_status',
-      gateway_id: ' gw-demo ',
+      connection_id: ' gw-demo ',
     })).toEqual({
       kind: 'refresh_gateway_status',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     for (const kind of [
       'start_gateway',
@@ -742,9 +742,9 @@ describe('desktopLauncherIPC', () => {
     ] as const) {
       expect(normalizeDesktopLauncherActionRequest({
         kind,
-        gateway_id: ' gw-demo ',
+        connection_id: ' gw-demo ',
         start_policy: 'start_if_needed',
-      })).toEqual({ kind, gateway_id: 'gw-demo', ...(kind === 'start_gateway' ? {} : { impact_acknowledged: false }) });
+      })).toEqual({ kind, connection_id: 'gw-demo', ...(kind === 'start_gateway' ? {} : { impact_acknowledged: false }) });
     }
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'preview_reinstall_target',
@@ -769,13 +769,13 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'local',
       preflight_id: 'reinstall_123e4567-e89b-12d3-a456-426614174000',
     })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', gateway_id: 'gw-demo' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'check_gateway', gateway_id: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: 'gw-demo' })).toEqual({ kind: 'start_gateway', gateway_id: 'gw-demo' });
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'restart_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'restart_gateway', gateway_id: 'gw-demo', impact_acknowledged: true });
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true });
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', gateway_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', connection_id: 'gw-demo' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'check_gateway', connection_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', connection_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', connection_id: 'gw-demo' })).toEqual({ kind: 'start_gateway', connection_id: 'gw-demo' });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'restart_gateway', connection_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'restart_gateway', connection_id: 'gw-demo', impact_acknowledged: true });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'update_gateway', connection_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'update_gateway', connection_id: 'gw-demo', impact_acknowledged: true });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', connection_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_environment_registration',
       registration_ref: { kind: 'saved_environment', id: '   ' },
@@ -941,9 +941,25 @@ describe('desktopLauncherIPC', () => {
 });
 
 it('requires a current member identity for explicit policy reevaluation', () => {
-  const request = { kind: 'reevaluate_gateway_member', gateway_id: 'gateway', attachment_id: 'member', attachment_version: 2 };
+  const request = { kind: 'reevaluate_gateway_member', connection_id: 'gateway', attachment_id: 'member', attachment_version: 2 };
   expect(normalizeDesktopLauncherActionRequest(request)).toEqual(request);
   for (const attachment_version of [0, -1, 1.5, undefined]) {
     expect(normalizeDesktopLauncherActionRequest({ ...request, attachment_version })).toBeNull();
   }
+});
+
+
+describe('Gateway identity boundaries', () => {
+  it('requires a local connection ID for saved connection actions', () => {
+    for (const kind of ['refresh_gateway', 'start_gateway', 'invite_gateway_runtime', 'list_gateway_clients'] as const) {
+      expect(normalizeDesktopLauncherActionRequest({ kind, gateway_id: 'signed-service-id' })).toBeNull();
+      expect(normalizeDesktopLauncherActionRequest({ kind, connection_id: 'saved-connection-id', gateway_id: 'signed-service-id' })).toBeNull();
+      expect(normalizeDesktopLauncherActionRequest({ kind, connection_id: 'saved-connection-id' })).toMatchObject({ kind, connection_id: 'saved-connection-id' });
+    }
+  });
+  it('uses the stable service ID only when addressing a Runtime attachment', () => {
+    const request = { kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:runtime', operation: 'leave' };
+    expect(normalizeDesktopLauncherActionRequest({ ...request, connection_id: 'saved-connection-id' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ ...request, gateway_id: 'signed-service-id' })).toEqual({ ...request, gateway_id: 'signed-service-id' });
+  });
 });

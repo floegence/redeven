@@ -373,3 +373,13 @@ describe('launcherActionFeedback', () => {
     });
   });
 });
+
+
+it('localizes Gateway attachment failures without Cloud messaging and preserves delivery', () => {
+  const i18n = createDesktopI18n('zh-CN');
+  for (const scope of ['environment', 'dialog'] as const) {
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false, code: 'gateway_attachment_failed', scope, message: 'raw transport error', should_refresh_snapshot: true,
+    })).toEqual({ message: i18n.t('gatewayJoin.failed'), tone: 'error', refresh_snapshot: true, delivery: scope === 'dialog' ? 'inline' : 'toast' });
+  }
+});

@@ -627,9 +627,10 @@ try {
   recoveryCodes = (await portal.getByTestId('recovery-codes').textContent()).trim().split(/\s+/);
   await portal.getByLabel('I saved these recovery codes', { exact: true }).check();
   await portal.getByRole('button', { name: 'Continue', exact: true }).click();
+  await portal.getByRole('button', { name: 'Sign in', exact: true }).waitFor();
   if ((await centerCall(portal, 'directory')).status === 200) throw new Error('Setup silently created an authorized session');
   const setupDeliveries = await portal.evaluate(() => Object.values(window.setupDeliveries));
-  if (setupDeliveries.some(count => count !== 2) || setupDeliveries.length !== 3) throw new Error('Setup lost-response retry did not retain each operation');
+  if (setupDeliveries.some(count => count !== 2) || setupDeliveries.length !== 3) throw new Error('Setup lost-response retry did not retain each operation: ' + JSON.stringify(setupDeliveries));
   await authenticate(portal);
   report.cases.push('Three-stage owner-authorized setup and password plus recovery-code login through actual UI');
   report.cases.push('Lost start, verify and commit responses recover one setup; visibility refresh preserves the pending wizard');

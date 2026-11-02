@@ -30,7 +30,7 @@ export function environmentSourceForEntry(
     return entry.environment_source;
   }
   if (entry.kind === 'gateway_environment') {
-    const gatewaySourceID = desktopGatewaySourceID(entry.gateway_id ?? '');
+    const gatewaySourceID = desktopGatewaySourceID(entry.connection_id ?? '');
     const gatewaySource = sources.find((source) => source.source_id === gatewaySourceID);
     return gatewaySource ?? {
       kind: 'gateway',
@@ -106,7 +106,7 @@ export function buildGatewayEnvironmentEntries(
   const openSessionEntries = attachEnvironmentSources(
     (input.openSessions ?? []).filter((entry) => (
       entry.open_session_key
-      && !(entry.kind === 'gateway_environment' && entry.gateway_id && disabledGatewayIDs.has(entry.gateway_id))
+      && !(entry.kind === 'gateway_environment' && entry.connection_id && disabledGatewayIDs.has(entry.connection_id))
     )),
     sources,
   );
@@ -154,13 +154,13 @@ function buildGatewayEnvironmentEntry(
     kind: 'gateway_environment',
     registration_ref: {
       kind: 'gateway_environment',
-      gateway_id: gateway.connection_id,
+      connection_id: gateway.connection_id,
       gateway_env_id: environment.attachment_id,
     },
     label: displayName,
     local_ui_url: '',
     secondary_text: environment.metadata.hostname || gatewayLabel,
-    gateway_id: gateway.connection_id,
+    connection_id: gateway.connection_id,
     gateway_identity_fingerprint: gateway.identity_fingerprint,
     gateway_label: gatewayLabel,
     gateway_env_id: environment.attachment_id,

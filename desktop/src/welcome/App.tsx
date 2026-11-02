@@ -201,10 +201,7 @@ import {
   buildDesktopCloudRuntimeLinkPlan,
   type DesktopCloudRuntimeLinkPlanState,
 } from '../shared/providerRuntimeLinkPlanner';
-import type {
-  DesktopCloudEnvironmentCandidate,
-  DesktopCloudRuntimeLinkTarget,
-} from '../shared/providerRuntimeLinkTarget';
+import type { DesktopCloudEnvironmentCandidate, DesktopRuntimeConnectionTarget } from "../shared/runtimeConnectionTarget";
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import type {
   DesktopRuntimeContainerListRequest,
@@ -458,9 +455,9 @@ type GatewaySetupDialogState = Readonly<{
   opening_id: number;
   interaction_identity?: string;
   authority_revoked?: boolean;
-  created_gateway_id?: string;
+  created_connection_id?: string;
   mode: 'create' | 'edit';
-  gateway_id: string;
+  connection_id: string;
   display_name: string;
   display_name_touched: boolean;
   connection_kind: DesktopGatewayConnectionKind;
@@ -531,7 +528,7 @@ type CloudRuntimeLinkConfirmationState = Readonly<{
 
 
 type GatewayActionRecovery = Readonly<{
-  gateway_id: string;
+  connection_id: string;
   message: string;
   start_action?: Extract<DesktopLauncherActionRequest, { kind: 'start_gateway' }>;
 }>;
@@ -632,7 +629,7 @@ function launcherProgressIdentityKey(progress: DesktopLauncherActionProgress): s
   if (operationKey !== '') {
     return `operation:${operationKey}`;
   }
-  const gatewayID = trimString(progress.gateway_id || (progress.subject_kind === 'gateway' ? progress.subject_id : ''));
+  const gatewayID = trimString(progress.connection_id || (progress.subject_kind === 'gateway' ? progress.subject_id : ''));
   if (gatewayID !== '') {
     return `gateway:${gatewayID}:${progress.action}`;
   }
@@ -1672,7 +1669,7 @@ function retainedGatewayFailureProgress(
   request: DesktopLauncherActionRequest | undefined,
   presentation: ReturnType<typeof launcherActionFailurePresentation>,
 ): DesktopLauncherActionProgress {
-  const gatewayID = trimString(failure.gateway_id);
+  const gatewayID = trimString(failure.connection_id);
   const now = Date.now();
   const operationKey = `ui:gateway:${gatewayID}:${now}`;
   const action = gatewayActionKindForRequest(request);
@@ -1691,7 +1688,7 @@ function retainedGatewayFailureProgress(
   ];
   return {
     action,
-    gateway_id: gatewayID,
+    connection_id: gatewayID,
     operation_key: operationKey,
     subject_kind: 'gateway',
     subject_id: gatewayID,
@@ -1953,7 +1950,7 @@ function createGatewaySetupDialogState(
     interaction_identity: overrides.interaction_identity,
     mode: overrides.mode ?? 'create',
     focus_section: overrides.focus_section,
-    gateway_id: trimString(overrides.gateway_id),
+    connection_id: trimString(overrides.connection_id),
     display_name: displayName,
     display_name_touched: overrides.display_name_touched === true
       || ((overrides.mode ?? 'create') === 'edit' && displayName !== ''),
@@ -2676,7 +2673,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function openManagedGatewayService(action: GatewaySourceActionModel) {
     if (action.intent === 'view_gateway_environments' || action.intent === 'manage_gateway_members') { updateGatewaySetupDialogField('settings_tab', 'runtimes'); return; }
     if (action.intent === 'setup_gateway' || action.intent === 'pair_gateway' && gatewaySetupDialogState()?.connection_kind === 'url') { updateGatewaySetupDialogField('editing_connection', true); return; }
-    const id = gatewaySetupDialogState()?.gateway_id;
+    const id = gatewaySetupDialogState()?.connection_id;
     const surface = id && gatewayServiceSurfaces()[id];
     if (!surface || !action.enabled) return;
     batch(() => {
@@ -2806,7 +2803,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const gatewayState = gatewaySetupDialogState();
     if (gatewayState?.connection_kind === 'ssh_host' || gatewayState?.connection_kind === 'ssh_container') {
-      return `gateway:${gatewayState.mode}:${gatewayState.connection_kind}:${gatewayState.gateway_id}`;
+      return `gateway:${gatewayState.mode}:${gatewayState.connection_kind}:${gatewayState.connection_id}`;
     }
     return '';
   });
@@ -2888,12 +2885,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       next.add(SSH_ENVIRONMENT_LIBRARY_FILTER);
     }
     for (const environment of snapshot().environments) {
-      const runtimeTargetID = environment.provider_runtime_link_target?.id;
+      const runtimeTargetID = environment.runtime_connection_target?.id;
       if (runtimeTargetID) {
         next.add(runtimeTargetEnvironmentLibraryFilterValue(runtimeTargetID));
       }
       if (environment.kind === 'gateway_environment') {
-        const gatewayFilterValue = gatewaySourceFilterValue(environment.gateway_id ?? '');
+        const gatewayFilterValue = gatewaySourceFilterValue(environment.connection_id ?? '');
         if (gatewayFilterValue !== '') {
           next.add(gatewayFilterValue);
         }
@@ -2970,7 +2967,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ));
   const providerRuntimeLinkDialogOpen = createMemo(() => providerRuntimeLinkConfirmation() !== null);
   const currentLinkEnvironment = () => snapshot().environments.find(entry => entry.id === providerRuntimeLinkConfirmation()?.environment.id);
-  const linkIdentity = (entry: DesktopEnvironmentEntry | undefined) => JSON.stringify([entry?.provider_runtime_link_target?.id, entry?.provider_runtime_link_target?.cloud_link_binding, entry?.managed_runtime_host_access, entry?.managed_runtime_placement]);
+  const linkIdentity = (entry: DesktopEnvironmentEntry | undefined) => JSON.stringify([entry?.runtime_connection_target?.id, entry?.runtime_connection_target?.cloud_link_binding, entry?.managed_runtime_host_access, entry?.managed_runtime_placement]);
   const linkConfirmationCurrent = () => !!currentLinkEnvironment() && linkIdentity(currentLinkEnvironment()) === linkIdentity(providerRuntimeLinkConfirmation()?.environment);
   const providerRuntimeLinkSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => environmentRuntimeServiceSnapshot(currentLinkEnvironment() ?? null));
   const providerRuntimeLinkActiveWorkLabel = createMemo(() => (
@@ -2985,7 +2982,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       : busyStateMatchesAction(busyState(), 'connect_cloud_runtime')
   ));
   const providerRuntimeLinkCandidatePlans = createMemo(() => {
-    const target = currentLinkEnvironment()?.provider_runtime_link_target;
+    const target = currentLinkEnvironment()?.runtime_connection_target;
     if (!target) {
       return [] as readonly Readonly<{
         candidate: DesktopCloudEnvironmentCandidate;
@@ -3204,7 +3201,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }
         const gatewayByID = new Map(next.gateway_sources.map((gateway) => [gateway.connection_id, gateway]));
         const retained = failures.filter((failure) => {
-          const gatewayID = trimString(failure.gateway_id || (failure.subject_kind === 'gateway' ? failure.subject_id : ''));
+          const gatewayID = trimString(failure.connection_id || (failure.subject_kind === 'gateway' ? failure.subject_id : ''));
           const gateway = gatewayByID.get(gatewayID);
           return !gateway || desktopGatewayNeedsResolution(gateway.status) || gateway.sync_state === 'catalog_failed' || gateway.sync_state === 'pairing_failed';
         });
@@ -3623,8 +3620,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
       const gatewayID = trimString(
-        failure.gateway_id
-        || (activeProgress?.subject_kind === 'gateway' ? activeProgress.gateway_id || activeProgress.subject_id : ''),
+        failure.connection_id
+        || (activeProgress?.subject_kind === 'gateway' ? activeProgress.connection_id || activeProgress.subject_id : ''),
       );
       if (failure.scope === 'gateway' && gatewayID !== '') {
         setActiveCenterTab('gateways');
@@ -3661,13 +3658,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       return;
     }
-    if (failure.scope === 'gateway' && trimString(failure.gateway_id) !== '') {
+    if (failure.scope === 'gateway' && trimString(failure.connection_id) !== '') {
       if (activeOperationKey !== '') {
         return;
       }
       const retained = retainedGatewayFailureProgress(i18n(), failure, request, presentation);
       setRetainedGatewayFailures((current) => [
-        ...current.filter((progress) => trimString(progress.gateway_id) !== trimString(failure.gateway_id)),
+        ...current.filter((progress) => trimString(progress.connection_id) !== trimString(failure.connection_id)),
         retained,
       ]);
       return;
@@ -3850,7 +3847,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     gatewaySetupReturnID = gateway?.connection_id ?? '';
     requestAnimationFrame(() => { const surface = document.querySelector('.redeven-welcome-surface'); if (surface) surface.scrollTop = 0; });
     const current = gatewaySetupDialogState();
-    if (gateway && current?.mode === 'edit' && current.gateway_id === gateway.connection_id) {
+    if (gateway && current?.mode === 'edit' && current.connection_id === gateway.connection_id) {
       setGatewayWorkspaceVisible(true); setActiveCenterTab('gateways');
       if (focusSection === 'settings' || focusSection === 'url_endpoint' || focusSection === 'identity_trust') updateGatewaySetupDialogField('editing_connection', true);
       else if (focusSection) {
@@ -3876,7 +3873,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setGatewaySetupDialogState(createGatewaySetupDialogState(gateway
       ? {
           mode: 'edit',
-          gateway_id: gateway.connection_id,
+          connection_id: gateway.connection_id,
           interaction_identity: gatewayInteractionIdentity(gateway),
           display_name: gateway.display_name,
           connection_kind: gateway.connection_kind,
@@ -4616,14 +4613,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }> = {},
   ): Promise<boolean> {
     if (environment.kind === 'gateway_environment') {
-      const gatewayID = trimString(environment.gateway_id);
+      const gatewayID = trimString(environment.connection_id);
       if (gatewayID === '') {
         setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveGatewayError'));
         return false;
       }
       const result = await performLauncherAction({
         kind: 'refresh_gateway',
-        gateway_id: gatewayID,
+        connection_id: gatewayID,
       }, errorTarget);
       const refreshed = result?.outcome === 'refreshed_gateway';
       if (refreshed && options.announceSuccess !== false) {
@@ -4655,13 +4652,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
   ): Promise<boolean> {
     if (environment.kind === 'gateway_environment') {
-      const gatewayID = trimString(environment.gateway_id);
+      const gatewayID = trimString(environment.connection_id);
       if (gatewayID === '') {
         return false;
       }
       const result = await performLauncherActionSilently({
         kind: 'refresh_gateway',
-        gateway_id: gatewayID,
+        connection_id: gatewayID,
       });
       return result.ok && result.outcome === 'refreshed_gateway';
     }
@@ -4683,7 +4680,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
       return;
     }
-    const target = environment.provider_runtime_link_target;
+    const target = environment.runtime_connection_target;
     if (!target) {
       setErrorMessage('connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return;
@@ -4707,7 +4704,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function providerEnvironmentIDForRuntimeTarget(environment: DesktopEnvironmentEntry): string {
-    const target = environment.provider_runtime_link_target;
+    const target = environment.runtime_connection_target;
     if (!target?.cloud_origin || !target.cloud_id || !target.env_public_id) {
       return '';
     }
@@ -4730,7 +4727,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setErrorMessage('connect', i18n().t('environmentCenter.chooseCloudEnvironmentFirst'));
         return;
       }
-      const target = latestEnvironment.provider_runtime_link_target;
+      const target = latestEnvironment.runtime_connection_target;
       const providerEnvironment = latestEnvironment.provider_environment_candidates?.find((candidate) => (
         candidate.provider_environment_id === providerEnvironmentID
       ));
@@ -4757,7 +4754,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     providerEnvironmentID: string,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
-    const target = environment.provider_runtime_link_target;
+    const target = environment.runtime_connection_target;
     if (!target) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
@@ -4784,7 +4781,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     providerEnvironmentID: string,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
-    const target = environment.provider_runtime_link_target;
+    const target = environment.runtime_connection_target;
     if (!target) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
@@ -5095,7 +5092,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'resolve_gateway':
         if (environment.kind === 'gateway_environment') {
           const gateway = snapshot().gateway_sources.find(
-            (source) => source.connection_id === (environment.gateway_id ?? ''),
+            (source) => source.connection_id === (environment.connection_id ?? ''),
           );
           if (gateway) {
             openCreateGatewaySetup(gateway);
@@ -5325,7 +5322,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       if (environment.kind === 'gateway_environment') {
         const gateway = snapshot().gateway_sources.find(
-          (source) => source.connection_id === (environment.gateway_id ?? ''),
+          (source) => source.connection_id === (environment.connection_id ?? ''),
         );
         if (gateway) {
           openCreateGatewaySetup(gateway);
@@ -5758,8 +5755,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function gatewayActionRecovery(gatewayID: string, failure: SilentLauncherActionFailure): GatewayActionRecovery {
     const continuation = failure.raw_failure?.continuation_action;
-    return { gateway_id: gatewayID, message: failure.message,
-      ...(continuation?.kind === 'start_gateway' && continuation.gateway_id === gatewayID ? { start_action: continuation } : {}) };
+    return { connection_id: gatewayID, message: failure.message,
+      ...(continuation?.kind === 'start_gateway' && continuation.connection_id === gatewayID ? { start_action: continuation } : {}) };
   }
 
   function validateGatewaySetupDialogFields(state: GatewaySetupDialogState): Partial<Record<string, string>> {
@@ -5780,7 +5777,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (state.connection_kind === 'url' && !trimString(state.gateway_url)) {
       errors.gateway_url = i18n().t('connectionDialog.validationGatewayUrlRequired');
     }
-    if (state.connection_kind === 'url' && (state.mode === 'create' || snapshot().gateway_sources.find(source => source.connection_id === state.gateway_id)?.trust_state !== 'paired') && !trimString(state.access_code)) {
+    if (state.connection_kind === 'url' && (state.mode === 'create' || snapshot().gateway_sources.find(source => source.connection_id === state.connection_id)?.trust_state !== 'paired') && !trimString(state.access_code)) {
       errors.access_code = i18n().t('connectionDialog.gatewayAccessCodeHelp');
     }
     return errors;
@@ -5791,13 +5788,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!state) return false;
     if (state.mode === 'create') return true;
     if (state.authority_revoked) return false;
-    const current = snapshot().gateway_sources.find(source => source.connection_id === state.gateway_id);
-    return current ? !state.interaction_identity || gatewayInteractionIdentity(current) === state.interaction_identity : !state.interaction_identity && state.created_gateway_id === state.gateway_id;
+    const current = snapshot().gateway_sources.find(source => source.connection_id === state.connection_id);
+    return current ? !state.interaction_identity || gatewayInteractionIdentity(current) === state.interaction_identity : !state.interaction_identity && state.created_connection_id === state.connection_id;
   };
   createEffect(() => {
     const state = gatewaySetupDialogState();
     if (!state || state.mode !== 'edit' || !state.interaction_identity || state.authority_revoked) return;
-    const source = snapshot().gateway_sources.find(source => source.connection_id === state.gateway_id);
+    const source = snapshot().gateway_sources.find(source => source.connection_id === state.connection_id);
     if (!source || gatewayInteractionIdentity(source) !== state.interaction_identity) {
       setGatewaySetupDialogState(current => current?.opening_id === state.opening_id ? { ...current, authority_revoked: true } : current);
     }
@@ -5817,7 +5814,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const displayName = trimString(state.display_name) || suggestGatewayDisplayName(state) || 'Gateway';
     const base = {
       kind: 'upsert_gateway',
-      gateway_id: trimString(state.gateway_id) || undefined,
+      connection_id: trimString(state.connection_id) || undefined,
       display_name: displayName,
     } as const;
     const action: DesktopLauncherActionRequest = state.connection_kind === 'url' ? {
@@ -5851,10 +5848,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!result.ok) {
       setGatewaySetupDialogError(result.message);
       setGatewaySetupTechnicalDetail(gatewaySetupFailureDetail(result));
-      const gatewayID = result.raw_failure?.gateway_id;
+      const gatewayID = result.raw_failure?.connection_id;
       if (gatewayID) {
         setGatewaySetupRecovery(gatewayActionRecovery(gatewayID, result));
-        setGatewaySetupDialogState(draft => draft ? { ...draft, gateway_id: gatewayID, mode: 'edit', editing_connection: true, created_gateway_id: draft.mode === 'create' ? gatewayID : draft.created_gateway_id } : draft);
+        setGatewaySetupDialogState(draft => draft ? { ...draft, connection_id: gatewayID, mode: 'edit', editing_connection: true, created_connection_id: draft.mode === 'create' ? gatewayID : draft.created_connection_id } : draft);
       }
       return;
     }
@@ -5862,15 +5859,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(i18n().t('toast.gatewaySaved'));
       await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
       if (!current()) return;
-      if ((state.mode === 'create' || state.created_gateway_id) && result.gateway_id) {
-        const source = snapshot().gateway_sources.find(gateway => gateway.connection_id === result.gateway_id);
-        setGatewaySetupDialogState(draft => draft ? { ...draft, gateway_id: result.gateway_id!, created_gateway_id: result.gateway_id,
+      if ((state.mode === 'create' || state.created_connection_id) && result.connection_id) {
+        const source = snapshot().gateway_sources.find(gateway => gateway.connection_id === result.connection_id);
+        setGatewaySetupDialogState(draft => draft ? { ...draft, connection_id: result.connection_id!, created_connection_id: result.connection_id,
           mode: 'edit', editing_connection: false, settings_tab: 'overview', onboarding_intent: undefined, onboarding_complete: true,
           ssh_password: '', access_code: '', interaction_identity: source ? gatewayInteractionIdentity(source) : undefined } : draft);
       } else if (state.mode === 'create') {
         closeGatewaySetupDialog();
       } else {
-        const source = snapshot().gateway_sources.find(source => source.connection_id === state.gateway_id);
+        const source = snapshot().gateway_sources.find(source => source.connection_id === state.connection_id);
         setGatewaySetupDialogState(draft => draft ? { ...draft, editing_connection: false, ssh_password: '', access_code: '', interaction_identity: source ? gatewayInteractionIdentity(source) : draft.interaction_identity } : draft);
       }
     } else {
@@ -5887,7 +5884,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setGatewaySetupDialogError('');
     setGatewaySetupTechnicalDetail(result.ok ? '' : gatewaySetupFailureDetail(result));
     setGatewaySetupRecovery(result.ok && result.outcome === 'started_gateway'
-      ? { gateway_id: recovery.gateway_id, message: i18n().t('gatewayAccess.serviceReady') }
+      ? { connection_id: recovery.connection_id, message: i18n().t('gatewayAccess.serviceReady') }
       : { ...recovery, message: result.ok ? i18n().t('toast.unexpectedLauncherResult') : result.message });
     await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
   }
@@ -6200,7 +6197,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: target.id,
       cloud_origin: '',
       cloud_id: '',
-      gateway_id: registrationRef?.kind === 'gateway_environment' ? registrationRef.gateway_id : '',
+      connection_id: registrationRef?.kind === 'gateway_environment' ? registrationRef.connection_id : '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
@@ -6255,11 +6252,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction({
       kind: 'delete_gateway',
-      gateway_id: target.connection_id,
+      connection_id: target.connection_id,
     });
     if (result?.outcome === 'deleted_gateway') {
       if (deleteGatewayTarget() === target) setDeleteGatewayTarget(null);
-      if (gatewaySetupDialogState()?.gateway_id === target.connection_id) closeGatewaySetupDialog();
+      if (gatewaySetupDialogState()?.connection_id === target.connection_id) closeGatewaySetupDialog();
       showActionToast(i18n().t('environmentCenter.gatewayRemoved'), 'info');
     }
   }
@@ -6424,7 +6421,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
         recoverGateway={async gateway => {
           if (gateway.service_state?.status !== 'not_started' || !gateway.service_state.can_start) return false;
-          const result = await runGatewayLauncherAction({ kind: 'start_gateway', gateway_id: gateway.connection_id });
+          const result = await runGatewayLauncherAction({ kind: 'start_gateway', connection_id: gateway.connection_id });
           return result.ok && result.outcome === 'started_gateway';
         }}
         gatewayID={gatewayEnrollment()?.gatewayID} open={gatewayEnrollment() !== null}
@@ -6585,13 +6582,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         serviceContent={embeddedGatewayService() ? gatewayServiceSurfaces()[embeddedGatewayService()]?.content : undefined}
         closeService={closeManagedGatewayService}
         onService={openManagedGatewayService}
-        onEnroll={() => { const gatewayID = gatewaySetupDialogState()?.gateway_id; const trigger = document.activeElement as HTMLElement; if (gatewayID) openGatewayEnrollment(gatewayID, '', () => requestAnimationFrame(() => trigger?.focus())); }}
-        onDelete={() => { const source = snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.gateway_id); if (source) setDeleteGatewayTarget(source); }}
+        onEnroll={() => { const gatewayID = gatewaySetupDialogState()?.connection_id; const trigger = document.activeElement as HTMLElement; if (gatewayID) openGatewayEnrollment(gatewayID, '', () => requestAnimationFrame(() => trigger?.focus())); }}
+        onDelete={() => { const source = snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.connection_id); if (source) setDeleteGatewayTarget(source); }}
         available={gatewaySetupOwnerAvailable()}
-        canRevalidate={!!snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.gateway_id)}
-        onRevalidate={() => { const source = snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.gateway_id); if (source) setGatewaySetupDialogState(state => state ? { ...state, interaction_identity: gatewayInteractionIdentity(source), authority_revoked: false } : state); }}
+        canRevalidate={!!snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.connection_id)}
+        onRevalidate={() => { const source = snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.connection_id); if (source) setGatewaySetupDialogState(state => state ? { ...state, interaction_identity: gatewayInteractionIdentity(source), authority_revoked: false } : state); }}
         restoreFocus={() => { if (!gatewaySetupDialogState()) gatewaySetupReturnFocus?.focus(); }}
-        gateway={snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.gateway_id)}
+        gateway={snapshot().gateway_sources.find(source => source.connection_id === gatewaySetupDialogState()?.connection_id)}
         refresh={refreshSnapshot}
         nativeHostSupported={snapshot().platform_capabilities.native_host_runtime}
         i18n={i18n()}
@@ -6624,7 +6621,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         removeSSHPassword={removeSSHPasswordFromGatewaySetupDialog}
         onSave={saveGatewayFromDialog}
       />}
-              managedGatewayID={gatewayWorkspaceVisible() ? gatewaySetupDialogState()?.gateway_id ?? '' : ''}
+              managedGatewayID={gatewayWorkspaceVisible() ? gatewaySetupDialogState()?.connection_id ?? '' : ''}
               registerGatewayService={registerGatewayService}
               embeddedGatewayService={embeddedGatewayService()}
               closeEmbeddedGatewayService={() => setEmbeddedGatewayService('')}
@@ -7193,10 +7190,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>
             <p class="text-xs text-muted-foreground">
-              {i18n().t('desktop.provider')}: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.cloud_origin || i18n().t('environmentCenter.unknownProvider')}</span>
+              {i18n().t('desktop.provider')}: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.runtime_connection_target?.cloud_origin || i18n().t('environmentCenter.unknownProvider')}</span>
             </p>
             <p class="text-xs text-muted-foreground">
-              {i18n().t('environmentCenter.sourceEnvironment')}: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.env_public_id || i18n().t('common.unknown')}</span>
+              {i18n().t('environmentCenter.sourceEnvironment')}: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.runtime_connection_target?.env_public_id || i18n().t('common.unknown')}</span>
             </p>
           </Show>
           <Show
@@ -7728,7 +7725,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
       return '';
     }
     const environment = props.snapshot.environments.find((entry) => (
-      entry.provider_runtime_link_target?.id === runtimeTargetID
+      entry.runtime_connection_target?.id === runtimeTargetID
     ));
     return environment
       ? props.i18n.t('environmentCenter.linkedRuntimeFilterWithLabel', {
@@ -8486,7 +8483,7 @@ function isEnvironmentActionBusy(
         busyState.action === 'start_control_plane_connect'
       );
     case 'pair_gateway':
-      return busyStateMatchesGateway(busyState, action.gateway_id ?? '', ['refresh_gateway']);
+      return busyStateMatchesGateway(busyState, action.connection_id ?? '', ['refresh_gateway']);
     case 'update_desktop':
       return busyStateMatchesEnvironment(busyState, environmentID, ['manage_desktop_update']);
     case 'connect_cloud_runtime':
@@ -10487,7 +10484,7 @@ function ControlPlanesPanel(props: Readonly<{
 
 function localizedProviderRuntimeTargetLabel(
   i18n: DesktopI18n,
-  target: DesktopCloudRuntimeLinkTarget,
+  target: DesktopRuntimeConnectionTarget,
 ): string {
   return target.kind === 'ssh_environment'
     ? i18n.t('providerRuntimeLink.sshRuntime')
@@ -10496,7 +10493,7 @@ function localizedProviderRuntimeTargetLabel(
 
 function localizedCloudRuntimeLinkPlanMessage(
   i18n: DesktopI18n,
-  target: DesktopCloudRuntimeLinkTarget,
+  target: DesktopRuntimeConnectionTarget,
   providerEnvironment: DesktopCloudEnvironmentCandidate,
   state: DesktopCloudRuntimeLinkPlanState,
 ): string {
@@ -10620,8 +10617,8 @@ function GatewaySourcesPanel(props: Readonly<{
   const gatewaySourcesByID = createMemo<Record<string, DesktopGatewaySource>>(previous => {
     const record = Object.fromEntries(props.gatewaySources.map(gateway => [gateway.connection_id, gateway]));
     const active = activeGatewayOverlayState();
-    if (active.kind !== 'none' && previous?.[active.gateway_id] && !record[active.gateway_id]) {
-      record[active.gateway_id] = previous[active.gateway_id]!;
+    if (active.kind !== 'none' && previous?.[active.connection_id] && !record[active.connection_id]) {
+      record[active.connection_id] = previous[active.connection_id]!;
     }
     const id = props.managedGatewayID;
     if (id && !record[id] && previous?.[id]) record[id] = previous[id]!;
@@ -10631,7 +10628,7 @@ function GatewaySourcesPanel(props: Readonly<{
   const gatewayEntriesByGatewayID = createMemo(() => {
     const record: Record<string, DesktopEnvironmentEntry[]> = {};
     for (const entry of props.gatewayEntries) {
-      const gatewayID = trimString(entry.gateway_id);
+      const gatewayID = trimString(entry.connection_id);
       if (gatewayID === '') {
         continue;
       }
@@ -10756,7 +10753,7 @@ function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string)
 type GatewayLauncherActionResult = Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | SilentLauncherActionFailure;
 
 type GatewayForegroundActionSnapshot = Readonly<{
-  gateway_id: string;
+  connection_id: string;
   started_at_unix_ms: number;
   action: GatewaySourceActionModel;
   gateway: DesktopGatewaySource;
@@ -10769,7 +10766,7 @@ type GatewayForegroundActionSnapshot = Readonly<{
 }>;
 
 type GatewayDiagnosisResultSnapshot = Readonly<{
-  gateway_id: string;
+  connection_id: string;
   checked_at_unix_ms: number;
   operation_key?: string;
   gateway: DesktopGatewaySource;
@@ -10833,7 +10830,7 @@ function selectForegroundGatewayProgress(
 function gatewayProgressMatchesSubject(gatewayID: string, progress: DesktopLauncherActionProgress): boolean {
   return progress.subject_kind === 'gateway'
     && (
-      progress.gateway_id === gatewayID
+      progress.connection_id === gatewayID
       || progress.subject_id === gatewayID
     );
 }
@@ -10850,16 +10847,16 @@ function gatewayProgressBelongsToForegroundAction(
   if (actionKind === null || progress.action !== actionKind) {
     return false;
   }
-  if (gatewayProgressMatchesSubject(foreground.gateway_id, progress)) {
+  if (gatewayProgressMatchesSubject(foreground.connection_id, progress)) {
     return progressStartedAt > 0 && progressStartedAt >= foreground.started_at_unix_ms;
   }
   if (!foreground.owns_progress) {
     return false;
   }
   if (
-    !gatewaySourceMatchesRuntimeLifecycleProgress(foreground.gateway_id, progress)
-    && !(actionKind === 'open_gateway_environment' && gatewayProgressMatchesSubject(foreground.gateway_id, progress))
-    && !(progress.step_progress !== undefined && gatewayProgressMatchesSubject(foreground.gateway_id, progress))
+    !gatewaySourceMatchesRuntimeLifecycleProgress(foreground.connection_id, progress)
+    && !(actionKind === 'open_gateway_environment' && gatewayProgressMatchesSubject(foreground.connection_id, progress))
+    && !(progress.step_progress !== undefined && gatewayProgressMatchesSubject(foreground.connection_id, progress))
   ) {
     return false;
   }
@@ -11002,7 +10999,7 @@ function buildGatewayDiagnosisResultSnapshot(input: Readonly<{
     show_diagnosis_result: true,
   });
   return {
-    gateway_id: input.gateway.connection_id,
+    connection_id: input.gateway.connection_id,
     checked_at_unix_ms: diagnosisGateway.diagnosis?.checked_at_unix_ms ?? (input.progress ? gatewayProgressTimestamp(input.progress) : Date.now()),
     ...(input.progress?.operation_key ? { operation_key: input.progress.operation_key } : {}),
     gateway: diagnosisGateway,
@@ -11094,7 +11091,7 @@ function GatewaySourceOwner(props: Readonly<{
   const [retainedDiagnosisResult, setRetainedDiagnosisResult] = createSignal<GatewayDiagnosisResultSnapshot | null>(null);
   let foregroundTerminalClearTimer: ReturnType<typeof setTimeout> | null = null;
   let foregroundTerminalClearKey: string | null = null;
-  const foregroundSessionKey = () => { const value = foregroundAction(); return value ? JSON.stringify([value.gateway_id, value.started_at_unix_ms, value.action.intent]) : ''; };
+  const foregroundSessionKey = () => { const value = foregroundAction(); return value ? JSON.stringify([value.connection_id, value.started_at_unix_ms, value.action.intent]) : ''; };
   let actionPopoverExitTask: { owner: string; task: () => void } | null = null;
   const clearForegroundTerminalClearTimer = () => {
     if (!foregroundTerminalClearTimer) {
@@ -11140,7 +11137,7 @@ function GatewaySourceOwner(props: Readonly<{
       ) && progress?.subject_kind === 'gateway'
       && (
         progress.subject_id === props.gateway.connection_id
-        || progress.gateway_id === props.gateway.connection_id
+        || progress.connection_id === props.gateway.connection_id
       )
     ) {
       return progress;
@@ -11219,7 +11216,7 @@ function GatewaySourceOwner(props: Readonly<{
       progress,
       clicked_action: foregroundAction()?.action ?? gatewaySourceActionForLauncherRequest({
         kind: 'refresh_gateway',
-        gateway_id: props.gateway.connection_id,
+        connection_id: props.gateway.connection_id,
       } as DesktopLauncherActionRequest) ?? row().primary_action,
       affected_sessions: affectedSessions(),
     });
@@ -11253,7 +11250,7 @@ function GatewaySourceOwner(props: Readonly<{
         gateway: props.gateway,
         clicked_action: gatewaySourceActionForLauncherRequest({
           kind: 'refresh_gateway',
-          gateway_id: props.gateway.connection_id,
+          connection_id: props.gateway.connection_id,
         } as DesktopLauncherActionRequest) ?? row().primary_action,
         affected_sessions: affectedSessions(),
       });
@@ -11501,7 +11498,7 @@ function GatewaySourceOwner(props: Readonly<{
     const startedAtUnixMS = gatewayProgressStartedAt(progress);
     const foregroundStartedAtUnixMS = foreground.started_at_unix_ms;
     const terminalClearKey = [
-      foreground.gateway_id,
+      foreground.connection_id,
       foregroundStartedAtUnixMS,
       foreground.action.intent,
       operationKey,
@@ -11521,7 +11518,7 @@ function GatewaySourceOwner(props: Readonly<{
       if (
         currentForeground
         && currentForeground.started_at_unix_ms === foregroundStartedAtUnixMS
-        && currentForeground.gateway_id === foreground.gateway_id
+        && currentForeground.connection_id === foreground.connection_id
         && currentForeground.action.intent === foreground.action.intent
         && (
           !currentProgress
@@ -11551,7 +11548,7 @@ function GatewaySourceOwner(props: Readonly<{
     });
     const operationKey = gatewayOperationKeyForAction(props.gateway, action);
     setForegroundAction({
-      gateway_id: props.gateway.connection_id,
+      connection_id: props.gateway.connection_id,
       started_at_unix_ms: startedAtUnixMS,
       action,
       gateway: props.gateway,
@@ -11573,7 +11570,7 @@ function GatewaySourceOwner(props: Readonly<{
       affected_sessions: affectedSessions(),
     });
     setForegroundAction({
-      gateway_id: props.gateway.connection_id,
+      connection_id: props.gateway.connection_id,
       started_at_unix_ms: startedAtUnixMS,
       action,
       gateway: props.gateway,
@@ -11622,7 +11619,7 @@ function GatewaySourceOwner(props: Readonly<{
     });
     const operationKey = gatewayOperationKeyForAction(props.gateway, action);
     setForegroundAction({
-      gateway_id: props.gateway.connection_id,
+      connection_id: props.gateway.connection_id,
       started_at_unix_ms: startedAtUnixMS,
       action,
       gateway: props.gateway,
@@ -11659,27 +11656,27 @@ function GatewaySourceOwner(props: Readonly<{
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-        return { kind: action.intent, gateway_id: props.gateway.connection_id };
+        return { kind: action.intent, connection_id: props.gateway.connection_id };
       case 'refresh_gateway':
         return {
           kind: 'refresh_gateway',
-          gateway_id: props.gateway.connection_id,
+          connection_id: props.gateway.connection_id,
         };
       case 'pair_gateway':
         return {
           kind: 'pair_gateway',
-          gateway_id: props.gateway.connection_id,
+          connection_id: props.gateway.connection_id,
         };
       case 'enable_gateway':
         return {
           kind: 'set_gateway_enabled',
-          gateway_id: props.gateway.connection_id,
+          connection_id: props.gateway.connection_id,
           enabled: true,
         };
       case 'disable_gateway':
         return {
           kind: 'set_gateway_enabled',
-          gateway_id: props.gateway.connection_id,
+          connection_id: props.gateway.connection_id,
           enabled: false,
         };
       default:
@@ -11953,7 +11950,7 @@ function GatewaySourceOwner(props: Readonly<{
                           runForegroundRequestFromProgress({
                             kind: 'open_gateway_environment',
                             environment_id: action.environment_id,
-                            gateway_id: action.gateway_id,
+                            connection_id: action.connection_id,
                             gateway_env_id: action.gateway_env_id,
                             label: action.label,
                             ...(action.start_policy ? { start_policy: action.start_policy } : {}),
@@ -12095,7 +12092,7 @@ function GatewaySourceOwner(props: Readonly<{
           <GatewayEnvironmentList i18n={props.i18n} environments={props.gatewayEntries} progress={props.actionProgress} revealProgress={() => props.onActionPopoverOpenChange(true)}
             disabled={primaryActionRunning() || props.gateway.local_enabled === false}
             open={environment => runForegroundRequest({ kind: 'open_gateway_environment',
-              environment_id: environment.access_group_id ?? environment.id, gateway_id: props.gateway.connection_id,
+              environment_id: environment.access_group_id ?? environment.id, connection_id: props.gateway.connection_id,
               gateway_env_id: environment.gateway_env_id ?? '', label: environment.label })} />
         </div>
       </EnvironmentSettingsReveal>
@@ -13464,7 +13461,7 @@ function GatewayWorkspace(props: Readonly<{
               </Show>
               <Show when={tab !== 'overview' && !hostManaged()}><p class="redeven-gateway-help">{props.i18n.t('gatewayClients.clientOnly')}</p></Show>
               <Show when={hostManaged() && sectionSession()?.visited.has(tab)}>
-                <Show when={tab === 'clients'}><GatewayClientsPanel suspended={props.hidden} onPresenceChange={present => dialogPresence('clients', present)} available={canManage()} gatewayID={props.state?.gateway_id ?? ''} endpoints={props.gateway?.endpoints} enrolling={props.state?.client_enrollment ?? false} onEnrollmentChange={value => props.updateField('client_enrollment', value)} i18n={props.i18n} /></Show>
+                <Show when={tab === 'clients'}><GatewayClientsPanel suspended={props.hidden} onPresenceChange={present => dialogPresence('clients', present)} available={canManage()} gatewayID={props.state?.connection_id ?? ''} endpoints={props.gateway?.endpoints} enrolling={props.state?.client_enrollment ?? false} onEnrollmentChange={value => props.updateField('client_enrollment', value)} i18n={props.i18n} /></Show>
                 <Show when={tab === 'runtimes'}><RuntimeAttachmentsPanel suspended={props.hidden} onPresenceChange={present => dialogPresence('runtimes', present)} available={props.available} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onEnroll={props.onEnroll} enrolling={props.state?.runtime_enrollment} onEnrollmentChange={value => props.updateField('runtime_enrollment', value)} onNetwork={() => selectTab('network')} section="runtimes" /></Show>
                 <Show when={tab === 'network'}><RuntimeAttachmentsPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onRestart={() => props.onService(serviceAction('restart'))} section="connection" /><RuntimeAttachmentsPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} section="policy" /></Show>
                 <Show when={tab === 'maintenance'}><div class="redeven-gateway-section-heading"><h3>{sectionLabel(tab)}</h3></div><Show when={props.gateway?.diagnosis?.managed_probe?.version}><dl class="redeven-gateway-overview-facts"><div><dt>{props.i18n.t('gatewayExperience.serviceVersion')}</dt><dd>{props.gateway?.diagnosis?.managed_probe?.version}</dd></div></dl></Show><div class="flex flex-wrap gap-2"><For each={(['start', 'restart', 'stop', 'update'] as const).filter(operation => props.gateway?.service_state?.[('can_' + operation) as 'can_start' | 'can_restart' | 'can_stop' | 'can_update'])}>{operation => <Button variant="outline" size="sm" disabled={!props.available || props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onClick={() => props.onService(serviceAction(operation))}>{localizedGatewaySourceActionLabel(props.i18n, serviceAction(operation))}</Button>}</For><Button variant="outline" size="sm" disabled={!props.available} onClick={() => props.onService(serviceAction('refresh'))}>{localizedGatewaySourceActionLabel(props.i18n, serviceAction('refresh'))}</Button></div></Show>

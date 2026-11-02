@@ -3,15 +3,15 @@ type: Runtime Contract
 title: Runtime Service snapshot
 tags: [architecture, desktop, runtime-service, compatibility]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
-The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local UI, and optional Gateway supervision. Runtime protocol/version, compatibility epoch, capabilities, service readiness, and workload identity are explicit facts. Gateway is optional for Runtime startup and ordinary access; its absence only closes Redeven-managed lifecycle actions.
+The Runtime Service snapshot is a typed boundary between Runtime, Desktop and Local UI. Runtime protocol/version, compatibility epoch, capabilities, service readiness and workload identity are explicit facts. Gateway attachments are optional access paths; their absence never disables independent Runtime access or host-authorized lifecycle management.
 
 # Contract
 
-Runtime publishes its own service protocol and independent component version. A missing or incompatible Gateway fails closed only for lifecycle management.
+Runtime publishes its own service protocol and independent component version. Desktop manages Runtime lifecycle through its verified target-host connection, placement bridge and lifecycle coordinator. Gateway manages neither Runtime processes nor their lifecycle admission.
 
 Runtime snapshot fields and generated wire schemas change together; an unknown response key must not turn a healthy Runtime into a reconnect loop.
 
@@ -25,7 +25,7 @@ Epoch 67 requires complete changed pin metadata in Flower pin confirmations. New
 
 # Boundaries
 
-Portal `ControlChannelFence` fields protect the Provider control channel and are distinct from Gateway `target_generation`. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.
+Portal control-channel fences protect Provider authorization. Gateway attachment versions fence only their corresponding attachment and transport authority. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.
 
 # Evidence
 

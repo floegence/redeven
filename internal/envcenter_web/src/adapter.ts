@@ -6,7 +6,7 @@ export function webCenterEntry(route: Route, member: Member | undefined, sourceE
   const matched = member?.attachment_id === route.attachment_id && member.runtime_public_id === route.runtime_id ? member : undefined;
   const connected = matched?.connected === true && !sourceError;
   return { id: route.id, label: route.label || matched?.display_name || route.runtime_id,
-    gateway_id: route.source_id, gateway_env_id: route.attachment_id,
+    connection_id: route.source_id, gateway_env_id: route.attachment_id,
     gateway_member: { connected, metadata: { hostname: matched?.metadata.hostname ?? route.runtime_id } },
     runtime_operations: { open: { availability: connected ? 'available' : 'unavailable' } }, route };
 }

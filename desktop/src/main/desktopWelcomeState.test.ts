@@ -67,7 +67,7 @@ it('keeps configured local authority stable while live Presence is withdrawn', (
   expect(environmentInteractionIdentity(fresh)).toBe(environmentInteractionIdentity(checking));
   expect(fresh.verified_runtime_identity).toBe(identity);
   expect(checking.verified_runtime_identity).toBe(identity);
-  expect(checking.provider_runtime_link_target?.runtime_control_status.state).not.toBe('available');
+  expect(checking.runtime_connection_target?.runtime_control_status.state).not.toBe('available');
   const moved = buildDesktopWelcomeSnapshot({ platformCapabilities, preferences: { ...remembered,
     local_environment: testLocalEnvironment({ stateDir: '/other/local-environment' }) } }).environments.find(entry => entry.id === 'local')!;
   expect(moved.verified_runtime_identity).toBeUndefined();
@@ -1243,7 +1243,7 @@ describe('desktopWelcomeState', () => {
         kind: 'host_process',
         runtime_root: 'remote_default',
       },
-      provider_runtime_link_target: {
+      runtime_connection_target: {
         runtime_running: true,
         runtime_control_status: {
           state: 'available',
@@ -1251,8 +1251,8 @@ describe('desktopWelcomeState', () => {
         can_connect_cloud: true,
       },
     });
-    expect(JSON.stringify(sshEntry?.provider_runtime_link_target)).not.toContain('runtime-control-token');
-    expect(JSON.stringify(sshEntry?.provider_runtime_link_target)).not.toContain('base_url');
+    expect(JSON.stringify(sshEntry?.runtime_connection_target)).not.toContain('runtime-control-token');
+    expect(JSON.stringify(sshEntry?.runtime_connection_target)).not.toContain('base_url');
   });
 
   it('keeps a running SSH runtime Open operation available when compatibility requires an update', () => {
@@ -1585,7 +1585,7 @@ describe('desktopWelcomeState', () => {
     const providerEntry = snapshot.environments.find((entry) => (
       entry.id === providerEnvironment.id && entry.kind === 'provider_environment'
     ));
-    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.runtime_connection_target).toBeUndefined();
     expect(providerEntry?.managed_runtime_target_id).toBeUndefined();
 
     const localContainerEntry = snapshot.environments.find((entry) => entry.id === localContainerID);
@@ -1600,7 +1600,7 @@ describe('desktopWelcomeState', () => {
       managed_runtime_placement: containerPlacement,
       auto_runtime_probe_enabled: true,
       auto_runtime_probe_configurable: false,
-      provider_runtime_link_target: {
+      runtime_connection_target: {
         id: `local:${localContainerID}`,
         kind: 'local_environment',
         runtime_key: localContainerID,
@@ -1628,7 +1628,7 @@ describe('desktopWelcomeState', () => {
       ssh_details: sshHostAccess.ssh,
       auto_runtime_probe_enabled: false,
       auto_runtime_probe_configurable: true,
-      provider_runtime_link_target: {
+      runtime_connection_target: {
         id: `ssh:${sshContainerID}`,
         kind: 'ssh_environment',
         runtime_key: sshContainerID,
@@ -1636,10 +1636,10 @@ describe('desktopWelcomeState', () => {
         can_connect_cloud: true,
       },
     });
-    expect(JSON.stringify(localContainerEntry?.provider_runtime_link_target)).not.toContain('runtime-control-token');
-    expect(JSON.stringify(localContainerEntry?.provider_runtime_link_target)).not.toContain('base_url');
-    expect(JSON.stringify(sshContainerEntry?.provider_runtime_link_target)).not.toContain('runtime-control-token');
-    expect(JSON.stringify(sshContainerEntry?.provider_runtime_link_target)).not.toContain('base_url');
+    expect(JSON.stringify(localContainerEntry?.runtime_connection_target)).not.toContain('runtime-control-token');
+    expect(JSON.stringify(localContainerEntry?.runtime_connection_target)).not.toContain('base_url');
+    expect(JSON.stringify(sshContainerEntry?.runtime_connection_target)).not.toContain('runtime-control-token');
+    expect(JSON.stringify(sshContainerEntry?.runtime_connection_target)).not.toContain('base_url');
   });
 
   it('uses managed runtime presence as the renderer-facing operation source', () => {
@@ -1892,7 +1892,7 @@ describe('desktopWelcomeState', () => {
           reason_code: 'runtime_already_running',
         }),
       }),
-      provider_runtime_link_target: expect.objectContaining({
+      runtime_connection_target: expect.objectContaining({
         runtime_running: true,
         runtime_openable: false,
         blocked_reason_code: 'runtime_control_missing',
@@ -1978,7 +1978,7 @@ describe('desktopWelcomeState', () => {
           method: 'local_container_exec',
         }),
       }),
-      provider_runtime_link_target: expect.objectContaining({
+      runtime_connection_target: expect.objectContaining({
         runtime_running: false,
         runtime_openable: false,
         blocked_reason_code: 'target_not_running',
@@ -2042,7 +2042,7 @@ describe('desktopWelcomeState', () => {
           method: 'local_container_exec',
         }),
       }),
-      provider_runtime_link_target: expect.objectContaining({
+      runtime_connection_target: expect.objectContaining({
         runtime_running: false,
       }),
     });
@@ -2300,7 +2300,7 @@ describe('desktopWelcomeState', () => {
         source: 'provider_batch_probe',
       }),
     }));
-    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.runtime_connection_target).toBeUndefined();
     expect(providerEntry?.provider_environment_candidates).toBeUndefined();
     expect(providerEntry?.managed_runtime_target_id).toBeUndefined();
     expect(providerEntry?.managed_runtime_host_access).toBeUndefined();
@@ -2536,7 +2536,7 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: 'local',
         kind: 'local_environment',
-        provider_runtime_link_target: expect.objectContaining({
+        runtime_connection_target: expect.objectContaining({
           id: 'local:local',
           kind: 'local_environment',
           runtime_key: 'local',
@@ -2594,7 +2594,7 @@ describe('desktopWelcomeState', () => {
       cloud_linked_runtime_summary: undefined,
       local_ui_url: '',
     }));
-    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.runtime_connection_target).toBeUndefined();
     expect(providerEntry?.provider_environment_candidates).toBeUndefined();
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
@@ -2602,7 +2602,7 @@ describe('desktopWelcomeState', () => {
         id: 'local',
         kind: 'local_environment',
         local_environment_runtime_url: 'http://localhost:23998/',
-        provider_runtime_link_target: expect.objectContaining({
+        runtime_connection_target: expect.objectContaining({
           id: 'local:local',
           runtime_url: 'http://localhost:23998/',
           runtime_running: true,
@@ -2714,7 +2714,7 @@ describe('desktopWelcomeState', () => {
     const providerEntry = snapshot.environments.find((entry) => (
       entry.id === providerEnvironment.id && entry.kind === 'provider_environment'
     ));
-    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.runtime_connection_target).toBeUndefined();
     expect(providerEntry?.provider_environment_candidates).toBeUndefined();
     expect(providerEntry).toMatchObject({
       cloud_linked_runtime_summary: {
@@ -2732,7 +2732,7 @@ describe('desktopWelcomeState', () => {
       managed_runtime_host_access: { kind: 'local_host' },
       managed_runtime_placement: { kind: 'host_process', runtime_root: testLocalEnvironment().local_hosting.state_dir, runtime_state_root: resolveStateRoot() },
     });
-    expect(localEntry?.provider_runtime_link_target).toMatchObject({
+    expect(localEntry?.runtime_connection_target).toMatchObject({
       id: 'local:local',
       cloud_link_state: 'linked',
       cloud_origin: 'https://provider.example.invalid',
@@ -2826,7 +2826,7 @@ describe('desktopWelcomeState', () => {
       && entry.env_public_id === 'env_demo'
     ))).toBe(false);
     expect(snapshot.environments.find((entry) => entry.kind === 'local_environment')).toMatchObject({
-      provider_runtime_link_target: expect.objectContaining({
+      runtime_connection_target: expect.objectContaining({
         id: 'local:local',
         cloud_link_state: 'linked',
         cloud_origin: 'https://provider.example.invalid',
@@ -2962,9 +2962,9 @@ describe('desktopWelcomeState', () => {
       REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
     ]);
     expect(productionSnapshot.environments.find((entry) => entry.kind === 'local_environment')
-      ?.provider_runtime_link_target?.cloud_origin_supported).toBe(false);
+      ?.runtime_connection_target?.cloud_origin_supported).toBe(false);
     expect(developmentSnapshot.environments.find((entry) => entry.kind === 'local_environment')
-      ?.provider_runtime_link_target?.cloud_origin_supported).toBe(true);
+      ?.runtime_connection_target?.cloud_origin_supported).toBe(true);
   });
 
 

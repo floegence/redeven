@@ -137,8 +137,8 @@ describe('provider credential recovery actions', () => {
       ['error', 'providerRecovery.attention'],
       ['disabled', 'providerRecovery.disabled'],
     ] as const) {
-      const recovering = { ...local!, provider_runtime_link_target: {
-        ...local!.provider_runtime_link_target!, provider_connection_state: state,
+      const recovering = { ...local!, runtime_connection_target: {
+        ...local!.runtime_connection_target!, provider_connection_state: state,
       } };
       expect(buildEnvironmentCardFactsModel(recovering).find(fact => fact.id === 'cloud-connection')?.value_key).toBe(key);
       expect(buildProviderBackedEnvironmentActionModel(recovering).action_presentation.menu_actions
@@ -332,7 +332,7 @@ describe('environment open flow decisions', () => {
 
     const gatewayReadyButRuntimeMissing = {
       ...setupRequired,
-      gateway_id: 'gw_local',
+      connection_id: 'gw_local',
       gateway_env_id: 'env_local',
       runtime_management: {
         support: 'supported' as const,
@@ -375,7 +375,7 @@ describe('environment open flow decisions', () => {
 
     const stoppedAfterDesktopRestart = {
       ...setupRequired,
-      gateway_id: 'gw_local',
+      connection_id: 'gw_local',
       gateway_env_id: 'env_local',
       runtime_management: {
         support: 'supported' as const,
@@ -1734,7 +1734,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(localEntry).toMatchObject({
       managed_runtime_open_connection_required: true,
-      provider_runtime_link_target: expect.objectContaining({
+      runtime_connection_target: expect.objectContaining({
         runtime_running: true,
         runtime_openable: false,
         blocked_reason_code: 'runtime_control_missing',
@@ -2747,7 +2747,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot.environments), '', localOnlyFilter).map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         kind: 'local_environment',
-        provider_runtime_link_target: expect.objectContaining({ id: 'local:local' }),
+        runtime_connection_target: expect.objectContaining({ id: 'local:local' }),
       }),
     ]);
     const localOnlyCloudMenuActionIDs = buildProviderBackedEnvironmentActionModel(localOnlyProviderEntry!)
@@ -2890,12 +2890,12 @@ describe('buildEnvironmentCardModel', () => {
     const busyLocalEntry = busySnapshot.environments.find((environment) => environment.kind === 'local_environment');
 
     expect(entry?.cloud_linked_runtime_summary).toBeUndefined();
-    expect(localEntry?.provider_runtime_link_target).toMatchObject({
+    expect(localEntry?.runtime_connection_target).toMatchObject({
       can_connect_cloud: true,
       runtime_running: true,
     });
     expect(busyEntry?.cloud_linked_runtime_summary).toBeUndefined();
-    expect(busyLocalEntry?.provider_runtime_link_target).toMatchObject({
+    expect(busyLocalEntry?.runtime_connection_target).toMatchObject({
       cloud_link_state: 'linked',
       cloud_origin: 'https://other.example.invalid',
       can_connect_cloud: false,
@@ -3565,7 +3565,7 @@ describe('Gateway view models', () => {
       status: 'needs_setup',
       endpoint_label: 'lab-host / app-network-runner',
     }))).toMatchObject({
-      gateway_id: 'lab',
+      connection_id: 'lab',
       label: 'Lab Docker',
       transport_label: 'SSH container',
       status_label: 'Needs setup',

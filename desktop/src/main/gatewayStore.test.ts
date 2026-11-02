@@ -49,6 +49,18 @@ describe('GatewayStore', () => {
     expect(retireRuntimeAttachmentObservation(record, source, { ...member, attachment_id: 'unknown' })).toBe(source);
   });
 
+  it('keeps two local connections to one service distinct without changing pinned trust', () => {
+    const trust = { trust_profile_id: 'trust', paired_client_key_id: 'client', paired_client_private_key_ref: 'secret-ref',
+      gateway_id: 'signed-service-id', gateway_public_key: 'PUBLIC KEY', gateway_public_key_fingerprint: 'SHA256:pinned',
+      binding_audience: 'https://office.example/', created_at_unix_ms: 1 };
+    const saved = normalizeGatewayStoreSnapshot({ schema_version: 5, gateways: ['first', 'second'].map(connection_id => ({
+      connection_id, display_name: 'Office', connection: { kind: 'url', base_url: 'https://office.example' }, trust_profile: trust,
+    })) });
+    expect(saved.gateways.map(record => gatewayRecordToSource(record).connection_id)).toEqual(['first', 'second']);
+    expect(saved.gateways.map(record => record.trust_profile?.gateway_id)).toEqual(['signed-service-id', 'signed-service-id']);
+    expect(saved.gateways.map(record => record.trust_profile?.paired_client_private_key_ref)).toEqual(['secret-ref', 'secret-ref']);
+  });
+
   it('does not reuse a retained secret after the user clears the configured credential', () => {
     const record = normalizeGatewayStoreSnapshot({ gateways: [{ connection_id: 'ssh', display_name: 'SSH',
       connection: { kind: 'ssh_host', ssh_destination: 'bastion', runtime_root: '/data/gateway', auth_mode: 'password', ssh_password_configured: false },

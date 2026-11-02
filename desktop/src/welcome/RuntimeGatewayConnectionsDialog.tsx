@@ -1,12 +1,13 @@
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { Button, Dialog, StableText, KeyedFor } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
-import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 import type { GatewayAttachmentStatus } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
 
 /** The Runtime owns the selected member and verifies Cloud interruption consent. */
 export function RuntimeGatewayConnectionsDialog(props: Readonly<{
-  targetID: DesktopCloudRuntimeLinkTargetID;
+  targetID: DesktopRuntimeTargetID;
   available?: boolean;
   i18n: DesktopI18n;
   mode?: 'leave';

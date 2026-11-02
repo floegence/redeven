@@ -1,14 +1,14 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Redeven Gateway membership and access",
+    "title": "Redeven Gateway device admission and Runtime attachments",
     "version": "redeven-gateway-v6",
-    "description": "Runtime is the active member initiator. Gateway never dials Runtime URLs. The administration listener rejects browser Origin headers. Runtime membership uses a separately authenticated HTTPS listener; inner Runtime TLS and Flowersec application authorization remain end to end. Member limits are 1,024 members, 32 business streams per member and 1,024 business streams globally, including pending opens and Cloud egress. No Runtime lifecycle or legacy HTTP proxy routes are exposed."
+    "description": "Gateway provides independent client-device admission, Runtime attachments, reverse application streams and optional restricted network egress. One public HTTPS endpoint composes client access and authenticated Runtime attachment transport. Administration uses a private Unix socket and host credential; loopback TCP and headers alone never prove host authority. Runtime initiates attachments; Gateway never dials Runtime application URLs or manages Runtime lifecycle. Runtime owns application TLS, authentication and Cloud association. Limits are 1,024 attachments, 32 business streams per attachment and 1,024 globally, including pending opens and network egress."
   },
   "paths": {
     "/gateway/v6/identity": {
       "post": {
-        "operationId": "gateway_v5_identity",
+        "operationId": "gateway_v6_identity",
         "description": "Prove the stable Gateway key at a changed address using fresh caller input and the existing paired identity.",
         "security": [
           {
@@ -61,12 +61,13 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "public-client"
       }
     },
     "/gateway/v6/pairing/challenge": {
       "post": {
-        "operationId": "gateway_v5_pairing_challenge",
+        "operationId": "gateway_v6_pairing_challenge",
         "description": "Authorize Desktop pairing through an administrator code or trusted host bridge.",
         "security": [],
         "requestBody": {
@@ -112,12 +113,13 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "public-client"
       }
     },
     "/gateway/v6/pairing/complete": {
       "post": {
-        "operationId": "gateway_v5_pairing_complete",
+        "operationId": "gateway_v6_pairing_complete",
         "description": "Complete signed pairing with explicit access, member management and Cloud configuration grants.",
         "security": [],
         "requestBody": {
@@ -163,12 +165,13 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "public-client"
       }
     },
     "/gateway/v6/attachments/reevaluate": {
       "post": {
-        "operationId": "gateway_v5_members_reevaluate",
+        "operationId": "gateway_v6_members_reevaluate",
         "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
@@ -230,12 +233,13 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/catalog": {
       "post": {
-        "operationId": "gateway_v5_catalog",
+        "operationId": "gateway_v6_catalog",
         "description": "Read members, policy, hook status and observed connectivity. This does not issue Runtime lifecycle authority.",
         "security": [
           {
@@ -288,12 +292,13 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "public-client"
       }
     },
     "/gateway/v6/invitation-codes": {
       "post": {
-        "operationId": "gateway_v5_invitation_codes",
+        "operationId": "gateway_v6_invitation_codes",
         "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
@@ -355,12 +360,13 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/endpoints": {
       "post": {
-        "operationId": "gateway_v5_endpoints",
+        "operationId": "gateway_v6_endpoints",
         "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
@@ -432,12 +438,13 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/attachments/remove": {
       "post": {
-        "operationId": "gateway_v5_members_remove",
+        "operationId": "gateway_v6_members_remove",
         "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
@@ -499,12 +506,13 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/attachments/policy": {
       "post": {
-        "operationId": "gateway_v5_members_policy",
+        "operationId": "gateway_v6_members_policy",
         "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
@@ -569,12 +577,13 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/policy": {
       "post": {
-        "operationId": "gateway_v5_policy",
+        "operationId": "gateway_v6_policy",
         "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
@@ -636,12 +645,13 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/access/open": {
       "post": {
-        "operationId": "gateway_v5_access_open",
+        "operationId": "gateway_v6_access_open",
         "description": "Authorize a reverse member access connection. Ticket expiry limits redemption, not application session duration.",
         "security": [
           {
@@ -694,12 +704,13 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "public-client"
       }
     },
     "/gateway/v6/access/service": {
       "post": {
-        "operationId": "gateway_v5_access_service",
+        "operationId": "gateway_v6_access_service",
         "description": "Refresh signed Runtime TLS service identity for the exact member version, without interrupting established streams.",
         "security": [
           {
@@ -752,7 +763,8 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "public-client"
       }
     },
     "/v6/attachment/join": {
@@ -791,7 +803,8 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "runtime-attachment"
       }
     },
     "/v6/attachment/cancel-join": {
@@ -830,7 +843,8 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "runtime-attachment"
       }
     },
     "/v6/attachment/rotate": {
@@ -873,7 +887,8 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "runtime-attachment"
       }
     },
     "/v6/attachment/leave": {
@@ -916,7 +931,8 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "runtime-attachment"
       }
     },
     "/v6/attachment/connect": {
@@ -959,7 +975,8 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "runtime-attachment"
       }
     },
     "/gateway/v6/clients/access-codes": {
@@ -1027,7 +1044,8 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/clients/list": {
@@ -1083,7 +1101,8 @@
             }
           }
         },
-        "summary": "Host administrator: clients/list"
+        "summary": "Host administrator: clients/list",
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/clients/revoke": {
@@ -1152,7 +1171,8 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/v6/attachment/invitation-exchange": {
@@ -1163,7 +1183,8 @@
           "101": {
             "description": "WebSocket invitation exchange"
           }
-        }
+        },
+        "x-redeven-surface": "runtime-attachment"
       }
     },
     "/v6/attachment/update-endpoints": {
@@ -1195,12 +1216,13 @@
               }
             }
           }
-        }
+        },
+        "x-redeven-surface": "runtime-attachment"
       }
     },
     "/gateway/v6/network-settings": {
       "post": {
-        "operationId": "gateway_v5_network_settings",
+        "operationId": "gateway_v6_network_settings",
         "description": "Atomically save confirmed Runtime endpoints, next-start listener bindings and immediate Host restrictions. Requires current verified host management proof. Does not restart Gateway or change member identity. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
@@ -1272,7 +1294,8 @@
             },
             "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
           }
-        ]
+        ],
+        "x-redeven-surface": "private-host"
       }
     },
     "/gateway/v6/operations/query": {
@@ -1298,7 +1321,9 @@
             "description": "Outcome unknown; reconcile current state without replay"
           }
         },
-        "description": " Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses."
+        "description": " Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
+        "x-redeven-surface": "private-host",
+        "operationId": "gateway_v6_query"
       }
     }
   },
@@ -1314,7 +1339,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-Redeven-Gateway-Host-Token",
-        "description": "The Gateway's private host credential, attached only inside a verified target-host bridge or host CLI. Accepted only from loopback on the administration listener, never from Runtime channels. Signed host requests must also retain and verify the real client identity."
+        "description": "Requires the current private host credential and verified Unix administration socket context, including host CLI and SSH/container bridges to that socket. The public HTTPS listener never mounts host-management routes. Loopback TCP and request headers alone are not host proof. Signed host requests also verify the real paired client identity."
       },
       "MemberTLS": {
         "type": "mutualTLS",
@@ -1414,13 +1439,16 @@
         "additionalProperties": false,
         "properties": {
           "access": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Paired client admission to the catalog and Runtime application transport; Runtime authentication remains independent."
           },
           "manage_attachments": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Current verified host-request capability for Runtime invitations, removal and reevaluation. Never a persisted device role."
           },
           "manage_network": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Current verified host-request capability for shared endpoints, listeners, Host restrictions and network egress policy. Never a persisted device role."
           }
         },
         "required": [

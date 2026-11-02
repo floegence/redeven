@@ -131,7 +131,7 @@ describe('resolveDesktopSessionTransport', () => {
       session_key: 'gateway:demo:env:one:session:token',
       environment_id: 'gateway-env',
       label: 'Gateway Env',
-      gateway_id: 'demo',
+      connection_id: 'demo',
       gateway_label: 'Gateway',
       gateway_env_id: 'one',
       gateway_session_id: 'token',

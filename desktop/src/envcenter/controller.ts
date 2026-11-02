@@ -12,7 +12,7 @@ export async function requestEnvironmentOpen(host: EnvironmentCenterHost, enviro
 }
 export function environmentOpenRunning(environment: EnvironmentEntry, progress?: readonly OpenProgress[]): boolean {
   return progress?.some(item => item.action === 'open_gateway_environment'
-    && item.gateway_id === environment.gateway_id && item.environment_id === environment.id && item.status === 'running') ?? false;
+    && item.connection_id === environment.connection_id && item.environment_id === environment.id && item.status === 'running') ?? false;
 }
 
 /** A host instance owns one pending intent per exact route. Repeated clicks join

@@ -232,3 +232,53 @@ export function desktopRuntimeTargetAutoStatusDetectionEnabled(
   }
   return configured === true;
 }
+
+export type DesktopRuntimeTargetKind = 'local_environment' | 'wsl_environment' | 'ssh_environment';
+
+export function desktopRuntimeConnectionTargetID(
+  kind: DesktopRuntimeTargetKind,
+  runtimeKey: string,
+): DesktopRuntimeTargetID {
+  const cleanRuntimeKey = compact(runtimeKey);
+  if (cleanRuntimeKey === '') {
+    throw new Error('Runtime target key is required.');
+  }
+  const prefix = kind === 'ssh_environment'
+    ? 'ssh'
+    : kind === 'wsl_environment'
+      ? 'wsl'
+      : 'local';
+  return `${prefix}:${cleanRuntimeKey}`;
+}
+
+export function normalizeDesktopRuntimeTargetID(
+  value: unknown,
+): DesktopRuntimeTargetID | null {
+  const cleanValue = compact(value);
+  if (cleanValue.startsWith('local:') && cleanValue.length > 'local:'.length) {
+    return cleanValue as DesktopRuntimeTargetID;
+  }
+  if (cleanValue.startsWith('ssh:') && cleanValue.length > 'ssh:'.length) {
+    return cleanValue as DesktopRuntimeTargetID;
+  }
+  if (cleanValue.startsWith('wsl:') && cleanValue.length > 'wsl:'.length) {
+    return cleanValue as DesktopRuntimeTargetID;
+  }
+  return null;
+}
+
+export function desktopRuntimeTargetKindFromID(
+  value: DesktopRuntimeTargetID,
+): DesktopRuntimeTargetKind {
+  return value.startsWith('ssh:')
+    ? 'ssh_environment'
+    : value.startsWith('wsl:')
+      ? 'wsl_environment'
+      : 'local_environment';
+}
+
+export function desktopRuntimeTargetKey(
+  value: DesktopRuntimeTargetID,
+): string {
+  return value.replace(/^(local|wsl|ssh):/u, '');
+}

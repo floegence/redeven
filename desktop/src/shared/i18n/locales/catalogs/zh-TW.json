@@ -2616,7 +2616,7 @@
     "directory": "已加入的執行階段",
     "directoryPending": "重新整理 Gateway 以載入已加入的執行階段。",
     "directoryIntro": "Gateway 是供已加入執行階段共用的存取入口。",
-    "directoryAccessHint": "Redeven Cloud 和其他獲准的用戶端都能使用此 Gateway；執行階段服務仍由各自主機獨立管理。",
+    "directoryAccessHint": "已配對的裝置可透過此 Gateway 存取已連接的執行環境。使用者與工作階段由各執行環境獨立驗證。",
     "environmentListStale": "重新整理失敗，正在顯示上次儲存的成員清單。",
     "viaNamedGateway": "透過 {gateway}",
     "registeredConnection": "已儲存的直接連線",
@@ -3817,13 +3817,11 @@
     "automaticHelp": "僅允許列出的目標；清單為空時禁止轉送。",
     "affected": "受影響的連線",
     "none": "無",
-    "cloudImpact": "出口變更只影響經過此代理的流量，獨立 Gateway 存取維持可用。",
     "confirmSave": "確認並儲存",
     "hookConfigured": "已在 Gateway 主機設定",
     "hookAbsent": "未設定",
     "members": "執行階段 連線",
     "empty": "尚無執行階段加入此 Gateway。",
-    "cloudPermission": "出口存取",
     "inherit": "繼承預設",
     "allow": "允許",
     "deny": "禁止",
@@ -3837,10 +3835,12 @@
     "memberCapacity": "此 Gateway 的 執行階段 連線數量已達上限。",
     "hookMemberAdmission": "執行階段 連線准入",
     "hookSessionAccess": "工作階段存取",
-    "hookCloudPublication": "網路出口",
     "destinations": "允許的目標（主機:連接埠，每行一個）",
     "operationUnknown": "操作結果尚未確認。請重新整理以檢查 Gateway 狀態。重試只會查詢原操作結果，不會重複執行變更。操作編號：{id}",
-    "operationReviewed": "我已核對目前狀態，允許開始新操作"
+    "operationReviewed": "我已核對目前狀態，允許開始新操作",
+    "egressPermission": "出口存取",
+    "hookEgress": "網路出口",
+    "egressImpact": "出口變更只影響經過此代理的流量，獨立 Gateway 存取維持可用。"
   },
   "gatewayClients": {
     "connectionSettings": "連線設定",
@@ -3903,13 +3903,9 @@
     "unpairImpact": "將停止透過此 Gateway 存取，其他連線不受影響。",
     "cloudImpact": "透過此 Gateway 的 Redeven Cloud 存取也將中斷。",
     "cloudChanged": "Cloud 存取已變更，請重新開啟以確認影響。",
-    "publishTitle": "透過 Gateway 發布至 Cloud",
-    "publish": "確認發布",
-    "publishHelp": "透過此 Gateway 將執行階段發布至 Redeven Cloud，需要 Cloud 核准。",
     "empty": "尚未配對 Gateway。",
     "unavailable": "授權 Desktop 存取此閘道後，即可開啟環境視窗。",
-    "tab": "Gateway",
-    "useRouteChange": "此執行階段已關聯 Cloud。請使用「變更通路」切換連線，環境身分與歸屬會保留。"
+    "tab": "Gateway"
   },
   "tessivenRuntime": {
     "confirmTitle": "確認{action}",

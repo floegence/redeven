@@ -2616,7 +2616,7 @@
     "directory": "가입한 런타임",
     "directoryPending": "Gateway를 새로 고쳐 가입한 런타임을 불러오세요.",
     "directoryIntro": "Gateway는 가입한 런타임이 함께 사용하는 액세스 지점입니다.",
-    "directoryAccessHint": "Redeven Cloud와 승인된 다른 클라이언트가 이 Gateway를 사용할 수 있습니다. 런타임 서비스는 별도로 관리됩니다.",
+    "directoryAccessHint": "페어링된 기기는 이 Gateway를 통해 연결된 런타임에 접근할 수 있습니다. 사용자와 세션은 각 런타임이 직접 검증합니다.",
     "environmentListStale": "새로 고치지 못했습니다. 마지막으로 저장된 멤버 목록을 표시합니다.",
     "viaNamedGateway": "{gateway} 경유",
     "registeredConnection": "저장된 직접 연결",
@@ -3817,13 +3817,11 @@
     "automaticHelp": "목록의 대상만 허용합니다. 목록이 비어 있으면 전달이 비활성화됩니다.",
     "affected": "영향받는 연결",
     "none": "없음",
-    "cloudImpact": "변경은 이 프록시의 트래픽에만 적용됩니다. 독립 Gateway 접근은 계속 사용할 수 있습니다.",
     "confirmSave": "확인 후 저장",
     "hookConfigured": "Gateway 호스트에 설정됨",
     "hookAbsent": "설정되지 않음",
     "members": "런타임 연결",
     "empty": "이 Gateway에 가입한 런타임이 없습니다.",
-    "cloudPermission": "출구 접근",
     "inherit": "기본값 상속",
     "allow": "허용",
     "deny": "금지",
@@ -3837,10 +3835,12 @@
     "memberCapacity": "이 Gateway의 런타임 연결 수가 한도에 도달했습니다.",
     "hookMemberAdmission": "런타임 연결 허용",
     "hookSessionAccess": "세션 접근",
-    "hookCloudPublication": "네트워크 출구",
     "destinations": "허용 대상(호스트:포트, 한 줄에 하나)",
     "operationUnknown": "작업 결과를 확인하지 못했습니다. 새로 고침하여 Gateway 상태를 확인하세요. 다시 시도하면 변경을 반복하지 않고 원래 결과만 조회합니다. 작업 ID: {id}",
-    "operationReviewed": "현재 상태를 확인했습니다. 새 작업 허용"
+    "operationReviewed": "현재 상태를 확인했습니다. 새 작업 허용",
+    "egressPermission": "출구 접근",
+    "hookEgress": "네트워크 출구",
+    "egressImpact": "변경은 이 프록시의 트래픽에만 적용됩니다. 독립 Gateway 접근은 계속 사용할 수 있습니다."
   },
   "gatewayClients": {
     "connectionSettings": "연결 설정",
@@ -3903,13 +3903,9 @@
     "unpairImpact": "이 Gateway를 통한 접근이 종료됩니다. 다른 연결은 유지됩니다.",
     "cloudImpact": "이 Gateway를 통한 Redeven Cloud 접근도 중단됩니다.",
     "cloudChanged": "Cloud 접근이 변경되었습니다. 다시 열어 영향을 확인하세요.",
-    "publishTitle": "Gateway를 통해 게시",
-    "publish": "게시 확인",
-    "publishHelp": "이 Gateway를 통해 런타임을 Redeven Cloud에 게시합니다. Cloud 승인이 필요합니다.",
     "empty": "페어링된 Gateway가 없습니다.",
     "unavailable": "환경 창을 열려면 이 게이트웨이에서 Desktop을 승인하세요.",
-    "tab": "Gateway",
-    "useRouteChange": "이 런타임은 이미 Cloud에 연결되어 있습니다. 경로 변경을 사용하면 환경 ID와 소유권을 유지하면서 연결 경로를 바꿀 수 있습니다."
+    "tab": "Gateway"
   },
   "tessivenRuntime": {
     "confirmTitle": "{action} 확인",

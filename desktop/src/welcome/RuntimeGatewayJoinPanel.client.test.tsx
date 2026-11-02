@@ -1,3 +1,4 @@
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -7,7 +8,7 @@ import { controlText } from '../testSupport/controlText';
 import type { GatewayJoinPreview, GatewayAttachmentStatus } from '../shared/gatewayJoin';
 import type { DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 
 let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve,40));
@@ -27,10 +28,10 @@ function verified(value=preview): DesktopLauncherActionResult { return {ok:true,
 function mount(perform: ReturnType<typeof vi.fn>, gateways: readonly DesktopGatewaySource[] = [], initialAddress = "https://gateway.internal:7443") {
  vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
  const root=document.createElement('div');document.body.append(root);
- const [snapshot,setSnapshot]=createSignal({target:'ssh:chosen' as DesktopCloudRuntimeLinkTargetID,gateways,address:initialAddress,code:'123456789ABCDEFGHJKMNPQRSTV'});
+ const [snapshot,setSnapshot]=createSignal({target:'ssh:chosen' as DesktopRuntimeTargetID,gateways,address:initialAddress,code:'123456789ABCDEFGHJKMNPQRSTV'});
  dispose=render(()=><RuntimeGatewayJoinPanel targetID={snapshot().target} targetLabel="Build Runtime" gateways={snapshot().gateways} address={snapshot().address} code={snapshot().code} i18n={i18n}/>,root);
  const trigger=button(i18n.t('gatewayJoin.title'));trigger.focus();trigger.click();return {trigger,
-  setTarget:(target:DesktopCloudRuntimeLinkTargetID)=>setSnapshot(current=>({...current,target})),
+  setTarget:(target:DesktopRuntimeTargetID)=>setSnapshot(current=>({...current,target})),
   setGateways:(gateways:readonly DesktopGatewaySource[])=>setSnapshot(current=>({...current,gateways})),
   refreshSnapshot:()=>setSnapshot(current=>({...current,gateways:structuredClone(current.gateways)})),
   setInvitation:(address:string,code:string)=>setSnapshot(current=>({...current,address,code})),
@@ -182,7 +183,7 @@ describe('Runtime Gateway address and code interaction',()=>{
   const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified()).mockResolvedValue(status({joined:false,phase:'not_joined'}));const {setTarget}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();setTarget('ssh:other');await settle();expect(document.body.textContent).toContain(preview.gateway_name);expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(true);expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
  });
  it.each([['GATEWAY_INVITATION_EXPIRED','expired'],['GATEWAY_INVITATION_USED','used'],['GATEWAY_UNREACHABLE','unreachable'],['GATEWAY_IDENTITY_FAILED','identityFailed'],['INVITATION_AUTHENTICATION_FAILED','invalid']] as const)('preserves input and explains %s',async(error,key)=>{
-  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValue({ok:false,code:'cloud_link_failed',gateway_error_code:error});mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t(`gatewayJoin.${key}`));expect(document.querySelectorAll('input')[1]?.value).toBe('123456789ABCDEFGHJKMNPQRSTV');
+  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValue({ok:false,code:'gateway_attachment_failed',gateway_error_code:error});mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t(`gatewayJoin.${key}`));expect(document.querySelectorAll('input')[1]?.value).toBe('123456789ABCDEFGHJKMNPQRSTV');
  });
 
 });
@@ -204,7 +205,7 @@ describe('saved Gateway selection',()=>{
  it('shows the real local and SSH registrations even before publishing any endpoint',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
   mount(perform,['local_host','ssh_host'].map((connection_kind,index)=>({...localGateway,
-   gateway_id:`saved-${index}`,display_name:index?'Gateway-gzcom':'Gateway-local',
+   connection_id:`saved-${index}`,display_name:index?'Gateway-gzcom':'Gateway-local',
    connection_kind:connection_kind as DesktopGatewaySource['connection_kind'],endpoints:[],
    listener_addresses:[':7443'],active_listener_addresses:['[::]:7443'],allowed_hosts:[],
    permissions:{access:true,manage_attachments:true,manage_network:true},
@@ -358,7 +359,7 @@ describe('saved Gateway address completion',()=>{
   expect(document.querySelector('[data-gateway-endpoint-draft]')).toBe(input);expect(document.activeElement).toBe(input);
   button(i18n.t('gatewayDiscovery.saveAddress')).click();await settle();refreshSnapshot();await settle();
   expect(document.querySelector('[data-gateway-selected-address]')?.textContent).toBe('https://office.example:7443');
-  expect(perform.mock.calls.find(([request])=>request.kind==='update_gateway_endpoints')?.[0]).toMatchObject({gateway_id:'local-gateway',endpoints:[{address:'https://office.example:7443'}]});
+  expect(perform.mock.calls.find(([request])=>request.kind==='update_gateway_endpoints')?.[0]).toMatchObject({connection_id:'local-gateway',endpoints:[{address:'https://office.example:7443'}]});
   expect(perform.mock.calls.some(([request])=>request.kind==='invite_gateway_runtime')).toBe(false);
   button(i18n.t('gatewayMembers.createInvitation')).click();await settle();
   expect(document.querySelector<HTMLInputElement>('input[autocomplete=off]:not([placeholder])')?.value).toBe('generated-code');

@@ -155,7 +155,7 @@ try {
       container: { ...original, managed_runtime_host_access: { kind: 'local_host' }, managed_runtime_placement: {
         kind: 'container_process', container_engine: 'docker', container_id: 'fixture-container', container_ref: 'fixture-container', container_label: 'Container', runtime_root: '/root/.redeven', bridge_strategy: 'exec_stream' } },
       url: { ...original, kind: 'external_local_ui', registration_ref: { kind: 'saved_environment', id: 'fixture-url' }, local_ui_url: 'https://example.invalid/' },
-      gateway: { ...original, kind: 'gateway_environment', access_group_id: undefined, registration_ref: { kind: 'gateway_environment', gateway_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } },
+      gateway: { ...original, kind: 'gateway_environment', access_group_id: undefined, registration_ref: { kind: 'gateway_environment', connection_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } },
       cloud,
     };
     for (const [kind, value] of Object.entries(variants)) {

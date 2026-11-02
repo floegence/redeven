@@ -2616,7 +2616,7 @@
     "directory": "Environnements joints",
     "directoryPending": "Actualisez ce Gateway pour charger les environnements joints.",
     "directoryIntro": "Un Gateway est un point d’accès partagé pour les environnements joints.",
-    "directoryAccessHint": "Redeven Cloud et d’autres clients autorisés peuvent utiliser ce Gateway. Les services d’exécution restent gérés séparément.",
+    "directoryAccessHint": "Les appareils associés peuvent accéder aux environnements d’exécution connectés via ce Gateway. Chaque environnement vérifie ses propres utilisateurs et sessions.",
     "environmentListStale": "Échec de l’actualisation. La dernière liste enregistrée est affichée.",
     "viaNamedGateway": "Via {gateway}",
     "registeredConnection": "Connexion directe enregistrée",
@@ -3825,13 +3825,11 @@
     "automaticHelp": "Seules les destinations indiquées sont autorisées. Une liste vide désactive le transfert.",
     "affected": "Connexions concernées",
     "none": "Aucun",
-    "cloudImpact": "Les modifications affectent le trafic de ce proxy. L’accès indépendant au Gateway reste disponible.",
     "confirmSave": "Confirmer et enregistrer",
     "hookConfigured": "Configuré sur l’hôte Gateway",
     "hookAbsent": "Non configuré",
     "members": "Connexions environnement d’exécution",
     "empty": "Aucun environnement d’exécution n’a rejoint ce Gateway.",
-    "cloudPermission": "Accès sortant",
     "inherit": "Hériter de la valeur par défaut",
     "allow": "Autoriser",
     "deny": "Interdire",
@@ -3845,10 +3843,12 @@
     "memberCapacity": "Ce Gateway a atteint sa limite de connexions environnement d’exécution.",
     "hookMemberAdmission": "Admission des connexions environnement d’exécution",
     "hookSessionAccess": "Accès aux sessions",
-    "hookCloudPublication": "Sortie réseau",
     "destinations": "Destinations autorisées (hôte:port, une par ligne)",
     "operationUnknown": "Le résultat est incertain. Actualisez pour vérifier l’état du Gateway. Réessayer consulte le résultat initial sans répéter la modification. Opération : {id}",
-    "operationReviewed": "État actuel vérifié ; autoriser une nouvelle opération"
+    "operationReviewed": "État actuel vérifié ; autoriser une nouvelle opération",
+    "egressPermission": "Accès sortant",
+    "hookEgress": "Sortie réseau",
+    "egressImpact": "Les modifications affectent le trafic de ce proxy. L’accès indépendant au Gateway reste disponible."
   },
   "gatewayClients": {
     "connectionSettings": "Paramètres de connexion",
@@ -3911,13 +3911,9 @@
     "unpairImpact": "L’accès via ce Gateway prendra fin. Les autres connexions resteront disponibles.",
     "cloudImpact": "L’accès à Redeven Cloud via ce Gateway sera également interrompu.",
     "cloudChanged": "L’accès Cloud a changé. Rouvrez cette fenêtre pour vérifier les conséquences.",
-    "publishTitle": "Publier via un Gateway",
-    "publish": "Confirmer la publication",
-    "publishHelp": "Publier cet environnement d’exécution dans Redeven Cloud via ce Gateway. Une approbation Cloud est requise.",
     "empty": "Aucun Gateway associé.",
     "unavailable": "Autorisez Desktop sur cette passerelle pour ouvrir la fenêtre de l’environnement.",
-    "tab": "Gateway",
-    "useRouteChange": "Cet environnement d’exécution est déjà associé à Cloud. Utilisez Changer de route pour changer de connexion tout en conservant son identité et son appartenance."
+    "tab": "Gateway"
   },
   "tessivenRuntime": {
     "confirmTitle": "Confirmer : {action}",

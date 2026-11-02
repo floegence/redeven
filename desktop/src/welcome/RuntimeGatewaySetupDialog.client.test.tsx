@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import type { RuntimeGatewayPreparationResult } from './RuntimeGatewayJoinPanel';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopRuntimeConnectionTarget } from "../shared/runtimeConnectionTarget";
 import { createDesktopI18n } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
 import { invitationFixture } from '../testSupport/gatewayMembershipFixture';
@@ -20,17 +20,17 @@ function button(key: Parameters<typeof i18n.t>[0]) {
   if (!found) throw new Error(`Missing button ${key}`);
   return found;
 }
-const target: DesktopCloudRuntimeLinkTarget = { id: 'ssh:created', kind: 'ssh_environment', environment_id: 'created', label: 'Created Runtime', runtime_key: 'created', runtime_url: 'http://localhost:12345',
+const target: DesktopRuntimeConnectionTarget = { id: 'ssh:created', kind: 'ssh_environment', environment_id: 'created', label: 'Created Runtime', runtime_key: 'created', runtime_url: 'http://localhost:12345',
   runtime_running: true, runtime_openable: true, runtime_control_status: { state: 'available' }, provider_connection_state: 'unlinked', cloud_link_state: 'unbound',
   cloud_origin_supported: false, can_connect_cloud: false, can_disconnect_cloud: false };
 const original = mixedEnvironmentFixture({ linkKind: 'ssh_environment' }).snapshot.environments.find(item => item.kind === 'ssh_environment')!;
 const service = { ...original.runtime_service!, compatibility: 'compatible' as const, capabilities: { ...original.runtime_service!.capabilities!, runtime_gateway: { supported: true } } };
 const environment: DesktopEnvironmentEntry = { ...original, id: 'created', label: 'Created Runtime', runtime_service: undefined,
   runtime_health: { ...original.runtime_health, status: 'offline', freshness: 'fresh', offline_reason_code: 'not_started' },
-  provider_runtime_link_target: { ...target, runtime_running: false, runtime_control_status: { state: 'missing', reason_code: 'not_started', message: 'Stopped' } },
+  runtime_connection_target: { ...target, runtime_running: false, runtime_control_status: { state: 'missing', reason_code: 'not_started', message: 'Stopped' } },
 };
 const readyEnvironment: DesktopEnvironmentEntry = { ...environment, runtime_service: service,
-  runtime_health: { ...original.runtime_health, status: 'online' }, provider_runtime_link_target: target };
+  runtime_health: { ...original.runtime_health, status: 'online' }, runtime_connection_target: target };
 const refresh = async () => true;
 it('authenticates inside the wizard and keeps one connection through verification and consent', async () => {
   const perform = vi.fn(async (request) => {
@@ -89,7 +89,7 @@ it('recovers authentication without losing invitation drafts and starts a fresh 
   if (access?.kind !== 'ssh_host') throw new Error('SSH fixture required');
   const selected: DesktopEnvironmentEntry = { ...readyEnvironment,
     managed_runtime_host_access: { ...access, ssh: { ...access.ssh, auth_mode: 'password' } },
-    provider_runtime_link_target: { ...readyEnvironment.provider_runtime_link_target!,
+    runtime_connection_target: { ...readyEnvironment.runtime_connection_target!,
       runtime_control_status: { state: 'missing', reason_code: 'auth_required', message: 'Authenticate' } },
   };
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(selected);
@@ -161,9 +161,9 @@ it.each(['ssh', 'ssh_container'] as const)('tries the current %s connection befo
   expect(document.querySelector('[role="alert"]')).toBeNull();
   expect(button('gatewayJoin.connectAndContinue').hasAttribute('disabled')).toBe(false);
   setCurrent({ ...entry, runtime_health: { ...entry.runtime_health, freshness: 'checking',
-    observed_runtime_control_status: entry.provider_runtime_link_target!.runtime_control_status } }); await settle();
+    observed_runtime_control_status: entry.runtime_connection_target!.runtime_control_status } }); await settle();
   button('gatewayJoin.connectAndContinue').click(); await settle();
-  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: entry.provider_runtime_link_target!.id,
+  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: entry.runtime_connection_target!.id,
     connection_token: expect.any(Number), operation: 'status' });
   setCurrent({ ...entry }); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
@@ -188,7 +188,7 @@ it.each([false, true])('preserves invitation drafts across settings with changed
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   const closed = perform.mock.calls.at(-1) as unknown as [{ kind: string; connection_token: number }];
   expect(closed[0].kind).toBe('close_runtime_gateway');
-  if (replaced) setCurrent({ ...readyEnvironment, id: 'replacement', provider_runtime_link_target: { ...target, id: 'ssh:replacement', environment_id: 'replacement' } });
+  if (replaced) setCurrent({ ...readyEnvironment, id: 'replacement', runtime_connection_target: { ...target, id: 'ssh:replacement', environment_id: 'replacement' } });
   setSuspended(false); await settle();
   expect([...document.querySelectorAll<HTMLInputElement>('input')].map(input => input.value)).toEqual(['https://office.example', 'retained-code']);
   button('gatewayJoin.connectAndContinue').click(); await settle();
@@ -199,7 +199,7 @@ it.each([false, true])('preserves invitation drafts across settings with changed
 
 it('shows an unverified diagnostic without blaming credentials', async () => {
   const selected = { ...environment, runtime_health: { ...environment.runtime_health, offline_reason_code: 'unverified' as const, offline_reason: 'SSH host did not answer.' },
-    provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'unverified' as const, message: 'SSH host did not answer.' } } };
+    runtime_connection_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'unverified' as const, message: 'SSH host did not answer.' } } };
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={selected} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
   await settle(); expect(document.body.textContent).not.toContain(i18n.t('gatewayJoin.credentialsHelp'));
@@ -212,7 +212,7 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
   if (access?.kind !== 'ssh_host') throw new Error('SSH fixture required');
   const selected = { ...readyEnvironment, ssh_password_configured: false,
     managed_runtime_host_access: { ...access, ssh: { ...access.ssh, auth_mode: 'password' as const } },
-    provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'auth_required' as const, message: 'Authenticate.' } } };
+    runtime_connection_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'auth_required' as const, message: 'Authenticate.' } } };
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry>(selected);
   const perform = vi.fn().mockResolvedValueOnce({ ok: false, gateway_error_code: 'runtime_not_started' })
     .mockResolvedValue(connected ? { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }
@@ -220,7 +220,7 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const recover = vi.fn(async () => {
     expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value ?? '').toBe('');
-    if (connected) setCurrent({ ...selected, provider_runtime_link_target: target });
+    if (connected) setCurrent({ ...selected, runtime_connection_target: target });
     return { ok: true };
   });
   const root = document.createElement('div'); document.body.append(root);
@@ -245,7 +245,7 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
 
 it.each(['start', 'restart', 'update'] as const)('uses one authentication field for actual %s failures and clears it after recovery', async operation => {
   const source = operation === 'start' ? environment : operation === 'restart'
-    ? { ...readyEnvironment, provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'not_reported' as const, message: 'Restart' } } }
+    ? { ...readyEnvironment, runtime_connection_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'not_reported' as const, message: 'Restart' } } }
     : { ...readyEnvironment, runtime_operations: { ...readyEnvironment.runtime_operations,
       update: { ...readyEnvironment.runtime_operations.update, reason_code: 'runtime_update_required' } } };
   const selected = { ...source, runtime_started_at_unix_ms: 100 };
@@ -331,7 +331,7 @@ it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects t
   expect(button('gatewayJoin.connecting').hasAttribute('disabled')).toBe(true);
   expect(button('gatewayJoin.connecting')).toBe(connection);
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
-  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
+  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: selected.runtime_connection_target!.id, operation: 'status' });
   complete({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
   expect(document.querySelector('input')?.closest('[hidden]')).toBeNull();
@@ -478,7 +478,7 @@ it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('s
   expect(refresh).toHaveBeenCalledOnce(); expect(recover).not.toHaveBeenCalled(); expect(perform).not.toHaveBeenCalled();
   button('gatewayJoin.startAndContinue').click(); await settle();
   expect(recover).toHaveBeenCalledExactlyOnceWith(selected, 'start');
-  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
+  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: selected.runtime_connection_target!.id, operation: 'status' });
 });
 
 it('keeps drafts and verified consent across a failed management retry', async () => {
@@ -497,7 +497,7 @@ it('keeps drafts and verified consent across a failed management retry', async (
     inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
   }
   button('gatewayJoin.verify').click(); await settle();
-  setCurrent({ ...readyEnvironment, provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing', reason_code: 'auth_required', message: 'Credentials required' } } });
+  setCurrent({ ...readyEnvironment, runtime_connection_target: { ...target, runtime_control_status: { state: 'missing', reason_code: 'auth_required', message: 'Credentials required' } } });
   await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
   expect(button('gatewayJoin.confirmEnable').hasAttribute('disabled')).toBe(true);
@@ -527,7 +527,7 @@ it.each(['restart', 'update'] as const)('retains the enrollment session across f
     inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
   }
   button('gatewayJoin.verify').click(); await settle();
-  const blocked = operation === 'restart' ? { ...readyEnvironment, provider_runtime_link_target: { ...target,
+  const blocked = operation === 'restart' ? { ...readyEnvironment, runtime_connection_target: { ...target,
     runtime_control_status: { state: 'missing' as const, reason_code: 'not_reported' as const, message: 'Restart' } } }
     : { ...readyEnvironment, runtime_operations: { ...readyEnvironment.runtime_operations,
       update: { ...readyEnvironment.runtime_operations.update, reason_code: 'runtime_update_required' } } };
@@ -565,7 +565,7 @@ it('reports failed management checks with Retry and ignores a response after clo
   let resolve: ((value: boolean) => void) | undefined;
   const refresh = vi.fn().mockResolvedValueOnce(false).mockImplementationOnce(() => new Promise<boolean>(done => { resolve = done; }));
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>({ ...readyEnvironment,
-    provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing', reason_code: 'auth_required', message: 'Credentials' } } });
+    runtime_connection_target: { ...target, runtime_control_status: { state: 'missing', reason_code: 'auth_required', message: 'Credentials' } } });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();

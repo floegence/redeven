@@ -229,7 +229,7 @@ describe('DesktopWelcomeShell', () => {
       ...local!,
       cloud_origin: 'https://legacy.example.invalid',
       control_plane_label: 'Legacy Control Plane',
-      provider_runtime_link_target: {
+      runtime_connection_target: {
         id: 'local:local' as const,
         kind: 'local_environment' as const,
         environment_id: local!.id,
@@ -471,13 +471,13 @@ describe('DesktopWelcomeShell', () => {
       "if (environment.kind === 'gateway_environment') {\n      return openGatewayEnvironment(environment, errorTarget);\n    }",
     );
     expect(appSrc).toContain("kind: 'open_gateway_environment'");
-    expect(appSrc).toContain('gateway_id: gatewayID');
+    expect(appSrc).toContain('connection_id: gatewayID');
     expect(appSrc).toContain('createEnvironmentOpenController(');
     const controller = fs.readFileSync(path.join(__dirname, '..', 'envcenter', 'controller.ts'), 'utf8');
     expect(controller).toContain('projectEnvironment(environment, presentationEnvironmentID).target');
     expect(appSrc).toContain("case 'resolve_gateway':\n        if (environment.kind === 'gateway_environment') {");
     expect(appSrc).toContain('openCreateGatewaySetup(gateway);');
-    expect(appSrc).not.toContain("case 'resolve_gateway':\n        await pairGateway(environment.gateway_id ?? '');");
+    expect(appSrc).not.toContain("case 'resolve_gateway':\n        await pairGateway(environment.connection_id ?? '');");
     expect(appSrc).toContain("kind: 'refresh_gateway'");
     expect(appSrc).not.toContain("kind: 'sync_gateway'");
     expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
@@ -508,7 +508,7 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain(
-      'const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));',
+      'const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.connection_id));',
     );
     expect(appSrc).toContain('const renderedGatewaySourceIDs = gatewaySourceIDs;');
     expect(appSrc).toContain('function GatewaySourceOwner(');
@@ -516,7 +516,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<For each={renderedGatewaySourceIDs()}>');
     expect(appSrc).not.toContain('<For each={visibleGatewaySourceIDs()}>');
     expect(appSrc).toContain('gatewayEntriesByGatewayID()[gatewayID] ?? []');
-    expect(appSrc).toContain('gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter');
+    expect(appSrc).toContain('gatewaySourceFilterValue(gateway.connection_id) !== props.gatewaySourceFilter');
     expect(appSrc).toContain('return !hasQuery || gatewaySourceMatchesQuery(gateway, query);');
     expect(appSrc).toContain(
       'function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string): boolean',
@@ -1310,7 +1310,7 @@ describe('DesktopWelcomeShell', () => {
     const operationKeyStart = appSrc.indexOf('function gatewayOperationKeyForAction(');
     const operationKeyEnd = appSrc.indexOf('function pendingGatewayRefreshProgress(', operationKeyStart);
     const operationKeySrc = appSrc.slice(operationKeyStart, operationKeyEnd);
-    expect(operationKeySrc).toContain('return `${gateway.gateway_id}:refresh`;');
+    expect(operationKeySrc).toContain('return `${gateway.connection_id}:refresh`;');
     expect(operationKeySrc).not.toContain('service_target_id');
   });
 

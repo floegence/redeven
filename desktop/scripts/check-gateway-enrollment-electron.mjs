@@ -83,9 +83,9 @@ await session.run(async () => {
   const saved = await action({ kind: 'upsert_gateway', connection_id: gatewayID, display_name: 'Empty-address Gateway', connection_kind: 'local_host',
     host_access: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: gatewayRoot } });
   assert.equal(saved.ok, true, JSON.stringify(saved));
-  const paired = await action({ kind: 'pair_gateway', gateway_id: gatewayID });
+  const paired = await action({ kind: 'pair_gateway', connection_id: gatewayID });
   assert.equal(paired.ok, true, JSON.stringify(paired));
-  const source = await bounded(async () => { while (true) { const value = (await snapshot()).gateway_sources.find(value => value.gateway_id === gatewayID);
+  const source = await bounded(async () => { while (true) { const value = (await snapshot()).gateway_sources.find(value => value.connection_id === gatewayID);
     if (value?.permissions?.manage_attachments && value.active_listener_addresses?.length) return value;
     await new Promise(resolve => setTimeout(resolve, 200));
   } }, 30000, 'Paired empty-address Gateway catalog');
@@ -125,12 +125,12 @@ await session.run(async () => {
   assert.deepEqual(persisted.advertised_endpoints.map(endpoint => endpoint.address), [origin]);
   assert.deepEqual(persisted.listen_addresses, before.listen_addresses);
   assert.deepEqual(persisted.allowed_hosts, before.allowed_hosts);
-  assert.equal((await snapshot()).gateway_sources.find(value => value.gateway_id === gatewayID).environments.length, 0);
+  assert.equal((await snapshot()).gateway_sources.find(value => value.connection_id === gatewayID).environments.length, 0);
   await dialog.getByRole('button', { name: 'Generate invitation code', exact: true }).click();
   await page.waitForFunction(() => { const input = document.querySelector('input[autocomplete="off"]:not([placeholder])'); return input?.value.length === 26; });
   await dialog.getByRole('button', { name: 'Verify', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirm and enable', exact: true }).waitFor();
-  assert.equal((await snapshot()).gateway_sources.find(value => value.gateway_id === gatewayID).environments.length, 0);
+  assert.equal((await snapshot()).gateway_sources.find(value => value.connection_id === gatewayID).environments.length, 0);
   await dialog.screenshot({ path: path.join(output, 'verified-before-consent.png') });
   await dialog.getByRole('button', { name: 'Confirm and enable', exact: true }).click();
   await dialog.locator('[data-gateway-enrollment-result]').waitFor();
@@ -139,10 +139,10 @@ await session.run(async () => {
   await dialog.getByRole('button', { name: 'Runtimes I manage', exact: true }).waitFor();
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
-  await action({ kind: 'refresh_gateway', gateway_id: gatewayID });
+  await action({ kind: 'refresh_gateway', connection_id: gatewayID });
   const joined = await bounded(async () => { while (true) {
-    await action({ kind: 'refresh_gateway', gateway_id: gatewayID });
-    const value = (await snapshot()).gateway_sources.find(value => value.gateway_id === gatewayID);
+    await action({ kind: 'refresh_gateway', connection_id: gatewayID });
+    const value = (await snapshot()).gateway_sources.find(value => value.connection_id === gatewayID);
     if (value?.environments?.some(member => member.connected)) return value;
     console.log('Observed member state', value?.environments.map(member => ({state:member.state,connected:member.connected})));
     await new Promise(resolve => setTimeout(resolve, 1000));

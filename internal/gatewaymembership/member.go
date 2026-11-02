@@ -149,12 +149,12 @@ func (s *Store) Rotate(leaf *x509.Certificate, request gp.MemberRotateRequest) (
 	return response, nil
 }
 
-// RefreshHooks is local-host-only. It first fences all previous Cloud hook
+// RefreshHooks is local-host-only. It first fences all previous egress hook
 // grants, including when configuration validation fails. Re-evaluation is explicit.
 func (s *Store) RefreshHooks(config HookConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Fence both live hook execution and cached Cloud grants.
+	// Fence both live hook execution and cached egress grants.
 	s.hooks.Invalidate()
 	if err := s.fenceHookGrantsLocked(); err != nil {
 		return err
@@ -162,7 +162,7 @@ func (s *Store) RefreshHooks(config HookConfig) error {
 	return s.hooks.Replace(config)
 }
 
-// InvalidateHooks also fences Cloud grants when the local file cannot be read.
+// InvalidateHooks also fences egress grants when the local file cannot be read.
 func (s *Store) InvalidateHooks() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

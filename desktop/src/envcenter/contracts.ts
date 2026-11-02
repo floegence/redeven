@@ -2,7 +2,7 @@
 export type EnvironmentEntry = Readonly<{
   id: string;
   label: string;
-  gateway_id?: string;
+  connection_id?: string;
   gateway_env_id?: string;
   access_group_id?: string;
   is_open?: boolean;
@@ -12,14 +12,14 @@ export type EnvironmentEntry = Readonly<{
 }>;
 export type OpenProgress = Readonly<{
   action: string;
-  gateway_id?: string;
+  connection_id?: string;
   environment_id?: string;
   status?: string;
 }>;
 export type ListTranslationKey = 'gatewayMembers.connected' | 'gatewayMembers.offline'
   | 'gatewayAccess.checkingAccess' | 'environmentAction.open';
 export type ListI18n = Readonly<{ t: (key: ListTranslationKey) => string }>;
-export type OpenTarget = Readonly<{ environment_id: string; gateway_id: string; gateway_env_id: string; label: string }>;
+export type OpenTarget = Readonly<{ environment_id: string; connection_id: string; gateway_env_id: string; label: string }>;
 export type OpenResult = Readonly<{ kind: 'window' | 'navigation'; accepted: boolean }>;
 export interface EnvironmentCenterHost {
   focus(sessionKey: string): Promise<boolean>;

@@ -1,8 +1,9 @@
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { environmentInteractionIdentity } from './environmentInteractionIdentity';
 import {RuntimeCloudConnections} from './RuntimeCloudConnections';
 import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccessPresentation';
 import { RuntimeGatewayConnectionsDialog } from './RuntimeGatewayConnectionsDialog';
-import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 import type { RuntimeServiceCloudLinkBinding } from '../shared/runtimeService';
 import type { RuntimeGatewayAttachment } from '../shared/runtimeService';
 import type { GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
@@ -939,8 +940,8 @@ function EnvironmentOwnerSurface(
     setGatewayActionID(props.gatewayPerspective ? props.gatewayMember?.gateway_id : undefined);
     setGatewayMode(mode);
   };
-  const targetID = createMemo<DesktopCloudRuntimeLinkTargetID | undefined>(previous => runtime().provider_runtime_link_target?.id ?? previous);
-  const targetAvailable = () => props.ownerAvailable && runtime().provider_runtime_link_target?.id === targetID();
+  const targetID = createMemo<DesktopRuntimeTargetID | undefined>(previous => runtime().runtime_connection_target?.id ?? previous);
+  const targetAvailable = () => props.ownerAvailable && runtime().runtime_connection_target?.id === targetID();
   const cloudBinding = createMemo<RuntimeServiceCloudLinkBinding | undefined>(previous => runtime().runtime_service?.bindings?.cloud_link ?? previous);
   const gatewayActions = createMemo(() => {
     if (runtimeGatewayAccessPresentation(runtime())) {
@@ -1066,7 +1067,7 @@ function EnvironmentOwnerSurface(
             onChanged={async () => { if (!await props.refreshEnvironmentRuntime(runtime(), 'connect')) throw new Error('Runtime status could not be refreshed'); }} />
         </Show>
         <Show when={runtime().kind !== 'provider_environment' && targetID()}>
-          <RuntimeGatewayJoinPanel gateways={props.gateways} targetLabel={runtime().provider_runtime_link_target?.label ?? runtime().label} focusOwner={() => ownerElement?.focus()} targetID={targetID()!} i18n={props.i18n} purpose={gatewayJoinPurpose()} address={gatewayJoinAddress()} openRequest={gatewayJoinOpenRequest()} authorityKey={JSON.stringify([targetAvailable(), environmentInteractionIdentity(runtime()), !!runtime().runtime_service?.capabilities?.runtime_gateway?.supported])} submissionBlocked={!targetAvailable() || !runtime().runtime_service?.capabilities?.runtime_gateway?.supported} hideTrigger onClose={()=>{setJoinOpen(false);void props.refreshEnvironmentRuntime(runtime(),'connect');}} />
+          <RuntimeGatewayJoinPanel gateways={props.gateways} targetLabel={runtime().runtime_connection_target?.label ?? runtime().label} focusOwner={() => ownerElement?.focus()} targetID={targetID()!} i18n={props.i18n} purpose={gatewayJoinPurpose()} address={gatewayJoinAddress()} openRequest={gatewayJoinOpenRequest()} authorityKey={JSON.stringify([targetAvailable(), environmentInteractionIdentity(runtime()), !!runtime().runtime_service?.capabilities?.runtime_gateway?.supported])} submissionBlocked={!targetAvailable() || !runtime().runtime_service?.capabilities?.runtime_gateway?.supported} hideTrigger onClose={()=>{setJoinOpen(false);void props.refreshEnvironmentRuntime(runtime(),'connect');}} />
           <RuntimeGatewayConnectionsDialog targetID={targetID()!} mode={gatewayMode()} available={targetAvailable() && !!runtime().runtime_service?.capabilities?.runtime_gateway?.supported}
             gatewayID={gatewayActionID()} authorityKey={JSON.stringify([environmentInteractionIdentity(runtime()), (runtime().runtime_service?.gateway_memberships ?? []).map(member => [member.gateway_id, member.attachment_id, member.identity_fingerprint, member.runtime_public_id])])}
             i18n={props.i18n} onClose={()=>setGatewayMode(undefined)} onChanged={()=>void props.refreshEnvironmentRuntime(runtime(),'connect')} focusOwner={()=>ownerElement?.focus()} />

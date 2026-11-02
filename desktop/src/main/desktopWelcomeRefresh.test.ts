@@ -94,7 +94,7 @@ describe('Welcome health refresh relationship continuity', () => {
       expect(refreshing.primary_entry.local_ui_urls).toEqual(pair.primary_entry.local_ui_urls);
       expect(refreshing.primary_entry.runtime_started_at_unix_ms).toBe(pair.primary_entry.runtime_started_at_unix_ms);
       expect(refreshing.provider_entry?.cloud_linked_runtime_summary?.runtime_target_id).toBe(linkedTarget.key);
-      expect(refreshing.primary_entry.provider_runtime_link_target?.runtime_control_status.state).toBe('missing');
+      expect(refreshing.primary_entry.runtime_connection_target?.runtime_control_status.state).toBe('missing');
       resolve(await linkedTarget.probe());
       await pending;
       expect(groups().map(group => [group.id, group.attachment_ids])).toEqual(initialGroups.map(group => [group.id, group.attachment_ids]));

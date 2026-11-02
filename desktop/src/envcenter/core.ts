@@ -35,11 +35,11 @@ export function reduceEnvironmentOperation(
 
 /** Route identity is an exact tuple, never a display name or network address. */
 export function projectEnvironment(environment: EnvironmentEntry, presentationID?: string): EnvironmentPresentation {
-  const gateway = environment.gateway_id?.trim() ?? '';
+  const gateway = environment.connection_id?.trim() ?? '';
   const member = environment.gateway_env_id?.trim() ?? '';
   const id = presentationID ?? environment.access_group_id ?? environment.id;
   const target = gateway && member && id ? {
-    environment_id: id, gateway_id: gateway, gateway_env_id: member, label: environment.label,
+    environment_id: id, connection_id: gateway, gateway_env_id: member, label: environment.label,
   } : undefined;
   return {
     identity: JSON.stringify([gateway, member, id]),

@@ -2,7 +2,7 @@ export type GatewaySourceOverlayKind = 'action_popover';
 
 export type GatewaySourceOverlayState =
   | Readonly<{ kind: 'none' }>
-  | Readonly<{ kind: GatewaySourceOverlayKind; gateway_id: string }>;
+  | Readonly<{ kind: GatewaySourceOverlayKind; connection_id: string }>;
 
 export function closedGatewaySourceOverlayState(): GatewaySourceOverlayState {
   return { kind: 'none' };
@@ -14,7 +14,7 @@ export function openGatewaySourceOverlayState(
 ): GatewaySourceOverlayState {
   return {
     kind,
-    gateway_id: gatewayID,
+    connection_id: gatewayID,
   };
 }
 
@@ -23,7 +23,7 @@ export function gatewaySourceOverlayOpenFor(
   kind: GatewaySourceOverlayKind,
   gatewayID: string,
 ): boolean {
-  return state.kind === kind && state.gateway_id === gatewayID;
+  return state.kind === kind && state.connection_id === gatewayID;
 }
 
 export function closeGatewaySourceOverlayState(

@@ -74,7 +74,7 @@ try {
       await workspace.locator('summary').filter({ hasText: i18n.t('gatewayMembers.policy') }).click();
       const technical = workspace.locator('.redeven-gateway-policy details');
       await technical.locator('summary').click();
-      for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookCloudPublication']) {
+      for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookEgress']) {
         assert.equal(await technical.getByText(i18n.t(`gatewayMembers.${key}`), { exact: false }).isVisible(), true);
       }
       await technical.locator('summary').click();
@@ -90,7 +90,7 @@ try {
       await workspace.locator('.redeven-gateway-policy > summary').click();
       await nav.getByRole('button', { name: i18n.t('gatewayClients.runtimes'), exact: true }).click();
       for (const row of await membersPanel.locator('.redeven-gateway-member-row').all()) {
-        await row.getByRole('button', { name: i18n.t('gatewayMembers.cloudPermission'), exact: true }).click();
+        await row.getByRole('button', { name: i18n.t('gatewayMembers.egressPermission'), exact: true }).click();
         await page.getByRole('menuitem', { name: i18n.t('gatewayMembers.allow'), exact: true }).click();
       }
       await workspace.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();

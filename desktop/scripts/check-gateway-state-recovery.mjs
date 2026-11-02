@@ -44,8 +44,8 @@ try {
           summary: 'Gateway requires host maintenance', detail: failed.service_state.message,
           service_state: failed.service_state, error_code: failed.service_state.error_code };
         window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...failed, diagnosis }, ...snapshot.gateway_sources.slice(1)],
-          action_progress: [{ action: 'start_gateway', gateway_id: failed.gateway_id, subject_kind: 'gateway', subject_id: failed.gateway_id,
-            operation_key: `${failed.gateway_id}:start_gateway`, started_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
+          action_progress: [{ action: 'start_gateway', connection_id: failed.connection_id, subject_kind: 'gateway', subject_id: failed.connection_id,
+            operation_key: `${failed.connection_id}:start_gateway`, started_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
             status: 'failed', phase: 'starting_gateway', title: 'Start Gateway', detail: failed.service_state.message,
             failure: { code: 'operation_failed', severity: 'error', title: 'Start Gateway', summary: failed.service_state.message } }] });
         return { ok: false, scope: 'gateway', code: 'gateway_reinstall_required', message: failed.service_state.message,
@@ -56,8 +56,6 @@ try {
     const panel = page.locator('.redeven-gateway-action-popover-surface');
     await panel.getByText(i18n.t('environmentCenter.gatewayGuidanceHostMaintenanceTitle'), { exact: true }).waitFor();
     await panel.getByText(i18n.t('environmentCenter.gatewayGuidanceStateRecoveryDetail'), { exact: true }).waitFor();
-    const disable = panel.getByRole('button', { name: i18n.t('environmentCenter.gatewayActionDisable'), exact: true });
-    assert.equal(await disable.evaluate(el => getComputedStyle(el).cursor), 'pointer');
     for (const key of ['gatewayActionStart', 'gatewayActionRestart', 'gatewayActionUpdate']) {
       assert.equal(await panel.getByRole('button', { name: i18n.t(`environmentCenter.${key}`), exact: true }).count(), 0);
     }
@@ -65,10 +63,14 @@ try {
       await Promise.all(element.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
     });
     await page.screenshot({ path: `${output}/maintenance-${locale}.png` });
-    await disable.click();
-    assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(r => r.kind === 'set_gateway_enabled' && !r.enabled).length), 1);
     await page.keyboard.press('Escape');
     await panel.waitFor({ state: 'detached' });
+    await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: failed.display_name }), exact: true }).click();
+    const disable = page.getByRole('menuitem', { name: i18n.t('gatewayExperience.disableConnection'), exact: true });
+    assert.equal(await disable.evaluate(el => getComputedStyle(el).cursor), 'pointer');
+    await disable.click();
+    await page.waitForFunction(() => window.settingsFixture.requests.some(r => r.kind === 'set_gateway_enabled' && !r.enabled));
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(r => r.kind === 'set_gateway_enabled' && !r.enabled).length), 1);
     assert.ok(await page.locator('[data-gateway-id]').count() > 1, 'Other Gateways remain reachable in the list');
     const repaired = { ...failed, service_state: { status: 'not_started', can_start: true, can_stop: false,
       can_restart: false, can_update: false, can_pair_after_start: true } };

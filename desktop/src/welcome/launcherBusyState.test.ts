@@ -11,7 +11,7 @@ import {
   type DesktopRuntimeLifecyclePhase,
 } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopRuntimeConnectionTarget } from "../shared/runtimeConnectionTarget";
 import {
   busyStateForLauncherRequest,
   busyStateBlocksEnvironmentAction,
@@ -49,7 +49,7 @@ function runtimeID(value: `local:${string}` | `ssh:${string}`): DesktopRuntimeTa
 function providerRuntimeTarget(
   runtimeKey: string,
   id: `local:${string}` | `ssh:${string}` = 'ssh:target',
-): DesktopCloudRuntimeLinkTarget {
+): DesktopRuntimeConnectionTarget {
   return {
     id,
     kind: id.startsWith('ssh:') ? 'ssh_environment' : 'local_environment',
@@ -261,7 +261,7 @@ describe('launcherBusyState', () => {
       id: 'los',
       managed_runtime_target_id: runtimeID('ssh:target'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     } as never;
     const openProgress = {
       ...localOpenActionProgress({
@@ -438,7 +438,7 @@ describe('launcherBusyState', () => {
   it('matches Gateway action progress by Gateway subject identity', () => {
     const state = busyStateForLauncherRequest({
       kind: 'start_gateway',
-      gateway_id: 'gw-demo',
+      connection_id: 'gw-demo',
     });
     const progress = gatewayRuntimeLifecycleActionProgress({
       gatewayID: 'gw-demo',
@@ -494,7 +494,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     } as never;
     const openProgress = localOpenActionProgress({
       status: 'running',
@@ -533,7 +533,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     } as never;
     const busyState = busyStateForLauncherRequest({
       kind: 'update_environment_runtime',
@@ -567,7 +567,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const succeededOpenProgress = {
       action: 'open_local_environment' as const,
@@ -621,7 +621,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const runningOpenProgress = localOpenActionProgress({
       status: 'running',
@@ -668,7 +668,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const operationKey = 'local:host:local:open';
     const failedSnapshotProgress = localOpenActionProgress({
@@ -691,7 +691,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const staleBusyProgress = localOpenActionProgress({
       status: 'running',
@@ -737,7 +737,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const staleBusyProgress = localOpenActionProgress({
       status: 'running',
@@ -785,7 +785,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
@@ -831,7 +831,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const olderRunningProgress = localOpenActionProgress({
       status: 'running',
@@ -862,7 +862,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const failures = [
       localRuntimeLifecycleActionProgress({
@@ -908,7 +908,7 @@ describe('launcherBusyState', () => {
       id: 'ssh:host:gzcom:7afba939',
       managed_runtime_target_id: runtimeID('ssh:host:gzcom:7afba939'),
       managed_runtime_placement_target_id: runtimeID('ssh:host:gzcom:7afba939'),
-      provider_runtime_link_target: providerRuntimeTarget('ssh:host:gzcom:7afba939'),
+      runtime_connection_target: providerRuntimeTarget('ssh:host:gzcom:7afba939'),
     };
     const updateFailure: DesktopLauncherActionProgress = {
       action: 'update_environment_runtime',
@@ -1103,7 +1103,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const operationKey = 'local:host:local:open';
     const failedPreviousAttempt = localOpenActionProgress({
@@ -1139,7 +1139,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const operationKey = 'local:host:local:open';
     const runningOpenProgress = localOpenActionProgress({
@@ -1194,7 +1194,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const localHostProgress = {
       action: 'start_environment_runtime' as const,
@@ -1217,7 +1217,7 @@ describe('launcherBusyState', () => {
       id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       managed_runtime_target_id: runtimeID('local:container:docker:dev:abcd1234'),
       managed_runtime_placement_target_id: runtimeID('local:container:docker:dev:abcd1234'),
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const localContainerProgress = {
       action: 'start_environment_runtime' as const,
@@ -1240,7 +1240,7 @@ describe('launcherBusyState', () => {
       id: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
       managed_runtime_target_id: runtimeID('ssh:ssh%3A%2564evbox%3Adefault%3Akey_agent%3Aremote_default%3Aenvinst_demo'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: providerRuntimeTarget('ssh:%64evbox:default:key_agent:remote_default:envinst_demo'),
+      runtime_connection_target: providerRuntimeTarget('ssh:%64evbox:default:key_agent:remote_default:envinst_demo'),
     };
     const sshHostProgress = {
       action: 'start_environment_runtime' as const,
@@ -1263,7 +1263,7 @@ describe('launcherBusyState', () => {
       id: 'ssh-container-env',
       managed_runtime_target_id: runtimeID('ssh:container:devbox:docker:dev:abcd1234'),
       managed_runtime_placement_target_id: runtimeID('ssh:container:devbox:docker:dev:abcd1234'),
-      provider_runtime_link_target: providerRuntimeTarget('ssh:container:devbox:docker:dev:abcd1234'),
+      runtime_connection_target: providerRuntimeTarget('ssh:container:devbox:docker:dev:abcd1234'),
     };
     const sshContainerProgress = {
       action: 'start_environment_runtime' as const,
@@ -1299,7 +1299,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const runningStopProgress = localRuntimeLifecycleActionProgress({
       status: 'running',
@@ -1428,7 +1428,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const operationKey = 'local:host:local:restart';
     const failedSnapshotProgress = localRuntimeLifecycleActionProgress({
@@ -1565,7 +1565,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const stopFailedProgress = localRuntimeLifecycleActionProgress({
       status: 'failed',
@@ -1606,7 +1606,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const operationKey = 'local:host:local:restart';
     const runningRestartProgress = localRuntimeLifecycleActionProgress({
@@ -1667,7 +1667,7 @@ describe('launcherBusyState', () => {
       id: 'local',
       managed_runtime_target_id: undefined,
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: providerRuntimeTarget('local', 'local:local'),
+      runtime_connection_target: providerRuntimeTarget('local', 'local:local'),
     };
     const localHostProgress = {
       action: 'open_local_environment' as const,
@@ -1694,7 +1694,7 @@ describe('launcherBusyState', () => {
       id: 'ssh-env',
       managed_runtime_target_id: runtimeID('ssh:devbox'),
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: providerRuntimeTarget('ssh:devbox'),
+      runtime_connection_target: providerRuntimeTarget('ssh:devbox'),
     };
     const progress = {
       action: 'open_ssh_environment' as const,

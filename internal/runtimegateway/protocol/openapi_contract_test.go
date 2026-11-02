@@ -137,3 +137,42 @@ func TestGatewayOpenAPIReferencesResolve(t *testing.T) {
 	}
 	visit(document)
 }
+
+func TestGatewayOpenAPIDeclaresTransportSurfaces(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../spec/openapi/gateway-v6.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec struct {
+		Paths map[string]map[string]struct {
+			Surface     string `json:"x-redeven-surface"`
+			OperationID string `json:"operationId"`
+		}
+	}
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		t.Fatal(err)
+	}
+	public := map[string]bool{"identity": true, "catalog": true, "pairing/challenge": true, "pairing/complete": true, "access/open": true, "access/service": true}
+	seen := map[string]bool{}
+	for route, methods := range spec.Paths {
+		for method, op := range methods {
+			if method != "post" && method != "get" {
+				continue
+			}
+			expected := "private-host"
+			if strings.HasPrefix(route, "/v6/attachment/") {
+				expected = "runtime-attachment"
+			} else if public[strings.TrimPrefix(route, "/gateway/v6/")] {
+				expected = "public-client"
+			}
+			if op.Surface != expected {
+				t.Errorf("%s: surface %q, expected %q", route, op.Surface, expected)
+			}
+			if op.OperationID == "" || seen[op.OperationID] || strings.Contains(op.OperationID, "_v5_") {
+				t.Errorf("invalid operation ID: %s", op.OperationID)
+			}
+			seen[op.OperationID] = true
+		}
+	}
+}

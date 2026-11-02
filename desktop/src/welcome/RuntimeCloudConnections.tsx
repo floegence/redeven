@@ -1,14 +1,15 @@
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import {Button, Dialog, KeyedFor} from '@floegence/floe-webapp-core/ui';
 import {createEffect, createMemo, createSignal, on, onCleanup, Show} from 'solid-js';
 import type {DesktopI18n} from '../shared/i18n';
-import type {DesktopCloudRuntimeLinkTargetID} from '../shared/providerRuntimeLinkTarget';
+
 import type {RuntimeGatewayAttachment, RuntimeServiceCloudLinkBinding} from '../shared/runtimeService';
 import type {CloudRouteOperation, RuntimeCloudOperation} from '../shared/runtimeCloud';
 
 /** Only Runtime commits a route. This view retains the original operation ID. */
 export function RuntimeCloudConnections(props: Readonly<{
  available?: boolean; onOpenChange?: (open: boolean) => void;
- targetID: DesktopCloudRuntimeLinkTargetID; binding: RuntimeServiceCloudLinkBinding;
+ targetID: DesktopRuntimeTargetID; binding: RuntimeServiceCloudLinkBinding;
  memberships: readonly RuntimeGatewayAttachment[]; i18n: DesktopI18n;
  onChanged: () => void | Promise<void>; openInBrowser: (url: string) => unknown;
 }>) {

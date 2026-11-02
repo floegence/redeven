@@ -2616,7 +2616,7 @@
     "directory": "参加済みランタイム",
     "directoryPending": "Gateway を更新して参加済みランタイムを読み込んでください。",
     "directoryIntro": "Gateway は参加済みランタイムが共有するアクセス入口です。",
-    "directoryAccessHint": "Redeven Cloud や承認済みの他のクライアントがこの Gateway を利用できます。ランタイムサービスは個別に管理されます。",
+    "directoryAccessHint": "ペアリング済みのデバイスは、この Gateway を経由して接続されたランタイムにアクセスできます。ユーザーとセッションは各ランタイムが個別に検証します。",
     "environmentListStale": "更新に失敗しました。最後に保存されたメンバー一覧を表示しています。",
     "viaNamedGateway": "{gateway} 経由",
     "registeredConnection": "保存済みの直接接続",
@@ -3817,13 +3817,11 @@
     "automaticHelp": "一覧の接続先のみ許可します。空の一覧では転送を無効にします。",
     "affected": "影響を受ける接続",
     "none": "なし",
-    "cloudImpact": "変更はこのプロキシ経由の通信にのみ適用されます。独立した Gateway アクセスは引き続き利用できます。",
     "confirmSave": "確認して保存",
     "hookConfigured": "Gateway ホストで設定済み",
     "hookAbsent": "未設定",
     "members": "ランタイム 接続",
     "empty": "この Gateway に参加したランタイムはありません。",
-    "cloudPermission": "出口へのアクセス",
     "inherit": "既定値を継承",
     "allow": "許可",
     "deny": "禁止",
@@ -3837,10 +3835,12 @@
     "memberCapacity": "この Gateway の ランタイム 接続数が上限に達しました。",
     "hookMemberAdmission": "ランタイム 接続の許可",
     "hookSessionAccess": "セッションへのアクセス",
-    "hookCloudPublication": "ネットワーク出口",
     "destinations": "許可する接続先（ホスト:ポート、1行に1件）",
     "operationUnknown": "操作結果を確認できません。更新して Gateway の状態を確認してください。再試行では元の結果を照会し、変更は繰り返しません。操作 ID: {id}",
-    "operationReviewed": "現在の状態を確認しました。新しい操作を許可する"
+    "operationReviewed": "現在の状態を確認しました。新しい操作を許可する",
+    "egressPermission": "出口へのアクセス",
+    "hookEgress": "ネットワーク出口",
+    "egressImpact": "変更はこのプロキシ経由の通信にのみ適用されます。独立した Gateway アクセスは引き続き利用できます。"
   },
   "gatewayClients": {
     "connectionSettings": "接続設定",
@@ -3903,13 +3903,9 @@
     "unpairImpact": "この Gateway 経由のアクセスを終了します。他の接続は維持されます。",
     "cloudImpact": "この Gateway 経由の Redeven Cloud アクセスも中断されます。",
     "cloudChanged": "Cloud アクセスが変更されました。開き直して影響を確認してください。",
-    "publishTitle": "Gateway 経由で公開",
-    "publish": "公開を確認",
-    "publishHelp": "この Gateway 経由でランタイムを Redeven Cloud に公開します。Cloud の承認が必要です。",
     "empty": "ペアリング済みの Gateway はありません。",
     "unavailable": "環境ウィンドウを開くには、このゲートウェイで Desktop を認可してください。",
-    "tab": "Gateway",
-    "useRouteChange": "このランタイムはすでに Cloud に関連付けられています。「経路を変更」で接続経路を切り替えると、環境の ID と所属を維持できます。"
+    "tab": "Gateway"
   },
   "tessivenRuntime": {
     "confirmTitle": "{action}を確認",

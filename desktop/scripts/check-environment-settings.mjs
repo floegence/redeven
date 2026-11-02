@@ -301,7 +301,7 @@ try {
           kind: 'container_process', container_engine: 'docker', container_id: 'fixture-container', container_ref: 'fixture-container', container_label: 'Container', runtime_root: '/root/.redeven', bridge_strategy: 'exec_stream',
         } } : {}),
         ...(kind === 'url' ? { kind: 'external_local_ui', registration_ref: { kind: 'saved_environment', id: 'fixture-url' }, local_ui_url: 'https://example.invalid/' } : {}),
-        ...(kind === 'gateway' ? { kind: 'gateway_environment', access_group_id: undefined, registration_ref: { kind: 'gateway_environment', gateway_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } } : {}),
+        ...(kind === 'gateway' ? { kind: 'gateway_environment', access_group_id: undefined, registration_ref: { kind: 'gateway_environment', connection_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } } : {}),
       };
       await page.evaluate(value => window.settingsFixture.publish(value), { ...snapshot, environments: [...snapshot.environments, entry] });
       await page.getByRole('button', { name: `Settings for Fixture ${kind}`, exact: true }).click();

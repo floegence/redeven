@@ -248,7 +248,7 @@ describe('environment Open click smoke', () => {
           update: { availability: 'available', method: testCase.kind === 'local_environment' ? 'local_host' : 'ssh_host' },
         },
       });
-      expect(stopped.gateway_id).toBeUndefined();
+      expect(stopped.connection_id).toBeUndefined();
       expect(stopped.gateway_env_id).toBeUndefined();
       expect(environmentOpenFlow(stopped)).toBe('start');
       expect(environmentOpenFlowAfterPreflight(stopped)).toBe('start');

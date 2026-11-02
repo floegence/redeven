@@ -1,8 +1,9 @@
+import { desktopRuntimeConnectionTargetID } from '../shared/desktopRuntimePlacement';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import { buildDesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import { desktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { mixedEnvironmentFixture } from './mixedEnvironmentFixture';
 
@@ -14,7 +15,7 @@ export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, sta
   const environmentKind = kind === 'wsl' ? 'wsl_environment' : kind.startsWith('local') ? 'local_environment' : 'ssh_environment';
   const fixture = mixedEnvironmentFixture({ linkKind: environmentKind });
   const original = fixture.snapshot.environments.find(entry => entry.kind === environmentKind)!;
-  const sourcePresence = fixture.inputs.managedRuntimePresenceByTargetID[original.provider_runtime_link_target!.id]!;
+  const sourcePresence = fixture.inputs.managedRuntimePresenceByTargetID[original.runtime_connection_target!.id]!;
   const container = kind.endsWith('_container');
   const placement = container ? {
     kind: 'container_process' as const, container_engine: 'docker' as const, container_id: 'gateway-fixture',
@@ -23,7 +24,7 @@ export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, sta
   } : sourcePresence.placement;
   const placementID = desktopRuntimeTargetID(sourcePresence.host_access, placement);
   const id = environmentKind === 'local_environment' && !container ? original.id : placementID;
-  const targetID = desktopCloudRuntimeLinkTargetID(environmentKind, id);
+  const targetID = desktopRuntimeConnectionTargetID(environmentKind, id);
   const rawPresence = {
     ...sourcePresence, environment_id: id, target_id: targetID, placement_target_id: desktopRuntimeTargetID(sourcePresence.host_access, placement),
     runtime_key: targetID, placement, running: state !== 'stopped', openable: state !== 'stopped',

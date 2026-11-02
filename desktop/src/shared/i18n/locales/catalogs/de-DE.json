@@ -2616,7 +2616,7 @@
     "directory": "Beigetretene Laufzeitumgebungen",
     "directoryPending": "Aktualisieren Sie das Gateway, um beigetretene Laufzeitumgebungen zu laden.",
     "directoryIntro": "Ein Gateway ist ein gemeinsamer Zugangspunkt für beigetretene Laufzeitumgebungen.",
-    "directoryAccessHint": "Redeven Cloud und andere freigegebene Clients können dieses Gateway nutzen. Laufzeitdienste werden weiterhin unabhängig verwaltet.",
+    "directoryAccessHint": "Gekoppelte Geräte können über dieses Gateway auf verbundene Laufzeitumgebungen zugreifen. Jede Laufzeitumgebung prüft ihre Benutzer und Sitzungen selbst.",
     "environmentListStale": "Aktualisierung fehlgeschlagen. Die zuletzt gespeicherte Mitgliederliste wird angezeigt.",
     "viaNamedGateway": "Über {gateway}",
     "registeredConnection": "Gespeicherte Direktverbindung",
@@ -3823,13 +3823,11 @@
     "automaticHelp": "Nur aufgeführte Ziele sind erlaubt. Eine leere Liste deaktiviert die Weiterleitung.",
     "affected": "Betroffene Verbindungen",
     "none": "Keine",
-    "cloudImpact": "Änderungen betreffen den Datenverkehr über diesen Proxy. Der unabhängige Gateway-Zugriff bleibt verfügbar.",
     "confirmSave": "Bestätigen und speichern",
     "hookConfigured": "Auf dem Gateway-Host konfiguriert",
     "hookAbsent": "Nicht konfiguriert",
     "members": "Laufzeitumgebung-Verbindungen",
     "empty": "Noch keine Laufzeitumgebung ist diesem Gateway beigetreten.",
-    "cloudPermission": "Ausgehender Zugriff",
     "inherit": "Standard erben",
     "allow": "Erlauben",
     "deny": "Verbieten",
@@ -3843,10 +3841,12 @@
     "memberCapacity": "Dieses Gateway hat die maximale Anzahl an Laufzeitumgebung-Verbindungen erreicht.",
     "hookMemberAdmission": "Zulassung von Laufzeitumgebung-Verbindungen",
     "hookSessionAccess": "Sitzungszugriff",
-    "hookCloudPublication": "Netzwerkausgang",
     "destinations": "Erlaubte Ziele (Host:Port, eines pro Zeile)",
     "operationUnknown": "Das Ergebnis ist unklar. Aktualisieren Sie den Gateway-Status. Ein erneuter Versuch fragt nur das ursprüngliche Ergebnis ab und wiederholt die Änderung nicht. Vorgang: {id}",
-    "operationReviewed": "Aktuellen Zustand geprüft; neuen Vorgang zulassen"
+    "operationReviewed": "Aktuellen Zustand geprüft; neuen Vorgang zulassen",
+    "egressPermission": "Ausgehender Zugriff",
+    "hookEgress": "Netzwerkausgang",
+    "egressImpact": "Änderungen betreffen den Datenverkehr über diesen Proxy. Der unabhängige Gateway-Zugriff bleibt verfügbar."
   },
   "gatewayClients": {
     "connectionSettings": "Verbindungseinstellungen",
@@ -3909,13 +3909,9 @@
     "unpairImpact": "Der Zugriff über dieses Gateway endet. Andere Verbindungen bleiben verfügbar.",
     "cloudImpact": "Auch der Redeven Cloud-Zugriff über dieses Gateway wird unterbrochen.",
     "cloudChanged": "Der Cloud-Zugriff hat sich geändert. Öffnen Sie den Dialog erneut, um die Auswirkungen zu prüfen.",
-    "publishTitle": "Über Gateway veröffentlichen",
-    "publish": "Veröffentlichung bestätigen",
-    "publishHelp": "Diese Laufzeitumgebung über dieses Gateway in Redeven Cloud veröffentlichen. Eine Cloud-Genehmigung ist erforderlich.",
     "empty": "Kein Gateway gekoppelt.",
     "unavailable": "Autorisiere Desktop an diesem Gateway, um das Umgebungsfenster zu öffnen.",
-    "tab": "Gateway",
-    "useRouteChange": "Diese Laufzeitumgebung ist bereits mit Cloud verknüpft. Verwenden Sie „Route ändern“, um die Verbindung zu wechseln; Identität und Besitz bleiben erhalten."
+    "tab": "Gateway"
   },
   "tessivenRuntime": {
     "confirmTitle": "{action} bestätigen",

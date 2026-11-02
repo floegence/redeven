@@ -1,3 +1,4 @@
+import { desktopRuntimeTargetKindFromID, desktopRuntimeTargetKey } from '../shared/desktopRuntimePlacement';
 import { decodeGatewayClientAccessPackage } from './gatewayClientAccess';
 import { createRuntimeFlowerReadOwner, awaitRuntimeFlowerRead } from './runtimeFlowerReadOwner';
 import { retainDesktopRuntimePlatformFacts } from './desktopRuntimePlatformFacts';
@@ -160,7 +161,6 @@ import {
   type DesktopSavedRuntimeTarget,
 } from './desktopPreferences';
 import {
-  defaultRedevenCloudOrigin,
   requireRedevenCloudOrigin,
   type RedevenCloudOriginPolicy,
 } from '../shared/redevenCloud';
@@ -208,7 +208,7 @@ import {
   buildBlockedLaunchIssue,
   buildControlPlaneIssue,
   buildDesktopWelcomeSnapshot,
-  desktopCloudRuntimeLinkTargetID,
+  desktopRuntimeConnectionTargetID,
   buildRemoteConnectionIssue,
   type BuildDesktopWelcomeSnapshotArgs,
 } from './desktopWelcomeState';
@@ -823,11 +823,7 @@ import {
   buildDesktopLocalRuntimeOpenPlan,
   desktopRuntimeProviderBindingMatches,
 } from '../shared/localRuntimeSupervisor';
-import {
-  desktopCloudRuntimeLinkTargetKindFromID,
-  desktopCloudRuntimeLinkTargetRuntimeKey,
-  type DesktopCloudRuntimeLinkTargetID,
-} from '../shared/providerRuntimeLinkTarget';
+
 import { desktopCloudEnvironmentOpenRoute } from '../shared/environmentManagementPrinciples';
 import { loadDesktopSSHConfigHosts } from './sshConfigHosts';
 import { createCloudSessionRenewal, isCloudSessionRenewalDocument } from './cloudSessionRenewal';
@@ -912,7 +908,7 @@ type DesktopControlPlaneSyncRecord = Readonly<{
 }>;
 
 type GatewaySyncRecord = Readonly<{
-  gateway_id: string;
+  connection_id: string;
   sync_state: DesktopGatewaySyncState;
   background_sync_running: boolean;
   last_sync_attempt_at_ms: number;
@@ -970,7 +966,7 @@ type RuntimePlacementReadyRecord = Readonly<{
   runtime_key: string;
   environment_id: string;
   label: string;
-  target_id: DesktopCloudRuntimeLinkTargetID;
+  target_id: DesktopRuntimeTargetID;
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
   runtime_pid?: number;
@@ -1597,7 +1593,7 @@ function runtimeMatchesProvider(
   );
 }
 
-function providerRuntimeLinkKindForHostAccess(
+function runtimeTargetKindForHostAccess(
   hostAccess: DesktopRuntimeHostAccess,
 ): 'local_environment' | 'wsl_environment' | 'ssh_environment' {
   return hostAccess.kind === 'ssh_host'
@@ -1607,12 +1603,12 @@ function providerRuntimeLinkKindForHostAccess(
       : 'local_environment';
 }
 
-function providerRuntimeLinkTargetIDForRuntimeTarget(
+function runtimeConnectionTargetIDForSavedTarget(
   hostAccess: DesktopRuntimeHostAccess,
   runtimeTargetID: DesktopRuntimeTargetID,
-): DesktopCloudRuntimeLinkTargetID {
-  return desktopCloudRuntimeLinkTargetID(
-    providerRuntimeLinkKindForHostAccess(hostAccess),
+): DesktopRuntimeTargetID {
+  return desktopRuntimeConnectionTargetID(
+    runtimeTargetKindForHostAccess(hostAccess),
     runtimeTargetID,
   );
 }
@@ -1628,7 +1624,7 @@ function bridgeRecordFromSession(input: Readonly<{
     runtime_key: runtimeKey,
     environment_id: compact(input.environmentID) || runtimeKey,
     label: compact(input.label) || 'Container Runtime',
-    target_id: providerRuntimeLinkTargetIDForRuntimeTarget(input.session.host_access, runtimeKey),
+    target_id: runtimeConnectionTargetIDForSavedTarget(input.session.host_access, runtimeKey),
     runtime_binary_path: compact(input.runtimeBinaryPath) || 'redeven',
     session: input.session,
     startup: input.session.startup,
@@ -1689,42 +1685,42 @@ async function prepareDesktopModels(lease: RuntimePlacementBridgeLease, retry = 
   }), retry);
 }
 
-type CloudRuntimeLinkTargetRecord = Readonly<{ bridge_lease?: RuntimePlacementBridgeLease }> & Readonly<
+type RuntimeManagementTargetRecord = Readonly<{ bridge_lease?: RuntimePlacementBridgeLease }> & Readonly<
   | {
       kind: 'local_environment';
-      id: DesktopCloudRuntimeLinkTargetID;
+      id: DesktopRuntimeTargetID;
       label: string;
       record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord;
     }
   | {
       kind: 'ssh_environment';
-      id: DesktopCloudRuntimeLinkTargetID;
+      id: DesktopRuntimeTargetID;
       label: string;
       record: RuntimePlacementBridgeRecord;
     }
   | {
       kind: 'wsl_environment';
-      id: DesktopCloudRuntimeLinkTargetID;
+      id: DesktopRuntimeTargetID;
       label: string;
       record: RuntimePlacementBridgeRecord;
     }
 >;
 
-async function resolveCloudRuntimeLinkTarget(
+async function resolveRuntimeManagementTarget(
   preferences: DesktopPreferences,
-  runtimeTargetID: DesktopCloudRuntimeLinkTargetID,
-): Promise<CloudRuntimeLinkTargetRecord | null> {
+  runtimeTargetID: DesktopRuntimeTargetID,
+): Promise<RuntimeManagementTargetRecord | null> {
   // IMPORTANT: Provider-link operations must resolve the exact Local/WSL/SSH runtime
   // target selected by the user. Do not search for "any eligible" runtime here;
   // implicit selection would let provider-card flows affect device-managed work.
-  const kind = desktopCloudRuntimeLinkTargetKindFromID(runtimeTargetID);
-  const runtimeKey = desktopCloudRuntimeLinkTargetRuntimeKey(runtimeTargetID);
+  const kind = desktopRuntimeTargetKindFromID(runtimeTargetID);
+  const runtimeKey = desktopRuntimeTargetKey(runtimeTargetID);
   if (kind === 'local_environment') {
     if (!desktopPlatformCapabilities.native_host_runtime) {
       return null;
     }
     if (runtimeKey !== preferences.local_environment.id) {
-      const lease = await acquireEnvironmentManagementConnection(runtimeKey, 'cloud-link');
+      const lease = await acquireEnvironmentManagementConnection(runtimeKey, 'runtime-connections');
       const resolvedBridgeRecord = lease?.record;
       if (!resolvedBridgeRecord || resolvedBridgeRecord.target_id !== runtimeTargetID || resolvedBridgeRecord.session.host_access.kind !== 'local_host') {
         await lease?.release();
@@ -1749,7 +1745,7 @@ async function resolveCloudRuntimeLinkTarget(
         }
       : null;
   }
-  const lease = await acquireEnvironmentManagementConnection(runtimeKey, 'cloud-link');
+  const lease = await acquireEnvironmentManagementConnection(runtimeKey, 'runtime-connections');
   const expectedHostKind = kind === 'wsl_environment' ? 'wsl_host' : 'ssh_host';
   const resolvedBridgeRecord = lease?.record;
   if (resolvedBridgeRecord && resolvedBridgeRecord.target_id === runtimeTargetID && resolvedBridgeRecord.session.host_access.kind === expectedHostKind) {
@@ -1766,7 +1762,7 @@ async function resolveCloudRuntimeLinkTarget(
 }
 
 function updateProviderRuntimeTargetStartup(
-  target: CloudRuntimeLinkTargetRecord,
+  target: RuntimeManagementTargetRecord,
   startupPatch: Partial<StartupReport>,
 ): void {
   if ('session' in target.record) {
@@ -1822,7 +1818,7 @@ function providerEnvironmentOccupiedFailure(
 }
 
 function runtimeTargetRecordMatchesProvider(
-  runtimeTarget: CloudRuntimeLinkTargetRecord,
+  runtimeTarget: RuntimeManagementTargetRecord,
   cloudOrigin: string,
   cloudID: string,
   envPublicID: string,
@@ -1834,8 +1830,8 @@ function runtimeTargetRecordMatchesProvider(
 async function providerEnvironmentOccupyingRuntime(
   preferences: DesktopPreferences,
   environment: DesktopCloudEnvironmentRecord,
-  selectedRuntimeTargetID: DesktopCloudRuntimeLinkTargetID,
-): Promise<CloudRuntimeLinkTargetRecord | null> {
+  selectedRuntimeTargetID: DesktopRuntimeTargetID,
+): Promise<RuntimeManagementTargetRecord | null> {
   const cloudOrigin = compact(environment.cloud_origin);
   const cloudID = compact(environment.cloud_id);
   const envPublicID = compact(environment.env_public_id);
@@ -1843,14 +1839,14 @@ async function providerEnvironmentOccupyingRuntime(
   if (cloudOrigin === '' || cloudID === '' || envPublicID === '' || accessPointOrigin === '') {
     return null;
   }
-  const records: CloudRuntimeLinkTargetRecord[] = [];
+  const records: RuntimeManagementTargetRecord[] = [];
   const localRuntimeRecord = desktopPlatformCapabilities.native_host_runtime
     ? await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)
     : null;
   if (localRuntimeRecord) {
     records.push({
       kind: 'local_environment',
-      id: desktopCloudRuntimeLinkTargetID('local_environment', localRuntimeRecord.environment_id),
+      id: desktopRuntimeConnectionTargetID('local_environment', localRuntimeRecord.environment_id),
       label: localRuntimeRecord.label,
       record: localRuntimeRecord,
     });
@@ -1862,7 +1858,7 @@ async function providerEnvironmentOccupyingRuntime(
     }
     const record = observation.record;
     records.push({
-      kind: providerRuntimeLinkKindForHostAccess(record.session.host_access),
+      kind: runtimeTargetKindForHostAccess(record.session.host_access),
       id: record.target_id,
       label: record.label,
       record,
@@ -2249,7 +2245,7 @@ function runtimeControlReasonCodeForContainerResolution(
 }
 
 function managedRuntimePresence(args: Readonly<{
-  targetID: DesktopCloudRuntimeLinkTargetID;
+  targetID: DesktopRuntimeTargetID;
   placementTargetID: DesktopRuntimeTargetID;
   kind: DesktopRuntimePresence['kind'];
   environmentID: string;
@@ -2459,7 +2455,7 @@ async function inspectRuntimePlacementTargetState(
           runtime_key: target.targetID,
           environment_id: target.environmentID,
           label: target.label,
-          target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.hostAccess, target.targetID),
+          target_id: runtimeConnectionTargetIDForSavedTarget(target.hostAccess, target.targetID),
           host_access: target.hostAccess,
           placement: target.placement,
           runtime_pid: status.startup.pid,
@@ -2582,7 +2578,7 @@ async function inspectRuntimePlacementTargetState(
           runtime_key: target.targetID,
           environment_id: target.environmentID,
           label: target.label,
-          target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.hostAccess, target.targetID),
+          target_id: runtimeConnectionTargetIDForSavedTarget(target.hostAccess, target.targetID),
           host_access: target.hostAccess,
           placement: target.placement,
           runtime_pid: status.startup.pid,
@@ -2762,7 +2758,7 @@ async function inspectRuntimePlacementTargetState(
             runtime_key: target.targetID,
             environment_id: target.environmentID,
             label: target.label,
-            target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.hostAccess, target.targetID),
+            target_id: runtimeConnectionTargetIDForSavedTarget(target.hostAccess, target.targetID),
             host_access: target.hostAccess,
             placement: resolution.placement,
             runtime_pid: report.startup.pid,
@@ -3001,7 +2997,7 @@ function launcherActionFailure(
     scope,
     message: compact(failure?.summary) || compact(message),
     environment_id: compact(options.environmentID) || undefined,
-    gateway_id: compact(options.gatewayID) || undefined,
+    connection_id: compact(options.gatewayID) || undefined,
     gateway_label: compact(options.gatewayLabel) || undefined,
     gateway_environment_id: compact(options.gatewayEnvironmentID) || undefined,
     operation_key: compact(options.operationKey) || undefined,
@@ -3497,7 +3493,6 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
       release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
       asset_cache_root: desktopRuntimePackageCacheRoot(),
       temp_root: app.getPath('temp'),
-      cloud_origin: defaultRedevenCloudOrigin(desktopRedevenCloudOriginPolicy()),
       source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
       local_ui_bind: compact(process.env.REDEVEN_DESKTOP_LOCAL_UI_BIND),
       target_commit: bundle.commit,
@@ -3800,7 +3795,7 @@ async function verifyFreshDirectReinstallTarget(
       runtime_key: targetID,
       environment_id: target.environment_id,
       label: target.label,
-      target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.host_access, targetID),
+      target_id: runtimeConnectionTargetIDForSavedTarget(target.host_access, targetID),
       host_access: target.host_access,
       placement: resolvedReinstallRuntimePlacement(target, targetRoot),
       runtime_pid: ready.startup.pid,
@@ -4579,7 +4574,7 @@ async function localEnvironmentPresenceFromRecord(
   environment: DesktopPreferences['local_environment'],
   record: LocalEnvironmentRuntimeRecord,
 ): Promise<DesktopRuntimePresence> {
-  const targetID = desktopCloudRuntimeLinkTargetID('local_environment', environment.id);
+  const targetID = desktopRuntimeConnectionTargetID('local_environment', environment.id);
   const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
   const placement = localHostRuntimeLifecyclePlacement(environment);
   return managedRuntimePresence({
@@ -4615,7 +4610,7 @@ function localEnvironmentMaintenanceProbeResult(
       runtime_maintenance: maintenance,
     },
     presence: managedRuntimePresence({
-      targetID: desktopCloudRuntimeLinkTargetID('local_environment', environment.id),
+      targetID: desktopRuntimeConnectionTargetID('local_environment', environment.id),
       placementTargetID: desktopRuntimeTargetID(hostAccess, placement, environment.id),
       kind: 'local_environment',
       environmentID: environment.id,
@@ -4783,8 +4778,8 @@ function runtimeTargetPresenceFromState(
   target: DesktopSavedRuntimeTarget,
   state: SavedRuntimeTargetState,
 ): DesktopRuntimePresence {
-  const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
-  const targetID = providerRuntimeLinkTargetIDForRuntimeTarget(target.host_access, target.id);
+  const targetKind = runtimeTargetKindForHostAccess(target.host_access);
+  const targetID = runtimeConnectionTargetIDForSavedTarget(target.host_access, target.id);
   const placement = state.placement ?? target.placement;
   return managedRuntimePresence({
     targetID,
@@ -4841,7 +4836,7 @@ function welcomeRuntimeProbeCoordinatorKey(
 function projectWelcomeRuntimeProbeResult(
   result: DesktopWelcomeRuntimeHealthProbeResult,
   identity: Readonly<{
-    target_id: DesktopCloudRuntimeLinkTargetID;
+    target_id: DesktopRuntimeTargetID;
     placement_target_id: DesktopRuntimeTargetID;
     environment_id: string;
     label: string;
@@ -4894,7 +4889,7 @@ function buildWelcomeRuntimeHealthTargets(
           runtime_root: preferences.local_environment.local_hosting.state_dir }),
         environment_id: preferences.local_environment.id,
         slot: 'local_environment' as const,
-        presence_target_id: desktopCloudRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
+        presence_target_id: desktopRuntimeConnectionTargetID('local_environment', preferences.local_environment.id),
         auto_refresh_enabled: true,
         checking_health: checkingRuntimeHealth('local_runtime_probe', 'not_started', 'Checking Local Runtime status.'),
         probe: () => observeDirectAccessIdentity(preferences, preferences.local_environment.id, () => probeLocalEnvironmentRuntimeHealth(preferences, openSessions)),
@@ -4914,8 +4909,8 @@ function buildWelcomeRuntimeHealthTargets(
       .filter((target) => desktopPlatformCapabilities.native_host_runtime || target.host_access.kind !== 'local_host')
       .map((target) => {
         const hostAccess = target.host_access;
-        const targetKind = providerRuntimeLinkKindForHostAccess(hostAccess);
-        const presenceTargetID = desktopCloudRuntimeLinkTargetID(targetKind, target.id);
+        const targetKind = runtimeTargetKindForHostAccess(hostAccess);
+        const presenceTargetID = desktopRuntimeConnectionTargetID(targetKind, target.id);
         return {
           key: `runtime-target:${target.id}`,
           observation_key: runtimeLifecycleFingerprint({ host_access: hostAccess, placement: target.placement,
@@ -5086,10 +5081,10 @@ function scheduleWelcomeRuntimeHealthRefreshAfterLauncherAction(
 function launcherActionGatewayID(request: DesktopLauncherActionRequest): string {
   if (request.kind === 'delete_environment_registration') {
     return request.registration_ref.kind === 'gateway_environment'
-      ? compact(request.registration_ref.gateway_id)
+      ? compact(request.registration_ref.connection_id)
       : '';
   }
-  return 'gateway_id' in request ? compact(request.gateway_id) : '';
+  return 'connection_id' in request ? compact(request.connection_id) : '';
 }
 
 function scheduleGatewaySyncAfterLauncherAction(
@@ -5409,7 +5404,7 @@ async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySo
 
 function defaultGatewaySyncRecord(record: GatewayRecord): GatewaySyncRecord {
   return {
-    gateway_id: record.connection_id,
+    connection_id: record.connection_id,
     sync_state: 'idle',
     background_sync_running: false,
     last_sync_attempt_at_ms: record.last_catalog_sync_at_ms ?? 0,
@@ -5605,7 +5600,7 @@ function gatewaySyncRecordFromError(
     serviceState ?? previous.source?.service_state,
   );
   return {
-    gateway_id: record.connection_id,
+    connection_id: record.connection_id,
     sync_state: errorState,
     background_sync_running: false,
     last_sync_attempt_at_ms: attemptAtMS,
@@ -5853,7 +5848,7 @@ async function syncGatewayRecord(
     }
     commitGatewaySyncRecord(record, {
       ...previous,
-      gateway_id: record.connection_id,
+      connection_id: record.connection_id,
       background_sync_running: priority === 'background',
       last_sync_attempt_at_ms: attemptAtMS,
       last_sync_error_code: '',
@@ -5932,7 +5927,7 @@ async function syncGatewayRecord(
       const catalogEnvironments = [...catalog.attachments];
       for (const sessionRecord of sessionsByKey.values()) {
         const target = sessionRecord.target;
-        if (target.kind !== 'gateway_environment' || target.gateway_id !== currentRecord.connection_id) continue;
+        if (target.kind !== 'gateway_environment' || target.connection_id !== currentRecord.connection_id) continue;
         const member = catalogEnvironments.find(member => member.attachment_id === target.gateway_env_id);
         // Missing observations and offline control connections are not revocations.
         if (member && (member.state === 'removed' || member.attachment_version !== sessionRecord.gateway_attachment_version)) {
@@ -5957,7 +5952,7 @@ async function syncGatewayRecord(
         endpoints: catalog.gateway.endpoints, hook_status: catalog.hook_status,
         environments: catalogEnvironments,
       }), syncedRecord, {
-        gateway_id: syncedRecord.connection_id,
+        connection_id: syncedRecord.connection_id,
         sync_state: 'ready',
         background_sync_running: false,
         last_sync_attempt_at_ms: attemptAtMS,
@@ -5966,7 +5961,7 @@ async function syncGatewayRecord(
         last_sync_error_message: '',
       }, serviceState);
       commitGatewaySyncRecord(syncedRecord, {
-        gateway_id: syncedRecord.connection_id,
+        connection_id: syncedRecord.connection_id,
         sync_state: 'ready',
         background_sync_running: false,
         last_sync_attempt_at_ms: attemptAtMS,
@@ -5982,7 +5977,7 @@ async function syncGatewayRecord(
         const latestRecord = await gatewayStore().get(record.connection_id).catch(() => null) ?? record;
         commitGatewaySyncRecord(latestRecord, {
           ...(gatewaySyncStateByID.get(record.connection_id) ?? defaultGatewaySyncRecord(latestRecord)),
-          gateway_id: latestRecord.connection_id,
+          connection_id: latestRecord.connection_id,
           background_sync_running: false,
         });
         throw error;
@@ -6041,7 +6036,7 @@ async function upsertGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway' }>,
 ): Promise<GatewayRecord> {
   let connection = gatewayConnectionFromSetup(request);
-  const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(connection));
+  const gatewayID = compact(request.connection_id) || stableGatewayID(gatewayBindingAudience(connection));
   const existing = await gatewayStore().get(gatewayID);
   if (existing && gatewayLifecycleManager().activeLifecycle(existing)) {
     throw new Error('Wait for the current Gateway service action before editing its connection.');
@@ -6126,7 +6121,7 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
 async function manageRuntimeAttachmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'acknowledge_gateway_operation' | 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' }>,
 ): Promise<DesktopLauncherActionResult> {
-  const record = await gatewayStore().get(request.gateway_id);
+  const record = await gatewayStore().get(request.connection_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
   if (record.connection.kind === 'url') return launcherActionFailure('gateway_not_manageable', 'gateway', 'Manage this Gateway through its host connection.');
   try {
@@ -6166,7 +6161,7 @@ function gatewayActionFailure(record: GatewayRecord, error: unknown, gatewayEnvi
       gatewayID: record.connection_id, gatewayLabel: record.display_name, gatewayEnvironmentID,
       shouldRefreshSnapshot: true,
       ...(requiresService && error.service_state.can_start ? {
-        continuationAction: { kind: 'start_gateway' as const, gateway_id: record.connection_id },
+        continuationAction: { kind: 'start_gateway' as const, connection_id: record.connection_id },
       } : {}),
       ...(error instanceof GatewayClientError && error.code === 'TARGET_UNAVAILABLE' ? { failure: desktopOperationFailurePresentation({
         code: 'operation_failed', title: 'Target unavailable', titleKey: 'gatewayAccess.targetUnavailable',
@@ -6673,7 +6668,7 @@ async function checkGatewayRecord(
 async function setGatewayEnabledFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'set_gateway_enabled' }>,
 ): Promise<DesktopLauncherActionResult> {
-  const record = await gatewayStore().setLocalEnabled(request.gateway_id, request.enabled);
+  const record = await gatewayStore().setLocalEnabled(request.connection_id, request.enabled);
   if (!request.enabled) {
     gatewaySyncStateByID.delete(record.connection_id);
     gatewayDiagnosisByID.delete(record.connection_id);
@@ -6689,10 +6684,10 @@ async function refreshGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'refresh_gateway' }>,
   options: Readonly<{ allowPairing?: boolean }> = {},
 ): Promise<DesktopLauncherActionResult> {
-  const record = await gatewayStore().get(request.gateway_id);
+  const record = await gatewayStore().get(request.connection_id);
   if (!record) {
     return launcherActionFailure('environment_missing', 'dialog', 'Gateway was not found.', {
-      gatewayID: request.gateway_id,
+      gatewayID: request.connection_id,
       shouldRefreshSnapshot: true,
     });
   }
@@ -6703,7 +6698,7 @@ async function refreshGatewayFromLauncher(
       gatewayLabel: record.display_name,
       continuationAction: {
         kind: 'set_gateway_enabled',
-        gateway_id: record.connection_id,
+        connection_id: record.connection_id,
         enabled: true,
       },
       shouldRefreshSnapshot: true,
@@ -6719,7 +6714,7 @@ async function refreshGatewayFromLauncher(
     action: 'refresh_gateway',
     subject_kind: 'gateway',
     subject_id: record.connection_id,
-    gateway_id: record.connection_id,
+    connection_id: record.connection_id,
     active_progress_surface: 'gateway',
     phase: 'checking_gateway_service',
     title: 'Refresh Gateway',
@@ -6862,7 +6857,7 @@ async function checkGatewayFromLauncher(
 ): Promise<DesktopLauncherActionResult> {
   return refreshGatewayFromLauncher({
     kind: 'refresh_gateway',
-    gateway_id: request.gateway_id,
+    connection_id: request.connection_id,
   });
 }
 
@@ -6871,7 +6866,7 @@ async function refreshGatewayCatalogFromLauncher(
 ): Promise<DesktopLauncherActionResult> {
   return refreshGatewayFromLauncher({
     kind: 'refresh_gateway',
-    gateway_id: request.gateway_id,
+    connection_id: request.connection_id,
   });
 }
 
@@ -6880,17 +6875,17 @@ async function refreshGatewayStatusFromLauncher(
 ): Promise<DesktopLauncherActionResult> {
   return refreshGatewayFromLauncher({
     kind: 'refresh_gateway',
-    gateway_id: request.gateway_id,
+    connection_id: request.connection_id,
   });
 }
 
 async function runGatewayServiceActionFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' }>,
 ): Promise<DesktopLauncherActionResult> {
-  const record = await gatewayStore().get(request.gateway_id);
+  const record = await gatewayStore().get(request.connection_id);
   if (!record || record.connection.kind === 'url') {
     return launcherActionFailure('action_invalid', 'gateway', 'This Gateway has no configured service management transport.', {
-      gatewayID: request.gateway_id, shouldRefreshSnapshot: true,
+      gatewayID: request.connection_id, shouldRefreshSnapshot: true,
     });
   }
   const activeService = gatewayLifecycleManager().activeLifecycle(record);
@@ -6906,7 +6901,7 @@ async function runGatewayServiceActionFromLauncher(
     return launcherActionSuccess('gateway_sync_in_progress');
   }
   const affected = [...sessionsByKey.values()].filter(session => session.target.kind === 'gateway_environment'
-    && session.target.gateway_id === record.connection_id
+    && session.target.connection_id === record.connection_id
     && session.lifecycle !== 'closing');
   if (request.kind !== 'start_gateway' && affected.length && !request.impact_acknowledged) {
     return launcherActionFailure('action_invalid', 'gateway', 'This action disconnects sessions opened through this Gateway.', {
@@ -6923,7 +6918,7 @@ async function runGatewayServiceActionFromLauncher(
   const selected = presentation[request.kind];
   const operation = launcherOperations.create({
     operation_key: operationKey, action: request.kind, subject_kind: 'gateway', subject_id: record.connection_id,
-    gateway_id: record.connection_id, active_progress_surface: 'gateway', phase: 'checking_gateway_service',
+    connection_id: record.connection_id, active_progress_surface: 'gateway', phase: 'checking_gateway_service',
     title: selected.title, title_key: selected.key, detail: '', cancelable: true,
     environment_label: record.display_name,
     step_progress: gatewayServiceStepProgress(undefined, 'checking_gateway_service'),
@@ -6979,16 +6974,16 @@ async function runGatewayServiceActionFromLauncher(
 async function pairGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'pair_gateway' | 'sync_gateway' }>,
 ): Promise<DesktopLauncherActionResult> {
-  const record = await gatewayStore().get(request.gateway_id);
+  const record = await gatewayStore().get(request.connection_id);
   if (!record) {
     return launcherActionFailure('environment_missing', 'gateway', 'Gateway was not found.', {
-      gatewayID: request.gateway_id,
+      gatewayID: request.connection_id,
       shouldRefreshSnapshot: true,
     });
   }
   return refreshGatewayFromLauncher({
     kind: 'refresh_gateway',
-    gateway_id: request.gateway_id,
+    connection_id: request.connection_id,
   }, { allowPairing: true });
 }
 
@@ -7464,7 +7459,7 @@ async function reinstallTargetFromLauncher(
 async function deleteGatewayFromLauncher(gatewayID: string): Promise<GatewayRecord | null> {
   const existing = await gatewayStore().get(gatewayID);
   for (const record of [...sessionsByKey.values()]) {
-    if (record.target.kind === 'gateway_environment' && record.target.gateway_id === gatewayID) {
+    if (record.target.kind === 'gateway_environment' && record.target.connection_id === gatewayID) {
       await finalizeSessionClosure(record.session_key);
     }
   }
@@ -7538,7 +7533,7 @@ function liveGatewayEnvironmentSessions(gatewayID: string, gatewayEnvID: string)
   for (const sessionRecord of sessionsByKey.values()) {
     if (
       sessionRecord.target.kind === 'gateway_environment'
-      && sessionRecord.target.gateway_id === cleanGatewayID
+      && sessionRecord.target.connection_id === cleanGatewayID
       && sessionRecord.target.gateway_env_id === cleanGatewayEnvID
     ) {
       const live = liveSession(sessionRecord.session_key);
@@ -7556,7 +7551,7 @@ type RuntimeLifecycleSessionScope = Readonly<
   | { kind: 'runtime_target'; target_key: string }
   | { kind: 'session_key'; session_key: DesktopSessionKey }
   | { kind: 'session_target'; target: DesktopSessionTarget }
-  | { kind: 'gateway_environment'; gateway_id: string; gateway_env_id: string }
+  | { kind: 'gateway_environment'; connection_id: string; gateway_env_id: string }
 >;
 
 const runtimeLifecycleGenerationByIdentity = new Map<string, number>();
@@ -7583,7 +7578,7 @@ function runtimeLifecycleIdentityKeysForTarget(target: DesktopSessionTarget): re
       keys.push(runtimeLifecycleIdentityKey(['external_local_ui', target.environment_id]));
       break;
     case 'gateway_environment':
-      keys.push(runtimeLifecycleIdentityKey(['gateway_environment', target.gateway_id, target.gateway_env_id]));
+      keys.push(runtimeLifecycleIdentityKey(['gateway_environment', target.connection_id, target.gateway_env_id]));
       break;
     case 'ssh_environment':
       break;
@@ -7599,7 +7594,7 @@ function runtimeLifecycleIdentityKeysForScope(scope: RuntimeLifecycleSessionScop
     case 'session_target':
       return runtimeLifecycleIdentityKeysForTarget(scope.target);
     case 'gateway_environment':
-      return [runtimeLifecycleIdentityKey(['gateway_environment', scope.gateway_id, scope.gateway_env_id])];
+      return [runtimeLifecycleIdentityKey(['gateway_environment', scope.connection_id, scope.gateway_env_id])];
   }
 }
 
@@ -7635,7 +7630,7 @@ function runtimeLifecycleSessionMatchesScope(
       return desktopSessionTargetsReferToSameEnvironment(sessionRecord.target, scope.target);
     case 'gateway_environment':
       return sessionRecord.target.kind === 'gateway_environment'
-        && sessionRecord.target.gateway_id === compact(scope.gateway_id)
+        && sessionRecord.target.connection_id === compact(scope.connection_id)
         && sessionRecord.target.gateway_env_id === compact(scope.gateway_env_id);
   }
 }
@@ -7659,7 +7654,7 @@ function runtimeLifecycleScopeMatchesLauncherOpen(
         || compact(snapshot.subject_id) === scope.session_key
         || snapshot.operation_key.startsWith(`${scope.session_key}:open`);
     case 'gateway_environment': {
-      const gatewayTargetID = `gateway:${encodeURIComponent(compact(scope.gateway_id))}:env:${encodeURIComponent(compact(scope.gateway_env_id))}`;
+      const gatewayTargetID = `gateway:${encodeURIComponent(compact(scope.connection_id))}:env:${encodeURIComponent(compact(scope.gateway_env_id))}`;
       return targetID === gatewayTargetID || targetID.startsWith(`${gatewayTargetID}:session:`);
     }
     case 'session_target':
@@ -7683,7 +7678,7 @@ function runtimeLifecycleScopeMatchesLauncherOpen(
         case 'wsl_environment':
           return targetID === scope.target.session_key;
         case 'gateway_environment': {
-          const gatewayTargetID = `gateway:${encodeURIComponent(scope.target.gateway_id)}:env:${encodeURIComponent(scope.target.gateway_env_id)}`;
+          const gatewayTargetID = `gateway:${encodeURIComponent(scope.target.connection_id)}:env:${encodeURIComponent(scope.target.gateway_env_id)}`;
           return targetID === gatewayTargetID || targetID.startsWith(`${gatewayTargetID}:session:`);
         }
       }
@@ -9337,7 +9332,7 @@ function failGatewaySessionTransport(record: DesktopSessionRecord, error: Gatewa
   record.transport_recovery_snapshot = { generation: 0, revision: (record.transport_recovery_snapshot?.revision ?? 0) + 1,
     phase: 'failed', attempt_count: 0, failure: { code, error_name: 'GatewayClientError', technical_detail: code },
     actions: ['open_connection_center'] };
-  recordGatewayAccessResult(record.target.gateway_id, record.target.gateway_env_id,
+  recordGatewayAccessResult(record.target.connection_id, record.target.gateway_env_id,
     code === 'gateway_member_removed' ? 'member_removed' : code === 'gateway_target_unavailable' ? 'target_unavailable' : 'gateway_unavailable');
   sendSessionTransportRecoverySnapshot(record);
   if (record.gateway_member_transport) void closeRuntimeAttachmentTransport(record.gateway_member_transport);
@@ -9348,7 +9343,7 @@ function markSessionAppReady(
   payload: DesktopSessionAppReadyPayload,
 ): void {
   if (!sessionRecord.closing && !sessionTransportRecoveryFailed(sessionRecord) && sessionRecord.target.kind === 'gateway_environment') {
-    recordGatewayAccessResult(sessionRecord.target.gateway_id, sessionRecord.target.gateway_env_id,
+    recordGatewayAccessResult(sessionRecord.target.connection_id, sessionRecord.target.gateway_env_id,
       payload.state === 'access_gate_interactive' ? 'runtime_authentication_required' : 'ready');
   }
   if (sessionRecord.lifecycle !== 'opening') {
@@ -10497,8 +10492,8 @@ async function tessivenRuntimeInventory(
   ];
   for (const saved of direct) {
     const runtimeRef = saved.local
-      ? desktopCloudRuntimeLinkTargetID('local_environment', saved.id)
-      : providerRuntimeLinkTargetIDForRuntimeTarget(
+      ? desktopRuntimeConnectionTargetID('local_environment', saved.id)
+      : runtimeConnectionTargetIDForSavedTarget(
           saved.host_access,
           saved.id as DesktopRuntimeTargetID,
         );
@@ -10516,7 +10511,7 @@ async function tessivenRuntimeInventory(
       managedRuntimePresence({
         targetID: runtimeRef,
         placementTargetID: saved.id as DesktopRuntimeTargetID,
-        kind: providerRuntimeLinkKindForHostAccess(saved.host_access),
+        kind: runtimeTargetKindForHostAccess(saved.host_access),
         environmentID: saved.id,
         label: saved.label,
         runtimeKey: saved.id,
@@ -11015,7 +11010,7 @@ async function tessivenRuntimeInventory(
           await preflightTessivenHostEffect(source, message, connectSignal);
           const result = await openGatewayEnvironmentFromLauncher({
             kind: 'open_gateway_environment',
-            gateway_id: gateway.connection_id,
+            connection_id: gateway.connection_id,
             gateway_env_id: member.attachment_id,
             environment_id: member.runtime_public_id,
             label: member.display_name,
@@ -11362,7 +11357,7 @@ async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
     const selected = attachedProviderRuntimeTargets(preferences).find(value => value.id === runtime);
     const record = selected?.record;
     if (record) assertRuntimeFlowerCompatible(record.startup.runtime_service);
-    if (!selected || !record?.startup.runtime_control || !providerRuntimeTargetIsCurrent(selected))
+    if (!selected || !record?.startup.runtime_control || !runtimeManagementTargetIsCurrent(selected))
       throw new RuntimeControlError('TESSIVEN_TARGET_UNAVAILABLE',
         'The exact Runtime target has no available authorized connection.', 409);
     const executionTarget: RuntimeFlowerTarget = {
@@ -11371,13 +11366,13 @@ async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
     const lease = await retainRuntimeFlowerTarget(executionTarget, 'tessiven-resource', false);
     try {
       signal.throwIfAborted();
-      if (!providerRuntimeTargetIsCurrent(selected) || (lease && !lease.active))
+      if (!runtimeManagementTargetIsCurrent(selected) || (lease && !lease.active))
         throw new Error('The Tessiven target connection changed.');
       await preflightTessivenHostEffect(target, message, signal);
       const refreshed = await tessivenRuntimeInventory(target, signal, true);
       const currentPaths = refreshed.paths.filter(path => path.target.runtime_ref === runtime);
       if (currentPaths.length !== 1 || currentPaths[0]?.target.generation !== observed.generation
-        || !providerRuntimeTargetIsCurrent(selected))
+        || !runtimeManagementTargetIsCurrent(selected))
         throw new RuntimeControlError('TESSIVEN_RESOURCE_CONFLICT', 'The selected Runtime path changed before dispatch.', 409);
 
       const result = await requestTessivenTarget(
@@ -11386,7 +11381,7 @@ async function ensureTessivenHost(target: RuntimeFlowerTarget): Promise<void> {
         signal,
       );
       if (
-        (lease && !lease.active) || !providerRuntimeTargetIsCurrent(selected)
+        (lease && !lease.active) || !runtimeManagementTargetIsCurrent(selected)
       )
         throw new Error(
           'The target connection ended; inspect the operation before retrying.',
@@ -11602,7 +11597,7 @@ async function openTessivenManagedService(source: RuntimeFlowerTarget, data: unk
   const selected = result?.runtime_ref === 'local:local' ? undefined
     : attachedProviderRuntimeTargets(await loadDesktopPreferencesCached()).find(record => record.id === result?.runtime_ref);
   const target = result?.runtime_ref === 'local:local' ? source.record
-    : selected && providerRuntimeTargetIsCurrent(selected) ? selected.record : undefined;
+    : selected && runtimeManagementTargetIsCurrent(selected) ? selected.record : undefined;
   if (!target || !opening.forward?.forward_id || !opening.app_path || !opening.forward.target_url) throw new Error('The exact service connection is unavailable.');
   const base = runtimeFlowerBaseURL(target);
   const route = new URL(opening.app_path, base);
@@ -13638,18 +13633,18 @@ async function refreshAllCloudEnvironmentRuntimeHealth(): Promise<void> {
 const cloudLinkIntentVersions = new Map<string, number>();
 const explicitCloudLinkTargets = new Set<string>();
 
-function attachedProviderRuntimeTargets(preferences: DesktopPreferences): CloudRuntimeLinkTargetRecord[] {
+function attachedProviderRuntimeTargets(preferences: DesktopPreferences): RuntimeManagementTargetRecord[] {
   const local = currentLocalEnvironmentRuntimeRecord(preferences.local_environment);
   return [
-    ...(local ? [{ kind: 'local_environment' as const, id: desktopCloudRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
+    ...(local ? [{ kind: 'local_environment' as const, id: desktopRuntimeConnectionTargetID('local_environment', preferences.local_environment.id),
       label: preferences.local_environment.label, record: local }] : []),
     ...runtimePlacementBridgeRegistry.values().map(record => ({
-      kind: desktopCloudRuntimeLinkTargetKindFromID(record.target_id), id: record.target_id, label: record.label, record,
+      kind: desktopRuntimeTargetKindFromID(record.target_id), id: record.target_id, label: record.label, record,
     })),
   ];
 }
 
-function providerRuntimeTargetIsCurrent(target: CloudRuntimeLinkTargetRecord): boolean {
+function runtimeManagementTargetIsCurrent(target: RuntimeManagementTargetRecord): boolean {
   return 'session' in target.record
     ? runtimePlacementBridgeRegistry.get(target.record.session.placement_target_id)?.session === target.record.session
     : localEnvironmentRuntimeRecord?.startup.runtime_control === target.record.startup.runtime_control;
@@ -14801,7 +14796,7 @@ function remoteManagedSessionStartup(remoteSessionURL: string): StartupReport {
 async function openGatewayEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_gateway_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  const record = await gatewayStore().get(request.gateway_id);
+  const record = await gatewayStore().get(request.connection_id);
   if (!record) {
     return launcherActionFailure(
       'environment_missing',
@@ -14822,7 +14817,7 @@ async function openGatewayEnvironmentFromLauncher(
   });
   const operation = launcherOperations.create({
     operation_key: operationKey, action: 'open_gateway_environment', subject_kind: 'gateway', subject_id: record.connection_id,
-    environment_id: request.environment_id, environment_label: request.label, gateway_id: record.connection_id,
+    environment_id: request.environment_id, environment_label: request.label, connection_id: record.connection_id,
     active_progress_surface: 'open', phase: 'checking_runtime_record',
     title: 'Checking Gateway access', detail: 'Desktop is verifying Gateway trust and catalog access.',
     title_key: 'gatewayAccess.checkingAccess', detail_key: 'gatewayAccess.checkingAccessDetail',
@@ -15550,7 +15545,7 @@ function savedRuntimePlacementReadyRecord(
     runtime_key: targetID,
     environment_id: environmentID,
     label,
-    target_id: providerRuntimeLinkTargetIDForRuntimeTarget(hostAccess, targetID),
+    target_id: runtimeConnectionTargetIDForSavedTarget(hostAccess, targetID),
     host_access: hostAccess,
     // The bridge and Runtime daemon both accept the installation root. The
     // startup report's state_dir points at the nested local-environment state
@@ -16745,7 +16740,7 @@ async function executeDirectManagedEnvironmentLifecycle(
           runtime_key: targetID,
           environment_id: input.environment_id,
           label: input.label,
-          target_id: providerRuntimeLinkTargetIDForRuntimeTarget(input.host_access, targetID),
+          target_id: runtimeConnectionTargetIDForSavedTarget(input.host_access, targetID),
           host_access: input.host_access,
           placement: ready.placement,
           runtime_pid: ready.startup?.pid,
@@ -16816,7 +16811,7 @@ async function executeDirectManagedEnvironmentLifecycle(
             runtime_key: targetID,
             environment_id: input.environment_id,
             label: input.label,
-            target_id: providerRuntimeLinkTargetIDForRuntimeTarget(input.host_access, targetID),
+            target_id: runtimeConnectionTargetIDForSavedTarget(input.host_access, targetID),
             host_access: input.host_access,
             placement: ready.placement,
             runtime_pid: ready.startup?.pid,
@@ -17270,9 +17265,9 @@ async function connectProviderRuntimeOperation(
     );
   }
 
-  let runtimeTarget: CloudRuntimeLinkTargetRecord | null;
+  let runtimeTarget: RuntimeManagementTargetRecord | null;
   try {
-    runtimeTarget = await resolveCloudRuntimeLinkTarget(preferences, request.runtime_target_id);
+    runtimeTarget = await resolveRuntimeManagementTarget(preferences, request.runtime_target_id);
 
   } catch (error) {
     return launcherActionFailureFromSessionOpenError(error, providerEnvironmentFailureContext(environment));
@@ -17340,7 +17335,7 @@ async function connectProviderRuntimeOperation(
   const accountGeneration = launcherOperations.currentSubjectGeneration('control_plane', accountKey);
   const isCurrent = () => launcherOperations.currentSubjectGeneration('control_plane', accountKey) === accountGeneration
     && (cloudLinkIntentVersions.get(request.runtime_target_id) ?? 0) === intentVersion
-    && providerRuntimeTargetIsCurrent(runtimeTarget);
+    && runtimeManagementTargetIsCurrent(runtimeTarget);
   try {
     if (!isCurrent()) throw new RuntimeControlError('CLOUD_LINK_BINDING_CHANGED', 'The saved connection changed.');
     const target = await resolveProviderDesktopSessionTarget(preferences, environment);
@@ -17414,7 +17409,7 @@ async function disconnectProviderRuntimeOperation(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'disconnect_cloud_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
   const preferences = await loadDesktopPreferencesCached();
-  const runtimeTarget = await resolveCloudRuntimeLinkTarget(preferences, request.runtime_target_id);
+  const runtimeTarget = await resolveRuntimeManagementTarget(preferences, request.runtime_target_id);
   try {
   const runtimeRecord = runtimeTarget?.record ?? null;
   if (runtimeTarget && runtimeRecord?.startup.runtime_control) {
@@ -18633,7 +18628,7 @@ async function deleteEnvironmentRegistrationFromWelcome(
 ): Promise<DesktopLauncherActionResult> {
   const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
   const removed = snapshot.environments.find(entry => registrationRef.kind === 'gateway_environment'
-    ? entry.gateway_id === registrationRef.gateway_id && entry.gateway_env_id === registrationRef.gateway_env_id
+    ? entry.connection_id === registrationRef.connection_id && entry.gateway_env_id === registrationRef.gateway_env_id
     : 'id' in registrationRef && entry.id === registrationRef.id);
   const needsReplacement = removed && removalNeedsAccessReplacement(removed, [removed.id]);
   if (needsReplacement && !removed.access_routes?.some(route => route.id === replacementRouteID && route.environment_id !== removed.id)) {
@@ -18853,11 +18848,11 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         if (record.trust_profile) {
           await syncGatewayRecord(record, { force: true, priority: 'foreground', mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
         }
-        return { ...launcherActionSuccess('saved_gateway'), gateway_id: record.connection_id };
+        return { ...launcherActionSuccess('saved_gateway'), connection_id: record.connection_id };
       } catch (error) {
         let saved: GatewayRecord | null = null;
         try {
-          const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(gatewayConnectionFromSetup(request)));
+          const gatewayID = compact(request.connection_id) || stableGatewayID(gatewayBindingAudience(gatewayConnectionFromSetup(request)));
           saved = await gatewayStore().get(gatewayID);
         } catch { /* Invalid coordinates or unavailable storage must retain the original failure. */ }
         if (saved && error instanceof GatewayServiceStartRequiredError) {
@@ -18914,14 +18909,14 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return refreshGatewayStatusFromLauncher(request);
     case 'delete_gateway': {
       const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
-      const removed = snapshot.environments.filter(entry => entry.gateway_id === request.gateway_id);
+      const removed = snapshot.environments.filter(entry => entry.connection_id === request.connection_id);
       if (removed.some(entry => removalNeedsAccessReplacement(entry, removed.map(candidate => candidate.id)))) {
         return launcherActionFailure('action_invalid', 'gateway', 'Choose replacement default connections before removing this Gateway.', {
           failure: desktopOperationFailurePresentation({ code: 'operation_failed', title: 'Choose connection', titleKey: 'gatewayAccess.chooseDefault',
             summary: 'Choose replacement default connections before removing this Gateway.', summaryKey: 'gatewayAccess.removeGatewayDefaultHint' }),
         });
       }
-      await deleteGatewayFromLauncher(request.gateway_id);
+      await deleteGatewayFromLauncher(request.connection_id);
       return launcherActionSuccess('deleted_gateway');
     }
     case 'upsert_environment_registration':
@@ -20503,37 +20498,37 @@ async function performRuntimeGatewayDialogAction(
   }
   try {
     return await gatewayManagementConnections.use(event.sender.id, {
-      environment_id: desktopCloudRuntimeLinkTargetRuntimeKey(request.runtime_target_id), dialog_token: request.connection_token!,
+      environment_id: desktopRuntimeTargetKey(request.runtime_target_id), dialog_token: request.connection_token!,
     }, () => manageRuntimeGatewayFromLauncher(request), request.operation === 'status' ? request.ssh_password : undefined);
   } catch (error) {
     const code = error instanceof RuntimeControlError ? error.code
       : error instanceof DesktopSSHTransportAuthenticationError ? 'SSH_AUTHENTICATION_REQUIRED' : 'RUNTIME_CONTROL_UNREACHABLE';
-    return { ...launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime management connection needs attention.'), gateway_error_code: code };
+    return { ...launcherActionFailure('gateway_attachment_failed', 'environment', 'The Runtime management connection needs attention.'), gateway_error_code: code };
   }
 }
 
 async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'manage_runtime_gateway' }>): Promise<DesktopLauncherActionResult> {
   const mutating = request.operation === 'replace' || request.operation === 'leave' && request.route_impact_acknowledged === true;
-  if (mutating && explicitCloudLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('cloud_link_failed', 'environment', 'A Cloud connection action is already in progress.');
+  if (mutating && explicitCloudLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('gateway_attachment_failed', 'environment', 'A Cloud connection action is already in progress.');
   if (mutating) {
     explicitCloudLinkTargets.add(request.runtime_target_id);
     cloudLinkIntentVersions.set(request.runtime_target_id, (cloudLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
   }
-  let target: CloudRuntimeLinkTargetRecord | null = null;
+  let target: RuntimeManagementTargetRecord | null = null;
   try {
-    target = await resolveCloudRuntimeLinkTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
+    target = await resolveRuntimeManagementTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
     const endpoint = target?.record.startup.runtime_control;
     if (!target || !endpoint) return launcherActionFailure('runtime_not_started', 'environment', 'Start this Runtime through its trusted management connection first.');
     if (request.operation === 'preview') {
       const preview = await previewRuntimeGateway(endpoint, { address: request.address, code: request.code, purpose: request.purpose });
-      if (!providerRuntimeTargetIsCurrent(target)) return { ...launcherActionFailure('cloud_link_failed','environment','The Runtime connection changed. Verify again.'), gateway_error_code: 'GATEWAY_PREVIEW_CHANGED' };
+      if (!runtimeManagementTargetIsCurrent(target)) return { ...launcherActionFailure('gateway_attachment_failed','environment','The Runtime connection changed. Verify again.'), gateway_error_code: 'GATEWAY_PREVIEW_CHANGED' };
       return { ...launcherActionSuccess('gateway_membership_updated'), gateway_preview: preview };
     }
     const leavingMember = request.operation === 'leave'
       ? (await manageRuntimeGateway(endpoint, 'status')).memberships?.find(member => member.gateway_id === request.gateway_id)
       : undefined;
     const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.gateway_id, request.route_impact_acknowledged);
-    if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
+    if (!runtimeManagementTargetIsCurrent(target)) return launcherActionFailure('gateway_attachment_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
     if (leavingMember) {
       for (const record of await gatewayStore().list()) {
         const sync = gatewaySyncStateByID.get(record.connection_id);
@@ -20547,7 +20542,7 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
     }
     return { ...launcherActionSuccess('gateway_membership_updated'), gateway_membership: result };
   } catch (error) {
-    return { ...launcherActionFailure('cloud_link_failed', 'environment', 'Gateway enrollment could not advance. Check the Gateway and retry.'), gateway_error_code: error instanceof RuntimeControlError ? error.code : 'GATEWAY_UNREACHABLE' };
+    return { ...launcherActionFailure('gateway_attachment_failed', 'environment', 'Gateway enrollment could not advance. Check the Gateway and retry.'), gateway_error_code: error instanceof RuntimeControlError ? error.code : 'GATEWAY_UNREACHABLE' };
   } finally {
     try { await target?.bridge_lease?.release(); }
     finally { if (mutating) explicitCloudLinkTargets.delete(request.runtime_target_id); }
@@ -20555,13 +20550,13 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
 }
 
 async function manageRuntimeCloudFromLauncher(request: Extract<DesktopLauncherActionRequest, {kind: 'manage_runtime_cloud'}>): Promise<DesktopLauncherActionResult> {
- let target: CloudRuntimeLinkTargetRecord | null = null;
+ let target: RuntimeManagementTargetRecord | null = null;
  try {
-  target = await resolveCloudRuntimeLinkTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
+  target = await resolveRuntimeManagementTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
   const endpoint = target?.record.startup.runtime_control;
   if (!target || !endpoint) return launcherActionFailure('runtime_not_started','environment','Start the Runtime through its trusted management connection first.');
   const result = await manageRuntimeCloud(endpoint, request);
-  if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed','environment','Runtime connection changed. Query the original route operation.');
+  if (!runtimeManagementTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed','environment','Runtime connection changed. Query the original route operation.');
   return {...launcherActionSuccess('gateway_membership_updated'), ...result};
  } catch (error) {
   return {...launcherActionFailure('cloud_link_failed','environment',error instanceof Error ? error.message : 'Cloud route request failed. Query its original operation before retrying.'), cloud_error_code: error instanceof RuntimeControlError ? error.code : 'CLOUD_UNREACHABLE'};

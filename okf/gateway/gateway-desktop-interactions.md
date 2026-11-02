@@ -11,6 +11,11 @@ Desktop enrolls managed Local, SSH, WSL and container targets through one app-ow
 
 # Contract
 
+## Identity and ownership
+Desktop IPC, progress, session targets and shared Center presentation use connection_id for the saved connection record; Web Center maps its source_id to that host-local field. gateway_id remains the signed service identity used by Runtime attachment requests and trust records. Neither an address nor a selected Cloud route substitutes for either identity. Ambiguous or retired IPC identity fields fail explicitly. The renderer and main process change together; stored connection IDs, credentials, session keys and schema 5 remain unchanged.
+
+Generic Runtime management uses DesktopRuntimeTargetID and the Runtime placement owner. The single runtime_connection_target projection carries Runtime management facts and derived Cloud connection presentation; Gateway access does not depend on Cloud association, Cloud capability or a Cloud-selected route. Cloud association keeps its own state and mutation coordination; Gateway failures use the attachment error domain. Gateway does not own Runtime lifecycle or Cloud identity.
+
 ## Enrollment and authority
 One app session serves creation and card actions for managed Local, SSH, WSL and container targets. Creation offers Not now or Add Gateway access after setup. Each opening leases the exact sender/target Env App bridge and connects before verification/consent; prior opening is no current proof. Env App closure retains the lease, while cancel, navigation/destruction and authority changes retire it. Admitted writes retain transport until settlement; reject late requests.
 
@@ -21,7 +26,7 @@ Proven stopped targets offer explicit Start. Start/restart/update share the life
 ## Gateway selection and invitation
 Saved/manual tabs keep separate drafts/input nodes. Select enabled registration ID, never address or connectivity. Retain endpoint-less entries with setup guidance. Use confirmed endpoints, otherwise only a URL registration's canonical HTTPS origin; SSH/listener coordinates are not substitutes. Reject changed trust, invalid/Host-rejected origins and remote loopback without hiding registrations. Inventory cannot overwrite typing; removing a selected usable address revokes verification.
 
-manage_attachments uses update_gateway_endpoints without changing listeners/restrictions. Retain authoritative IPC values only until catalog change; never restore removed addresses. Enrollment needs explicit invite_gateway_runtime or pasted code plus Runtime verification/consent. Saving/selecting/issuing alone never enrolls. Access-only users receive administrator guidance. Close/suspension/authority changes fence late responses; success consumes code and reopening clears consent/code.
+Shared-address edits require manage_network and use update_gateway_endpoints without changing listeners/restrictions. Retain authoritative IPC values only until catalog change; never restore removed addresses. Enrollment needs explicit invite_gateway_runtime or pasted code plus Runtime verification/consent. Saving/selecting/issuing alone never enrolls. Access-only users receive administrator guidance. Close/suspension/authority changes fence late responses; success consumes code and reopening clears consent/code.
 
 Unknown submission queries exact membership without resubmitting. Positive membership completes; authoritative absence clears uncertain/consumed material and returns to verification. Checks consume no code. Done restores the originating control.
 

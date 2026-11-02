@@ -1,13 +1,10 @@
+import { type DesktopRuntimeTargetID } from './desktopRuntimePlacement';
 import {
   runtimeServiceHasActiveWork,
   runtimeServiceCloudLinkMatches,
   runtimeServiceSupportsCloudLink,
 } from './runtimeService';
-import type {
-  DesktopCloudEnvironmentCandidate,
-  DesktopCloudRuntimeLinkTarget,
-  DesktopCloudRuntimeLinkTargetID,
-} from './providerRuntimeLinkTarget';
+import type { DesktopCloudEnvironmentCandidate, DesktopRuntimeConnectionTarget } from "./runtimeConnectionTarget";
 
 export type DesktopCloudRuntimeLinkPlanState =
   | 'target_ready'
@@ -23,14 +20,14 @@ export type DesktopCloudRuntimeLinkPlanState =
 
 export type DesktopCloudRuntimeLinkPlan = Readonly<{
   state: DesktopCloudRuntimeLinkPlanState;
-  runtime_target_id: DesktopCloudRuntimeLinkTargetID;
+  runtime_target_id: DesktopRuntimeTargetID;
   provider_environment_id: string;
   runtime_running: boolean;
   runtime_matches_provider: boolean;
   requires_confirmation: boolean;
   can_connect: boolean;
   can_disconnect: boolean;
-  current_binding?: DesktopCloudRuntimeLinkTarget['cloud_link_binding'];
+  current_binding?: DesktopRuntimeConnectionTarget['cloud_link_binding'];
   target_binding: Readonly<{
     cloud_origin: string;
     cloud_id: string;
@@ -40,13 +37,13 @@ export type DesktopCloudRuntimeLinkPlan = Readonly<{
   message: string;
 }>;
 
-function runtimeTargetLabel(target: DesktopCloudRuntimeLinkTarget): string {
+function runtimeTargetLabel(target: DesktopRuntimeConnectionTarget): string {
   return target.kind === 'ssh_environment' ? 'SSH runtime' : 'Local Runtime';
 }
 
 function planMessage(
   state: DesktopCloudRuntimeLinkPlanState,
-  target: DesktopCloudRuntimeLinkTarget,
+  target: DesktopRuntimeConnectionTarget,
   providerEnvironment: DesktopCloudEnvironmentCandidate,
 ): string {
   const runtimeLabel = runtimeTargetLabel(target);
@@ -77,7 +74,7 @@ function planMessage(
 }
 
 export function buildDesktopCloudRuntimeLinkPlan(
-  runtimeTarget: DesktopCloudRuntimeLinkTarget,
+  runtimeTarget: DesktopRuntimeConnectionTarget,
   providerEnvironment: DesktopCloudEnvironmentCandidate,
 ): DesktopCloudRuntimeLinkPlan {
   const runtimeMatchesProvider = runtimeServiceCloudLinkMatches(runtimeTarget.runtime_service, {

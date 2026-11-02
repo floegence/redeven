@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopCloudRuntimeLinkPlan } from './providerRuntimeLinkPlanner';
-import type { DesktopCloudEnvironmentCandidate, DesktopCloudRuntimeLinkTarget } from './providerRuntimeLinkTarget';
+import type { DesktopCloudEnvironmentCandidate, DesktopRuntimeConnectionTarget } from "./runtimeConnectionTarget";
 import {
   runtimeServiceProviderConnectionState,
   type RuntimeServiceCloudLinkBinding,
@@ -46,7 +46,7 @@ function runtimeService(binding: RuntimeServiceCloudLinkBinding): RuntimeService
   };
 }
 
-function target(overrides: Partial<DesktopCloudRuntimeLinkTarget> = {}): DesktopCloudRuntimeLinkTarget {
+function target(overrides: Partial<DesktopRuntimeConnectionTarget> = {}): DesktopRuntimeConnectionTarget {
   const service = overrides.runtime_service ?? runtimeService({ state: 'unbound', remote_enabled: false });
   return {
     id: 'ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default',

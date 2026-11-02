@@ -16,7 +16,7 @@ describe('explicit Gateway registration boundary', () => {
     ['ssh_host', ssh, host], ['ssh_container', ssh, container],
   ])('retains the %s service placement without a Runtime mapping', (kind, hostAccess, placement) => {
     const request = normalizeDesktopLauncherActionRequest({ kind: 'upsert_gateway', connection_kind: kind,
-      gateway_id: 'office', display_name: 'Office', host_access: hostAccess, placement,
+      connection_id: 'office', display_name: 'Office', host_access: hostAccess, placement,
       ssh_password: ' password ', ssh_password_mode: 'replace', runtime_environment_id: 'injected-runtime',
       proof: 'injected-proof', client_private_key: 'injected-key' });
     expect(request?.kind).toBe('upsert_gateway');

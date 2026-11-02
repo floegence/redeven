@@ -1,6 +1,7 @@
+import { type DesktopRuntimeTargetID, normalizeDesktopRuntimeTargetID } from './desktopRuntimePlacement';
 import type { DesktopEnvironmentEntryKind, DesktopLauncherActionKind, DesktopLocalEnvironmentStateRoute } from './desktopLauncherIPC';
-import type { DesktopCloudRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
-import { normalizeDesktopCloudRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
+
+
 
 export type DesktopEnvironmentManagementSurface = 'provider_card' | 'managed_runtime_card' | 'unmanaged_environment_card';
 
@@ -31,7 +32,7 @@ export type DesktopCloudRuntimeLinkRequestFields = Readonly<{
 
 export type DesktopCloudRuntimeLinkRequestTarget = Readonly<{
   provider_environment_id?: string;
-  runtime_target_id: DesktopCloudRuntimeLinkTargetID;
+  runtime_target_id: DesktopRuntimeTargetID;
 }>;
 
 function compact(value: unknown): string {
@@ -71,7 +72,7 @@ export function normalizeDesktopCloudRuntimeLinkRequestTarget(
   fields: DesktopCloudRuntimeLinkRequestFields,
 ): DesktopCloudRuntimeLinkRequestTarget | null {
   const providerEnvironmentID = compact(fields.provider_environment_id);
-  const runtimeTargetID = normalizeDesktopCloudRuntimeLinkTargetID(fields.runtime_target_id);
+  const runtimeTargetID = normalizeDesktopRuntimeTargetID(fields.runtime_target_id);
   if (!runtimeTargetID) {
     return null;
   }

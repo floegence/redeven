@@ -29,8 +29,8 @@ describe('managed Runtime Gateway access', () => {
       const completed = runtimeGatewayAccessPresentation(f.snapshot().environments[0])!;
       const check = f.beginProbe();
       const environment = check.checking.environments[0];
-      expect(environment.provider_runtime_link_target?.runtime_control_status.state).toBe('missing');
-      expect(f.store.snapshot().managedRuntimePresenceByTargetID[environment.provider_runtime_link_target!.id]).toBeUndefined();
+      expect(environment.runtime_connection_target?.runtime_control_status.state).toBe('missing');
+      expect(f.store.snapshot().managedRuntimePresenceByTargetID[environment.runtime_connection_target!.id]).toBeUndefined();
       expect(runtimeGatewayAccessPresentation(environment), `${kind}/${state}`).toEqual({ ...completed, revalidating: true });
       expect(runtimeGatewayAccessPresentation((await check.finish()).environments[0])).toEqual(completed);
     }
@@ -55,8 +55,8 @@ describe('managed Runtime Gateway access', () => {
   it('requires both a current control channel and the published Gateway bind method', () => {
     const entry = runtime();
     expect(runtimeGatewayAccessPresentation(entry)).toMatchObject({ phase: 'ready' });
-    expect(runtimeGatewayAccessPresentation({ ...entry, provider_runtime_link_target: {
-      ...entry.provider_runtime_link_target!, runtime_control_status: { state: 'missing', reason_code: 'not_reported', message: 'Missing' },
+    expect(runtimeGatewayAccessPresentation({ ...entry, runtime_connection_target: {
+      ...entry.runtime_connection_target!, runtime_control_status: { state: 'missing', reason_code: 'not_reported', message: 'Missing' },
     } })).toMatchObject({ phase: 'control_missing', recovery: 'restart' });
     expect(runtimeGatewayAccessPresentation({ ...entry, runtime_service: { ...entry.runtime_service,
       capabilities: { ...entry.runtime_service.capabilities, runtime_gateway: { supported: true, bind_method: 'future' } },
@@ -66,21 +66,21 @@ describe('managed Runtime Gateway access', () => {
     const entry = runtime();
     expect(runtimeGatewayAccessPresentation({ ...entry, runtime_service: undefined,
       runtime_health: { ...entry.runtime_health, freshness: 'fresh', status: 'offline', offline_reason_code: 'not_started' },
-      provider_runtime_link_target: { ...entry.provider_runtime_link_target!, runtime_running: false,
+      runtime_connection_target: { ...entry.runtime_connection_target!, runtime_running: false,
         runtime_control_status: { state: 'missing', reason_code: 'not_started', message: 'Stopped' } },
     })).toMatchObject({ phase: 'not_started', recovery: 'start' });
   });
   it('keeps unreachable management distinct from stopped Runtime and allows retry', () => {
     const entry = runtime();
     for (const reason_code of ['auth_required', 'container_engine_unavailable'] as const) {
-      expect(runtimeGatewayAccessPresentation({ ...entry, provider_runtime_link_target: {
-        ...entry.provider_runtime_link_target!, runtime_control_status: { state: 'missing', reason_code, message: 'Unavailable' },
+      expect(runtimeGatewayAccessPresentation({ ...entry, runtime_connection_target: {
+        ...entry.runtime_connection_target!, runtime_control_status: { state: 'missing', reason_code, message: 'Unavailable' },
       } })).toMatchObject({ phase: 'management_unavailable', recovery: 'refresh' });
     }
   });
   it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('offers connection for an observed running %s without a Desktop bridge', kind => {
     const entry = runtimeGatewayAccessFixture(kind).environment;
-    const pending = { ...entry, provider_runtime_link_target: { ...entry.provider_runtime_link_target!,
+    const pending = { ...entry, runtime_connection_target: { ...entry.runtime_connection_target!,
       runtime_control_status: { state: 'missing' as const, reason_code: 'forward_unavailable' as const, message: 'Connect the Desktop bridge' },
     } };
     expect(runtimeGatewayAccessPresentation(pending)).toMatchObject({ phase: 'connection_required' });
@@ -103,4 +103,14 @@ describe('managed Runtime Gateway access', () => {
     expect(runtimeGatewayAccessPresentation({ ...entry, managed_runtime_host_access: undefined })).toBeUndefined();
     expect(runtimeGatewayAccessPresentation({ ...entry, managed_runtime_placement: undefined })).toBeUndefined();
   });
+});
+
+
+it('keeps Gateway readiness independent of Cloud association and capability', () => {
+  const entry = runtimeGatewayAccessFixture('ssh').environment;
+  const before = runtimeGatewayAccessPresentation(entry);
+  expect(runtimeGatewayAccessPresentation({ ...entry, runtime_connection_target: {
+    ...entry.runtime_connection_target!, can_connect_cloud: false, can_disconnect_cloud: false,
+    cloud_origin_supported: false, provider_connection_state: 'unlinked', cloud_link_state: 'unbound',
+  } })).toEqual(before);
 });

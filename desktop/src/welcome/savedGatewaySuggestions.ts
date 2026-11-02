@@ -1,9 +1,10 @@
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { gatewayConnectionOrigin } from '../shared/gatewayNetworkSettings';
-import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 
 /** A usable address is only an input to verification, never evidence of reachability. */
-export function gatewayRuntimeAddress(address: string, gateway: DesktopGatewaySource, target: DesktopCloudRuntimeLinkTargetID): string | null {
+export function gatewayRuntimeAddress(address: string, gateway: DesktopGatewaySource, target: DesktopRuntimeTargetID): string | null {
   const origin = gatewayConnectionOrigin(address);
   if (!origin) return null;
   const host = new URL(origin).hostname;
@@ -14,7 +15,7 @@ export function gatewayRuntimeAddress(address: string, gateway: DesktopGatewaySo
 }
 
 /** Registration identity owns selection, including Gateways awaiting address setup. */
-export function savedGatewaySuggestions(gateways: readonly DesktopGatewaySource[], target: DesktopCloudRuntimeLinkTargetID) {
+export function savedGatewaySuggestions(gateways: readonly DesktopGatewaySource[], target: DesktopRuntimeTargetID) {
   return gateways.filter(gateway => gateway.local_enabled && gateway.trust_state !== 'revoked' && gateway.trust_state !== 'trust_changed')
     .map(gateway => {
       const endpoints = [...(gateway.endpoints ?? [])].sort((a,b) => a.priority - b.priority).map(endpoint => endpoint.address);

@@ -1,10 +1,11 @@
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { GatewayPicker } from './GatewayPicker';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { gatewayRuntimeAddress, savedGatewaySuggestions } from './savedGatewaySuggestions';
 import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 import type { GatewayJoinPreview, GatewayAttachmentOperation, GatewayEnrollmentPurpose, GatewayAttachmentStatus } from '../shared/gatewayJoin';
 import type { GatewayEndpoint } from '../shared/gatewayMembership';
 import { gatewayInteractionIdentity } from './environmentInteractionIdentity';
@@ -16,7 +17,7 @@ export type RuntimeGatewayPreparationResult = Readonly<{ ok: boolean; authentica
 
 /** Verification belongs to the selected Runtime; only a verified preview can be confirmed. */
 export function RuntimeGatewayJoinPanel(props: Readonly<{
-  targetID: DesktopCloudRuntimeLinkTargetID; targetLabel?: string; i18n: DesktopI18n; disabled?: boolean;
+  targetID: DesktopRuntimeTargetID; targetLabel?: string; i18n: DesktopI18n; disabled?: boolean;
   gatewayID?: string;
   recoverGateway?: (gateway: DesktopGatewaySource) => Promise<boolean>;
   gateways?: readonly DesktopGatewaySource[]; address?: string; code?: string; focusOwner?: () => void;
@@ -43,7 +44,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [password, setPassword] = createSignal('');
   const [connectionLost, setConnectionLost] = createSignal(false);
   let passwordInput: HTMLInputElement | undefined;
-  let connection: { runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token: number } | undefined;
+  let connection: { runtime_target_id: DesktopRuntimeTargetID; connection_token: number } | undefined;
   const connectionScope = () => connection ??= { runtime_target_id: props.targetID, connection_token: ++nextConnectionToken };
   const releaseConnection = () => {
     const previous = connection;
@@ -105,6 +106,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const selectedSavedAddress = createMemo(() => selectedAddresses().includes(savedAddress()) ? savedAddress() : '');
   const effectiveAddress = createMemo(() => addressMode() === 'saved' ? selectedSavedAddress() : address().trim());
   const canManageGateway = () => !!selectedGateway()?.permissions?.manage_attachments && selectedGateway()?.connection_kind !== 'url';
+  const canManageNetwork = () => !!selectedGateway()?.permissions?.manage_network && selectedGateway()?.connection_kind !== 'url';
   const endpointDraft = () => endpointDrafts()[savedGatewayID()] ?? '';
   const draftAddress = () => selectedGateway() ? gatewayRuntimeAddress(endpointDraft(), selectedGateway()!, props.targetID) : null;
   const focusAddress = () => (addressMode() === 'saved' ? savedGatewayInput?.querySelector<HTMLElement>('[data-floe-dropdown-trigger]') : addressInput)?.focus();
@@ -159,7 +161,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   createEffect(on(gatewayAuthority, () => { invalidate(); }, { defer: true }));
   async function saveGatewayAddress() {
     const gateway = selectedGateway(), origin = draftAddress();
-    if (!gateway || !origin || !canManageGateway() || blocked() || busy()) return;
+    if (!gateway || !origin || !canManageNetwork() || blocked() || busy()) return;
     invalidate(); const current = generation;
     const baseline = JSON.stringify(gateway.endpoints ?? []);
     const endpoints = [...(gateway.endpoints ?? [])];
@@ -168,7 +170,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     });
     setPending('saving-address');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'update_gateway_endpoints', gateway_id: gateway.connection_id, endpoints });
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'update_gateway_endpoints', connection_id: gateway.connection_id, endpoints });
       if (current !== generation) return;
       if (!result?.ok || !result.gateway_endpoints?.some(endpoint => endpoint.address === origin)) { setError(text('gatewayMembers.failed')); return; }
       setEndpointDelivery({ gatewayID: gateway.connection_id, baseline, endpoints: result.gateway_endpoints });
@@ -190,7 +192,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     if (!gateway || !selectedSavedAddress() || !canManageGateway() || blocked() || busy()) return;
     invalidate(); const current = generation; setPending('creating-invitation');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'invite_gateway_runtime', gateway_id: gateway.connection_id });
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'invite_gateway_runtime', connection_id: gateway.connection_id });
       if (current !== generation) return;
       if (!result?.ok || !result.gateway_invitation_code?.share_addresses.includes(selectedSavedAddress())) { setError(text('gatewayMembers.failed')); return; }
       setCode(result.gateway_invitation_code.code);
@@ -443,8 +445,8 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
                   <Show when={selectedAddresses().length} fallback={
                     <div class="redeven-gateway-address-setup" data-gateway-address-setup aria-busy={pending() === 'saving-address'}>
                       <strong class="text-sm">{text('gatewayDiscovery.setupNeeded')}</strong>
-                      <p class="text-sm text-muted-foreground">{text(canManageGateway() ? 'gatewayDiscovery.setupHelp' : 'gatewayDiscovery.cannotManage')}</p>
-                      <Show when={canManageGateway()}>
+                      <p class="text-sm text-muted-foreground">{text(canManageNetwork() ? 'gatewayDiscovery.setupHelp' : 'gatewayDiscovery.cannotManage')}</p>
+                      <Show when={canManageNetwork()}>
                         <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span>
                           <Input ref={endpointInput} data-gateway-endpoint-draft value={endpointDraft()} placeholder={text('gatewayNetwork.addressPlaceholder')}
                             autocomplete="off" spellcheck={false} disabled={busy()} aria-describedby={addressTabsID + '-setup-help'}

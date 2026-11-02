@@ -336,11 +336,11 @@ func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) handleClientAccessCode(w http.ResponseWriter, r *http.Request) {
 	var request gp.ClientAccessCodeRequest
-	client, ok := s.authenticated(w, r, &request)
+	_, ok := s.authenticated(w, r, &request)
 	if !ok {
 		return
 	}
-	if !client.Permissions.ManageAttachments {
+	if !s.isHostAdminRequest(r) {
 		writeError(w, http.StatusForbidden, "HOST_MANAGEMENT_REQUIRED")
 		return
 	}
@@ -362,11 +362,11 @@ func (s *Server) handleClientAccessCode(w http.ResponseWriter, r *http.Request) 
 }
 func (s *Server) handleClientList(w http.ResponseWriter, r *http.Request) {
 	var request gp.ClientListRequest
-	client, ok := s.authenticated(w, r, &request)
+	_, ok := s.authenticated(w, r, &request)
 	if !ok {
 		return
 	}
-	if !client.Permissions.ManageAttachments {
+	if !s.isHostAdminRequest(r) {
 		writeError(w, http.StatusForbidden, "HOST_MANAGEMENT_REQUIRED")
 		return
 	}
@@ -375,11 +375,11 @@ func (s *Server) handleClientList(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) handleClientRevoke(w http.ResponseWriter, r *http.Request) {
 	var request gp.ClientRevokeRequest
-	client, ok := s.authenticated(w, r, &request)
+	_, ok := s.authenticated(w, r, &request)
 	if !ok {
 		return
 	}
-	if !client.Permissions.ManageAttachments {
+	if !s.isHostAdminRequest(r) {
 		writeError(w, http.StatusForbidden, "HOST_MANAGEMENT_REQUIRED")
 		return
 	}
@@ -490,8 +490,8 @@ func (s *Server) handleNetworkSettings(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !client.Permissions.ManageAttachments {
-		writeError(w, http.StatusForbidden, "ATTACHMENT_MANAGEMENT_REQUIRED")
+	if !client.Permissions.ManageNetwork {
+		writeError(w, http.StatusForbidden, "NETWORK_CONFIGURATION_REQUIRED")
 		return
 	}
 	if err := s.members.UpdateNetworkSettings(request.Settings); err != nil {
@@ -511,8 +511,8 @@ func (s *Server) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !client.Permissions.ManageAttachments {
-		writeError(w, http.StatusForbidden, "ATTACHMENT_MANAGEMENT_REQUIRED")
+	if !client.Permissions.ManageNetwork {
+		writeError(w, http.StatusForbidden, "NETWORK_CONFIGURATION_REQUIRED")
 		return
 	}
 	if err := s.members.UpdateEndpoints(request.Endpoints); err != nil {

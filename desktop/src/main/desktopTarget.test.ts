@@ -152,7 +152,7 @@ describe('desktopTarget', () => {
       session_key: 'gateway:bastion:env:env%2Fdemo:session:gws_123',
       environment_id: 'gateway:bastion:env:env/demo',
       label: 'Demo Env',
-      gateway_id: 'bastion',
+      connection_id: 'bastion',
       gateway_label: 'Bastion Gateway',
       gateway_env_id: 'env/demo',
       gateway_session_id: 'gws_123',

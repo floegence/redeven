@@ -1,5 +1,6 @@
+import { desktopRuntimeConnectionTargetID } from '../shared/desktopRuntimePlacement';
 import { REDEVEN_CLOUD_DEVELOPMENT_ORIGIN, REDEVEN_CLOUD_ORIGIN } from '../shared/redevenCloud';
-import { desktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 import { resolveDesktopPlatformCapabilities } from '../shared/desktopPlatformCapabilities';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import type { DesktopSavedRuntimeTarget } from '../main/desktopPreferences';
@@ -66,7 +67,7 @@ export function mixedEnvironmentFixture(options: {
   const presences = Object.fromEntries([
     { id: 'local:local' as const, environmentID: local.id, label: local.label, kind: 'local_environment' as const,
       host: { kind: 'local_host' as const }, placement: { kind: 'host_process' as const, runtime_root: '' } },
-    ...targets.map(target => ({ id: desktopCloudRuntimeLinkTargetID(target.host_access.kind === 'wsl_host' ? 'wsl_environment' : 'ssh_environment', target.id), environmentID: target.id, label: target.label,
+    ...targets.map(target => ({ id: desktopRuntimeConnectionTargetID(target.host_access.kind === 'wsl_host' ? 'wsl_environment' : 'ssh_environment', target.id), environmentID: target.id, label: target.label,
       kind: target.host_access.kind === 'wsl_host' ? 'wsl_environment' as const : 'ssh_environment' as const,
       host: target.host_access, placement: target.placement })),
   ].map((target, index) => {

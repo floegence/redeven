@@ -16,7 +16,7 @@ export function runtimeGatewayAccessPresentation(
 ): RuntimeGatewayAccessPresentation | undefined {
   if (!['local_environment', 'ssh_environment', 'wsl_environment'].includes(environment.kind)
     || !environment.managed_runtime_host_access || !environment.managed_runtime_placement) return undefined;
-  const target = environment.provider_runtime_link_target;
+  const target = environment.runtime_connection_target;
   const service = environment.runtime_service;
   const health = environment.runtime_health;
   const revalidating = health.freshness === 'checking' && health.checked_at_unix_ms > 0;

@@ -32,7 +32,7 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
     if (!id || !gatewayID || busy() || props.available === false) return;
     const owner = generation; setBusy(true);
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'acknowledge_gateway_operation', gateway_id: gatewayID, operation_id: id });
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'acknowledge_gateway_operation', connection_id: gatewayID, operation_id: id });
       if (owner !== generation) return;
       if (result?.ok) { setUncertainOperation(''); setError(''); }
       else setError(props.i18n.t('gatewayMembers.failed'));
@@ -59,7 +59,7 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
   createEffect(() => {
     const gatewayID = currentGatewayID();
     generation++; setUncertainOperation(''); setBusy(false); setClients([]); setCode(undefined); setRevoking(''); setAddress(untrack(() => props.endpoints?.[0]?.address ?? ''));
-    untrack(() => void perform({ kind: 'list_gateway_clients', gateway_id: gatewayID }));
+    untrack(() => void perform({ kind: 'list_gateway_clients', connection_id: gatewayID }));
   });
   createEffect(on(() => props.available, value => {
     if (value !== false) return;
@@ -81,7 +81,7 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
     <Dialog open={enrolling() && !props.suspended} onOpenChange={setEnrollment} onPresenceChange={props.onPresenceChange} title={props.i18n.t('gatewayExperience.connectClient')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog redeven-gateway-task-dialog"><section class="redeven-gateway-client-access" data-gateway-client-enrollment>
       <div class="redeven-gateway-section-heading">
         <div><h3>{props.i18n.t('gatewayClients.createCode')}</h3></div>
-        <Button size="sm" icon={Plus} disabled={props.available === false || busy() || !validAddress()} onClick={() => void perform({ kind: 'issue_gateway_access_code', gateway_id: props.gatewayID })}>{props.i18n.t('gatewayClients.createCode')}</Button>
+        <Button size="sm" icon={Plus} disabled={props.available === false || busy() || !validAddress()} onClick={() => void perform({ kind: 'issue_gateway_access_code', connection_id: props.gatewayID })}>{props.i18n.t('gatewayClients.createCode')}</Button>
       </div>
       <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder={props.i18n.t('gatewayNetwork.addressPlaceholder')} aria-invalid={address() !== '' && !validAddress() || undefined} disabled={props.available === false || busy()} onInput={event => { setAddress(event.currentTarget.value); setCopied(undefined); }} /></label>
       <details class="redeven-gateway-disclosure text-xs text-muted-foreground"><summary class="cursor-pointer">{props.i18n.t('gatewayClients.codeHelpTitle')}</summary><p class="pt-2 leading-relaxed">{props.i18n.t('gatewayClients.codeHelp')}</p></details>
@@ -96,14 +96,14 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
       <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show></Dialog>
     <section class="redeven-gateway-settings-section">
       <div class="redeven-gateway-section-heading"><div><h3>{props.i18n.t('gatewayClients.authorizedClients')}</h3></div>
-        <Button variant="ghost" size="sm" disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', gateway_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>
+        <Button variant="ghost" size="sm" disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', connection_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>
       <Show when={clients().length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayClients.emptyClients')}</p>}>
         <ul class="redeven-gateway-authorized-client-list"><KeyedFor each={clients()} by={client => client.client_key_id}>{client => <li class="redeven-gateway-content-enter redeven-gateway-authorized-client-row">
           <div class="flex flex-wrap items-center justify-between gap-3"><strong class="text-sm font-semibold">{client().client_name || props.i18n.t('gatewayClients.unnamedClient')}</strong>
             <Show when={!client().revoked_at_unix_ms} fallback={<span class="text-xs text-muted-foreground">{props.i18n.t('gatewayClients.revoked')}</span>}>
               <Button variant="outline" size="xs" icon={Trash} disabled={props.available === false || busy()} onClick={() => {
                 if (revoking() !== client().client_key_id) { setRevoking(client().client_key_id); return; }
-                void perform({ kind: 'revoke_gateway_client', gateway_id: props.gatewayID, client_key_id: client().client_key_id });
+                void perform({ kind: 'revoke_gateway_client', connection_id: props.gatewayID, client_key_id: client().client_key_id });
               }}>{props.i18n.t(revoking() === client().client_key_id ? 'gatewayClients.confirmRevoke' : 'gatewayClients.revoke')}</Button>
             </Show>
           </div>

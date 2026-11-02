@@ -50,7 +50,7 @@ describe('environmentLibraryProjection', () => {
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
     const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment')!;
     const runtimeTarget = {
-      ...localEntry.provider_runtime_link_target!,
+      ...localEntry.runtime_connection_target!,
       id: 'local:local' as const,
       cloud_link_state: 'linked' as const,
       provider_connection_state: 'connected' as const,
@@ -58,7 +58,7 @@ describe('environmentLibraryProjection', () => {
       cloud_id: provider.cloud_id,
       env_public_id: provider.env_public_id,
     };
-    const linkedLocal = { ...localEntry, provider_runtime_link_target: runtimeTarget };
+    const linkedLocal = { ...localEntry, runtime_connection_target: runtimeTarget };
     const linkedProvider = {
       ...providerEntry,
       cloud_linked_runtime_summary: {
@@ -98,8 +98,8 @@ describe('environmentLibraryProjection', () => {
     const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment')!;
     const unpairedLocal = {
       ...localEntry,
-      provider_runtime_link_target: {
-        ...localEntry.provider_runtime_link_target!,
+      runtime_connection_target: {
+        ...localEntry.runtime_connection_target!,
         id: 'local:local' as const,
         cloud_link_state: 'linked' as const,
         provider_connection_state: 'connected' as const,
@@ -141,7 +141,7 @@ describe('environmentLibraryProjection', () => {
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
     const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment')!;
     const runtimeTarget = {
-      ...localEntry.provider_runtime_link_target!,
+      ...localEntry.runtime_connection_target!,
       id: 'local:local' as const,
       cloud_link_state: 'linked' as const,
       provider_connection_state: 'connected' as const,
@@ -149,7 +149,7 @@ describe('environmentLibraryProjection', () => {
       cloud_id: provider.cloud_id,
       env_public_id: provider.env_public_id,
     };
-    const linkedLocal = { ...localEntry, provider_runtime_link_target: runtimeTarget };
+    const linkedLocal = { ...localEntry, runtime_connection_target: runtimeTarget };
     const linkedProvider = {
       ...providerEntry,
       cloud_linked_runtime_summary: {
@@ -181,7 +181,7 @@ describe('environmentLibraryProjection', () => {
     expect(rows).toEqual([
       expect.objectContaining({
         id: 'gateway:bastion:env:env_demo',
-        gateway_id: 'bastion',
+        connection_id: 'bastion',
         gateway_label: 'Bastion',
         source_label: 'Gateway: Bastion',
         primary_action: expect.objectContaining({

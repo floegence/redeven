@@ -102,7 +102,7 @@ describe('Gateway product navigation', () => {
     await openGatewayAccess('Overview');
     document.querySelector<HTMLElement>('[data-gateway-management-page] [aria-haspopup="menu"]')!.click(); await settle();
     button('Disable connection').click(); await settle();
-    expect(perform).toHaveBeenCalledWith({ kind: 'set_gateway_enabled', gateway_id: source.connection_id, enabled: false });
+    expect(perform).toHaveBeenCalledWith({ kind: 'set_gateway_enabled', connection_id: source.connection_id, enabled: false });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
@@ -206,7 +206,7 @@ describe('Gateway product navigation', () => {
     input('gateway-name', source.display_name);
     perform.mockImplementationOnce(async () => {
       perform.publish({ ...perform.snapshot, gateway_sources: [source] });
-      return { ok: true, outcome: 'saved_gateway', gateway_id: source.connection_id };
+      return { ok: true, outcome: 'saved_gateway', connection_id: source.connection_id };
     });
     button('Save Gateway').click(); await settle();
     await vi.waitFor(() => expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0));
@@ -237,7 +237,7 @@ describe('Gateway setup and own-service actions', () => {
     const snapshot = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), gatewaySources: [gateway] });
     const startedAt = Date.now() - 60_000;
     const perform = await mount(gateway, { ...snapshot, action_progress: [{
-      action: 'update_gateway', subject_kind: 'gateway', subject_id: gateway.connection_id, gateway_id: gateway.connection_id,
+      action: 'update_gateway', subject_kind: 'gateway', subject_id: gateway.connection_id, connection_id: gateway.connection_id,
       operation_key: gateway.connection_id + ':update_gateway', started_at_unix_ms: startedAt, updated_at_unix_ms: startedAt,
       status: 'running', active_progress_surface: 'gateway', phase: 'installing_gateway', title: 'Update Gateway', detail: '',
       step_progress: gatewayServiceStepProgress(undefined, 'installing_gateway', 'running', startedAt),
@@ -276,7 +276,7 @@ describe('Gateway setup and own-service actions', () => {
     const startedAt = Date.now();
     const detail = 'Desktop is opening the Gateway protocol stream through the managed Gateway service. /tmp/private-build/state';
     const progress = { action: 'update_gateway' as const, subject_kind: 'gateway' as const, subject_id: source.connection_id,
-      gateway_id: source.connection_id, operation_key: source.connection_id + ':update_gateway', started_at_unix_ms: startedAt,
+      connection_id: source.connection_id, operation_key: source.connection_id + ':update_gateway', started_at_unix_ms: startedAt,
       updated_at_unix_ms: startedAt, status: 'running' as const, active_progress_surface: 'gateway' as const,
       phase: 'installing_gateway', title: 'Update Gateway', detail,
       step_progress: gatewayServiceStepProgress(gatewayServiceStepProgress(undefined, 'preparing_gateway_package'), 'installing_gateway') };
@@ -381,7 +381,7 @@ describe('Gateway setup and own-service actions', () => {
     expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
     expect(document.querySelector('[data-gateway-environment-id="internal-workspace"]')?.textContent).toContain('Gateway workspace');
     button('Open window').click(); await settle();
-    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'open_gateway_environment', gateway_id: 'bastion', gateway_env_id: 'internal-workspace' });
+    expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'open_gateway_environment', connection_id: 'bastion', gateway_env_id: 'internal-workspace' });
     expect(perform.mock.calls).toHaveLength(1);
   });
 
@@ -455,7 +455,7 @@ describe('Gateway setup and own-service actions', () => {
     await openSetup();
     input('gateway-name', 'Draft Gateway');
     perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Connection saved. Start before granting permission.',
-      gateway_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', gateway_id: 'saved-fixture' } });
+      connection_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', connection_id: 'saved-fixture' } });
     button('Save Gateway').click(); await settle();
     expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'upsert_gateway' });
     expect((document.getElementById('gateway-name') as HTMLInputElement).value).toBe('Draft Gateway');
@@ -464,7 +464,7 @@ describe('Gateway setup and own-service actions', () => {
     expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['upsert_gateway', 'start_gateway']);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Review your changes, then retry.');
     button('Save Gateway').click(); await settle();
-    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_gateway', gateway_id: 'saved-fixture', display_name: 'Draft Gateway' });
+    expect(perform.mock.calls[2]?.[0]).toMatchObject({ kind: 'upsert_gateway', connection_id: 'saved-fixture', display_name: 'Draft Gateway' });
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
 
@@ -491,7 +491,7 @@ describe('Gateway setup and own-service actions', () => {
     const perform = await mount(undefined, undefined, async () => { throw new Error('Snapshot unavailable'); });
     await openSetup();
     perform.mockResolvedValueOnce({ ok: false, scope: 'dialog', code: 'gateway_start_required', message: 'Original authorization failure',
-      should_refresh_snapshot: true, gateway_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', gateway_id: 'saved-fixture' } });
+      should_refresh_snapshot: true, connection_id: 'saved-fixture', continuation_action: { kind: 'start_gateway', connection_id: 'saved-fixture' } });
     button('Save Gateway').click(); await settle();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Original authorization failure');
     expect(button('Start Gateway')).toBeTruthy();
@@ -561,7 +561,7 @@ describe('Gateway setup and own-service actions', () => {
     expect(trigger.getAttribute('data-floe-progress-shimmer')).toBe('surface');
     trigger.click(); await settle();
     expect(progress()).toBeTruthy();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'refresh_gateway', gateway_id: 'bastion' });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'refresh_gateway', connection_id: 'bastion' });
     complete({ ok: true, outcome: 'refreshed_gateway' }); await settle();
   });
 
@@ -573,7 +573,7 @@ describe('Gateway setup and own-service actions', () => {
       } });
     button('Gateways').click(); await settle();
     button('Start Gateway').click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'start_gateway', gateway_id: 'managed-fixture' });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'start_gateway', connection_id: 'managed-fixture' });
   });
 
   it.each(['rejected', 'exception', 'malformed'] as const)('keeps %s Gateway admission in the current popup with retry and close',async failure=>{

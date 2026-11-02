@@ -37,9 +37,6 @@ func (a *Agent) GatewayAttachment(ids ...string) *gatewaymembership.RuntimeConfi
 	if len(ids) > 0 {
 		return a.cfg.RuntimeAttachment(ids[0]).Clone()
 	}
-	if member := a.cfg.CloudGateway(); member != nil {
-		return member.Clone()
-	}
 	return a.cfg.RuntimeAttachment("").Clone()
 }
 

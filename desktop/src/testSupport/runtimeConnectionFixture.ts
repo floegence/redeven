@@ -18,7 +18,7 @@ export function runtimeConnectionFixture(options: {
   const memberships = ['Office', 'Lab'].map((gateway_name, index) => ({
     gateway_id: `service-${index}`, gateway_name, attachment_id: `member-${index}`,
     runtime_public_id: memberFixture.runtime_public_id, identity_fingerprint: `SHA256:${String(index).repeat(43)}`,
-    phase: 'joined' as const, cloud_publication: index === 1,
+    phase: 'joined' as const, route_selected: index === 1,
     endpoints: [{ address: `https://${gateway_name.toLowerCase()}.internal:7443` }],
   }));
   const presences = Object.fromEntries<DesktopRuntimePresence>(Object.entries(fixture.inputs.managedRuntimePresenceByTargetID).map(([id, presence]) => {

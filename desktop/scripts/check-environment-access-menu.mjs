@@ -21,7 +21,7 @@ try {
         const { snapshot } = mixedEnvironmentFixture({ linkState: connectionState === 'unlinked' ? 'unbound' : 'linked' });
         const runtime = snapshot.environments.find(entry => entry.kind === 'local_environment');
         runtime.runtime_service.capabilities.runtime_gateway = { supported: true };
-        Object.assign(runtime.provider_runtime_link_target, {
+        Object.assign(runtime.runtime_connection_target, {
           provider_connection_state: connectionState, can_connect_provider: true, can_disconnect_provider: true,
         });
         const context = await browser.newContext({ viewport: { width, height: 1050 }, reducedMotion: 'reduce' });

@@ -99,7 +99,7 @@ function permissions(value: unknown): GatewayPermissions {
   const item = object(value);
   return { access: boolean(item.access), manage_attachments: boolean(item.manage_attachments), manage_network: boolean(item.manage_network) };
 }
-function cloudPermission(value: unknown): GatewayEgressPermission {
+function egressPermission(value: unknown): GatewayEgressPermission {
   if (value !== 'inherit' && value !== 'allow' && value !== 'deny') return invalid();
   return value;
 }
@@ -118,7 +118,7 @@ function member(value: unknown): RuntimeAttachment {
   return {
     attachment_id: id(item.attachment_id), runtime_public_id: id(item.runtime_public_id), attachment_version: integer(item.attachment_version, 1),
     display_name: text(item.display_name), state: item.state, connected: boolean(item.connected),
-    last_seen_at_unix_ms: integer(item.last_seen_at_unix_ms), egress_permission: cloudPermission(item.egress_permission),
+    last_seen_at_unix_ms: integer(item.last_seen_at_unix_ms), egress_permission: egressPermission(item.egress_permission),
     effective_egress_allowed: boolean(item.effective_egress_allowed), metadata: {
       hostname: text(metadata.hostname), os: text(metadata.os, 64), arch: text(metadata.arch, 64), version: text(metadata.version, 128),
     },

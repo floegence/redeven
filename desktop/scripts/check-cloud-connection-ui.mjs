@@ -20,13 +20,13 @@ try {
   function failedSnapshot(recovery = 'waiting_for_service', code = 'provider_connection_failed') {
     const next = structuredClone(snapshot);
     const local = next.environments.find(entry => entry.id === runtime.id);
-    Object.assign(local.provider_runtime_link_target, {
+    Object.assign(local.runtime_connection_target, {
       provider_connection_state: 'authorization_required', can_connect_cloud: true,
       credential_recovery: recovery,
       credential_recovery_details: { last_error_code: code, last_attempt_at_unix_ms: 1_800_000_000_000,
         next_retry_at_unix_ms: recovery === 'waiting_for_service' ? 1_800_000_060_000 : undefined, attempt_count: 3 },
     });
-    if (code === 'CONTROL_CREDENTIALS_EXPIRED') local.provider_runtime_link_target.cloud_link_binding.last_error_code = code;
+    if (code === 'CONTROL_CREDENTIALS_EXPIRED') local.runtime_connection_target.cloud_link_binding.last_error_code = code;
     const remote = next.environments.find(entry => entry.id === cloud.id);
     Object.assign(remote, { remote_route_state: 'offline', control_plane_sync_state: recovery === 'sign_in_required' ? 'auth_required' : 'ready' });
     return next;

@@ -245,7 +245,7 @@ describe('operationNextActions', () => {
       ...failedProgress([
         {
           kind: 'check_gateway',
-          gateway_id: 'bastion',
+          connection_id: 'bastion',
           label: 'Check Gateway',
         },
         {
@@ -260,12 +260,12 @@ describe('operationNextActions', () => {
         },
         {
           kind: 'refresh_gateway_status',
-          gateway_id: 'bastion',
+          connection_id: 'bastion',
           label: 'Refresh status',
         },
         {
           kind: 'refresh_gateway_catalog',
-          gateway_id: 'bastion',
+          connection_id: 'bastion',
           start_policy: 'start_if_needed',
           label: 'Sync Gateway',
         },
@@ -274,7 +274,7 @@ describe('operationNextActions', () => {
           operation_key: 'gateway:bastion:start',
           retry_action: {
             kind: 'refresh_gateway_status',
-            gateway_id: 'bastion',
+            connection_id: 'bastion',
           },
           label: 'Retry',
         },
@@ -446,13 +446,13 @@ describe('operationNextActions', () => {
       ...failedProgress([
         {
           kind: 'resolve_gateway',
-          gateway_id: 'bastion',
+          connection_id: 'bastion',
           resolve_focus: 'ssh_host',
           label: 'Resolve Gateway',
         },
         {
           kind: 'refresh_gateway_catalog',
-          gateway_id: 'bastion',
+          connection_id: 'bastion',
           start_policy: 'start_if_needed',
           label: 'Sync Gateway',
         },
@@ -486,13 +486,13 @@ describe('operationNextActions', () => {
           operation_key: 'gateway:bastion:sync',
           retry_action: {
             kind: 'sync_gateway',
-            gateway_id: 'bastion',
+            connection_id: 'bastion',
           },
           label: 'Sync Gateway',
         },
         {
           kind: 'resolve_gateway',
-          gateway_id: 'bastion',
+          connection_id: 'bastion',
           resolve_focus: 'container',
           label: 'Resolve Gateway',
         },

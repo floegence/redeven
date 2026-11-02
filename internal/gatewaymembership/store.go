@@ -62,7 +62,7 @@ type MemberRecord struct {
 	ClientExpiresAtUnixMS   int64                `json:"client_expires_at_unix_ms"`
 	HookEgressAllowed       bool                 `json:"hook_egress_allowed"`
 	HookPolicyRevision      int64                `json:"hook_policy_revision"`
-	// A denial is delivered even if a later edit permits Cloud again. The
+	// A denial is delivered even if a later edit permits egress again. The
 	// transaction revision prevents an older receipt from clearing a newer denial.
 	ConnectionGeneration uint64            `json:"connection_generation"`
 	Rotation             *rotationDelivery `json:"rotation,omitempty"`

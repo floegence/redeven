@@ -301,8 +301,8 @@ app.whenReady().then(async()=>{
       current = await snapshot();
       const source = current.gateway_sources.find((item) => item.display_name === label);
       assert.ok(source);
-      const serviceRoot = path.join(dataRoot, 'gateways', source.gateway_id, 'state');
-      report.gateways.push({ id: source.gateway_id, serviceRoot });
+      const serviceRoot = path.join(dataRoot, 'gateways', source.connection_id, 'state');
+      report.gateways.push({ id: source.connection_id, serviceRoot });
       await mkdir(path.join(serviceRoot, 'managed', 'bin'), {
         recursive: true,
       });
@@ -320,13 +320,13 @@ app.whenReady().then(async()=>{
       await writeFile(trustPath, JSON.stringify(trust) + '\n');
       const started = await action({
         kind: 'start_gateway',
-        gateway_id: source.gateway_id,
+        connection_id: source.connection_id,
       });
       if (!started.ok) report.failedGatewayStart = started;
       assert.equal(started.ok, true);
-      assert.equal((await action({ kind: 'pair_gateway', gateway_id: source.gateway_id })).ok, true);
+      assert.equal((await action({ kind: 'pair_gateway', connection_id: source.connection_id })).ok, true);
       current = await snapshot();
-      const paired = current.gateway_sources.find((item) => item.gateway_id === source.gateway_id);
+      const paired = current.gateway_sources.find((item) => item.connection_id === source.connection_id);
       assert.equal(paired.permissions.manage_attachments, true);
       const active = paired.active_listener_addresses?.[0];
       assert.ok(active, `No listener in ${JSON.stringify(paired.service_state)}`);
@@ -336,7 +336,7 @@ app.whenReady().then(async()=>{
         (
           await action({
             kind: 'update_gateway_network_settings',
-            gateway_id: source.gateway_id,
+            connection_id: source.connection_id,
             settings: {
               listen_addresses: paired.listener_addresses,
               allowed_hosts: [],
@@ -346,7 +346,7 @@ app.whenReady().then(async()=>{
         ).ok,
         true,
       );
-      const invitation = await action({ kind: 'invite_gateway_runtime', gateway_id: source.gateway_id });
+      const invitation = await action({ kind: 'invite_gateway_runtime', connection_id: source.connection_id });
       assert.equal(invitation.ok, true);
       await page.getByRole('button', { name: 'Environments', exact: true }).first().click();
       const card = page.locator(`[data-environment-group="${local.id}"]`);
@@ -367,7 +367,7 @@ app.whenReady().then(async()=>{
           snapshot.environments.find((entry) => entry.kind === 'local_environment')?.runtime_service?.gateway_memberships ?? [];
         return members.length === index + 1 && members.every((member) => member.phase === 'joined');
       });
-      await action({ kind: 'refresh_gateway_catalog', gateway_id: source.gateway_id });
+      await action({ kind: 'refresh_gateway_catalog', connection_id: source.connection_id });
       await waitSnapshot(
         (snapshot) =>
           snapshot.environments.find((entry) => entry.kind === 'local_environment')?.runtime_service?.gateway_memberships?.length ===

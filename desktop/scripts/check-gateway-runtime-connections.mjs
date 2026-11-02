@@ -9,7 +9,7 @@ const supportedLocales=['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR',
 const setupOnly=process.argv.includes('--setup-only');
 const locales=process.argv.slice(2).filter(argument=>argument!=='--setup-only');
 assert.ok(locales.every(locale=>supportedLocales.includes(locale)),'arguments must be supported locale codes');
-const localGateway={gateway_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
+const localGateway={connection_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
  management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
  created_at_ms:1,updated_at_ms:1,environments:[],endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}]};
 const output=fileURLToPath(new URL('../dist/gateway-runtime-connections/',import.meta.url));
@@ -46,14 +46,14 @@ async function assertWizardTypography(dialog) {
    .map(element=>parseFloat(getComputedStyle(element).fontSize)/rem);
   return {coarse:matchMedia('(pointer: coarse)').matches,title:font('h2'),heading:font('h3'),
    copy:font('.redeven-gateway-join-section p'),labels:font('label'),inputs:font('input'),
-   gatewayPicker:font('.redeven-gateway-saved-picker')};
+   gatewayPicker:font('.redeven-gateway-picker-trigger')};
  });
  assert.ok(typography.title.every(size=>Math.abs(size-1)<.01),JSON.stringify(typography));
  assert.ok(typography.heading.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
- assert.ok(typography.copy.every(size=>Math.abs(size-(typography.coarse ? .875 : .75))<.01),JSON.stringify(typography));
- assert.ok(typography.labels.every(size=>Math.abs(size-(typography.coarse ? .8125 : .75))<.01),JSON.stringify(typography));
- assert.ok(typography.inputs.every(size=>Math.abs(size-(typography.coarse ? 1 : .75))<.01),JSON.stringify(typography));
- assert.ok(typography.gatewayPicker.every(size=>Math.abs(size-(typography.coarse ? .875 : .75))<.01),JSON.stringify(typography));
+ assert.ok(typography.copy.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
+ assert.ok(typography.labels.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
+ assert.ok(typography.inputs.every(size=>Math.abs(size-(typography.coarse ? 1 : .8125))<.01),JSON.stringify(typography));
+ assert.ok(typography.gatewayPicker.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
  return typography;
 }
 async function holdAction(page) {
@@ -113,7 +113,8 @@ try {
     }
     await page.screenshot({path:`${output}/${locale}-${width}-card.png`});
     await card.getByRole('tab').nth(2).click();
-    const panel=card.getByRole('tabpanel',{name:i18n.t('gatewayConnections.tab'),exact:true});
+    const panel=card.locator('[role="tabpanel"][aria-label="'+i18n.t('gatewayConnections.tab')+'"]');
+    await panel.waitFor({state:'visible'});
     await panel.getByRole('combobox').selectOption('service-1');
     await panel.getByText('https://lab.internal:7443',{exact:true}).waitFor();
     const toggle=panel.getByRole('button',{name:i18n.t('environmentAction.runtimeActions'),exact:true});
@@ -182,7 +183,10 @@ try {
      assert.ok(controls.every(item=>item.width<=item.client+1 && item.whiteSpace==='nowrap'));
     }
     await page.screenshot({path:`${output}/${locale}-${width}-join.png`});
-    await join.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).click();await join.waitFor({state:'detached'});
+    await join.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).click();
+    await join.locator('[data-gateway-enrollment-result]').waitFor();
+    await join.getByRole('button',{name:i18n.t('gatewayExperience.done'),exact:true}).click();
+    await join.waitFor({state:'detached'});
     const requests=await page.evaluate(()=>window.settingsFixture.requests);
     assert.equal(requests.filter(item=>item.operation==='leave').length,0);
     assert.ok(requests.some(item=>item.operation==='join' && item.preview_id && !item.environment_choice));
@@ -239,7 +243,7 @@ try {
         return {ok:true,outcome:outcomes[request.kind]};
        }
        if(request.kind==='manage_runtime_gateway') {
-        if(request.operation==='status' && window.gatewayAcceptanceFailConnection)return {ok:false,code:'cloud_link_failed',gateway_error_code:'RUNTIME_CONTROL_UNREACHABLE'};
+        if(request.operation==='status' && window.gatewayAcceptanceFailConnection)return {ok:false,code:'gateway_attachment_failed',gateway_error_code:'RUNTIME_CONTROL_UNREACHABLE'};
         if(request.operation==='preview')return {ok:true,gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'office',gateway_name:'Office',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+300000}};
         return {ok:true,gateway_membership:{joined:false,phase:'not_joined'}};
        }
@@ -417,7 +421,9 @@ try {
        assert.equal(await scroll.evaluate(element=>element.scrollTop),scrollTop,'same-target snapshots retain the reading position');
        const copyBounds=await scroll.locator('section:visible > p').last().boundingBox();
        assert.ok(copyBounds.y+copyBounds.height<=shortLayout.actions.y+1,'final guidance remains reachable above actions');
-       const primaryBounds=await scroll.locator('.redeven-gateway-step-actions > button').last().boundingBox();
+       const primary=scroll.locator('.redeven-gateway-step-actions > button').last();
+       await primary.scrollIntoViewIfNeeded();
+       const primaryBounds=await primary.boundingBox();
        assert.ok(primaryBounds.y>=shortLayout.scroll.y && primaryBounds.y+primaryBounds.height<=shortLayout.actions.y+1,
         'the primary action remains reachable in the scrolling body');
        for(const step of ['invitation','connection']) {
@@ -450,7 +456,7 @@ try {
      await page.waitForFunction(element=>element===document.activeElement,await toggle.elementHandle());
      const requests=await page.evaluate(()=>window.settingsFixture.requests);
      assert.ok((await lifecycle()).every(request=>request.environment_id===runtime.id),'recovery stays on the original owner');
-     assert.ok(requests.filter(request=>request.kind==='manage_runtime_gateway').every(request=>request.runtime_target_id===runtime.provider_runtime_link_target.id));
+     assert.ok(requests.filter(request=>request.kind==='manage_runtime_gateway').every(request=>request.runtime_target_id===runtime.runtime_connection_target.id));
      assert.ok(requests.some(request=>request.operation==='status'));
      assert.equal(requests.filter(request=>request.operation==='join').length,0,'cancel never consumes an invitation');
      report.cases.push(`${locale}/${width}/${kind}: unchecked entry, horizontal steps, explicit bridge connection and failure, startup/recovery, retained preview, busy controls and focus return`);

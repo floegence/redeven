@@ -1,4 +1,5 @@
-import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
+
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { Button, Dialog, Dropdown } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
@@ -47,7 +48,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
       environment.managed_runtime_host_access, environment.managed_runtime_placement,
     ]);
   });
-  const retainedTarget = createMemo<DesktopCloudRuntimeLinkTargetID | undefined>(previous => props.environment ? props.environment.provider_runtime_link_target?.id ?? previous : undefined);
+  const retainedTarget = createMemo<DesktopRuntimeTargetID | undefined>(previous => props.environment ? props.environment.runtime_connection_target?.id ?? previous : undefined);
   const presentation = createMemo(() => {
     const observed = props.environment && runtimeGatewayAccessPresentation(props.environment);
     const required = requiredPreparation();
@@ -56,9 +57,9 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
       recovery_enabled: props.environment?.runtime_operations[required].availability === 'available' } : observed;
   });
   const canConnect = createMemo(() => ['ready', 'connection_required'].includes(presentation()?.phase ?? ''));
-  const submissionBlocked = () => props.suspended === true || props.available === false || !props.environment?.provider_runtime_link_target || !canConnect() || busy() || !!props.operationBusy;
+  const submissionBlocked = () => props.suspended === true || props.available === false || !props.environment?.runtime_connection_target || !canConnect() || busy() || !!props.operationBusy;
   const control = () => presentation()?.revalidating ? props.environment?.runtime_health.observed_runtime_control_status
-    ?? props.environment?.provider_runtime_link_target?.runtime_control_status : props.environment?.provider_runtime_link_target?.runtime_control_status;
+    ?? props.environment?.runtime_connection_target?.runtime_control_status : props.environment?.runtime_connection_target?.runtime_control_status;
   const technicalDetail = () => {
     const diagnosis = control();
     return diagnosis?.state === 'missing' ? diagnosis.message : props.environment?.runtime_health.offline_reason;
@@ -172,7 +173,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
           trigger={props.i18n.t('gatewayMembers.chooseRuntime')}
           items={() => (props.environments ?? []).filter(environment => !!runtimeGatewayAccessPresentation(environment)).map(environment => ({
             id: environment.id, label: environment.label,
-            description: props.i18n.t(environment.provider_runtime_link_target?.runtime_running ? 'gatewayMembers.connected' : 'gatewayJoin.startAndContinue'),
+            description: props.i18n.t(environment.runtime_connection_target?.runtime_running ? 'gatewayMembers.connected' : 'gatewayJoin.startAndContinue'),
           }))}
           onSelect={id => props.selectEnvironment?.(id)} />
         <Show when={!(props.environments ?? []).some(environment => !!runtimeGatewayAccessPresentation(environment))}>

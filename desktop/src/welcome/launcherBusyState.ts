@@ -5,7 +5,7 @@ import { selectEnvironmentPanelProgress } from './environmentProgressPrimaryPres
 
 export type RuntimeProgressEnvironmentMatch = Pick<
   DesktopEnvironmentEntry,
-  'id' | 'managed_runtime_target_id' | 'managed_runtime_placement_target_id' | 'provider_runtime_link_target'
+  'id' | 'managed_runtime_target_id' | 'managed_runtime_placement_target_id' | 'runtime_connection_target'
 >;
 
 export type BusyAction = DesktopLauncherActionRequest['kind'] | '' | 'save_settings' | 'save_environment' | 'delete_environment';
@@ -15,7 +15,7 @@ export type DesktopLauncherBusyState = Readonly<{
   environment_id: string;
   cloud_origin: string;
   cloud_id: string;
-  gateway_id: string;
+  connection_id: string;
   request_started_at_unix_ms: number;
   progress: DesktopLauncherActionProgress | null;
 }>;
@@ -25,7 +25,7 @@ export const IDLE_LAUNCHER_BUSY_STATE: DesktopLauncherBusyState = {
   environment_id: '',
   cloud_origin: '',
   cloud_id: '',
-  gateway_id: '',
+  connection_id: '',
   request_started_at_unix_ms: 0,
   progress: null,
 };
@@ -76,7 +76,7 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
           request.registration.registration_ref.id,
         cloud_origin: '',
         cloud_id: '',
-        gateway_id:
+        connection_id:
           '',
         progress: null,
       });
@@ -89,7 +89,7 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
             : request.registration_ref.id,
         cloud_origin: '',
         cloud_id: '',
-        gateway_id: request.registration_ref.kind === 'gateway_environment' ? request.registration_ref.gateway_id : '',
+        connection_id: request.registration_ref.kind === 'gateway_environment' ? request.registration_ref.connection_id : '',
         progress: null,
       });
     case 'refresh_control_plane':
@@ -99,7 +99,7 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
         environment_id: '',
         cloud_origin: request.cloud_origin,
         cloud_id: request.cloud_id,
-        gateway_id: '',
+        connection_id: '',
         progress: null,
       });
     case 'cancel_launcher_operation':
@@ -109,7 +109,7 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
         environment_id: '',
         cloud_origin: '',
         cloud_id: '',
-        gateway_id: '',
+        connection_id: '',
         progress: null,
       });
     case 'start_control_plane_connect':
@@ -118,7 +118,7 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
         environment_id: '',
         cloud_origin: request.cloud_origin,
         cloud_id: '',
-        gateway_id: '',
+        connection_id: '',
         progress: null,
       });
     default:
@@ -127,7 +127,7 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
         environment_id: 'environment_id' in request ? (request.environment_id ?? '') : '',
         cloud_origin: '',
         cloud_id: '',
-        gateway_id: 'gateway_id' in request ? (request.gateway_id ?? '') : '',
+        connection_id: 'connection_id' in request ? (request.connection_id ?? '') : '',
         progress: null,
       });
   }
@@ -140,7 +140,7 @@ export function busyStateWithActionProgress(
   if (state.action !== progress.action) {
     return state;
   }
-  if (state.gateway_id !== '' && !gatewayMatchesActionProgress(state.gateway_id, progress)) {
+  if (state.connection_id !== '' && !gatewayMatchesActionProgress(state.connection_id, progress)) {
     return state;
   }
   const progressEnvironmentID = String(progress.environment_id ?? '').trim();
@@ -200,7 +200,7 @@ function environmentRuntimeProgressIDs(environment: RuntimeProgressEnvironmentMa
     environment.id,
     environment.managed_runtime_target_id,
     environment.managed_runtime_placement_target_id,
-    environment.provider_runtime_link_target?.runtime_key,
+    environment.runtime_connection_target?.runtime_key,
   ]
     .map((value) => String(value ?? '').trim())
     .filter((value, index, values) => value !== '' && values.indexOf(value) === index);
@@ -275,7 +275,7 @@ export function gatewayMatchesActionProgress(
     return false;
   }
   const progressSubjectID = String(progress.subject_id ?? '').trim();
-  const progressGatewayID = String(progress.gateway_id ?? '').trim();
+  const progressGatewayID = String(progress.connection_id ?? '').trim();
   return (
     progress.subject_kind === 'gateway' &&
     (progressSubjectID === cleanGatewayID || progressGatewayID === cleanGatewayID)
@@ -330,8 +330,8 @@ export function busyStateMatchesActionProgress(
   if (!progress || state.action !== progress.action) {
     return false;
   }
-  if (state.gateway_id !== '') {
-    return gatewayMatchesActionProgress(state.gateway_id, progress);
+  if (state.connection_id !== '') {
+    return gatewayMatchesActionProgress(state.connection_id, progress);
   }
   if (state.environment_id === '') {
     return false;
@@ -399,7 +399,7 @@ export function selectedSnapshotReinstallTargetProgressForEnvironment(
     environment.id,
     environment.managed_runtime_target_id,
     environment.managed_runtime_placement_target_id,
-    environment.provider_runtime_link_target?.runtime_key,
+    environment.runtime_connection_target?.runtime_key,
   ]
     .map((value) => String(value ?? '').trim())
     .filter(Boolean);
@@ -676,7 +676,7 @@ export function busyStateMatchesGateway(
   gatewayID: string,
   actions?: readonly BusyAction[],
 ): boolean {
-  if (state.gateway_id === '' || state.gateway_id !== gatewayID) {
+  if (state.connection_id === '' || state.connection_id !== gatewayID) {
     return false;
   }
   return actions === undefined ? true : busyStateMatchesAnyAction(state, actions);

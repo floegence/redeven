@@ -31,7 +31,7 @@ describe('Gateway client enrollment', () => {
     button('gatewayClients.createCode').click(); await settle();
     expect(document.body.textContent).toContain('unknown_operation_123');
     button('gatewayMembers.operationReviewed').click(); await settle();
-    expect(perform.mock.calls.at(-1)?.[0]).toEqual({ kind: 'acknowledge_gateway_operation', gateway_id: 'gateway-one', operation_id: 'unknown_operation_123' });
+    expect(perform.mock.calls.at(-1)?.[0]).toEqual({ kind: 'acknowledge_gateway_operation', connection_id: 'gateway-one', operation_id: 'unknown_operation_123' });
     expect(perform.mock.calls.filter(([request]) => request.kind === 'issue_gateway_access_code')).toHaveLength(1);
     expect(document.body.textContent).not.toContain('unknown_operation_123');
   });
@@ -69,13 +69,13 @@ describe('Gateway client enrollment', () => {
     const client = { client_key_id: 'client-one', client_name: 'Studio', paired_at_unix_ms: 1, last_verified_at_unix_ms: 2, revoked_at_unix_ms: 0 };
     const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [client] });
     mount(perform); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'list_gateway_clients', gateway_id: 'gateway-one' });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'list_gateway_clients', connection_id: 'gateway-one' });
     button('gatewayClients.revoke').click(); await settle();
     expect(perform).toHaveBeenCalledOnce();
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(i18n.t('gatewayClients.revokeHelp'));
     perform.mockResolvedValueOnce({ ok: true, gateway_clients: [{ ...client, revoked_at_unix_ms: 3 }] });
     button('gatewayClients.confirmRevoke').click(); await settle();
-    expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'revoke_gateway_client', gateway_id: 'gateway-one', client_key_id: 'client-one' });
+    expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'revoke_gateway_client', connection_id: 'gateway-one', client_key_id: 'client-one' });
     expect(document.body.textContent).toContain(i18n.t('gatewayClients.revoked'));
   });
 
@@ -102,6 +102,6 @@ describe('Gateway client enrollment', () => {
     setID('gateway-two'); await settle();
     finish({ ok: true, gateway_access_code: { access_code: 'old-secret', expires_at_unix_ms: Date.now() + 600000 } }); await settle();
     expect(document.body.textContent).not.toContain('old-secret');
-    expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'list_gateway_clients', gateway_id: 'gateway-two' });
+    expect(perform.mock.calls[1]?.[0]).toEqual({ kind: 'list_gateway_clients', connection_id: 'gateway-two' });
   });
 });

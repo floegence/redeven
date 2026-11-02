@@ -55,12 +55,12 @@ it('confirms a single pairing directly without a selector or Cloud migration cho
 it.each(['leave'] as const)('retains the %s confirmation during the closing transition',async mode=>{
  const f=mount([one],mode);await settle();
  const dialog=document.querySelector('[role="dialog"]')!;
- const label=i18n.t(mode==='leave'?'gatewayConnections.unpair':'gatewayConnections.publish');
+ const label=i18n.t('gatewayConnections.unpair');
  button(label).click();await settle();
  expect(f.close).toHaveBeenCalledOnce();
  expect(dialog.textContent).toContain('Office');
- expect(dialog.textContent).toContain(i18n.t(mode==='leave'?'gatewayConnections.unpairImpact':'gatewayConnections.publishHelp'));
- expect(dialog.textContent).toContain(i18n.t(mode==='leave'?'gatewayConnections.unpairTitle':'gatewayConnections.publishTitle'));
+ expect(dialog.textContent).toContain(i18n.t('gatewayConnections.unpairImpact'));
+ expect(dialog.textContent).toContain(i18n.t('gatewayConnections.unpairTitle'));
 });
 it('confirms the already selected Gateway without asking the user to choose again',async()=>{
  const f=mount([one,two],'leave',undefined,'two');await settle();

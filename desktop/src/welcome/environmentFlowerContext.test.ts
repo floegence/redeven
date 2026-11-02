@@ -173,7 +173,7 @@ describe('environment Flower context envelope', () => {
       cloud_origin: undefined,
       cloud_id: undefined,
       managed_runtime_target_id: 'ssh:host:udesk26:7afba939',
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
       managed_runtime_placement_target_id: undefined,
       runtime_platform: 'linux',
       runtime_health: { status: 'offline', freshness: 'failed', checked_at_unix_ms: 1759999999000,
@@ -351,7 +351,7 @@ describe('environment Flower context envelope', () => {
       kind,
       label: kind,
       env_public_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
       managed_runtime_target_id: kind === 'external_local_ui'
         ? undefined
         : targetID as NonNullable<DesktopEnvironmentEntry['managed_runtime_target_id']>,

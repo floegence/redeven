@@ -10,25 +10,25 @@ it('binds passwords to the login session using the server PBKDF2 vector', async 
 import { createEnvironmentOpenController, requestEnvironmentOpen, environmentOpenRunning, createEnvironmentOperationObserver, createEnvironmentHandoffGuard } from '../src/envcenter/controller';
 import { filterEnvironmentFacts, reduceEnvironmentOperation, classifyEnvironmentFailure, projectEnvironment, environmentRecovery } from '../src/envcenter/core';
 import type { EnvironmentCenterHost, EnvironmentEntry } from '../src/envcenter/contracts';
-const entry: EnvironmentEntry = { id: 'env-a', label: 'Production', gateway_id: 'gateway-a', gateway_env_id: 'member-a', runtime_operations: { open: { availability: 'available' } } };
+const entry: EnvironmentEntry = { id: 'env-a', label: 'Production', connection_id: 'gateway-a', gateway_env_id: 'member-a', runtime_operations: { open: { availability: 'available' } } };
 describe.each(['window', 'navigation'] as const)('shared %s host contract', kind => {
   it('delegates exactly one explicit route and preserves the host result', async () => {
     const host: EnvironmentCenterHost = { focus: vi.fn(async () => true), open: vi.fn(async () => ({ kind, accepted: true })), invalidTarget: vi.fn() };
     expect(await requestEnvironmentOpen(host, entry)).toBe(true);
-    expect(host.open).toHaveBeenCalledExactlyOnceWith({ environment_id: 'env-a', gateway_id: 'gateway-a', gateway_env_id: 'member-a', label: 'Production' });
+    expect(host.open).toHaveBeenCalledExactlyOnceWith({ environment_id: 'env-a', connection_id: 'gateway-a', gateway_env_id: 'member-a', label: 'Production' });
     expect(host.focus).not.toHaveBeenCalled();
   });
   it('does not invent a route or replay a rejected action', async () => {
     const host: EnvironmentCenterHost = { focus: vi.fn(async () => true), open: vi.fn(async () => ({ kind, accepted: false })), invalidTarget: vi.fn() };
-    expect(await requestEnvironmentOpen(host, { ...entry, gateway_id: '' })).toBe(false);
+    expect(await requestEnvironmentOpen(host, { ...entry, connection_id: '' })).toBe(false);
     expect(host.open).not.toHaveBeenCalled();
     expect(await requestEnvironmentOpen(host, entry)).toBe(false);
     expect(host.open).toHaveBeenCalledTimes(1);
   });
   it('keeps source filtering and progress association exact', () => {
-    const other = { ...entry, id: 'env-b', gateway_id: 'gateway-b' };
-    expect(filterEnvironmentFacts([entry, other], ' PROD ', e => e.label, e => e.gateway_id === 'gateway-b')).toEqual([other]);
-    expect(environmentOpenRunning(entry, [{ action: 'open_gateway_environment', gateway_id: 'gateway-b', environment_id: entry.id, status: 'running' }])).toBe(false);
+    const other = { ...entry, id: 'env-b', connection_id: 'gateway-b' };
+    expect(filterEnvironmentFacts([entry, other], ' PROD ', e => e.label, e => e.connection_id === 'gateway-b')).toEqual([other]);
+    expect(environmentOpenRunning(entry, [{ action: 'open_gateway_environment', connection_id: 'gateway-b', environment_id: entry.id, status: 'running' }])).toBe(false);
   });
 });
 
@@ -74,9 +74,9 @@ describe('shared operation authority', () => {
 describe('shared verified directory facts', () => {
   it('preserves exact route identity when labels and addresses are equal', () => {
     const a = projectEnvironment(entry);
-    const b = projectEnvironment({ ...entry, gateway_id: 'another-source' });
+    const b = projectEnvironment({ ...entry, connection_id: 'another-source' });
     expect(a.identity).not.toBe(b.identity);
-    expect(a.target?.gateway_id).toBe('gateway-a');
+    expect(a.target?.connection_id).toBe('gateway-a');
     expect(a.openAvailable).toBe(true);
     expect(projectEnvironment({ ...entry, runtime_operations: { open: { availability: 'forbidden' } } }).openAvailable).toBe(false);
   });

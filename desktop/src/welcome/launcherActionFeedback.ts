@@ -181,6 +181,8 @@ export function launcherActionFailurePresentation(
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
+    case 'gateway_attachment_failed':
+      return { message: i18n.t('gatewayJoin.failed'), tone: 'error', refresh_snapshot: refreshSnapshot, delivery };
     case 'cloud_link_failed':
       return {
         message: i18n.t('runtimeMessage.cloudLinkFailedDetail'),

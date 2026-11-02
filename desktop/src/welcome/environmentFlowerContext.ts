@@ -85,7 +85,7 @@ function snapshotText(value: unknown, limit: number): string {
 
 function environmentInspectionSnapshot(environment: DesktopEnvironmentEntry): unknown {
   const health = environment.runtime_health;
-  const presence = environment.provider_runtime_link_target;
+  const presence = environment.runtime_connection_target;
   const service = environment.runtime_service ?? (environment.kind === 'local_environment'
     ? environment.local_environment_runtime_service : undefined);
   const maintenance = environment.runtime_maintenance ?? health.runtime_maintenance;
@@ -175,7 +175,7 @@ export function environmentFlowerPrimaryTargetID(environment: DesktopEnvironment
     return `provider:${encodeURIComponent(cloudOrigin)}:env:${encodeURIComponent(envPublicID)}`;
   }
   return envPublicID
-    || trimString(environment.provider_runtime_link_target?.id)
+    || trimString(environment.runtime_connection_target?.id)
     || trimString(environment.managed_runtime_target_id)
     || trimString(environment.managed_runtime_placement_target_id)
     || trimString(environment.id);

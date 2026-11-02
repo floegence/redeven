@@ -88,7 +88,7 @@ describe('unified environment settings session', () => {
   });
   it('never loads access settings for Cloud, URL, or Gateway registrations', async () => {
     const h = harness();
-    for (const registration_ref of [undefined, { kind: 'saved_environment', id: 'url' }, { kind: 'gateway_environment', gateway_id: 'g', gateway_env_id: 'e' }]) {
+    for (const registration_ref of [undefined, { kind: 'saved_environment', id: 'url' }, { kind: 'gateway_environment', connection_id: 'g', gateway_env_id: 'e' }]) {
       const entry = { id: 'remote', label: 'remote', registration_ref } as DesktopEnvironmentEntry;
       expect(environmentHasAccessSettings(entry)).toBe(false);
       h.open(entry, {}); await h.loadAccess();

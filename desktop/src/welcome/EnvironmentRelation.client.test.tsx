@@ -180,7 +180,7 @@ it('retains invitation focus across scheduled five-second production probes for 
       const finish = f.holdNextProbe();
       await vi.advanceTimersByTimeAsync(5000);
       expect(f.snapshot().environments[0].runtime_health.freshness).toBe('checking');
-      expect(f.snapshot().environments[0].provider_runtime_link_target?.runtime_control_status.state).not.toBe('available');
+      expect(f.snapshot().environments[0].runtime_connection_target?.runtime_control_status.state).not.toBe('available');
       expect(button(dialog, 'Verify')).toBe(verify); expect(document.activeElement).toBe(input);
       expect([input.selectionStart, input.selectionEnd]).toEqual([2, 5]);
       expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
@@ -360,7 +360,7 @@ describe('linked environment owner interactions', () => {
     button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
     expect(perform).not.toHaveBeenCalled();
     button(document.querySelector('[role="dialog"]')!, 'Connect and continue').click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: runtime.provider_runtime_link_target!.id, operation: 'status' });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: runtime.runtime_connection_target!.id, operation: 'status' });
     expect(h.performAction).not.toHaveBeenCalled();
     button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
@@ -400,7 +400,7 @@ describe('linked environment owner interactions', () => {
     expect(requests()[1]).toMatchObject({ environment_id: f.environment.id, ssh_password: ' temporary ' });
     expect(dialog.querySelector('input[type="password"]')).toBeNull();
     expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: f.environment.provider_runtime_link_target!.id, operation: 'status' });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: f.environment.runtime_connection_target!.id, operation: 'status' });
   });
   it('resumes a dismissed enrollment through its existing card action without adding Welcome content', async () => {
     const f = runtimeGatewayAccessFixture('ssh');
@@ -619,7 +619,7 @@ describe('linked environment owner interactions', () => {
     expect(dialog.textContent).toContain('Other connections stay available.');
     expect(perform).toHaveBeenCalledOnce();
     button(dialog, 'Cancel pairing').click(); await settle();
-    expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: 'leave', gateway_id: 'service-1', route_impact_acknowledged: false });
+    expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: 'leave', gateway_id: 'service-1', route_impact_acknowledged: true });
     const remainingMemberships = [fixture.memberships[0]!];
     const remainingInputs = {
       ...fixture.inputs,
@@ -646,7 +646,7 @@ describe('linked environment owner interactions', () => {
         runtime_service: { ...original.runtime_service!, capabilities: { ...original.runtime_service!.capabilities!,
           runtime_gateway: { supported: true },
         } },
-        provider_runtime_link_target: { ...original.provider_runtime_link_target!,
+        runtime_connection_target: { ...original.runtime_connection_target!,
           provider_connection_state: connectionState, can_connect_cloud: true, can_disconnect_cloud: true,
         },
       };
@@ -683,7 +683,7 @@ describe('linked environment owner interactions', () => {
 
   it('explains an expired Cloud connection on either tab and routes recovery to the exact Runtime owner', async () => {
     const f = linkedEnvironmentFixture();
-    const runtime = { ...f.runtime, provider_runtime_link_target: { ...f.runtime.provider_runtime_link_target!,
+    const runtime = { ...f.runtime, runtime_connection_target: { ...f.runtime.runtime_connection_target!,
       provider_connection_state: 'authorization_required' as const, can_connect_cloud: true,
 
       cloud_link_binding: { state: 'linked' as const, connection_state: 'authorization_required' as const,
@@ -713,12 +713,12 @@ describe('linked environment owner interactions', () => {
     const f = mixedEnvironmentFixture();
     const originalRuntime = f.snapshot.environments.find(environment => environment.kind === 'local_environment')!;
     const originalCloud = f.snapshot.environments.find(environment => environment.env_public_id === 'env_0_0')!;
-    const target = originalRuntime.provider_runtime_link_target!;
+    const target = originalRuntime.runtime_connection_target!;
     const binding = { ...target.cloud_link_binding!, connection_state: 'authorization_required' as const,
       last_error_code: 'provider_tls_untrusted',
     };
     const service = { ...target.runtime_service!, bindings: { ...target.runtime_service!.bindings!, cloud_link: binding } };
-    const runtime = { ...originalRuntime, runtime_service: service, provider_runtime_link_target: { ...target,
+    const runtime = { ...originalRuntime, runtime_service: service, runtime_connection_target: { ...target,
       provider_connection_state: 'authorization_required' as const, can_connect_cloud: true,
 
 
@@ -749,7 +749,7 @@ describe('linked environment owner interactions', () => {
     expect(h.performAction).toHaveBeenCalledExactlyOnceWith({ kind: 'connect_cloud_runtime',
       provider_environment_id: cloud.id, runtime_target_id: target.id,
     });
-    const blockedRuntime = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target,
+    const blockedRuntime = { ...runtime, runtime_connection_target: { ...runtime.runtime_connection_target,
       can_connect_cloud: false,
     } };
     h.publish({ ...f.snapshot, environments: [blockedRuntime, cloud] }); await settle();
@@ -970,7 +970,7 @@ describe('linked environment owner interactions', () => {
     expect(button(h.owner('runtime'), 'Open window').disabled).toBe(false);
     expect(h.owner('cloud').querySelector('[data-floe-progress-shimmer]')).not.toBeNull();
     h.publish({ ...h.snapshot, environments: [
-      { ...h.runtime, provider_runtime_link_target: { ...h.runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' } },
+      { ...h.runtime, runtime_connection_target: { ...h.runtime.runtime_connection_target!, cloud_link_state: 'unbound' } },
       { ...h.cloud, cloud_linked_runtime_summary: undefined, access_group_id: h.cloud.id },
     ] }); await settle();
     expect(document.querySelectorAll('[data-environment-group]')).toHaveLength(2);

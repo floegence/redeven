@@ -1,5 +1,5 @@
 // Package gatewaymembership owns the single Gateway member authority used by
-// standalone access and optional Cloud publication.
+// standalone access and optional network egress.
 package gatewaymembership
 
 import (

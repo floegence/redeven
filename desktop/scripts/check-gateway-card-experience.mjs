@@ -77,7 +77,7 @@ try {
     const needsUpdate = { ...local, status: 'needs_update', trust_state: 'paired',
       service_state: { ...local.service_state, status: 'service_needs_update', can_start: false, can_update: true } };
     const updateSnapshot = { ...snapshot, gateway_sources: [needsUpdate, writable, readonly] };
-    const backgroundUpdate = { action: 'update_gateway', subject_kind: 'gateway', subject_id: 'local-preview', gateway_id: 'local-preview',
+    const backgroundUpdate = { action: 'update_gateway', subject_kind: 'gateway', subject_id: 'local-preview', connection_id: 'local-preview',
       operation_key: 'local-preview:update_gateway', started_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
       status: 'running', phase: 'installing_gateway', title: 'Update Gateway', active_progress_surface: 'gateway',
       step_progress: gatewayServiceStepProgress(undefined, 'installing_gateway') };
@@ -125,7 +125,7 @@ try {
     const trigger = card.locator('.redeven-gateway-card__primary-button');
     assert.equal(await trigger.locator('svg').count(), 1, 'Admission must have a single icon, including the loading spinner');
     const startedAt = Date.now();
-    const progress = { action, subject_kind: 'gateway', subject_id: 'local-preview', gateway_id: 'local-preview',
+    const progress = { action, subject_kind: 'gateway', subject_id: 'local-preview', connection_id: 'local-preview',
       operation_key: `local-preview:${action}`, started_at_unix_ms: startedAt, updated_at_unix_ms: startedAt,
       status: 'running', active_progress_surface: 'gateway', environment_label: 'Gateway-local', phase: 'preparing_gateway_package', title: isUpdate ? 'Update Gateway' : 'Start Gateway', title_key: actionKey, cancelable: true,
       detail: 'Technical fixture: ' + 'package=/fixture/cache/gateway; transport=ssh; '.repeat(80),

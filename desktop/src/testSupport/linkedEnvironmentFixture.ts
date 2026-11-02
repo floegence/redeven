@@ -1,21 +1,22 @@
+import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { decorateEnvironmentAccess } from '../main/environmentAccess';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { testDesktopPreferences, testCloudEnvironment } from './desktopTestHelpers';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import type { DesktopCloudRuntimeLinkTargetKind, DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import type { DesktopRuntimeTargetKind } from "../shared/runtimeConnectionTarget";
 
-export function linkedEnvironmentFixture(kind: DesktopCloudRuntimeLinkTargetKind = 'local_environment') {
+export function linkedEnvironmentFixture(kind: DesktopRuntimeTargetKind = 'local_environment') {
   const provider = testCloudEnvironment('https://provider.example.invalid', 'env_linked', { label: 'Cloud workspace', pinned: false });
   const initial = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({ cloud_environments: [provider] }) });
   const local = initial.environments.find(entry => entry.kind === 'local_environment')!;
-  const targetID: DesktopCloudRuntimeLinkTargetID = kind === 'ssh_environment' ? 'ssh:fixture' : kind === 'wsl_environment' ? 'wsl:fixture' : 'local:local';
+  const targetID: DesktopRuntimeTargetID = kind === 'ssh_environment' ? 'ssh:fixture' : kind === 'wsl_environment' ? 'wsl:fixture' : 'local:local';
   const rawRuntime: DesktopEnvironmentEntry = {
     ...local, kind, label: 'Development runtime', pinned: false,
     local_ui_url: 'http://localhost:23998/', local_ui_urls: ['http://localhost:23998/'],
     runtime_health: { ...local.runtime_health, status: 'online', freshness: 'fresh' },
     local_environment_runtime_state: 'running',
     runtime_operations: { ...local.runtime_operations, open: { ...local.runtime_operations.open, availability: 'available' } },
-    provider_runtime_link_target: { ...local.provider_runtime_link_target!, id: targetID, kind,
+    runtime_connection_target: { ...local.runtime_connection_target!, id: targetID, kind,
       cloud_link_state: 'linked', provider_connection_state: 'connected', cloud_origin_supported: true,
       cloud_origin: provider.cloud_origin, cloud_id: provider.cloud_id, env_public_id: provider.env_public_id,
     },

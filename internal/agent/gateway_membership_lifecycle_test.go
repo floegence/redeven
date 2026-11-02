@@ -15,6 +15,33 @@ import (
 	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
 
+func TestGatewayAttachmentSelectionDoesNotUseCloudRoute(t *testing.T) {
+	firstStore, _ := gatewayfixture.NewWithID(t, "first", "https://first.internal:7443", "127.0.0.1:7443")
+	secondStore, _ := gatewayfixture.NewWithID(t, "second", "https://second.internal:7443", "127.0.0.1:7443")
+	first := gatewayfixture.Enroll(t, firstStore, "runtime")
+	second := gatewayfixture.Enroll(t, secondStore, "runtime")
+	a := routeAgentFixture(t)
+	a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{first, second}
+	a.cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: second.AttachmentID, Revision: 1}
+	if member := a.GatewayAttachment(); member != nil {
+		t.Fatal("omitted attachment identity selected the Cloud route")
+	}
+	if member := a.GatewayAttachment(first.GatewayID); member == nil || member.AttachmentID != first.AttachmentID {
+		t.Fatal("explicit identity did not select the requested attachment")
+	}
+	before := a.remoteConfigSnapshot()
+	if err := a.persistRuntimeAttachment(nil); !errors.Is(err, gatewaymembership.ErrConflict) {
+		t.Fatal("ambiguous removal must fail without selecting a Cloud route", err)
+	}
+	if !reflect.DeepEqual(before, a.remoteConfigSnapshot()) {
+		t.Fatal("ambiguous removal changed state")
+	}
+	a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{first}
+	if member := a.GatewayAttachment(); member == nil || member.AttachmentID != first.AttachmentID {
+		t.Fatal("unambiguous single attachment lookup was lost")
+	}
+}
+
 func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
 	for _, field := range []string{"address", "certificate", "key", "trust", "bookkeeping"} {
 		for _, selected := range []bool{true, false} {

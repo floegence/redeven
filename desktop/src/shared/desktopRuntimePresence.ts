@@ -7,7 +7,7 @@ import type {
   DesktopRuntimePlacement,
   DesktopRuntimeTargetID,
 } from './desktopRuntimePlacement';
-import type { DesktopCloudRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
+
 import type { RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopRuntimePlatform } from './desktopRuntimePlatform';
 
@@ -30,7 +30,7 @@ export type DesktopRuntimeControlStatus =
     }>;
 
 export type DesktopRuntimePresence = Readonly<{
-  target_id: DesktopCloudRuntimeLinkTargetID;
+  target_id: DesktopRuntimeTargetID;
   placement_target_id: DesktopRuntimeTargetID;
   kind: 'local_environment' | 'wsl_environment' | 'ssh_environment';
   environment_id: string;
@@ -58,7 +58,7 @@ export type DesktopRuntimePresence = Readonly<{
 const missingNotStarted: DesktopRuntimeControlStatus = {
   state: 'missing',
   reason_code: 'not_started',
-  message: 'Start this runtime before connecting it to a provider.',
+  message: 'Start this runtime before opening its management connection.',
 };
 
 export function desktopRuntimeControlStatusAvailable(): DesktopRuntimeControlStatus {

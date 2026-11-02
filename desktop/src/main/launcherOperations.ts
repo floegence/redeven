@@ -22,7 +22,7 @@ type CreateLauncherOperationInput = Readonly<{
   subject_id: string;
   environment_id?: string;
   environment_label?: string;
-  gateway_id?: string;
+  connection_id?: string;
   gateway_environment_id?: string;
   cloud_origin?: string;
   cloud_id?: string;
@@ -145,7 +145,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     subject_id: snapshot.subject_id,
     environment_id: snapshot.environment_id,
     environment_label: snapshot.environment_label,
-    gateway_id: snapshot.gateway_id,
+    connection_id: snapshot.connection_id,
     gateway_environment_id: snapshot.gateway_environment_id,
     started_at_unix_ms: snapshot.started_at_unix_ms,
     updated_at_unix_ms: snapshot.updated_at_unix_ms,
@@ -379,7 +379,7 @@ export class LauncherOperationRegistry {
       subject_generation: this.currentSubjectGeneration(input.subject_kind, subjectID),
       environment_id: compact(input.environment_id) || undefined,
       environment_label: compact(input.environment_label) || undefined,
-      gateway_id: compact(input.gateway_id) || undefined,
+      connection_id: compact(input.connection_id) || undefined,
       gateway_environment_id: compact(input.gateway_environment_id) || undefined,
       cloud_origin: compact(input.cloud_origin) || undefined,
       cloud_id: compact(input.cloud_id) || undefined,

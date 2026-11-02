@@ -7,7 +7,7 @@ import { DesktopActionPopover } from './DesktopActionPopover';
 import { buildProviderBackedEnvironmentActionModel, type EnvironmentActionModel } from './viewModel';
 
 export function cloudConnectionState(runtime: DesktopEnvironmentEntry, cloud: DesktopEnvironmentEntry): string {
-  const target = runtime.provider_runtime_link_target;
+  const target = runtime.runtime_connection_target;
   if (cloud.control_plane_sync_state === 'auth_required') return 'sign_in_required';
   if (target?.provider_connection_state === 'connected') return 'connected';
   if (target?.cloud_link_binding?.last_error_code === 'provider_tls_untrusted') return 'tls_error';
@@ -15,7 +15,7 @@ export function cloudConnectionState(runtime: DesktopEnvironmentEntry, cloud: De
 }
 
 export function cloudConnectionTitleKey(runtime: DesktopEnvironmentEntry, cloud: DesktopEnvironmentEntry): DesktopTranslationKey {
-  const target = runtime.provider_runtime_link_target;
+  const target = runtime.runtime_connection_target;
   switch (cloudConnectionState(runtime, cloud)) {
     case 'connected': return 'providerRecovery.connected';
     case 'connecting': return 'providerRecovery.connecting';
@@ -42,7 +42,7 @@ export function CloudConnectionStatus(props: Readonly<{
   const [detailsOpen, setDetailsOpen] = createSignal(false);
   let trigger: HTMLButtonElement | undefined;
   createEffect(() => { if (!props.active) setDetailsOpen(false); });
-  const target = () => props.runtime.provider_runtime_link_target;
+  const target = () => props.runtime.runtime_connection_target;
   const state = () => cloudConnectionState(props.runtime, props.cloud);
   const localAvailable = () => props.runtime.kind === 'local_environment'
     && props.runtime.runtime_operations.open.availability === 'available';

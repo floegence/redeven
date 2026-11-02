@@ -29,7 +29,7 @@ export function normalizeEnvironmentAccessPreferences(value: unknown): Environme
 /** Excludes labels, health and transient listener ports; includes the configured owner. */
 export function environmentAccessBinding(entry: DesktopEnvironmentEntry): string {
   const config = entry.kind === 'gateway_environment'
-    ? [entry.gateway_id, entry.gateway_env_id, entry.gateway_identity_fingerprint, entry.gateway_member?.attachment_version, entry.gateway_member?.runtime_public_id]
+    ? [entry.connection_id, entry.gateway_env_id, entry.gateway_identity_fingerprint, entry.gateway_member?.attachment_version, entry.gateway_member?.runtime_public_id]
     : entry.kind === 'external_local_ui' ? [entry.id, entry.local_ui_url]
     : [entry.id, entry.managed_runtime_host_access, entry.managed_runtime_placement, entry.local_environment_ui_bind];
   return createHash('sha256').update(JSON.stringify(config)).digest('hex');
@@ -52,7 +52,7 @@ function routes(entry: DesktopEnvironmentEntry): readonly EnvironmentAccessRoute
   if (entry.kind === 'provider_environment') return [];
   if (entry.kind !== 'gateway_environment') return [{ id: `${entry.id}:direct`, environment_id: entry.id, kind: 'direct', label: entry.label, is_open: entry.is_open }];
   return [{ id: `${entry.id}:member`, environment_id: entry.id, kind: 'gateway_member', label: entry.label,
-    gateway_id: entry.gateway_id, gateway_label: entry.gateway_label, is_open: entry.is_open }];
+    connection_id: entry.connection_id, gateway_label: entry.gateway_label, is_open: entry.is_open }];
 }
 
 export function decorateEnvironmentAccess(entries: readonly DesktopEnvironmentEntry[], preferences: DesktopPreferences): DesktopEnvironmentEntry[] {
@@ -79,7 +79,7 @@ export function decorateEnvironmentAccess(entries: readonly DesktopEnvironmentEn
   }
   const projections = new Map<string, Partial<DesktopEnvironmentEntry>>();
   for (const [key, members] of groups) {
-    const rank = (entry: DesktopEnvironmentEntry) => entry.provider_runtime_link_target?.env_public_id ? 0 : entry.kind === 'gateway_environment' ? 3 : entry.kind === 'external_local_ui' ? 2 : 1;
+    const rank = (entry: DesktopEnvironmentEntry) => entry.runtime_connection_target?.env_public_id ? 0 : entry.kind === 'gateway_environment' ? 3 : entry.kind === 'external_local_ui' ? 2 : 1;
     const age = (entry: DesktopEnvironmentEntry) => preferences.environment_access?.observations[entry.id]?.observed_at_ms ?? entry.created_at_ms;
     members.sort((a, b) => rank(a) - rank(b)
       || age(a) - age(b) || a.id.localeCompare(b.id));
@@ -99,10 +99,10 @@ export function decorateEnvironmentAccess(entries: readonly DesktopEnvironmentEn
   return entries.map(entry => {
     if (entry.kind !== 'provider_environment') return { ...entry, ...projections.get(entry.id) };
     const targetID = entry.cloud_linked_runtime_summary?.runtime_target_id;
-    const runtime = targetID ? entries.find(candidate => candidate.provider_runtime_link_target?.id === targetID) : undefined;
+    const runtime = targetID ? entries.find(candidate => candidate.runtime_connection_target?.id === targetID) : undefined;
     // The snapshot builder establishes the exact Cloud binding once. Route
     // addresses and management capability are independent of this association.
-    const attached = runtime && ['linked', 'linking', 'disconnecting'].includes(runtime.provider_runtime_link_target!.cloud_link_state);
+    const attached = runtime && ['linked', 'linking', 'disconnecting'].includes(runtime.runtime_connection_target!.cloud_link_state);
     return { ...entry, access_group_id: attached ? runtime.id : entry.id };
   });
 }

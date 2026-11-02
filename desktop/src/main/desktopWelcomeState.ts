@@ -1,3 +1,4 @@
+import { desktopRuntimeConnectionTargetID, type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { decorateEnvironmentAccess } from './environmentAccess';
 import { localHostRuntimeLifecyclePlacement } from './localRuntimePlacement';
 import { reportedRuntimeURLs } from '../shared/desktopEnvironmentConnection';
@@ -75,14 +76,7 @@ import {
   runtimeServiceSupportsCloudLink,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
-import {
-  desktopCloudRuntimeLinkTargetID,
-  type DesktopCloudEnvironmentCandidate,
-  type DesktopCloudEnvironmentOccupancy,
-  type DesktopCloudRuntimeLinkTargetKind,
-  type DesktopCloudRuntimeLinkTarget,
-  type DesktopCloudRuntimeLinkTargetID,
-} from '../shared/providerRuntimeLinkTarget';
+import { type DesktopCloudEnvironmentCandidate, type DesktopCloudEnvironmentOccupancy, type DesktopRuntimeTargetKind, type DesktopRuntimeConnectionTarget } from "../shared/runtimeConnectionTarget";
 import {
   desktopRuntimeTargetID,
   desktopRuntimeTargetAutoStatusDetectionConfigurable,
@@ -105,7 +99,7 @@ import {
 } from '../shared/redevenCloud';
 
 export {
-  desktopCloudRuntimeLinkTargetID,
+  desktopRuntimeConnectionTargetID,
 };
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
@@ -545,9 +539,9 @@ function openSessionByURL(
   )) ?? null;
 }
 
-function providerRuntimeLinkKindForHostAccess(
+function runtimeTargetKindForHostAccess(
   hostAccess: DesktopRuntimeHostAccess,
-): DesktopCloudRuntimeLinkTargetKind {
+): DesktopRuntimeTargetKind {
   return hostAccess.kind === 'ssh_host'
     ? 'ssh_environment'
     : hostAccess.kind === 'wsl_host'
@@ -656,8 +650,8 @@ function providerEnvironmentCandidateRouteState(
 function providerEnvironmentCandidatesForSnapshot(
   environments: readonly DesktopCloudEnvironmentRecord[],
   controlPlanes: readonly DesktopControlPlaneSummary[],
-  runtimeLinkTargets: readonly DesktopCloudRuntimeLinkTarget[],
-  selectedRuntimeTargetID: DesktopCloudRuntimeLinkTargetID,
+  runtimeLinkTargets: readonly DesktopRuntimeConnectionTarget[],
+  selectedRuntimeTargetID: DesktopRuntimeTargetID,
 ): readonly DesktopCloudEnvironmentCandidate[] {
   return environments.map((environment) => {
     const routeDetails = providerEnvironmentRouteDetails(environment, controlPlanes);
@@ -683,9 +677,9 @@ function providerEnvironmentCandidatesForSnapshot(
 
 function linkedRuntimeTargetForCloudEnvironment(
   environment: DesktopCloudEnvironmentRecord,
-  runtimeLinkTargets: readonly DesktopCloudRuntimeLinkTarget[],
+  runtimeLinkTargets: readonly DesktopRuntimeConnectionTarget[],
   includeInFlightBinding = false,
-): DesktopCloudRuntimeLinkTarget | null {
+): DesktopRuntimeConnectionTarget | null {
   return runtimeLinkTargets.find((target) => (
     (target.cloud_link_state === 'linked' || (includeInFlightBinding && ['linking', 'disconnecting'].includes(target.cloud_link_state)))
     && target.cloud_origin === environment.cloud_origin
@@ -695,7 +689,7 @@ function linkedRuntimeTargetForCloudEnvironment(
 }
 
 function occupancyFromLinkedRuntimeTarget(
-  linkedRuntime: DesktopCloudRuntimeLinkTarget,
+  linkedRuntime: DesktopRuntimeConnectionTarget,
   state: Extract<DesktopCloudEnvironmentOccupancy['state'], 'linked_here' | 'occupied_by_known_runtime'>,
 ): DesktopCloudEnvironmentOccupancy {
   return {
@@ -709,8 +703,8 @@ function occupancyFromLinkedRuntimeTarget(
 
 function providerEnvironmentOccupancyForRuntimeTarget(
   routeDetails: ReturnType<typeof providerEnvironmentRouteDetails>,
-  linkedRuntime: DesktopCloudRuntimeLinkTarget | null,
-  selectedRuntimeTargetID: DesktopCloudRuntimeLinkTargetID,
+  linkedRuntime: DesktopRuntimeConnectionTarget | null,
+  selectedRuntimeTargetID: DesktopRuntimeTargetID,
 ): DesktopCloudEnvironmentOccupancy {
   if (linkedRuntime) {
     return occupancyFromLinkedRuntimeTarget(
@@ -755,18 +749,18 @@ function runtimeControlStatusForObservation(presence: DesktopRuntimePresence | u
   return defaultRuntimeControlStatusForRunningState(true);
 }
 
-function buildCloudRuntimeLinkTarget(input: Readonly<{
-  id: DesktopCloudRuntimeLinkTarget['id'];
-  kind: DesktopCloudRuntimeLinkTarget['kind'];
+function buildRuntimeConnectionTarget(input: Readonly<{
+  id: DesktopRuntimeConnectionTarget['id'];
+  kind: DesktopRuntimeConnectionTarget['kind'];
   environmentID: string;
   label: string;
   runtimeKey: string;
   runtimeURL: string;
   runtimeRunning?: boolean;
-  runtimeControlStatus?: DesktopCloudRuntimeLinkTarget['runtime_control_status'];
+  runtimeControlStatus?: DesktopRuntimeConnectionTarget['runtime_control_status'];
   runtimeService?: RuntimeServiceSnapshot;
   redevenCloudOriginPolicy: RedevenCloudOriginPolicy;
-}>): DesktopCloudRuntimeLinkTarget {
+}>): DesktopRuntimeConnectionTarget {
   const runtimeURL = compact(input.runtimeURL);
   const runtimeService = input.runtimeService
     ? normalizeRuntimeServiceSnapshot(input.runtimeService)
@@ -1287,8 +1281,8 @@ function buildLocalEnvironmentEntry(
     runtimeControlStatus: runtimeControlStatusForObservation(presence, runtimeHealth),
     maintenance: runtimeMaintenance,
   });
-  const providerRuntimeLinkTarget = buildCloudRuntimeLinkTarget({
-    id: desktopCloudRuntimeLinkTargetID('local_environment', environment.id),
+  const runtimeConnectionTarget = buildRuntimeConnectionTarget({
+    id: desktopRuntimeConnectionTargetID('local_environment', environment.id),
     kind: 'local_environment',
     environmentID: environment.id,
     label: environment.label,
@@ -1331,7 +1325,7 @@ function buildLocalEnvironmentEntry(
     local_environment_runtime_url: resolvedLocalRuntimeURL || undefined,
     local_environment_runtime_service: runtimeService,
     local_environment_close_behavior: resolvedLocalCloseBehavior,
-    provider_runtime_link_target: providerRuntimeLinkTarget,
+    runtime_connection_target: runtimeConnectionTarget,
     ...managedRuntimeEntryFields(presence),
     managed_runtime_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement, environment.id),
     managed_runtime_placement_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement, environment.id),
@@ -1490,7 +1484,7 @@ function buildCloudEnvironmentEntry(
   environment: DesktopCloudEnvironmentRecord,
   controlPlanes: readonly DesktopControlPlaneSummary[],
   openSessions: readonly DesktopSessionSummary[],
-  runtimeLinkTargets: readonly DesktopCloudRuntimeLinkTarget[],
+  runtimeLinkTargets: readonly DesktopRuntimeConnectionTarget[],
 ): DesktopEnvironmentEntry {
   const sessions = openSessionsByCloudEnvironment(openSessions, environment);
   const remoteSession = sessions.remote_desktop ?? null;
@@ -1601,7 +1595,7 @@ function buildEnvironmentEntries(
       openSessionsByLocalEnvironment(openSessions, environment),
       controlPlanes,
       localRuntimeHealth[environment.id],
-      managedRuntimePresenceByTargetID[desktopCloudRuntimeLinkTargetID('local_environment', environment.id)],
+      managedRuntimePresenceByTargetID[desktopRuntimeConnectionTargetID('local_environment', environment.id)],
       platformCapabilities,
       redevenCloudOriginPolicy,
     )),
@@ -1609,18 +1603,18 @@ function buildEnvironmentEntries(
       target,
       openSessionByRuntimeTarget(openSessions, target),
       savedRuntimeTargetHealth[target.id],
-      managedRuntimePresenceByTargetID[desktopCloudRuntimeLinkTargetID(providerRuntimeLinkKindForHostAccess(target.host_access), target.id)],
+      managedRuntimePresenceByTargetID[desktopRuntimeConnectionTargetID(runtimeTargetKindForHostAccess(target.host_access), target.id)],
       redevenCloudOriginPolicy,
     )),
   ];
   // Runtime cards, Cloud summaries and candidate occupancy share one observed
   // binding, including cached health while a probe withdraws live presence.
-  const runtimeLinkTargets = runtimeEntries.flatMap(entry => entry.provider_runtime_link_target ? [entry.provider_runtime_link_target] : []);
+  const runtimeLinkTargets = runtimeEntries.flatMap(entry => entry.runtime_connection_target ? [entry.runtime_connection_target] : []);
   const entries: DesktopEnvironmentEntry[] = [
     ...runtimeEntries.map(entry => ({
       ...entry,
-      provider_environment_candidates: entry.provider_runtime_link_target
-        ? providerEnvironmentCandidatesForSnapshot(preferences.cloud_environments, controlPlanes, runtimeLinkTargets, entry.provider_runtime_link_target.id)
+      provider_environment_candidates: entry.runtime_connection_target
+        ? providerEnvironmentCandidatesForSnapshot(preferences.cloud_environments, controlPlanes, runtimeLinkTargets, entry.runtime_connection_target.id)
         : [],
     })),
     ...preferences.cloud_environments.map((environment) => (
@@ -1641,13 +1635,13 @@ function buildEnvironmentEntries(
         kind: 'gateway_environment' as const,
         registration_ref: {
           kind: 'gateway_environment' as const,
-          gateway_id: target.gateway_id,
+          connection_id: target.connection_id,
           gateway_env_id: target.gateway_env_id,
         },
         label: target.label,
         local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
         secondary_text: target.gateway_label,
-        gateway_id: target.gateway_id,
+        connection_id: target.connection_id,
         gateway_label: target.gateway_label,
         gateway_env_id: target.gateway_env_id,
         gateway_status: 'online' as const,
@@ -1810,9 +1804,9 @@ function buildSavedRuntimeTargetEntry(
   const runtimeObservation = presence ?? cachedRuntimeHealth ?? openSession?.startup;
   const startedAtUnixMS = runtimeStartedAtUnixMS(runtimeObservation?.started_at_unix_ms);
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, runtimeHealth, presence);
-  const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
-  const providerRuntimeLinkTarget = buildCloudRuntimeLinkTarget({
-    id: desktopCloudRuntimeLinkTargetID(targetKind, target.id),
+  const targetKind = runtimeTargetKindForHostAccess(target.host_access);
+  const runtimeConnectionTarget = buildRuntimeConnectionTarget({
+    id: desktopRuntimeConnectionTargetID(targetKind, target.id),
     kind: targetKind,
     environmentID: target.id,
     label: target.label,
@@ -1867,7 +1861,7 @@ function buildSavedRuntimeTargetEntry(
     runtime_service: runtimeService,
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
-    provider_runtime_link_target: providerRuntimeLinkTarget,
+    runtime_connection_target: runtimeConnectionTarget,
     ...managedFields,
     managed_runtime_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
     managed_runtime_placement_target_id: target.id,

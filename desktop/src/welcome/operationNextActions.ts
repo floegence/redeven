@@ -48,13 +48,13 @@ export function operationNextActionKey(action: DesktopLauncherOperationNextActio
     case 'check_gateway':
     case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
-      return `${action.kind}:gateway:${action.gateway_id}`;
+      return `${action.kind}:gateway:${action.connection_id}`;
     case 'reinstall_target':
       return `${action.kind}:environment:${action.environment_id}`;
     case 'resolve_gateway':
-      return `${action.kind}:gateway:${action.gateway_id}:${action.resolve_focus ?? ''}`;
+      return `${action.kind}:gateway:${action.connection_id}:${action.resolve_focus ?? ''}`;
     case 'open_gateway_environment':
-      return `${action.kind}:gateway:${action.gateway_id}:environment:${action.environment_id}`;
+      return `${action.kind}:gateway:${action.connection_id}:environment:${action.environment_id}`;
     case 'copy_diagnostics':
     case 'dismiss':
     case 'retry':

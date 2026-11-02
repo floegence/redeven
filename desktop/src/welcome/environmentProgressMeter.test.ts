@@ -38,7 +38,7 @@ function gatewayRefreshProgress(input: Readonly<{
 }>): DesktopLauncherActionProgress {
   return {
     action: 'refresh_gateway',
-    gateway_id: 'gateway-1',
+    connection_id: 'gateway-1',
     operation_key: 'gateway-refresh',
     subject_kind: 'gateway',
     subject_id: 'gateway-1',

@@ -17,7 +17,7 @@ describe('Runtime connection ownership from raw snapshot inputs', () => {
       const group = buildEnvironmentLibraryDisplayGroups(snapshot.environments).find(group => group.id === runtime.id)!;
       expect(group.provider_entry?.env_public_id).toBe('env_0_0');
       expect(runtime.provider_environment_candidates?.find(candidate => candidate.env_public_id === 'env_0_0')?.access_point_origin).toBe('https://new-region.example.invalid');
-      expect(runtime.provider_runtime_link_target?.access_point_origin).toBe('https://team.example.invalid');
+      expect(runtime.runtime_connection_target?.access_point_origin).toBe('https://team.example.invalid');
       expect(runtime.provider_environment_candidates?.find(candidate => candidate.env_public_id === 'env_0_0')?.occupancy.state).toBe('linked_here');
       expect(group.gateway_entries).toHaveLength(2);
       expect(buildEnvironmentLibraryDisplayGroups(snapshot.environments)).toHaveLength(8);
@@ -47,7 +47,7 @@ describe('Runtime connection ownership from raw snapshot inputs', () => {
       expect(runtime.provider_entry?.env_public_id).toBe('env_0_0');
       expect(runtime.gateway_entries).toHaveLength(2);
       expect(runtime.attachment_ids).toHaveLength(4);
-      expect(runtime.primary_entry.provider_runtime_link_target?.can_disconnect_cloud).toBe(false);
+      expect(runtime.primary_entry.runtime_connection_target?.can_disconnect_cloud).toBe(false);
       expect(groups).toHaveLength(8);
       expect(environmentLibraryCount(groups, '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
       expect(filterEnvironmentLibraryDisplayGroups(groups, 'Office', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toContain(runtime);

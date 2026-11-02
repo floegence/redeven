@@ -12,7 +12,7 @@ Cloud is optional Runtime functionality. Gateway has no Cloud binding or credent
 # Contract
 
 ## Independent enrollment
-Runtime owns one Cloud association, owner-issued setup authorization and its existing Flowersec connection controller. Gateway attachment consent cannot authorize Cloud registration. Runtime may select a Gateway route before initial Cloud enrollment, using route/association revision zero; enrollment verifies the actual Cloud target when it becomes known.
+Runtime owns one Cloud association, owner-issued setup authorization and its existing Flowersec connection controller. Gateway attachment consent cannot authorize Cloud registration. Attachment lookup uses an explicit Gateway identity, or the sole attachment when unambiguous; a selected Cloud route never supplies a default attachment for general lookup or removal. Runtime may select a Gateway route before initial Cloud enrollment, using route/association revision zero; enrollment verifies the actual Cloud target when it becomes known.
 
 Route operations retain an operation ID, expected revisions, target fingerprint, confirmation and queryable result. Changing an attachment, certificate, route or Cloud identity invalidates previous consent. An unknown result queries the original operation. A canceled committed operation remains committed.
 

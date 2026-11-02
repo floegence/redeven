@@ -638,7 +638,7 @@ describe('environmentLifecycleDisclosure', () => {
       id: 'local:second',
       managed_runtime_target_id: undefined,
       managed_runtime_placement_target_id: undefined,
-      provider_runtime_link_target: undefined,
+      runtime_connection_target: undefined,
     };
     const first = beginDisclosure(firstEnvironment.id, 'reinstall_target');
     const second = beginEnvironmentLifecycleDisclosure(

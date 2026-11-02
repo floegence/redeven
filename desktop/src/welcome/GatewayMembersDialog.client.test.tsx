@@ -47,6 +47,17 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { showMembers = undefined; dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('Gateway member management', () => {
+  it('uses network capability for listener settings independently of attachment capability', async () => {
+    const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_endpoints_updated' });
+    mount(perform, undefined, { ...gateway, permissions: { access: true, manage_attachments: false, manage_network: true } }, 'connection');
+    await settle();
+    const input = document.querySelector<HTMLInputElement>('#gateway-listen-addresses')!;
+    expect(input.disabled).toBe(false);
+    input.value = '127.0.0.1:7444'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    button(i18n.t('gatewayNetwork.save')).click(); await settle();
+    expect(perform).toHaveBeenCalledWith(expect.objectContaining({ kind: 'update_gateway_network_settings', settings: expect.objectContaining({ listen_addresses: ['127.0.0.1:7444'] }) }));
+  });
   it.each([
     ['ATTACHMENT_DENIED', 'gatewayMembers.memberDenied'],
     ['ATTACHMENT_CAPACITY', 'gatewayMembers.memberCapacity'],
@@ -70,7 +81,7 @@ describe('Gateway member management', () => {
     const [enrolling, setEnrolling] = createSignal(false);
     dispose = render(() => <><RuntimeAttachmentsPanel gateway={gateway} section="runtimes" enrolling={enrolling()} onEnrollmentChange={setEnrolling} onEnroll={() => {}} i18n={localized} refresh={async () => {}} /><RuntimeAttachmentsPanel gateway={gateway} section="policy" i18n={localized} refresh={async () => {}} /></>, root);
     await settle();
-    for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookCloudPublication'] as const) {
+    for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookEgress'] as const) {
       expect(document.body.textContent).toContain(localized.t(`gatewayMembers.${key}`));
     }
     const picker = document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!;
@@ -150,14 +161,14 @@ describe('Gateway member management', () => {
     address.value = 'https://gateway.example:7443';
     address.dispatchEvent(new Event('input', { bubbles: true }));
     button(i18n.t('gatewayNetwork.save')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_network_settings', gateway_id: gateway.connection_id,
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_network_settings', connection_id: gateway.connection_id,
       settings: {listen_addresses:[gateway.listener_address],allowed_hosts:[],endpoints: [{ ...catalogFixture.gateway.endpoints[0]!, address: 'https://gateway.example:7443' }]} });
   });
   it('cancels an address-removal animation when the edited Gateway changes', async () => {
     const setGateway = mount(vi.fn(), undefined, gateway, 'connection'); await settle();
     document.querySelector<HTMLButtonElement>(`.redeven-gateway-endpoint-shell button[aria-label="${i18n.t('gatewayMembers.removeAddress')}"]`)!.click();
     const replacement = { ...catalogFixture.gateway.endpoints[0]!, endpoint_id: 'replacement_endpoint' };
-    setGateway({ ...gateway, gateway_id: 'replacement_gateway', endpoints: [replacement] }); await settle();
+    setGateway({ ...gateway, connection_id: 'replacement_gateway', endpoints: [replacement] }); await settle();
     await new Promise(resolve => setTimeout(resolve, 220));
     expect(document.querySelector('[data-endpoint-id="replacement_endpoint"]')).toBeTruthy();
     expect(document.querySelector('.redeven-gateway-endpoint-shell--removing')).toBeNull();
@@ -167,7 +178,7 @@ describe('Gateway member management', () => {
     mount(perform); await settle();
     await select(document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!, 'allow');
     button(i18n.t('gatewayMembers.reevaluate')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', gateway_id: gateway.connection_id,
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', connection_id: gateway.connection_id,
       attachment_id: memberFixture.attachment_id, attachment_version: memberFixture.attachment_version });
     expect(document.querySelector('li [data-floe-dropdown-trigger]')?.textContent).toContain(i18n.t('gatewayMembers.allow'));
   });
@@ -178,7 +189,7 @@ describe('Gateway member management', () => {
     expect(button(i18n.t('gatewayJoin.copyCode')).disabled).toBe(false);
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayMembers.refreshFailed'));
     expect(document.body.textContent).toContain(memberFixture.display_name);
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'invite_gateway_runtime', gateway_id: gateway.connection_id });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'invite_gateway_runtime', connection_id: gateway.connection_id });
   });
   it('keeps failed and missing batch results retryable, without resubmitting successful members', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated', gateway_member_results: [
@@ -204,7 +215,7 @@ describe('Gateway member management', () => {
     button(i18n.t('common.save')).click(); await settle();
     expect(perform).not.toHaveBeenCalled();
     button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_policy', gateway_id: gateway.connection_id, policy: { ...catalogFixture.policy, default_egress_allowed: true } });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_policy', connection_id: gateway.connection_id, policy: { ...catalogFixture.policy, default_egress_allowed: true } });
   });
   it('previews destination changes for permitted attachments', async () => {
     mount(vi.fn(), undefined, { ...gateway, policy: { ...catalogFixture.policy, default_egress_allowed: true }, environments: [
@@ -250,7 +261,7 @@ describe('Gateway network configuration',()=>{
   const binding=document.getElementById('gateway-listen-addresses') as HTMLInputElement;
   binding.value='0.0.0.0:7555';binding.dispatchEvent(new Event('input',{bubbles:true}));
   button(i18n.t('gatewayNetwork.save')).click();await settle();
-  expect(perform).toHaveBeenCalledExactlyOnceWith({kind:'update_gateway_network_settings',gateway_id:gateway.connection_id,
+  expect(perform).toHaveBeenCalledExactlyOnceWith({kind:'update_gateway_network_settings',connection_id:gateway.connection_id,
    settings:{listen_addresses:['0.0.0.0:7555'],allowed_hosts:[],endpoints:gateway.endpoints}});
  });
  it('keeps drafts and shows a useful validation error for invalid listener addresses',async()=>{

@@ -48,7 +48,7 @@ try {
     await member.locator('.redeven-split-action-primary button').first().click();
     const request = (await page.evaluate(() => window.settingsFixture.requests)).at(-1);
     assert.equal(request.kind, 'open_gateway_environment');
-    assert.equal(request.gateway_id, gateway.gateway_id);
+    assert.equal(request.connection_id, gateway.connection_id);
     assert.equal(request.gateway_env_id, gateway.gateway_member.attachment_id);
     assert.equal('access_mode' in request, false);
     assert.equal(await member.getByRole('button', { name: i18n.t('environmentCenter.settingsForLabel', { label: gateway.label }), exact: true }).count(), 0);

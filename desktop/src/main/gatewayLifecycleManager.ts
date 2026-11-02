@@ -125,7 +125,6 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   release_base_url: string;
   asset_cache_root: string;
   temp_root: string;
-  cloud_origin: string;
   lifecycle_coordinator: RuntimeLifecycleCoordinator;
   source_runtime_root?: string;
   local_ui_bind?: string;
@@ -153,7 +152,7 @@ export class GatewayLifecycleManager {
   lifecycleFingerprint(record: GatewayRecord, intent: RuntimeLifecycleIntent): string {
     return runtimeLifecycleFingerprint({
       intent,
-      gateway_id: record.connection_id,
+      connection_id: record.connection_id,
       connection: record.connection,
       runtime_release_tag: this.options.runtime_release_tag,
       target_commit: this.options.target_commit ?? '',

@@ -73,7 +73,7 @@ export type GatewayDesktopTarget = Readonly<{
   session_key: `gateway:${string}:env:${string}:session:${string}`;
   environment_id: string;
   label: string;
-  gateway_id: string;
+  connection_id: string;
   gateway_label: string;
   gateway_env_id: string;
   gateway_session_id: string;
@@ -123,7 +123,7 @@ export function desktopSessionTargetsReferToSameEnvironment(
     return left.session_key === right.session_key;
   }
   if (left.kind === 'gateway_environment' && right.kind === 'gateway_environment') {
-    return compact(left.gateway_id) === compact(right.gateway_id)
+    return compact(left.connection_id) === compact(right.connection_id)
       && compact(left.gateway_env_id) === compact(right.gateway_env_id);
   }
   return false;
@@ -370,7 +370,7 @@ export function buildGatewayDesktopTarget(input: Readonly<{
     session_key: gatewayDesktopSessionKey(gatewayID, gatewayEnvID, gatewaySessionID),
     environment_id: `gateway:${gatewayID}:env:${gatewayEnvID}`,
     label,
-    gateway_id: gatewayID,
+    connection_id: gatewayID,
     gateway_label: compact(input.gatewayLabel) || gatewayID,
     gateway_env_id: gatewayEnvID,
     gateway_session_id: gatewaySessionID,

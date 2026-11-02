@@ -1,10 +1,11 @@
+import { desktopRuntimeTargetKindFromID, desktopRuntimeTargetKey, type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
-import { desktopCloudRuntimeLinkTargetKindFromID, desktopCloudRuntimeLinkTargetRuntimeKey, type DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+
 import { RuntimeControlError } from './runtimeControlClient';
 import { requireEnvironmentManagementAvailable } from './environmentAccessSettings';
 import { EnvironmentManagementConnections } from './environmentManagementConnections';
@@ -33,12 +34,12 @@ function fixture() {
   const release = vi.fn(async () => undefined);
   const manage = vi.fn(async () => ({ joined: false, phase: 'not_joined' }));
   const context = { explicitCloudLinkTargets: targets, cloudLinkIntentVersions: versions,
-    resolveCloudRuntimeLinkTarget: vi.fn(async () => ({ record: { startup: { runtime_control: { token: 'private' } } }, bridge_lease: { release } })),
-    loadDesktopPreferencesCached: vi.fn(async () => ({})), manageRuntimeGateway: manage, providerRuntimeTargetIsCurrent: () => true,
+    resolveRuntimeManagementTarget: vi.fn(async () => ({ record: { startup: { runtime_control: { token: 'private' } } }, bridge_lease: { release } })),
+    loadDesktopPreferencesCached: vi.fn(async () => ({})), manageRuntimeGateway: manage, runtimeManagementTargetIsCurrent: () => true,
     RuntimeControlError,
     launcherActionSuccess: (outcome: string) => ({ ok: true, outcome }), launcherActionFailure: () => ({ ok: false }) };
   const run = productionBoundary('manageRuntimeGatewayFromLauncher', context) as (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
-  return { run, targets, versions, release, manage, resolve: context.resolveCloudRuntimeLinkTarget };
+  return { run, targets, versions, release, manage, resolve: context.resolveRuntimeManagementTarget };
 }
 
 describe('Runtime Gateway launcher ownership', () => {
@@ -85,7 +86,7 @@ describe('Runtime Gateway launcher ownership', () => {
       sshDetailsFromRuntimePlacement: () => ({ runtime_root: '/runtime' }), sshDesktopSessionKey: () => target.id,
       probeManagedSSHRuntimeStatus: probe, desktopSSHTransportManager: {}, resolveSSHRuntimeReleaseTag: () => 'fixture',
       desktopRuntimePlacementStateRoot: () => '/runtime/state', runtimePlacementMaintenanceForRuntimeService: () => undefined,
-      runtimeServiceAllowsOpenAttempt: () => true, providerRuntimeLinkTargetIDForRuntimeTarget: () => `ssh:${target.id}`,
+      runtimeServiceAllowsOpenAttempt: () => true, runtimeConnectionTargetIDForSavedTarget: () => `ssh:${target.id}`,
       sshRuntimeReadyByKey: new Map(), clearSSHRuntimeReadyState: vi.fn(),
       runtimeContainerResolver: resolver, resolveRuntimeContainerPlacement: resolve, runtimeHostExecutor: () => executor,
       containerRuntimeProbeCommand: vi.fn(), parseManagedSSHRuntimeProbeResult: () => ({ status: 'ready', binary_path: '/runtime/redeven' }),
@@ -133,10 +134,10 @@ describe('Runtime Gateway launcher ownership', () => {
     const entry = buildDesktopWelcomeSnapshot({ ...fixture.inputs, managedRuntimePresenceByTargetID: {},
       savedRuntimeTargetHealth: { [target.id]: health },
     }).environments.find(entry => entry.id === target.id)!;
-    expect(entry.provider_runtime_link_target?.runtime_control_status).toMatchObject({ state: 'missing' });
-    expect(entry.provider_runtime_link_target?.runtime_control_status).not.toMatchObject({ reason_code: 'not_started' });
-    expect(entry.provider_runtime_link_target?.can_connect_cloud).toBe(false);
-    if (state === 'failed') expect(entry.provider_runtime_link_target?.runtime_control_status).toMatchObject({ reason_code: 'unverified' });
+    expect(entry.runtime_connection_target?.runtime_control_status).toMatchObject({ state: 'missing' });
+    expect(entry.runtime_connection_target?.runtime_control_status).not.toMatchObject({ reason_code: 'not_started' });
+    expect(entry.runtime_connection_target?.can_connect_cloud).toBe(false);
+    if (state === 'failed') expect(entry.runtime_connection_target?.runtime_control_status).toMatchObject({ reason_code: 'unverified' });
   });
   it.each((['ssh', 'ssh_container'] as const).flatMap(kind => (['start', 'restart', 'update'] as const).flatMap(operation => [true, false].map(explicit => ({ kind, operation, explicit })))))('uses $kind $operation authentication through preflight and readiness without saving it (explicit=$explicit)', async ({ kind, operation, explicit }) => {
     const target = runtimeGatewayAccessFixture(kind).inputs.preferences.saved_runtime_targets[0];
@@ -163,7 +164,7 @@ describe('Runtime Gateway launcher ownership', () => {
       verifyManagedRuntimeLifecycleAccess: verify, desktopSSHTransportManager: {}, resolveSSHRuntimeReleaseTag: () => 'fixture',
       desktopRuntimePlacementStateRoot: () => '/runtime/state', compact: (value?: string) => value?.trim() ?? '',
       process: { env: {} }, desktopRuntimePackageCacheRoot: () => '/cache', PUBLIC_REDEVEN_RELEASE_BASE_URL: 'https://example.test/releases',
-      providerRuntimeLinkTargetIDForRuntimeTarget: () => `ssh:${target.id}`,
+      runtimeConnectionTargetIDForSavedTarget: () => `ssh:${target.id}`,
       runtimePlacementReadyByTargetID: new Map(), sshRuntimeReadyByKey: new Map(), runtimeRestartWindows: new Map(),
       refreshWelcomeRuntimeHealthForEnvironment: vi.fn(async () => undefined), completeRuntimeLifecycleWorkflowProgress: vi.fn(),
       scheduleCurrentLauncherOperationRemoval: vi.fn(), retireSupersededEnvironmentOperations: vi.fn(),
@@ -221,8 +222,8 @@ describe('Runtime Gateway launcher ownership', () => {
     const entry = snapshot.environments.find(entry => entry.id === target.id)!;
     expect(store.snapshot().managedRuntimePresenceByTargetID).toEqual({});
     expect(entry.runtime_health.offline_reason_code).toBe('auth_required');
-    expect(entry.provider_runtime_link_target?.runtime_control_status).toMatchObject({ state: 'missing', reason_code: 'auth_required' });
-    expect(entry.provider_runtime_link_target?.can_connect_cloud).toBe(false);
+    expect(entry.runtime_connection_target?.runtime_control_status).toMatchObject({ state: 'missing', reason_code: 'auth_required' });
+    expect(entry.runtime_connection_target?.can_connect_cloud).toBe(false);
     expect(runtimeGatewayAccessPresentation(entry)).toMatchObject({ phase: 'connection_required' });
   });
   it('binds transient authentication and cancellation to the originating Desktop window', async () => {
@@ -239,7 +240,7 @@ describe('Runtime Gateway launcher ownership', () => {
     const event = { sender: { id: 42, mainFrame: frame }, senderFrame: frame };
     const run = productionBoundary('performRuntimeGatewayDialogAction', {
       utilityWindowKindByWebContentsID: new Map([[42, 'launcher']]), watchEnvironmentManagementWindow: vi.fn(),
-      gatewayManagementConnections: manager, desktopCloudRuntimeLinkTargetRuntimeKey,
+      gatewayManagementConnections: manager, desktopRuntimeTargetKey,
       manageRuntimeGatewayFromLauncher: manage, RuntimeControlError, DesktopSSHTransportAuthenticationError,
       launcherActionFailure: () => ({ ok: false }), launcherActionSuccess: () => ({ ok: true }),
     }) as (event: object, request: object) => Promise<DesktopLauncherActionResult>;
@@ -272,10 +273,10 @@ describe('Runtime Gateway launcher ownership', () => {
       requireEnvironmentManagementAvailable, runtimePlacementReadyByTargetID: new Map([[target.id, ready]]),
       acquireRuntimePlacementBridgeForReadyRecord: acquire,
     }) as (id: string, owner: string) => Promise<unknown>;
-    await connect(target.id, 'cloud-link');
+    await connect(target.id, 'runtime-connections');
     expect(inspect).toHaveBeenCalledOnce();
     expect(inspect).toHaveBeenCalledWith(expect.objectContaining({ allowUnsavedSSHAuthentication: true }));
-    expect(acquire).toHaveBeenCalledExactlyOnceWith(ready, 'cloud-link', undefined, undefined);
+    expect(acquire).toHaveBeenCalledExactlyOnceWith(ready, 'runtime-connections', undefined, undefined);
   });
   it('passes a transient password to both the host inspection and bridge without saving it', async () => {
     const target = { id: 'chosen', label: 'Chosen', host_access: { kind: 'ssh_host' }, placement: { kind: 'host_process' }, ssh_password: 'old-password' };
@@ -318,14 +319,14 @@ describe('Runtime Gateway launcher ownership', () => {
     const record = { target_id: id, label: 'Selected Runtime', session: { host_access: { kind: hostKind } } };
     const acquire = vi.fn(async () => ({ record, release }));
     const local = vi.fn();
-    const resolve = productionBoundary('resolveCloudRuntimeLinkTarget', {
-      desktopCloudRuntimeLinkTargetKindFromID, desktopCloudRuntimeLinkTargetRuntimeKey,
+    const resolve = productionBoundary('resolveRuntimeManagementTarget', {
+      desktopRuntimeTargetKindFromID, desktopRuntimeTargetKey,
       desktopPlatformCapabilities: { native_host_runtime: true }, acquireEnvironmentManagementConnection: acquire,
       verifyCurrentLocalEnvironmentRuntimeRecord: local, attachLocalEnvironmentRuntime: local,
-    }) as (preferences: object, id: DesktopCloudRuntimeLinkTargetID) => Promise<unknown>;
+    }) as (preferences: object, id: DesktopRuntimeTargetID) => Promise<unknown>;
     const preferences = { local_environment: { id: 'native-local' } };
     expect(await resolve(preferences, id)).toMatchObject({ id, record });
-    expect(acquire).toHaveBeenCalledExactlyOnceWith(id.slice(id.indexOf(':') + 1), 'cloud-link');
+    expect(acquire).toHaveBeenCalledExactlyOnceWith(id.slice(id.indexOf(':') + 1), 'runtime-connections');
     expect(local).not.toHaveBeenCalled(); expect(release).not.toHaveBeenCalled();
     record.target_id = 'ssh:another' as typeof id;
     expect(await resolve(preferences, id)).toBeNull(); expect(release).toHaveBeenCalledOnce();
