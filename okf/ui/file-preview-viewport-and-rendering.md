@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview viewport and rendering
 tags: [ui, files, preview, viewport, rendering]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -31,7 +31,7 @@ Limits: input 20 MiB, 100,000 rows, 1,000,000 cells, 64 MiB owned UTF-8, 128 MiB
 
 DOCX keeps docx-preview and off-DOM identity-checked commit; PPTX keeps published Floe document/page ownership, navigation and incomplete/external-content notice. Rich previews share 20 MiB/local retry. Never rewrite originals.
 
-Only original-author releases: no forks, vendoring, patches, model rewrites or silent fallback. XLSX indentation/views/malformed fidelity may differ from Office. DOCX/PPTX migration awaits upstream fixes and Word-equivalent math/layout evidence. Lazy renderer/worker/WASM assets include licenses/notices. Build size is not installer size.
+Only original-author releases: no forks, vendoring, patches, model rewrites or silent fallback. XLSX indentation/views/malformed fidelity may differ from Office. DOCX/PPTX migration awaits upstream fixes and Word-equivalent math/layout evidence. Lazy renderer/worker/WASM assets include licenses/notices. Production asset checks admit only content-hashed graph-router and XLSX WASM files whose bytes match the installed published packages; unknown names or altered bytes remain rejected. Build size is not installer size.
 
 ## HTML pages
 [HTML preview](file-preview-html.md) owns page-first opening, explicit editing, bounds/isolation and rejection of incomplete HTML.
@@ -55,3 +55,5 @@ The [window actions contract](file-preview-window-actions.md) owns actions, draf
 - `redeven:internal/envapp/ui_src/src/ui/widgets/DelimitedTextPreview.test.tsx` and `SpreadsheetPreview.test.tsx` - Exact bytes, stale loads, retry/edit lifecycle, XLSX limits and corruption.
 - `redeven:desktop/scripts/check-office-preview.mjs` (`pnpm test:office-preview` in `desktop/`) - Production-built shared components under Electron `file://`, offline worker/assets, task/attachment routes, Escape, DOCX/PPTX, styled multi-sheet XLSX, native PDF and supervised cleanup. It does not certify a packaged installer or Microsoft Office visual equivalence.
 - The reported four-visible-sheet workbook (SHA-256 `bed4a8aa26d0ddf254f41da4b792da957122759b382bca85eda8470c5581c22f`) reproduced the ExcelJS 4.4.0 comments reconciliation crash. Its unchanged bytes render through the official OOXML engine in Env and production-built Electron acceptance. `REDEVEN_ACCEPTANCE_XLSX` supplies this optional local input without committing user data. The generated fixture covers an absolute nested comments relationship, a hidden sheet, styles, merged cells, literal identifiers, cached formulas and BA301 content beyond the removed cap.
+
+- `redeven:internal/envapp/ui_src/scripts/initialBuildGraphPolicy.node-test.mjs` - Published graph/XLSX asset identity, altered-byte and unknown-name rejection.

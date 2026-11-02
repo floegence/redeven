@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { findUnapprovedWasmAssets } from './packagedWasmPolicy.mjs';
 
 import {
   analyzeInitialBuildGraph,
@@ -8,6 +13,23 @@ import {
 
 const entry = (file, options = {}) => ({ file, isEntry: true, ...options });
 const chunk = (modules) => ({ modules });
+
+test('accepts only content-hashed graph and XLSX assets matching their published bytes', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'redeven-approved-wasm-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const published = async (entry, file) => readFile(path.join(path.dirname(fileURLToPath(import.meta.resolve(entry))), file));
+  const graph = await published('@floegence/floe-webapp-core/graph', 'libavoid.wasm');
+  const xlsx = await published('@silurus/ooxml/xlsx', 'xlsx_parser_bg.wasm');
+  await writeFile(path.join(directory, 'libavoid-ABCDEFGH.wasm'), graph);
+  await writeFile(path.join(directory, 'xlsx_parser_bg-12345678.wasm'), xlsx);
+  assert.deepEqual(await findUnapprovedWasmAssets(directory), []);
+  await writeFile(path.join(directory, 'xlsx_parser_bg-12345678.wasm'), graph);
+  await writeFile(path.join(directory, 'terminal-ABCDEFGH.wasm'), xlsx);
+  await writeFile(path.join(directory, 'xlsx_parser_bg.wasm'), xlsx);
+  assert.deepEqual(await findUnapprovedWasmAssets(directory), [
+    'terminal-ABCDEFGH.wasm', 'xlsx_parser_bg-12345678.wasm', 'xlsx_parser_bg.wasm',
+  ]);
+});
 
 test('measures each document with all its static shared imports and its own CSS', () => {
   const manifest = {

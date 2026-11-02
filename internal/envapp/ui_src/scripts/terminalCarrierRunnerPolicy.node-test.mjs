@@ -19,6 +19,10 @@ const packageSource = await readFile(new URL('../package.json', import.meta.url)
 const viteConfigSource = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
 const releaseSource = await readFile(new URL('../../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 
+test('packaged renderer smoke provides the current complete Flower baseline', () => {
+  assert.match(packagedRendererSource, /const baseline = Buffer\.from\(JSON\.stringify\(\{\s*schema_version: 3,\s*kind: 'ready',\s*baseline_complete: true,/u);
+});
+
 test('keeps the supported terminal carriers explicit in the exact-main pre-push gate', () => {
   assert.match(carrierSource, /chromium\.launch\(\{\s*headless: options\.headless,/u);
   assert.match(carrierSource, /--enable-gpu/u);

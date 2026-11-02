@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
+import { findUnapprovedWasmAssets } from './packagedWasmPolicy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
@@ -558,8 +559,9 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         if (requestURL.pathname === '/_redeven_proxy/api/ai/flower/stream') {
           // Flower becomes interactive only after its fragmented workspace baseline.
           const baseline = Buffer.from(JSON.stringify({
-            schema_version: 1,
+            schema_version: 3,
             kind: 'ready',
+            baseline_complete: true,
             summaries: [],
             observer_id: 'built-renderer-observer',
           }));
@@ -1654,18 +1656,9 @@ async function main() {
     }
   }
 
-  const distAssetFiles = await readdir(path.join(distDir, 'assets'));
-  const graphRouterWasmPath = path.join(path.dirname(fileURLToPath(import.meta.resolve('@floegence/floe-webapp-core/graph'))), 'libavoid.wasm');
-  const graphRouterWasmHash = createHash('sha256').update(await readFile(graphRouterWasmPath)).digest('hex');
-  const removedBrowserTerminalAssets = [];
-  for (const entry of distAssetFiles.filter((entry) => entry.endsWith('.wasm'))) {
-    // Floe's reviewed graph router ships one independently replaceable asset.
-    // Every other WASM renderer remains forbidden in this production directory.
-    const hash = createHash('sha256').update(await readFile(path.join(distDir, 'assets', entry))).digest('hex');
-    if (!/^libavoid-[A-Za-z0-9_-]{8,}\.wasm$/u.test(entry) || hash !== graphRouterWasmHash) {
-      removedBrowserTerminalAssets.push(entry);
-    }
-  }
+  // Only the published graph router and approved XLSX parser may ship as WASM.
+  // Both the emitted name and installed package bytes must match.
+  const removedBrowserTerminalAssets = await findUnapprovedWasmAssets(path.join(distDir, 'assets'));
   if (removedBrowserTerminalAssets.length > 0) {
     throw new Error(`built Env App dist contains removed browser terminal WASM assets: ${removedBrowserTerminalAssets.join(', ')}`);
   }
