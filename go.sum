@@ -160,8 +160,6 @@ github.com/floegence/floe-native-apps v0.25.1 h1:QIoP1RBGPSrUsHaRdL+q+GXaWddSiRH
 github.com/floegence/floe-native-apps v0.25.1/go.mod h1:uj1f8bbY9m4MgrK7OJ3JGt722oYRWYOpaEWqmtJnF4c=
 github.com/floegence/floeterm/terminal-go v0.19.2 h1:BCqhXYaxEMcjpXl4jNY6aldyqj0DHqqUtwS9X6KaJkI=
 github.com/floegence/floeterm/terminal-go v0.19.2/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
-github.com/floegence/floret/v7 v7.100.0 h1:pdWL3Tcb+Xgz7fL34YOCU7kzPTH9xYopunWnmLSKSbU=
-github.com/floegence/floret/v7 v7.100.0/go.mod h1:BGS8jsrPjqyn0WwMkKo84soksxKqFAM4p4R9UdRoTM0=
 github.com/floegence/floret/v7 v7.100.1 h1:BFqOg/YgVQdpJvSOGyHcUGXGTCbwzBr8xMZtKuLv360=
 github.com/floegence/floret/v7 v7.100.1/go.mod h1:BGS8jsrPjqyn0WwMkKo84soksxKqFAM4p4R9UdRoTM0=
 github.com/floegence/flowersec/flowersec-go/v5 v5.11.1 h1:eMqkpqpVCGQ+rbcNKe9SI+aEimAQLZTmzkwOXxiCpRw=
