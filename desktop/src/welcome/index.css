@@ -3563,8 +3563,8 @@ pre,
 .redeven-gateway-card__name { min-width: 0; font-size: var(--floe-type-heading-sm); font-weight: 600; color: var(--foreground); }
 .redeven-gateway-card__name > button { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: .25rem; }
 .redeven-gateway-card__name > button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
-.redeven-gateway-card__mark { display: grid; place-items: center; flex: 0 0 2.5rem; height: 2.5rem; border: 1px solid var(--border); border-radius: .625rem; color: var(--foreground); background: var(--muted); }
-.redeven-gateway-card__mark > svg { width: 1.625rem; height: 1.625rem; color: inherit; }
+.redeven-gateway-card__mark { display: grid; place-items: center; flex: 0 0 2.5rem; height: 2.5rem; border-radius: var(--radius-lg); color: var(--foreground); background: var(--muted); }
+.redeven-gateway-card__mark > svg { width: 1.5rem; height: 1.5rem; color: inherit; }
 .redeven-gateway-card__actions { padding: .25rem 1.25rem 1rem; }
 .redeven-gateway-card__actions .redeven-gateway-enrollment-actions { width: 100%; }
 .redeven-gateway-enrollment-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: .5rem; max-width: 100%; width: max-content; }
@@ -3585,25 +3585,11 @@ pre,
 .redeven-gateway-card__identity-text { flex: 1; min-width: 0; }
 
 .redeven-gateway-mark {
-  width: 2.5rem;
-  height: 2.5rem;
+  display: block;
+  width: 1.5rem;
+  height: 1.5rem;
   flex: 0 0 auto;
-  color: var(--foreground);
-  stroke: currentColor;
-  /* The mark is drawn on a 40-unit box while Floe's icons use 24, so the same
-   * optical weight needs a heavier stroke here than the 1.5-2 those icons
-   * declare. At 1.6 the jambs read as hairlines beside the rest of the chrome. */
-  stroke-width: 2.25;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.redeven-gateway-mark__outer {
-  opacity: 0.38;
-}
-
-.redeven-gateway-mark__route {
-  opacity: 0.85;
+  color: inherit;
 }
 
 .redeven-gateway-card__connection {
@@ -3776,7 +3762,7 @@ pre,
 }
 
 .redeven-gateway-dialog .redeven-gateway-action-panel[data-listener-recovery] {
-  max-height: min(36rem, calc(100dvh - 8rem));
+  max-height: min(36rem, calc(var(--redeven-welcome-dialog-available-height) - 2rem));
 }
 
 .redeven-gateway-action-panel__close {
