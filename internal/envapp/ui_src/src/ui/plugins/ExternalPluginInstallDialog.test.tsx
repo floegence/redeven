@@ -342,6 +342,37 @@ describe('ExternalPluginInstallDialog', () => {
     expect(controlText(access)).toContain('Can run in the background');
   });
 
+  it('reviews settings-only Surface access before installation', async () => {
+    const inspected = inspection('verified');
+    const surface: PluginExternalPackageSecuritySummary['surfaces'][number] = { surface_id: 'preferences.view', kind: 'view' as const, intent: 'primary', label: 'Preferences', entry: 'ui/index.html', settings: ['get', 'patch'] };
+    inspected.security_summary.surfaces = [surface];
+    const props = renderDialog({ onInspect: vi.fn(async () => inspected) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/preferences.redevplugin');
+    button('Review package').click();
+    await flush();
+    expect(controlText(document.querySelector('[data-external-plugin-access-summary]'))).toContain('Use its own saved data');
+    expect(controlText(document.body)).toContain('settings=get, patch');
+    expect(props.onCommit).not.toHaveBeenCalled();
+  });
+
+  it('marks Surface data access changes on the saved-data row', async () => {
+    const previous = inspection('verified');
+    const inspected = inspection('verified');
+    const surface: PluginExternalPackageSecuritySummary['surfaces'][number] = { surface_id: 'notes.view', kind: 'view' as const, intent: 'primary', label: 'Notes', entry: 'ui/index.html', storage: [{ store_id: 'notes', operations: ['get'] }] };
+    const store = { store_id: 'notes', kind: 'kv' as const, scope: 'user' as const, schema_version: 1, quota_bytes: 1024, method_access: [] };
+    previous.security_summary.storage = inspected.security_summary.storage = [store];
+    previous.security_summary.surfaces = [surface];
+    inspected.security_summary.surfaces = [{ ...surface, storage: [{ store_id: 'notes', operations: ['get', 'put'] }] }];
+    renderDialog({ updateItem: externalUpdateItem(previous), sourcePreset: { sourceKind: 'package_url', url: 'https://plugins.example.com/notes.redevplugin' }, onInspect: vi.fn(async () => inspected) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/notes.redevplugin');
+    button('Review package').click();
+    await flush();
+    const access = controlText(document.querySelector('[data-external-plugin-access-summary]'));
+    expect(access).toContain('Use its own saved data');
+    expect(access).toContain('Changed');
+    expect(controlText(document.body)).toContain('store_id=notes; operations=get, put');
+  });
+
   it('uses a compact opaque dialog and announces progress without a visual timeline', () => {
     renderDialog();
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;

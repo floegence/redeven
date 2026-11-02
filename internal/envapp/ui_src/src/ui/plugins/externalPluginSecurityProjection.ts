@@ -37,6 +37,31 @@ export type OperationImpactGroup = {
   preflightOnlyCount: number;
 };
 
+export function surfaceResourceFacts(surface: PluginExternalPackageSecuritySummary['surfaces'][number]): string[] {
+  return [
+    ...(surface.storage ?? []).map((access) => `store_id=${access.store_id}; operations=${list(access.operations)}`),
+    ...(surface.settings?.length ? [`settings=${list(surface.settings)}`] : []),
+  ];
+}
+
+export function securitySummaryUsesSavedData(summary: Partial<Pick<PluginExternalPackageSecuritySummary, 'storage' | 'surfaces'>>): boolean {
+  return Boolean(summary.storage?.length) || Boolean(summary.surfaces?.some((surface) => surfaceResourceFacts(surface).length > 0));
+}
+
+export function savedDataAccessChange(declarations: readonly SecurityDeclaration[]): 'added' | 'changed' | undefined {
+  const resourceFacts = (facts: readonly string[]) => facts.filter((fact) => fact.startsWith('store_id=') || fact.startsWith('settings='));
+  const changed = declarations.filter((row) => {
+    if (!row.change) return false;
+    if (row.category === 'storage') return true;
+    if (row.category !== 'surfaces') return false;
+    const current = resourceFacts(row.facts);
+    if (row.change !== 'changed') return current.length > 0;
+    return JSON.stringify(current) !== JSON.stringify(resourceFacts(row.previousFacts ?? []));
+  });
+  if (changed.length === 0) return undefined;
+  return changed.every((row) => row.change === 'added') ? 'added' : 'changed';
+}
+
 export const securityCategoryOrder: readonly SecurityCategory[] = [
   'permissions',
   'methods',
@@ -63,6 +88,11 @@ export function securityDeclarationIsSensitive(declaration: SecurityDeclaration)
     return storage.method_access.some((access) => access.operations.some((operation) => (
       ['write', 'put', 'insert', 'update', 'delete', 'exec'].includes(operation)
     )));
+  }
+  if (declaration.category === 'surfaces') {
+    const surface = declaration.value as PluginExternalPackageSecuritySummary['surfaces'][number];
+    return Boolean(surface.settings?.includes('patch')) || Boolean(surface.storage?.some((access) =>
+      access.operations.some((operation) => ['write', 'put', 'insert', 'update', 'delete', 'exec'].includes(operation))));
   }
   return declaration.category === 'workers'
     || declaration.category === 'process'
@@ -96,6 +126,8 @@ export function securityDeclarationHighlight(declaration: SecurityDeclaration): 
     case 'storage':
       return (declaration.value as PluginExternalPackageSecuritySummary['storage'][number])
         .method_access.flatMap((access) => access.operations).join(', ');
+    case 'surfaces':
+      return surfaceResourceFacts(declaration.value as PluginExternalPackageSecuritySummary['surfaces'][number]).join('; ') || undefined;
     default:
       return undefined;
   }
@@ -191,6 +223,7 @@ export function projectSecurityDeclarations(summary: PluginExternalPackageSecuri
     add('surfaces', value.surface_id, [
       `label=${value.label}; kind=${value.kind}; intent=${value.intent}`,
       `entry=${value.entry}; icon=${value.icon ?? '-'}; default_size=${value.default_size ? `${value.default_size.width}x${value.default_size.height}` : '-'}`,
+      ...surfaceResourceFacts(value),
     ], value);
   }
   return rows;

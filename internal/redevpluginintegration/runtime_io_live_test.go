@@ -21,14 +21,81 @@ import (
 	"github.com/floegence/redevplugin/v3/pkg/sessionctx"
 )
 
+func TestPublishedAuthorWorkerRunsThroughRedevenRuntime(t *testing.T) {
+	invoke := openLivePluginWorker(t, "REDEVEN_TEST_AUTHOR_PLUGIN_PACKAGE", "dev.redeven.qualification.worker.view")
+	result, err := invoke("worker.echo", map[string]any{"message": "published author workflow"})
+	if err != nil {
+		t.Fatalf("invoke author worker: %v", err)
+	}
+	data, ok := result.Data.(map[string]any)
+	if !ok || data["message"] != "published author workflow" || data["backend"] != "executed wasm worker scaffold" || data["transport"] != "rust runtime ipc" {
+		t.Fatalf("unexpected worker result: %#v", result.Data)
+	}
+	_, err = invoke("worker.echo", map[string]any{"message": ""})
+	workerError, ok := host.AsValidatedWorkerExecutionError(err)
+	if !ok || workerError.Code != "INVALID_REQUEST" || workerError.Origin != host.WorkerErrorOriginPlugin {
+		t.Fatalf("worker validation error lost: %T: %v", err, err)
+	}
+	result, err = invoke("worker.echo", map[string]any{"message": "after validation error"})
+	if err != nil {
+		t.Fatalf("invoke after worker rejection: %v", err)
+	}
+	data, ok = result.Data.(map[string]any)
+	if !ok || data["message"] != "after validation error" {
+		t.Fatalf("unexpected subsequent result: %#v", result.Data)
+	}
+}
+
 func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t *testing.T) {
+	invoke := openLivePluginWorker(t, "REDEVEN_TEST_PLUGIN_PACKAGE", "io.view")
+	fullIO := os.Getenv("REDEVEN_TEST_PLUGIN_IO_FULL") == "1"
+	port := func(name string) float64 {
+		if !fullIO {
+			return 1
+		}
+		value, parseErr := strconv.ParseUint(os.Getenv(name), 10, 16)
+		if parseErr != nil || value == 0 {
+			t.Fatalf("%s is invalid", name)
+		}
+		return float64(value)
+	}
+	smokeParams := map[string]any{"server": map[string]any{
+		"http": port("REDEVEN_TEST_PLUGIN_IO_HTTP_PORT"),
+		"ws":   port("REDEVEN_TEST_PLUGIN_IO_WS_PORT"),
+		"tcp":  port("REDEVEN_TEST_PLUGIN_IO_TCP_PORT"),
+		"udp":  port("REDEVEN_TEST_PLUGIN_IO_UDP_PORT"),
+	}}
+	result, err := invoke("smoke.run", smokeParams)
+	if fullIO {
+		if workerError, ok := host.AsValidatedWorkerExecutionError(err); ok {
+			t.Fatalf("full invocation worker error: %+v", workerError)
+		}
+		if err != nil {
+			t.Fatalf("full invocation: %T: %+v", err, err)
+		}
+		if result.Data == nil {
+			t.Fatal("full invocation returned no data")
+		}
+		return
+	}
+	workerError, ok := host.AsValidatedWorkerExecutionError(err)
+	if !ok {
+		t.Fatalf("first invocation did not reach the worker's network probe: %T: %v", err, err)
+	}
+	if workerError.Origin != host.WorkerErrorOriginPlugin || workerError.Code != "NETWORK_ERROR" {
+		t.Fatalf("first invocation failed before completing filesystem hostcalls: %+v", workerError)
+	}
+}
+
+func openLivePluginWorker(t *testing.T, packageVariable, surfaceID string) func(string, map[string]any) (host.CallMethodResult, error) {
+	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("the production plugin runtime requires Linux or macOS")
 	}
 	runtimePath := os.Getenv("REDEVEN_TEST_PLUGIN_RUNTIME")
-	packagePath := os.Getenv("REDEVEN_TEST_PLUGIN_PACKAGE")
+	packagePath := os.Getenv(packageVariable)
 	if runtimePath == "" || packagePath == "" {
-		t.Skip("REDEVEN_TEST_PLUGIN_RUNTIME and REDEVEN_TEST_PLUGIN_PACKAGE are required")
+		t.Skipf("REDEVEN_TEST_PLUGIN_RUNTIME and %s are required", packageVariable)
 	}
 	packageBytes, err := os.ReadFile(packagePath)
 	if err != nil {
@@ -103,20 +170,31 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 	if err != nil {
 		t.Fatalf("inspect v9 package: %v", err)
 	}
-	approved := make([]string, 0, len(inspection.SecuritySummary.Permissions))
-	for _, permission := range inspection.SecuritySummary.Permissions {
-		approved = append(approved, permission.PermissionID)
-	}
-	activate := true
 	installed, err := integration.host.InstallInspectedPackage(ctx, host.InstallInspectedPackageRequest{
 		InspectionID: inspection.InspectionID, ExpectedPackageSHA256: inspection.InspectedHashes.PackageSHA256,
-		ActivateAfterInstall: &activate, ApprovedPermissionIDs: approved, Now: now.Add(time.Second),
+		Now: now.Add(time.Second),
 	})
 	if err != nil {
 		t.Fatalf("install v9 package: %v", err)
 	}
 	if installed.Plugin == nil {
 		t.Fatal("installed package has no plugin record")
+	}
+	// Installation and execution grants are independent platform decisions.
+	for _, permission := range inspection.SecuritySummary.Permissions {
+		granted, err := integration.host.GrantPermission(ctx, host.GrantPermissionRequest{
+			PluginInstanceID: installed.Plugin.PluginInstanceID, PermissionID: permission.PermissionID,
+			ExpectedPolicyRevision:     installed.Plugin.PolicyRevision,
+			ExpectedManagementRevision: installed.Plugin.ManagementRevision,
+			ExpectedRevokeEpoch:        installed.Plugin.RevokeEpoch,
+			Now:                        now.Add(2 * time.Second),
+		})
+		if err != nil {
+			t.Fatalf("grant execution permission: %v", err)
+		}
+		installed.Plugin.PolicyRevision = granted.Revisions.PolicyRevision
+		installed.Plugin.ManagementRevision = granted.Revisions.ManagementRevision
+		installed.Plugin.RevokeEpoch = granted.Revisions.RevokeEpoch
 	}
 	if recovery, err := integration.host.RetryPluginRecovery(ctx, installed.Plugin.PluginInstanceID); err != nil {
 		t.Fatalf("retry runtime recovery: %v", err)
@@ -129,7 +207,7 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 	bootstrap, err := integration.host.OpenSurface(ctx, host.OpenSurfaceRequest{
 		PluginInstanceID:           installed.Plugin.PluginInstanceID,
 		ExpectedManagementRevision: installed.Plugin.ManagementRevision,
-		SurfaceID:                  "io.view", SurfaceInstanceID: surfaceInstanceID, Now: now.Add(2 * time.Second),
+		SurfaceID:                  surfaceID, SurfaceInstanceID: surfaceInstanceID, Now: now.Add(2 * time.Second),
 	})
 	if err != nil {
 		t.Fatalf("open surface: %v", err)
@@ -155,48 +233,13 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 		t.Fatalf("mint bridge token: %v", err)
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	fullIO := os.Getenv("REDEVEN_TEST_PLUGIN_IO_FULL") == "1"
-	port := func(name string) float64 {
-		if !fullIO {
-			return 1
-		}
-		value, parseErr := strconv.ParseUint(os.Getenv(name), 10, 16)
-		if parseErr != nil || value == 0 {
-			t.Fatalf("%s is invalid", name)
-		}
-		return float64(value)
-	}
-	smokeParams := map[string]any{"server": map[string]any{
-		"http": port("REDEVEN_TEST_PLUGIN_IO_HTTP_PORT"),
-		"ws":   port("REDEVEN_TEST_PLUGIN_IO_WS_PORT"),
-		"tcp":  port("REDEVEN_TEST_PLUGIN_IO_TCP_PORT"),
-		"udp":  port("REDEVEN_TEST_PLUGIN_IO_UDP_PORT"),
-	}}
-	result, err := integration.host.CallPluginMethod(callCtx, host.CallMethodRequest{
-		PluginInstanceID:  installed.Plugin.PluginInstanceID,
-		SurfaceInstanceID: surfaceInstanceID, BridgeChannelID: bridgeChannelID,
-		GatewayToken: gateway.GatewayToken, Method: "smoke.run",
-		Params: smokeParams,
-	})
-	if fullIO {
-		if workerError, ok := host.AsValidatedWorkerExecutionError(err); ok {
-			t.Fatalf("full invocation worker error: %+v", workerError)
-		}
-		if err != nil {
-			t.Fatalf("full invocation: %T: %+v", err, err)
-		}
-		if result.Data == nil {
-			t.Fatal("full invocation returned no data")
-		}
-		return
-	}
-	workerError, ok := host.AsValidatedWorkerExecutionError(err)
-	if !ok {
-		t.Fatalf("first invocation did not reach the worker's network probe: %T: %v", err, err)
-	}
-	if workerError.Origin != host.WorkerErrorOriginPlugin || workerError.Code != "NETWORK_ERROR" {
-		t.Fatalf("first invocation failed before completing filesystem hostcalls: %+v", workerError)
+	return func(method string, params map[string]any) (host.CallMethodResult, error) {
+		callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		return integration.host.CallPluginMethod(callCtx, host.CallMethodRequest{
+			PluginInstanceID:  installed.Plugin.PluginInstanceID,
+			SurfaceInstanceID: surfaceInstanceID, BridgeChannelID: bridgeChannelID,
+			GatewayToken: gateway.GatewayToken, Method: method, Params: params,
+		})
 	}
 }

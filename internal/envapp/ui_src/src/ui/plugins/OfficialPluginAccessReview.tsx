@@ -2,7 +2,7 @@ import { For, Show, type JSX } from 'solid-js';
 import { ChevronDown, RefreshIcon, Shield } from '@floegence/floe-webapp-core/icons';
 import { useI18n } from '../i18n';
 import { backgroundScheduleLabel } from './PluginBackgroundStatus';
-import { dataUpgradeFacts } from './externalPluginSecurityProjection';
+import { dataUpgradeFacts, securitySummaryUsesSavedData, surfaceResourceFacts } from './externalPluginSecurityProjection';
 import type { PluginMarketInstallPreview, PluginExternalPackageProcessSummary, PluginExternalPackageBackgroundSummary } from './pluginTypes';
 
 export function OfficialPluginAccessReview(props: { preview: PluginMarketInstallPreview }): JSX.Element {
@@ -10,6 +10,8 @@ export function OfficialPluginAccessReview(props: { preview: PluginMarketInstall
   const permissions = () => props.preview.security_summary.permissions.filter((permission) =>
     permission.permission_id !== 'network.client' || !props.preview.security_summary.network?.length);
   const methods = () => props.preview.security_summary.methods?.filter((method) => method.route.kind === 'capability' || method.dangerous);
+  const surfaceResources = () => (props.preview.security_summary.surfaces ?? []).flatMap((surface) =>
+    surfaceResourceFacts(surface).map((fact) => `surface_id=${surface.surface_id}; ${fact}`));
   return (
     <section class="space-y-3 border-t pt-4" data-plugin-access-review>
       <h3 class="text-[length:var(--floe-type-body)] font-semibold">
@@ -67,8 +69,16 @@ export function OfficialPluginAccessReview(props: { preview: PluginMarketInstall
           <For each={props.preview.security_summary.network}>{(network) => <p class="break-all text-xs text-muted-foreground">{network.destinations.join(', ')}</p>}</For>
         </div>
       </Show>
-      <Show when={props.preview.security_summary.storage?.length}>
-        <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.external.accessStorage')}</p>
+      <Show when={securitySummaryUsesSavedData(props.preview.security_summary)}>
+        <div data-plugin-official-saved-data class="space-y-2">
+          <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.external.accessStorage')}</p>
+          <Show when={surfaceResources().length > 0}>
+            <details class="group rounded-md border">
+              <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 group-open:rotate-180" /></summary>
+              <ul class="space-y-1 break-all border-t p-3 font-mono text-xs"><For each={surfaceResources()}>{(fact) => <li>{fact}</li>}</For></ul>
+            </details>
+          </Show>
+        </div>
       </Show>
       <For each={props.preview.security_summary.secret_refs}>{(secret) => <div class="flex flex-wrap gap-2 text-xs">
         <span>{i18n.t('uiCopy.plugin.external.accessCredential')}</span><code class="break-all">{secret.secret_ref}</code>

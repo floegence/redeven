@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin package review
 tags: [ui, plugins, review, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -34,6 +34,14 @@ The external review leads with Host-verified, locale-resolved author presentatio
 Before consent, concrete destinations, requested host permissions, credentials, processes, background activity and host-facing methods remain visible. Ordinary worker methods and plugin-owned storage operations do not become broad "delete content" permission counters. Explicitly dangerous and unknown effects remain visible regardless of route. Full declarations, diffs, source evidence, hashes and inspection binding remain under a keyboard-operable package-details disclosure.
 
 Network destinations share one access heading, with update changes marked beside the affected destination. Storage, process and background changes remain visible on their access rows. Removed declarations remain available in the full report.
+
+Surface storage and settings access comes from the released verified security
+summary, including packages with settings but no storage namespace or Worker.
+The saved-data row includes those declarations in official and external review;
+exact Surface/store/operation facts remain in a collapsed technical disclosure.
+Resource changes mark the saved-data row, while label-only Surface changes do
+not. Writable Surface resources join the sensitive-declaration projection but
+never become host filesystem permissions or automatic grants.
 
 One short checkbox confirms the exact inspected package. Signature validity never substitutes for consent. The review cannot claim that installation or grants already occurred; completion cannot infer permission grants from enabled state. Unknown outcomes preserve the inspection identity and reconciliation behavior. Long names and translations wrap, mobile controls retain touch targets, and footer actions remain visible.
 

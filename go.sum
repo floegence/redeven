@@ -166,8 +166,8 @@ github.com/floegence/flowersec/flowersec-go/v5 v5.11.1 h1:eMqkpqpVCGQ+rbcNKe9SI+
 github.com/floegence/flowersec/flowersec-go/v5 v5.11.1/go.mod h1:3wcvWklYumBaa/mlY/9TDMKlyJvi8ZziIy/NbEEmdsc=
 github.com/floegence/redeven-service-templates v0.7.0 h1:8sSbDNi7S8rodecHHoek+nDxZKJlwsyf2+xdSRL+V3M=
 github.com/floegence/redeven-service-templates v0.7.0/go.mod h1:aEDVtML4eX6rTXe1DY5tsEUzl/vIw/qJcR6GWo1nK+c=
-github.com/floegence/redevplugin/v3 v3.12.2 h1:E0ztC3F0hdPZDYByEXNgZihsnZaxsSC8JuN8P7f9rOY=
-github.com/floegence/redevplugin/v3 v3.12.2/go.mod h1:03mDF3RG3u1zvUHKVbRo5Dkg5GvnCUp5z72I1b7FEGw=
+github.com/floegence/redevplugin/v3 v3.13.0 h1:d/DearPQSWdJTO926VKDuwLV9mJLMCiLoxeGs0ZjomA=
+github.com/floegence/redevplugin/v3 v3.13.0/go.mod h1:03mDF3RG3u1zvUHKVbRo5Dkg5GvnCUp5z72I1b7FEGw=
 github.com/flynn/noise v1.1.0 h1:KjPQoQCEFdZDiP03phOvGi11+SVVhBG2wOWAorLsstg=
 github.com/flynn/noise v1.1.0/go.mod h1:xbMo+0i6+IGbYdJhF31t2eR1BIU0CYc12+BNAKwUTag=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=

@@ -27,8 +27,8 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
   let consent = false;
   let confirmations = 0;
   const require = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
-  const evidence = async (host: PluginSurfaceHost) => {
-    const deadline = Date.now() + 8000;
+  const evidence = async (host: PluginSurfaceHost, expectedRevision: number) => {
+    const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       const event = observations.find(item => item.source === host.element.contentWindow);
       if (event) {
@@ -36,6 +36,9 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
         require(event.origin === new URL(host.element.src).origin && value.origin === event.origin, 'Plugin observation came from another origin');
         require(value.parentDenied && value.managementStatus === 404, 'Plugin reached parent or management authority');
         require(value.count === 1 && value.workerValue === 2 && JSON.stringify(value.pixel) === '[255,0,0,255]', 'Native module, DOM, Worker or Canvas failed');
+        require(value.resources?.revision === expectedRevision && value.resources.kv && value.resources.kvConflict && value.resources.snapshot, 'Private KV persistence, conditional write or snapshot failed');
+        require(value.resources.settings && value.resources.settingsConflict && value.resources.database, 'Private settings revision or SQL transaction failed');
+        require(value.resources.files && value.resources.limits, 'Binary private-file roundtrip or published resource limits failed');
         return event.origin;
       }
       await new Promise(resolve => setTimeout(resolve, 20));
@@ -48,7 +51,7 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
     const installed = await client.installInspectedPackage({ inspection_id: inspection.inspection_id, expected_package_sha256: inspection.inspected_hashes.package_sha256 });
     pluginID = installed.plugin.plugin_instance_id;
     require(installed.plugin.enable_state === 'enabled', 'Explicit install was not enabled');
-    const open = async () => {
+    const open = async (expectedRevision: number) => {
       const container = document.createElement('div');
       container.style.cssText = 'width:50%;height:400px';
       stage.append(container);
@@ -58,15 +61,15 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
         prepareWebOrigin: center ? prepareCenterPluginOrigin : undefined,
         confirmClose: () => { confirmations++; return consent; },
       });
-      return { slot, host, origin: await evidence(host) };
+      return { slot, host, origin: await evidence(host, expectedRevision) };
     };
-    const first = await open();
-    const second = await open();
+    const first = await open(1);
+    const second = await open(2);
     require(first.origin !== second.origin && first.host.element !== second.host.element, 'Simultaneous containers shared a surface');
     require(await first.slot.requestClose() === undefined && first.host.element.isConnected && confirmations === 1, 'Unsaved close cancellation removed the application');
     consent = true;
     require(await first.slot.requestClose() !== undefined && !first.host.element.isConnected && second.host.element.isConnected, 'Closing one application affected another');
-    const reopened = await open();
+    const reopened = await open(3);
     require(reopened.origin !== first.origin && reopened.host.surfaceInstanceId !== first.host.surfaceInstanceId, 'Reopen reused revoked surface authority');
     const confirmationCount = confirmations;
     const record = (await client.catalog()).plugins.find(item => item.plugin_instance_id === pluginID)!;
@@ -77,7 +80,7 @@ export async function verifyPluginWebApplication(packageBase64: string, center: 
       require(surface.host.element.src === 'about:blank' && !surface.host.element.sandbox.contains('allow-same-origin'), 'Disabled application retained its document or origin authority');
     }
     require(confirmations === confirmationCount, 'Forced invalidation asked for an unsaved-close veto');
-    return ['Published Web package installs and runs native ESM, dynamic import, DOM, Worker and Canvas through the product route', 'Plugin origin cannot read parent DOM or Runtime management', 'Independent simultaneous surfaces, cancelled unsaved close, confirmed close and fresh reopen', 'Disable invalidates all plugin surfaces without an unsaved-close veto'];
+    return ['Published Web package installs and runs native ESM, dynamic import, DOM, Worker and Canvas through the product route', 'Private KV persists across independent surfaces with conditional-write conflicts and snapshot observation', 'Private settings enforce revisions and SQLite executes bounded parameterized transactions without a backend Worker', 'Binary private-file stream roundtrip preserves 262177 bytes and content through the product transport', 'Plugin origin cannot read parent DOM or Runtime management', 'Independent simultaneous surfaces, cancelled unsaved close, confirmed close and fresh reopen', 'Disable invalidates all plugin surfaces without an unsaved-close veto'];
   } finally {
     try {
       await Promise.all(slots.map(slot => slot.dispose()));

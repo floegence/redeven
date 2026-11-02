@@ -5,6 +5,7 @@ import {
   operationImpactGroups,
   securityDeclarationIsSensitive,
   securityDeclarations,
+  savedDataAccessChange,
 } from './externalPluginSecurityProjection';
 
 function summary(overrides: Partial<PluginExternalPackageSecuritySummary> = {}): PluginExternalPackageSecuritySummary {
@@ -38,6 +39,41 @@ function method(name: string, effect: string, dangerous = false, preflightOnly =
 }
 
 describe('external plugin security projection', () => {
+  it('projects signed Surface resources and preserves access changes', () => {
+    const surface: PluginExternalPackageSecuritySummary['surfaces'][number] = { surface_id: 'notes.view', kind: 'view' as const, intent: 'primary', label: 'Notes', entry: 'ui/index.html', storage: [{ store_id: 'notes', operations: ['get'] }], settings: ['get'] };
+    const previous = summary({ surfaces: [surface] });
+    const current = summary({ surfaces: [{ ...surface, storage: [{ store_id: 'notes', operations: ['get', 'put'] }], settings: ['get', 'patch'] }] });
+    const [before] = securityDeclarations(previous);
+    const [after] = securityDeclarations(current, previous);
+    expect(before.facts).toContain('store_id=notes; operations=get');
+    expect(before.facts).toContain('settings=get');
+    expect(after.facts).toContain('store_id=notes; operations=get, put');
+    expect(after.facts).toContain('settings=get, patch');
+    expect(after).toMatchObject({ change: 'changed', previousFacts: before.facts });
+    expect(securityDeclarationIsSensitive(before)).toBe(false);
+    expect(securityDeclarationIsSensitive(after)).toBe(true);
+    expect(securityDeclarations(current, current)[0].change).toBeUndefined();
+    expect(securityDeclarations(summary(), current)[0].change).toBe('removed');
+  });
+
+  it('marks settings-only patch and every Surface storage write as sensitive', () => {
+    const surface: PluginExternalPackageSecuritySummary['surfaces'][number] = { surface_id: 'notes.view', kind: 'view' as const, intent: 'primary', label: 'Notes', entry: 'ui/index.html' };
+    for (const operation of ['write', 'put', 'delete', 'exec'] as const) {
+      const value: PluginExternalPackageSecuritySummary['surfaces'][number] = { ...surface, storage: [{ store_id: 'notes', operations: [operation] }] };
+      expect(securityDeclarations(summary({ surfaces: [value] })).filter(securityDeclarationIsSensitive)).toHaveLength(1);
+    }
+    const value: PluginExternalPackageSecuritySummary['surfaces'][number] = { ...surface, settings: ['patch'] };
+    expect(securityDeclarations(summary({ surfaces: [value] })).filter(securityDeclarationIsSensitive)).toHaveLength(1);
+  });
+
+  it('does not mark presentation changes as saved-data access changes', () => {
+    const surface: PluginExternalPackageSecuritySummary['surfaces'][number] = { surface_id: 'notes.view', kind: 'view' as const, intent: 'primary', label: 'Notes', entry: 'ui/index.html', settings: ['get'] };
+    const before = summary({ surfaces: [surface] });
+    expect(savedDataAccessChange(securityDeclarations(summary({ surfaces: [{ ...surface, label: 'Documents' }] }), before))).toBeUndefined();
+    expect(savedDataAccessChange(securityDeclarations(before, summary()))).toBe('added');
+    expect(savedDataAccessChange(securityDeclarations(summary({ surfaces: [{ ...surface, settings: [] }] }), before))).toBe('changed');
+  });
+
   it('binds interval method, period and budget in review differences', () => {
     const background = { strategy: 'interval' as const, worker_id: 'worker', method: 'counter.tick', interval_ms: 60000, max_runtime_ms: 5000 };
     const current = summary({ background });

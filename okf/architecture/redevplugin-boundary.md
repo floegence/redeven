@@ -4,7 +4,7 @@ title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
 quality_exception: Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -73,6 +73,20 @@ unchanged and unavailable only within the plugin boundary.
 The released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.
 
 ## Platform execution boundaries
+
+ReDevPlugin 3.13.0 owns manifest-derived action bindings and direct Surface
+resources. Declared private KV, SQLite, files and settings need no forwarding
+Worker. Binary transfers and controlled WebSockets use the released dedicated-origin
+handler after the exact Surface handshake; Host checks session ceilings, resource
+scope, grants, quotas and revocation. Redeven mounts that handler and presents
+verified resource declarations without adding endpoints or interpreting manifests.
+The SDK reports explicit conflicts and unknown writes; the product never retries
+an uncertain mutation. Snapshot watches coalesce changes and are not a durable log.
+
+The upstream private files namespace automatically upgrades its released schema
+1 to chunked schema 2. This is distinct from the control database and author
+schema versions. Redeven keeps the layout opaque, including retained snapshots
+and crash recovery, and never copies migration SQL or rewrites plugin state.
 
 ReDevPlugin 3.12.2 keeps ordinary Web packaging and application SDK calls unchanged.
 The trusted parent SDK binds execution queries, event reads and cancellation to

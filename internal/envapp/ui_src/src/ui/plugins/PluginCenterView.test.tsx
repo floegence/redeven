@@ -1382,6 +1382,23 @@ describe('PluginCenterView', () => {
     expect(onCommand).not.toHaveBeenCalled();
   });
 
+  it('reviews official settings-only Surface access before confirmation', async () => {
+    const preview = metricsPlugin.officialCatalog.installPreview!;
+    const surface: NonNullable<typeof preview.security_summary.surfaces>[number] = { surface_id: 'preferences.view', kind: 'view' as const, intent: 'primary', label: 'Preferences', entry: 'ui/index.html', settings: ['get', 'patch'] };
+    const item = { ...metricsPlugin, officialCatalog: { ...metricsPlugin.officialCatalog, installPreview: { ...preview, security_summary: { ...preview.security_summary, storage: [], surfaces: [surface] } } } };
+    const onCommand = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => <PluginCenterView projection={{ items: [item] }} loading={false} onCommand={onCommand} onRefresh={vi.fn()} canManagePlugins canOpenPluginSurfaces />, mount);
+    mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:metrics"]')!.click();
+    await Promise.resolve();
+    expect(controlText(document.querySelector('[data-plugin-access-review]'))).toContain('Use its own saved data');
+    const details = document.querySelector<HTMLDetailsElement>('[data-plugin-official-saved-data] details')!;
+    expect(details.open).toBe(false);
+    expect(controlText(details)).toContain('surface_id=preferences.view; settings=get, patch');
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
   it('opens an actionable loading dialog immediately when the market preview is missing', async () => {
     const missingPreview = {
       ...metricsPlugin,

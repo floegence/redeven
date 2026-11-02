@@ -39,6 +39,8 @@ import type {
 import {
   securityCategoryOrder,
   securityDeclarations,
+  securitySummaryUsesSavedData,
+  savedDataAccessChange,
   type OperationEffectGroup,
   type SecurityCategory,
   type SecurityDeclaration,
@@ -774,13 +776,9 @@ function InspectionHighlights(props: {
     permission.permission_id !== 'network.client' || props.summary.network.length === 0);
   const extraChanges = () => changes().filter((row) =>
     row.change !== 'removed' && ['workers', 'capability_contracts', 'intents', 'surfaces'].includes(row.category));
-  const storageChange = () => {
-    const rows = changes().filter((row) => row.category === 'storage');
-    if (rows.length === 0) return undefined;
-    return rows.every((row) => row.change === 'added') ? 'added' as const : 'changed' as const;
-  };
+  const storageChange = () => savedDataAccessChange(props.declarations);
   const showHighlights = () => props.hasPreviousSummary || props.declarations.length === 0
-    || props.summary.network.length > 0 || props.summary.storage.length > 0
+    || props.summary.network.length > 0 || securitySummaryUsesSavedData(props.summary)
     || permissions().length > 0 || Boolean(props.summary.process) || Boolean(props.summary.background) || Boolean(props.summary.data_upgrade)
     || props.summary.secret_refs.length > 0 || methods().length > 0 || props.summary.core_actions.length > 0;
   return (
@@ -809,7 +807,7 @@ function InspectionHighlights(props: {
               </div>
             </AccessRow>
           </Show>
-          <Show when={props.summary.storage.length > 0}>
+          <Show when={securitySummaryUsesSavedData(props.summary)}>
             <AccessRow icon={<Package class="h-4 w-4" />} title={i18n.t('uiCopy.plugin.external.accessStorage')} change={storageChange()} />
           </Show>
           <div data-external-plugin-requested-permissions class="contents">
