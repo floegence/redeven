@@ -33,14 +33,20 @@ export function gatewayListenAddress(value: string): string | null {
   return `${host.includes(':') ? `[${host}]` : host}:${Number(match[2])}`;
 }
 
+export function normalizeGatewayListenAddresses(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16) return null;
+  const addresses = value.map(item => typeof item === 'string' ? gatewayListenAddress(item) : null);
+  return addresses.includes(null) || new Set(addresses).size !== addresses.length ? null : addresses as string[];
+}
+
 export function normalizeGatewayNetworkSettings(value: unknown): GatewayNetworkSettings | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const candidate = value as Record<string, unknown>;
   if (!Array.isArray(candidate.listen_addresses) || candidate.listen_addresses.length < 1 || candidate.listen_addresses.length > 16
     || !Array.isArray(candidate.allowed_hosts) || candidate.allowed_hosts.length > 64 || !Array.isArray(candidate.endpoints) || candidate.endpoints.length > 16) return null;
-  const listen = candidate.listen_addresses.map(item => typeof item === 'string' ? gatewayListenAddress(item) : null);
+  const listen = normalizeGatewayListenAddresses(candidate.listen_addresses);
   const hosts = candidate.allowed_hosts.map(item => typeof item === 'string' ? gatewayAllowedHost(item) : null);
-  if (listen.includes(null) || hosts.includes(null) || new Set(listen).size !== listen.length || new Set(hosts).size !== hosts.length) return null;
+  if (!listen || hosts.includes(null) || new Set(hosts).size !== hosts.length) return null;
   const endpoints: GatewayEndpoint[] = [];
   for (const raw of candidate.endpoints) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;

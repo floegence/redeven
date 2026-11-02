@@ -775,6 +775,12 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: true })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: 'yes', impact_acknowledged: true })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: true, impact_acknowledged: true })).toEqual({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: true, impact_acknowledged: true });
+    const recovery = { kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: true, impact_acknowledged: true, listen_addresses: ['127.0.0.1:0'] };
+    expect(normalizeDesktopLauncherActionRequest(recovery)).toEqual(recovery);
+    for (const listen_addresses of [[], ['invalid'], ['127.0.0.1:7443', '127.0.0.1:7443'], ['127.0.0.1:7443; touch /tmp/no'], Array(17).fill('127.0.0.1:0')]) {
+      expect(normalizeDesktopLauncherActionRequest({ ...recovery, listen_addresses })).toBeNull();
+    }
+    expect(normalizeDesktopLauncherActionRequest({ ...recovery, impact_acknowledged: false })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', connection_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', connection_id: 'gw-demo' })).toEqual({ kind: 'start_gateway', connection_id: 'gw-demo' });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'restart_gateway', connection_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'restart_gateway', connection_id: 'gw-demo', impact_acknowledged: true });

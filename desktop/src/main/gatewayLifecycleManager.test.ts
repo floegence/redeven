@@ -774,9 +774,10 @@ describe('GatewayLifecycleManager', () => {
     });
     const lifecycle = manager();
     const record = sshGateway();
-    const recovery = lifecycle.reinstallGateway(record, { resetConfiguration: true });
+    const recovery = lifecycle.reinstallGateway(record, { resetConfiguration: true, listenAddresses: ['127.0.0.1:0'] });
     await vi.waitFor(() => expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(1));
-    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({ forceUpdate: true, resetConfiguration: true }));
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({ forceUpdate: true, resetConfiguration: true, listenAddresses: ['127.0.0.1:0'] }));
+    await expect(lifecycle.reinstallGateway(record, { resetConfiguration: true, listenAddresses: ['127.0.0.1:7444'] })).rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
     await expect(lifecycle.reinstallGateway(record)).rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
     release();
     await recovery;

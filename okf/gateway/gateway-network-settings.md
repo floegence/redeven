@@ -18,6 +18,8 @@ Desktop Settings shows the saved listener bindings separately from active addres
 
 A runtime-selected ephemeral port is reported as an active address rather than replacing the configured `:0` binding.
 
+When the service cannot start, verified host maintenance can pass explicit bind addresses through a confirmed reinstall. The IPC and host owner validate one to sixteen unique bindings before mutation; the lifecycle fingerprint includes the bindings. No address is chosen after an error. Rebuild confirmation reviews bindings separately from the destructive reset. Ordinary reinstall can correct an occupied port while preserving configuration and the existing recovery archive. Listener-only host changes preserve TLS authority and do not require or publish share endpoints; fresh configuration accepts multiple bindings.
+
 # Boundaries
 
 ## Request Host restriction

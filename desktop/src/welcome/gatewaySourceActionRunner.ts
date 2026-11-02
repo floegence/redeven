@@ -5,13 +5,16 @@ import type { GatewaySourceActionModel } from './viewModel';
 export function runGatewaySourceAction(
   action: GatewaySourceActionModel,
   gateway: DesktopGatewaySource,
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void,
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, section?: 'maintenance') => void,
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<unknown>,
 ): Promise<unknown> | void {
   if (!action.enabled) {
     return;
   }
   switch (action.intent) {
+    case 'manage_gateway_service':
+      openCreateGatewaySetup(gateway, 'maintenance');
+      return;
     case 'manage_gateway_members':
     case 'view_gateway_environments':
     case 'cancel_gateway_action':

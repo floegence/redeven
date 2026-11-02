@@ -69,6 +69,41 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway product navigation', () => {
+  it('opens maintenance directly from an incompatible unpaired Gateway', async () => {
+    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_kind: 'local_host' as const,
+      management_capability: 'managed_local_host' as const, status: 'pairing_required' as const, trust_state: 'unpaired' as const,
+      service_state: { status: 'needs_reinstall' as const, can_start: false, can_stop: false, can_restart: false, can_update: false, can_pair_after_start: false } };
+    const perform = await mount(source);
+    button('Gateways').click(); await settle();
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card__primary-button')!.click(); await settle();
+    expect(selectedSection('maintenance')).toBe('page');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(button('Rebuild configuration and reinstall').disabled).toBe(false);
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it.each(['update_gateway', 'start_gateway'] as const)('leaves a failed %s through maintenance without replaying it', async action => {
+    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_kind: 'local_host' as const,
+      management_capability: 'managed_local_host' as const };
+    const initial = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), gatewaySources: [source] });
+    const progress = { action, connection_id: source.connection_id, subject_kind: 'gateway' as const, subject_id: source.connection_id,
+      status: 'running' as const, phase: 'installing_gateway', title: 'Update Gateway', detail: '',
+      active_progress_surface: 'gateway' as const, operation_key: source.connection_id + ':' + action, started_at_unix_ms: 1, updated_at_unix_ms: 2,
+      step_progress: gatewayServiceStepProgress(undefined, 'installing_gateway', 'running', 1) };
+    const perform = await mount(source, { ...initial, action_progress: [progress] });
+    button('Gateways').click(); await settle();
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card__primary-button')!.click(); await settle();
+    perform.publish({ ...initial, gateway_sources: [{ ...source, service_state: { status: 'needs_reinstall', can_start: false, can_stop: false, can_restart: false, can_update: false, can_pair_after_start: false } }],
+      action_progress: [{ ...progress, status: 'failed', detail: 'Installation interrupted',
+      step_progress: gatewayServiceStepProgress(progress.step_progress, 'installing_gateway', 'failed', 2) }] }); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const recovery = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(element => controlText(element) === 'Service maintenance');
+    expect([...dialog.querySelectorAll<HTMLButtonElement>('button')].map(controlText)).toContain('Service maintenance');
+    recovery!.click();
+    await vi.waitFor(() => expect(selectedSection('maintenance')).toBe('page'));
+    expect(perform).not.toHaveBeenCalled();
+  });
+
   it('keeps catalog errors in the existing status area instead of appending a row', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host', status: 'error', sync_state: 'pairing_failed', environments: [],
@@ -131,9 +166,31 @@ describe('Gateway product navigation', () => {
     expect(dialog.textContent).toContain('Runtime connections, network settings, and local egress policy are reset');
     expect(dialog.textContent).toContain('Previous configuration is retained');
     expect(perform).not.toHaveBeenCalled();
-    [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === 'Rebuild configuration and reinstall')!.click();
+    const listen = dialog.querySelector<HTMLInputElement>('input')!;
+    expect(listen).toBeTruthy();
+    listen.value = 'invalid'; listen.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    const confirm = dialog.querySelector<HTMLButtonElement>('button[aria-label="Rebuild configuration and reinstall"]')!;
+    expect(confirm.disabled).toBe(true);
+    listen.value = '127.0.0.1:0'; listen.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    confirm.click();
     await settle();
-    expect(perform).toHaveBeenCalledWith({ kind: 'reinstall_gateway', connection_id: source.connection_id, impact_acknowledged: true, reset_configuration: true });
+    expect(perform).toHaveBeenCalledWith({ kind: 'reinstall_gateway', connection_id: source.connection_id, impact_acknowledged: true, reset_configuration: true, listen_addresses: ['127.0.0.1:0'] });
+  });
+
+  it('repairs listener bindings through ordinary reinstall without rebuilding configuration', async () => {
+    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_kind: 'local_host' as const,
+      management_capability: 'managed_local_host' as const, listener_addresses: ['127.0.0.1:7443'] };
+    const perform = await mount(source);
+    await openGatewayAccess('Service maintenance');
+    button('Reinstall Gateway').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const listen = dialog.querySelector<HTMLInputElement>('input')!;
+    expect(listen.placeholder).toBe('127.0.0.1:7443');
+    listen.value = '127.0.0.1:7555'; listen.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    perform.publish({ ...perform.snapshot, gateway_sources: [{ ...source, listener_addresses: ['127.0.0.1:7666'] }] }); await settle();
+    expect(listen.value).toBe('127.0.0.1:7555');
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === 'Reinstall Gateway')!.click(); await settle();
+    expect(perform).toHaveBeenCalledWith({ kind: 'reinstall_gateway', connection_id: source.connection_id, impact_acknowledged: true, listen_addresses: ['127.0.0.1:7555'] });
   });
 
   it('opens fresh recovery confirmation after a retained update failure', async () => {

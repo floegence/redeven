@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -117,8 +118,52 @@ try {
     assert.deepEqual(invitation.share_addresses, endpoints.map(endpoint => endpoint.address));
     assert.match(invitation.code, /^[0-9A-HJKMNP-TV-Z]{26}$/u);
   report.cases.push({ restartPassed: true, invitationPassed: true, noCloudRequired: true, phases: restartPhases });
+  const reinstallPhases = [];
+  await lifecycle.reinstallGateway(record, { onProgress: event => reinstallPhases.push(event.phase) });
+  restored = await lifecycle.catalog(record);
+  assert.equal(restored.gateway.gateway_id, catalog.gateway.gateway_id);
+  assert.deepEqual(restored.gateway.endpoints, endpoints);
+  assert.deepEqual(restored.gateway.permissions, catalog.gateway.permissions);
+  report.cases.push({ reinstallPassed: true, configurationAndIdentityPreserved: true, phases: reinstallPhases });
+
+  // Exercise explicit recovery only against this test-owned stopped service.
+  await lifecycle.stopGateway(record);
+  const trustPath = path.join(stateRoot, 'gateway-trust.json');
+  const identityBeforeReset = JSON.parse(await readFile(trustPath, 'utf8'));
+  const membersPath = path.join(stateRoot, 'members.json');
+  const incompatible = JSON.parse(await readFile(membersPath, 'utf8'));
+  incompatible.schema_version = -1;
+  const retiredConfiguration = JSON.stringify(incompatible);
+  await writeFile(membersPath, retiredConfiguration, { mode: 0o600 });
+  assert.equal((await lifecycle.inspectService(record)).status, 'not_started', 'Stopped observation must not imply compatible configuration');
+  await assert.rejects(lifecycle.startGateway(record));
+  assert.equal(await readFile(membersPath, 'utf8'), retiredConfiguration, 'Failed start must preserve incompatible state');
+  const recoveryPhases = [];
+  const occupied = createServer();
+  await new Promise(resolve => occupied.listen(0, '127.0.0.1', resolve));
+  try {
+    await assert.rejects(lifecycle.reinstallGateway(record, { resetConfiguration: true,
+      listenAddresses: ['127.0.0.1:' + occupied.address().port], onProgress: event => recoveryPhases.push(event.phase) }), /address already in use/u);
+  } finally { await new Promise(resolve => occupied.close(resolve)); }
+  assert.ok(recoveryPhases.includes('resetting_gateway_configuration'));
+  const archives = await readdir(path.join(stateRoot, 'configuration-history'));
+  assert.equal(archives.length, 1);
+  assert.equal(await readFile(path.join(stateRoot, 'configuration-history', archives[0], 'members.json'), 'utf8'), retiredConfiguration);
+  const identityAfterReset = JSON.parse(await readFile(trustPath, 'utf8'));
+  assert.deepEqual(identityAfterReset, identityBeforeReset, 'Recovery preserves device identity, client keys and revocations');
+  await lifecycle.reinstallGateway(record, { listenAddresses: ['127.0.0.1:0', '[::1]:0'] });
+  assert.equal((await readdir(path.join(stateRoot, 'configuration-history'))).length, 1, 'Fixing a bind failure must not repeat configuration reset');
+  restored = await lifecycle.catalog(record);
+  assert.equal(restored.gateway.gateway_id, catalog.gateway.gateway_id);
+  assert.deepEqual(restored.gateway.permissions, catalog.gateway.permissions);
+  assert.deepEqual(restored.gateway.endpoints, []);
+  assert.deepEqual(restored.gateway.listener_addresses, ['127.0.0.1:0', '[::1]:0']);
+  assert.deepEqual(restored.attachments, []);
+  await (await lifecycle.client(record)).updateEndpoints(record, endpoints);
+  assert.deepEqual((await lifecycle.catalog(record)).gateway.endpoints, endpoints, 'Recovered Gateway remains manageable');
+  report.cases.push({ incompatibleStartPreservesState: true, explicitRecoveryPassed: true, occupiedPortRecoveryPassed: true, archivedConfigurationExact: true, clientTrustPreserved: true, managementRestored: true, phases: recoveryPhases });
   report.status = 'passed';
-  console.log('PASS real local Gateway update, restart, identity preservation and failed-package service retention');
+  console.log('PASS real local Gateway update, reinstall, configuration recovery and identity preservation');
 } catch (error) {
   report.status = 'failed'; report.error = String(error.stack || error); report.failure = error.presentation;
   throw error;

@@ -6939,8 +6939,9 @@ async function runGatewayServiceActionFromLauncher(
     const manager = gatewayLifecycleManager();
     const methods = { start_gateway: manager.startGateway, stop_gateway: manager.stopGateway,
       restart_gateway: manager.restartGateway, update_gateway: manager.updateGateway, reinstall_gateway: manager.reinstallGateway };
-    const execute: (record: GatewayRecord, options: { signal?: AbortSignal; operationKey: string; onProgress: GatewayLifecycleProgressSink; resetConfiguration?: boolean }) => Promise<unknown> = methods[request.kind].bind(manager);
-    await execute(record, { signal, operationKey, resetConfiguration: request.kind === 'reinstall_gateway' && request.reset_configuration === true, onProgress: progress => {
+    const execute: (record: GatewayRecord, options: { signal?: AbortSignal; operationKey: string; onProgress: GatewayLifecycleProgressSink; resetConfiguration?: boolean; listenAddresses?: readonly string[] }) => Promise<unknown> = methods[request.kind].bind(manager);
+    await execute(record, { signal, operationKey, resetConfiguration: request.kind === 'reinstall_gateway' && request.reset_configuration === true,
+      listenAddresses: request.kind === 'reinstall_gateway' ? request.listen_addresses : undefined, onProgress: progress => {
       if (request.kind !== 'start_gateway' && progress.phase === 'stopping_gateway' && !sessionsInvalidated) {
         sessionsInvalidated = true;
         for (const session of affected) failGatewaySessionTransport(session, new GatewayClientError('ATTACHMENT_REMOVED', 'Gateway access ended.'));

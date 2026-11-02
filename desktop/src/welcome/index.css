@@ -3775,6 +3775,10 @@ pre,
   overscroll-behavior: contain;
 }
 
+.redeven-gateway-dialog .redeven-gateway-action-panel[data-listener-recovery] {
+  max-height: min(36rem, calc(100dvh - 8rem));
+}
+
 .redeven-gateway-action-panel__close {
   display: grid;
   flex: 0 0 auto;

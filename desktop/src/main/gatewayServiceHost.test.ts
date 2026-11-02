@@ -136,6 +136,17 @@ esac
     expect(error.message).not.toContain('secret-value');
   });
 
+  it.each([[], ['invalid'], ['127.0.0.1:7443', '127.0.0.1:7443']])('rejects invalid recovery bindings before host access: %j', async (...listenAddresses) => {
+    const root = path.join(os.tmpdir(), 'redeven-bind-invalid-' + Date.now());
+    await expect(ensureManagedGatewayServiceReady({
+      hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: root },
+      stateRoot: root, releaseTag: 'v0.0.0-test', releaseBaseURL: '', assetCacheRoot: root, tempRoot: root,
+      sshCredentialScope: 'invalid-listener', sshTransportManager: {} as DesktopSSHTransportManager,
+      forceUpdate: true, listenAddresses,
+    })).rejects.toThrow('valid bind addresses');
+    expect(fs.existsSync(root)).toBe(false);
+  });
+
   it('offers first installation as Start when the actual local service directory is empty', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-probe-'));
     try {

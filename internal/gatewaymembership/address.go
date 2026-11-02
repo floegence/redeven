@@ -52,9 +52,12 @@ func (s *Store) Readdress(origin, listen string) error {
 			return ErrState
 		}
 	}
-	endpoint, err := renewEndpointForOrigins(endpoint, endpointAddresses(advertised))
-	if err != nil {
-		return err
+	if !endpointsEqual(advertised, s.state.AdvertisedEndpoints) {
+		var err error
+		endpoint, err = renewEndpointForOrigins(endpoint, endpointAddresses(advertised))
+		if err != nil {
+			return err
+		}
 	}
 	next := s.clone()
 	next.Endpoint = endpoint

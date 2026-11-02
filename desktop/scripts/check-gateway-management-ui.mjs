@@ -238,6 +238,27 @@ try {
         assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(r => r.reset_configuration)), false);
         assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
         await settleVisuals(page);
+        const confirmationButton = button(dialog, 'gatewayMaintenance.reset');
+        const confirmationLabel = confirmationButton.getByText(i18n.t('gatewayMaintenance.resetAction'), { exact: true });
+        assert.equal(await confirmationLabel.count(), 1);
+        assert.ok(await confirmationLabel.evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'Recovery action text fits');
+        const bindInput = dialog.getByRole('textbox', { name: i18n.t('gatewayNetwork.listenAddress'), exact: true });
+        assert.equal(await bindInput.inputValue(), ':7443');
+        const inputFits = () => bindInput.evaluate(element => {
+          const input = element.getBoundingClientRect();
+          const body = element.closest('.redeven-gateway-action-panel__body').getBoundingClientRect();
+          return input.top >= body.top && input.bottom <= body.bottom + 1;
+        });
+        assert.ok(await inputFits(), 'Bind input is fully visible without scrolling');
+        const validBounds = await dialog.boundingBox();
+        await bindInput.fill('invalid');
+        await settleVisuals(page);
+        assert.equal(await confirmationButton.isEnabled(), false);
+        const invalidBounds = await dialog.boundingBox();
+        assert.ok(Math.abs(validBounds.height - invalidBounds.height) < 1 && Math.abs(validBounds.y - invalidBounds.y) < 1, 'Validation keeps confirmation geometry stable');
+        await bindInput.fill('127.0.0.1:0, [::1]:0');
+        assert.equal(await confirmationButton.isEnabled(), true);
+        await bindInput.fill(':7443');
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-recovery-confirmation.png' });
         await button(dialog, 'common.close').first().click();
         await page.locator('[data-floe-dialog-panel].redeven-gateway-dialog').waitFor({ state: 'detached' });

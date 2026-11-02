@@ -387,6 +387,9 @@ function gatewayRefreshRecoveryPlan(
 
   const service = gateway.service_state;
   if (service?.status === 'needs_reinstall') {
+    if (gateway.connection_kind !== 'url') return { title: 'Gateway requires host maintenance',
+      detail: 'Review this Gateway configuration.', aria_label: 'Gateway host maintenance',
+      primary_action: gatewaySourceAction('manage_gateway_service', 'Service maintenance', 'default', true) };
     return { title: 'Gateway requires host maintenance',
       detail: 'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.',
       aria_label: 'Gateway host maintenance', primary_action: gatewaySourceAction('disable_gateway', 'Disable', 'outline', true) };

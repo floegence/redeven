@@ -1,6 +1,6 @@
 import { selectEnvironmentSnapshot } from '../envcenter/core';
 import {normalizeRuntimeCloudOperation, type RuntimeCloudOperation, type CloudRouteOperation} from './runtimeCloud';
-import { normalizeGatewayNetworkSettings } from './gatewayNetworkSettings';
+import { normalizeGatewayListenAddresses, normalizeGatewayNetworkSettings } from './gatewayNetworkSettings';
 import type { GatewayNetworkSettings } from './gatewayMembership';
 import type { GatewayEndpoint, RuntimeAttachment, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayInvitationCodeDelivery, RuntimeAttachmentOperationResult, GatewayEgressPermission } from './gatewayMembership';
 import { type GatewayAttachmentSnapshot, type GatewayAttachmentOperation, type GatewayEnrollmentPurpose, type GatewayJoinPreview } from './gatewayJoin';
@@ -846,6 +846,7 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'reinstall_gateway';
       connection_id: string;
       reset_configuration?: boolean;
+      listen_addresses?: string[];
       impact_acknowledged?: boolean;
     }
   | {
@@ -1639,10 +1640,13 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (!gatewayID) return null;
       if (kind === 'start_gateway') return { kind, connection_id: gatewayID };
       if (kind === 'reinstall_gateway') {
-        const input = candidate as { reset_configuration?: unknown; impact_acknowledged?: unknown };
+        const input = candidate as { reset_configuration?: unknown; impact_acknowledged?: unknown; listen_addresses?: unknown };
         if (input.reset_configuration !== undefined && typeof input.reset_configuration !== 'boolean') return null;
         if (input.reset_configuration === true && input.impact_acknowledged !== true) return null;
-        return { kind, connection_id: gatewayID, ...(input.reset_configuration === true ? { reset_configuration: true } : {}), impact_acknowledged: input.impact_acknowledged === true };
+        const listen = input.listen_addresses === undefined ? undefined : normalizeGatewayListenAddresses(input.listen_addresses);
+        if (listen === null || listen && input.impact_acknowledged !== true) return null;
+        return { kind, connection_id: gatewayID, ...(input.reset_configuration === true ? { reset_configuration: true } : {}),
+          ...(listen ? { listen_addresses: listen } : {}), impact_acknowledged: input.impact_acknowledged === true };
       }
       return { kind, connection_id: gatewayID, impact_acknowledged: (candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true };
     }

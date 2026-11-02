@@ -5,6 +5,36 @@ import (
 	"testing"
 )
 
+func TestListenerRecoveryWithoutPublishedEndpoints(t *testing.T) {
+	store, identity := membershipStore(t)
+	settings := store.NetworkSettings()
+	settings.Endpoints = nil
+	if err := store.UpdateNetworkSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	before := store.Endpoint()
+	if err := store.Readdress("", "127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(store.path, identity, "", "", store.hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reopened.Endpoints()) != 0 || reopened.Endpoint().RootPEM != before.RootPEM || reopened.Endpoint().ListenAddress != "127.0.0.1:0" {
+		t.Fatal("listener recovery changed published endpoints or trust")
+	}
+}
+
+func TestFreshEndpointAcceptsMultipleListenerBindings(t *testing.T) {
+	endpoint, err := newEndpoint("https://localhost:7443", "127.0.0.1:0,[::1]:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(endpoint.ListenAddresses) != 2 || endpoint.ListenAddresses[0] != "127.0.0.1:0" || endpoint.ListenAddresses[1] != "[::1]:0" {
+		t.Fatal("fresh endpoint did not preserve explicit listener bindings")
+	}
+}
+
 func TestAddressUpdatePreservesMembershipAndRejectsIdentityReplacement(t *testing.T) {
 	store, identity := membershipStore(t)
 	invitation, err := store.Invite("admin")

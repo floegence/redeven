@@ -59,7 +59,14 @@ try {
         assert.ok(Math.abs(row.top - previous.top) <= 1 ? row.left >= previous.right : row.top >= previous.bottom, 'Card columns and rows never overlap');
       }
     }
-    assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.directoryPending')));
+    assert.equal(await card.locator('.redeven-gateway-card__empty').count(), 0, 'Pending catalog does not append a descriptive row');
+    const pendingHeight = (await card.boundingBox()).height;
+    await card.getByRole('button', { name: i18n.t('gatewayAccess.directoryHelpLabel'), exact: true }).click();
+    const directoryHelp = page.getByRole('dialog', { name: i18n.t('gatewayAccess.directoryHelpLabel'), exact: true });
+    await directoryHelp.getByText(i18n.t('gatewayAccess.directoryPending'), { exact: true }).waitFor();
+    assert.ok(Math.abs((await card.boundingBox()).height - pendingHeight) < 0.1, 'Catalog details do not reflow the card');
+    await page.keyboard.press('Escape');
+    await directoryHelp.waitFor({ state: 'detached' });
     assert.equal(await card.locator('.redeven-gateway-enrollment-actions').count(), 1, 'Enrollment actions remain visible on managed Gateways');
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
     for (const button of await library.locator('button[data-floe-control="button"]').all()) {

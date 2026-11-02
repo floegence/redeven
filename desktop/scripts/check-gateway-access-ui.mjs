@@ -69,7 +69,7 @@ try {
       assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyAddress'), exact: true }).count(), 1);
       assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyCode'), exact: true }).count(), 1);
       await dialog.getByRole('button', { name: i18n.t('common.close'), exact: true }).click(); await dialog.waitFor({ state: 'detached' });
-      await nav.getByRole('button', { name: i18n.t('gatewayExperience.cloud'), exact: true }).click();
+      await nav.getByRole('button', { name: i18n.t('gatewayExperience.network'), exact: true }).click();
       // A policy preview only includes inherited members; saving requires a second explicit action.
       await workspace.locator('summary').filter({ hasText: i18n.t('gatewayMembers.policy') }).click();
       const technical = workspace.locator('.redeven-gateway-policy details');
@@ -116,7 +116,11 @@ try {
       await page.waitForFunction(() => document.activeElement?.matches('.redeven-gateway-card__name button'));
       // Failed refresh retains the last directory; access-only identities never gain mutation rights.
       await page.evaluate(({ snapshot, gateway }) => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...gateway, sync_state: 'catalog_failed', permissions: { access: true, manage_attachments: false, manage_network: false } }] }), { snapshot, gateway });
-      await card.getByText(i18n.t('gatewayAccess.environmentListStale'), { exact: true }).waitFor();
+      const cardHeight = (await card.boundingBox()).height;
+      await card.locator('.redeven-gateway-card__help').click();
+      await page.getByRole('dialog').getByText(i18n.t('gatewayAccess.environmentListStale'), { exact: true }).waitFor();
+      assert.ok(Math.abs((await card.boundingBox()).height - cardHeight) < 0.1, 'Failure details preserve card geometry');
+      await page.keyboard.press('Escape');
       assert.equal(await card.locator('.redeven-gateway-card__count').innerText(), i18n.tn('plural.environmentCount', 2));
       report.cases.push({ locale, width, dark, largeText, invitationRetry: true, partialBatch: true, policyPreview: true, restoredFocus: true, staleDirectory: true });
       await context.close();

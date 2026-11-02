@@ -14,6 +14,7 @@ import { createDesktopTessivenTransport } from './tessivenTransport';
 import type { ContextActionEnvelope } from '../../../internal/flower_ui/src/contextActionWire';
 import { EnvironmentAccessSettings } from './EnvironmentAccessSettings';
 import { environmentAccessRouteLabel } from './environmentAccessPresentation';
+import { normalizeGatewayListenAddresses } from '../shared/gatewayNetworkSettings';
 import {
   StableText,
   Button,
@@ -454,7 +455,7 @@ type GatewayServiceSurface = Readonly<{
   close: () => void;
 }>;
 
-type GatewaySetupTarget = DesktopGatewayResolveFocus | 'clients' | 'runtimes' | 'connect_client' | 'connect_runtime' | 'settings';
+type GatewaySetupTarget = DesktopGatewayResolveFocus | 'clients' | 'runtimes' | 'network' | 'maintenance' | 'connect_client' | 'connect_runtime' | 'settings';
 
 type GatewaySetupDialogState = Readonly<{
   opening_id: number;
@@ -941,6 +942,8 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
       return i18n.t('environmentCenter.gatewayPanelPairThisGatewayAria');
     case 'setup_gateway':
       return i18n.t('environmentStatus.setupRequired');
+    case 'manage_gateway_service':
+      return i18n.t('gatewayExperience.maintenance');
     case 'cancel_gateway_action':
       return i18n.t('common.cancel');
     default:
@@ -2681,6 +2684,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setEmbeddedGatewayService('');
   }
   function openManagedGatewayService(action: GatewaySourceActionModel) {
+    if (action.intent === 'manage_gateway_service') { updateGatewaySetupDialogField('settings_tab', 'maintenance'); return; }
     if (action.intent === 'view_gateway_environments' || action.intent === 'manage_gateway_members') { updateGatewaySetupDialogField('settings_tab', 'runtimes'); return; }
     if (action.intent === 'setup_gateway' || action.intent === 'pair_gateway' && gatewaySetupDialogState()?.connection_kind === 'url') { updateGatewaySetupDialogField('editing_connection', true); return; }
     const id = gatewaySetupDialogState()?.connection_id;
@@ -3904,8 +3908,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'url_endpoint' || focusSection === 'identity_trust' ? focusSection : undefined),
           settings_tab: focusSection === 'clients' || focusSection === 'connect_client' ? 'clients'
             : focusSection === 'runtimes' || focusSection === 'connect_runtime' ? 'runtimes'
+              : focusSection === 'network' || focusSection === 'maintenance' ? focusSection
                 : 'overview',
-          editing_connection: focusSection === 'settings' || focusSection === 'url_endpoint' || focusSection === 'identity_trust' || gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired',
+          editing_connection: focusSection === 'settings' || focusSection === 'url_endpoint' || focusSection === 'identity_trust'
+            || gateway.connection_kind === 'url' && (gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired'),
           client_enrollment: focusSection === 'connect_client',
           runtime_enrollment: focusSection === 'connect_runtime',
         }
@@ -8924,6 +8930,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   runNextAction?: (action: DesktopLauncherOperationNextAction, progress: DesktopLauncherActionProgress) => void;
   runPrimaryAction?: (action: EnvironmentActionModel) => void;
+  recoveryAction?: JSX.Element;
 }>) {
   const runtimeLifecycle = createMemo(() => (
     props.progress.active_progress_surface === 'runtime_lifecycle'
@@ -8999,7 +9006,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
       .filter((group) => group.actions.length > 0);
   });
   const hasPanelActions = createMemo(() => (
-    (props.settingsRestart && phaseStatus() !== 'running')
+    props.recoveryAction || (props.settingsRestart && phaseStatus() !== 'running')
     || nextActionGroups().length > 0
     || canCancel()
     || panelPrimaryAction() !== null
@@ -9362,6 +9369,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
       </div>
       <Show when={hasPanelActions()}>
         <div class="redeven-action-popover__action-footer">
+          <Show when={props.recoveryAction}>{action => <div class="redeven-action-popover__actions">{action()}</div>}</Show>
           {renderNextActionGroups()}
           <Show when={props.settingsRestart && phaseStatus() !== 'running'}>
             <div class="redeven-action-popover__actions">
@@ -11275,14 +11283,7 @@ function GatewaySourceOwner(props: Readonly<{
     }
     return null;
   });
-  const visibleGatewayProgress = createMemo(() => {
-    const progress = selectedGatewayOperationProgress();
-    if (progress && launcherActionProgressIsTerminal(progress) && props.gateway.service_state?.status === 'needs_reinstall'
-      && progress.action !== 'update_gateway' && progress.action !== 'reinstall_gateway') {
-      return null;
-    }
-    return progress;
-  });
+  const visibleGatewayProgress = selectedGatewayOperationProgress;
   const activeGatewayLifecycleProgress = createMemo(() => selectForegroundGatewayProgress(
     props.actionProgress.filter((progress) => (
       gatewaySourceMatchesRuntimeLifecycleProgress(props.gateway.connection_id, progress)
@@ -11725,6 +11726,12 @@ function GatewaySourceOwner(props: Readonly<{
   };
   const runAction = (action: GatewaySourceActionModel) => {
     if (!props.available) return;
+    if (action.intent === 'manage_gateway_service') {
+      props.onActionPopoverOpenChange(false);
+      setForegroundAction(null);
+      props.openCreateGatewaySetup(props.gateway, 'maintenance');
+      return;
+    }
     if (action.intent === 'view_gateway_environments') {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
@@ -11782,6 +11789,10 @@ function GatewaySourceOwner(props: Readonly<{
   };
   const runPanelAction = (action: GatewaySourceActionModel) => {
     if (!props.available) return;
+    if (action.intent === 'manage_gateway_service') {
+      closeActionPopoverAfterExit(() => props.openCreateGatewaySetup(props.gateway, 'maintenance'));
+      return;
+    }
     if (action.intent === 'view_gateway_environments') {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
@@ -11933,6 +11944,12 @@ function GatewaySourceOwner(props: Readonly<{
                     i18n={props.i18n}
                     progress={progress()}
                     close={closeServiceSurface}
+                    recoveryAction={gatewayProgressNeedsAttention(progress()) && props.gateway.connection_kind !== 'url' ?
+                      <Button size="sm" variant="default" class="w-full justify-center gap-1.5" icon={Settings} disabled={!props.available}
+                        onClick={() => closeActionPopoverAfterExit(() => props.openCreateGatewaySetup(props.gateway, 'maintenance'))}>
+                        {props.i18n.t('gatewayExperience.maintenance')}
+                      </Button>
+                    : undefined}
                     cancelOperation={props.cancelOperation}
                     dismissOperation={(currentProgress) => {
                       closeActionPopoverAfterExit(() => {
@@ -12132,10 +12149,27 @@ function GatewayActionPanel(props: Readonly<{
   foregroundActionBusy: (action: GatewaySourceActionModel) => boolean;
   close: () => void;
 }>) {
+  const listenerRecoveryKind = createMemo(() => {
+    const request = props.model.continuation_action;
+    return request?.kind === 'reinstall_gateway' ? request.reset_configuration ? 'reset' : 'reinstall' : '';
+  });
+  const listenerInputID = createUniqueId();
+  const [listenDraft, setListenDraft] = createSignal('');
+  createEffect(() => {
+    const kind = listenerRecoveryKind();
+    setListenDraft(kind === 'reset' ? untrack(() => props.gateway.listener_addresses?.join(', ') || ':7443') : '');
+  });
+  const listenAddresses = createMemo(() => !listenDraft().trim() && listenerRecoveryKind() !== 'reset' ? undefined
+    : normalizeGatewayListenAddresses(listenDraft().split(',').map(address => address.trim())));
   const runPanelPrimary = () => {
     const action = props.model.primary_action;
     if (props.model.continuation_action) {
-      props.runGatewayLauncherAction(props.model.continuation_action, action);
+      const request = props.model.continuation_action;
+      if (request.kind === 'reinstall_gateway') {
+        const listen = listenAddresses();
+        if (listen === null) return;
+        props.runGatewayLauncherAction({ ...request, ...(listen ? { listen_addresses: listen } : {}) }, action);
+      } else props.runGatewayLauncherAction(request, action);
       return;
     }
     if (action) {
@@ -12158,7 +12192,7 @@ function GatewayActionPanel(props: Readonly<{
   const awaitingProgress = () => props.admission === 'pending' || props.admission === 'accepted';
   const showDiagnostics = () => props.model.kind !== 'service_confirmation' && !props.admission && props.model.diagnostic_facts.length > 0;
   return (
-    <div class="redeven-action-popover redeven-gateway-action-panel" data-redeven-action-popover-initial-focus="" tabIndex={-1} aria-label={panelAriaLabel()}>
+    <div class="redeven-action-popover redeven-gateway-action-panel" data-listener-recovery={listenerRecoveryKind() || undefined} data-redeven-action-popover-initial-focus="" tabIndex={-1} aria-label={panelAriaLabel()}>
       <div class="redeven-gateway-action-panel__body">
         <div class="redeven-gateway-action-panel__hero">
           <span class="redeven-action-popover__status-icon" data-tone={awaitingProgress() ? 'primary' : tone()}>
@@ -12194,6 +12228,20 @@ function GatewayActionPanel(props: Readonly<{
         <Show when={props.admission === 'failed'}>
           <div class="redeven-action-popover__notice" data-tone="error" role="alert">{props.admissionError || props.i18n.t('interactionContinuity.rejected')}</div>
           <Button onClick={props.retry}>{props.i18n.t('common.retry')}</Button>
+        </Show>
+
+        <Show when={listenerRecoveryKind() && !props.admission}>
+          <div class="grid gap-1.5">
+            <label class="redeven-gateway-form-label block truncate" for={listenerInputID}>
+              <Show when={listenAddresses() === null} fallback={props.i18n.t('gatewayNetwork.listenAddress')}>
+                <span id={listenerInputID + '-error'} class="text-destructive" role="alert" title={props.i18n.t('gatewayNetwork.invalidListen')}>{props.i18n.t('gatewayNetwork.invalidListen')}</span>
+              </Show>
+            </label>
+            <Input id={listenerInputID} value={listenDraft()} placeholder={props.gateway.listener_addresses?.join(', ') || ':7443'}
+              aria-label={props.i18n.t('gatewayNetwork.listenAddress')}
+              aria-invalid={listenAddresses() === null} aria-describedby={listenAddresses() === null ? listenerInputID + '-error' : undefined}
+              onInput={event => setListenDraft(event.currentTarget.value)} />
+          </div>
         </Show>
 
         <Show when={showDiagnostics()}>
@@ -12244,12 +12292,13 @@ function GatewayActionPanel(props: Readonly<{
                 size="sm"
                 variant="default"
                 class="redeven-gateway-action-panel__primary-action justify-center gap-1.5"
+                aria-label={localizedPanelActionLabel(action())}
                 loading={props.foregroundActionBusy(action())}
-                disabled={!action().enabled || props.admission === 'pending'}
+                disabled={!action().enabled || props.admission === 'pending' || !!listenerRecoveryKind() && listenAddresses() === null}
                 onClick={runPanelPrimary}
               >
                 <GatewaySourceActionIcon intent={action().intent} />
-                <span>{localizedPanelActionLabel(action())}</span>
+                <span>{action().intent === 'reinstall_gateway' && action().reset_configuration ? props.i18n.t('gatewayMaintenance.resetAction') : localizedPanelActionLabel(action())}</span>
               </Button>
             </div>
           </div>
@@ -12328,6 +12377,7 @@ function GatewaySourceActionIcon(
       case 'update_gateway': return GatewayDownloadIcon;
       case 'refresh_gateway': return Refresh;
       case 'setup_gateway': return Settings;
+      case 'manage_gateway_service': return Settings;
       case 'cancel_gateway_action': return X;
     }
   });

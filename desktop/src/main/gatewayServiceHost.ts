@@ -1,3 +1,4 @@
+import { normalizeGatewayListenAddresses } from '../shared/gatewayNetworkSettings';
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -109,6 +110,7 @@ export type GatewayServiceHostOptions = Readonly<{
   tempRoot: string;
   forceUpdate?: boolean;
   resetConfiguration?: boolean;
+  listenAddresses?: readonly string[];
   forceRestart?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: GatewayServiceProgress) => void;
@@ -462,7 +464,8 @@ function gatewayServiceStartScript(rootShell: string): string {
     'set -eu',
     rootShell,
     managedGatewayPathShell(),
-    'if "$binary" service-start --state-root "$state_root"; then',
+    'if [ "$#" -gt 3 ]; then set -- --public-listen "$4"; else set --; fi',
+    'if "$binary" service-start --state-root "$state_root" "$@"; then',
     '  exit 0',
     'else',
     '  code="$?"',
@@ -918,6 +921,10 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
   if (options.resetConfiguration === true && options.forceUpdate !== true) {
     throw new Error('Configuration recovery requires an explicit package reinstall.');
   }
+  const listen = options.listenAddresses === undefined ? undefined : normalizeGatewayListenAddresses(options.listenAddresses);
+  if (listen === null || listen && options.forceUpdate !== true) {
+    throw new Error('Listener recovery requires valid bind addresses and an explicit package reinstall.');
+  }
   return withGatewayExecutor(options, async (executor) => {
     const releaseTag = normalizeReleaseTag(options.releaseTag);
     const initialProbe = await probeGatewayPackage(options, executor).catch(() => null);
@@ -953,6 +960,7 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
       options.placement.runtime_root,
       options.stateRoot,
       releaseTag,
+      ...(listen ? [listen.join(',')] : []),
     ]), { signal: options.signal });
     const status = parseGatewayServiceCommandStatus(result.stdout, options.stateRoot);
     if (status.status !== 'running' || !status.pid || !status.listen) throw new GatewayServiceStartError(status);

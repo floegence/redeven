@@ -3783,9 +3783,9 @@ describe('Gateway view models', () => {
     }));
     expect(reinstallRequiredSSHRow).toMatchObject({
       status_label: 'Needs attention',
-      primary_action: expect.objectContaining({ intent: 'refresh_gateway' }),
+      primary_action: expect.objectContaining({ intent: 'manage_gateway_service' }),
     });
-    expect(reinstallRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual(['stop_gateway', 'update_gateway', 'reinstall_gateway', 'disable_gateway']);
+    expect(reinstallRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual(['stop_gateway', 'update_gateway', 'reinstall_gateway', 'refresh_gateway', 'disable_gateway']);
 
     const reinstallPairingSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',

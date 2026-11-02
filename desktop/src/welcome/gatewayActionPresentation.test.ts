@@ -170,6 +170,7 @@ describe('buildGatewayActionPresentation', () => {
   it('keeps host maintenance distinct from access-only protocol failures', () => {
     const managed = buildGatewayActionPresentation({
       gateway: gateway({
+        connection_kind: 'local_host', management_capability: 'managed_local_host',
         service_state: {
           status: 'needs_reinstall',
           can_start: false,
@@ -188,7 +189,7 @@ describe('buildGatewayActionPresentation', () => {
       show_diagnosis_result: true,
     });
     expect(managed).toMatchObject({ title: 'Gateway requires host maintenance' });
-    expect(managed.primary_action?.intent).toBe('disable_gateway');
+    expect(managed.primary_action?.intent).toBe('manage_gateway_service');
 
     const accessOnly = buildGatewayActionPresentation({
       gateway: gateway({
@@ -220,8 +221,8 @@ describe('buildGatewayActionPresentation', () => {
         message: 'members.json: unsupported schema_version 4; expected 5' } });
     const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action('refresh_gateway') });
     expect(panel.title).toBe('Gateway requires host maintenance');
-    expect(panel.primary_action?.intent).toBe('disable_gateway');
-    expect(panel.detail).toContain('Cloud authorizations are preserved');
+    expect(panel.primary_action?.intent).toBe('manage_gateway_service');
+    expect(panel.continuation_action).toBeUndefined();
     expect(panel.detail).not.toContain('reinstall');
   });
 

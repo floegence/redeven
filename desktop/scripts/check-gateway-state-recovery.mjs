@@ -47,6 +47,9 @@ try {
           action_progress: [{ action: 'start_gateway', connection_id: failed.connection_id, subject_kind: 'gateway', subject_id: failed.connection_id,
             operation_key: `${failed.connection_id}:start_gateway`, started_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
             status: 'failed', phase: 'starting_gateway', title: 'Start Gateway', detail: failed.service_state.message,
+            active_progress_surface: 'gateway',
+            step_progress: { active_step_id: 'starting_gateway', steps: [{ id: 'starting_gateway', label: 'Starting Gateway service',
+              label_key: 'progress.startingGatewayService', status: 'failed', started_at_unix_ms: Date.now() }] },
             failure: { code: 'operation_failed', severity: 'error', title: 'Start Gateway', summary: failed.service_state.message } }] });
         return { ok: false, scope: 'gateway', code: 'gateway_reinstall_required', message: failed.service_state.message,
           gateway_diagnosis: diagnosis, should_refresh_snapshot: true };
@@ -54,8 +57,11 @@ try {
     }, { snapshot, failed });
     await card.locator('.redeven-gateway-card__primary-button').click();
     const panel = page.locator('.redeven-gateway-action-popover-surface');
-    await panel.getByText(i18n.t('environmentCenter.gatewayGuidanceHostMaintenanceTitle'), { exact: true }).waitFor();
-    await panel.getByText(i18n.t('environmentCenter.gatewayGuidanceStateRecoveryDetail'), { exact: true }).waitFor();
+    await panel.getByRole('button', { name: i18n.t('gatewayExperience.maintenance'), exact: true }).waitFor().catch(async error => {
+      await writeFile(`${output}/failure-${locale}.txt`, await page.locator('body').innerText());
+      await page.screenshot({ path: `${output}/failure-${locale}.png` });
+      throw error;
+    });
     for (const key of ['gatewayActionStart', 'gatewayActionRestart', 'gatewayActionUpdate']) {
       assert.equal(await panel.getByRole('button', { name: i18n.t(`environmentCenter.${key}`), exact: true }).count(), 0);
     }
@@ -63,8 +69,21 @@ try {
       await Promise.all(element.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
     });
     await page.screenshot({ path: `${output}/maintenance-${locale}.png` });
-    await page.keyboard.press('Escape');
+    const beforeMaintenance = await page.evaluate(() => window.settingsFixture.requests.length);
+    await panel.getByRole('button', { name: i18n.t('gatewayExperience.maintenance'), exact: true }).click();
     await panel.waitFor({ state: 'detached' });
+    await page.locator('[aria-controls="gateway-management-maintenance"][aria-current="page"]').waitFor();
+    assert.equal(await page.getByRole('dialog').count(), 0, 'Managed unpaired maintenance must not open the connection editor');
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.length), beforeMaintenance, 'Opening maintenance must not retry a failed operation');
+    await page.getByRole('button', { name: i18n.t('gatewayMaintenance.reset'), exact: true }).click();
+    const confirmation = page.getByRole('dialog');
+    await confirmation.waitFor();
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(request => request.reset_configuration)), false);
+    await page.keyboard.press('Escape');
+    await confirmation.waitFor({ state: 'detached' });
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(request => request.reset_configuration)), false, 'Cancel must not rebuild configuration');
+    await page.screenshot({ path: `${output}/recovery-${locale}.png` });
+    await page.getByRole('button', { name: i18n.t('gatewayExperience.allGateways'), exact: true }).click();
     await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: failed.display_name }), exact: true }).click();
     const disable = page.getByRole('menuitem', { name: i18n.t('gatewayExperience.disableConnection'), exact: true });
     assert.equal(await disable.evaluate(el => getComputedStyle(el).cursor), 'pointer');
@@ -72,11 +91,18 @@ try {
     await page.waitForFunction(() => window.settingsFixture.requests.some(r => r.kind === 'set_gateway_enabled' && !r.enabled));
     assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(r => r.kind === 'set_gateway_enabled' && !r.enabled).length), 1);
     assert.ok(await page.locator('[data-gateway-id]').count() > 1, 'Other Gateways remain reachable in the list');
+    await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), { ...snapshot, gateway_sources: [{ ...failed, local_enabled: false }, ...source.gateway_sources] });
+    await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: failed.display_name }), exact: true }).click();
+    await page.getByRole('menuitem', { name: i18n.t('gatewayExperience.enableConnection'), exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: i18n.t('environmentCenter.gatewayActionEnable'), exact: true }).click();
+    await page.waitForFunction(() => window.settingsFixture.requests.some(r => r.kind === 'set_gateway_enabled' && r.enabled));
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(r => r.kind === 'start_gateway').length), 1, 'Recovery navigation never replays Start');
     const repaired = { ...failed, service_state: { status: 'not_started', can_start: true, can_stop: false,
       can_restart: false, can_update: false, can_pair_after_start: true } };
     await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), { ...snapshot, gateway_sources: [repaired, ...source.gateway_sources] });
     await card.getByRole('button', { name: i18n.t('environmentCenter.gatewayActionStart'), exact: true }).waitFor();
-    report.cases.push({ locale, width, maintenanceGuidance: true, disable: true, dismiss: true, otherGatewaysAvailable: true, repairRestoresStart: true });
+    report.cases.push({ locale, width, directMaintenance: true, noAutomaticReplay: true, resetCancellation: true, disableAndEnable: true, dismiss: true, otherGatewaysAvailable: true, repairRestoresStart: true });
     await context.close();
   }
   assert.deepEqual(report.errors, []);

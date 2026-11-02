@@ -2472,6 +2472,7 @@ export type GatewaySourceActionIntent =
   | 'disable_gateway'
   | 'open_gateway_environment'
   | 'setup_gateway'
+  | 'manage_gateway_service'
   | 'view_gateway_environments'
   | 'cancel_gateway_action';
 
@@ -2550,8 +2551,8 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   if (desktopGatewayCanManageService(gateway) && gateway.service_state?.status === 'service_needs_update') {
     return gatewaySourceAction('update_gateway', 'Update Gateway', 'default');
   }
-  if (gateway.service_state?.status === 'needs_reinstall') {
-    return gatewaySourceAction('refresh_gateway', 'Refresh', 'default');
+  if (desktopGatewayCanManageService(gateway) && gateway.service_state?.status === 'needs_reinstall') {
+    return gatewaySourceAction('manage_gateway_service', 'Service maintenance', 'default');
   }
   if (gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired') {
     return gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default');

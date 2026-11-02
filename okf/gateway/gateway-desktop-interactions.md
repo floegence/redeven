@@ -52,6 +52,8 @@ Card/service/network-restart actions share admission, foreground ownership and p
 
 Service maintenance uses compact open rows, shared text/control sizes and a distinct operation icon per action. Software and service controls use aligned buttons; impacts appear in confirmation, not permanent explanatory cards. Host upgrade/reinstall remain available for stopped, incompatible, unpaired, revoked or previously unreachable services; each attempt must authenticate the configured host. URL-only registrations gain no host controls. Configuration recovery is a separate confirmed action with explicit attachment/network loss and retained identity/archive disclosure. Failed maintenance keeps the actual operation error and can open a new recovery confirmation without stale progress taking over.
 
+Incompatible managed cards open Service maintenance directly. Managed unpaired registrations do not force the connection editor. Failed service progress retains its actual error and offers maintenance navigation after popup exit; navigation never retries the operation. Reinstall confirmation accepts optional validated bind addresses, and configuration rebuild explicitly reviews the new bindings. Binding validation uses the existing label line without changing dialog geometry; controls retain their accessible names and full error description. A listener failure can be corrected by ordinary reinstall without repeating a configuration reset. Pending admission and unrelated snapshots cannot replace that confirmation.
+
 # Boundaries
 
 Presentation never grants authority or proves completion.

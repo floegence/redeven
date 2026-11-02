@@ -23,7 +23,7 @@ Gateway management qualification covers ten locales at 390, 430, 768 and 1280 pi
 
 # Boundaries
 
-These results certify the exercised source-build paths, not installers, native Windows/WSL deployment or production Cloud. Main push qualification is intentionally excluded from this local-only delivery.
+These results certify the exercised source-build paths, not installers, native Windows/WSL deployment or production Cloud. The main push gate separately validates the exact integration tip.
 
 # Evidence
 
@@ -31,7 +31,9 @@ The authority-convergence pass on 2026-11-02 uses published Flowersec 5.11.1 con
 
 The affected Go packages and focused race checks pass. Desktop typecheck, build and changed-source lint pass; its regular suite passes 4,404 tests with two existing skips, and its client suite passes 584 tests. Regression coverage includes identity-preserving trust schemas 1–3 to 4, revoked-key non-resurrection, exact client stream/ticket revocation, independent private host recovery, malformed signatures, real collection observations, stopped CLI state and separate Cloud consent. The DNS reconnect fixture drains callbacks with SDK Shutdown; ten repeated reconnect runs pass without temporary-store cleanup races.
 
-Source-build acceptance passes the 13-case real Electron application fixture, all three Web Center browser engines, isolated Docker egress and all four local/SSH/container host placements. Production Desktop setup passes 20 cases, including current-device revocation, refresh without implicit reauthorization, explicit fresh-key recovery, restart persistence and owned cleanup. Gateway management passes 40 locale/viewport cases including current-device recovery; authentication passes 37, network presentation 28, independent Cloud consent 11 and state recovery two. Runtime connection acceptance passes 135 cases across English, Simplified Chinese and German at narrow and wide viewports. The current-device German narrow layout and Chinese enrollment layout were visually reviewed.
+The 2026-11-02 interaction pass runs the 13-case real Electron application fixture, isolated Docker egress and all four local/SSH/container host placements. Production Desktop setup passes 20 cases, including current-device revocation, explicit fresh-key recovery and restart persistence. Real Runtime enrollment covers seven assertions from missing share addresses through explicit consent, connected membership and client code issuance. The local maintenance fixture covers upgrade, reinstall, incompatible-state rejection, exact configuration archival, retained client trust, occupied-port failure and explicit listener repair without a second reset. Network host acceptance verifies staged bindings and restart persistence.
+
+Presentation acceptance covers ten locales: 40 management viewport cases, 70 geometry/touch/large-text cases, 37 authentication, 28 network, 30 membership and 429 Runtime connection scenarios. Independent Cloud consent adds 11 cases; card progress adds three widths. Two recovery flows verify maintenance navigation, reset cancellation, disable/enable, continued access to other Gateways and restored Start. Chinese desktop/narrow layouts and German narrow recovery confirmation were visually reviewed. Real process fixtures verify owned cleanup; injected snapshots qualify presentation, not host effects. Web Center browser evidence belongs to the earlier authority-convergence pass.
 
 - redeven:internal/localui/gateway_member_browser_test.go — Production no-inbound-Runtime application fixture.
 - redeven:desktop/scripts/fixtures/gateway-access-electron.ts — Real Electron access assertions and owned cleanup.

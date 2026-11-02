@@ -38,8 +38,11 @@ func newEndpoint(origin, listen string) (Endpoint, error) {
 	if err != nil {
 		return Endpoint{}, err
 	}
-	if _, _, err := net.SplitHostPort(listen); err != nil {
-		return Endpoint{}, ErrState
+	addresses := strings.Split(listen, ",")
+	for _, address := range addresses {
+		if _, _, err := net.SplitHostPort(address); err != nil {
+			return Endpoint{}, ErrState
+		}
 	}
 	now := time.Now()
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -62,12 +65,6 @@ func newEndpoint(origin, listen string) (Endpoint, error) {
 	rootPrivate, err := keyPEM(rootKey)
 	if err != nil {
 		return Endpoint{}, err
-	}
-	addresses := strings.Split(listen, ",")
-	for _, address := range addresses {
-		if _, _, err := net.SplitHostPort(address); err != nil {
-			return Endpoint{}, ErrState
-		}
 	}
 	return renewEndpointForOrigins(Endpoint{URL: origin, ListenAddress: addresses[0], ListenAddresses: addresses, RootPEM: certPEM(root.Raw), RootKeyPEM: rootPrivate}, []string{origin})
 }
