@@ -14,6 +14,7 @@ const (
 	TypeID_TERMINAL_VIEW_PUT      uint32 = 2025
 	TypeID_TERMINAL_VIEW_DELETE   uint32 = 2026
 	TypeID_TERMINAL_VIEWS_CHANGED uint32 = 2027
+	TypeID_TERMINAL_VIEWS_UPDATE  uint32 = 2028
 )
 
 func (m *Manager) EnablePersistentViews(path string) error {
@@ -32,6 +33,10 @@ type terminalViewPutReq struct {
 	LayoutJSON   string `json:"layout_json"`
 	BaseRevision uint64 `json:"base_revision"`
 }
+type terminalViewsUpdateReq struct {
+	Changes []terminalViewChange `json:"changes"`
+}
+
 type terminalViewDeleteReq struct {
 	ID           string `json:"id"`
 	BaseRevision uint64 `json:"base_revision"`
@@ -61,6 +66,21 @@ func registerTerminalViewRPCs(m *Manager, r *sessionrpc.Router, meta *session.Me
 		snapshot := m.viewCatalog.Snapshot()
 		return &snapshot, nil
 	})
+	accessgate.RegisterTyped[terminalViewsUpdateReq, TerminalViewSnapshot](r, TypeID_TERMINAL_VIEWS_UPDATE, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalViewsUpdateReq) (*TerminalViewSnapshot, error) {
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
+		}
+		if req == nil {
+			return nil, viewRPCError(errInvalidView)
+		}
+		snapshot, err := m.viewCatalog.Update(req.Changes)
+		if err != nil {
+			return nil, viewRPCError(err)
+		}
+		m.broadcastTerminalMetadata(TypeID_TERMINAL_VIEWS_CHANGED, snapshot)
+		return &snapshot, nil
+	})
+
 	accessgate.RegisterTyped[terminalViewPutReq, TerminalViewSnapshot](r, TypeID_TERMINAL_VIEW_PUT, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalViewPutReq) (*TerminalViewSnapshot, error) {
 		if err := requireProcessLaunchPermission(meta); err != nil {
 			return nil, err

@@ -60,7 +60,7 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     terminal: {
       listViews: vi.fn(async () => ({ revision: 1, views: [] })),
-      putView: vi.fn(async req => ({ revision: 2, views: [{ id: req.id, name: req.name, layout: req.layout, revision: 2, createdAtMs: 1, updatedAtMs: 1 }] })),
+      updateViews: vi.fn(async ({ changes: [req] }) => ({ revision: 2, views: [{ id: req.id, name: req.name, layout: req.layout, revision: 2, createdAtMs: 1, updatedAtMs: 1 }] })),
       deleteView: vi.fn(async () => ({ revision: 3, views: [] })),
       onViewsChanged: vi.fn(() => () => undefined),
       listSessions: vi.fn(async () => ({ sessions: rpcState.sessions })),

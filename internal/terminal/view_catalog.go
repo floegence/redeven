@@ -103,7 +103,7 @@ func viewCatalogSchemaSpec() sqliteutil.Spec {
  `)
 		return err
 	}
-	return sqliteutil.Spec{Kind: "terminal_view_catalog", CurrentVersion: 1, Pragmas: []string{"PRAGMA journal_mode=WAL;", "PRAGMA busy_timeout=3000;"}, Initialize: initialize, Migrations: []sqliteutil.Migration{{FromVersion: 0, ToVersion: 1, Apply: initialize}}, Verify: func(tx *sql.Tx) error {
+	verify := func(tx *sql.Tx) error {
 		tables, err := sqliteutil.ListUserTablesTx(tx)
 		if err != nil {
 			return err
@@ -155,7 +155,26 @@ func viewCatalogSchemaSpec() sqliteutil.Spec {
 			}
 		}
 		return rows.Err()
-	}}
+	}
+	return sqliteutil.Spec{Kind: "terminal_view_catalog", CurrentVersion: 2, Pragmas: []string{"PRAGMA journal_mode=WAL;", "PRAGMA busy_timeout=3000;"},
+		Initialize: initialize,
+		Migrations: []sqliteutil.Migration{{FromVersion: 0, ToVersion: 1, Apply: initialize}, {FromVersion: 1, ToVersion: 2, Apply: func(tx *sql.Tx) error {
+			if err := verify(tx); err != nil {
+				return err
+			}
+			return migrateViewOwnership(tx)
+		}}},
+		Verify: func(tx *sql.Tx) error {
+			if err := verify(tx); err != nil {
+				return err
+			}
+			views, err := readViewsTx(tx)
+			if err != nil {
+				return err
+			}
+			return validateViewOwnership(views)
+		},
+	}
 }
 func openViewCatalog(path string) (*viewCatalog, error) {
 	db, err := sqliteutil.Open(path, viewCatalogSchemaSpec())
@@ -197,6 +216,9 @@ func (c *viewCatalog) Close() error {
 func (c *viewCatalog) Snapshot() TerminalViewSnapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.snapshotLocked()
+}
+func (c *viewCatalog) snapshotLocked() TerminalViewSnapshot {
 	views := make([]TerminalView, 0, len(c.views))
 	for _, v := range c.views {
 		views = append(views, v)
@@ -209,75 +231,106 @@ func (c *viewCatalog) Snapshot() TerminalViewSnapshot {
 	})
 	return TerminalViewSnapshot{c.revision, views}
 }
+
+type terminalViewChange struct {
+	ID           string `json:"id"`
+	Name         string `json:"name,omitempty"`
+	LayoutJSON   string `json:"layout_json,omitempty"`
+	BaseRevision uint64 `json:"base_revision"`
+	Delete       bool   `json:"delete,omitempty"`
+}
+
+// Apply all affected views atomically, including membership transfers. A stale
+// source revision or a conflicting owner rejects the entire operation.
+func (c *viewCatalog) Update(changes []terminalViewChange) (TerminalViewSnapshot, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(changes) == 0 || len(changes) > 64 {
+		return TerminalViewSnapshot{}, errInvalidView
+	}
+	next := make(map[string]TerminalView, len(c.views))
+	for id, view := range c.views {
+		next[id] = view
+	}
+	seen := map[string]bool{}
+	now := time.Now().UnixMilli()
+	for _, change := range changes {
+		if change.ID == "" || seen[change.ID] {
+			return TerminalViewSnapshot{}, errInvalidView
+		}
+		seen[change.ID] = true
+		previous, exists := c.views[change.ID]
+		if (exists && previous.Revision != change.BaseRevision) || (!exists && change.BaseRevision != 0) {
+			return TerminalViewSnapshot{}, errViewConflict
+		}
+		if change.Delete {
+			if !exists {
+				return TerminalViewSnapshot{}, errViewNotFound
+			}
+			delete(next, change.ID)
+			continue
+		}
+		view := TerminalView{ID: change.ID, Name: change.Name, LayoutJSON: change.LayoutJSON, Revision: c.revision + 1, CreatedAtMs: now, UpdatedAtMs: now}
+		if exists {
+			view.CreatedAtMs = previous.CreatedAtMs
+		}
+		if err := validateView(view); err != nil {
+			return TerminalViewSnapshot{}, err
+		}
+		next[view.ID] = view
+	}
+	if len(next) > 64 {
+		return TerminalViewSnapshot{}, errInvalidView
+	}
+	if err := validateViewOwnership(next); err != nil {
+		return TerminalViewSnapshot{}, err
+	}
+	if c.db != nil {
+		tx, err := c.db.Begin()
+		if err != nil {
+			return TerminalViewSnapshot{}, err
+		}
+		defer tx.Rollback()
+		if err = c.advanceRevisionTx(tx); err != nil {
+			return TerminalViewSnapshot{}, err
+		}
+		for _, change := range changes {
+			if change.Delete {
+				_, err = tx.Exec("DELETE FROM terminal_views WHERE id=?", change.ID)
+			} else {
+				err = writeViewTx(tx, next[change.ID])
+			}
+			if err != nil {
+				return TerminalViewSnapshot{}, err
+			}
+		}
+		if err = tx.Commit(); err != nil {
+			return TerminalViewSnapshot{}, err
+		}
+	}
+	c.revision++
+	c.views = next
+	return c.snapshotLocked(), nil
+}
 func (c *viewCatalog) Put(view TerminalView, base uint64) (TerminalView, error) {
-	if err := validateView(view); err != nil {
+	snapshot, err := c.Update([]terminalViewChange{{ID: view.ID, Name: view.Name, LayoutJSON: view.LayoutJSON, BaseRevision: base}})
+	if err != nil {
 		return TerminalView{}, err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	previous, exists := c.views[view.ID]
-	if (exists && previous.Revision != base) || (!exists && base != 0) {
-		return TerminalView{}, errViewConflict
-	}
-	if !exists && len(c.views) >= 64 {
-		return TerminalView{}, fmt.Errorf("%w: at most 64 views", errInvalidView)
-	}
-	now := time.Now().UnixMilli()
-	view.Revision = c.revision + 1
-	view.CreatedAtMs = now
-	view.UpdatedAtMs = now
-	if exists {
-		view.CreatedAtMs = previous.CreatedAtMs
-	}
-	if c.db != nil {
-		tx, err := c.db.Begin()
-		if err != nil {
-			return TerminalView{}, err
-		}
-		defer tx.Rollback()
-		if err = c.advanceRevisionTx(tx); err != nil {
-			return TerminalView{}, err
-		}
-		if _, err = tx.Exec("INSERT INTO terminal_views(id,name,layout_json,revision,created_at_ms,updated_at_ms) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,revision=excluded.revision,updated_at_ms=excluded.updated_at_ms", view.ID, view.Name, view.LayoutJSON, view.Revision, view.CreatedAtMs, view.UpdatedAtMs); err != nil {
-			return TerminalView{}, err
-		}
-		if err = tx.Commit(); err != nil {
-			return TerminalView{}, err
+	for _, v := range snapshot.Views {
+		if v.ID == view.ID {
+			return v, nil
 		}
 	}
-	c.revision = view.Revision
-	c.views[view.ID] = view
-	return view, nil
+	return TerminalView{}, errViewNotFound
 }
 func (c *viewCatalog) Delete(id string, base uint64) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	v, ok := c.views[id]
-	if !ok {
-		return errViewNotFound
-	}
-	if v.Revision != base {
-		return errViewConflict
-	}
-	if c.db != nil {
-		tx, err := c.db.Begin()
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-		if err = c.advanceRevisionTx(tx); err != nil {
-			return err
-		}
-		if _, err = tx.Exec("DELETE FROM terminal_views WHERE id=?", id); err != nil {
-			return err
-		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-	}
-	delete(c.views, id)
-	c.revision++
-	return nil
+	_, err := c.Update([]terminalViewChange{{ID: id, BaseRevision: base, Delete: true}})
+	return err
+}
+func writeViewTx(tx *sql.Tx, view TerminalView) error {
+	_, err := tx.Exec("INSERT INTO terminal_views(id,name,layout_json,revision,created_at_ms,updated_at_ms) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,revision=excluded.revision,updated_at_ms=excluded.updated_at_ms", view.ID, view.Name, view.LayoutJSON, view.Revision, view.CreatedAtMs, view.UpdatedAtMs)
+	return err
 }
 
 // Fail closed if another process changed the persisted catalog after startup.

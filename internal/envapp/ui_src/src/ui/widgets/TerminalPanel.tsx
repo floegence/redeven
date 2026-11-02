@@ -16,7 +16,7 @@ import { SplitWorkspace, dockSplitWorkspaceItem, presetSplitWorkspace, splitWork
 import { createTerminalWorkspace } from './terminalWorkspace';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Grid, Link, Maximize, Restore, Menu, Pencil, Plus, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Grid, Link, Menu, Pencil, Plus, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { FolderIcon } from '@floegence/floe-webapp-core/file-browser';
 
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -1744,7 +1744,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     single: i18n.t('terminalWorkspace.single'), columns: i18n.t('terminalWorkspace.columns'), rows: i18n.t('terminalWorkspace.rows'),
     'three-columns': i18n.t('terminalWorkspace.threeColumns'), 'main-left': i18n.t('terminalWorkspace.mainLeft'), grid: i18n.t('terminalWorkspace.grid'),
   });
-  const maximizedWorkspaceSessionId = createMemo(() => workspace.maximized() ? activeSessionId() : null);
   const selectWorkspacePane = (id: string) => {
     clearPendingTerminalFocusIntent();
     markSessionMounted(id);
@@ -1769,7 +1768,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const base = splitWorkspaceItems(current).includes(targetId) ? current : original;
       batch(() => {
         workspace.commit(dockSplitWorkspaceItem(base, id, targetId, edge, 'split-' + createClientId()));
-        workspace.setMaximized(false);
         markSessionMounted(id);
         setActiveSessionId(id);
       });
@@ -1786,6 +1784,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       if (id && workspace.activeViewId() === viewId) batch(() => { workspace.commit(splitWorkspacePane(id)); markSessionMounted(id); setActiveSessionId(id); });
     } finally { setWorkspaceBusy(false); }
   };
+  const createWorkspaceView = async () => {
+    if (workspaceBusy() || !connected() || !terminalCatalog?.viewCatalog.ready()) return;
+    const group = terminalGroups().find(group => group.id === activeGroupId()) ?? terminalGroups()[0];
+    if (!group) return;
+    const environment = env.env_id();
+    const selectedView = workspace.activeViewId();
+    const selectedSession = activeSessionId();
+    setWorkspaceBusy(true);
+    try {
+      const id = await beginCreateSession(undefined, group.defaultWorkingDir, group.id, false);
+      if (id && env.env_id() === environment && workspace.activeViewId() === selectedView && activeSessionId() === selectedSession) batch(() => {
+        workspace.newView(id); markSessionMounted(id); setActiveSessionId(id);
+      });
+    } finally { setWorkspaceBusy(false); }
+  };
   const applyWorkspacePreset = async (preset: SplitWorkspacePreset) => {
     if (workspaceBusy() || !connected() || (terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready())) return;
     const target = activeSession();
@@ -1797,7 +1810,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       : terminalGroups().find(group => group.id === target.groupId)?.defaultWorkingDir;
     if (!startupDir) return;
     const count = preset === 'grid' ? 4 : preset === 'single' ? 1 : preset === 'columns' || preset === 'rows' ? 2 : 3;
-    const ids = [...new Set([target.id, ...workspace.displayedPaneIds(), ...sessions().map(session => session.id)])].slice(0, count);
+    const ids = [...new Set([target.id, ...workspace.displayedPaneIds()])].slice(0, count);
     setWorkspaceBusy(true);
     try {
       while (ids.length < count) {
@@ -1808,7 +1821,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const available = ids.filter(id => sessions().some(session => session.id === id));
       batch(() => {
         workspace.commit(presetSplitWorkspace(preset, available, () => 'split-' + createClientId()));
-        workspace.setMaximized(false);
         available.forEach(markSessionMounted);
         if (available.includes(target.id)) setActiveSessionId(target.id);
       });
@@ -1920,7 +1932,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const focusIntent = metadata?.restoreFocus ? metadata.focusIntent ?? null : null;
       if (!metadata?.restoreFocus) clearPendingTerminalFocusIntent();
       batch(() => {
-        if (sessionId !== activeSessionId()) workspace.setMaximized(false);
         workspace.browseSession(sessionId);
         setActiveSessionId(sessionId);
       });
@@ -3115,8 +3126,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const beginCreateSession = async (name: string | undefined, workingDir: string, groupId: string, activate = true): Promise<string | null> => {
-    if (activate) workspace.leaveView();
-    const pendingSession = createPendingSession(name, workingDir, groupId, activate);
+    const pendingSession = batch(() => {
+      if (activate) workspace.leaveView();
+      return createPendingSession(name, workingDir, groupId, activate);
+    });
     terminalCatalog?.getCoordinator();
     const createFence = captureSessionMutationFence();
     // Let the optimistic tab reach the screen before starting the heavier RPC/state reconciliation path.
@@ -4862,9 +4875,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
     if (e.defaultPrevented) return;
-    if (e.key === 'Escape' && workspace.maximized() && !searchOpen() && !sessionDrawerOpen()) {
-      e.preventDefault(); workspace.setMaximized(false); return;
-    }
 
     if (e.key === 'Escape' && searchOpen()) {
       e.preventDefault();
@@ -5041,8 +5051,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         onOpenTreeContextMenu={openTerminalTreeMenu}
         onRefresh={handleRefresh}
         onFilterQueryChange={setSessionFilterQuery}
-        viewList={<Show when={terminalCatalog?.viewCatalog}>{catalog => <TerminalViewList catalog={catalog()} activeId={workspace.activeViewId()} query={sessionFilterQuery()} disabled={!activeSessionId() || workspaceBusy() || !connected()}
-          onNew={workspace.newView} onSelect={id => { workspace.activateView(id); if (navigationOverlay()) setSessionDrawerOpen(false); }} onRename={workspace.renameView} onDelete={workspace.removeView} />}</Show>}
+        viewList={<Show when={terminalCatalog?.viewCatalog}>{catalog => <TerminalViewList catalog={catalog()} activeId={workspace.activeViewId()} query={sessionFilterQuery()} disabled={workspaceBusy() || !connected()}
+          onNew={() => void createWorkspaceView()} onSelect={id => { workspace.activateView(id); if (navigationOverlay()) setSessionDrawerOpen(false); }} onRename={workspace.renameView} onDelete={workspace.removeView} />}</Show>}
         dragPreviewBoundary={navigationContainer}
         footerActions={<Show when={!navigationOverlay()}>
           <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => rootEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
@@ -5344,10 +5354,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 <div class="h-full">
                   <SplitWorkspace
                     itemIds={sessionPanelIds()} layout={workspace.displayedLayout()} activeId={activeDisplaySessionId()}
-                    compact={isMobileLayout()} maximizedId={maximizedWorkspaceSessionId()}
+                    compact={isMobileLayout()}
                     showHeaders={!isMobileLayout()}
                     resizeLabel={i18n.t('terminalWorkspace.resize')}
-                    onLayoutChange={next => { workspace.commit(next); workspace.setMaximized(false); }} onActivate={selectWorkspacePane}
+                    onLayoutChange={workspace.commit} onActivate={selectWorkspacePane}
                     externalDragType={terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready() ? undefined : "application/x-redeven-terminal-session"}
                     resolveExternalDrag={event => event.dataTransfer?.getData('application/x-redeven-terminal-session') || null}
                     renderHeader={sessionId => <>
@@ -5366,15 +5376,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       <Dropdown align="end" trigger={<Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.split')} disabled={workspaceBusy() || !connected() || (terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready())}><Plus class="h-3 w-3" /></Button>}
                         items={(['left', 'right', 'top', 'bottom'] as const).map(edge => ({ id: edge, label: i18n.t(edge === 'left' ? 'terminalWorkspace.left' : edge === 'right' ? 'terminalWorkspace.right' : edge === 'top' ? 'terminalWorkspace.top' : 'terminalWorkspace.bottom') }))}
                         onSelect={edge => void splitWorkspaceSession(sessionId, edge as SplitWorkspaceEdge)} />
-                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0"
-                        aria-label={workspace.maximized() ? i18n.t('terminalWorkspace.restore') : i18n.t('terminalWorkspace.maximize')}
-                        title={workspace.maximized() ? i18n.t('terminalWorkspace.restore') : i18n.t('terminalWorkspace.maximize')}
-                        aria-pressed={workspace.maximized()}
-                        disabled={workspace.displayedPaneIds().length < 2}
-                        onClick={() => { selectWorkspacePane(sessionId); workspace.setMaximized(value => !value); }}>
-                        <Show when={workspace.maximized()} fallback={<Maximize class="h-3 w-3" />}><Restore class="h-3 w-3" /></Show>
-                      </Button>
-                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.closePane')} disabled={workspace.displayedPaneIds().length < 2} onClick={() => workspace.closePane(sessionId)}><X class="h-3 w-3" /></Button>
+                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.closePane')} title={i18n.t('terminalWorkspace.closePane')} disabled={!workspace.activeViewId()} onClick={() => workspace.closePane(sessionId)}><X class="h-3 w-3" /></Button>
                     </>}
                     renderItem={(sessionId, visible) => {
                       const sessionForId = createMemo(() => renderableSessions().find((session) => session.id === sessionId) ?? null);

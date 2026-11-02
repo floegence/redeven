@@ -1,5 +1,5 @@
-import type { TerminalViewSnapshot, TerminalViewPutRequest, TerminalViewDeleteRequest } from './sdk/terminalViews';
-import { fromWireTerminalViewSnapshot, toWireTerminalViewPutRequest, toWireTerminalViewDeleteRequest } from './codec/terminalViews';
+import type { TerminalViewSnapshot, TerminalViewPutRequest, TerminalViewDeleteRequest, TerminalViewsUpdateRequest } from './sdk/terminalViews';
+import { fromWireTerminalViewSnapshot, toWireTerminalViewPutRequest, toWireTerminalViewDeleteRequest, toWireTerminalViewsUpdateRequest } from './codec/terminalViews';
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
 type RpcOperationOptions = NonNullable<Parameters<RpcHelpers['call']>[3]>;
 import type { JsonValue } from '@floegence/flowersec-core';
@@ -255,6 +255,7 @@ export type RedevenV1Rpc = {
     semanticClear: (req: TerminalSemanticClearRequest) => Promise<TerminalSemanticClearResponse>;
     deleteSession: (req: TerminalSessionDeleteRequest) => Promise<TerminalSessionDeleteResponse>;
     listViews: () => Promise<TerminalViewSnapshot>;
+    updateViews: (req: TerminalViewsUpdateRequest) => Promise<TerminalViewSnapshot>;
     putView: (req: TerminalViewPutRequest) => Promise<TerminalViewSnapshot>;
     deleteView: (req: TerminalViewDeleteRequest) => Promise<TerminalViewSnapshot>;
     onViewsChanged: (handler: (event: TerminalViewSnapshot) => void) => () => void;
@@ -538,6 +539,7 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call(redevenV1TypeIds.terminal.sessionDelete, payload, decodeWire(redevenWireSchemaNames.fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionDeleteResponse));
         return resp;
       },
+      updateViews: async req => call(redevenV1TypeIds.terminal.viewsUpdate, toWireTerminalViewsUpdateRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot)),
       listViews: async () => call(redevenV1TypeIds.terminal.viewList, {}, decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot)),
       putView: async req => call(redevenV1TypeIds.terminal.viewPut, toWireTerminalViewPutRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot)),
       deleteView: async req => call(redevenV1TypeIds.terminal.viewDelete, toWireTerminalViewDeleteRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot)),

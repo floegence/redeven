@@ -8,6 +8,8 @@ afterEach(() => {
   dispose?.();
   document.body.replaceChildren();
   localStorage.removeItem('terminal-workspace-test');
+  localStorage.removeItem('terminal-workspace-test:active-view');
+  localStorage.removeItem('terminal-workspace-other:active-view');
   localStorage.removeItem('terminal-workspace-other');
 });
 const tick = () => new Promise<void>(resolve => queueMicrotask(resolve));
@@ -75,10 +77,45 @@ it('defers selection placement during creation and isolates environment storage'
   setBusy(false); await tick();
   expect(controller.paneIds()).toEqual(['a', 'b', 'c']);
   const previous = localStorage.getItem('terminal-workspace-test');
-  controller.setMaximized(true);
   batch(() => { setKey('terminal-workspace-other'); setIds(['z']); setActive('z'); });
   await tick();
   expect(controller.paneIds()).toEqual(['z']);
-  expect(controller.maximized()).toBe(false);
   expect(localStorage.getItem('terminal-workspace-test')).toBe(previous);
+});
+
+it('selects the owning view when browsing a member from another view', async () => {
+  const { createTerminalViewCatalog } = await import('../services/terminalViewCatalog');
+  const views = [
+    { id: 'view-ab', name: 'AB', layout: presetSplitWorkspace('columns', ['a', 'b'], () => 'split-ab')!, revision: 2, createdAtMs: 1, updatedAtMs: 1 },
+    { id: 'view-cd', name: 'CD', layout: presetSplitWorkspace('rows', ['c', 'd'], () => 'split-cd')!, revision: 3, createdAtMs: 2, updatedAtMs: 2 },
+  ];
+  const [active, setActive] = createSignal<string | null>('a');
+  let workspace!: ReturnType<typeof createTerminalWorkspace>;
+  let catalog!: ReturnType<typeof createTerminalViewCatalog>;
+  dispose = render(() => {
+    catalog = createTerminalViewCatalog({ scope: () => 'env', connected: () => true, rpc: {
+      listViews: async () => ({ revision: 3, views }), updateViews: async () => ({ revision: 3, views }), onViewsChanged: () => () => undefined,
+    } });
+    workspace = createTerminalWorkspace({ catalog, storageKey: () => 'terminal-workspace-test', sessionIds: () => ['a', 'b', 'c', 'd', 'e'], hydrated: () => true, activeId: active, select: setActive });
+    return <div />;
+  }, document.body);
+  await expect.poll(catalog.ready).toBe(true);
+  expect(workspace.activeViewId()).toBe('view-ab');
+  workspace.activateView('view-cd');
+  batch(() => { workspace.browseSession('b'); setActive('b'); });
+  expect(workspace.activeViewId()).toBe('view-ab');
+  expect(workspace.displayedPaneIds()).toEqual(['a', 'b']);
+  expect(active()).toBe('b');
+  batch(() => { workspace.browseSession('e'); setActive('e'); });
+  expect(workspace.activeViewId()).toBeNull();
+  expect(workspace.displayedPaneIds()).toEqual(['e']);
+  batch(() => { workspace.browseSession('b'); setActive('b'); });
+  workspace.closePane('b');
+  expect(catalog.ownerOf('b')).toBeUndefined();
+  expect(catalog.ownerOf('a')?.id).toBe('view-ab');
+  expect(active()).toBe('a');
+  workspace.closePane('a');
+  expect(catalog.ownerOf('a')).toBeUndefined();
+  expect(workspace.activeViewId()).toBeNull();
+  expect(workspace.displayedPaneIds()).toEqual(['a']);
 });

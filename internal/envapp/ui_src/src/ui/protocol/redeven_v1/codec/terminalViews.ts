@@ -1,6 +1,6 @@
 import type { JsonValue } from '@floegence/flowersec-core';
-import type { TerminalViewSnapshot, TerminalViewPutRequest, TerminalViewDeleteRequest } from '../sdk/terminalViews';
-import type { wire_terminal_view_snapshot_resp, wire_terminal_view_put_req, wire_terminal_view_delete_req } from '../wire/terminalViews';
+import type { TerminalViewSnapshot, TerminalViewPutRequest, TerminalViewDeleteRequest, TerminalViewsUpdateRequest } from '../sdk/terminalViews';
+import type { wire_terminal_view_snapshot_resp, wire_terminal_view_put_req, wire_terminal_view_delete_req, wire_terminal_views_update_req } from '../wire/terminalViews';
 export function fromWireTerminalViewSnapshot(value: wire_terminal_view_snapshot_resp): TerminalViewSnapshot {
   if (!Number.isSafeInteger(value.revision) || value.revision < 1 || value.views.length > 64) throw new Error('Invalid terminal view catalog');
   const ids = new Set<string>();
@@ -18,4 +18,8 @@ export function toWireTerminalViewPutRequest(req: TerminalViewPutRequest): wire_
 }
 export function toWireTerminalViewDeleteRequest(req: TerminalViewDeleteRequest): wire_terminal_view_delete_req {
   return { id: req.id, base_revision: req.baseRevision };
+}
+
+export function toWireTerminalViewsUpdateRequest(req: TerminalViewsUpdateRequest): wire_terminal_views_update_req {
+  return { changes: req.changes.map(change => 'delete' in change ? { id: change.id, base_revision: change.baseRevision, delete: true } : toWireTerminalViewPutRequest(change)) };
 }

@@ -29,6 +29,7 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 		"view put":                  TypeID_TERMINAL_VIEW_PUT,
 		"view delete":               TypeID_TERMINAL_VIEW_DELETE,
 		"views changed":             TypeID_TERMINAL_VIEWS_CHANGED,
+		"views update":              TypeID_TERMINAL_VIEWS_UPDATE,
 		"group list":                TypeID_TERMINAL_GROUP_LIST,
 		"group create":              TypeID_TERMINAL_GROUP_CREATE,
 		"group update":              TypeID_TERMINAL_GROUP_UPDATE,
@@ -119,6 +120,11 @@ func TestContextWorkAndGroupRPCTypeIDsAreGloballyUnique(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
 	internalRoot := filepath.Join(repoRoot, "internal")
 	targets := map[uint32]string{
+		TypeID_TERMINAL_VIEW_LIST:                "terminal view list",
+		TypeID_TERMINAL_VIEW_PUT:                 "terminal view put",
+		TypeID_TERMINAL_VIEW_DELETE:              "terminal view delete",
+		TypeID_TERMINAL_VIEWS_CHANGED:            "terminal views changed",
+		TypeID_TERMINAL_VIEWS_UPDATE:             "terminal views update",
 		TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE: "terminal execution context",
 		TypeID_TERMINAL_WORK_STATE_UPDATE:        "terminal semantic work state",
 		TypeID_TERMINAL_GROUP_LIST:               "terminal group list",

@@ -15,7 +15,7 @@ Runtime catalogs own groups, assignments and named views. Activity/Workbench sha
 
 Redeven owns versioned apps/terminal/groups.sqlite and views.sqlite, opened before readiness. Future/wrong-kind/drifted stores remain unchanged. Group reorder atomically persists the full non-Default order; Default stays at zero.
 
-Views use schema kind terminal_view_catalog, version 1. RPC 2024–2027 list/put/delete/notify use process-launch permission and the access gate. Records store ID, name, published SplitWorkspace JSON, revision and timestamps. Bounds: 64 views, 32 panes, depth 16, 64KiB layout, 128-byte IDs, 64-character names. Validate shape, unique nodes, axis and ratio. Atomic writes check per-view and database catalog revisions. Notifications carry full snapshots. Deleting views preserves sessions.
+Views use schema kind terminal_view_catalog, version 2. RPC 2024–2027 list/put/delete/notify and 2028 atomic batch update use process-launch permission and the access gate. Records store ID, name, published SplitWorkspace JSON, revision and timestamps. Bounds: 64 views, 32 panes, depth 16, 64KiB layout, 128-byte IDs, 64-character names. Validate shape, unique nodes, axis and ratio. Atomic writes check every touched view and database catalog revision, rejecting duplicate session ownership. A transfer updates both source and destination in one transaction and emits one full snapshot. Stale writes reject the entire transfer. Deleting views preserves sessions. The contiguous v1→v2 migration keeps each session in the highest-revision view (then newest creation time, then lexical ID), prunes duplicate leaves from older trees and deletes empty aliases without modifying sessions or PTYs. Invalid stores fail unchanged.
 
 ## Projection and interaction
 

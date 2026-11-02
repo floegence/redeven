@@ -62,13 +62,18 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     terminal: {
       listViews: vi.fn(async () => ({ revision: rpcState.viewRevision, views: [...rpcState.views] })),
-      putView: vi.fn(async req => {
-        const previous = rpcState.views.find(view => view.id === req.id);
-        if ((previous?.revision ?? 0) !== req.baseRevision) throw new Error('conflict');
-        rpcState.views = [...rpcState.views.filter(view => view.id !== req.id), { id: req.id, name: req.name, layout: req.layout, revision: ++rpcState.viewRevision, createdAtMs: 1, updatedAtMs: 1 }];
-        return { revision: rpcState.viewRevision, views: [...rpcState.views] };
+      updateViews: vi.fn(async ({ changes }) => {
+        for (const req of changes) {
+          const previous = rpcState.views.find(view => view.id === req.id);
+          if ((previous?.revision ?? 0) !== req.baseRevision) throw new Error('conflict');
+        }
+        const revision = ++rpcState.viewRevision;
+        for (const req of changes) {
+          rpcState.views = rpcState.views.filter(view => view.id !== req.id);
+          if (!('delete' in req)) rpcState.views.push({ id: req.id, name: req.name, layout: req.layout, revision, createdAtMs: 1, updatedAtMs: 1 });
+        }
+        return { revision, views: [...rpcState.views] };
       }),
-      deleteView: vi.fn(async req => { rpcState.views = rpcState.views.filter(view => view.id !== req.id); return { revision: ++rpcState.viewRevision, views: [...rpcState.views] }; }),
       onViewsChanged: vi.fn(() => () => undefined),
       listSessions: vi.fn(async () => ({ sessions: rpcState.sessions })),
       listGroups: vi.fn(async () => ({
@@ -249,7 +254,7 @@ describe('TerminalPanel loading continuity', () => {
     vi.restoreAllMocks();
   });
 
-  it('retains terminal instances while applying layouts, focusing panes, maximizing and closing placement', async () => {
+  it('retains terminal instances while applying layouts, focusing panes and removing placement', async () => {
     let sequence = 0;
     const create = vi.fn(async () => ({ ...createdSession('split-session-' + ++sequence), name: 'Shell ' + sequence }));
     const host = renderCreateFlow(create);
@@ -266,11 +271,8 @@ describe('TerminalPanel loading continuity', () => {
     const second = host.querySelector<HTMLElement>('[data-floe-split-pane="split-session-2"]')!;
     second.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
     expect(runtimeState.propsBySession.get('split-session-2').active()).toBe(true);
-    await userEvent.click(second.querySelector<HTMLButtonElement>('[aria-label="Maximize pane"]')!);
-    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
-    await userEvent.click(page.getByRole('button', { name: 'Restore panes', exact: true }));
-    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(4);
-    await userEvent.click(second.querySelector<HTMLButtonElement>('[aria-label="Close pane"]')!);
+    expect(host.querySelector('[aria-label="Maximize pane"], [aria-label="Restore panes"]')).toBeNull();
+    await userEvent.click(second.querySelector<HTMLButtonElement>('[aria-label="Remove from view"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
     expect(runtimeState.propsBySession.size).toBe(4);
     expect(host.querySelector('[data-terminal-session-id="split-session-2"]')).not.toBeNull();
@@ -377,7 +379,7 @@ describe('TerminalPanel loading continuity', () => {
     expect(rpcState.views.map(view => view.id)).toEqual([viewId]);
   });
 
-  it('supports native row dragging, center replacement, maximize docking and cancellation', async () => {
+  it('supports native row dragging, center replacement, repeated docking and cancellation', async () => {
     await page.viewport(1280, 800);
     rpcState.sessions = ['native-a', 'native-b', 'native-c'].map((id) => ({ ...createdSession(id), isActive: id === 'native-a' }));
     const host = document.createElement('div');
@@ -396,8 +398,6 @@ describe('TerminalPanel loading continuity', () => {
     await native.dragTerminalSessionToPane('native-c', 'native-b', 'center');
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).toEqual(['native-a', 'native-c']);
     runtimeState.propsBySession.get('native-c').onInteractive?.('native-c');
-    const pane = host.querySelector('[data-floe-split-pane="native-a"]')!;
-    await userEvent.click(pane.querySelector<HTMLButtonElement>('[aria-label="Maximize pane"]')!);
     await native.dragTerminalSessionToPane('native-b', 'native-a', 'bottom');
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
     const saved = localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page');
@@ -460,17 +460,10 @@ describe('TerminalPanel loading continuity', () => {
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).toEqual(['browse-c']);
     await expect.poll(() => rpcState.views.length).toBe(1);
     expect(rpcState.views[0].layout).toEqual(JSON.parse(saved!));
-    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id]')!);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="browse-b"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
     await expect.poll(() => runtimeState.propsBySession.get('browse-b').active()).toBe(true);
-    const pane = host.querySelector('[data-floe-split-pane="browse-b"]')!;
-    const maximize = pane.querySelector<HTMLButtonElement>('[aria-label="Maximize pane"]')!;
-    const maximizeIcon = maximize.innerHTML;
-    await userEvent.click(maximize);
-    const restore = pane.querySelector<HTMLButtonElement>('[aria-label="Restore panes"]')!;
-    expect(restore.innerHTML).not.toBe(maximizeIcon);
-    expect(restore.getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[aria-label="Maximize pane"], [aria-label="Restore panes"]')).toBeNull();
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="browse-a"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
     await expect.poll(() => runtimeState.propsBySession.get('browse-a').active()).toBe(true);
@@ -525,18 +518,17 @@ describe('TerminalPanel loading continuity', () => {
     await native.dragTerminalSessionToPane('views-b', 'views-a', 'right');
     await expect.poll(() => rpcState.views.length).toBe(1);
     const firstId = rpcState.views[0].id;
-    const firstLayout = rpcState.views[0].layout;
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="views-c"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
     runtimeState.propsBySession.get('views-c').onInteractive?.('views-c');
     await native.dragTerminalSessionToPane('views-a', 'views-c', 'bottom');
     await expect.poll(() => rpcState.views.length).toBe(2);
     const secondId = rpcState.views.find(view => view.id !== firstId)!.id;
-    expect(rpcState.views.find(view => view.id === firstId)!.layout).toEqual(firstLayout);
+    expect(rpcState.views.find(view => view.id === firstId)!.layout).toEqual({ type: 'pane', id: 'views-b' });
     expect(host.querySelectorAll('[data-terminal-view-id]')).toHaveLength(2);
     expect(host.querySelector('[data-terminal-view-count], .terminal-view-pane-count')).toBeNull();
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="' + firstId + '"]')!);
-    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-a', 'views-b']);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-b']);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for View 1"]')!);
     await userEvent.click(page.getByRole('menuitem', { name: 'Rename view', exact: true }));
     await page.getByRole('textbox', { name: 'View name', exact: true }).fill('Services');
@@ -544,7 +536,7 @@ describe('TerminalPanel loading continuity', () => {
     await expect.poll(() => rpcState.views.find(view => view.id === firstId)?.name).toBe('Services');
     disposeRendered(); disposeRendered = mount();
     await expect.poll(() => host.querySelectorAll('[data-terminal-view-id]').length).toBe(2);
-    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="' + secondId + '"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-a', 'views-c']);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for View 2"]')!);
@@ -554,6 +546,36 @@ describe('TerminalPanel loading continuity', () => {
     expect(rpcState.views[0].name).toBe('Services');
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
     await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/views.png' });
+  });
+
+  it('creates independent views with fresh sessions and ordinary sessions leave the current view', async () => {
+    let sequence = 0;
+    const create = vi.fn(async () => createdSession('new-view-' + ++sequence));
+    const host = renderCreateFlow(create);
+    await expect.poll(() => runtimeState.propsBySession.has('new-view-1')).toBe(true);
+    runtimeState.propsBySession.get('new-view-1').onInteractive?.('new-view-1');
+    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Two columns', exact: true }));
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    const first = rpcState.views[0];
+    await userEvent.click(page.getByRole('button', { name: 'New view', exact: true }));
+    await expect.poll(() => rpcState.views.length).toBe(2);
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(rpcState.views.find(view => view.id !== first.id)?.layout).toEqual({ type: 'pane', id: 'new-view-3' });
+    expect(rpcState.views.find(view => view.id === first.id)?.layout).toEqual(first.layout);
+    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Two columns', exact: true }));
+    await expect.poll(() => create.mock.calls.length).toBe(4);
+    expect(visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['new-view-3', 'new-view-4']);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="new-view-2"]')!);
+    await expect.poll(() => runtimeState.propsBySession.get('new-view-2').active()).toBe(true);
+    expect(visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['new-view-1', 'new-view-2']);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('.terminal-navigation-footer [aria-label="More options"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'New session', exact: true }));
+    await expect.poll(() => create.mock.calls.length).toBe(5);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['new-view-5']);
+    expect(host.querySelector('[data-terminal-view-id][aria-pressed="true"]')).toBeNull();
+    expect(rpcState.views).toHaveLength(2);
   });
 
   it('keeps the existing pane active and visible while a split session is being created', async () => {

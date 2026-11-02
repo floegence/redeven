@@ -17,7 +17,6 @@ export function createTerminalWorkspace(options: {
   const catalog = options.catalog;
   const [activeViewId, setActiveViewId] = createSignal<string | null>(null);
   const [layout, setLayout] = createSignal<SplitWorkspaceLayout | null>(null);
-  const [maximized, setMaximized] = createSignal(false);
   let loadedKey = '';
   let legacyImportConsidered = false;
   createEffect(on(options.storageKey, key => {
@@ -26,7 +25,6 @@ export function createTerminalWorkspace(options: {
     const saved = readUIStorageJSON<unknown>(key, null);
     setLayout(isSplitWorkspaceLayout(saved) ? saved : null);
     setActiveViewId(readUIStorageJSON<string | null>(key + ':active-view', null));
-    setMaximized(false);
   }));
   const nextViewName = () => {
     const names = new Set(catalog?.views().map(view => view.name));
@@ -46,8 +44,7 @@ export function createTerminalWorkspace(options: {
     const current = catalog.views().find(view => view.id === activeViewId());
     if (next && (current || splitWorkspaceItems(next).length > 1)) {
       const id = current?.id ?? 'view-' + crypto.randomUUID();
-      catalog.put({ id, name: current?.name ?? nextViewName(), layout: next });
-      selectViewId(id);
+      batch(() => { catalog.put({ id, name: current?.name ?? nextViewName(), layout: next }); selectViewId(id); });
     }
   };
   createEffect(() => {
@@ -60,15 +57,24 @@ export function createTerminalWorkspace(options: {
       setLayout(selected.layout);
       return;
     }
-    if (activeViewId()) { selectViewId(null); setLayout(options.activeId() ? splitWorkspacePane(options.activeId()!) : null); setMaximized(false); }
-    if (legacyImportConsidered) return;
+    if (activeViewId()) { selectViewId(null); setLayout(options.activeId() ? splitWorkspacePane(options.activeId()!) : null); }
+    if (legacyImportConsidered) {
+      const owner = options.activeId() ? catalog.ownerOf(options.activeId()!) : undefined;
+      if (owner) { selectViewId(owner.id); setLayout(owner.layout); }
+      return;
+    }
     legacyImportConsidered = true;
+    const owner = options.activeId() ? catalog.ownerOf(options.activeId()!) : undefined;
+    if (owner) { selectViewId(owner.id); setLayout(owner.layout); return; }
     // Import the old local split once; backend views are authoritative thereafter.
     const legacy = readUIStorageJSON<unknown>(options.storageKey(), null);
     if (isSplitWorkspaceLayout(legacy) && splitWorkspaceItems(legacy).length > 1) {
       const id = 'legacy-' + options.storageKey().split(':').slice(2).join('-');
-      if (!views.some(view => view.id === id)) catalog.put({ id, name: nextViewName(), layout: legacy });
-      selectViewId(id);
+      if (!views.some(view => view.id === id)) {
+        const available = reconcileSplitWorkspace(legacy, splitWorkspaceItems(legacy).filter(session => !catalog.ownerOf(session)));
+        if (available) { catalog.put({ id, name: nextViewName(), layout: available }); selectViewId(id); }
+        else writeUIStorageJSON(options.storageKey(), null);
+      } else selectViewId(id);
     }
   });
   const activateView = (id: string) => {
@@ -76,33 +82,32 @@ export function createTerminalWorkspace(options: {
     if (!view) return;
     const available = reconcileSplitWorkspace(view.layout, options.sessionIds());
     batch(() => {
-      selectViewId(id); setLayout(view.layout); setMaximized(false);
+      selectViewId(id); setLayout(view.layout);
       const ids = splitWorkspaceItems(available);
       if (ids.length) options.select(ids.includes(options.activeId() ?? '') ? options.activeId()! : ids[0]);
     });
   };
   const browseSession = (id: string | null) => {
     if (!catalog || !id) return;
-    const current = catalog.views().find(view => view.id === activeViewId());
-    if (current && splitWorkspaceItems(current.layout).includes(id)) return;
-    selectViewId(null); setLayout(splitWorkspacePane(id)); setMaximized(false);
+    const owner = catalog.ownerOf(id);
+    batch(() => { selectViewId(owner?.id ?? null); setLayout(owner?.layout ?? splitWorkspacePane(id)); });
   };
-  const leaveView = () => { selectViewId(null); setMaximized(false); };
-  const newView = () => {
-    const active = options.activeId();
+  const leaveView = () => { selectViewId(null); };
+  const newView = (sessionId: string) => {
+    const active = sessionId;
     if (!catalog?.ready() || !active) return;
     batch(() => {
       const id = 'view-' + crypto.randomUUID();
       const next = splitWorkspacePane(active);
       catalog.put({ id, name: nextViewName(), layout: next });
-      selectViewId(id); setLayout(next); setMaximized(false);
+      selectViewId(id); setLayout(next);
     });
   };
   const removeView = (id: string) => {
     const wasActive = id === activeViewId();
     batch(() => {
       catalog?.remove(id);
-      if (wasActive) { selectViewId(null); setLayout(options.activeId() ? splitWorkspacePane(options.activeId()!) : null); setMaximized(false); }
+      if (wasActive) { selectViewId(null); setLayout(options.activeId() ? splitWorkspacePane(options.activeId()!) : null); }
     });
   };
   const renameView = (id: string, name: string) => {
@@ -141,14 +146,14 @@ export function createTerminalWorkspace(options: {
     if (ids.length && !ids.includes(options.activeId() ?? '')) options.select(ids[0]);
   });
   const closePane = (id: string) => {
-    if (paneIds().length < 2) return;
+    if (!paneIds().includes(id) || (catalog && !activeViewId())) return;
+    if (paneIds().length === 1) { removeView(activeViewId()!); return; }
     const next = removeSplitWorkspaceItem(layout(), id);
     batch(() => {
       commit(next);
       const available = splitWorkspaceItems(reconcileSplitWorkspace(next, options.sessionIds()));
       if (options.activeId() === id && available.length) options.select(available[0]);
-      setMaximized(false);
     });
   };
-  return { layout, displayedLayout, commit, paneIds, displayedPaneIds, maximized, setMaximized, closePane, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
+  return { layout, displayedLayout, commit, paneIds, displayedPaneIds, closePane, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
 }

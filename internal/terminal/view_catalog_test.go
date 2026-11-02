@@ -25,7 +25,7 @@ func TestTerminalViewsPersistIndependentlyAndRejectStaleWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = c.Put(TerminalView{ID: "view-two", Name: "Logs", LayoutJSON: layout}, 0)
+	_, err = c.Put(TerminalView{ID: "view-two", Name: "Logs", LayoutJSON: `{"type":"pane","id":"three"}`}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestTerminalViewsRejectMalformedLayoutsWithoutMutation(t *testing.T) {
 }
 
 func TestTerminalViewDatabaseRejectsFutureAndDriftUnchanged(t *testing.T) {
-	for _, statement := range []string{"PRAGMA user_version=2", "ALTER TABLE terminal_views ADD COLUMN drift TEXT", "CREATE INDEX drift ON terminal_views(name)"} {
+	for _, statement := range []string{"PRAGMA user_version=3", "ALTER TABLE terminal_views ADD COLUMN drift TEXT", "CREATE INDEX drift ON terminal_views(name)"} {
 		t.Run(statement, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "views.sqlite")
 			c, err := openViewCatalog(path)
@@ -114,7 +114,8 @@ func TestTerminalViewRPCPermissionAndNotification(t *testing.T) {
 	router := sessionrpc.NewRouter()
 	peer := newTestRPCPeer(router)
 	var notified TerminalViewSnapshot
-	peer.OnNotify(TypeID_TERMINAL_VIEWS_CHANGED, func(_ context.Context, raw json.RawMessage) { json.Unmarshal(raw, &notified) })
+	notifications := 0
+	peer.OnNotify(TypeID_TERMINAL_VIEWS_CHANGED, func(_ context.Context, raw json.RawMessage) { json.Unmarshal(raw, &notified); notifications++ })
 	detach := m.RegisterWithAccessGate(router, &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}, peer, nil)
 	defer detach()
 	var snapshot TerminalViewSnapshot
@@ -125,12 +126,26 @@ func TestTerminalViewRPCPermissionAndNotification(t *testing.T) {
 	if len(snapshot.Views) != 1 || len(notified.Views) != 1 {
 		t.Fatalf("missing mutation/notification: %#v %#v", snapshot, notified)
 	}
+	before := notifications
+	changes := terminalViewsUpdateReq{Changes: []terminalViewChange{
+		{ID: "view-a", BaseRevision: snapshot.Views[0].Revision, Delete: true},
+		{ID: "view-b", Name: "Moved", LayoutJSON: req.LayoutJSON},
+	}}
+	if err := peer.Call(context.Background(), TypeID_TERMINAL_VIEWS_UPDATE, changes, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if notifications != before+1 || len(notified.Views) != 1 || notified.Views[0].ID != "view-b" {
+		t.Fatalf("atomic notification: %#v", notified)
+	}
 	deniedRouter := sessionrpc.NewRouter()
 	denied := newTestRPCPeer(deniedRouter)
 	detachDenied := m.RegisterWithAccessGate(deniedRouter, &session.Meta{CanRead: true, CanWrite: true}, denied, nil)
 	defer detachDenied()
 	if err := denied.Call(context.Background(), TypeID_TERMINAL_VIEW_PUT, terminalViewPutReq{ID: "blocked", Name: "Blocked", LayoutJSON: req.LayoutJSON}, &snapshot); err == nil {
 		t.Fatal("mutation without execute permission")
+	}
+	if err := denied.Call(context.Background(), TypeID_TERMINAL_VIEWS_UPDATE, changes, &snapshot); err == nil {
+		t.Fatal("batch mutation without execute permission")
 	}
 	if len(m.viewCatalog.Snapshot().Views) != 1 {
 		t.Fatal("denied write mutated state")
@@ -164,5 +179,21 @@ func TestTerminalViewsRejectConcurrentDatabaseOwner(t *testing.T) {
 	defer reopened.Close()
 	if got := reopened.Snapshot(); got.Views[0].Name != "Original" {
 		t.Fatalf("lost update: %#v", got)
+	}
+}
+
+func TestTerminalViewsRejectDuplicateSessionOwnership(t *testing.T) {
+	c := newMemoryViewCatalog()
+	first := TerminalView{ID: "a", Name: "A", LayoutJSON: "{\"type\":\"pane\",\"id\":\"session\"}"}
+	if _, err := c.Put(first, 0); err != nil {
+		t.Fatal(err)
+	}
+	before := c.Snapshot()
+	first.ID = "b"
+	if _, err := c.Put(first, 0); !errors.Is(err, errViewConflict) {
+		t.Fatalf("duplicate ownership accepted: %v", err)
+	}
+	if got := c.Snapshot(); len(got.Views) != 1 || got.Revision != before.Revision {
+		t.Fatalf("rejected write changed catalog: %#v", got)
 	}
 }

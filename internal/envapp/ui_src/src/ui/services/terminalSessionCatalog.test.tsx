@@ -179,7 +179,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({ terminal: {
     listViews: vi.fn(async () => ({ revision: 1, views: [] })),
-    putView: vi.fn(), deleteView: vi.fn(), onViewsChanged: vi.fn(() => () => undefined),
+    updateViews: vi.fn(), onViewsChanged: vi.fn(() => () => undefined),
     listSessions: rpcState.list,
     onSessionsChanged: rpcState.onSessionsChanged,
     onForegroundCommandUpdate: rpcState.foregroundSubscriptionAvailable ? rpcState.onForegroundCommandUpdate : undefined,

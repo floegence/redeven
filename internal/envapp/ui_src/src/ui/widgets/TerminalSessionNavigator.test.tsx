@@ -615,11 +615,13 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     expect(sessionRow.className).toContain('cursor-pointer');
     expect(sessionRow.className).not.toContain('cursor-grab');
-    expect(sessionButton.className).toContain('cursor-grab');
+    expect(sessionButton.className).toContain('cursor-pointer');
+    expect(sessionButton.className).not.toContain('cursor-grab');
     expect(sessionRow.getAttribute('draggable')).toBe('true');
     expect(sessionButton.getAttribute('draggable')).not.toBe('true');
     expect(dragHandle.getAttribute('draggable')).toBe('true');
-    expect(dragHandle.className).toContain('cursor-grab');
+    expect(dragHandle.className).toContain('cursor-pointer');
+    expect(dragHandle.className).not.toContain('cursor-grab');
     expect(dragHandle.className).toContain('h-6 w-6');
     expect(sessionRow.getAttribute('aria-grabbed')).toBe('false');
     expect(onSelectSession).toHaveBeenCalledOnce();

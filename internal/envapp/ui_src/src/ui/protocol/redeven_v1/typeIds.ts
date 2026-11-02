@@ -67,6 +67,7 @@ export const redevenV1TypeIds = {
     viewPut: 2025,
     viewDelete: 2026,
     viewsChanged: 2027,
+    viewsUpdate: 2028,
   },
   monitor: {
     sysMonitor: 3001,

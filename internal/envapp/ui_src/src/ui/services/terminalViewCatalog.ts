@@ -1,7 +1,7 @@
 import { batch, createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
-import { isSplitWorkspaceLayout, splitWorkspaceItems, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
+import { isSplitWorkspaceLayout, reconcileSplitWorkspace, splitWorkspaceItems, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1/contract';
-import type { TerminalView, TerminalViewSnapshot } from '../protocol/redeven_v1/sdk/terminalViews';
+import type { TerminalView, TerminalViewSnapshot, TerminalViewsUpdateRequest } from '../protocol/redeven_v1/sdk/terminalViews';
 
 type WorkspaceView = Omit<TerminalView, 'layout'> & { layout: SplitWorkspaceLayout };
 type WorkspaceSnapshot = { revision: number; views: WorkspaceView[] };
@@ -12,7 +12,7 @@ export function createTerminalViewCatalog(options: {
   scope: Accessor<string>;
   connected: Accessor<boolean>;
   enabled?: Accessor<boolean>;
-  rpc: Pick<RedevenV1Rpc['terminal'], 'listViews' | 'putView' | 'deleteView' | 'onViewsChanged'>;
+  rpc: Pick<RedevenV1Rpc['terminal'], 'listViews' | 'updateViews' | 'onViewsChanged'>;
 }) {
   const [snapshot, setSnapshot] = createSignal<WorkspaceSnapshot>({ revision: 0, views: [] });
   const [drafts, setDrafts] = createSignal<Map<string, ViewDraft | null>>(new Map());
@@ -23,19 +23,34 @@ export function createTerminalViewCatalog(options: {
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
-  const views = createMemo(() => {
-    const pending = drafts();
-    const result = snapshot().views.filter(view => pending.get(view.id) !== null).map(view => ({ ...view, ...(pending.get(view.id) ?? {}) }));
+  const project = (source: WorkspaceSnapshot, pending: Map<string, ViewDraft | null>) => {
+    const result = source.views.filter(view => pending.get(view.id) !== null).map(view => ({ ...view, ...(pending.get(view.id) ?? {}) }));
     for (const [id, draft] of pending) if (draft && !result.some(view => view.id === id)) result.push({ ...draft, revision: 0, createdAtMs: 0, updatedAtMs: 0 });
     return result;
-  });
-  const accept = (next: TerminalViewSnapshot) => {
+  };
+  const views = createMemo(() => project(snapshot(), drafts()));
+  const accept = (next: TerminalViewSnapshot, discardDrafts = false) => {
+    const owners = new Set<string>();
     const views = next.views.map(view => {
       // Layout validation belongs at the UI adapter, using the published owner.
       if (!isSplitWorkspaceLayout(view.layout) || splitWorkspaceItems(view.layout).length > 32) throw new Error('Invalid terminal view layout');
+      for (const id of splitWorkspaceItems(view.layout)) {
+        if (owners.has(id)) throw new Error('Duplicate terminal view membership');
+        owners.add(id);
+      }
       return { ...view, layout: view.layout };
     });
-    if (next.revision >= snapshot().revision) setSnapshot({ ...next, views });
+    if (next.revision < snapshot().revision) return;
+    // A conflicting remote transfer must not publish two local owners while
+    // unsaved drafts are retained. Explicit reload discards those drafts.
+    owners.clear();
+    for (const view of project({ ...next, views }, discardDrafts ? new Map() : drafts())) {
+      for (const id of splitWorkspaceItems(view.layout)) {
+        if (owners.has(id)) throw new Error('Conflicting terminal view membership');
+        owners.add(id);
+      }
+    }
+    setSnapshot({ ...next, views });
   };
   const reload = async () => {
     if (saving() || !options.connected() || options.enabled?.() === false) return;
@@ -44,27 +59,28 @@ export function createTerminalViewCatalog(options: {
     try {
       const next = await options.rpc.listViews();
       if (disposed || epoch !== generation) return;
-      batch(() => { accept(next); baseRevisions.clear(); setDrafts(new Map()); setError(null); setReady(true); });
+      batch(() => { accept(next, true); baseRevisions.clear(); setDrafts(new Map()); setError(null); setReady(true); });
     } catch { if (!disposed && epoch === generation) setError(current => current === 'save' || drafts().size > 0 ? 'save' : 'load'); }
   };
   const flush = async () => {
     if (saving() || error() || !ready() || !options.connected() || drafts().size === 0) return;
-    const entry = drafts().entries().next().value!;
-    const [id, draft] = entry;
-    const base = snapshot().views.find(view => view.id === id);
+    const pending = new Map(drafts());
+    const changes = [...pending].flatMap<TerminalViewsUpdateRequest['changes'][number]>(([id, draft]) => draft
+      ? [{ ...draft, baseRevision: baseRevisions.get(id) ?? 0 }]
+      : snapshot().views.some(view => view.id === id) ? [{ id, baseRevision: baseRevisions.get(id) ?? 0, delete: true as const }] : []);
     const epoch = generation;
     setSaving(true);
     try {
-      const next = draft
-        ? await options.rpc.putView({ ...draft, baseRevision: baseRevisions.get(id) ?? 0 })
-        : base ? await options.rpc.deleteView({ id, baseRevision: baseRevisions.get(id) ?? 0 }) : snapshot();
+      const next = changes.length ? await options.rpc.updateViews({ changes }) : snapshot();
       if (disposed || epoch !== generation) return;
-      accept(next);
-      if (drafts().get(id) === draft) baseRevisions.delete(id);
-      else baseRevisions.set(id, next.views.find(view => view.id === id)?.revision ?? 0);
-      setDrafts(current => {
-        if (current.get(id) !== draft) return current;
-        const remaining = new Map(current); remaining.delete(id); return remaining;
+      batch(() => {
+        accept(next);
+        const remaining = new Map(drafts());
+        for (const [id, draft] of pending) {
+          if (remaining.get(id) === draft) { baseRevisions.delete(id); remaining.delete(id); }
+          else baseRevisions.set(id, next.views.find(view => view.id === id)?.revision ?? 0);
+        }
+        setDrafts(remaining);
       });
     } catch { if (!disposed && epoch === generation) setError('save'); }
     finally { if (!disposed && epoch === generation) setSaving(false); }
@@ -105,10 +121,24 @@ export function createTerminalViewCatalog(options: {
   onCleanup(() => { disposed = true; generation++; if (timer) clearTimeout(timer); });
   return {
     views, ready, saving, pending: () => drafts().size > 0, error, reload,
+    ownerOf: (sessionId: string) => views().find(view => splitWorkspaceItems(view.layout).includes(sessionId)),
     put: (draft: ViewDraft) => {
       if (!ready() || options.enabled?.() === false) return;
-      if (!baseRevisions.has(draft.id)) baseRevisions.set(draft.id, snapshot().views.find(view => view.id === draft.id)?.revision ?? 0);
-      setDrafts(current => new Map(current).set(draft.id, draft));
+      const next = new Map(drafts());
+      const stage = (id: string, value: ViewDraft | null) => {
+        if (!baseRevisions.has(id)) baseRevisions.set(id, snapshot().views.find(view => view.id === id)?.revision ?? 0);
+        next.set(id, value);
+      };
+      const members = new Set(splitWorkspaceItems(draft.layout));
+      for (const other of views()) {
+        if (other.id === draft.id) continue;
+        const ids = splitWorkspaceItems(other.layout);
+        if (!ids.some(id => members.has(id))) continue;
+        const layout = reconcileSplitWorkspace(other.layout, ids.filter(id => !members.has(id)));
+        stage(other.id, layout ? { id: other.id, name: other.name, layout } : null);
+      }
+      stage(draft.id, draft);
+      setDrafts(next);
     },
     remove: (id: string) => {
       if (!ready() || options.enabled?.() === false) return;
