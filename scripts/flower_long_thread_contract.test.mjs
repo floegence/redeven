@@ -17,13 +17,15 @@ test('only the long-thread host isolates native input before showing its visible
       async loadURL(value) { calls.push(['load', value]); }
     }
     vm.runInNewContext(read('internal/flower_ui/testing/performance/desktop.cjs'), {
-      require: name => { assert.equal(name, 'electron'); return { app, BrowserWindow }; },
+      require: name => { assert.equal(name, 'electron'); return { app, BrowserWindow, screen: { getPrimaryDisplay: () => ({ workArea: { x: 10, y: 24 } }) } }; },
       process: { argv: isolated ? ['--redeven-smoke-run=long-thread-gate'] : ['--redeven-smoke-run=flower-cpu'],
         env: { FLOWER_PERF_PROFILE: '/test-profile', FLOWER_PERF_URL: 'http://127.0.0.1:12345' } },
     });
     await ready();
     assert.equal(options.show, !isolated);
     assert.equal(options.focusable, isolated ? false : undefined);
+    assert.equal(options.x, isolated ? 10 : undefined);
+    assert.equal(options.y, isolated ? 24 : undefined);
     assert.deepEqual(calls, isolated ? [['ignoreMouse', true], ['showInactive'], ['load', 'http://127.0.0.1:12345']] : [['load', 'http://127.0.0.1:12345']]);
     assert.equal(listeners.has('before-mouse-event'), false, 'Do not filter injected pointer events or hide interruptions');
     let prevented = false;

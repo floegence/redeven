@@ -3,7 +3,7 @@ type: Validation Contract
 title: Flower explicit long-thread qualification
 tags: [flower, performance, correctness, gates]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -26,7 +26,7 @@ Sustained fixture creates 500 canonical turns, 1,000 messages and 1,000 tools th
 After canonical terminal observation, use actual history/disclosure controls to compare every generated prose/reasoning item and exact code blocks with canonical content/full Markdown. Enter reading mode and reveal parents before children; never force hidden clicks/change disclosure state. Draft/focus/selection survive drag. Synthetic floating output does not qualify terminal emulation.
 
 ## Responsiveness
-Sample idle/early/late/repeat on the same visible production UI with two PersistentFloatingWindows, >=12 monotonic seconds each. Cancellation, button release, blur or hidden document invalidates samples. Dedicated nonfocusable Electron host installs pointer isolation before showing, preventing native keyboard input while retaining real composition, CDP input, DOM focus and interruption checks. Assert both drafts before and throughout sampling.
+Sample idle/early/late/repeat on the same visible production UI with two PersistentFloatingWindows, >=12 monotonic seconds each. Cancellation, button release, blur or hidden document invalidates samples. Dedicated nonfocusable Electron host uses the primary display work-area origin for repeatable visible placement and installs pointer isolation before showing, preventing native keyboard input while retaining real composition, CDP input, DOM focus and interruption checks. Assert both drafts before and throughout sampling.
 
 Read counter before press; one CDP session performs press/move/release with no intervening backend calls. Use Chromium monotonic timestamps. Independent 60 Hz producer cannot await dispatch: offer >=55 events/s and require >=45 position commits/s and >=80% idle cadence.
 
