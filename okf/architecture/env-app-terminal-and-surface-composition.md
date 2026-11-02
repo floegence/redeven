@@ -8,7 +8,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Env App keeps terminal and Activity/Workbench surfaces thin over published Floeterm and Floe components. A mounted view owns only its semantic projection and local interaction state; Floeterm owns PTY facts and Floe owns shell, selection, KeepAlive, focus, and layer mechanics. Lazy loading and recovery preserve those ownership boundaries while keeping existing surfaces mounted and interactive where policy allows.
+Env App adapts published Floeterm/Floe. Views own projection and local interaction; Floeterm owns PTY facts, Floe owns shell, selection, KeepAlive, focus and layers. Loading/recovery preserve these boundaries and retain interactive surfaces where allowed.
 
 # Contract
 
@@ -20,15 +20,17 @@ Floe owns the CSS contract; Redeven marks custom compound controls without dupli
 
 ## Terminal workspace placement
 
-Published Floe SplitWorkspace owns recursive splits, presets, edge docking, center swaps and pointer/keyboard resizing. Redeven owns localized controls and the environment/panel-scoped v1 layout record. Validate saved trees and reconcile only after catalog hydration. Selecting an unplaced session replaces the focused pane; closing a pane preserves the session. Explicit splitting creates a session in the target group using its verified local cwd or group startup directory; dragging places an existing session. Group, cwd and placement remain independent.
+Published Floe SplitWorkspace owns recursive splits, presets, edge docking, center swaps and pointer/keyboard resizing. Redeven owns localized controls and the environment/panel-scoped v1 layout record. Validate saved trees and reconcile only after catalog hydration. Selecting another split member focuses it and restores a maximized layout. Selecting an unplaced session shows it alone without rewriting the saved split; selecting a member restores that split. Closing a pane preserves its session. Explicit splitting creates a session in the target group using its verified local cwd or group startup directory; dragging places an existing session. Group, cwd and placement remain independent.
+
+Desktop starts at pane headers. The sidebar footer retains presets, search, clear, settings and creation; groups retain scoped creation. Overlays keep their toolbar/drawer trigger. Maximize changes to restore; docking restores splits.
 
 Runtime nodes stay keyed by session ID across layout changes. Visible panes paint independently; active session alone owns keyboard input, search and toolbar commands. Mobile shows the active pane and pane tabs without changing the saved desktop tree. Maximize is transient. Alt+Shift+Left/Right cycles placed panes.
 
-Pane headers, dividers, toolbar controls and footer inherit a palette derived from the selected terminal theme, independently of the shell-themed directory sidebar. Prehydrated catalog snapshots initialize placement before reconciliation, so reload cannot prune a saved split tree against an empty local list. Resize controls retain keyboard focus through geometry updates.
+Pane headers, dividers, overlay toolbar and status footer use the terminal theme; the sidebar uses the shell theme. Prehydrated catalog snapshots initialize placement before reconciliation, preventing reload from pruning saved splits against an empty list. Resize controls retain keyboard focus.
 
 # Boundaries
 
-Redeven supplies product placement, permission mapping, local-path capability, and localized chrome. It must not parse terminal output, predict echo, own history or renderer state, recreate shell token/layer/focus state machines, or replace a retained surface with a second recovery curtain. Browser validation and semantic terminal carriers prove this adapter boundary; packaged Desktop evidence remains a separate gate.
+Redeven supplies placement, permissions, local-path capability and localized chrome. It must not parse output, predict echo, own history/renderer state, recreate shell token/layer/focus machinery, or overlay a retained surface with duplicate recovery. Browser/semantic carriers verify this boundary; packaged Desktop qualification is separate.
 
 # Evidence
 

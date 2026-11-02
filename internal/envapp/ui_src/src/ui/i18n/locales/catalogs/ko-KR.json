@@ -1,5 +1,5 @@
 {
-  "terminalWorkspace": {"previous": "이전 세션", "next": "다음 세션", "directories": "디렉터리", "quickSwitch": "빠른 전환", "layout": "레이아웃", "split": "창 분할", "single": "단일 창", "columns": "2열", "rows": "2행", "threeColumns": "3열", "mainLeft": "왼쪽 기본 창", "grid": "격자", "left": "왼쪽으로 분할", "right": "오른쪽으로 분할", "top": "위로 분할", "bottom": "아래로 분할", "maximize": "창 최대화", "restore": "창 복원", "closePane": "창 닫기", "resize": "창 크기 조절", "panes": "터미널 창"},
+  "terminalWorkspace": {"previous": "이전 세션", "next": "다음 세션", "directories": "디렉터리", "layout": "레이아웃", "split": "창 분할", "single": "단일 창", "columns": "2열", "rows": "2행", "threeColumns": "3열", "mainLeft": "왼쪽 기본 창", "grid": "격자", "left": "왼쪽으로 분할", "right": "오른쪽으로 분할", "top": "위로 분할", "bottom": "아래로 분할", "maximize": "창 최대화", "restore": "창 복원", "closePane": "창 닫기", "resize": "창 크기 조절", "resizeSidebar": "터미널 사이드바 너비 조절", "panes": "터미널 창"},
   "centerEntry": {
     "expiringTitle": "진입 세션이 곧 만료됩니다",
     "expiringMessage": "환경에서 작업을 계속하면 진입 세션이 유지됩니다. 최대 세션 시간이 지나면 다시 로그인해야 합니다."

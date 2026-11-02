@@ -22,17 +22,18 @@
 .terminal-navigation-filter input { height: 32px; }
 .terminal-navigation-content [data-testid='terminal-session-list'] { padding-inline: 8px; }
 .terminal-navigation-group { padding-bottom: var(--floe-gap-group); }
-.terminal-navigation-content [data-terminal-session-avatar] { background: transparent; border: 0; box-shadow: none; }
-.terminal-navigation-content [data-terminal-session-row] [data-terminal-agent-identity] { width: 18px; height: 18px; }
+.terminal-navigation-content [data-terminal-session-avatar] {
+  width: 24px; height: 24px; border-radius: 7px;
+  background: var(--redeven-surface-control); border: 1px solid var(--floe-line-quiet);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--background) 18%, transparent);
+}
+
 .terminal-navigation-content [data-terminal-agent-identity] > img,
 .terminal-navigation-content [data-terminal-agent-identity] > .bg-current { max-width: 16px; max-height: 16px; }
 .terminal-workspace-toolbar, .terminal-work-area .terminal-status-bar { border-color: var(--border); }
 .terminal-workspace-new-session { margin-left: 8px; --primary: var(--foreground); --primary-foreground: var(--background); }
-.terminal-toolbar-divider { width: 1px; height: 15px; background: var(--border); margin-inline: 4px; }
 .terminal-workspace-layout-label { font-size: var(--floe-type-supporting); margin-left: 6px; }
 .terminal-workspace-group { max-width: 40%; }
-.terminal-navigation-quick-switch { display: flex; align-items: center; gap: 8px; flex-shrink: 0; height: 44px; padding-inline: 20px; color: var(--muted-foreground); font-size: var(--floe-type-caption); border-top: 1px solid var(--floe-line-quiet); cursor: pointer; }
-.terminal-navigation-quick-switch:hover { background: var(--floe-state-hover); color: var(--foreground); }
 @media (min-width: 768px) {
   .terminal-workspace-context-path { display: none; }
 }
@@ -56,3 +57,5 @@
   .terminal-workspace-context-path { font-family: inherit; font-size: 10px; }
   .terminal-workspace-context-path::before { display: none; }
 }
+
+.terminal-navigation-footer { border-top: 1px solid var(--floe-line-quiet); height: 36px; padding-inline: 8px; flex-shrink: 0; }

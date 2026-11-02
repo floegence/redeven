@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime catalog alone owns group identity/order/revision and each Session assignment. Activity/Workbench share a two-level tree with independent expansion/placement. Default always exists, immutable; every session has one known group_id, and group paths affect new startup only. Stale replies cannot regress; unknown groups refresh without reassignment. Delete closes/hides members first.
+The runtime catalog owns groups and session assignments. Activity/Workbench share a two-level tree with local expansion/placement. Default is immutable; every session has one known group_id. Paths affect startup only. Stale replies cannot regress; unknown groups refresh without reassignment. Delete closes/hides members first.
 
 # Contract
 
@@ -17,20 +17,20 @@ Redeven owns `apps/terminal/groups.sqlite` as a versioned product database. Futu
 Reorder persists one complete non-Default order in a single database transaction and revision; Default remains protected at order zero.
 
 ## Activity, Workbench, and view-local state
-One Terminal Session Catalog Provider owns the browser projection, the live in-memory Session display order, and the Redeven-specific `session_id -> group_id` membership map for the Environment. List requests carry membership and lifecycle fences, so an older response cannot overwrite a local move or newer notification.
+One Terminal Session Catalog Provider owns browser projection, display order, and the `session_id -> group_id` membership map per Environment. Membership/lifecycle fences prevent stale lists overwriting moves or notifications.
 
 Search matches Group name, Group path, and Session presentation; a matching folded child is revealed temporarily without changing that saved preference.
 
 ## Interaction and asynchronous lifecycle
-The 258px sidebar starts with one search/refresh row, without a redundant title/count. One-line Group headers and Session rows are 32px on desktop. Groups use the published yellow Floe FolderIcon/FolderOpenIcon, count, disclosure, scoped create and action menu. Session actions share one accessible overflow menu. Full paths remain in tooltips; no secondary desktop path row or decorative tree rails. Mobile retains larger touch targets.
+Sidebar width defaults to 258px, persists per environment/panel, and resizes within 220–480px while reserving content space. Floe ResizeHandle owns pointer resizing; arrows/Home/End support keyboards. Overlays retain their own width. A search/refresh row replaces title/count and Quick switch. Desktop rows are single-line, 32px. Groups use Floe yellow FolderIcon/FolderOpenIcon, count, disclosure, scoped create and actions. Session icons are rounded tiles; selection uses fill without a rail. Actions share an accessible overflow menu. Paths stay in tooltips; no desktop path rows or tree rails. Mobile keeps larger touch targets.
 
-Session/group reorder and cross-group moves retain the catalog mutation contracts; Default remains first. Disclosure and metadata never remount terminal instances.
+Rows/icons start drags independently of action buttons. Session previews follow the pointer across the panel, including scaled Workbench; group previews stay in the sidebar. SplitWorkspace drops change placement only; group targets retain catalog membership/order authority. Default stays first.
 
-Individual failures are returned as explicit Session IDs; those Sessions remain hidden, no success is fabricated, and no silent retry loop is introduced.
+Failures return explicit Session IDs; those sessions remain hidden without fabricated success or silent retries.
 
 # Boundaries
 
-Group membership is not Workbench placement, shell working directory, controller ownership, attachment identity, or persistent Session recovery. No Activity or Workbench component may maintain a second membership map, infer membership from paths, or repair an unknown Group by changing a Session to Default. Group disclosure and metadata updates remain renderer-neutral UI state and must not remount `TerminalSessionRuntime`.
+Membership is independent of placement, cwd, controller/attachment identity and recovery. Activity/Workbench must not duplicate membership maps, infer groups from paths, or assign unknown groups to Default. Disclosure and metadata must not remount `TerminalSessionRuntime`.
 
 # Evidence
 

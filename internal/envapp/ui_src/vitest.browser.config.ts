@@ -128,6 +128,36 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        resizeTerminalSidebar: async ({ page }, delta: number) => {
+          const frame = await terminalPanelFrame(page);
+          const handle = frame.locator('[data-terminal-sidebar-resizer]');
+          const bounds = await handle.boundingBox();
+          if (!bounds) throw new Error('Terminal sidebar resize handle is unavailable');
+          const x = bounds.x + bounds.width / 2;
+          const y = bounds.y + bounds.height / 2;
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          const sidebar = frame.locator('.redeven-terminal-session-sidebar');
+          const sidebarBounds = await sidebar.boundingBox();
+          const localWidth = await sidebar.evaluate(node => (node as HTMLElement).offsetWidth);
+          const screenScale = sidebarBounds && localWidth ? sidebarBounds.width / localWidth : 1;
+          await page.mouse.move(x + delta * screenScale, y, { steps: 8 });
+          await page.mouse.up();
+        },
+        dragTerminalSessionToPane: async ({ page }, sourceId: string, targetId: string, edge: 'left' | 'right' | 'top' | 'bottom' | 'center') => {
+          const frame = await terminalPanelFrame(page);
+          const source = frame.locator('[data-terminal-session-id="' + sourceId + '"]');
+          const target = frame.locator('[data-floe-split-pane="' + targetId + '"]');
+          const bounds = await target.boundingBox();
+          if (!bounds) throw new Error('Terminal drop target is unavailable');
+          await source.dragTo(target, {
+            sourcePosition: { x: 100, y: 16 },
+            targetPosition: {
+              x: edge === 'left' ? 4 : edge === 'right' ? bounds.width - 4 : bounds.width / 2,
+              y: edge === 'top' ? 4 : edge === 'bottom' ? bounds.height - 4 : bounds.height / 2,
+            },
+          });
+        },
         readOfficeAcceptanceWorkbook: async () => {
           const file = process.env.REDEVEN_ACCEPTANCE_XLSX;
           if (!file) return null;

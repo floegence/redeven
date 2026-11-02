@@ -15,7 +15,7 @@ import { SplitWorkspace, dockSplitWorkspaceItem, presetSplitWorkspace, splitWork
 import { createTerminalWorkspace } from './terminalWorkspace';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Grid, Link, Maximize, Menu, Pencil, Plus, Refresh, Search, ChevronLeft, ChevronRight, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Grid, Link, Maximize, Restore, Menu, Pencil, Plus, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { FolderIcon } from '@floegence/floe-webapp-core/file-browser';
 
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -1033,7 +1033,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [localSessionDrawerOpen, setLocalSessionDrawerOpen] = createSignal(false);
   const [desktopSessionDrawerOpen, setDesktopSessionDrawerOpen] = createSignal(false);
   const [navigationContainer, setNavigationContainer] = createSignal<HTMLDivElement>();
-  const sidebarPresentation = createAdaptiveSidebar({ container: navigationContainer, sidebarWidth: () => 258, minContentWidth: () => 480 });
+  const sidebarWidthKey = () => 'redeven_terminal_sidebar_width:v1:' + String(env.env_id() ?? '') + ':' + panelId;
+  const [sidebarWidth, setSidebarWidth] = createSignal(258);
+  createEffect(on(sidebarWidthKey, key => {
+    const saved = readUIStorageJSON<unknown>(key, 258);
+    setSidebarWidth(typeof saved === 'number' && Number.isFinite(saved) ? Math.max(220, Math.min(480, saved)) : 258);
+  }));
+  const resizeSidebar = (delta: number) => {
+    const container = navigationContainer();
+    const maximum = Math.max(220, Math.min(480, (container?.clientWidth ?? 960) - 480));
+    setSidebarWidth(width => Math.max(220, Math.min(maximum, width + delta)));
+  };
+  const saveSidebarWidth = () => writeUIStorageJSON(sidebarWidthKey(), sidebarWidth());
+  const sidebarPresentation = createAdaptiveSidebar({ container: navigationContainer, sidebarWidth, minContentWidth: () => 480 });
   const desktopNavigationOverlay = () => !layout.isMobile() && sidebarPresentation() === 'overlay';
   const navigationOverlay = () => layout.isMobile() || desktopNavigationOverlay();
   createEffect(() => { if (!desktopNavigationOverlay()) setDesktopSessionDrawerOpen(false); });
@@ -1744,7 +1756,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       ? terminalChromeBySession().get(targetId)?.localWorkingDir
       : terminalGroups().find(group => group.id === target.groupId)?.defaultWorkingDir;
     if (!startupDir) return;
-    const original = workspace.layout() ?? splitWorkspacePane(targetId);
+    const original = workspace.displayedLayout() ?? splitWorkspacePane(targetId);
     setWorkspaceBusy(true);
     try {
       const id = await beginCreateSession(undefined, startupDir, target.groupId || 'default');
@@ -1891,7 +1903,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     commit: (sessionId, metadata) => {
       const focusIntent = metadata?.restoreFocus ? metadata.focusIntent ?? null : null;
       if (!metadata?.restoreFocus) clearPendingTerminalFocusIntent();
-      setActiveSessionId(sessionId);
+      batch(() => {
+        if (sessionId !== activeSessionId()) workspace.setMaximized(false);
+        setActiveSessionId(sessionId);
+      });
       if (navigationOverlay()) {
         setSessionDrawerOpen(false);
       }
@@ -4894,12 +4909,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sessionListItems().find((item) => item.id === activeId) ?? null;
   });
   const activeToolbarGroup = createMemo(() => navigationGroups().find(group => group.id === activeGroupId()));
-  const cycleWorkspaceSession = (direction: number) => {
-    const items = sessionListItems();
-    if (!items.length) return;
-    const index = items.findIndex(item => item.id === activeSessionId());
-    requestSessionSelection(items[(index + direction + items.length) % items.length].id, true);
-  };
   const activeToolbarTitle = createMemo(() => activeSessionListItem()?.title ?? i18n.t('terminal.title'));
   const activeToolbarAvatar = createMemo(() => activeSessionListItem()?.avatar ?? { kind: 'initial' as const });
   const activeToolbarTransitionIndicator = createMemo(() => activeSessionListItem()?.transitionIndicator ?? 'none');
@@ -4969,6 +4978,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       <TerminalSessionNavigator
         accessibilityIdPrefix={accessibilityIdPrefix}
         mobile={isMobileLayout()}
+        width={sidebarWidth()}
+        resizable={!navigationOverlay()}
+        onResize={resizeSidebar}
+        onResizeEnd={saveSidebarWidth}
         drawerOpen={sessionDrawerOpen()}
         connected={connected()}
         refreshing={refreshing()}
@@ -5002,6 +5015,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         onOpenTreeContextMenu={openTerminalTreeMenu}
         onRefresh={handleRefresh}
         onFilterQueryChange={setSessionFilterQuery}
+        dragPreviewBoundary={navigationContainer}
+        footerActions={<Show when={!navigationOverlay()}>
+          <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => rootEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
+          <Dropdown align="end"
+            trigger={<Button size="sm" variant="ghost" class="h-7 w-7 p-0" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!activeSessionId() || workspaceBusy()}><Grid class="h-3.5 w-3.5" /></Button>}
+            items={Object.entries(workspaceLabels()).map(([id, label]) => ({ id, label }))}
+            onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
+          <Dropdown align="end"
+            trigger={<Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminal.moreOptions')} title={i18n.t('terminal.moreOptions')}><MoreVerticalIcon class="h-3.5 w-3.5" /></Button>}
+            items={[
+              { id: 'new', label: i18n.t('terminal.newSession'), disabled: !connected() || workspaceBusy() },
+              { id: 'clear', label: i18n.t('terminal.clear'), disabled: !activeSessionId() || clearingSessionId() !== null },
+              ...moreItems(),
+            ]}
+            onSelect={id => id === 'new' ? createSession() : handleMoreSelect(id)} />
+        </Show>}
         onPreviewSession={previewSidebarSessionSelection}
         onResetSessionPreview={sessionSelection.resetPreview}
         onSelectSession={commitSidebarSessionSelection}
@@ -5074,191 +5103,187 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
           <SessionNavigation />
           <div inert={desktopNavigationOverlay() && sessionDrawerPresent()} data-terminal-work-area="" class="terminal-work-area min-w-0 min-h-0 flex flex-1 flex-col" style={terminalWorkspaceVars()}>
-            <div
-              ref={(element) => {
-                mobileToolbarEl = element;
-              }}
-              tabIndex={-1}
-              class="terminal-workspace-toolbar flex shrink-0 items-center gap-2 border-b border-border bg-background outline-none"
-            >
-              <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => mobileToolbarEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
-              <Show when={navigationOverlay()}>
-                <Button
-                  ref={(element) => {
-                    sessionDrawerTriggerEl = element;
-                  }}
-                  size="sm"
-                  variant="ghost"
-                  class="relative h-7 w-7 shrink-0 p-0"
-                  data-testid="terminal-session-drawer-open"
-                  aria-haspopup="dialog" aria-expanded={sessionDrawerOpen()}
-                  onClick={event => { event.currentTarget.focus({ preventScroll: true }); setSessionDrawerOpen(true); }}
-                  aria-label={mobileSessionDrawerLabel()}
-                  title={mobileSessionDrawerLabel()}
-                >
-                  <Menu class="h-4 w-4" />
-                  <Show when={mobileBackgroundAttention() !== 'none'}>
-                    <span
-                      class={`absolute right-0.5 top-0.5 rounded-full border border-background forced-colors:border-current ${mobileBackgroundAttention() === 'waiting'
-                        ? 'h-2 w-2 bg-warning'
-                        : 'h-1.5 w-1.5 bg-primary'}`}
-                      data-terminal-background-attention={mobileBackgroundAttention()}
-                      aria-hidden="true"
-                    />
-                  </Show>
-                </Button>
-              </Show>
-              <div class="contents">
-                <Show when={terminalWorkIndicatorState() !== 'idle'}>
-                  <span
-                    class="redeven-terminal-work-status inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--redeven-status-success-foreground)]"
-                    data-terminal-work-state={terminalWorkIndicatorState()}
-                    role="img"
-                    aria-label={terminalWorkIndicatorLabel()}
-                    title={terminalWorkIndicatorLabel()}
+            <Show when={navigationOverlay()}>
+              <div
+                ref={(element) => {
+                  mobileToolbarEl = element;
+                }}
+                tabIndex={-1}
+                class="terminal-workspace-toolbar flex shrink-0 items-center gap-2 border-b border-border bg-background outline-none"
+              >
+                <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => mobileToolbarEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
+                <Show when={navigationOverlay()}>
+                  <Button
+                    ref={(element) => {
+                      sessionDrawerTriggerEl = element;
+                    }}
+                    size="sm"
+                    variant="ghost"
+                    class="relative h-7 w-7 shrink-0 p-0"
+                    data-testid="terminal-session-drawer-open"
+                    aria-haspopup="dialog" aria-expanded={sessionDrawerOpen()}
+                    onClick={event => { event.currentTarget.focus({ preventScroll: true }); setSessionDrawerOpen(true); }}
+                    aria-label={mobileSessionDrawerLabel()}
+                    title={mobileSessionDrawerLabel()}
                   >
-                    <Show when={terminalWorkIndicatorState() === 'active'} fallback={<Refresh class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />}>
-                      <Activity class="h-3.5 w-3.5" />
-                    </Show>
-                  </span>
-                </Show>
-                <div class="terminal-workspace-context-icon relative flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
-                  <FolderIcon size={16} />
-                  <TerminalSessionTransitionBadge state={activeToolbarTransitionIndicator()} />
-                </div>
-                <div class="min-w-0 flex-1 overflow-hidden">
-                  <Tooltip
-                    placement="bottom"
-                    delay={0}
-                    clickToToggle
-                    content={(
-                      <span class="flex max-w-[min(82vw,360px)] flex-col gap-0.5 text-left">
-                        <span class="break-words font-semibold">{activeToolbarTitle()}</span>
-                        <Show when={activeToolbarSubtitle()}>
-                          <span class="break-all text-popover-foreground/75">{activeToolbarSubtitle()}</span>
-                        </Show>
-                      </span>
-                    )}
-                  >
-                    <button
-                      type="button"
-                      class="terminal-workspace-context w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      aria-label={[activeToolbarTitle(), activeToolbarSubtitle()].filter(Boolean).join(', ')}
-                      aria-describedby={activeToolbarStatusDescription() ? activeContextStatusId : undefined}
-                      data-testid="terminal-active-context-disclosure"
-                    >
-                      <span class="terminal-workspace-group truncate text-xs text-muted-foreground">{activeToolbarGroup()?.name}</span>
-                      <span aria-hidden="true" class="terminal-workspace-breadcrumb-separator text-muted-foreground">/</span>
+                    <Menu class="h-4 w-4" />
+                    <Show when={mobileBackgroundAttention() !== 'none'}>
                       <span
-                        class="terminal-workspace-context-title truncate text-xs font-semibold text-foreground"
-                        data-terminal-session-title={activeSessionId() ?? ''}
-                      >
-                        {activeToolbarTitle()}
-                      </span>
-                      <Show when={activeToolbarSubtitle()}>
-                        <span class="terminal-workspace-context-path flex min-w-0 items-center text-[10px] leading-3 text-muted-foreground">
-                          <Show when={activeToolbarSubtitleIcon() === 'link'}>
-                            <span class="mr-1 flex h-2.5 w-2.5 shrink-0" data-terminal-toolbar-location-icon="link" aria-hidden="true">
-                              <Link class="h-2.5 w-2.5" />
-                            </span>
-                          </Show>
-                          <span class="truncate">{activeToolbarSubtitle()}</span>
-                        </span>
+                        class={`absolute right-0.5 top-0.5 rounded-full border border-background forced-colors:border-current ${mobileBackgroundAttention() === 'waiting'
+                          ? 'h-2 w-2 bg-warning'
+                          : 'h-1.5 w-1.5 bg-primary'}`}
+                        data-terminal-background-attention={mobileBackgroundAttention()}
+                        aria-hidden="true"
+                      />
+                    </Show>
+                  </Button>
+                </Show>
+                <div class="contents">
+                  <Show when={terminalWorkIndicatorState() !== 'idle'}>
+                    <span
+                      class="redeven-terminal-work-status inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--redeven-status-success-foreground)]"
+                      data-terminal-work-state={terminalWorkIndicatorState()}
+                      role="img"
+                      aria-label={terminalWorkIndicatorLabel()}
+                      title={terminalWorkIndicatorLabel()}
+                    >
+                      <Show when={terminalWorkIndicatorState() === 'active'} fallback={<Refresh class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />}>
+                        <Activity class="h-3.5 w-3.5" />
                       </Show>
-                    </button>
-                  </Tooltip>
-                  <Show when={activeToolbarStatusDescription()}>
-                    <span class="sr-only" id={activeContextStatusId}>{activeToolbarStatusDescription()}</span>
+                    </span>
                   </Show>
+                  <div class="terminal-workspace-context-icon relative flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
+                    <FolderIcon size={16} />
+                    <TerminalSessionTransitionBadge state={activeToolbarTransitionIndicator()} />
+                  </div>
+                  <div class="min-w-0 flex-1 overflow-hidden">
+                    <Tooltip
+                      placement="bottom"
+                      delay={0}
+                      clickToToggle
+                      content={(
+                        <span class="flex max-w-[min(82vw,360px)] flex-col gap-0.5 text-left">
+                          <span class="break-words font-semibold">{activeToolbarTitle()}</span>
+                          <Show when={activeToolbarSubtitle()}>
+                            <span class="break-all text-popover-foreground/75">{activeToolbarSubtitle()}</span>
+                          </Show>
+                        </span>
+                      )}
+                    >
+                      <button
+                        type="button"
+                        class="terminal-workspace-context w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        aria-label={[activeToolbarTitle(), activeToolbarSubtitle()].filter(Boolean).join(', ')}
+                        aria-describedby={activeToolbarStatusDescription() ? activeContextStatusId : undefined}
+                        data-testid="terminal-active-context-disclosure"
+                      >
+                        <span class="terminal-workspace-group truncate text-xs text-muted-foreground">{activeToolbarGroup()?.name}</span>
+                        <span aria-hidden="true" class="terminal-workspace-breadcrumb-separator text-muted-foreground">/</span>
+                        <span
+                          class="terminal-workspace-context-title truncate text-xs font-semibold text-foreground"
+                          data-terminal-session-title={activeSessionId() ?? ''}
+                        >
+                          {activeToolbarTitle()}
+                        </span>
+                        <Show when={activeToolbarSubtitle()}>
+                          <span class="terminal-workspace-context-path flex min-w-0 items-center text-[10px] leading-3 text-muted-foreground">
+                            <Show when={activeToolbarSubtitleIcon() === 'link'}>
+                              <span class="mr-1 flex h-2.5 w-2.5 shrink-0" data-terminal-toolbar-location-icon="link" aria-hidden="true">
+                                <Link class="h-2.5 w-2.5" />
+                              </span>
+                            </Show>
+                            <span class="truncate">{activeToolbarSubtitle()}</span>
+                          </span>
+                        </Show>
+                      </button>
+                    </Tooltip>
+                    <Show when={activeToolbarStatusDescription()}>
+                      <span class="sr-only" id={activeContextStatusId}>{activeToolbarStatusDescription()}</span>
+                    </Show>
+                  </div>
                 </div>
-              </div>
-              <Show when={isMobileLayout()}>
-                <span
-                  class="flex h-7 w-7 shrink-0 items-center justify-center"
-                  data-terminal-mobile-activity-slot=""
-                >
-                  <Show when={activeSessionListItem()?.outputState !== 'none'} fallback={(
-                    <Show when={activeSessionListItem()?.attentionState !== 'none'}>
+                <Show when={isMobileLayout()}>
+                  <span
+                    class="flex h-7 w-7 shrink-0 items-center justify-center"
+                    data-terminal-mobile-activity-slot=""
+                  >
+                    <Show when={activeSessionListItem()?.outputState !== 'none'} fallback={(
+                      <Show when={activeSessionListItem()?.attentionState !== 'none'}>
+                        <Tooltip content={activeToolbarActivityDescription()} placement="bottom" delay={0} clickToToggle>
+                          <button
+                            type="button"
+                            class={`flex h-7 w-7 cursor-pointer items-center justify-center rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-ring forced-colors:border forced-colors:border-current ${activeSessionListItem()?.attentionState === 'waiting'
+                              ? 'text-warning hover:bg-warning/10'
+                              : 'text-primary hover:bg-primary/10'}`}
+                            aria-label={activeToolbarActivityDescription()}
+                            data-terminal-mobile-attention={activeSessionListItem()?.attentionState}
+                          >
+                            <span class={`rounded-full bg-current ${activeSessionListItem()?.attentionState === 'waiting' ? 'h-2 w-2' : 'h-1.5 w-1.5'}`} aria-hidden="true" />
+                          </button>
+                        </Tooltip>
+                      </Show>
+                    )}>
                       <Tooltip content={activeToolbarActivityDescription()} placement="bottom" delay={0} clickToToggle>
                         <button
                           type="button"
-                          class={`flex h-7 w-7 cursor-pointer items-center justify-center rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-ring forced-colors:border forced-colors:border-current ${activeSessionListItem()?.attentionState === 'waiting'
-                            ? 'text-warning hover:bg-warning/10'
-                            : 'text-primary hover:bg-primary/10'}`}
+                          class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring forced-colors:border forced-colors:border-current"
                           aria-label={activeToolbarActivityDescription()}
-                          data-terminal-mobile-attention={activeSessionListItem()?.attentionState}
+                          data-terminal-mobile-activity={activeSessionListItem()?.activitySource}
                         >
-                          <span class={`rounded-full bg-current ${activeSessionListItem()?.attentionState === 'waiting' ? 'h-2 w-2' : 'h-1.5 w-1.5'}`} aria-hidden="true" />
+                          <TerminalOutputStatusGlyph state="streaming" />
                         </button>
                       </Tooltip>
                     </Show>
-                  )}>
-                    <Tooltip content={activeToolbarActivityDescription()} placement="bottom" delay={0} clickToToggle>
-                      <button
-                        type="button"
-                        class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring forced-colors:border forced-colors:border-current"
-                        aria-label={activeToolbarActivityDescription()}
-                        data-terminal-mobile-activity={activeSessionListItem()?.activitySource}
-                      >
-                        <TerminalOutputStatusGlyph state="streaming" />
-                      </button>
-                    </Tooltip>
-                  </Show>
-                </span>
-              </Show>
-              <Show when={isMobileLayout() ? activeGeometryPresentation() : null}>
-                {(presentation) => (
-                  <TerminalSharedGeometryNotice
-                    presentation={presentation()}
-                    mobile
-                    interactive={workbenchSelected()}
-                    fallbackFocus={terminalDisclosureFallbackFocus}
-                    surfaceBoundary={terminalDisclosureSurfaceBoundary}
-                    previousFocus={previousMobileToolbarControl}
-                    nextFocus={nextMobileToolbarControl}
-                  />
-                )}
-              </Show>
-              <Show when={!isMobileLayout()}>
-                <Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminalWorkspace.previous')} onClick={() => cycleWorkspaceSession(-1)} disabled={sessionListItems().length < 2}><ChevronLeft class="h-3.5 w-3.5" /></Button>
-                <Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminalWorkspace.next')} onClick={() => cycleWorkspaceSession(1)} disabled={sessionListItems().length < 2}><ChevronRight class="h-3.5 w-3.5" /></Button>
-                <span class="terminal-toolbar-divider" aria-hidden="true" />
-                <Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminal.search')} onClick={openSearch} disabled={!activeSessionId()}><Search class="h-3.5 w-3.5" /></Button>
-              </Show>
-              <Dropdown align="end"
-                trigger={<Button size="sm" variant="ghost" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!activeSessionId() || workspaceBusy()}><Grid class="h-3.5 w-3.5" /><span class="terminal-workspace-layout-label">{i18n.t('terminalWorkspace.layout')} {workspace.paneIds().length}</span></Button>}
-                items={Object.entries(workspaceLabels()).map(([id, label]) => ({ id, label }))}
-                onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
-              <Button
-                aria-busy={clearingSessionId() !== null}
-                data-terminal-clear-state={clearingSessionId() ? 'pending' : 'idle'}
-                data-testid="terminal-clear-active-session"
-                size="sm"
-                variant="ghost"
-                onClick={clearActive}
-                disabled={!connected() || !activeSessionId() || clearingSessionId() !== null}
-                title={i18n.t('terminal.clear')}
-              >
-                <Trash class="w-3.5 h-3.5" />
-              </Button>
-              <Dropdown
-                trigger={
-                  <Button size="sm" variant="ghost" disabled={!connected()} title={i18n.t('terminal.moreOptions')} aria-label={i18n.t('terminal.moreOptions')}>
-                    <MoreVerticalIcon class="w-3.5 h-3.5" />
-                  </Button>
-                }
-                items={moreItems()}
-                onSelect={handleMoreSelect}
-                align="end"
-              />
-              <Button size="sm" variant="primary" class="terminal-workspace-new-session" aria-label={i18n.t('terminal.newSession')} data-testid="terminal-workspace-new-session" onClick={createSession} disabled={!connected() || workspaceBusy()}>
-                <Plus class="h-3.5 w-3.5" /><span>{i18n.t('terminal.newSession')}</span>
-              </Button>
-            </div>
+                  </span>
+                </Show>
+                <Show when={isMobileLayout() ? activeGeometryPresentation() : null}>
+                  {(presentation) => (
+                    <TerminalSharedGeometryNotice
+                      presentation={presentation()}
+                      mobile
+                      interactive={workbenchSelected()}
+                      fallbackFocus={terminalDisclosureFallbackFocus}
+                      surfaceBoundary={terminalDisclosureSurfaceBoundary}
+                      previousFocus={previousMobileToolbarControl}
+                      nextFocus={nextMobileToolbarControl}
+                    />
+                  )}
+                </Show>
+                <Dropdown align="end"
+                  trigger={<Button size="sm" variant="ghost" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!activeSessionId() || workspaceBusy()}><Grid class="h-3.5 w-3.5" /><span class="terminal-workspace-layout-label">{i18n.t('terminalWorkspace.layout')} {workspace.displayedPaneIds().length}</span></Button>}
+                  items={Object.entries(workspaceLabels()).map(([id, label]) => ({ id, label }))}
+                  onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
+                <Button
+                  aria-busy={clearingSessionId() !== null}
+                  data-terminal-clear-state={clearingSessionId() ? 'pending' : 'idle'}
+                  data-testid="terminal-clear-active-session"
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearActive}
+                  disabled={!connected() || !activeSessionId() || clearingSessionId() !== null}
+                  title={i18n.t('terminal.clear')}
+                >
+                  <Trash class="w-3.5 h-3.5" />
+                </Button>
+                <Dropdown
+                  trigger={
+                    <Button size="sm" variant="ghost" disabled={!connected()} title={i18n.t('terminal.moreOptions')} aria-label={i18n.t('terminal.moreOptions')}>
+                      <MoreVerticalIcon class="w-3.5 h-3.5" />
+                    </Button>
+                  }
+                  items={moreItems()}
+                  onSelect={handleMoreSelect}
+                  align="end"
+                />
+                <Button size="sm" variant="primary" class="terminal-workspace-new-session" aria-label={i18n.t('terminal.newSession')} data-testid="terminal-workspace-new-session" onClick={createSession} disabled={!connected() || workspaceBusy()}>
+                  <Plus class="h-3.5 w-3.5" /><span>{i18n.t('terminal.newSession')}</span>
+                </Button>
+              </div>
 
-            <Show when={isMobileLayout() && workspace.paneIds().length > 1}>
+            </Show>
+            <Show when={isMobileLayout() && workspace.displayedPaneIds().length > 1}>
               <nav aria-label={i18n.t('terminalWorkspace.panes')} class="flex h-9 shrink-0 gap-1 overflow-x-auto border-b border-border px-1">
-                <For each={workspace.paneIds()}>{id => <button type="button" aria-pressed={activeSessionId() === id}
+                <For each={workspace.displayedPaneIds()}>{id => <button type="button" aria-pressed={activeSessionId() === id}
                   class="shrink-0 rounded px-2 text-xs" classList={{ 'bg-accent text-accent-foreground': activeSessionId() === id }}
                   onClick={() => requestSessionSelection(id, true)}>{sessionListItemById().get(id)?.title}</button>}</For>
               </nav>
@@ -5290,11 +5315,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
                 <div class="h-full">
                   <SplitWorkspace
-                    itemIds={sessionPanelIds()} layout={workspace.layout()} activeId={activeDisplaySessionId()}
+                    itemIds={sessionPanelIds()} layout={workspace.displayedLayout()} activeId={activeDisplaySessionId()}
                     compact={isMobileLayout()} maximizedId={maximizedWorkspaceSessionId()}
                     showHeaders={!isMobileLayout()}
                     resizeLabel={i18n.t('terminalWorkspace.resize')}
-                    onLayoutChange={workspace.commit} onActivate={selectWorkspacePane}
+                    onLayoutChange={next => { workspace.commit(next); workspace.setMaximized(false); }} onActivate={selectWorkspacePane}
                     externalDragType="application/x-redeven-terminal-session"
                     resolveExternalDrag={event => event.dataTransfer?.getData('application/x-redeven-terminal-session') || null}
                     renderHeader={sessionId => <>
@@ -5306,9 +5331,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       <Dropdown align="end" trigger={<Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.split')} disabled={workspaceBusy()}><Plus class="h-3 w-3" /></Button>}
                         items={(['left', 'right', 'top', 'bottom'] as const).map(edge => ({ id: edge, label: i18n.t(edge === 'left' ? 'terminalWorkspace.left' : edge === 'right' ? 'terminalWorkspace.right' : edge === 'top' ? 'terminalWorkspace.top' : 'terminalWorkspace.bottom') }))}
                         onSelect={edge => void splitWorkspaceSession(sessionId, edge as SplitWorkspaceEdge)} />
-                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={workspace.maximized() ? i18n.t('terminalWorkspace.restore') : i18n.t('terminalWorkspace.maximize')}
-                        onClick={() => { selectWorkspacePane(sessionId); workspace.setMaximized(value => !value); }}><Maximize class="h-3 w-3" /></Button>
-                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.closePane')} onClick={() => workspace.closePane(sessionId)}><X class="h-3 w-3" /></Button>
+                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0"
+                        aria-label={workspace.maximized() ? i18n.t('terminalWorkspace.restore') : i18n.t('terminalWorkspace.maximize')}
+                        title={workspace.maximized() ? i18n.t('terminalWorkspace.restore') : i18n.t('terminalWorkspace.maximize')}
+                        aria-pressed={workspace.maximized()}
+                        disabled={workspace.displayedPaneIds().length < 2}
+                        onClick={() => { selectWorkspacePane(sessionId); workspace.setMaximized(value => !value); }}>
+                        <Show when={workspace.maximized()} fallback={<Maximize class="h-3 w-3" />}><Restore class="h-3 w-3" /></Show>
+                      </Button>
+                      <Button size="sm" variant="ghost" class="h-6 w-6 p-0" aria-label={i18n.t('terminalWorkspace.closePane')} disabled={workspace.displayedPaneIds().length < 2} onClick={() => workspace.closePane(sessionId)}><X class="h-3 w-3" /></Button>
                     </>}
                     renderItem={(sessionId, visible) => {
                       const sessionForId = createMemo(() => renderableSessions().find((session) => session.id === sessionId) ?? null);

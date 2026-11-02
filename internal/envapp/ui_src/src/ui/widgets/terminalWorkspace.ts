@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, on, untrack, type Accessor } from 'solid-js';
-import { isSplitWorkspaceLayout, mapSplitWorkspace, reconcileSplitWorkspace, removeSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
+import { isSplitWorkspaceLayout, reconcileSplitWorkspace, removeSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 
 /** Product storage and selection adapter; placement mechanics remain upstream. */
@@ -14,10 +14,8 @@ export function createTerminalWorkspace(options: {
   const [layout, setLayout] = createSignal<SplitWorkspaceLayout | null>(null);
   const [maximized, setMaximized] = createSignal(false);
   let loadedKey = '';
-  let previousActive: string | null = null;
   createEffect(on(options.storageKey, key => {
     loadedKey = key;
-    previousActive = null;
     const saved = readUIStorageJSON<unknown>(key, null);
     setLayout(isSplitWorkspaceLayout(saved) ? saved : null);
     setMaximized(false);
@@ -34,15 +32,22 @@ export function createTerminalWorkspace(options: {
     if (!options.hydrated()) return;
     untrack(() => {
       let next = reconcileSplitWorkspace(layout(), ids);
-      if (!deferred && active && ids.includes(active) && !splitWorkspaceItems(next).includes(active)) {
-        const replaced = previousActive && splitWorkspaceItems(next).includes(previousActive) ? previousActive : splitWorkspaceItems(next)[0];
-        next = next && replaced ? mapSplitWorkspace(next, replaced, () => splitWorkspacePane(active)) : splitWorkspacePane(active);
+      // Sidebar browsing must never silently replace a member of a saved split.
+      // A single-pane workspace can follow selection; a split remains explicit.
+      if (!deferred && active && ids.includes(active) && splitWorkspaceItems(next).length < 2) {
+        if (!next || !splitWorkspaceItems(next).includes(active)) next = splitWorkspacePane(active);
       }
       if (next !== layout()) commit(next);
-      if (active && ids.includes(active)) previousActive = active;
     });
   });
   const paneIds = createMemo(() => splitWorkspaceItems(layout()));
+  const displayedLayout = createMemo(() => {
+    const active = options.activeId();
+    return active && options.sessionIds().includes(active) && !paneIds().includes(active)
+      ? splitWorkspacePane(active)
+      : layout();
+  });
+  const displayedPaneIds = createMemo(() => splitWorkspaceItems(displayedLayout()));
   const closePane = (id: string) => {
     if (paneIds().length < 2) return;
     const next = removeSplitWorkspaceItem(layout(), id);
@@ -52,5 +57,5 @@ export function createTerminalWorkspace(options: {
       setMaximized(false);
     });
   };
-  return { layout, commit, paneIds, maximized, setMaximized, closePane };
+  return { layout, displayedLayout, commit, paneIds, displayedPaneIds, maximized, setMaximized, closePane };
 }

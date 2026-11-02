@@ -38,7 +38,7 @@ function mountNavigator(mobile: boolean, scale = 1) {
     title: id,
     avatarInitial: 'T',
     avatarTone: { background: '#ddd', border: '#999', foreground: '#333' },
-    avatar: { kind: 'initial' },
+    avatar: id === 'second' ? { kind: 'agent', identity: 'codex' } : { kind: 'initial' },
     subtitleIcon: 'none',
     subtitle: '/workspace/redeven',
     fullPath: '/workspace/redeven',
@@ -141,6 +141,23 @@ describe.each(['light', 'dark'])('TerminalSessionNavigator %s tree geometry', (t
     expectCompactGroup(host, 'workspace', scale);
     for (const row of host.querySelectorAll('[data-terminal-session-row]')) expect(row.getBoundingClientRect().height / scale).toBeCloseTo(32, 1);
   });
+});
+
+it.each(['light', 'dark'])('uses rounded session tiles and a clean selected row in %s', async (theme) => {
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  const host = mountNavigator(false);
+  await settleLayout();
+  const row = host.querySelector<HTMLElement>('[data-terminal-session-row="first"]')!;
+  const avatar = row.querySelector<HTMLElement>('[data-terminal-session-avatar]')!;
+  const style = getComputedStyle(avatar);
+  expect(parseFloat(style.borderRadius)).toBeGreaterThanOrEqual(6);
+  expect(avatar.getBoundingClientRect().width).toBe(24);
+  expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  expect(row.querySelector('.absolute.left-0')).toBeNull();
+  const agent = host.querySelector<HTMLElement>('[data-terminal-session-avatar="second"]')!;
+  expect(agent.getBoundingClientRect().width).toBe(24);
+  expect(getComputedStyle(agent).borderRadius).toBe(style.borderRadius);
+  await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/sidebar-' + theme + '.png' });
 });
 
 it.each([false])('collapses groups and restores the compact folder row (mobile=%s)', async (mobile) => {

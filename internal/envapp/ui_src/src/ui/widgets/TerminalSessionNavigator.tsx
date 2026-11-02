@@ -1,7 +1,7 @@
 import './terminal-mobile-navigation.css';
 import './terminal-workspace.css';
-import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
+import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { ResizeHandle, Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Input, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, FolderPlus, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
 
@@ -67,6 +67,10 @@ export type TerminalSessionNavigationGroup = Readonly<{
 export type TerminalSessionNavigatorProps = Readonly<{
   accessibilityIdPrefix: string;
   mobile: boolean;
+  width?: number;
+  resizable?: boolean;
+  onResize?: (delta: number) => void;
+  onResizeEnd?: () => void;
   drawerOpen: boolean;
   connected: boolean;
   refreshing: boolean;
@@ -82,6 +86,9 @@ export type TerminalSessionNavigatorProps = Readonly<{
   emptyListLoading: boolean;
   ownedLayerIds?: readonly string[];
   isFocusWithinOwnedLayer?: (target: Node | null) => boolean;
+  /** Owning terminal panel; keeps session previews visible over workspace drop targets. */
+  dragPreviewBoundary?: () => HTMLElement | undefined;
+  footerActions?: JSX.Element;
   onCloseDrawer: () => void;
   onDrawerPresenceChange?: (present: boolean) => void;
   onCreateSessionInGroup?: (groupId: string) => void;
@@ -334,10 +341,11 @@ function sanitizeDragPreviewClone(clone: HTMLElement) {
 
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const i18n = useI18n();
-  const sidebarWidth = () => (props.mobile ? 232 : 258);
+  const sidebarWidth = () => (props.mobile ? 232 : props.width ?? 258);
   let drawerDialogEl: HTMLDivElement | undefined;
   let dragBoundaryEl: HTMLDivElement | undefined;
   let dragPreviewEl: HTMLDivElement | undefined;
+  let dragPreviewBoundaryEl: HTMLElement | undefined;
   let dragPreviewReturnTimer: number | undefined;
   let dragPreviewReturning = false;
   let dragPreviewMetrics: Readonly<{
@@ -373,6 +381,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     if (dragPreviewReturnTimer !== undefined) window.clearTimeout(dragPreviewReturnTimer);
     dragPreviewEl?.remove();
     dragPreviewEl = undefined;
+    dragPreviewBoundaryEl = undefined;
     dragPreviewReturnTimer = undefined;
     dragPreviewReturning = false;
     dragPreviewMetrics = null;
@@ -384,10 +393,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     setGroupDropIntent(null);
   };
   const resolveDragBoundaryGeometry = () => {
-    if (!dragBoundaryEl) return null;
-    const rect = dragBoundaryEl.getBoundingClientRect();
-    const width = dragBoundaryEl.offsetWidth || rect.width;
-    const height = dragBoundaryEl.offsetHeight || rect.height;
+    const boundary = dragPreviewBoundaryEl ?? dragBoundaryEl;
+    if (!boundary) return null;
+    const rect = boundary.getBoundingClientRect();
+    const width = boundary.offsetWidth || rect.width;
+    const height = boundary.offsetHeight || rect.height;
     const scaleX = width > 0 && rect.width > 0 ? rect.width / width : 1;
     const scaleY = height > 0 && rect.height > 0 ? rect.height / height : 1;
     return {
@@ -410,9 +420,10 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     dragPreviewEl.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
   };
   const beginDragPreview = (event: DragEvent, kind: 'session' | 'group', source: HTMLElement) => {
-    const geometry = resolveDragBoundaryGeometry();
-    if (!dragBoundaryEl || !geometry || !event.dataTransfer) return;
     clearDragPreview();
+    dragPreviewBoundaryEl = kind === 'session' ? props.dragPreviewBoundary?.() ?? dragBoundaryEl : dragBoundaryEl;
+    const geometry = resolveDragBoundaryGeometry();
+    if (!dragPreviewBoundaryEl || !geometry || !event.dataTransfer) return;
     installTransparentNativeDragImage(event);
     const sourceRect = source.getBoundingClientRect();
     const sourceWidth = source.offsetWidth || sourceRect.width / geometry.scaleX;
@@ -437,7 +448,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     clone.style.opacity = '1';
     clone.style.transform = 'none';
     preview.append(clone);
-    dragBoundaryEl.append(preview);
+    dragPreviewBoundaryEl.append(preview);
     dragPreviewEl = preview;
     dragPreviewMetrics = {
       width,
@@ -811,10 +822,32 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       >
         <Sidebar
           width={sidebarWidth()}
+          visibilityMotion="instant"
+          resizer={<Show when={!props.mobile && props.resizable}>
+            <div
+              role="separator" tabIndex={0} aria-orientation="vertical"
+              aria-label={i18n.t('terminalWorkspace.resizeSidebar')}
+              aria-valuemin={220} aria-valuemax={480} aria-valuenow={Math.round(sidebarWidth())}
+              data-terminal-sidebar-resizer
+              class="absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize focus-visible:bg-primary focus-visible:outline-none"
+              onKeyDown={event => {
+                const delta = event.key === 'ArrowLeft' ? -10 : event.key === 'ArrowRight' ? 10 : event.key === 'Home' ? 220 - sidebarWidth() : event.key === 'End' ? 480 - sidebarWidth() : 0;
+                if (!delta) return;
+                event.preventDefault(); event.stopPropagation();
+                props.onResize?.(delta); props.onResizeEnd?.();
+              }}
+            >
+              <span aria-hidden="true"><ResizeHandle direction="horizontal" class="!w-full" onResize={delta => {
+                const sidebar = drawerDialogEl?.querySelector<HTMLElement>('.redeven-terminal-session-sidebar');
+                const scale = sidebar?.offsetWidth ? sidebar.getBoundingClientRect().width / sidebar.offsetWidth : 1;
+                props.onResize?.(delta / (scale || 1));
+              }} onResizeEnd={props.onResizeEnd} /></span>
+            </div>
+          </Show>}
           ariaLabel={i18n.t('terminal.title')}
           class={`redeven-terminal-session-sidebar ${props.mobile
             ? '!h-full !max-h-full !min-h-0 !w-full overflow-hidden'
-            : '!w-[258px] !min-w-[258px] !max-w-[258px] overflow-hidden'}`}
+            : 'overflow-hidden'}`}
         >
           <SidebarContent class="terminal-navigation-content h-full min-h-0 overflow-hidden">
             <div
@@ -1132,11 +1165,28 @@ ${navigationGroup().defaultWorkingDir}`}
                             )}
                           </Show>
                         <div
+                          draggable={item().transitionState === 'none'}
+                          onDragStart={(event) => {
+                            const target = event.target instanceof Element ? event.target : null;
+                            if (!event.dataTransfer || item().transitionState !== 'none' || target?.closest('button:not([data-terminal-session-id]):not([data-terminal-session-drag-handle])')) {
+                              event.preventDefault();
+                              return;
+                            }
+                            props.onResetSessionPreview();
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
+                            beginDragPreview(event, 'session', event.currentTarget);
+                            setDraggedSessionId(sessionId);
+                            setDraggedGroupId(null);
+                            setDropIntent(null);
+                            setGroupDropIntent(null);
+                          }}
+                          onDragEnd={returnDragPreview}
                           data-terminal-session-row={sessionId}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
                           class={`group relative grid cursor-pointer items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 ${props.mobile
                             ? 'min-h-[64px] grid-cols-[36px_minmax(0,1fr)_44px] gap-x-2 px-2.5 py-1'
-                            : 'h-8 grid-cols-[20px_minmax(0,1fr)_24px] gap-x-1.5 pl-[27px] pr-1 py-0'} ${sidebarActive()
+                            : 'h-8 grid-cols-[24px_minmax(0,1fr)_24px] gap-x-1.5 pl-[27px] pr-1 py-0'} ${sidebarActive()
                             ? 'bg-[var(--floe-state-selected)] text-sidebar-accent-foreground'
                             : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
@@ -1156,7 +1206,7 @@ ${navigationGroup().defaultWorkingDir}`}
                           >
                             <button
                               type="button"
-                              class="h-full w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
+                              class="h-full w-full cursor-grab active:cursor-grabbing rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
                               data-terminal-session-id={sessionId}
                               data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                               data-terminal-session-index={navigationIndex() + 1}
@@ -1184,14 +1234,11 @@ ${navigationGroup().defaultWorkingDir}`}
                               </Show>
                             </button>
                           </Tooltip>
-                          <Show when={sidebarActive()}>
-                            <span class="absolute left-0 top-2.5 bottom-2.5 z-10 w-[2px] rounded-full bg-primary" aria-hidden="true" />
-                          </Show>
                           <button
                             type="button"
                             tabIndex={-1}
                             draggable={item().transitionState === 'none'}
-                            class={`relative z-10 flex shrink-0 cursor-grab select-none items-center justify-center rounded transition-colors duration-150 hover:bg-sidebar-accent/60 focus:outline-none active:cursor-grabbing ${props.mobile ? 'h-9 w-9' : 'h-6 w-5'}`}
+                            class={`relative z-10 flex shrink-0 cursor-grab select-none items-center justify-center rounded transition-colors duration-150 hover:bg-sidebar-accent/60 focus:outline-none active:cursor-grabbing ${props.mobile ? 'h-9 w-9' : 'h-6 w-6'}`}
                             classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
                             data-terminal-session-drag-handle={sessionId}
                             aria-label={`${item().label}: ${item().title}`}
@@ -1199,18 +1246,6 @@ ${navigationGroup().defaultWorkingDir}`}
                               event.stopPropagation();
                               props.onSelectSession(sessionId);
                             }}
-                            onDragStart={(event) => {
-                              if (!event.dataTransfer) return;
-                              event.dataTransfer.effectAllowed = 'move';
-                              event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
-                              const source = event.currentTarget.closest<HTMLElement>('[data-terminal-session-row]');
-                              if (source) beginDragPreview(event, 'session', source);
-                              setDraggedSessionId(sessionId);
-                              setDraggedGroupId(null);
-                              setDropIntent(null);
-                              setGroupDropIntent(null);
-                            }}
-                            onDragEnd={returnDragPreview}
                           >
                             <Show
                               when={agentIdentity()}
@@ -1394,9 +1429,11 @@ ${navigationGroup().defaultWorkingDir}`}
                 </SidebarItemList>
               </div>
             </SidebarSection>
-            <button type="button" class="terminal-navigation-quick-switch" onClick={() => drawerDialogEl?.querySelector<HTMLInputElement>('[data-testid="terminal-session-filter"]')?.focus()}>
-              <Search class="h-3.5 w-3.5" /><span>{i18n.t('terminalWorkspace.quickSwitch')}</span>
-            </button>
+            <Show when={props.footerActions}>
+              <div class="terminal-navigation-footer flex items-center justify-end gap-1">
+                {props.footerActions}
+              </div>
+            </Show>
             <span class="sr-only" aria-live="polite" data-terminal-drag-announcement>
               {draggedSessionId() ? dropAnnouncement() : ''}
             </span>

@@ -6,7 +6,7 @@ import { enUSActivityChrome } from './activityChrome';
 import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
-  terminalWorkspace: {"previous": "Previous session", "next": "Next session", "directories": "Directories", "quickSwitch": "Quick switch", "layout": "Layout", "split": "Split pane", "single": "Single pane", "columns": "Two columns", "rows": "Two rows", "threeColumns": "Three columns", "mainLeft": "Main left", "grid": "Grid", "left": "Split left", "right": "Split right", "top": "Split above", "bottom": "Split below", "maximize": "Maximize pane", "restore": "Restore panes", "closePane": "Close pane", "resize": "Resize panes", "panes": "Terminal panes"},
+  terminalWorkspace: {"previous": "Previous session", "next": "Next session", "directories": "Directories", "layout": "Layout", "split": "Split pane", "single": "Single pane", "columns": "Two columns", "rows": "Two rows", "threeColumns": "Three columns", "mainLeft": "Main left", "grid": "Grid", "left": "Split left", "right": "Split right", "top": "Split above", "bottom": "Split below", "maximize": "Maximize pane", "restore": "Restore panes", "closePane": "Close pane", "resize": "Resize panes", "resizeSidebar": "Resize terminal sidebar", "panes": "Terminal panes"},
   centerEntry: { expiringTitle: "Entry session expires soon", expiringMessage: "Continue interacting with the environment to keep the entry session active. The absolute session deadline still requires sign-in." },
   remoteDesktop: {
     "deployEnsure": "Prepare remote desktop",

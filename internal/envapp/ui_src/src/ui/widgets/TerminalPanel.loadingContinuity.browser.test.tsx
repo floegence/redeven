@@ -1,7 +1,7 @@
 import '../../index.css';
 
 import { createSignal } from 'solid-js';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -223,6 +223,7 @@ describe('TerminalPanel loading continuity', () => {
     flowerLauncher.mockClear();
     sessionStorage.clear();
     localStorage.removeItem('redeven_terminal_workspace:v1:env-1:terminal_page');
+    localStorage.removeItem('redeven_terminal_sidebar_width:v1:env-1:terminal_page');
   });
 
   afterEach(() => {
@@ -272,6 +273,186 @@ describe('TerminalPanel loading continuity', () => {
     await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/desktop.png' });
   });
 
+  it.each([1, 0.75, 1.25])('docks a full sidebar row without replacing or remounting sessions at scale %s', async (scale) => {
+    rpcState.sessions = ['dock-a', 'dock-b', 'dock-c'].map((id) => ({ ...createdSession(id), isActive: id === 'dock-a' }));
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '1100px', height: '700px' });
+    host.style.transform = 'scale(' + scale + ')';
+    host.style.transformOrigin = 'top left';
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    await expect.poll(() => runtimeState.propsBySession.has('dock-a')).toBe(true);
+    runtimeState.propsBySession.get('dock-a').onInteractive?.('dock-a');
+    const original = host.querySelector('[data-terminal-runtime-session="dock-a"]');
+    const dock = async (sourceId: string, targetId: string, edge: 'left' | 'bottom' | 'center') => {
+      const source = host.querySelector<HTMLElement>('[data-terminal-session-id="' + sourceId + '"]')!;
+      expect(source.closest('[data-terminal-session-row]')?.getAttribute('draggable')).toBe('true');
+      const target = host.querySelector<HTMLElement>('[data-floe-split-pane="' + targetId + '"]')!;
+      const transfer = new DataTransfer();
+      const sourceBox = source.getBoundingClientRect();
+      source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: sourceBox.left + 80, clientY: sourceBox.top + 15 }));
+      expect(transfer.getData('application/x-redeven-terminal-session')).toBe(sourceId);
+      const rect = target.getBoundingClientRect();
+      const clientX = edge === 'left' ? rect.left + 4 : rect.left + rect.width / 2;
+      const clientY = edge === 'bottom' ? rect.bottom - 4 : rect.top + rect.height / 2;
+      target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX, clientY }));
+      expect(target.querySelector('[data-floe-split-drop]')?.getAttribute('data-floe-split-drop')).toBe(edge);
+      const preview = host.querySelector<HTMLElement>('[data-terminal-drag-preview="session"]')!;
+      expect(preview.getBoundingClientRect().right).toBeGreaterThan(host.querySelector('[data-terminal-drag-boundary]')!.getBoundingClientRect().right);
+      target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX, clientY }));
+      source.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: transfer }));
+      await expect.poll(() => runtimeState.propsBySession.has(sourceId)).toBe(true);
+      runtimeState.propsBySession.get(sourceId).onInteractive?.(sourceId);
+    };
+    await dock('dock-b', 'dock-a', 'left');
+    expect(visibleElements(host, '[data-floe-split-pane]')).toHaveLength(2);
+    await dock('dock-c', 'dock-a', 'bottom');
+    expect(visibleElements(host, '[data-floe-split-pane]')).toHaveLength(3);
+    const previousPosition = host.querySelector<HTMLElement>('[data-floe-split-pane="dock-c"]')!.getBoundingClientRect();
+    await dock('dock-b', 'dock-c', 'center');
+    const swappedPosition = host.querySelector<HTMLElement>('[data-floe-split-pane="dock-b"]')!.getBoundingClientRect();
+    expect(swappedPosition.x).toBeCloseTo(previousPosition.x, 1);
+    expect(swappedPosition.y).toBeCloseTo(previousPosition.y, 1);
+    expect(visibleElements(host, '[data-floe-split-pane]')).toHaveLength(3);
+    expect(runtimeState.propsBySession.size).toBe(3);
+    expect(host.querySelector('[data-terminal-runtime-session="dock-a"]')).toBe(original);
+    expect(host.querySelector('.terminal-workspace-toolbar')).toBeNull();
+    expect(host.querySelector('[data-floe-split-header]')!.getBoundingClientRect().top).toBe(host.querySelector('[data-terminal-work-area]')!.getBoundingClientRect().top);
+  });
+
+  it('supports native row dragging, center replacement, maximize docking and cancellation', async () => {
+    await page.viewport(1280, 800);
+    rpcState.sessions = ['native-a', 'native-b', 'native-c'].map((id) => ({ ...createdSession(id), isActive: id === 'native-a' }));
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '1100px', height: '700px' });
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    await expect.poll(() => runtimeState.propsBySession.has('native-a')).toBe(true);
+    runtimeState.propsBySession.get('native-a').onInteractive?.('native-a');
+    const native = commands as unknown as {
+      dragTerminalSessionToPane: (source: string, target: string, edge: 'left' | 'right' | 'top' | 'bottom' | 'center') => Promise<void>;
+    };
+    const original = host.querySelector('[data-terminal-runtime-session="native-a"]');
+    await native.dragTerminalSessionToPane('native-b', 'native-a', 'right');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    runtimeState.propsBySession.get('native-b').onInteractive?.('native-b');
+    await native.dragTerminalSessionToPane('native-c', 'native-b', 'center');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).toEqual(['native-a', 'native-c']);
+    runtimeState.propsBySession.get('native-c').onInteractive?.('native-c');
+    const pane = host.querySelector('[data-floe-split-pane="native-a"]')!;
+    await userEvent.click(pane.querySelector<HTMLButtonElement>('[aria-label="Maximize pane"]')!);
+    await native.dragTerminalSessionToPane('native-b', 'native-a', 'bottom');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
+    const saved = localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page');
+    const source = host.querySelector('[data-terminal-session-id="native-b"]')!;
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+    source.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+    expect(localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page')).toBe(saved);
+    expect(host.querySelector('[data-terminal-runtime-session="native-a"]')).toBe(original);
+    expect(runtimeState.propsBySession.size).toBe(3);
+    await expect.poll(() => host.querySelector('[data-terminal-drag-preview]')).toBeNull();
+    await native.dragTerminalSessionToPane('native-c', 'native-a', 'top');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
+    const above = host.querySelector('[data-floe-split-pane="native-c"]')!.getBoundingClientRect();
+    const below = host.querySelector('[data-floe-split-pane="native-a"]')!.getBoundingClientRect();
+    expect(above.bottom).toBeLessThanOrEqual(below.top);
+    await expect.poll(() => host.querySelector('[data-terminal-drag-preview]')).toBeNull();
+    await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/sidebar-docking.png' });
+  });
+
+  it('keeps search, settings and session creation reachable from the sidebar footer', async () => {
+    await page.viewport(1280, 800);
+    let sequence = 0;
+    const create = vi.fn(async () => createdSession('footer-' + ++sequence));
+    const host = renderCreateFlow(create);
+    await expect.poll(() => runtimeState.propsBySession.has('footer-1')).toBe(true);
+    runtimeState.propsBySession.get('footer-1').onInteractive?.('footer-1');
+    const footer = host.querySelector<HTMLElement>('.terminal-navigation-footer')!;
+    const menu = footer.querySelector<HTMLButtonElement>('[aria-label="More options"]')!;
+    expect(host.querySelector('.terminal-workspace-toolbar')).toBeNull();
+    await userEvent.click(menu);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Search', exact: true }));
+    await expect.poll(() => host.querySelector('[data-terminal-search-state]')).not.toBeNull();
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => host.querySelector('[data-terminal-search-state]')).toBeNull();
+    await userEvent.click(menu);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Terminal settings', exact: true }));
+    await expect.element(page.getByRole('dialog', { name: 'Terminal settings', exact: true })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await expect.element(page.getByRole('dialog', { name: 'Terminal settings', exact: true })).not.toBeInTheDocument();
+    await userEvent.click(menu);
+    await userEvent.click(page.getByRole('menuitem', { name: 'New session', exact: true }));
+    await expect.poll(() => create.mock.calls.length).toBe(2);
+  });
+
+  it('preserves the split arrangement while browsing sidebar sessions and restores pane focus', async () => {
+    await page.viewport(1280, 800);
+    rpcState.sessions = ['browse-a', 'browse-b', 'browse-c'].map((id) => ({ ...createdSession(id), isActive: id === 'browse-a' }));
+    localStorage.setItem('redeven_terminal_workspace:v1:env-1:terminal_page', JSON.stringify({ type: 'split', id: 'browse-split', axis: 'x', ratio: 0.4, first: { type: 'pane', id: 'browse-a' }, second: { type: 'pane', id: 'browse-b' } }));
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '1100px', height: '700px' });
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    for (const [id, runtime] of runtimeState.propsBySession) runtime.onInteractive?.(id);
+    const original = host.querySelector('[data-terminal-runtime-session="browse-a"]');
+    const saved = localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="browse-c"]')!);
+    await expect.poll(() => runtimeState.propsBySession.has('browse-c')).toBe(true);
+    runtimeState.propsBySession.get('browse-c').onInteractive?.('browse-c');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).toEqual(['browse-c']);
+    expect(localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page')).toBe(saved);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="browse-b"]')!);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    expect(runtimeState.propsBySession.get('browse-b').active()).toBe(true);
+    const pane = host.querySelector('[data-floe-split-pane="browse-b"]')!;
+    const maximize = pane.querySelector<HTMLButtonElement>('[aria-label="Maximize pane"]')!;
+    const maximizeIcon = maximize.innerHTML;
+    await userEvent.click(maximize);
+    const restore = pane.querySelector<HTMLButtonElement>('[aria-label="Restore panes"]')!;
+    expect(restore.innerHTML).not.toBe(maximizeIcon);
+    expect(restore.getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="browse-a"]')!);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    expect(runtimeState.propsBySession.get('browse-a').active()).toBe(true);
+    expect(localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page')).toBe(saved);
+    expect(host.querySelector('[data-terminal-runtime-session="browse-a"]')).toBe(original);
+    expect(host.textContent).not.toContain('Quick switch');
+  });
+
+  it.each([1, 0.75, 1.25])('resizes and remembers the sidebar at scale %s without remounting terminals', async (scale) => {
+    await page.viewport(1440, 960);
+    rpcState.sessions = [{ ...createdSession('resize-a'), isActive: true }];
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '1100px', height: '700px', transform: 'scale(' + scale + ')', transformOrigin: 'top left' });
+    document.body.append(host);
+    const mount = () => render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = mount();
+    await expect.poll(() => runtimeState.propsBySession.has('resize-a')).toBe(true);
+    runtimeState.propsBySession.get('resize-a').onInteractive?.('resize-a');
+    const original = host.querySelector('[data-terminal-runtime-session="resize-a"]');
+    const width = () => host.querySelector<HTMLElement>('.redeven-terminal-session-sidebar')!.offsetWidth;
+    const native = commands as unknown as { resizeTerminalSidebar: (delta: number) => Promise<void> };
+    expect(width()).toBe(258);
+    await native.resizeTerminalSidebar(80);
+    await expect.poll(width).toBe(338);
+    expect(Number(localStorage.getItem('redeven_terminal_sidebar_width:v1:env-1:terminal_page'))).toBeCloseTo(338);
+    expect(host.querySelector('[data-terminal-runtime-session="resize-a"]')).toBe(original);
+    const handle = host.querySelector<HTMLElement>('[data-terminal-sidebar-resizer]')!;
+    handle.focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(width()).toBe(328);
+    await userEvent.keyboard('{Home}');
+    expect(width()).toBe(220);
+    await userEvent.keyboard('{End}');
+    expect(width()).toBe(480);
+    expect(document.activeElement).toBe(handle);
+    disposeRendered();
+    disposeRendered = mount();
+    await expect.poll(width).toBe(480);
+    expect(host.textContent).not.toContain('Quick switch');
+  });
+
   it('keeps headers, dividers and buttons within the selected terminal palette across shell themes', async () => {
     let sequence = 0;
     const host = renderCreateFlow(vi.fn(async () => createdSession('palette-' + ++sequence)));
@@ -294,7 +475,7 @@ describe('TerminalPanel loading continuity', () => {
         expect(area.style.getPropertyValue('--floe-state-hover')).toContain(colors.background);
         const inactiveHeader = host.querySelector<HTMLElement>('[data-floe-split-pane][data-active="false"] [data-floe-split-header]')!;
         expect(getComputedStyle(inactiveHeader).backgroundColor).toBe(getComputedStyle(area).backgroundColor);
-        expect(getComputedStyle(inactiveHeader).borderBottomColor).toBe(getComputedStyle(host.querySelector('.terminal-workspace-toolbar')!).borderBottomColor);
+        expect(getComputedStyle(inactiveHeader).borderBottomColor).toBe(getComputedStyle(host.querySelector('[data-floe-split-header]')!).borderBottomColor);
         await expect.poll(() => getComputedStyle(inactiveHeader.querySelector('button')!).color).toBe(getComputedStyle(inactiveHeader).color);
         const divider = host.querySelector<HTMLElement>('[data-floe-split-divider]')!;
         expect(getComputedStyle(divider).backgroundColor).toBe(getComputedStyle(area).backgroundColor);

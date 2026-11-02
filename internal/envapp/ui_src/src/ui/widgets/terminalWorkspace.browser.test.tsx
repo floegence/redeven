@@ -11,7 +11,7 @@ afterEach(() => {
   localStorage.removeItem('terminal-workspace-other');
 });
 const tick = () => new Promise<void>(resolve => queueMicrotask(resolve));
-it('waits for hydration, replaces only the selected pane, and preserves session membership on close', async () => {
+it('waits for hydration, browses unplaced sessions without rewriting splits, and preserves membership on close', async () => {
   let n = 0;
   const saved = presetSplitWorkspace('grid', ['a','b','c','d'], () => 'split-' + ++n)!;
   localStorage.setItem('terminal-workspace-test', JSON.stringify(saved));
@@ -28,8 +28,11 @@ it('waits for hydration, replaces only the selected pane, and preserves session 
   setIds(['a','b','c','d','e']); setHydrated(true); await tick();
   expect(controller.layout()).toEqual(saved);
   setActive('e'); await tick();
-  expect(controller.paneIds()).toEqual(['a','c','e','d']);
-  controller.closePane('e'); await tick();
+  expect(controller.layout()).toEqual(saved);
+  expect(JSON.parse(localStorage.getItem('terminal-workspace-test')!)).toEqual(saved);
+  setActive('b'); await tick();
+  expect(controller.layout()).toEqual(saved);
+  controller.closePane('b'); await tick();
   expect(controller.paneIds()).toEqual(['a','c','d']);
   expect(ids()).toContain('e');
   expect(active()).toBe('a');
