@@ -94,7 +94,7 @@ function fakeBridgeSession() {
     runtime_handle: { disconnect: vi.fn(), stop: vi.fn() },
     openStream: vi.fn(),
     closed: new Promise<void>(() => undefined),
-    disconnect: vi.fn(),
+    disconnect: vi.fn(async () => undefined),
     stop: vi.fn(),
   };
 }
@@ -750,7 +750,39 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
 
-  it('blocks every ordinary lifecycle action when the target requires reinstall', async () => {
+  it.each(['not_running', 'needs_reinstall', 'failed'] as const)('allows explicit package replacement after %s observations', async status => {
+    lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({ status,
+      message: 'Previous service observation requires recovery.',
+      binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
+      state_root: '/opt/redeven/gateways/gw_bastion/state' });
+    const lifecycle = manager();
+    const record = sshGateway();
+    expect((await lifecycle.inspectService(record)).can_update).toBe(true);
+    await lifecycle.updateGateway(record);
+    await lifecycle.reinstallGateway(record);
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
+      forceUpdate: true, resetConfiguration: false, stateRoot: '/opt/redeven/gateways/gw_bastion/state',
+    }));
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not coalesce configuration recovery with an ordinary reinstall', async () => {
+    let release = () => {};
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockImplementation(async () => {
+      await new Promise<void>(resolve => { release = resolve; });
+      return '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway';
+    });
+    const lifecycle = manager();
+    const record = sshGateway();
+    const recovery = lifecycle.reinstallGateway(record, { resetConfiguration: true });
+    await vi.waitFor(() => expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(1));
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({ forceUpdate: true, resetConfiguration: true }));
+    await expect(lifecycle.reinstallGateway(record)).rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
+    release();
+    await recovery;
+  });
+
+  it('keeps ordinary lifecycle actions blocked while permitting explicit package recovery', async () => {
     lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
       status: 'needs_reinstall',
       message: 'Gateway identity is incompatible with this Desktop.',
@@ -763,7 +795,6 @@ describe('GatewayLifecycleManager', () => {
     await expect(lifecycle.startGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
     await expect(lifecycle.stopGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
     await expect(lifecycle.restartGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
-    await expect(lifecycle.updateGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
     expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
@@ -776,7 +807,7 @@ describe('GatewayLifecycleManager', () => {
     await expect(manager().startGateway(sshGateway())).rejects.toMatchObject({
       name: 'GatewayReinstallRequiredError', service_state: {
         status: 'needs_reinstall', error_code: 'gateway_state_unsupported', can_start: false,
-        can_restart: false, can_update: false, can_pair_after_start: false,
+        can_restart: false, can_update: true, can_pair_after_start: false,
       },
     });
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();

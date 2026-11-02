@@ -34,6 +34,7 @@ export function runGatewaySourceAction(
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
       return runGatewayLauncherAction({ kind: action.intent, connection_id: gateway.connection_id });
     case 'refresh_gateway':

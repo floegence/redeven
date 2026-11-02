@@ -2464,7 +2464,7 @@ export type GatewayRowModel = Readonly<{
 }>;
 
 export type GatewaySourceActionIntent =
-  | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway'
+  | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway'
   | 'manage_gateway_members'
   | 'refresh_gateway'
   | 'pair_gateway'
@@ -2477,6 +2477,7 @@ export type GatewaySourceActionIntent =
 
 export type GatewaySourceActionModel = Readonly<{
   intent: GatewaySourceActionIntent;
+  reset_configuration?: boolean;
   label: string;
   enabled: boolean;
   variant: 'default' | 'outline';
@@ -2573,12 +2574,13 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
     return actions;
   }
 
-  if (desktopGatewayCanManageService(gateway) && gateway.service_state?.status !== 'needs_reinstall') {
+  if (desktopGatewayCanManageService(gateway)) {
     const state = gateway.service_state;
     if (state?.can_start) add(gatewaySourceAction('start_gateway', 'Start Gateway'));
     if (state?.can_stop) add(gatewaySourceAction('stop_gateway', 'Stop Gateway'));
     if (state?.can_restart) add(gatewaySourceAction('restart_gateway', 'Restart Gateway'));
-    if (state?.can_update) add(gatewaySourceAction('update_gateway', 'Update Gateway'));
+    add(gatewaySourceAction('update_gateway', 'Update Gateway'));
+    add(gatewaySourceAction('reinstall_gateway', 'Reinstall Gateway'));
   }
   add(gatewaySourceAction('refresh_gateway', 'Refresh'));
   if (gateway.status !== 'needs_setup') {

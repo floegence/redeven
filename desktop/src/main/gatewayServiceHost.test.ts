@@ -1,11 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ensureManagedGatewayServiceReady, GatewayServiceStartError, gatewayServiceBinaryPath, probeManagedGatewayServiceDeep, probeManagedGatewayServiceStatus } from './gatewayServiceHost';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
+
+vi.mock('./runtimePackageCache', async importOriginal => ({
+  ...await importOriginal<typeof import('./runtimePackageCache')>(), prepareDesktopRuntimeUploadAsset: vi.fn(),
+}));
+import { prepareDesktopRuntimeUploadAsset } from './runtimePackageCache';
 
 describe('gatewayServiceHost', () => {
   it.each([
@@ -88,6 +94,41 @@ esac
       await expect(ensureManagedGatewayServiceReady(options)).resolves.toBe(binary);
       expect(phases.at(-1)).toBe('gateway_ready');
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it.each([false, true])('replaces the package before starting, with explicit reset=%s', async resetConfiguration => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-reinstall-'));
+    const stateRoot = path.join(root, 'state');
+    const binary = gatewayServiceBinaryPath(stateRoot);
+    const options = {
+      hostAccess: { kind: 'local_host' as const }, placement: { kind: 'host_process' as const, runtime_root: root },
+      stateRoot, releaseTag: 'v0.0.0-test', releaseBaseURL: '', assetCacheRoot: path.join(root, 'cache'), tempRoot: root,
+      sshCredentialScope: 'reinstall-test', sshTransportManager: {} as DesktopSSHTransportManager,
+      forceUpdate: true, resetConfiguration,
+    };
+    fs.mkdirSync(path.dirname(binary), { recursive: true });
+    const script = "#!/bin/sh\nstate_root=\"$(dirname \"$0\")/../..\"\ncase \"$1\" in\nversion) echo 'redeven-gateway v0.0.0-test (test)' ;;\nservice-stop) echo stop >> \"$state_root/sequence\"; echo '{\"status\":\"not_running\"}' ;;\nservice-status) echo '{\"status\":\"error\",\"error_code\":\"gateway_state_unsupported\"}'; exit 1 ;;\nconfiguration-reset) echo reset >> \"$state_root/sequence\"; mv \"$state_root/members.json\" \"$state_root/retained-members.json\"; echo '{\"status\":\"configuration_reset\",\"identity_preserved\":true}' ;;\nservice-start) echo start >> \"$state_root/sequence\"; if [ -f \"$state_root/members.json\" ]; then echo '{\"status\":\"error\",\"error_code\":\"gateway_state_unsupported\"}'; exit 1; fi; echo '{\"status\":\"running\",\"pid\":123,\"listen\":\"127.0.0.1:7443\"}' ;;\n*) exit 2 ;;\nesac\n";
+    fs.writeFileSync(binary, script, { mode: 0o700 });
+    fs.writeFileSync(path.join(stateRoot, 'members.json'), 'old configuration');
+    fs.writeFileSync(path.join(root, 'redeven-gateway'), script, { mode: 0o700 });
+    const archive = execFileSync('tar', ['-czf', '-', '-C', root, 'redeven-gateway']);
+    vi.mocked(prepareDesktopRuntimeUploadAsset).mockResolvedValue({ archiveData: archive, cacheEntry: null, source: 'source_build' });
+    try {
+      if (resetConfiguration) await expect(ensureManagedGatewayServiceReady(options)).resolves.toBe(binary);
+      else await expect(ensureManagedGatewayServiceReady(options)).rejects.toMatchObject({ requiresStateRecovery: true });
+      expect(fs.readFileSync(path.join(stateRoot, 'sequence'), 'utf8').trim().split('\n')).toEqual(resetConfiguration ? ['stop', 'reset', 'start'] : ['stop', 'start']);
+      expect(fs.readFileSync(path.join(stateRoot, resetConfiguration ? 'retained-members.json' : 'members.json'), 'utf8')).toBe('old configuration');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it('rejects reset without reinstall before accessing or changing the host', async () => {
+    const root = path.join(os.tmpdir(), 'redeven-reset-invalid-' + Date.now());
+    await expect(ensureManagedGatewayServiceReady({
+      hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: root },
+      stateRoot: root, releaseTag: 'v0.0.0-test', releaseBaseURL: '', assetCacheRoot: root, tempRoot: root,
+      sshCredentialScope: 'invalid-reset', sshTransportManager: {} as DesktopSSHTransportManager, resetConfiguration: true,
+    })).rejects.toThrow('explicit package reinstall');
+    expect(fs.existsSync(root)).toBe(false);
   });
 
   it('redacts credentials from a rejected startup result', () => {

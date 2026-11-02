@@ -21,7 +21,7 @@ One app session serves creation and card actions for managed Local, SSH, WSL and
 
 Try saved management authentication first, including available SSH/OpenSSH credentials. Passive auth_required or missing saved passwords cannot preempt it. Only a current typed authentication failure exposes focused, Enter-submittable temporary credentials and stops credential-free retries. Distinguish authentication, Gateway and engine failures; unknown status is not rejection. Temporary passwords belong only to scoped status, never verification/consent; do not save preferences. Carry them unchanged through the admitted action/access verification, then clear on completion/failure/closure. Startup observations cannot race clearing or interrupt the action.
 
-Proven stopped targets offer explicit Start. Start/restart/update share the lifecycle owner and request credentials only after typed SSH failure. Connection loss stops submissions/polling but retains drafts. Explicit recovery, authority change or Settings suspension revokes verification/consent; resume with a fresh connection/lease. Preserve step/code drafts and use inline feedback. Observations cannot cancel admitted actions.
+Proven stopped targets offer explicit Start. Start/restart/update/reinstall share the lifecycle owner and request credentials only after typed SSH failure. Connection loss stops submissions/polling but retains drafts. Explicit recovery, authority change or Settings suspension revokes verification/consent; resume with a fresh connection/lease. Preserve step/code drafts and use inline feedback. Observations cannot cancel admitted actions.
 
 ## Gateway selection and invitation
 Saved/manual tabs keep separate drafts/input nodes. Select enabled registration ID, never address or connectivity. Retain endpoint-less entries with setup guidance. Use confirmed endpoints, otherwise only a URL registration's canonical HTTPS origin; SSH/listener coordinates are not substitutes. Reject changed trust, invalid/Host-rejected origins and remote loopback without hiding registrations. Inventory cannot overwrite typing; removing a selected usable address revokes verification.
@@ -49,6 +49,8 @@ Translated panels stay viewport-bounded with shared keyboard/focus behavior and 
 
 ## Service actions
 Card/service/network-restart actions share admission, foreground ownership and progress. Confirmation names action/target/affected sessions and title-row close. Pending replaces controls until authoritative progress. Closing cannot reopen or redispatch. Show observed steps/state/elapsed time, never fabricated percentages. Raw details collapse beneath timeline; failure retains recovery. Hide restores focus without canceling; reopen retains timing, and reconnect adopts current work before another confirmation.
+
+Service maintenance uses compact open rows, shared text/control sizes and a distinct operation icon per action. Software and service controls use aligned buttons; impacts appear in confirmation, not permanent explanatory cards. Host upgrade/reinstall remain available for stopped, incompatible, unpaired, revoked or previously unreachable services; each attempt must authenticate the configured host. URL-only registrations gain no host controls. Configuration recovery is a separate confirmed action with explicit attachment/network loss and retained identity/archive disclosure. Failed maintenance keeps the actual operation error and can open a new recovery confirmation without stale progress taking over.
 
 # Boundaries
 

@@ -1,4 +1,24 @@
 {
+  "gatewayMaintenance": {
+    "reset": "重建設定並重新安裝",
+    "resetConfirm": "重建 Gateway 設定並重新安裝，將重設執行環境連線、網路設定與本機對外連線原則。現有裝置身分與用戶端權限保持不變，舊設定會保留在主機上。完成後需要重新接入執行環境並設定網路存取。",
+    "recovery": "設定復原",
+    "resetting": "正在重建 Gateway 設定",
+    "reinstalled": "Gateway 已重新安裝",
+    "reinstall": "重新安裝 Gateway",
+    "reinstallConfirm": "Desktop 將重新安裝 Gateway 套件，並保留設定、身分與連線關係。",
+    "versionUnknown": "尚未檢查",
+    "dataDirectory": "資料目錄",
+    "software": "軟體維護",
+    "controls": "服務控制",
+    "updateAction": "升級",
+    "reinstallAction": "重新安裝",
+    "startAction": "啟動",
+    "restartAction": "重新啟動",
+    "stopAction": "停止",
+    "resetAction": "重建設定",
+    "reinstallFailed": "重新安裝失敗"
+  },
   "floeControls": {
     "close": "關閉",
     "selectPlaceholder": "請選擇…",

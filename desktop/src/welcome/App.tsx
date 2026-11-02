@@ -35,6 +35,7 @@ import { KeyedFor, handleMenuKeyboardNavigation } from '@floegence/floe-webapp-c
 import { GatewayMark } from './GatewayMark';
 import { GatewayEnvironmentList } from '../envcenter/GatewayEnvironmentList';
 import { GatewayClientsPanel } from './GatewayClientsPanel';
+import { GatewayMaintenancePanel } from './GatewayMaintenancePanel';
 import { RuntimeAttachmentsPanel } from './GatewayMembersDialog';
 import { EnvironmentAccessWorkflow } from './EnvironmentAccessWorkflow';
 import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
@@ -80,6 +81,8 @@ import {
   Play,
   Plus,
   PowerIcon,
+  Download as GatewayDownloadIcon,
+  Package as GatewayPackageIcon,
   Refresh,
   Save,
   Search,
@@ -929,6 +932,7 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
     case 'start_gateway': return i18n.t('environmentCenter.gatewayActionStart');
     case 'stop_gateway': return i18n.t('environmentCenter.gatewayActionStop');
     case 'restart_gateway': return i18n.t('environmentCenter.gatewayActionRestart');
+    case 'reinstall_gateway': return i18n.t(action.reset_configuration ? 'gatewayMaintenance.reset' : 'gatewayMaintenance.reinstall');
     case 'update_gateway': return i18n.t('environmentCenter.gatewayActionUpdate');
     case 'refresh_gateway':
       return i18n.t('common.refresh');
@@ -974,6 +978,10 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     'Pair Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
     'Desktop will stop the Gateway service on the configured target.': 'environmentCenter.gatewayPanelStopDetail',
     'Desktop will restart the Gateway service on the configured target.': 'environmentCenter.gatewayPanelRestartDetail',
+    'Reinstall Gateway': 'gatewayMaintenance.reinstall',
+    'Rebuild configuration and reinstall': 'gatewayMaintenance.reset',
+    'Rebuild Gateway configuration and reinstall. Runtime connections, network settings, and local egress policy are reset. Existing device identity and client permissions are preserved. Previous configuration is retained on the host. Reconnect Runtimes and configure network access afterward.': 'gatewayMaintenance.resetConfirm',
+    'Desktop will reinstall the Gateway package and preserve its configuration, identity, and connections.': 'gatewayMaintenance.reinstallConfirm',
     'Desktop will update the Gateway service on the configured target.': 'environmentCenter.gatewayPanelUpdateDetail',
     'Gateway status': 'environmentCenter.gatewayPanelStatusSection',
     'Gateway service': 'environmentCenter.gatewayPanelFactGatewayService',
@@ -5916,6 +5924,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'restarted_gateway':
         showActionToast(i18n().t('toast.gatewayRestarted'));
         break;
+      case 'reinstalled_gateway':
+        showActionToast(i18n().t('gatewayMaintenance.reinstalled'));
+        break;
       case 'updated_gateway':
         showActionToast(i18n().t('toast.gatewayUpdated'));
         break;
@@ -8954,7 +8965,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
     () => runtimeLifecycle()?.plan_revision ?? 0,
   );
   const observedGatewayServiceSteps = createMemo(() => props.progress.subject_kind === 'gateway'
-    && ['start_gateway', 'stop_gateway', 'restart_gateway', 'update_gateway'].includes(props.progress.action));
+    && ['start_gateway', 'stop_gateway', 'restart_gateway', 'update_gateway', 'reinstall_gateway'].includes(props.progress.action));
   const operationElapsedSeconds = createMemo(() => environmentProgressElapsedSeconds(props.progress, clockNow()));
   const stagePercent = createMemo(() => {
     return environmentProgressMeterPercent(props.progress);
@@ -10782,6 +10793,7 @@ function gatewayOperationKeyForAction(gateway: DesktopGatewaySource, action: Gat
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
       return `${gateway.connection_id}:${action.intent}`;
     default:
@@ -10888,6 +10900,7 @@ function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): b
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
     case 'refresh_gateway':
       return true;
@@ -10901,6 +10914,7 @@ function gatewayProgressCanRecoverForegroundAction(progress: DesktopLauncherActi
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
     case 'refresh_gateway':
       return true;
@@ -11013,8 +11027,9 @@ function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionReq
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
-      return { intent: request.kind, label: request.kind, enabled: true, variant: 'default' };
+      return { intent: request.kind, label: request.kind, enabled: true, variant: 'default', ...(request.kind === 'reinstall_gateway' && request.reset_configuration ? { reset_configuration: true } : {}) };
     case 'refresh_gateway':
     case 'check_gateway':
     case 'sync_gateway':
@@ -11050,7 +11065,8 @@ function gatewaySourceActionForLifecycleProgress(
 ): GatewaySourceActionModel | null {
   if (!progress) return null;
   switch (progress.action) {
-    case 'refresh_gateway': case 'start_gateway': case 'stop_gateway': case 'restart_gateway': case 'update_gateway':
+    case 'refresh_gateway': case 'start_gateway': case 'stop_gateway': case 'restart_gateway': case 'reinstall_gateway':
+    case 'update_gateway':
       return { intent: progress.action, label: progress.title, enabled: true, variant: 'default' };
     default: return null;
   }
@@ -11260,7 +11276,8 @@ function GatewaySourceOwner(props: Readonly<{
   });
   const visibleGatewayProgress = createMemo(() => {
     const progress = selectedGatewayOperationProgress();
-    if (progress && launcherActionProgressIsTerminal(progress) && props.gateway.service_state?.status === 'needs_reinstall') {
+    if (progress && launcherActionProgressIsTerminal(progress) && props.gateway.service_state?.status === 'needs_reinstall'
+      && progress.action !== 'update_gateway' && progress.action !== 'reinstall_gateway') {
       return null;
     }
     return progress;
@@ -11308,7 +11325,7 @@ function GatewaySourceOwner(props: Readonly<{
     });
   });
   const visiblePanelModel = createMemo(() => {
-    if (props.gateway.service_state?.status === 'needs_reinstall' && !visibleGatewayProgress()) {
+    if (props.gateway.service_state?.status === 'needs_reinstall' && !foregroundAction() && !visibleGatewayProgress()) {
       return currentActionPresentation();
     }
     const progress = visibleGatewayProgress();
@@ -11656,6 +11673,7 @@ function GatewaySourceOwner(props: Readonly<{
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
         return { kind: action.intent, connection_id: props.gateway.connection_id };
       case 'refresh_gateway':
@@ -12247,13 +12265,14 @@ function GatewayActionPanel(props: Readonly<{
 
 function gatewaySourceLauncherActionKind(
   action: GatewaySourceActionModel,
-): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'set_gateway_enabled' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway'> | null {
+): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'set_gateway_enabled' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway'> | null {
   switch (action.intent) {
     case 'open_gateway_environment':
       return 'open_gateway_environment';
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
       return action.intent;
     case 'refresh_gateway':
@@ -12308,8 +12327,9 @@ function GatewaySourceActionIcon(
       case 'disable_gateway': return GatewayDisabledIcon;
       case 'start_gateway': return Play;
       case 'stop_gateway': return Stop;
-      case 'restart_gateway': return PowerIcon;
-      case 'update_gateway':
+      case 'restart_gateway': return Refresh;
+      case 'reinstall_gateway': return GatewayPackageIcon;
+      case 'update_gateway': return GatewayDownloadIcon;
       case 'refresh_gateway': return Refresh;
       case 'setup_gateway': return Settings;
       case 'cancel_gateway_action': return X;
@@ -13465,7 +13485,7 @@ function GatewayWorkspace(props: Readonly<{
                 <Show when={tab === 'clients'}><GatewayClientsPanel suspended={props.hidden} onPresenceChange={present => dialogPresence('clients', present)} available={canManage()} gatewayID={props.state?.connection_id ?? ''} currentClientKeyID={props.gateway?.client_key_id} endpoints={props.gateway?.endpoints} enrolling={props.state?.client_enrollment ?? false} onEnrollmentChange={value => props.updateField('client_enrollment', value)} i18n={props.i18n} /></Show>
                 <Show when={tab === 'runtimes'}><RuntimeAttachmentsPanel suspended={props.hidden} onPresenceChange={present => dialogPresence('runtimes', present)} available={props.available} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onEnroll={props.onEnroll} enrolling={props.state?.runtime_enrollment} onEnrollmentChange={value => props.updateField('runtime_enrollment', value)} onNetwork={() => selectTab('network')} section="runtimes" /></Show>
                 <Show when={tab === 'network'}><RuntimeAttachmentsPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onRestart={() => props.onService(serviceAction('restart'))} section="connection" /><RuntimeAttachmentsPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} section="policy" /></Show>
-                <Show when={tab === 'maintenance'}><div class="redeven-gateway-section-heading"><h3>{sectionLabel(tab)}</h3></div><Show when={props.gateway?.diagnosis?.managed_probe?.version}><dl class="redeven-gateway-overview-facts"><div><dt>{props.i18n.t('gatewayExperience.serviceVersion')}</dt><dd>{props.gateway?.diagnosis?.managed_probe?.version}</dd></div></dl></Show><div class="flex flex-wrap gap-2"><For each={(['start', 'restart', 'stop', 'update'] as const).filter(operation => props.gateway?.service_state?.[('can_' + operation) as 'can_start' | 'can_restart' | 'can_stop' | 'can_update'])}>{operation => <Button variant="outline" size="sm" disabled={!props.available || props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onClick={() => props.onService(serviceAction(operation))}>{localizedGatewaySourceActionLabel(props.i18n, serviceAction(operation))}</Button>}</For><Button variant="outline" size="sm" disabled={!props.available} onClick={() => props.onService(serviceAction('refresh'))}>{localizedGatewaySourceActionLabel(props.i18n, serviceAction('refresh'))}</Button></div></Show>
+                <Show when={tab === 'maintenance' && props.gateway}>{gateway => <GatewayMaintenancePanel gateway={gateway()} i18n={props.i18n} available={props.available} busy={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onAction={props.onService} />}</Show>
               </Show>
             </section>}</For>
           </div>

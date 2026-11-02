@@ -63,13 +63,22 @@ function expectNoLegacyGatewayActions(value: unknown): void {
 }
 
 describe('buildGatewayActionPresentation', () => {
-  it.each(['stop_gateway', 'restart_gateway', 'update_gateway'] as const)('confirms %s with explicit Gateway-only session impact', intent => {
+  it.each(['stop_gateway', 'restart_gateway', 'update_gateway', 'reinstall_gateway'] as const)('confirms %s with explicit Gateway-only session impact', intent => {
     const source = gateway({ connection_kind: 'ssh_host', management_capability: 'managed_ssh_host' });
     const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action(intent),
       affected_sessions: [{ session_key: 'gateway-session', label: 'Private environment' }] });
     expect(panel.execution_mode).toBe('confirm');
     expect(panel.continuation_action).toEqual({ kind: intent, connection_id: source.connection_id, impact_acknowledged: true });
     expect(panel.affected_sessions).toHaveLength(1);
+  });
+
+  it('retains the actual maintenance failure when stale service state still requires recovery', () => {
+    const source = gateway({ connection_kind: 'ssh_host', management_capability: 'managed_ssh_host',
+      service_state: { status: 'needs_reinstall', can_start: false, can_stop: false, can_restart: false, can_update: true, can_pair_after_start: false } });
+    const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action('reinstall_gateway'),
+      retained_failure: { action: 'reinstall_gateway', connection_id: source.connection_id, status: 'failed',
+        phase: 'preparing_gateway_package', title: 'Reinstall Gateway', detail: 'Package signature verification failed.' } });
+    expect(panel.detail).toBe('Package signature verification failed.');
   });
 
   it('offers explicit start after a managed Gateway stopped diagnosis', () => {

@@ -1,4 +1,24 @@
 {
+  "gatewayMaintenance": {
+    "reset": "重建配置并重装",
+    "resetConfirm": "重建 Gateway 配置并重装，将重置运行时连接、网络设置及本地出站策略。现有设备身份和客户端权限保持不变，旧配置会保留在主机上。完成后需要重新接入运行时并配置网络访问。",
+    "recovery": "配置恢复",
+    "resetting": "正在重建 Gateway 配置",
+    "reinstalled": "Gateway 已重装",
+    "reinstall": "重装 Gateway",
+    "reinstallConfirm": "Desktop 将重新安装 Gateway 程序包，并保留配置、身份和连接关系。",
+    "versionUnknown": "尚未检查",
+    "dataDirectory": "数据目录",
+    "software": "软件维护",
+    "controls": "服务控制",
+    "updateAction": "升级",
+    "reinstallAction": "重装",
+    "startAction": "启动",
+    "restartAction": "重启",
+    "stopAction": "停止",
+    "resetAction": "重建配置",
+    "reinstallFailed": "重装失败"
+  },
   "floeControls": {
     "close": "关闭",
     "selectPlaceholder": "请选择…",

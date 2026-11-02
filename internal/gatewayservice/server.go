@@ -82,6 +82,11 @@ func New(options Options) (*Server, error) {
 	if root == "" {
 		root = filepath.Join(defaultStateRoot(), "gateways", "default", "state")
 	}
+	if _, err := os.Lstat(filepath.Join(root, "configuration-reset.json")); err == nil {
+		return nil, &gatewaystate.ReadError{Code: "gateway_state_invalid", File: "configuration-reset.json", Message: "interrupted configuration reset; inspect the recorded archive and restore or complete the reset before removing this marker; existing files were not changed"}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, &gatewaystate.ReadError{Code: "gateway_state_unavailable", File: "configuration-reset.json", Message: "configuration reset status could not be inspected; check file access"}
+	}
 	// Reject retired configuration before creating identities or member state.
 	for _, name := range []string{"environments.json", "membership-migration.json", "cloud-access.json"} {
 		if _, err := os.Lstat(filepath.Join(root, name)); err == nil {

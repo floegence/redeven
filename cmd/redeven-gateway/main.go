@@ -86,6 +86,8 @@ func (c *cli) run(args []string) int {
 		return c.serviceStatusCmd(args[1:])
 	case "service-start":
 		return c.serviceStartCmd(args[1:])
+	case "configuration-reset":
+		return c.configurationResetCmd(args[1:])
 	case "service-stop":
 		return c.serviceStopCmd(args[1:])
 	case "version":
@@ -488,6 +490,10 @@ func gatewayStartupFailureForError(err error) gatewayStartupFailure {
 		failure.Code = "gateway_state_invalid"
 		failure.StateFile = "members.json"
 	}
+	if failure.StateFile == "configuration-reset.json" {
+		failure.Recovery = "Inspect configuration-reset.json and its archive on the host. Restore or finish the recorded reset before removing the marker; do not repeat reset automatically."
+		return failure
+	}
 	switch failure.Code {
 	case "gateway_state_unsupported", "gateway_state_invalid":
 		failure.Recovery = "Stop Gateway and recreate its local configuration on its host, then enroll members again. Preserve the machine identity. Cloud authorizations are unchanged."
@@ -838,6 +844,7 @@ Commands:
   service-status    Probe a managed Gateway service.
   service-start     Start a managed Gateway service in the background.
   service-stop      Stop a managed Gateway service.
+  configuration-reset Rebuild local configuration after explicit host confirmation.
   version           Print build information.
 `, "\n")
 }

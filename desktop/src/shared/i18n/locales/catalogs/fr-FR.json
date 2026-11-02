@@ -1,4 +1,24 @@
 {
+  "gatewayMaintenance": {
+    "reset": "Réinitialiser la configuration et réinstaller",
+    "resetConfirm": "La configuration Gateway sera réinitialisée et le service réinstallé. Les connexions environnements d’exécution, les paramètres réseau et la politique locale de trafic sortant seront réinitialisés. L’identité de l’appareil et les autorisations des clients sont conservées. L’ancienne configuration reste sur l’hôte. Reconnectez ensuite les environnements d’exécution et configurez l’accès réseau.",
+    "recovery": "Récupération de la configuration",
+    "resetting": "Réinitialisation de la configuration Gateway",
+    "reinstalled": "Gateway réinstallé",
+    "reinstall": "Réinstaller Gateway",
+    "reinstallConfirm": "Desktop réinstallera le paquet Gateway en conservant sa configuration, son identité et ses connexions.",
+    "versionUnknown": "Non vérifiée",
+    "dataDirectory": "Répertoire des données",
+    "software": "Logiciel",
+    "controls": "Commandes du service",
+    "updateAction": "Mettre à jour",
+    "reinstallAction": "Réinstaller",
+    "startAction": "Démarrer",
+    "restartAction": "Redémarrer",
+    "stopAction": "Arrêter",
+    "resetAction": "Reconstruire la configuration",
+    "reinstallFailed": "Échec de la réinstallation"
+  },
   "floeControls": {
     "close": "Fermer",
     "selectPlaceholder": "Sélectionner…",

@@ -69,6 +69,81 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway product navigation', () => {
+  it.each(['not_started', 'needs_reinstall', 'ssh_unreachable'] as const)('offers host maintenance despite stale %s status and client permissions', async status => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'ssh_host', management_capability: 'managed_ssh_host',
+      permissions: { access: false, manage_attachments: false, manage_network: false },
+      service_state: { status, can_start: false, can_stop: false, can_restart: false, can_update: false, can_pair_after_start: false } });
+    await openGatewayAccess('Service maintenance');
+    expect(button('Update Gateway').disabled).toBe(false);
+    expect(button('Reinstall Gateway').disabled).toBe(false);
+    button('Reinstall Gateway').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('configuration, identity, and connections');
+    expect(perform).not.toHaveBeenCalled();
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === 'Reinstall Gateway')!.click();
+    await settle();
+    expect(perform).toHaveBeenCalledWith({ kind: 'reinstall_gateway', connection_id: source.connection_id, impact_acknowledged: true });
+  });
+  it('requires separate confirmation to rebuild incompatible configuration', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'ssh_host', management_capability: 'managed_ssh_host',
+      service_state: { status: 'needs_reinstall', can_start: false, can_stop: false, can_restart: false, can_update: true, can_pair_after_start: false } });
+    await openGatewayAccess('Service maintenance');
+    button('Rebuild configuration and reinstall').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Runtime connections, network settings, and local egress policy are reset');
+    expect(dialog.textContent).toContain('Previous configuration is retained');
+    expect(perform).not.toHaveBeenCalled();
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === 'Rebuild configuration and reinstall')!.click();
+    await settle();
+    expect(perform).toHaveBeenCalledWith({ kind: 'reinstall_gateway', connection_id: source.connection_id, impact_acknowledged: true, reset_configuration: true });
+  });
+
+  it('opens fresh recovery confirmation after a retained update failure', async () => {
+    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_kind: 'ssh_host' as const,
+      management_capability: 'managed_ssh_host' as const, local_enabled: false,
+      service_state: { status: 'needs_reinstall' as const, can_start: false, can_stop: false, can_restart: false, can_update: true, can_pair_after_start: false } };
+    const initial = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), gatewaySources: [source] });
+    const perform = await mount(source, { ...initial, action_progress: [{
+      action: 'update_gateway', connection_id: source.connection_id, subject_kind: 'gateway', subject_id: source.connection_id,
+      status: 'failed', phase: 'starting_gateway', title: 'Update Gateway', detail: 'Old configuration rejected',
+      active_progress_surface: 'gateway', operation_key: source.connection_id + ':update_gateway', started_at_unix_ms: 1, updated_at_unix_ms: 2,
+    }] });
+    await openGatewayAccess('Service maintenance');
+    button('Rebuild configuration and reinstall').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Runtime connections, network settings, and local egress policy are reset');
+    expect(dialog.textContent).not.toContain('Old configuration rejected');
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('renders admitted reinstall steps and retains the actual failure', async () => {
+    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_kind: 'ssh_host' as const,
+      management_capability: 'managed_ssh_host' as const,
+      service_state: { status: 'needs_reinstall' as const, can_start: false, can_stop: false, can_restart: false, can_update: true, can_pair_after_start: false } };
+    const perform = await mount(source);
+    perform.mockImplementation(() => new Promise(() => {}));
+    await openGatewayAccess('Service maintenance');
+    button('Reinstall Gateway').click(); await settle();
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-action-panel__primary-action')!.click(); await settle();
+    const startedAt = Date.now();
+    const progress = { action: 'reinstall_gateway' as const, connection_id: source.connection_id, subject_kind: 'gateway' as const,
+      subject_id: source.connection_id, operation_key: source.connection_id + ':reinstall_gateway', started_at_unix_ms: startedAt,
+      updated_at_unix_ms: startedAt, status: 'running' as const, active_progress_surface: 'gateway' as const,
+      phase: 'installing_gateway', title: 'Reinstall Gateway', detail: '',
+      step_progress: gatewayServiceStepProgress(gatewayServiceStepProgress(undefined, 'preparing_gateway_package'), 'installing_gateway') };
+    perform.publish({ ...perform.snapshot, action_progress: [progress] }); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelectorAll('.redeven-environment-progress__step')).toHaveLength(2);
+    expect(dialog.querySelector('[aria-current="step"]')?.textContent).toBe('Installing Gateway package');
+    perform.publish({ ...perform.snapshot, action_progress: [{ ...progress, status: 'failed', updated_at_unix_ms: startedAt + 1000,
+      detail: 'Package signature verification failed.', step_progress: { ...progress.step_progress, steps: progress.step_progress.steps.map(step => ({ ...step, status: step.status === 'running' ? 'failed' : step.status })) } }] });
+    await settle();
+    expect(dialog.textContent).toContain('Package signature verification failed.');
+    expect(perform).toHaveBeenCalledOnce();
+  });
+
   it('opens a full management page with six sections and no duplicate Desktop connection area', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: true, manage_network: true } });

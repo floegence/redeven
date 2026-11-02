@@ -1,4 +1,24 @@
 {
+  "gatewayMaintenance": {
+    "reset": "Konfiguration neu erstellen und neu installieren",
+    "resetConfirm": "Gateway-Konfiguration neu erstellen und neu installieren. Laufzeitumgebungen-Verbindungen, Netzwerkeinstellungen und lokale Regeln für ausgehenden Verkehr werden zurückgesetzt. Geräteidentität und Clientberechtigungen bleiben erhalten. Die bisherige Konfiguration wird auf dem Host aufbewahrt. Verbinden Sie anschließend die Laufzeitumgebungen erneut und richten Sie den Netzwerkzugriff ein.",
+    "recovery": "Konfiguration wiederherstellen",
+    "resetting": "Gateway-Konfiguration wird neu erstellt",
+    "reinstalled": "Gateway neu installiert",
+    "reinstall": "Gateway neu installieren",
+    "reinstallConfirm": "Desktop installiert das Gateway-Paket neu und behält Konfiguration, Identität und Verbindungen bei.",
+    "versionUnknown": "Nicht geprüft",
+    "dataDirectory": "Datenverzeichnis",
+    "software": "Software",
+    "controls": "Dienststeuerung",
+    "updateAction": "Aktualisieren",
+    "reinstallAction": "Neu installieren",
+    "startAction": "Starten",
+    "restartAction": "Neu starten",
+    "stopAction": "Stoppen",
+    "resetAction": "Konfiguration neu erstellen",
+    "reinstallFailed": "Neuinstallation fehlgeschlagen"
+  },
   "floeControls": {
     "close": "Schließen",
     "selectPlaceholder": "Auswählen…",

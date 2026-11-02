@@ -207,6 +207,7 @@ function continuationActionFor(
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
       return { kind: action.intent, connection_id: gateway.connection_id };
     case 'refresh_gateway':
@@ -523,6 +524,7 @@ function actionLabel(action: string): string {
     case 'start_gateway': return 'Start Gateway';
     case 'stop_gateway': return 'Stop Gateway';
     case 'restart_gateway': return 'Restart Gateway';
+    case 'reinstall_gateway': return 'Reinstall Gateway';
     case 'update_gateway': return 'Update Gateway';
     case 'pair_gateway': return 'Pair Gateway';
     case 'refresh_gateway':
@@ -551,6 +553,7 @@ export function buildGatewayActionPresentation(
   }
 
   if (input.retained_failure) {
+    const maintenance = input.retained_failure.action === 'update_gateway' || input.retained_failure.action === 'reinstall_gateway';
     const recovery = gatewayRefreshRecoveryPlan(gateway, {
       useDiagnosis: action.intent === 'refresh_gateway' || input.retained_failure.action === 'refresh_gateway',
     });
@@ -560,8 +563,8 @@ export function buildGatewayActionPresentation(
       execution_mode: 'attention',
       tone: 'error',
       eyebrow: 'Gateway issue',
-      title: recovery.title || input.retained_failure.title || `${actionLabel(action.intent)} failed`,
-      detail: recovery.detail || input.retained_failure.failure?.summary || input.retained_failure.detail || `Desktop could not complete this Gateway action.`,
+      title: (maintenance ? input.retained_failure.title : recovery.title) || input.retained_failure.title || `${actionLabel(action.intent)} failed`,
+      detail: (maintenance ? input.retained_failure.failure?.summary || input.retained_failure.detail : recovery.detail) || input.retained_failure.failure?.summary || input.retained_failure.detail || `Desktop could not complete this Gateway action.`,
       aria_label: recovery.aria_label || 'Gateway action issue',
       ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
       ...(recovery.primary_action ? { primary_action: recovery.primary_action } : {}),
@@ -570,6 +573,22 @@ export function buildGatewayActionPresentation(
 
   if (action.intent === 'setup_gateway') {
     return noGatewayActionPanel;
+  }
+
+  if (action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway' || action.intent === 'reinstall_gateway') {
+    const details = {
+      stop_gateway: 'Desktop will stop the Gateway service on the configured target.',
+      restart_gateway: 'Desktop will restart the Gateway service on the configured target.',
+      reinstall_gateway: 'Desktop will reinstall the Gateway package and preserve its configuration, identity, and connections.',
+      update_gateway: 'Desktop will update the Gateway service on the configured target.',
+    };
+    return buildPanel({ gateway, kind: 'service_confirmation', execution_mode: 'confirm', tone: 'warning',
+      eyebrow: 'Gateway service', title: action.reset_configuration ? 'Rebuild configuration and reinstall' : actionLabel(action.intent), aria_label: actionLabel(action.intent),
+      detail: action.intent === 'reinstall_gateway' && action.reset_configuration
+        ? 'Rebuild Gateway configuration and reinstall. Runtime connections, network settings, and local egress policy are reset. Existing device identity and client permissions are preserved. Previous configuration is retained on the host. Reconnect Runtimes and configure network access afterward.'
+        : details[action.intent], affected_sessions: input.affected_sessions,
+      continuation_action: { kind: action.intent, connection_id: gateway.connection_id, impact_acknowledged: true, ...(action.intent === 'reinstall_gateway' && action.reset_configuration ? { reset_configuration: true } : {}) },
+      primary_action: action });
   }
 
   if (gateway.local_enabled === false || action.intent === 'enable_gateway') {
@@ -585,19 +604,6 @@ export function buildGatewayActionPresentation(
       continuation_action: continuationActionFor(gateway, gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true)),
       primary_action: gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true),
     });
-  }
-
-  if (action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway') {
-    const details = {
-      stop_gateway: 'Desktop will stop the Gateway service on the configured target.',
-      restart_gateway: 'Desktop will restart the Gateway service on the configured target.',
-      update_gateway: 'Desktop will update the Gateway service on the configured target.',
-    };
-    return buildPanel({ gateway, kind: 'service_confirmation', execution_mode: 'confirm', tone: 'warning',
-      eyebrow: 'Gateway service', title: actionLabel(action.intent), aria_label: actionLabel(action.intent),
-      detail: details[action.intent], affected_sessions: input.affected_sessions,
-      continuation_action: { kind: action.intent, connection_id: gateway.connection_id, impact_acknowledged: true },
-      primary_action: action });
   }
 
   if (action.intent === 'refresh_gateway') {

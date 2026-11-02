@@ -246,6 +246,7 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): P
     case 'refresh_environment_runtime':
       return { label: 'Refreshing...', label_key: 'environmentCenter.gatewayActionSyncing' };
     case 'reinstall_target':
+    case 'reinstall_gateway':
       return { label: 'Reinstalling...', label_key: 'progress.reinstalling' };
     case 'sync_gateway':
     case 'pair_gateway':
@@ -261,7 +262,7 @@ function runningProgressPrimaryIcon(progress: DesktopLauncherActionProgress): 'p
   if (progress.status === 'canceling' || progress.status === 'cleanup_running') {
     return 'stop';
   }
-  if (progress.action === 'update_gateway' || progress.action === 'restart_gateway') return 'refresh';
+  if (progress.action === 'update_gateway' || progress.action === 'reinstall_gateway' || progress.action === 'restart_gateway') return 'refresh';
   return progress.action === 'stop_environment_runtime' || progress.action === 'stop_gateway'
     ? 'stop'
     : 'play';
@@ -295,6 +296,8 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): Pr
     case 'restart_environment_runtime':
     case 'restart_gateway':
       return { label: 'Restart failed', label_key: 'progress.restartFailed' };
+    case 'reinstall_gateway':
+      return { label: 'Reinstall failed', label_key: 'gatewayMaintenance.reinstallFailed' };
     case 'update':
     case 'update_environment_runtime':
     case 'update_gateway':

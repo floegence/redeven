@@ -26,6 +26,10 @@ Gateway state schema 6 owns local attachments and policy; authority epoch 70 own
 
 Trust schema 4 removes historical host classification while preserving every device identity and revocation. Attachment schema 6 and saved-connection schema 5 do not change. Runtime epoch 71 owns its new observation response; it does not advance Gateway epoch 70.
 
+Explicit host maintenance is independent of client-device admission and prior service observations. Update and ordinary reinstall replace only the managed package, preserving configuration, identity and client access. Unsupported state still fails unchanged; reinstall is never an implicit schema migration.
+
+Host-only configuration-reset requires an explicit existing state root, --confirm, a stopped service and valid existing private trust file. It archives Gateway-owned attachment, network/policy-hook, retired Cloud and host-operation configuration under a private configuration-history/reset-* directory, retaining device identity and revocations. Unsafe paths fail before moving files. A durable reset marker fences startup and repeat reset during interrupted file moves. Ordinary move failures roll back; uncertain failures retain the marker/archive for host inspection, never automatic replay. Reset requires reconnecting Runtimes and configuring network policy. Desktop exposes it as a separately confirmed reinstall option, prepares and verifies the package before reset, then starts and reconnects through host management. No public endpoint can invoke it.
+
 Saving, refresh, pairing and attachment management never implicitly start a stopped service. Removing a Desktop connection does not remove remote attachments or stop its service. Release/build metadata is diagnostic; unrelated Runtime releases do not change Gateway authority.
 
 # Boundaries
@@ -36,4 +40,6 @@ Published Flowersec supplies invitation exchange, connection controllers, ByteSt
 - redeven:internal/gatewayservice/public_endpoint_test.go — One public endpoint admits pairing and rejects host routes.
 - redeven:internal/gatewayservice/host_admin_test.go — Private socket context plus credential; loopback/header spoof rejection.
 - redeven:internal/gatewayservice/server_test.go — Unsupported state remains unchanged.
+- redeven:cmd/redeven-gateway/configuration_reset_test.go — Explicit recovery, lock/path rejection, retained trust and recovered host catalog.
+- redeven:desktop/src/main/gatewayServiceHost.test.ts — Package replacement and reset/start ordering; ordinary update preserves rejected state.
 - redeven:desktop/src/main/gatewayStore.test.ts — Saved registration migration and pinned identity preservation.

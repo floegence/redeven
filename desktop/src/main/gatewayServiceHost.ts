@@ -79,6 +79,7 @@ export type GatewayServiceProgressPhase =
   | 'checking_container'
   | 'preparing_gateway_package'
   | 'installing_gateway'
+  | 'resetting_gateway_configuration'
   | 'starting_gateway'
   | 'stopping_gateway'
   | 'verifying_gateway_stopped'
@@ -107,6 +108,7 @@ export type GatewayServiceHostOptions = Readonly<{
   sshPassword?: string;
   tempRoot: string;
   forceUpdate?: boolean;
+  resetConfiguration?: boolean;
   forceRestart?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: GatewayServiceProgress) => void;
@@ -913,6 +915,9 @@ export async function probeManagedGatewayServiceDeep(options: GatewayServiceHost
 }
 
 export async function ensureManagedGatewayServiceReady(options: GatewayServiceHostOptions): Promise<string> {
+  if (options.resetConfiguration === true && options.forceUpdate !== true) {
+    throw new Error('Configuration recovery requires an explicit package reinstall.');
+  }
   return withGatewayExecutor(options, async (executor) => {
     const releaseTag = normalizeReleaseTag(options.releaseTag);
     const initialProbe = await probeGatewayPackage(options, executor).catch(() => null);
@@ -927,6 +932,16 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
       }
     } else if (options.forceRestart === true) {
       await stopManagedGatewayServiceWithExecutor(options, executor);
+    }
+    if (options.resetConfiguration === true) {
+      options.onProgress?.({ phase: 'resetting_gateway_configuration', title: 'Rebuilding Gateway configuration',
+        detail: 'Retaining the previous configuration and preserving the Gateway machine identity.' });
+      const result = await executor.run(commandForPlacement(options.placement, [
+        'set -eu', rootShellForPlacement(options.placement), managedGatewayPathShell(),
+        'exec "$binary" configuration-reset --state-root "$state_root" --confirm',
+      ].join('\n'), [options.placement.runtime_root, options.stateRoot, releaseTag]), { signal: options.signal });
+      const reset = JSON.parse(result.stdout);
+      if (reset.status !== 'configuration_reset' || reset.identity_preserved !== true) throw new Error('Gateway configuration recovery was not confirmed.');
     }
     options.onProgress?.({
       phase: 'starting_gateway',

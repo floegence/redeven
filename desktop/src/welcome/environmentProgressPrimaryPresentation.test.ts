@@ -32,6 +32,7 @@ describe('Gateway service primary progress', () => {
     ['stop_gateway', 'Stopping...', 'Stop failed', 'stop'],
     ['restart_gateway', 'Restarting...', 'Restart failed', 'refresh'],
     ['update_gateway', 'Updating...', 'Update failed', 'refresh'],
+    ['reinstall_gateway', 'Reinstalling...', 'Reinstall failed', 'refresh'],
   ] as const)('names %s independently of its current internal phase', (action, label, failure, icon) => {
     const progress: DesktopLauncherActionProgress = {
       action, subject_kind: 'gateway', active_progress_surface: 'gateway',

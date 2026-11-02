@@ -1,4 +1,24 @@
 {
+  "gatewayMaintenance": {
+    "reset": "設定を再構築して再インストール",
+    "resetConfirm": "Gateway の設定を再構築して再インストールします。ランタイム 接続、ネットワーク設定、ローカルの外向き通信ポリシーがリセットされます。既存のデバイス ID とクライアント権限は保持され、以前の設定はホストに保存されます。完了後、ランタイム の再接続とネットワーク設定が必要です。",
+    "recovery": "設定の復旧",
+    "resetting": "Gateway の設定を再構築中",
+    "reinstalled": "Gateway を再インストールしました",
+    "reinstall": "Gateway を再インストール",
+    "reinstallConfirm": "Desktop は Gateway パッケージを再インストールし、設定、ID、接続情報を保持します。",
+    "versionUnknown": "未確認",
+    "dataDirectory": "データディレクトリ",
+    "software": "ソフトウェア",
+    "controls": "サービス操作",
+    "updateAction": "更新",
+    "reinstallAction": "再インストール",
+    "startAction": "起動",
+    "restartAction": "再起動",
+    "stopAction": "停止",
+    "resetAction": "設定を再構築",
+    "reinstallFailed": "再インストールに失敗"
+  },
   "floeControls": {
     "close": "閉じる",
     "selectPlaceholder": "選択…",

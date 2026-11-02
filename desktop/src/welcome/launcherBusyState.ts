@@ -311,6 +311,7 @@ export function gatewaySourceMatchesRuntimeLifecycleProgress(
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
     case 'refresh_gateway':
     case 'check_gateway':
     case 'sync_gateway':

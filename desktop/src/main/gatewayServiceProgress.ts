@@ -8,6 +8,7 @@ const labels: Record<Phase, readonly [string, DesktopTranslationKey]> = {
   checking_host: ['Checking host', 'progress.checkingHost'],
   checking_container: ['Checking container', 'progress.checkingContainer'],
   preparing_gateway_package: ['Preparing Gateway package', 'progress.preparingGatewayPackage'],
+  resetting_gateway_configuration: ['Rebuilding Gateway configuration', 'gatewayMaintenance.resetting'],
   installing_gateway: ['Installing Gateway package', 'progress.installingGatewayPackage'],
   starting_gateway: ['Starting Gateway service', 'progress.startingGatewayService'],
   opening_bridge: ['Opening Gateway bridge', 'progress.openingGatewayBridge'],

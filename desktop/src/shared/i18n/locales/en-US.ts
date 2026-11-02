@@ -2,6 +2,26 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  gatewayMaintenance: {
+    reinstallFailed: "Reinstall failed",
+    updateAction: "Update",
+    reinstallAction: "Reinstall",
+    startAction: "Start",
+    restartAction: "Restart",
+    stopAction: "Stop",
+    resetAction: "Rebuild configuration",
+    reset: "Rebuild configuration and reinstall",
+    resetConfirm: "Rebuild Gateway configuration and reinstall. Runtime connections, network settings, and local egress policy are reset. Existing device identity and client permissions are preserved. Previous configuration is retained on the host. Reconnect Runtimes and configure network access afterward.",
+    recovery: "Configuration recovery",
+    resetting: "Rebuilding Gateway configuration",
+    reinstalled: "Gateway reinstalled",
+    reinstall: "Reinstall Gateway",
+    reinstallConfirm: "Desktop will reinstall the Gateway package and preserve its configuration, identity, and connections.",
+    versionUnknown: "Not checked",
+    dataDirectory: "Data directory",
+    software: "Software",
+    controls: "Service controls",
+  },
   floeControls: {
     "close": "Close",
     "selectPlaceholder": "Select…",

@@ -93,6 +93,7 @@ export function launcherOperationInterruptionPresentation(
     case "stop_gateway":
     case "restart_gateway":
     case "update_gateway":
+    case "reinstall_gateway":
     case "refresh_gateway_catalog":
     case "refresh_gateway_status":
     case "delete_gateway":

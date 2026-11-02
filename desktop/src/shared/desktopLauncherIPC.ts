@@ -142,6 +142,7 @@ export type DesktopLauncherActionOutcome =
   | 'stopped_gateway'
   | 'restarted_gateway'
   | 'updated_gateway'
+  | 'reinstalled_gateway'
   | 'previewed_reinstall_target'
   | 'reinstall_target_in_progress'
   | 'reinstalled_target'
@@ -239,6 +240,7 @@ export type DesktopLauncherActionKind =
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
+  | 'reinstall_gateway'
   | 'preview_reinstall_target'
   | 'reinstall_target'
   | 'refresh_gateway_catalog'
@@ -631,7 +633,7 @@ export type DesktopLauncherOperationNextAction = Readonly<
       label_key?: DesktopTranslationKey;
     }
   | {
-      kind: 'update_gateway';
+      kind: 'update_gateway' | 'reinstall_gateway';
       connection_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
@@ -838,6 +840,12 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'update_gateway';
       connection_id: string;
+      impact_acknowledged?: boolean;
+    }
+  | {
+      kind: 'reinstall_gateway';
+      connection_id: string;
+      reset_configuration?: boolean;
       impact_acknowledged?: boolean;
     }
   | {
@@ -1625,10 +1633,17 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
-    case 'update_gateway': {
+    case 'update_gateway':
+    case 'reinstall_gateway': {
       const gatewayID = compact((candidate as { connection_id?: unknown }).connection_id);
       if (!gatewayID) return null;
       if (kind === 'start_gateway') return { kind, connection_id: gatewayID };
+      if (kind === 'reinstall_gateway') {
+        const input = candidate as { reset_configuration?: unknown; impact_acknowledged?: unknown };
+        if (input.reset_configuration !== undefined && typeof input.reset_configuration !== 'boolean') return null;
+        if (input.reset_configuration === true && input.impact_acknowledged !== true) return null;
+        return { kind, connection_id: gatewayID, ...(input.reset_configuration === true ? { reset_configuration: true } : {}), impact_acknowledged: input.impact_acknowledged === true };
+      }
       return { kind, connection_id: gatewayID, impact_acknowledged: (candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true };
     }
     case 'preview_reinstall_target': {

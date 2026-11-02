@@ -739,6 +739,7 @@ describe('desktopLauncherIPC', () => {
       'stop_gateway',
       'restart_gateway',
       'update_gateway',
+      'reinstall_gateway',
     ] as const) {
       expect(normalizeDesktopLauncherActionRequest({
         kind,
@@ -771,6 +772,9 @@ describe('desktopLauncherIPC', () => {
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', connection_id: 'gw-demo' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'check_gateway', connection_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: true })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: 'yes', impact_acknowledged: true })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: true, impact_acknowledged: true })).toEqual({ kind: 'reinstall_gateway', connection_id: 'gw-demo', reset_configuration: true, impact_acknowledged: true });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', connection_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', connection_id: 'gw-demo' })).toEqual({ kind: 'start_gateway', connection_id: 'gw-demo' });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'restart_gateway', connection_id: 'gw-demo', impact_acknowledged: true })).toEqual({ kind: 'restart_gateway', connection_id: 'gw-demo', impact_acknowledged: true });

@@ -143,7 +143,7 @@ function localRuntimeLifecycleActionProgress(input: Readonly<{
 
 function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
   gatewayID?: string;
-  action?: Extract<DesktopLauncherActionProgress['action'], 'sync_gateway' | 'pair_gateway' | 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'stop_gateway' | 'refresh_gateway_catalog'>;
+  action?: Extract<DesktopLauncherActionProgress['action'], 'sync_gateway' | 'pair_gateway' | 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway' | 'stop_gateway' | 'refresh_gateway_catalog'>;
   status?: LauncherProgressStatus;
   operationKey?: string;
   startedAt?: number;
@@ -1480,6 +1480,12 @@ describe('launcherBusyState', () => {
       kind: 'attention_trigger',
       label: 'Refresh failed',
     });
+  });
+
+  it('recognizes reinstall steps as the active Gateway workflow', () => {
+    const progress = gatewayRuntimeLifecycleActionProgress({ action: 'reinstall_gateway',
+      stepProgress: { active_step_id: 'installing_gateway', steps: [{ id: 'installing_gateway', label: 'Installing', status: 'running' }] } });
+    expect(gatewaySourceMatchesRuntimeLifecycleProgress('gw-demo', progress)).toBe(true);
   });
 
   it('selects Gateway card progress from step progress when a Gateway workflow is running', () => {

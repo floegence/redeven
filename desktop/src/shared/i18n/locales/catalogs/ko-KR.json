@@ -1,4 +1,24 @@
 {
+  "gatewayMaintenance": {
+    "reset": "구성 재설정 및 재설치",
+    "resetConfirm": "Gateway 구성을 재설정하고 다시 설치합니다. 런타임 연결, 네트워크 설정 및 로컬 외부 통신 정책이 초기화됩니다. 기존 기기 ID와 클라이언트 권한은 유지되고 이전 구성은 호스트에 보관됩니다. 완료 후 런타임을 다시 연결하고 네트워크 접근을 설정해야 합니다.",
+    "recovery": "구성 복구",
+    "resetting": "Gateway 구성 재설정 중",
+    "reinstalled": "Gateway 재설치 완료",
+    "reinstall": "Gateway 재설치",
+    "reinstallConfirm": "Desktop이 Gateway 패키지를 다시 설치하고 구성, ID 및 연결을 유지합니다.",
+    "versionUnknown": "확인 안 됨",
+    "dataDirectory": "데이터 디렉터리",
+    "software": "소프트웨어",
+    "controls": "서비스 제어",
+    "updateAction": "업데이트",
+    "reinstallAction": "재설치",
+    "startAction": "시작",
+    "restartAction": "다시 시작",
+    "stopAction": "중지",
+    "resetAction": "설정 재구성",
+    "reinstallFailed": "재설치 실패"
+  },
   "floeControls": {
     "close": "닫기",
     "selectPlaceholder": "선택…",

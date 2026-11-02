@@ -42,7 +42,7 @@ try {
           window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
           window.gatewayInvitationFixture = invitationFixture;
         }, { snapshot, locale, invitationFixture });
-        await page.goto(new URL('environment-settings.html', server.resolvedUrls.local[0]).href);
+        await page.goto(new URL('environment-settings.html', server.resolvedUrls.local[0]).href, { timeout: 60000 });
         await page.evaluate(async dark => {
           document.documentElement.classList.toggle('dark', dark); document.documentElement.classList.toggle('light', !dark);
           await document.fonts.ready;
@@ -82,6 +82,22 @@ try {
           });
           assert.ok(metrics.overflow <= 1 && metrics.left >= 0 && metrics.right <= width + 1, locale + '/' + width + ' fits: ' + JSON.stringify(metrics));
           assert.ok(metrics.excess <= 32, 'No blank scroll tail: ' + JSON.stringify(metrics));
+          if (index === 4) {
+            await button(panel, 'gatewayMaintenance.reinstall').waitFor();
+            assert.equal(await button(panel, 'environmentCenter.gatewayActionUpdate').isEnabled(), true);
+            assert.equal(await button(panel, 'gatewayMaintenance.reinstall').isEnabled(), true);
+            await settleVisuals(page);
+            const controls = await panel.locator('.redeven-gateway-maintenance-actions button').evaluateAll(buttons => buttons.map(button => ({
+              width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height,
+              font: getComputedStyle(button).fontSize, icon: !!button.querySelector('svg'),
+            })));
+            assert.ok(controls.every(control => control.icon), 'Every operation has its own icon');
+            assert.equal(new Set(controls.map(control => control.font)).size, 1, 'Consistent action typography');
+            assert.ok(Math.max(...controls.map(control => control.width)) - Math.min(...controls.map(control => control.width)) <= 1, 'Aligned action widths');
+            assert.ok(Math.max(...controls.map(control => control.height)) - Math.min(...controls.map(control => control.height)) <= 1, 'Aligned action heights');
+            assert.equal(await panel.locator('p').count(), 0, 'Impact copy belongs in confirmations');
+            await workspace.screenshot({ path: output + '/' + locale + '-' + width + '-maintenance.png' });
+          }
           if (index === 3) {
             await workspace.locator('#gateway-listen-addresses').fill('127.0.0.1:7555');
             assert.equal(await panel.getByPlaceholder(i18n.t('gatewayNetwork.addressPlaceholder'), { exact: true }).count(), 1);
@@ -152,6 +168,25 @@ try {
         await settleVisuals(page);
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-overview.png' });
         assert.equal(await page.locator('select').count(), 0);
+        await page.evaluate(snapshot => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{
+          ...snapshot.gateway_sources[0], status: 'offline', permissions: { access: false, manage_attachments: false, manage_network: false },
+          service_state: { status: 'needs_reinstall', can_start: false, can_stop: false, can_restart: false, can_update: true, can_pair_after_start: false },
+        }] }), snapshot);
+        await button(nav, 'gatewayExperience.maintenance').click();
+        await button(workspace, 'gatewayMaintenance.reset').waitFor();
+        assert.ok(await button(workspace, 'environmentCenter.gatewayActionUpdate').isEnabled());
+        assert.ok(await button(workspace, 'gatewayMaintenance.reinstall').isEnabled());
+        await settleVisuals(page);
+        await workspace.screenshot({ path: output + '/' + locale + '-' + width + '-recovery.png' });
+        await button(workspace, 'gatewayMaintenance.reset').click();
+        await dialog.waitFor();
+        await button(dialog, 'gatewayMaintenance.reset').waitFor();
+        assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(r => r.reset_configuration)), false);
+        assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
+        await settleVisuals(page);
+        await page.screenshot({ path: output + '/' + locale + '-' + width + '-recovery-confirmation.png' });
+        await button(dialog, 'common.close').first().click();
+        await page.locator('[data-floe-dialog-panel].redeven-gateway-dialog').waitFor({ state: 'detached' });
         report.cases.push({ locale, width, dark, sections: 6, draftsRetained: true, explicitIssuance: true, serviceConfirmed: true, revocationConfirmed: true, keyboardMenu: true });
       } catch (error) {
         await page.screenshot({ path: output + '/failure-' + locale + '-' + width + '.png', fullPage: true });

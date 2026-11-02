@@ -6884,13 +6884,16 @@ async function refreshGatewayStatusFromLauncher(
 }
 
 async function runGatewayServiceActionFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' }>,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.connection_id);
   if (!record || record.connection.kind === 'url') {
     return launcherActionFailure('action_invalid', 'gateway', 'This Gateway has no configured service management transport.', {
       gatewayID: request.connection_id, shouldRefreshSnapshot: true,
     });
+  }
+  if (request.kind === 'reinstall_gateway' && request.reset_configuration && !request.impact_acknowledged) {
+    return launcherActionFailure('action_invalid', 'gateway', 'Rebuilding Gateway configuration requires explicit confirmation.', { gatewayID: record.connection_id });
   }
   const activeService = gatewayLifecycleManager().activeLifecycle(record);
   if (activeService) {
@@ -6917,6 +6920,7 @@ async function runGatewayServiceActionFromLauncher(
     start_gateway: { title: 'Start Gateway', key: 'environmentCenter.gatewayActionStart', outcome: 'started_gateway' },
     stop_gateway: { title: 'Stop Gateway', key: 'environmentCenter.gatewayActionStop', outcome: 'stopped_gateway' },
     restart_gateway: { title: 'Restart Gateway', key: 'environmentCenter.gatewayActionRestart', outcome: 'restarted_gateway' },
+    reinstall_gateway: { title: 'Reinstall Gateway', key: 'gatewayMaintenance.reinstall', outcome: 'reinstalled_gateway' },
     update_gateway: { title: 'Update Gateway', key: 'environmentCenter.gatewayActionUpdate', outcome: 'updated_gateway' },
   } as const;
   const selected = presentation[request.kind];
@@ -6934,9 +6938,9 @@ async function runGatewayServiceActionFromLauncher(
     let sessionsInvalidated = false;
     const manager = gatewayLifecycleManager();
     const methods = { start_gateway: manager.startGateway, stop_gateway: manager.stopGateway,
-      restart_gateway: manager.restartGateway, update_gateway: manager.updateGateway };
-    const execute: (record: GatewayRecord, options: { signal?: AbortSignal; operationKey: string; onProgress: GatewayLifecycleProgressSink }) => Promise<unknown> = methods[request.kind].bind(manager);
-    await execute(record, { signal, operationKey, onProgress: progress => {
+      restart_gateway: manager.restartGateway, update_gateway: manager.updateGateway, reinstall_gateway: manager.reinstallGateway };
+    const execute: (record: GatewayRecord, options: { signal?: AbortSignal; operationKey: string; onProgress: GatewayLifecycleProgressSink; resetConfiguration?: boolean }) => Promise<unknown> = methods[request.kind].bind(manager);
+    await execute(record, { signal, operationKey, resetConfiguration: request.kind === 'reinstall_gateway' && request.reset_configuration === true, onProgress: progress => {
       if (request.kind !== 'start_gateway' && progress.phase === 'stopping_gateway' && !sessionsInvalidated) {
         sessionsInvalidated = true;
         for (const session of affected) failGatewaySessionTransport(session, new GatewayClientError('ATTACHMENT_REMOVED', 'Gateway access ended.'));
@@ -18901,6 +18905,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
+    case 'reinstall_gateway':
     case 'update_gateway':
       return runGatewayServiceActionFromLauncher(request);
     case 'preview_reinstall_target':

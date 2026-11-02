@@ -1,4 +1,24 @@
 {
+  "gatewayMaintenance": {
+    "reset": "Redefinir configuração e reinstalar",
+    "resetConfirm": "A configuração do Gateway será redefinida e o serviço reinstalado. As conexões de ambientes de execução, as configurações de rede e a política local de tráfego de saída serão redefinidas. A identidade do dispositivo e as permissões dos clientes serão preservadas. A configuração anterior ficará no host. Depois, reconecte os ambientes de execução e configure o acesso à rede.",
+    "recovery": "Recuperação da configuração",
+    "resetting": "Redefinindo a configuração do Gateway",
+    "reinstalled": "Gateway reinstalado",
+    "reinstall": "Reinstalar Gateway",
+    "reinstallConfirm": "O Desktop reinstalará o pacote do Gateway e preservará a configuração, a identidade e as conexões.",
+    "versionUnknown": "Não verificada",
+    "dataDirectory": "Diretório de dados",
+    "software": "Software",
+    "controls": "Controles do serviço",
+    "updateAction": "Atualizar",
+    "reinstallAction": "Reinstalar",
+    "startAction": "Iniciar",
+    "restartAction": "Reiniciar",
+    "stopAction": "Parar",
+    "resetAction": "Recriar configuração",
+    "reinstallFailed": "Falha na reinstalação"
+  },
   "floeControls": {
     "close": "Fechar",
     "selectPlaceholder": "Selecionar…",

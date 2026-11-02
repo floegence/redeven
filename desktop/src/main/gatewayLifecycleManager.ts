@@ -99,6 +99,7 @@ export type GatewayServiceLifecycleProgress = Readonly<{
     | 'checking_container'
     | 'preparing_gateway_package'
     | 'installing_gateway'
+    | 'resetting_gateway_configuration'
     | 'starting_gateway'
     | 'opening_bridge'
     | 'stopping_gateway'
@@ -371,8 +372,14 @@ export class GatewayLifecycleManager {
     if (record.connection.kind === 'url') {
       throw new GatewayNotManageableError();
     }
-    await this.throwIfReinstallRequired(record, options.signal);
     return this.runLifecycle(record, 'update', options, signal => this.restartOrUpdateGatewayUncoordinated(record, 'update', { ...options, signal }));
+  }
+
+  async reinstallGateway(record: GatewayRecord, options: Readonly<{ resetConfiguration?: boolean; signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<GatewayLifecycleSession> {
+    if (record.connection.kind === 'url') {
+      throw new GatewayNotManageableError();
+    }
+    return this.runLifecycle(record, 'reinstall', options, signal => this.restartOrUpdateGatewayUncoordinated(record, 'update', { ...options, signal }));
   }
 
   async installFreshGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<void> {
@@ -453,11 +460,12 @@ export class GatewayLifecycleManager {
     });
   }
 
-  private async restartOrUpdateGatewayUncoordinated(record: GatewayRecord, intent: 'restart' | 'update', options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
+  private async restartOrUpdateGatewayUncoordinated(record: GatewayRecord, intent: 'restart' | 'update', options: Readonly<{ resetConfiguration?: boolean; signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
     const placement = gatewayPlacement(record);
     const sshPassword = await this.gatewaySSHPassword(record);
     const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
       forceUpdate: intent === 'update',
+      resetConfiguration: options.resetConfiguration === true,
       forceRestart: intent === 'restart',
       onProgress: options.onProgress,
     });
@@ -505,14 +513,14 @@ export class GatewayLifecycleManager {
   private runLifecycle<T>(
     record: GatewayRecord,
     intent: RuntimeLifecycleIntent,
-    options: Readonly<{ operationKey?: string; signal?: AbortSignal }>,
+    options: Readonly<{ operationKey?: string; signal?: AbortSignal; resetConfiguration?: boolean }>,
     execute: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
     const targetID = gatewayLifecycleTargetID(record);
     return this.options.lifecycle_coordinator.run({
       target_key: gatewayLifecycleCoordinatorTargetKey(record),
       intent,
-      fingerprint: this.lifecycleFingerprint(record, intent),
+      fingerprint: runtimeLifecycleFingerprint({ lifecycle: this.lifecycleFingerprint(record, intent), reset_configuration: options.resetConfiguration === true }),
       operation_key: options.operationKey ?? targetID,
       signal: options.signal,
       execute,
@@ -575,7 +583,7 @@ export class GatewayLifecycleManager {
     placement: DesktopRuntimePlacement,
     sshPassword: string,
     signal?: AbortSignal,
-    options: Readonly<{ forceUpdate?: boolean; forceRestart?: boolean; onProgress?: GatewayLifecycleProgressSink }> = {},
+    options: Readonly<{ forceUpdate?: boolean; forceRestart?: boolean; resetConfiguration?: boolean; onProgress?: GatewayLifecycleProgressSink }> = {},
   ): Promise<string> {
     try {
       return await ensureManagedGatewayServiceReady({
@@ -599,6 +607,7 @@ export class GatewayLifecycleManager {
         sshPassword,
         tempRoot: this.options.temp_root,
         forceUpdate: options.forceUpdate === true,
+        resetConfiguration: options.resetConfiguration === true,
         forceRestart: options.forceRestart === true,
         signal,
         onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
@@ -782,7 +791,9 @@ function manageableServiceState(
     can_start: canStart,
     can_stop: isReady,
     can_restart: isReady || status === 'service_needs_update',
-    can_update: record.connection.kind !== 'url' && (isReady || status === 'service_needs_update'),
+    // Each explicit maintenance operation verifies host authentication.
+    // Previous service observations must not prevent package recovery.
+    can_update: record.connection.kind !== 'url',
     can_pair_after_start: record.connection.kind !== 'url' && status !== 'ssh_unreachable' && status !== 'container_unavailable' && status !== 'needs_reinstall',
     service_target_id: options.serviceTargetID,
     service_state_root: options.serviceStateRoot,
