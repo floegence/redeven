@@ -217,7 +217,7 @@ func TestFlowerDeepSeekOutputSourceFixtures(t *testing.T) {
 	before, _ := json.Marshal(publicFloretThreadView(final.Current).Items)
 	after, _ := json.Marshal(publicFloretThreadView(restored.Current).Items)
 	if string(before) != string(after) {
-		t.Fatal("reopen changed public canonical source IDs, order or content")
+		t.Fatalf("reopen changed public canonical source IDs, order or content\nbefore: %s\nafter: %s", before, after)
 	}
 
 	// Normalize only fixture identities and runtime sampling. Text/order originate
