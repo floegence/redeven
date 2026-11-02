@@ -125,10 +125,15 @@ void app.whenReady().then(async () => {
       native.window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 2, ...point });
       native.window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 2, ...point });
       await native.window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Gateway editor file unavailable')),10000);const check=()=>{if(document.querySelector('.monaco-editor .view-lines')?.textContent.replaceAll(String.fromCharCode(160),' ').includes('Gateway editor qualification')){clearTimeout(timer);resolve(true)}else setTimeout(check,100)};check()})`);
-      const editorPoint = await native.window.webContents.executeJavaScript(`(()=>{const r=document.querySelector('.monaco-editor .view-lines').getBoundingClientRect();return {x:Math.round(r.x+10),y:Math.round(r.y+10)}})()`);
+      app.focus({ steal: true });
+      native.window.focus();
+      native.window.webContents.focus();
+      const editorPoint = await native.window.webContents.executeJavaScript(`(()=>{const r=document.querySelector('.part.editor .monaco-editor .view-lines').getBoundingClientRect();return {x:Math.round(r.x+10),y:Math.round(r.y+10)}})()`);
       native.window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...editorPoint });
       native.window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...editorPoint });
+      await native.window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const deadline=Date.now()+5000;const check=()=>{if(document.activeElement?.closest('.part.editor .monaco-editor'))resolve(true);else if(Date.now()>deadline)reject(new Error('Gateway document editor did not receive focus'));else setTimeout(check,20)};check()})`);
       await native.window.webContents.insertText('Saved through Gateway ');
+      await native.window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const deadline=Date.now()+5000;const check=()=>{if(document.querySelector('.part.editor .monaco-editor .view-lines')?.textContent.replaceAll(String.fromCharCode(160),' ').includes('Saved through Gateway '))resolve(true);else if(Date.now()>deadline)reject(new Error('Gateway text did not reach the document editor'));else setTimeout(check,20)};check()})`);
       const modifiers = [process.platform === 'darwin' ? 'meta' as const : 'control' as const];
       native.window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 's', modifiers });
       native.window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 's', modifiers });
