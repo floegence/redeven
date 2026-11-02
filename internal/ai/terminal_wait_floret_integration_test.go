@@ -19,15 +19,17 @@ import (
 
 func TestTerminalReadPublishedFloretRepeatSafety(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		waitMS    int64
-		mixed     bool
-		completed bool
-		canceled  bool
+		name               string
+		waitMS             int64
+		mixed              bool
+		completed          bool
+		canceled           bool
+		descriptionChanges bool
 	}{
 		{name: "quiet waits then exit", waitMS: 10, completed: true},
 		{name: "immediate empty reads remain bounded"},
-		{name: "wait cannot excuse repeated effect", waitMS: 10, mixed: true},
+		{name: "alternating read and effect breaks sequence", waitMS: 10, mixed: true, completed: true},
+		{name: "description changes break sequence", completed: true, descriptionChanges: true},
 		{name: "stop interrupts the default wait", waitMS: terminalProcessModelReadWaitMS, canceled: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -49,6 +51,9 @@ func TestTerminalReadPublishedFloretRepeatSafety(t *testing.T) {
 			}
 			if !definition.ReadOnly || definition.OpenWorld || len(definition.Effects) != 1 || definition.Effects[0] != fltools.EffectRead {
 				t.Fatalf("terminal observation has mutating definition: %+v", definition)
+			}
+			if definition.Annotations[fltools.AnnotationRepeatPolicy] != fltools.RepeatPolicyPolling || definition.Annotations[fltools.AnnotationRepeatIdentityIgnoredArguments] != nil {
+				t.Fatal("terminal polling must preserve complete argument identity")
 			}
 			var reads, effects atomic.Int32
 			started := make(chan struct{})
@@ -87,6 +92,9 @@ func TestTerminalReadPublishedFloretRepeatSafety(t *testing.T) {
 			var steps []florettest.Step
 			args := fmt.Sprintf("{%q:%q,%q:%q,%q:4}", "process_id", process.id, "description", "Wait for push", "after_seq")
 			for i := 0; i < 6; i++ {
+				if tc.descriptionChanges {
+					args = fmt.Sprintf("{\"process_id\":%q,\"description\":%q,\"after_seq\":4}", process.id, fmt.Sprintf("Inspect state %d", i))
+				}
 				calls := []flprovider.ToolCall{{ID: fmt.Sprintf("read-%d", i), Name: "terminal.read", Args: args}}
 				if tc.mixed {
 					calls = append(calls, flprovider.ToolCall{ID: fmt.Sprintf("write-%d", i), Name: "write_fixture", Args: "{}"})
@@ -153,11 +161,14 @@ func TestTerminalReadPublishedFloretRepeatSafety(t *testing.T) {
 				if *view.LastOutcome != flruntime.TurnOutcomeCompleted || reads.Load() != 6 || len(gateway.Requests()) != 7 {
 					t.Fatalf("quiet command did not finish: outcome=%v failure=%+v reads=%d requests=%d", view.LastOutcome, view.Failure, reads.Load(), len(gateway.Requests()))
 				}
+				if tc.mixed && effects.Load() != 6 {
+					t.Fatalf("alternating effects=%d", effects.Load())
+				}
 				raw, err := json.Marshal(gateway.Requests()[6].Messages)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.Contains(string(raw), process.command) || !strings.Contains(string(raw), "wait_expired") {
+				if strings.Contains(string(raw), process.command) || (tc.waitMS > 0 && !strings.Contains(string(raw), "wait_expired")) {
 					t.Fatalf("provider continuation lost concise wait facts: %s", raw)
 				}
 			} else if *view.LastOutcome != flruntime.TurnOutcomeFailed || view.Failure == nil || view.Failure.Reason != flruntime.ThreadTurnFailureRepeatedToolCalls || reads.Load() >= 6 || effects.Load() >= 6 {

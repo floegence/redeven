@@ -465,7 +465,6 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 	}
 	if toolName == "terminal.read" {
 		annotations[fltools.AnnotationRepeatPolicy] = fltools.RepeatPolicyPolling
-		annotations[fltools.AnnotationRepeatIdentityIgnoredArguments] = []string{"description"}
 	}
 	return fltools.Definition{
 		Name:        toolName,

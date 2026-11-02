@@ -5525,7 +5525,7 @@
       "mediaCountLimit": "Quantidade de imagens: {actual}; limite: {limit}.",
       "mediaBytesLimit": "Tamanho das imagens: {actual} bytes; limite: {limit} bytes.",
       "runErrorModelGatewayContractFailed": "A fonte do modelo retornou uma chamada de ferramenta incompleta. Nenhuma ferramenta foi executada. Tente novamente ou escolha outro modelo.",
-      "runErrorRepeatedToolCalls": "Solicitações idênticas foram repetidas sem progresso efetivo. Este turno foi interrompido. Os resultados confirmados e os relatórios dos chats filhos concluídos foram preservados. Tente novamente para continuar do progresso salvo.",
+      "runErrorRepeatedToolCalls": "Este turno foi interrompido devido a chamadas idênticas e repetidas de uma ferramenta. Os resultados confirmados e os relatórios das subtarefas concluídas foram preservados. Confira os detalhes e adicione instruções ou tente novamente.",
       "runErrorNoProgress": "O Agent não avançava e este turno foi interrompido. Os resultados salvos foram preservados. Adicione orientações ou tente novamente.",
       "runErrorDuplicateToolCallID": "O modelo retornou IDs de chamadas de ferramentas duplicados. Os resultados salvos foram preservados. Tente novamente ou escolha outro modelo.",
       "runErrorStopHookLoop": "Um hook de parada solicitou continuação repetidamente. Os resultados salvos foram preservados. Verifique a configuração do hook antes de tentar novamente.",

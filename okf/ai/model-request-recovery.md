@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model request recovery
 tags: [ai, providers, recovery, diagnostics]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -30,6 +30,13 @@ the same safe failure classification. Restart retains the details without
 replaying the request; older envelopes remain readable. Flower shows the safe
 reason with expandable, copyable evidence. Missing historical evidence is not
 reconstructed.
+
+Tool repetition diagnostics use only validated Floret ToolRepetition fields:
+tool name, call ID, consecutive count, limit, prior feedback and non-execution.
+They share the existing expandable/copyable error detail with canonical thread,
+turn and run identity. No argument values are exposed. Historical failures retain
+their safe reason without invented counts or claims that recovery feedback was
+sent. Localized copy preserves saved-result and explicit-retry guidance.
 
 # Boundaries
 

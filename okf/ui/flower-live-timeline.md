@@ -3,11 +3,11 @@ type: UI Contract
 title: Flower incremental live state
 tags: [ui, flower, live, threads]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Floret owns canonical history/versions; Redeven authorizes one stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads keep navigation and disclosure stable.
+Floret owns canonical history/versions; Redeven authorizes one workspace stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads keep navigation and disclosure stable.
 
 # Contract
 

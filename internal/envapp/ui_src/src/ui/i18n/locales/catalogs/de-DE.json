@@ -5525,7 +5525,7 @@
       "mediaCountLimit": "Bildanzahl: {actual}; Grenze: {limit}.",
       "mediaBytesLimit": "Bildgröße: {actual} Byte; Grenze: {limit} Byte.",
       "runErrorModelGatewayContractFailed": "Die Modellquelle hat einen unvollständigen Tool-Aufruf zurückgegeben. Es wurde kein Tool ausgeführt. Versuche es erneut oder wähle ein anderes Modell.",
-      "runErrorRepeatedToolCalls": "Dieselben Werkzeuganfragen wurden ohne wirksamen Fortschritt wiederholt. Dieser Durchlauf wurde gestoppt. Bestätigte Ergebnisse und fertige Berichte der untergeordneten Chats bleiben erhalten. Ein erneuter Versuch setzt am gespeicherten Fortschritt an.",
+      "runErrorRepeatedToolCalls": "Dieser Durchgang wurde wegen wiederholter identischer Werkzeugaufrufe gestoppt. Bestätigte Ergebnisse und abgeschlossene Berichte der Unteraufgaben bleiben erhalten. Prüfen Sie die Details und ergänzen Sie Anweisungen oder versuchen Sie es erneut.",
       "runErrorNoProgress": "Der Agent machte keinen Fortschritt. Dieser Durchlauf wurde gestoppt. Gespeicherte Ergebnisse bleiben erhalten. Ergänzen Sie Anweisungen oder versuchen Sie es erneut.",
       "runErrorDuplicateToolCallID": "Das Modell lieferte doppelte Werkzeugaufruf-IDs. Gespeicherte Ergebnisse bleiben erhalten. Versuchen Sie es erneut oder wählen Sie ein anderes Modell.",
       "runErrorStopHookLoop": "Ein Stopp-Hook forderte wiederholt eine Fortsetzung an. Gespeicherte Ergebnisse bleiben erhalten. Prüfen Sie die Hook-Konfiguration vor einem erneuten Versuch.",

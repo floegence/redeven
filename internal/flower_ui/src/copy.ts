@@ -1176,7 +1176,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       mediaCountLimit: 'Image count: {actual}; limit: {limit}.',
       mediaBytesLimit: 'Image bytes: {actual}; limit: {limit}.',
       modelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
-      repeatedToolCalls: "Repeated identical tool requests made no effective progress, so this turn was stopped. Confirmed results and completed child reports are preserved. Retry to continue from saved progress.",
+      repeatedToolCalls: "This turn stopped after repeated identical tool requests. Confirmed results and completed child reports are preserved. Review the details, then add guidance or retry.",
       noProgress: "The agent made no progress, so this turn was stopped. Saved results are preserved. Add guidance or retry.",
       duplicateToolCallID: "The model returned duplicate tool call IDs. Saved results are preserved. Retry or choose another model.",
       stopHookLoop: "A stop hook repeatedly requested continuation. Saved results are preserved. Check the hook configuration before retrying.",

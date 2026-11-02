@@ -108,7 +108,7 @@ func userFacingRunError(code string, fallback string) string {
 	case runErrorCodeContextCompactionLimit:
 		return "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry."
 	case runErrorCodeRepeatedTools:
-		return "Repeated identical tool requests made no effective progress, so this turn was stopped. Confirmed results and completed child reports are preserved. Retry to continue from saved progress."
+		return "This turn stopped after repeated identical tool requests. Confirmed results and completed child reports are preserved. Review the details, then add guidance or retry."
 	case runErrorCodeNoProgress:
 		return "The agent made no progress, so this turn was stopped. Saved results are preserved. Add guidance or retry."
 	case runErrorCodeDuplicateCallID:
@@ -412,7 +412,11 @@ func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 		return ""
 	}
 	if code := floretLoopFailureCode(failure); code != "" {
-		raw, _ := json.MarshalIndent(map[string]string{"code": code, "failure_code": string(failure.Code), "reason": string(failure.Reason)}, "", "  ")
+		fields := map[string]any{"code": code, "failure_code": string(failure.Code), "reason": string(failure.Reason)}
+		if failure.ToolRepetition != nil {
+			fields["tool_repetition"] = failure.ToolRepetition
+		}
+		raw, _ := json.MarshalIndent(fields, "", "  ")
 		return string(raw)
 	}
 	switch failure.Code {
@@ -469,7 +473,7 @@ func scopedFailureDetail(failure *flruntime.ThreadTurnFailure, threadID, turnID,
 	if failure == nil || detail == "" || floretLoopFailureCode(failure) == "" {
 		return detail
 	}
-	var fields map[string]string
+	var fields map[string]any
 	if json.Unmarshal([]byte(detail), &fields) != nil {
 		return ""
 	}

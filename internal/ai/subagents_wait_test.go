@@ -255,3 +255,36 @@ func TestChildAttentionLeavesParentDecisionWithModel(t *testing.T) {
 		})
 	}
 }
+
+func TestStrictRepetitionDiagnosticsPreserveValidatedDetails(t *testing.T) {
+	repetition := &fltools.RepetitionDetails{ToolName: "subagents", CallID: "inspect-5", ConsecutiveCalls: 5, RepeatLimit: 3, FeedbackGiven: true, NotExecuted: true}
+	raw, err := json.Marshal(repetition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureEngineContract, Reason: flruntime.ThreadTurnFailureRepeatedToolCalls, Message: "agent loop repeated identical tool calls: " + string(raw), ToolRepetition: repetition}
+	if err := failure.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	diagnostic := scopedFailureDetail(failure, "thread-safe", "turn-safe", "run-safe")
+	var got struct {
+		Code       string                     `json:"code"`
+		ThreadID   string                     `json:"thread_id"`
+		TurnID     string                     `json:"turn_id"`
+		RunID      string                     `json:"run_id"`
+		Repetition *fltools.RepetitionDetails `json:"tool_repetition"`
+	}
+	if err := json.Unmarshal([]byte(diagnostic), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Code != runErrorCodeRepeatedTools || got.ThreadID != "thread-safe" || got.TurnID != "turn-safe" || got.RunID != "run-safe" || got.Repetition == nil || *got.Repetition != *repetition {
+		t.Fatalf("diagnostic=%s", diagnostic)
+	}
+	if strings.Contains(diagnostic, failure.Message) {
+		t.Fatal("raw failure leaked")
+	}
+	repetition.ConsecutiveCalls++
+	if diagnostic := scopedFailureDetail(failure, "thread", "turn", "run"); diagnostic != "" {
+		t.Fatalf("invented count exposed: %s", diagnostic)
+	}
+}

@@ -297,7 +297,7 @@ export const flowerSurfaceEnUS = {
     runErrorContextBudgetInvalid: "The request's context and output settings are incompatible. Check the model's context window, output limit, reasoning settings and provider output-control support, then retry. For Ollama, set num_ctx in the Modelfile and reload the model.",
     runErrorContextFixedOverhead: "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this.",
     runErrorContextCompactionLimit: "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry.",
-    runErrorRepeatedToolCalls: "Repeated identical tool requests made no effective progress, so this turn was stopped. Confirmed results and completed child reports are preserved. Retry to continue from saved progress.",
+    runErrorRepeatedToolCalls: "This turn stopped after repeated identical tool requests. Confirmed results and completed child reports are preserved. Review the details, then add guidance or retry.",
     runErrorNoProgress: "The agent made no progress, so this turn was stopped. Saved results are preserved. Add guidance or retry.",
     runErrorDuplicateToolCallID: "The model returned duplicate tool call IDs. Saved results are preserved. Retry or choose another model.",
     runErrorStopHookLoop: "A stop hook repeatedly requested continuation. Saved results are preserved. Check the hook configuration before retrying.",

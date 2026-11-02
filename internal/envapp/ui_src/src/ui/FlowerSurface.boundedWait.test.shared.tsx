@@ -4,7 +4,7 @@ import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAd
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 it('keeps a real loop failure visible after a declined tool and exposes only safe diagnostics', async () => {
-  const detail = '{"reason":"repeated_tool_calls","thread_id":"thread-1","turn_id":"turn-1","run_id":"run-1"}';
+  const detail = '{"reason":"repeated_tool_calls","thread_id":"thread-1","turn_id":"turn-1","run_id":"run-1","tool_repetition":{"tool_name":"subagents","call_id":"inspect-5","consecutive_calls":5,"repeat_limit":3,"feedback_given":true,"not_executed":true}}';
   const failed = thread({ status: 'failed', error: { code: 'floret_repeated_tool_calls', message: 'private raw error', detail }, messages: [{
     id: 'declined-assistant', turn_id: 'turn-1', run_id: 'run-1', role: 'assistant', content: '', status: 'complete', created_at_ms: 2,
     blocks: [activityTimeline({ thread_id: 'thread-1', turn_id: 'turn-1', run_id: 'run-1', items: [activityItem({ status: 'declined', approval_state: 'rejected' })] })],
@@ -16,7 +16,7 @@ it('keeps a real loop failure visible after a declined tool and exposes only saf
     const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [failed], loadThread: async () => liveBootstrap(failed) }, { focusThreadRequest: { request_id: 'loop', thread_id: failed.thread_id } });
     await waitFor(() => surface.querySelector('.flower-run-error') !== null);
     const card = surface.querySelector('.flower-run-error')!;
-    expect(card.textContent).toContain('Repeated identical tool requests');
+    expect(card.textContent).toContain('repeated identical tool requests');
     expect(card.textContent).toContain('completed child reports are preserved');
     expect(card.textContent).not.toContain('private raw error');
     expect(card.querySelector('pre')?.textContent).toBe(detail);

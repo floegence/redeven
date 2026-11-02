@@ -5525,7 +5525,7 @@
       "mediaCountLimit": "圖片數量為 {actual} 張，上限為 {limit} 張。",
       "mediaBytesLimit": "圖片大小為 {actual} 位元組，上限為 {limit} 位元組。",
       "runErrorModelGatewayContractFailed": "模型來源傳回了不完整的工具呼叫，因此未執行任何工具。請重試或切換模型。",
-      "runErrorRepeatedToolCalls": "連續請求相同工具且沒有有效進展，系統已停止本輪。已確認的結果與已完成的子執行緒報告均已保留，可重試並從儲存的進度繼續。",
+      "runErrorRepeatedToolCalls": "由於重複要求相同的工具呼叫，本輪已停止。已確認的結果和已完成的子任務報告均已保留。請查看詳細資訊，再補充指引或重試。",
       "runErrorNoProgress": "Agent 沒有取得進展，系統已停止本輪。已儲存的結果仍在，可補充指引或重試。",
       "runErrorDuplicateToolCallID": "模型傳回重複的工具呼叫 ID。已儲存的結果仍在，可重試或更換模型。",
       "runErrorStopHookLoop": "停止掛鉤反覆請求繼續，系統已停止本輪。已儲存的結果仍在，請檢查掛鉤設定後重試。",

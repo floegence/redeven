@@ -1474,7 +1474,7 @@
               "protocol",
               "ui"
             ],
-            "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.86.73 (Env App Core v0.86.73), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
+            "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
             "section_count": 2
           },
           {
@@ -3181,7 +3181,7 @@
               "threads",
               "ui"
             ],
-            "summary": "Floret owns canonical history/versions; Redeven authorizes one stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads keep navigation and disclosure stable.",
+            "summary": "Floret owns canonical history/versions; Redeven authorizes one workspace stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads keep navigation and disclosure stable.",
             "section_count": 2
           },
           {
@@ -8698,7 +8698,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "ai",
           "floret",
@@ -8708,15 +8708,15 @@
         "title": "Floret thread runtime integration",
         "type": "AI Runtime Contract"
       },
-      "body_length": 1775,
+      "body_length": 3167,
       "summary": "Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven authorizes endpoint ownership, resolves attachments and maps provider/tool effects. Send, Respond, Cancel, Retry, and the optional independent CompactContext return typed state before continuation. Canonical records prevent duplicates; drafts and execution tokens remain transient.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Typed runtime\nOptional ThreadGoalController and WithAgentGoals provide [canonical Goals](flower-goals.md).\n\nRedeven-specific authorization, DTO mapping, live projection, and adapter ownership are specified in [Floret Redeven adapter and projection](floret-redeven-adapter-and-projection.md).\n\n## Automatic display preparation\n\nFloret owns one-time historical source preparation during upgrade. Redeven publishes service readiness without a global display-preparation sweep and observes public per-thread readiness; it never scans or migrates Floret-owned records. Prepared restarts reuse canonical readiness anchors. Hidden Activity field indexes are prepared only on explicit detail reads.\nNew threads and independently ready conversations remain available while other\nthreads prepare; a failed preparation is reported without rewriting history.",
-          "char_count": 849
+          "body": "## Typed runtime\nOptional ThreadGoalController and WithAgentGoals provide [canonical Goals](flower-goals.md).\n\nRedeven-specific authorization, DTO mapping, live projection, and adapter ownership are specified in [Floret Redeven adapter and projection](floret-redeven-adapter-and-projection.md).\n\n## Automatic display preparation\n\nFloret owns one-time historical source preparation during upgrade. Redeven publishes service readiness without a global display-preparation sweep and observes public per-thread readiness; it never scans or migrates Floret-owned records. Prepared restarts reuse canonical readiness anchors. Hidden Activity field indexes are prepared only on explicit detail reads.\nNew threads and independently ready conversations remain available while other\nthreads prepare; a failed preparation is reported without rewriting history.\n\n## Identical consecutive tool calls\n\nPublished Floret v7.98.0 owns one sequence of individual calls, including\nprovider-hosted tools. Only the same tool and all identical arguments count;\ndescriptions remain significant. JSON object order and formatting are normalized\nwithout losing numeric precision, string contents, array order or value types.\nA different call or hosted invocation resets the sequence. Alternating batches\nare not consecutive identical calls. Call IDs, streaming fragments and transport\nretries add no calls. Completed bounded waits and changed polling tokens retain\ntheir upstream exemptions; Redeven does not exclude description fields.\n\nAt the configured limit, Floret rejects before authorization/execution and\npersists a paired, explicit non-execution result. The model receives one decision\nto adjust or summarize; continuing unchanged stops the turn. Admitted child\nevents reset the sequence at the next request boundary. Confirmed sibling\nresults and completed reports survive failure, restart and explicit Retry.\nNo product polling heuristic, automatic replay or child restart is added.",
+          "char_count": 1967
         },
         {
           "id": "boundaries",
@@ -8736,6 +8736,16 @@
           "id": "redeven:internal/session/floret_v7_dependency_contract_test.go:0:enforces exact published-v7 adoption and rejects retired imports.",
           "source": "redeven:internal/session/floret_v7_dependency_contract_test.go",
           "description": "Enforces exact published-v7 adoption and rejects retired imports."
+        },
+        {
+          "id": "redeven:internal/ai/terminal_wait_floret_integration_test.go:0:published polling, descriptions, alternation and cancellation.",
+          "source": "redeven:internal/ai/terminal_wait_floret_integration_test.go",
+          "description": "Published polling, descriptions, alternation and cancellation."
+        },
+        {
+          "id": "redeven:internal/ai/strict_repetition_integration_test.go:0:model-visible feedback and user-visible diagnostics over the released runtime.",
+          "source": "redeven:internal/ai/strict_repetition_integration_test.go",
+          "description": "Model-visible feedback and user-visible diagnostics over the released runtime."
         }
       ],
       "snippet": "Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven authorizes endpoint ownership, resolves attachments and maps provider/tool effects. Send, Respond, Cancel, Retry, and the optional independent Com",
@@ -10699,7 +10709,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "ai",
           "diagnostics",
@@ -10709,15 +10719,15 @@
         "title": "Model request recovery",
         "type": "AI Runtime Contract"
       },
-      "body_length": 2507,
+      "body_length": 2979,
       "summary": "Floret owns retry admission, physical-request deadlines and attempt identity. Redeven supplies protocol facts through one adapter and displays the authoritative current view. Frozen input, confirmed tool exchanges and user cancellation retain their existing authority across transport recovery.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.\n\nRedeven neither repairs old cancellation records nor owns a second retry loop.\n\nAdapter-owned response checks use typed diagnostic codes and reviewed constant\nmessages for output conflicts or gaps, tool namespace/argument conflicts, invalid\nusage and native history preparation/commit failures. Classification does not\nchange retry advice, cancellation, response validation or tool dispatch. Private\ncauses remain in the in-process error chain; arbitrary error prose, prompts and\nraw response bodies never become diagnostic text.\n\nThe Responses attempt collector normalizes failures before attaching transport\nfacts. Its bounded envelope preserves HTTP status, request/response identifiers,\nterminal event, output index when known, and Floret attempt identity through\nDesktop RPC and canonical failure storage. Logs serialize numeric timings and\nthe same safe failure classification. Restart retains the details without\nreplaying the request; older envelopes remain readable. Flower shows the safe\nreason with expandable, copyable evidence. Missing historical evidence is not\nreconstructed.",
-          "char_count": 1312
+          "body": "Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.\n\nRedeven neither repairs old cancellation records nor owns a second retry loop.\n\nAdapter-owned response checks use typed diagnostic codes and reviewed constant\nmessages for output conflicts or gaps, tool namespace/argument conflicts, invalid\nusage and native history preparation/commit failures. Classification does not\nchange retry advice, cancellation, response validation or tool dispatch. Private\ncauses remain in the in-process error chain; arbitrary error prose, prompts and\nraw response bodies never become diagnostic text.\n\nThe Responses attempt collector normalizes failures before attaching transport\nfacts. Its bounded envelope preserves HTTP status, request/response identifiers,\nterminal event, output index when known, and Floret attempt identity through\nDesktop RPC and canonical failure storage. Logs serialize numeric timings and\nthe same safe failure classification. Restart retains the details without\nreplaying the request; older envelopes remain readable. Flower shows the safe\nreason with expandable, copyable evidence. Missing historical evidence is not\nreconstructed.\n\nTool repetition diagnostics use only validated Floret ToolRepetition fields:\ntool name, call ID, consecutive count, limit, prior feedback and non-execution.\nThey share the existing expandable/copyable error detail with canonical thread,\nturn and run identity. No argument values are exposed. Historical failures retain\ntheir safe reason without invented counts or claims that recovery feedback was\nsent. Localized copy preserves saved-result and explicit-retry guidance.",
+          "char_count": 1784
         },
         {
           "id": "boundaries",
@@ -12592,7 +12602,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "architecture",
           "dependencies",
@@ -12602,8 +12612,8 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 2909,
-      "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.86.73 (Env App Core v0.86.73), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
+      "body_length": 2907,
+      "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
       "sections": [
         {
           "id": "contract",
@@ -12632,7 +12642,7 @@
           "description": "Published adapters preserve grants, ownership and debugger identity."
         }
       ],
-      "snippet": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell. Pins are Floe Webapp Boot, Core, and Protocol v0.86.73 (Env App Core v0.86.7",
+      "snippet": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell. Pins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0)",
       "links": [
         {
           "label": "layout stability",
@@ -27453,7 +27463,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "flower",
           "live",
@@ -27463,8 +27473,8 @@
         "title": "Flower incremental live state",
         "type": "UI Contract"
       },
-      "body_length": 9176,
-      "summary": "Floret owns canonical history/versions; Redeven authorizes one stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads keep navigation and disclosure stable.",
+      "body_length": 9186,
+      "summary": "Floret owns canonical history/versions; Redeven authorizes one workspace stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads keep navigation and disclosure stable.",
       "sections": [
         {
           "id": "contract",
@@ -27481,7 +27491,7 @@
           "char_count": 201
         }
       ],
-      "snippet": "Floret owns canonical history/versions; Redeven authorizes one stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped reads kee",
+      "snippet": "Floret owns canonical history/versions; Redeven authorizes one workspace stream into ThreadCache. UTF-8 growth changes one item, never rescans history. Window/transport recovery preserves execution, prose and drafts. Retained DOM and scoped",
       "links": [
         {
           "label": "Adapter",
@@ -31630,5 +31640,5 @@
       ]
     }
   ],
-  "source_sha256": "d666298234e74fbdbe102150f3b66100510169adc9c86e2682267fc00ef120c3"
+  "source_sha256": "151bed5bae53a9766af4396cd746c7f329b9a98f375cfb90003de393df2a09f3"
 }

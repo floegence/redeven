@@ -13,7 +13,7 @@ it.each([['zh-CN', 390], ['en-US', 1100]] as const)('keeps %s loop failure and k
   await page.viewport(width, 900);
   const i18n = createTestI18nHelpers(locale);
   const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
-  const failed = thread({ status: 'failed', error: { code: 'floret_repeated_tool_calls', message: 'private engine detail', detail: '{"reason":"repeated_tool_calls","thread_id":"thread-1"}' } });
+  const failed = thread({ status: 'failed', error: { code: 'floret_repeated_tool_calls', message: 'private engine detail', detail: '{"reason":"repeated_tool_calls","thread_id":"thread-1","tool_repetition":{"tool_name":"subagents","call_id":"inspect-5","consecutive_calls":5,"repeat_limit":3,"feedback_given":true,"not_executed":true}}' } });
   const retryThread = vi.fn(async () => {});
   const surface = renderSurfaceWithAdapterProps({...adapter(),listThreads:async()=>[failed],loadThread:async()=>liveBootstrap(failed),retryThread},{copy,focusThreadRequest:{request_id:'localized-loop',thread_id:failed.thread_id}});
   surface.style.cssText='width:100%;height:850px;position:relative';
@@ -24,6 +24,8 @@ it.each([['zh-CN', 390], ['en-US', 1100]] as const)('keeps %s loop failure and k
   details.querySelector('summary')!.focus();
   await userEvent.keyboard('{Enter}');
   expect(details.open).toBe(true);
+  expect(card.querySelector('pre')?.textContent).toContain('"consecutive_calls":5');
+  expect(card.querySelector('pre')?.textContent).toContain('"not_executed":true');
   expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth+1);
   const retry=[...card.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent===copy.chat.retryReply)!;
   expect(retry.getBoundingClientRect().right).toBeLessThanOrEqual(width);

@@ -5525,7 +5525,7 @@
       "mediaCountLimit": "이미지는 {actual}개이며, 제한은 {limit}개입니다.",
       "mediaBytesLimit": "이미지 크기는 {actual}바이트이며, 제한은 {limit}바이트입니다.",
       "runErrorModelGatewayContractFailed": "모델 소스가 불완전한 도구 호출을 반환하여 도구를 실행하지 않았습니다. 다시 시도하거나 다른 모델을 선택하세요.",
-      "runErrorRepeatedToolCalls": "동일한 도구 요청이 반복되고 유효한 진행이 없어 이번 턴을 중지했습니다. 확인된 결과와 완료된 하위 스레드 보고서는 보존됩니다. 재시도하면 저장된 진행 상황에서 계속할 수 있습니다.",
+      "runErrorRepeatedToolCalls": "동일한 도구 호출이 반복되어 이번 턴이 중지되었습니다. 확인된 결과와 완료된 하위 작업 보고서는 보존됩니다. 세부 정보를 확인한 다음 지침을 추가하거나 다시 시도하세요.",
       "runErrorNoProgress": "Agent가 진행하지 못해 이번 턴을 중지했습니다. 저장된 결과는 보존됩니다. 지침을 추가하거나 재시도하세요.",
       "runErrorDuplicateToolCallID": "모델이 중복된 도구 호출 ID를 반환했습니다. 저장된 결과는 보존됩니다. 재시도하거나 다른 모델을 선택하세요.",
       "runErrorStopHookLoop": "중지 훅이 계속 진행을 반복 요청했습니다. 저장된 결과는 보존됩니다. 훅 설정을 확인한 후 재시도하세요.",
