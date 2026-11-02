@@ -4,6 +4,8 @@ Concepts own contracts/evidence; Git retains history.
 
 ## 2026-11-02
 
+- [Computer scripts](ai/computer-use-scripts.md): preserve owner-confirmed pre-dispatch rejection through the existing result path, retain bounded carrier failure reasons, and align legacy role guidance; [qualification](ai/computer-use-qualification.md) retains all 26 real-provider outcomes and their declared scopes.
+
 - [Computer read contract](ai/computer-script-read-contract.md): unify controlled browser evaluation success checks, retain closed execution diagnostics and publish observer readiness only after success; role selection follows observations.
 
 - [Plugin authoring](ai/flower-plugin-generation.md): discoverable version-bound guidance consumes ReDevPlugin 3.14.0 templates, verified build/test/package, persistent manual preview and runtime preparation; [host boundary](architecture/redevplugin-boundary.md) keeps the common workflow upstream.

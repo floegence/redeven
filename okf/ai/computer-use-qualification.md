@@ -3,7 +3,7 @@ type: Acceptance Contract
 title: Computer use product qualification
 tags: [ai, computer-use, desktop, testing]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -39,6 +39,7 @@ Use default tools except explicit legacy-wait case. Cover bounded text/limits/bu
 | observed roles | Search-purpose controls with different observed roles; exact three values and one submit |
 | evaluation error | One injected execution failure retains method/reason/prefix; zero later input, fresh screenshot |
 | output loss | Prior explicit output retained; one fault/zero later input; actual method without invented code |
+| host rejection | Real empty helper rejects before controller dispatch; canonical non-execution and prior text survive, with zero later input |
 | drag | Independent press/release/moves/endpoints/duration; invalid integer_0_5000 rejects before input |
 
 Also cover >2,800 nodes, complete totals, account/tab separation, older same-name download and save followed by diagnostic failure without replay. Retain wire IDs/errors/history/events/answers. Scope success proves neither weights nor universal reliability.
@@ -60,6 +61,8 @@ checkDesktopSystemBrowser.mjs combines built Desktop/Runtime/extension/Native Me
 This contract grants no target authority and does not replace [media](computer-use-media.md) or [takeover](computer-use-takeover.md). Native disposable-app results do not qualify arbitrary applications/accounts. Freeze source hashes and rerun affected checks after integration; fixture scope never substitutes for the exact-main gate.
 
 # Evidence
+
+November 2, helper results: 193 Node tests, 479 Go test/subtest records, two relocated-bundle checks and packaged IPC pass. The ordinary Go run skips 15 opt-in integration/provider/native scopes; packaged IPC and the declared DeepSeek matrix run separately. Configured Flash 1017 executes 26 tasks with 151 provider requests: the initial 12 × 2 matrix passes 20/24; two source-removal fixtures race independent lifecycle cancellation and cannot prove the intended ordinary-rejection boundary. Their unknown-effect results remain retained. Two corrected empty-helper tasks pass 2/2 without forging replies or changing cancellation behavior. The resulting 12-category acceptance set passes 22/24: one batch reuses a ref after navigation and cannot complete two transitions in one script; one optional-element task omits the requested pre-save wait despite claiming it occurred. These remain failures, with no retry-until-green or task-specific production fix. Provider configuration is unchanged; this is managed-browser evidence, not native-desktop or full Desktop renderer qualification.
 
 November 2: evaluation-contract qualification passes 222 Node tests, 372 Go test/subtest records and two relocated-bundle checks. Final configured DeepSeek Flash 1017 run: 12 tasks × 2, 23/24 strict passes; one scroll task references an undefined variable before later issuing exactly one wheel. Both observed-role and execution-diagnostic tasks pass twice. Preserve the earlier 22/24 run separately (guessed wait text and premature scroll conclusion); no production task heuristics or assertion relaxation. Fault cases qualify canonical diagnostic delivery, while deterministic Chromium tests inject actual CDP responses and verify installation state, privacy and no replay. Native desktop is outside this change.
 

@@ -111,8 +111,8 @@ func TestBrowserHostPackagedIPCOutlivesStartingRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = host.Close() })
-	err = host.call(t.Context(), "source.tool", map[string]any{"target": "ungranted", "request": map[string]any{}}, nil)
-	if err == nil || !strings.Contains(err.Error(), "BROWSER_SOURCE_UNAVAILABLE") {
+	err = host.call(t.Context(), "source.ready", map[string]any{"target": "ungranted"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "helper_rejected") {
 		t.Fatalf("host lifetime or source grant failed: %v", err)
 	}
 	if err := host.Close(); err != nil {
@@ -145,5 +145,95 @@ func TestBrowserHostRejectsIncompatibleAndFailedHandshakeWithoutSecrets(t *testi
 				t.Fatalf("unsafe startup failure: %v", err)
 			}
 		})
+	}
+}
+
+func TestBrowserHostSourceRejectionPreservesConfirmedNonExecution(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper, err := filepath.Abs("../envapp/ui_src/scripts/redevenBrowserHost.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	host, err := startBrowserSourceHost(ctx, node, helper, browserHostHandlers{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = host.Close() })
+	executor := &extensionTargetExecutor{sourceHost: host, targetID: "missing-source"}
+	result, err := executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "missing-source", ToolName: "browser.navigate"})
+	var failure *targetToolPolicyError
+	if !errors.As(err, &failure) || failure.code != "target_connection_required" {
+		t.Fatalf("pre-dispatch rejection became unknown: %+v %v", result, err)
+	}
+	if result.Result.(map[string]any)["action_executed"] != false {
+		t.Fatalf("missing non-execution fact: %+v", result)
+	}
+	var response playwrightTargetResponse
+	err = host.call(ctx, "source.tool", map[string]any{"target": "missing-source", "request": playwrightTargetRequest{ID: "request", TargetID: "missing-source", ToolName: "browser.navigate"}}, &response)
+	if err != nil || response.ID != "request" || response.TargetID != "missing-source" || response.Error != "TARGET_CONNECTION_REQUIRED" || response.Result["action_executed"] != false {
+		t.Fatalf("managed wire shape lost source rejection: %+v %v", response, err)
+	}
+}
+
+func TestBrowserHostFailureReasonsNeverInventNonExecution(t *testing.T) {
+	for _, variant := range []string{"helper_rejected", "invalid_response", "response_unavailable"} {
+		t.Run(variant, func(t *testing.T) {
+			host, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				var request struct{ ID string }
+				_ = json.NewDecoder(r.Body).Decode(&request)
+				switch variant {
+				case "helper_rejected":
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "error": "private arbitrary error"})
+				case "invalid_response":
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": "wrong", "result": true})
+				default:
+					w.WriteHeader(http.StatusServiceUnavailable)
+				}
+			})
+			executor := &extensionTargetExecutor{sourceHost: host, targetID: "target"}
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "browser.navigate"})
+			if !errors.Is(err, errComputerEffectUnknown) {
+				t.Fatalf("carrier failure invented a result: %+v %v", result, err)
+			}
+			payload := result.Result.(map[string]any)
+			if payload["reason"] != variant || payload["action_executed"] != nil {
+				t.Fatalf("lost bounded facts: %+v", payload)
+			}
+			rows, _ := json.Marshal(computerActivityResultRows("computer.exec", payload))
+			if !strings.Contains(string(rows), variant) || strings.Contains(string(rows), "private") {
+				t.Fatalf("unsafe or missing visible diagnostic: %s", rows)
+			}
+		})
+	}
+}
+
+func TestBrowserHostRejectionPreservesScriptPrefix(t *testing.T) {
+	host, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ ID string }
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": map[string]any{"error": "TARGET_CONNECTION_REQUIRED", "result": map[string]any{"action_executed": false}}})
+	})
+	executor := &extensionTargetExecutor{sourceHost: host, targetID: "test-target"}
+	calls := 0
+	runtime, call := scriptRuntimeFixture(t, func(ctx context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		calls++
+		if calls == 1 {
+			return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("confirmed")}}, nil
+		}
+		return executor.ExecuteTargetTool(ctx, inner)
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.snapshot({emit:false}); log('confirmed'); await ui.click(1,2); await ui.key('Enter');")
+	payload := result.Result.(map[string]any)
+	if err == nil || errors.Is(err, errComputerEffectUnknown) || calls != 2 || payload["completed"] != false || payload["effect_outcome_unknown"] != false || payload["action_executed"] != false || len(extractStringSlice(payload["completed_actions"])) != 1 {
+		t.Fatalf("rejection lost facts or continued: calls=%d %+v %v", calls, payload, err)
+	}
+	body, _ := json.Marshal(payload)
+	if !strings.Contains(string(body), "confirmed") {
+		t.Fatalf("lost output: %s", body)
 	}
 }

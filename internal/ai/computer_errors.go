@@ -46,8 +46,13 @@ func computerNavigationReason(reason string) bool {
 // Call this only after dispatch; validated browser failures use the mapper below.
 func computerBrowserExchangeFailure(call TargetToolCall, private bool, err error) (TargetToolResult, error) {
 	if !private && computerCallMutates(call) {
+		reason := "response_unavailable"
+		var failure *browserHostCallError
+		if errors.As(err, &failure) {
+			reason = failure.reason
+		}
 		return TargetToolResult{TargetID: call.TargetID, Result: map[string]any{
-			"stage": "helper_exchange", "reason": "response_unavailable", "needs_observation": true,
+			"stage": "helper_exchange", "reason": reason, "needs_observation": true,
 		}}, errComputerEffectUnknown
 	}
 	return TargetToolResult{}, err

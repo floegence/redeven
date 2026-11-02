@@ -721,3 +721,23 @@ func TestComputerPausedScriptRetainsPartialInputReceipt(t *testing.T) {
 		t.Fatal("partial input reported as completed drag")
 	}
 }
+
+func TestComputerRoleNameDiagnosticAndHelpStayFactual(t *testing.T) {
+	for _, topic := range []string{"core", "legacy"} {
+		help, _ := computerScriptHelp(topic, true)
+		if !strings.Contains(help, "do not infer roles from a control's business purpose") || strings.Contains(help, "search inputs are searchbox") {
+			t.Fatalf("role guidance guesses page semantics: %s", topic)
+		}
+	}
+	calls := 0
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
+		calls++
+		return TargetToolResult{}, nil
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "ui.getByRole('heading',{name:/anything/}); await ui.click(1,2);")
+	payload := result.Result.(map[string]any)
+	diagnostic, _ := payload["diagnostic"].(map[string]any)
+	if err == nil || calls != 0 || diagnostic["field"] != "name" || diagnostic["expected"] != "string" {
+		t.Fatalf("bad argument diagnostic: calls=%d %+v %v", calls, payload, err)
+	}
+}

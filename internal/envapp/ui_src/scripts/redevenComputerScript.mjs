@@ -121,7 +121,7 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const selector = (role, value) => {
         string(role,'selector'); options(value, ['name', 'exact', 'root_ref']);
-        if (value.name !== undefined) string(value.name,'selector');
+        if (value.name !== undefined) string(value.name,'name');
         if (value.root_ref !== undefined) string(value.root_ref,'root_ref');
         if (value.exact !== undefined && typeof value.exact !== 'boolean') invalid();
         return {canonical_role: role, ...value};

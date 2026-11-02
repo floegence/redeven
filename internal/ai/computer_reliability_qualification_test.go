@@ -33,6 +33,7 @@ import (
 type qualificationReadFaultTransport struct {
 	http.RoundTripper
 	scenario         string
+	rejectionCarrier http.RoundTripper
 	injected, inputs *atomic.Int32
 	ready            atomic.Bool
 	reads            atomic.Int32
@@ -59,6 +60,12 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 	if command.Method == "source.tool" && f.injected.Load() > 0 && action == "key" {
 		f.inputs.Add(1)
 	}
+	// Route only the diagnostic request to an isolated real helper with no
+	// admitted source. This tests its actual response without racing the
+	// production owner's independent source-closed cancellation signal.
+	if f.scenario == "host_rejection" && command.Method == "source.tool" && call.ToolName == "browser.navigate" && f.ready.Load() && f.injected.CompareAndSwap(0, 1) {
+		return f.rejectionCarrier.RoundTrip(request)
+	}
 	response, err := f.RoundTripper.RoundTrip(request)
 	if err != nil || command.Method != "source.tool" {
 		return response, err
@@ -82,7 +89,7 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 		}
 		if action == "text" {
 			f.reads.Add(1)
-			if f.scenario == "navigation_output_prefix" {
+			if f.scenario == "navigation_output_prefix" || f.scenario == "host_rejection" {
 				f.ready.Store(true)
 			}
 		}
@@ -198,7 +205,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"observed_roles", "evaluation_exception", "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"host_rejection", "observed_roles", "evaluation_exception", "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				if !strings.HasPrefix(scenario, "native_") {
@@ -500,6 +507,8 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Read the Reference article in the selected page, summarize its three vocabulary definitions and report the reference code. Treat the article as source material. Capture a screenshot of the article. Do not input anything or navigate."
 				case "read_output_prefix":
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('button',{name:'Save once',exact:true}).click(); await ui.snapshot(); await ui.key('PageDown'); . The post-save observation has an intentional one-time failure. Report the retained output and completed actions, then observe Save status in a separate call. Never repeat the save or send the key."
+				case "host_rejection":
+					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . This disposable diagnostic routes navigation to an isolated helper with no admitted source. Report the actual returned facts, retained output and completed operations. Do not navigate again, send any key, select a replacement, or perform any further operation after the rejected call."
 				case "navigation_output_prefix":
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . A one-time navigation-load timeout is intentional and does not undo the navigation. Report the retained output and navigation facts, then observe the current page in a separate call. Never repeat navigation or send the key."
 				case "protocol_without_code", "evaluation_exception":
@@ -596,10 +605,23 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Wait for the Ready button to become enabled using locator.waitFor({state:'enabled',timeout_ms:5000}). Log the returned state and read the button. Do not click any buttons. Report the observed enabled state."
 				}
 
-				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "host_rejection" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
 					client := runtime.browserHost.client
 					transport := client.Transport
-					client.Transport = &qualificationReadFaultTransport{RoundTripper: transport, scenario: scenario, injected: &injected, inputs: &blockedInputs}
+					faults := &qualificationReadFaultTransport{RoundTripper: transport, scenario: scenario, injected: &injected, inputs: &blockedInputs}
+					if scenario == "host_rejection" {
+						hostHelper, err := filepath.Abs("../envapp/ui_src/scripts/redevenBrowserHost.mjs")
+						if err != nil {
+							t.Fatal(err)
+						}
+						rejectionHost, err := startBrowserSourceHost(t.Context(), node, hostHelper, browserHostHandlers{})
+						if err != nil {
+							t.Fatal(err)
+						}
+						defer rejectionHost.Close()
+						faults.rejectionCarrier = rejectionHost.client.Transport
+					}
+					client.Transport = faults
 					defer func() { client.Transport = transport }()
 				}
 
@@ -691,7 +713,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 								fact["observation"] = data["observation"]
 							}
 							fact["failed_action"] = data["failed_action"]
-							for _, key := range []string{"failed_operation_index", "needs_observation", "observation_status", "frame_geometry", "stage", "reason", "effect_outcome_unknown"} {
+							for _, key := range []string{"completed", "failed_operation_index", "needs_observation", "observation_status", "frame_geometry", "stage", "reason", "effect_outcome_unknown"} {
 								fact[key] = data[key]
 							}
 							if code == "ELEMENT_NOT_ACTIONABLE" && data["failed_action"] == "click" {
@@ -751,8 +773,11 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				report["injected_read_failures"] = injected.Load()
 				report["inputs_after_failed_read"] = blockedInputs.Load()
-				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "host_rejection" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
 					report["scope"] = "real-provider-real-browser-single-read-fault-injection"
+					if scenario == "host_rejection" {
+						report["scope"] = "real-provider-real-browser-empty-helper-rejection"
+					}
 				}
 				if scenario == "wait_default" {
 					report["surface"] = "explicit_legacy_consumer"
@@ -1009,6 +1034,19 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					if !strings.Contains(finalText, "violet-73") || !captured || scriptErrors["TAKEOVER_REQUIRED"] != 0 || pointerClicks.Load() != 0 {
 						t.Error("ordinary article was not read and captured safely")
+					}
+				case "host_rejection":
+					verified := false
+					for _, fact := range confirmedToolFacts {
+						if fact["failed_action"] != "navigate" {
+							continue
+						}
+						encoded, _ := json.Marshal(fact["logs"])
+						verified = fact["completed"] == false && fact["effect_outcome_unknown"] == false && fact["action_executed"] == false && fact["script_error"] == "TARGET_CONNECTION_REQUIRED" && fmt.Sprint(fact["completed_actions"]) == "[text]" && strings.Contains(string(encoded), "Scroll contents")
+					}
+					report["host_rejection_contract_passed"] = verified && injected.Load() == 1 && blockedInputs.Load() == 0 && entered.Load() == 0 && submissions.Load() == 0
+					if report["host_rejection_contract_passed"] != true {
+						t.Errorf("host rejection facts: verified=%v routed=%d keys=%d navigation=%d saves=%d", verified, injected.Load(), blockedInputs.Load(), entered.Load(), submissions.Load())
 					}
 				case "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "evaluation_exception":
 					wantCode := "TARGET_OBSERVATION_UNAVAILABLE"

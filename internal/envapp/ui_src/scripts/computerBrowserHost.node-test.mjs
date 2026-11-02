@@ -54,6 +54,12 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   const tool = (target, tool_name, args = {}, extra = {}) => host.tool(target, { tool_name, args, allowed_origins: [origin], script_operation: true, ...extra });
   const pending = tool('source-0', 'browser.navigate', { url: origin + '/pending' });
   await started;
+  const busy = await tool('source-0', 'computer.action', {action:'type',text:'must not run'});
+  assert.equal(busy.error, 'TARGET_IN_USE');
+  assert.deepEqual(busy.result, {action_executed:false});
+  const wrongIdentity = await tool('source-1', 'computer.action', {action:'type',text:'must not run'}, {target_id:'source-0'});
+  assert.equal(wrongIdentity.error, 'INVALID_REQUEST');
+  assert.deepEqual(wrongIdentity.result, {action_executed:false});
   const healthy = await tool('source-1', 'computer.observe');
   assert.equal(healthy.error, undefined);
   assert.ok(healthy.result.observation.nodes.some(node => node.name === 'Name'));
@@ -84,7 +90,9 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   assert.equal((await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true })).error, undefined);
 
   host.privacy('source-0', true);
-  assert.equal((await tool('source-0', 'computer.observe')).error, 'TARGET_IN_USE');
+  const privateResult = await tool('source-0', 'computer.observe');
+  assert.equal(privateResult.error, 'TARGET_IN_USE');
+  assert.deepEqual(privateResult.result, {action_executed:false});
   assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
   host.privacy('source-0', false);
   const returned = await tool('source-0', 'computer.screenshot', {}, { recovery_observation: true });
@@ -92,6 +100,9 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   assert.equal(returned.safety.safe_to_send_to_model, true);
   await host.remove('source-0');
   assert.equal(pages[0].isClosed(), false, 'Removing an observation source never closes the personal page');
+  const removed = await tool('source-0', 'browser.navigate', {url:origin});
+  assert.equal(removed.error, 'TARGET_CONNECTION_REQUIRED');
+  assert.deepEqual(removed.result, {action_executed:false});
   assert.equal((await tool('source-1', 'computer.observe')).error, undefined);
   host.privacy('source-1', true);
   const aliasedEndpoint = endpoint.replace('127.0.0.1', 'localhost');
@@ -114,4 +125,18 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   await host.admit({ id: 'created-later', endpoint, tab: targetId, context: targetInfo.browserContextId || 'default' });
   assert.equal((await tool('created-later', 'computer.observe')).error, undefined, 'A Runtime-created tab can be admitted after the shared connection has started');
   await directoryOwner.detach();
+});
+
+test('missing sources return a confirmed pre-dispatch rejection', async () => {
+  const host = await createComputerBrowserHost({});
+  try {
+    for (const tool_name of ['browser.navigate', 'computer.action', 'computer.observe']) {
+      const result = await host.tool('missing-source', {id:'request',target_id:'missing-source',tool_name});
+      assert.equal(result.error, 'TARGET_CONNECTION_REQUIRED');
+      assert.deepEqual(result.result, {action_executed:false});
+      assert.equal(result.id, 'request');
+      assert.equal(result.target_id, 'missing-source');
+      assert.equal(result.screenshot, undefined);
+    }
+  } finally { await host.close(); }
 });

@@ -176,6 +176,9 @@ func TestBrowserNavigationReplyMustMatchInvocation(t *testing.T) {
 				}
 				result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "browser.navigate"})
 				want := map[string]any{"stage": "helper_exchange", "reason": "response_unavailable", "needs_observation": true}
+				if channel == "extension" && damage == "identity" {
+					want["reason"] = "invalid_response"
+				}
 				if !errors.Is(err, errComputerEffectUnknown) || !reflect.DeepEqual(result.Result, want) {
 					t.Fatalf("invalid response claimed confirmed navigation: %+v %v", result, err)
 				}

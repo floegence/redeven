@@ -248,7 +248,24 @@ func (host *browserSourceHost) request(ctx context.Context, method, route string
 	return response, nil
 }
 
-func (host *browserSourceHost) call(ctx context.Context, method string, params, result any) error {
+// The carrier owns these bounded failure facts. They never establish whether
+// an operation ran; only a valid ordinary tool result can confirm that.
+type browserHostCallError struct {
+	reason string
+	cause  error
+}
+
+func (e *browserHostCallError) Error() string { return "browser host: " + e.reason }
+func (e *browserHostCallError) Unwrap() error { return e.cause }
+
+func (host *browserSourceHost) call(ctx context.Context, method string, params, result any) (err error) {
+	reason := "response_unavailable"
+	defer func() {
+		if err != nil {
+			err = &browserHostCallError{reason: reason, cause: err}
+		}
+	}()
+
 	id := strconv.FormatUint(host.sequence.Add(1), 10)
 	body, err := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
 	if err != nil || len(body) > 256*1024 {
@@ -269,6 +286,7 @@ func (host *browserSourceHost) call(ctx context.Context, method string, params, 
 	if len(payload) > 24<<20 {
 		return errors.New("invalid browser host response")
 	}
+	reason = "invalid_response"
 	var reply struct {
 		ID     string          `json:"id"`
 		Result json.RawMessage `json:"result"`
@@ -278,7 +296,8 @@ func (host *browserSourceHost) call(ctx context.Context, method string, params, 
 		return errors.New("browser host response provenance mismatch")
 	}
 	if reply.Error != "" {
-		return fmt.Errorf("browser host: %s", reply.Error)
+		reason = "helper_rejected"
+		return errors.New("browser host rejected command")
 	}
 	if result != nil {
 		if len(reply.Result) == 0 {

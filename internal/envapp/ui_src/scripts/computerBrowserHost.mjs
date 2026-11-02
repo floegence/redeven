@@ -223,10 +223,15 @@ export async function createComputerBrowserHost(options) {
       return work;
     },
     async tool(id, request) {
-      const source = requireSource(id);
-      const provenance = { id: request.id, target_id: source.id, execution_location: source.descriptor.managed ? `${process.platform}_headless_browser` : 'connected_browser' };
-      if (request.target_id && request.target_id !== source.id) throw new Error('BROWSER_SOURCE_IDENTITY_CHANGED');
-      if (source.busy || isPrivate(id) && request.user_control !== true && request.recovery_observation !== true) return { ...provenance, error: 'TARGET_IN_USE' };
+      // This owner can establish rejection before any controller or mode
+      // transition runs. Return the ordinary tool result, not a carrier error.
+      const source = sources.get(id);
+      const provenance = { id: request.id, target_id: id };
+      const rejected = error => ({ ...provenance, error, result: { action_executed: false } });
+      if (closed || !source || source.owner.source.isClosed()) return rejected('TARGET_CONNECTION_REQUIRED');
+      provenance.execution_location = source.descriptor.managed ? `${process.platform}_headless_browser` : 'connected_browser';
+      if (request.target_id && request.target_id !== source.id) return rejected('INVALID_REQUEST');
+      if (source.busy || isPrivate(id) && request.user_control !== true && request.recovery_observation !== true) return rejected('TARGET_IN_USE');
       source.busy = true;
       let completed;
       const task = { cancelled: false, done: new Promise(resolve => { completed = resolve; }) };
