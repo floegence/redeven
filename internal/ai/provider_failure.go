@@ -26,10 +26,11 @@ const providerFailurePrefix = "redeven_provider_failure_v1:"
 // message. Only structured error messages and reviewed diagnostic fields enter
 // it; raw bodies, metadata, endpoints and credentials stay private.
 type providerFailureDiagnostic struct {
-	MediaKind string `json:"media_kind,omitempty"`
-	Actual    int64  `json:"actual,omitempty"`
-	Limit     int64  `json:"limit,omitempty"`
-	Stage     string `json:"stage,omitempty"`
+	MediaKind   string `json:"media_kind,omitempty"`
+	Actual      int64  `json:"actual,omitempty"`
+	Limit       int64  `json:"limit,omitempty"`
+	Stage       string `json:"stage,omitempty"`
+	OutputIndex *int64 `json:"output_index,omitempty"`
 
 	ActualBytes int64                      `json:"actual_bytes,omitempty"`
 	LimitBytes  int64                      `json:"limit_bytes,omitempty"`
@@ -84,8 +85,18 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 		d.Actual = 0
 		d.Limit = 0
 	}
-	if d.Stage != "image_preparation" {
+	switch d.Stage {
+	case "image_preparation", "response_validation", "usage_validation", "history_preparation", "history_commit":
+	default:
 		d.Stage = ""
+	}
+	if d.OutputIndex != nil {
+		if *d.OutputIndex < 0 || d.Stage != "response_validation" {
+			d.OutputIndex = nil
+		} else {
+			index := *d.OutputIndex
+			d.OutputIndex = &index
+		}
 	}
 
 	if d.Code != "request_bytes_exceeded" || d.ActualBytes <= d.LimitBytes || d.LimitBytes <= 0 {
@@ -326,6 +337,10 @@ func providerTransportFailure(err error, providerType string) error {
 	var contract *modelGatewayContractError
 	if errors.As(err, &contract) {
 		return err
+	}
+	var validation *providerValidationError
+	if errors.As(err, &validation) {
+		return newProviderFailure(validation.diagnostic(providerType), err, flprovider.RetryAdviceForError(err))
 	}
 	if errors.As(err, &rpc) {
 		if rpc.Code == "MODEL_RESULT_INVALID" {

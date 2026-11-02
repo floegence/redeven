@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"errors"
 	"reflect"
 
 	flprovider "github.com/floegence/floret/v7/provider"
@@ -25,21 +24,21 @@ func (c *responsesCompletedItems) add(index int64, item oresponses.ResponseOutpu
 	var value map[string]any
 	raw := item.RawJSON()
 	if len(raw) > 8<<20 {
-		return errors.New("Responses native output exceeds the context state limit")
+		return &providerValidationError{code: responseOutputLimit}
 	}
 	if index < 0 || json.Unmarshal([]byte(raw), &value) != nil || value == nil {
-		return errors.New("invalid completed Responses output item")
+		return &providerValidationError{code: responseOutputInvalid}
 	}
 	if previous, exists := c.items[index]; exists {
 		var old map[string]any
 		_ = json.Unmarshal([]byte(previous.RawJSON()), &old)
 		if !reflect.DeepEqual(old, value) {
-			return errors.New("conflicting completed Responses output item")
+			return &providerValidationError{code: responseOutputConflict, outputIndex: &index}
 		}
 		return nil
 	}
 	if c.bytes+len(raw) > 8<<20 {
-		return errors.New("Responses native output exceeds the context state limit")
+		return &providerValidationError{code: responseOutputLimit}
 	}
 	if c.items == nil {
 		c.items = make(map[int64]oresponses.ResponseOutputItemUnion)
@@ -56,16 +55,16 @@ func (c *responsesCompletedItems) complete(snapshot []oresponses.ResponseOutputI
 		}
 	}
 	if len(c.items) == 0 {
-		return nil, errors.New("missing native Responses output")
+		return nil, &providerValidationError{code: responseOutputMissing}
 	}
 	if len(snapshot) > 0 && len(snapshot) != len(c.items) {
-		return nil, errors.New("incomplete completed Responses output snapshot")
+		return nil, &providerValidationError{code: responseSnapshotIncomplete}
 	}
 	output := make([]oresponses.ResponseOutputItemUnion, len(c.items))
 	for index := range output {
 		item, exists := c.items[int64(index)]
 		if !exists {
-			return nil, errors.New("missing completed Responses output item")
+			return nil, &providerValidationError{code: responseOutputIndexMissing}
 		}
 		output[index] = item
 	}
@@ -139,13 +138,17 @@ func (p *openAIProvider) prepareResponsesHistory(req ModelGatewayRequest, items 
 		// responses always publish the upstream-owned complete native envelope.
 		if !p.chatGPT && state.Kind == providerContinuationKindOpenAIResponses {
 			if state.ID == "" || len(state.Attributes) != 0 || state.ReusePolicy != flprovider.StateReuseExactSurface {
-				return nil, errors.New("invalid published Responses ID state")
+				return nil, &providerValidationError{code: responseHistoryPreparationFailed}
 			}
 		} else {
 			previous = &flprovider.State{Kind: state.Kind, ID: state.ID, ReusePolicy: state.ReusePolicy, Attributes: state.Attributes}
 		}
 	}
-	return flprovider.PrepareResponsesHistory(options, canonical, previous)
+	history, err := flprovider.PrepareResponsesHistory(options, canonical, previous)
+	if err != nil {
+		return nil, &providerValidationError{code: responseHistoryPreparationFailed, cause: err}
+	}
+	return history, nil
 }
 
 func responsesInput(items []json.RawMessage) oresponses.ResponseInputParam {
@@ -187,16 +190,16 @@ func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, re
 	for _, item := range completed.Output {
 		raw := json.RawMessage(item.RawJSON())
 		if !json.Valid(raw) {
-			return nil, errors.New("missing native Responses output bytes")
+			return nil, &providerValidationError{code: responseOutputInvalid}
 		}
 		output = append(output, raw)
 	}
 	if len(output) == 0 {
-		return nil, errors.New("missing native Responses output")
+		return nil, &providerValidationError{code: responseOutputMissing}
 	}
 	state, err := history.Commit(completed.ID, visibleRaw, output)
 	if err != nil {
-		return nil, err
+		return nil, &providerValidationError{code: responseHistoryCommitFailed, cause: err}
 	}
 	return &ModelGatewayState{Kind: state.Kind, ID: state.ID, ReusePolicy: state.ReusePolicy, Attributes: state.Attributes}, nil
 }

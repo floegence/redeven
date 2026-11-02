@@ -105,7 +105,11 @@ func TestOpenAIArgumentSnapshotRejectsChangedStreamPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = gateway.StreamTurn(t.Context(), ModelGatewayRequest{Model: "gpt-5-mini", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Inspect"}}}}}, nil)
-	if err == nil || !strings.Contains(err.Error(), "changed streamed prefix") {
+	if err == nil {
+		t.Fatal("changed snapshot was accepted")
+	}
+	d, ok := parseProviderFailure(err.Error())
+	if !ok || d.Code != "response_tool_arguments_conflict" || d.Stage != "response_validation" || d.Message != "Completed tool arguments conflict with the streamed arguments." || d.Attempt == nil || d.Attempt.Terminal {
 		t.Fatalf("changed snapshot error=%v", err)
 	}
 }

@@ -225,6 +225,9 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 		status                                                  int
 		chatGPT                                                 bool
 	}{
+		{"local_output_conflict", "openai", "gpt-6.1-sol", "responses", conflictingCompletedResponseStream, runErrorCodeProviderRequestFailed, "Conflicting completed response output item.", 200, false},
+		{"local_usage_invalid", "openai", "gpt-6.1-sol", "responses", `data: {"type":"response.completed","response":{"id":"resp_fixture","status":"completed","usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":101},"output_tokens":2}}}` + "\n\n", runErrorCodeProviderRequestFailed, "Provider cached tokens exceed total input tokens.", 200, false},
+		{"local_history_invalid", "openai", "gpt-6.1-sol", "responses", `data: {"type":"response.completed","response":{"id":"resp_fixture","status":"completed","output":[{"type":"private-output-type","id":"item_fixture"}]}}` + "\n\n", runErrorCodeProviderRequestFailed, "Could not retain the provider response for conversation continuation.", 200, false},
 		{"tool_arguments_stalled", "openai", "gpt-6.1-sol", "responses", "data: " + toolArgumentsStalledFailure + "\n\n", runErrorCodeProviderStreamInterrupted, toolArgumentsStalledMessage, 200, false},
 		{"server_stream", "openai", "gpt-6.1-sol", "responses", "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"500\",\"message\":\"The model is overloaded. Please retry shortly.\"}}}\n\n", runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 200, false},
 		{"server_responses", "openai", "gpt-6.1-sol", "responses", `{"error":{"message":"The model is overloaded. Please retry shortly.","code":"server_error"}}`, runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 500, false},
@@ -287,7 +290,7 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 				t.Fatal("provider failure missing")
 			}
 			wantSends := int32(5)
-			if tc.status == http.StatusBadRequest {
+			if tc.status == http.StatusBadRequest || strings.HasPrefix(tc.name, "local_") {
 				wantSends = 1
 			}
 			if sends.Load() != wantSends {
@@ -298,7 +301,13 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 			if code != tc.want || !strings.Contains(detail, "req-restart-fixture") || !strings.Contains(detail, tc.detail) {
 				t.Fatalf("failure=%+v code=%s detail=%s", first.Failure, code, detail)
 			}
-			if strings.Contains(first.Failure.Message+message+detail, "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") {
+			if tc.name == "local_output_conflict" {
+				d, ok := parseProviderFailure(first.Failure.Message)
+				if !ok || d.OutputIndex == nil || *d.OutputIndex != 0 || d.Stage != "response_validation" || d.Attempt == nil || d.Attempt.HTTPStatus != 200 || !d.Attempt.Terminal || d.Attempt.TerminalEvent != "response.completed" || d.Attempt.ResponseID != "resp_fixture" || d.Attempt.AttemptID == "" {
+					t.Fatalf("local failure lost attempt evidence: %s", detail)
+				}
+			}
+			if strings.Contains(first.Failure.Message+message+detail, "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") || strings.Contains(detail, "private-output-type") {
 				t.Fatal("canonical failure leaked credentials")
 			}
 			if err := host.Shutdown(t.Context()); err != nil {

@@ -465,7 +465,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 	for !gotCompleted && stream.Next() {
 		event := stream.Current()
-		diag.firstEvent(event.Type == "response.completed" || event.Type == "response.incomplete" || event.Type == "response.failed" || event.Type == "error")
+		diag.responseEvent(event.Type, event.Response.ID)
 		if event.Response.JSON.Usage.Valid() {
 			usage, err := turnUsageFromOpenAIResponse(event.Response.Usage)
 			if err != nil {
@@ -490,7 +490,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		case "response.output_item.added":
 			item := event.Item
 			if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
-				return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
+				return ModelGatewayResult{}, &providerValidationError{code: responseToolNamespaceInvalid}
 			}
 			hosted.item(item)
 			if strings.TrimSpace(item.Type) != "function_call" {
@@ -535,7 +535,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			raw := event.Arguments
 			if raw != "" {
 				if !strings.HasPrefix(raw, pc.ArgsRaw.String()) {
-					return ModelGatewayResult{}, errors.New("provider tool arguments changed streamed prefix")
+					return ModelGatewayResult{}, &providerValidationError{code: responseToolArgumentsConflict}
 				}
 				pc.ArgsRaw.Reset()
 				pc.ArgsRaw.WriteString(raw)
@@ -550,7 +550,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 				}
 			}
 			if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
-				return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
+				return ModelGatewayResult{}, &providerValidationError{code: responseToolNamespaceInvalid}
 			}
 			hosted.item(item)
 			if strings.TrimSpace(item.Type) != "function_call" {
@@ -588,7 +588,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			}
 			for _, item := range completed.Output {
 				if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
-					return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
+					return ModelGatewayResult{}, &providerValidationError{code: responseToolNamespaceInvalid}
 				}
 				hosted.item(item)
 			}

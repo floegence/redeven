@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	wire "github.com/coder/websocket"
@@ -24,6 +26,8 @@ type providerAttemptDiagnostic struct {
 	SwitchReason     string                    `json:"switch_reason,omitempty"`
 	HTTPStatus       int                       `json:"http_status,omitempty"`
 	RequestID        string                    `json:"request_id,omitempty"`
+	ResponseID       string                    `json:"response_id,omitempty"`
+	TerminalEvent    string                    `json:"terminal_event,omitempty"`
 	WSCloseCode      int                       `json:"ws_close_code,omitempty"`
 	ConnectMS        *int64                    `json:"connect_ms,omitempty"`
 	FirstEventMS     *int64                    `json:"first_event_ms,omitempty"`
@@ -48,6 +52,7 @@ type providerAttemptDiagnostic struct {
 var errOpenAIStaleResponse = errors.New("previous response is unavailable")
 var diagnosticIdentityPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_:./-]{0,255}$`)
 var diagnosticHashPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+var diagnosticResponseIDPattern = regexp.MustCompile(`^resp_[A-Za-z0-9_-]{1,120}$`)
 
 func newProviderAttemptDiagnostic(ctx context.Context, req ModelGatewayRequest, payload []byte, p *openAIProvider, onEvent func(StreamEvent)) *providerAttemptDiagnostic {
 	d := &providerAttemptDiagnostic{ThreadID: req.ThreadID.String(), TurnID: req.TurnID.String(), RunID: req.RunID.String(), TraceID: req.TraceID.String(), LogicalRequestID: req.LogicalRequestID.String(), AttemptID: req.AttemptID, AttemptEpoch: req.AttemptEpoch, RequestBytes: len(payload), PayloadHash: fmt.Sprintf("sha256:%x", sha256.Sum256(payload)), started: time.Now(), pool: p.responsesPool, route: openAIRequestRoute(p.transportIdentity, req), onEvent: onEvent}
@@ -81,6 +86,14 @@ func (d *providerAttemptDiagnostic) sanitized() *providerAttemptDiagnostic {
 	}
 	if !diagnosticRequestIDPattern.MatchString(copy.RequestID) || diagnosticSecretPattern.MatchString(copy.RequestID) {
 		copy.RequestID = ""
+	}
+	if !diagnosticResponseIDPattern.MatchString(copy.ResponseID) || strings.Contains(strings.ToLower(copy.ResponseID), "bearer") || strings.Contains(strings.ToLower(copy.ResponseID), "sk-") {
+		copy.ResponseID = ""
+	}
+	switch copy.TerminalEvent {
+	case "response.completed", "response.incomplete", "response.failed", "error":
+	default:
+		copy.TerminalEvent = ""
 	}
 	if copy.WSCloseCode < 1000 || copy.WSCloseCode > 4999 {
 		copy.WSCloseCode = 0
@@ -132,6 +145,16 @@ func (d *providerAttemptDiagnostic) firstEvent(terminal bool) {
 		d.observe(d.Transport, flprovider.TransportReceiving, "", "")
 	}
 	d.Terminal = d.Terminal || terminal
+}
+func (d *providerAttemptDiagnostic) responseEvent(eventType, responseID string) {
+	switch eventType {
+	case "response.completed", "response.incomplete", "response.failed", "error":
+		d.TerminalEvent = eventType
+	}
+	if responseID != "" {
+		d.ResponseID = responseID
+	}
+	d.firstEvent(d.TerminalEvent != "")
 }
 func recoverableWebSocketTransport(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) {
@@ -191,9 +214,9 @@ func (d *providerAttemptDiagnostic) finish(ctx context.Context, response *http.R
 			}
 			d.observe(d.Transport, flprovider.TransportFailed, next, d.SwitchReason)
 		}
-		if recoverableWebSocketTransport(err) {
-			err = providerTransportFailure(err, providerType)
-		}
+		// Normalize while this attempt still owns the transport facts. Delaying
+		// normalization until RPC serialization loses them for local failures.
+		err = providerTransportFailure(err, providerType)
 		var failure *providerFailure
 		if errors.As(err, &failure) {
 			diagnostic := failure.diagnostic
@@ -212,6 +235,15 @@ func (d *providerAttemptDiagnostic) finish(ctx context.Context, response *http.R
 	}
 	result.RawProviderDiag["attempt"] = safe
 	result.RawProviderDiag["transport"] = string(safe.Transport)
-	slog.InfoContext(context.WithoutCancel(ctx), "provider attempt completed", "diagnostic", safe, "failed", err != nil)
+	attemptJSON, _ := json.Marshal(safe)
+	attrs := []any{"diagnostic", string(attemptJSON), "failed", err != nil}
+	var failure *providerFailure
+	if errors.As(err, &failure) {
+		diagnostic := failure.diagnostic.sanitized()
+		diagnostic.Attempt = nil // The attempt is already recorded alongside it.
+		failureJSON, _ := json.Marshal(diagnostic)
+		attrs = append(attrs, "failure", string(failureJSON))
+	}
+	slog.InfoContext(context.WithoutCancel(ctx), "provider attempt completed", attrs...)
 	return err
 }

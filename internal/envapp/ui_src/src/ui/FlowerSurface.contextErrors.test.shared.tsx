@@ -134,6 +134,35 @@ describe('Flower provider failure recovery', () => {
 
 
 describe('Flower upstream error messages', () => {
+  it('shows local response validation and copies the complete attempt evidence', async () => {
+    const reason = 'Conflicting completed response output item.';
+    const diagnostic = JSON.stringify({ provider: 'openai', code: 'response_output_conflict', stage: 'response_validation', output_index: 0, message: reason, response_shape: 'local_validation',
+      attempt: { transport: 'http_sse', phase: 'receiving', http_status: 200, request_id: 'req-fixture', response_id: 'resp_fixture', terminal_received: true, terminal_event: 'response.completed', attempt_id: 'send:attempt:1' } });
+    const failed = thread({ status: 'failed', error: { code: 'provider_request_failed', message: 'controlled fallback', detail: diagnostic } });
+    const base = { ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) };
+    const writeText = vi.fn(async () => undefined);
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const surface = renderSurfaceWithAdapterProps(base, { focusThreadRequest: { request_id: 'local-validation', thread_id: failed.thread_id } });
+      await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+      const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+      expect(card.querySelector('.flower-error-message')?.textContent).toBe(reason);
+      const disclosure = card.querySelector<HTMLDetailsElement>('details')!;
+      expect(disclosure.open).toBe(false);
+      disclosure.querySelector('summary')!.click();
+      expect(disclosure.open).toBe(true);
+      expect(disclosure.querySelector('pre')?.textContent).toBe(diagnostic);
+      disclosure.querySelector<HTMLButtonElement>('button')!.click();
+      await waitFor(() => writeText.mock.calls.length === 1);
+      expect(writeText).toHaveBeenCalledWith(diagnostic);
+      expect(base.retryThread).not.toHaveBeenCalled();
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
   it.each(['zh-CN', 'en-US'] as const)('shows the upstream reason directly in %s', async (locale) => {
     const i18n = createTestI18nHelpers(locale);
     const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });

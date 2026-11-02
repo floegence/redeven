@@ -10710,15 +10710,15 @@
         "title": "Model request recovery",
         "type": "AI Runtime Contract"
       },
-      "body_length": 1097,
+      "body_length": 2507,
       "summary": "Floret owns retry admission, physical-request deadlines and attempt identity. Redeven supplies protocol facts through one adapter and displays the authoritative current view. Frozen input, confirmed tool exchanges and user cancellation retain their existing authority across transport recovery.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.\n\nRedeven neither repairs old cancellation records nor owns a second retry loop.",
-          "char_count": 300
+          "body": "Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.\n\nRedeven neither repairs old cancellation records nor owns a second retry loop.\n\nAdapter-owned response checks use typed diagnostic codes and reviewed constant\nmessages for output conflicts or gaps, tool namespace/argument conflicts, invalid\nusage and native history preparation/commit failures. Classification does not\nchange retry advice, cancellation, response validation or tool dispatch. Private\ncauses remain in the in-process error chain; arbitrary error prose, prompts and\nraw response bodies never become diagnostic text.\n\nThe Responses attempt collector normalizes failures before attaching transport\nfacts. Its bounded envelope preserves HTTP status, request/response identifiers,\nterminal event, output index when known, and Floret attempt identity through\nDesktop RPC and canonical failure storage. Logs serialize numeric timings and\nthe same safe failure classification. Restart retains the details without\nreplaying the request; older envelopes remain readable. Flower shows the safe\nreason with expandable, copyable evidence. Missing historical evidence is not\nreconstructed.",
+          "char_count": 1312
         },
         {
           "id": "boundaries",
@@ -10738,6 +10738,21 @@
           "id": "redeven:internal/ai/provider_failure.go:0:structured response-time retry advice and safe diagnostics.",
           "source": "redeven:internal/ai/provider_failure.go",
           "description": "Structured response-time retry advice and safe diagnostics."
+        },
+        {
+          "id": "redeven:internal/ai/provider_failure_details_test.go:0:local failures, desktop rpc, cancellation, retry advice and safe logs.",
+          "source": "redeven:internal/ai/provider_failure_details_test.go",
+          "description": "Local failures, Desktop RPC, cancellation, retry advice and safe logs."
+        },
+        {
+          "id": "redeven:internal/ai/model_gateway_chatgpt_floret_test.go:0:canonical failure detail preservation across restart.",
+          "source": "redeven:internal/ai/model_gateway_chatgpt_floret_test.go",
+          "description": "Canonical failure detail preservation across restart."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx:0:visible failure reason and complete copyable attempt evidence.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx",
+          "description": "Visible failure reason and complete copyable attempt evidence."
         }
       ],
       "snippet": "Floret owns retry admission, physical-request deadlines and attempt identity. Redeven supplies protocol facts through one adapter and displays the authoritative current view. Frozen input, confirmed tool exchanges and user cancellation reta",
@@ -31600,5 +31615,5 @@
       ]
     }
   ],
-  "source_sha256": "cf7a62d273fac3d031cf778d4164fa643fd38533b07f2437286d87d3850f6ea7"
+  "source_sha256": "d4954d3da3a1bac095fb7642f8d328e31ef668f9fa66094c9b99d0c3ceb79e95"
 }

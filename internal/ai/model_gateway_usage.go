@@ -2,8 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"math"
 
 	openai "github.com/openai/openai-go/v3"
@@ -37,12 +35,12 @@ func turnUsageFromOpenAICompletion(usage openai.CompletionUsage) (TurnUsage, err
 	}
 	if raw := usage.RawJSON(); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &extra); err != nil {
-			return TurnUsage{}, fmt.Errorf("decode provider usage details: %w", err)
+			return TurnUsage{}, &providerValidationError{code: responseUsageInvalid, cause: err}
 		}
 	}
 	if extra.PromptCacheHitTokens != nil {
 		if typedCacheReadPresent && cacheRead != *extra.PromptCacheHitTokens {
-			return TurnUsage{}, errors.New("provider cache-read token fields disagree")
+			return TurnUsage{}, &providerValidationError{code: responseUsageCacheConflict}
 		}
 		if !typedCacheReadPresent {
 			cacheRead = *extra.PromptCacheHitTokens
@@ -68,10 +66,10 @@ func turnUsageFromOpenAICompletion(usage openai.CompletionUsage) (TurnUsage, err
 
 func normalizedPromptUsage(totalInput, output, reasoning, cacheRead, cacheWrite int64) (TurnUsage, error) {
 	if totalInput < 0 || output < 0 || reasoning < 0 || cacheRead < 0 || cacheWrite < 0 {
-		return TurnUsage{}, errors.New("provider usage token counts must not be negative")
+		return TurnUsage{}, &providerValidationError{code: responseUsageNegative}
 	}
 	if cacheRead > totalInput || cacheWrite > totalInput-cacheRead {
-		return TurnUsage{}, errors.New("provider cached tokens exceed total input tokens")
+		return TurnUsage{}, &providerValidationError{code: responseUsageCacheExceedsInput}
 	}
 	out := TurnUsage{
 		OutputIncludesReasoning: true,
@@ -86,7 +84,7 @@ func normalizedPromptUsage(totalInput, output, reasoning, cacheRead, cacheWrite 
 
 func validateTurnUsage(usage TurnUsage) error {
 	if usage.TotalTokens < 0 || usage.InputTokens < 0 || usage.OutputTokens < 0 || usage.ReasoningTokens < 0 || usage.CacheReadTokens < 0 || usage.CacheWriteTokens < 0 {
-		return errors.New("model gateway usage token counts must not be negative")
+		return &providerValidationError{code: responseUsageNegative}
 	}
 	reasoning := usage.ReasoningTokens
 	if usage.OutputIncludesReasoning {
@@ -95,7 +93,7 @@ func validateTurnUsage(usage TurnUsage) error {
 	remaining := int64(math.MaxInt64)
 	for _, tokens := range []int64{usage.InputTokens, usage.OutputTokens, reasoning, usage.CacheReadTokens, usage.CacheWriteTokens} {
 		if tokens > remaining {
-			return errors.New("model gateway usage total overflows int64")
+			return &providerValidationError{code: responseUsageOverflow}
 		}
 		remaining -= tokens
 	}
