@@ -15,6 +15,8 @@ Only complete Mermaid fences become diagrams in streaming Flower Markdown. Incom
 
 Theme changes use CSS variables without reparsing or replacing SVG. Product palette maps eight published series variables to semantic graph roles. Original source stays available with explicit copy feedback, local errors and retry. Expand uses the shared accessible Dialog with zoom/fit and Escape; inline diagrams do not capture wheel input. All shipped locales explicitly supply every control label.
 
+# Boundaries
+
 Lazy imports and visibility scheduling keep diagram engines out of initial assets and avoid rendering offscreen history. No Mermaid.js runtime, alternate-engine fallback, private renderer, sibling import, package link, patched Pele or copied upstream implementation. Shared fixes land in Floe and reach both hosts through a new published release.
 
 Floe disables image loading and diagram links unless navigation is explicitly host-owned; these adapters enable neither. Final SVG and formula MathML cross the published sanitizer. Source is never rewritten to repair unsupported syntax. Failures retain the original source. Source/edge/output/queue limits bound admission, not guarantees of constant rendering time. Cancellation fences results; it cannot preempt synchronous Pele work. Measure actual browser tasks and use the explicit Flower long-thread qualification for responsiveness.

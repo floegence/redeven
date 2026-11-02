@@ -3499,7 +3499,7 @@
               "preview"
             ],
             "summary": "Mermaid fences retain their authored syntax and source. Both Flower hosts and file Markdown previews consume the published Floe diagrams API, which uses the original published Pele package. Pele is external; Floe owns shared rendering, sanitization, scheduling and controls. Redeven owns document/region identity, semantic palette, localization and host context.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-code-highlighting",
@@ -29984,15 +29984,22 @@
         "title": "Markdown diagram rendering",
         "type": "UI Contract"
       },
-      "body_length": 3084,
+      "body_length": 3098,
       "summary": "Mermaid fences retain their authored syntax and source. Both Flower hosts and file Markdown previews consume the published Floe diagrams API, which uses the original published Pele package. Pele is external; Floe owns shared rendering, sanitization, scheduling and controls. Redeven owns document/region identity, semantic palette, localization and host context.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Only complete Mermaid fences become diagrams in streaming Flower Markdown. Incomplete fences remain readable and copyable code. Closing a fence creates one diagram owner; subsequent prose, terminal completion and identical snapshot regions preserve its SVG, focus and selection. Changed/removed regions dispose their owners and cancel stale results. Nested mounts inherit host Dialog placement. File previews retain their reserved viewport and release diagrams before document replacement.\n\nTheme changes use CSS variables without reparsing or replacing SVG. Product palette maps eight published series variables to semantic graph roles. Original source stays available with explicit copy feedback, local errors and retry. Expand uses the shared accessible Dialog with zoom/fit and Escape; inline diagrams do not capture wheel input. All shipped locales explicitly supply every control label.\n\nLazy imports and visibility scheduling keep diagram engines out of initial assets and avoid rendering offscreen history. No Mermaid.js runtime, alternate-engine fallback, private renderer, sibling import, package link, patched Pele or copied upstream implementation. Shared fixes land in Floe and reach both hosts through a new published release.\n\nFloe disables image loading and diagram links unless navigation is explicitly host-owned; these adapters enable neither. Final SVG and formula MathML cross the published sanitizer. Source is never rewritten to repair unsupported syntax. Failures retain the original source. Source/edge/output/queue limits bound admission, not guarantees of constant rendering time. Cancellation fences results; it cannot preempt synchronous Pele work. Measure actual browser tasks and use the explicit Flower long-thread qualification for responsiveness.",
-          "char_count": 1780
+          "body": "Only complete Mermaid fences become diagrams in streaming Flower Markdown. Incomplete fences remain readable and copyable code. Closing a fence creates one diagram owner; subsequent prose, terminal completion and identical snapshot regions preserve its SVG, focus and selection. Changed/removed regions dispose their owners and cancel stale results. Nested mounts inherit host Dialog placement. File previews retain their reserved viewport and release diagrams before document replacement.\n\nTheme changes use CSS variables without reparsing or replacing SVG. Product palette maps eight published series variables to semantic graph roles. Original source stays available with explicit copy feedback, local errors and retry. Expand uses the shared accessible Dialog with zoom/fit and Escape; inline diagrams do not capture wheel input. All shipped locales explicitly supply every control label.",
+          "char_count": 892
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Lazy imports and visibility scheduling keep diagram engines out of initial assets and avoid rendering offscreen history. No Mermaid.js runtime, alternate-engine fallback, private renderer, sibling import, package link, patched Pele or copied upstream implementation. Shared fixes land in Floe and reach both hosts through a new published release.\n\nFloe disables image loading and diagram links unless navigation is explicitly host-owned; these adapters enable neither. Final SVG and formula MathML cross the published sanitizer. Source is never rewritten to repair unsupported syntax. Failures retain the original source. Source/edge/output/queue limits bound admission, not guarantees of constant rendering time. Cancellation fences results; it cannot preempt synchronous Pele work. Measure actual browser tasks and use the explicit Flower long-thread qualification for responsiveness.",
+          "char_count": 886
         }
       ],
       "snippet": "Mermaid fences retain their authored syntax and source. Both Flower hosts and file Markdown previews consume the published Floe diagrams API, which uses the original published Pele package. Pele is external; Floe owns shared rendering, sani",
@@ -31755,5 +31762,5 @@
       ]
     }
   ],
-  "source_sha256": "a3c588181efce54d6d36d8939b15dd3c6e7210c82eaf4c4364a1f411ec4057ed"
+  "source_sha256": "f6dd64aba52e9eb2fe38d57d4e95193b6d34618907e5eeaf63250f10aa357268"
 }
