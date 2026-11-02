@@ -3,6 +3,7 @@ package gatewayhost
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,8 +23,8 @@ import (
 
 // Client is the official local Gateway host API client. Credentials stay here.
 type Client struct {
-	endpoint, token string
-	transport       *http.Transport
+	endpoint, token, socketPath string
+	transport                   *http.Transport
 }
 
 func DefaultRoot() string {
@@ -44,7 +45,7 @@ type ServiceRecord struct {
 	Status                 string `json:"status"`
 	PID                    int    `json:"pid,omitempty"`
 	Listen                 string `json:"listen,omitempty"`
-	MemberListen           string `json:"member_listen,omitempty"`
+	PublicListen           string `json:"public_listen,omitempty"`
 	StateRoot              string `json:"state_root"`
 	Executable             string `json:"executable,omitempty"`
 	ProcessStartedAtUnixMS int64  `json:"process_started_at_unix_ms,omitempty"`
@@ -62,28 +63,20 @@ func Open(root string) (*Client, error) {
 	return New(root, status.Listen)
 }
 func New(root, listen string) (*Client, error) {
-	host, port, err := net.SplitHostPort(listen)
-	if err != nil {
-		return nil, errors.New("invalid Gateway administration endpoint")
+	if !filepath.IsAbs(listen) {
+		return nil, errors.New("invalid Gateway management socket")
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return nil, errors.New("Gateway administration requires a local IP endpoint")
-	}
-	if ip.IsUnspecified() {
-		if ip.To4() == nil {
-			host = "::1"
-		} else {
-			host = "127.0.0.1"
-		}
-	} else if !ip.IsLoopback() {
-		return nil, errors.New("Gateway administration listener must include loopback")
+	info, err := os.Lstat(listen)
+	if err != nil || info.Mode()&os.ModeSocket == 0 || info.Mode().Perm()&0077 != 0 {
+		return nil, errors.New("Gateway management socket is not private")
 	}
 	var token string
 	if gatewaystate.Read(TokenPath(root), &token) != nil || len(token) < 32 {
 		return nil, errors.New("Gateway host administrator credential is unavailable")
 	}
-	return &Client{endpoint: "http://" + net.JoinHostPort(host, port), token: token, transport: &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext, MaxResponseHeaderBytes: 16 << 10}}, nil
+	return &Client{endpoint: "http://gateway-host", token: token, socketPath: listen, transport: &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", listen)
+	}, MaxResponseHeaderBytes: 16 << 10}}, nil
 }
 func (c *Client) Close() { c.transport.CloseIdleConnections() }
 func (c *Client) Catalog(ctx context.Context) (gp.CatalogResponse, error) {
@@ -95,6 +88,19 @@ func (c *Client) Catalog(ctx context.Context) (gp.CatalogResponse, error) {
 	return catalog, err
 }
 func (c *Client) Request(ctx context.Context, route string, input, output any) error {
+	return c.RequestWithOperation(ctx, route, input, output, rand.Text())
+}
+
+// RequestWithOperation preserves caller-owned recovery identity across failures.
+// It never retries a mutation whose effects may already have committed.
+func (c *Client) RequestWithOperation(ctx context.Context, route string, input, output any, operationID string) error {
+	err := c.request(ctx, route, input, output, operationID)
+	if err != nil {
+		return fmt.Errorf("%w; operation ID: %s (query with redeven-gateway operations query --operation-id %s)", err, operationID, operationID)
+	}
+	return nil
+}
+func (c *Client) request(ctx context.Context, route string, input, output any, operationID string) error {
 	raw, err := json.Marshal(input)
 	if err != nil {
 		return err
@@ -105,6 +111,7 @@ func (c *Client) Request(ctx context.Context, route string, input, output any) e
 	}
 	request.Header.Set(gatewayservice.HostAdminHeader, c.token)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(gatewayservice.OperationIDHeader, operationID)
 	client := &http.Client{Transport: c.transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Do(request)
 	if err != nil {
@@ -134,5 +141,5 @@ func (c *Client) Request(ctx context.Context, route string, input, output any) e
 }
 
 func (c *Client) SurfaceDialer(memberURL string) desktopbridge.SurfaceDialer {
-	return desktopbridge.NewGatewaySurfaceDialer(c.endpoint+"/", memberURL, c.token)
+	return desktopbridge.NewGatewaySurfaceDialer("unix:"+c.socketPath, memberURL, c.token)
 }

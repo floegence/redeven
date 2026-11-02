@@ -38,11 +38,11 @@ func TestStoppedGatewayUnpairPreservesOtherCloudOwner(t *testing.T) {
 		address := reservation.Addr().String()
 		_ = reservation.Close()
 		hostToken := strings.Repeat("a", 43)
-		gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(t.TempDir(), "gateway"), HostAdminToken: hostToken, MemberURL: "https://" + address, MemberListen: address})
+		gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(t.TempDir(), "gateway"), HostAdminToken: hostToken, PublicURL: "https://" + address, PublicListen: address})
 		if err != nil {
 			t.Fatal(err)
 		}
-		server, _, err := gateway.Start(ctx, "127.0.0.1:0")
+		server, listeners, err := gateway.Start(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +51,7 @@ func TestStoppedGatewayUnpairPreservesOtherCloudOwner(t *testing.T) {
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
-		gateway.Handler().ServeHTTP(response, request)
+		gatewayfixture.HostHandler(t, listeners[0].Addr().String()).ServeHTTP(response, request)
 		var result struct {
 			Data struct {
 				Code      string `json:"code"`
@@ -71,8 +71,8 @@ func TestStoppedGatewayUnpairPreservesOtherCloudOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloud := cfg.GatewayMember(ids[1]).Clone()
-	cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: cloud.MemberID, Revision: 1}
+	cloud := cfg.RuntimeAttachment(ids[1]).Clone()
+	cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: cloud.AttachmentID, Revision: 1}
 	if err := config.Save(layout.ConfigPath, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestRunningGatewayUnpairAcknowledgesOnlyObservedCloudImpact(t *testing.T) {
 			}
 			acknowledgments <- body.Acknowledged
 		}
-		_, _ = w.Write([]byte(`{"ok":true,"data":{"joined":true,"phase":"joined","memberships":[{"gateway_id":"one","member_id":"member","phase":"joined","joined":true}]}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"joined":true,"phase":"joined","memberships":[{"gateway_id":"one","attachment_id":"member","phase":"joined","joined":true}]}}`))
 	})}
 	go func() { _ = server.Serve(listener) }()
 	defer server.Close()
@@ -173,7 +173,7 @@ func TestGatewayJoinInitializesFreshRuntimeAndPreservesExistingPermissionCap(t *
 			if err != nil {
 				t.Fatal(err)
 			}
-			if cfg.GatewayMember("") == nil || !reflect.DeepEqual(cfg.PermissionPolicy, policy) {
+			if cfg.RuntimeAttachment("") == nil || !reflect.DeepEqual(cfg.PermissionPolicy, policy) {
 				t.Fatal("confirmation lost local intent or changed Runtime permissions")
 			}
 			if err := cfg.ValidateGatewayManagement(); err != nil {

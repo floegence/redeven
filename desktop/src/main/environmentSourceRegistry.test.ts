@@ -17,7 +17,7 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 
 function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
   return {
-    gateway_id: 'bastion',
+    connection_id: 'bastion',
     display_name: 'Bastion',
     local_enabled: true,
     connection_kind: 'url',
@@ -102,8 +102,8 @@ describe('environmentSourceRegistry', () => {
       localLabel: 'Local',
       controlPlanes: [controlPlaneSummary()],
       gatewaySources: [
-        gatewaySource({ gateway_id: 'office', display_name: 'Office' }),
-        gatewaySource({ gateway_id: 'bastion', display_name: 'Bastion' }),
+        gatewaySource({ connection_id: 'office', display_name: 'Office' }),
+        gatewaySource({ connection_id: 'bastion', display_name: 'Bastion' }),
       ],
     });
 
@@ -120,7 +120,7 @@ describe('environmentSourceRegistry', () => {
       label: 'Provider Env',
     });
     const gateway = gatewaySource({
-      environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Provider Env' }],
+      environments: [{ ...memberFixture, attachment_id: 'env_demo', display_name: 'Provider Env' }],
     });
     const preferences = testDesktopPreferences({
       cloud_environments: [providerEnvironment],

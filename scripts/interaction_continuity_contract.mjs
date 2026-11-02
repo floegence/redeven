@@ -25,7 +25,6 @@ export const continuityTests = Object.freeze({
     'src/welcome/GatewaySetup.client.test.tsx',
     'src/welcome/GatewayMembersDialog.client.test.tsx',
     'src/welcome/GatewayClientsPanel.client.test.tsx',
-    'src/welcome/GatewayCloudPanel.client.test.tsx',
   ],
 });
 export function continuityAffected(path) {

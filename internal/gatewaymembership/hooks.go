@@ -69,7 +69,7 @@ func (h *PolicyHooks) Replace(config HookConfig) error {
 }
 
 func validHookAction(action gp.HookAction) bool {
-	return action == gp.HookMemberAdmit || action == gp.HookAccessOpen || action == gp.HookCloudPublish
+	return action == gp.HookAttachmentAdmit || action == gp.HookAccessOpen || action == gp.HookEgressOpen
 }
 
 var hookReason = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
@@ -152,7 +152,7 @@ func (h *PolicyHooks) Status() map[gp.HookAction]gp.HookStatus {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	result := make(map[gp.HookAction]gp.HookStatus, 3)
-	for _, action := range []gp.HookAction{gp.HookMemberAdmit, gp.HookAccessOpen, gp.HookCloudPublish} {
+	for _, action := range []gp.HookAction{gp.HookAttachmentAdmit, gp.HookAccessOpen, gp.HookEgressOpen} {
 		result[action] = gp.HookNotConfigured
 		if h.config == nil {
 			result[action] = gp.HookInvalid

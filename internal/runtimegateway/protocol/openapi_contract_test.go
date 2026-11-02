@@ -56,10 +56,10 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 		t.Fatal("OpenAPI protocol version differs from the executable")
 	}
 	for _, value := range []any{
-		gp.IdentityRequest{}, gp.IdentityResponse{}, gp.ConfigureCloudRequest{}, gp.MemberCloudContext{}, gp.GatewayPermissions{}, gp.GatewayMetadata{}, gp.CatalogRequest{}, gp.CatalogResponse{}, gp.OpenSessionRequest{}, gp.MemberServiceRequest{}, gp.MemberServiceResponse{},
+		gp.IdentityRequest{}, gp.IdentityResponse{}, gp.GatewayPermissions{}, gp.GatewayMetadata{}, gp.CatalogRequest{}, gp.CatalogResponse{}, gp.OpenSessionRequest{}, gp.MemberServiceRequest{}, gp.MemberServiceResponse{},
 		gp.ClientAccessCodeRequest{}, gp.ClientAccessCodeResponse{}, gp.ClientListRequest{}, gp.ClientListResponse{}, gp.ClientRevokeRequest{}, gp.GatewayClientRecord{}, gp.InvitationRequest{}, gp.RemoveMemberRequest{}, gp.UpdatePolicyRequest{}, gp.UpdateMembersRequest{}, gp.PairingChallengeRequest{}, gp.PairingChallengeResponse{}, gp.PairingCompleteRequest{}, gp.PairingCompleteResponse{},
 		gp.EnrollmentDescriptor{}, gp.MemberDelegation{}, gp.MemberService{}, gp.MemberMetadata{}, gp.MemberJoinRequest{}, gp.MemberJoinResponse{}, gp.MemberRotateRequest{}, gp.MemberRotateResponse{}, gp.GatewayEndpoint{}, gp.EndpointUpdateRequest{}, gp.EndpointUpdateResponse{}, gp.GatewayNetworkSettings{}, gp.NetworkSettingsRequest{}, gp.NetworkSettingsResponse{}, gp.MemberEndpointUpdateRequest{}, gp.MemberEndpointUpdateResponse{},
-		gp.Member{}, gp.MemberConnectRequest{}, gp.GatewayPolicy{}, gp.MemberPolicyUpdate{}, gp.MemberOperationResult{}, gp.HookInput{}, gp.HookResult{}, gatewaymembership.ConnectionOffer{},
+		gp.RuntimeAttachment{}, gp.MemberConnectRequest{}, gp.GatewayPolicy{}, gp.MemberPolicyUpdate{}, gp.MemberOperationResult{}, gp.HookInput{}, gp.HookResult{}, gatewaymembership.ConnectionOffer{},
 	} {
 		typ := reflect.TypeOf(value)
 		schema, ok := spec.Components.Schemas[typ.Name()]
@@ -83,7 +83,7 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 			}
 		}
 	}
-	expected := []string{"/gateway/v6/clients/access-codes", "/gateway/v6/clients/list", "/gateway/v6/clients/revoke", "/gateway/v6/identity", "/gateway/v6/cloud/configure", "/gateway/v6/cloud/status", "/gateway/v6/members/reevaluate", "/v6/member/cloud", "/gateway/v6/pairing/challenge", "/gateway/v6/pairing/complete", "/gateway/v6/catalog", "/gateway/v6/invitation-codes", "/gateway/v6/endpoints", "/gateway/v6/network-settings", "/gateway/v6/members/remove", "/gateway/v6/members/policy", "/gateway/v6/policy", "/gateway/v6/access/open", "/gateway/v6/access/service", "/v6/member/join", "/v6/member/cancel-join", "/v6/member/rotate", "/v6/member/leave", "/v6/member/connect", "/v6/member/invitation-exchange", "/v6/member/update-endpoints"}
+	expected := []string{"/gateway/v6/operations/query", "/gateway/v6/clients/access-codes", "/gateway/v6/clients/list", "/gateway/v6/clients/revoke", "/gateway/v6/identity", "/gateway/v6/attachments/reevaluate", "/gateway/v6/pairing/challenge", "/gateway/v6/pairing/complete", "/gateway/v6/catalog", "/gateway/v6/invitation-codes", "/gateway/v6/endpoints", "/gateway/v6/network-settings", "/gateway/v6/attachments/remove", "/gateway/v6/attachments/policy", "/gateway/v6/policy", "/gateway/v6/access/open", "/gateway/v6/access/service", "/v6/attachment/join", "/v6/attachment/cancel-join", "/v6/attachment/rotate", "/v6/attachment/leave", "/v6/attachment/connect", "/v6/attachment/invitation-exchange", "/v6/attachment/update-endpoints"}
 	if len(spec.Paths) != len(expected) {
 		t.Fatal("OpenAPI contains unexpected routes")
 	}
@@ -97,4 +97,43 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 			t.Errorf("retired contract remains: %s", retired)
 		}
 	}
+}
+
+func TestGatewayOpenAPIReferencesResolve(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../spec/openapi/gateway-v6.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	var visit func(any)
+	visit = func(value any) {
+		switch value := value.(type) {
+		case map[string]any:
+			if ref, ok := value["$ref"].(string); ok && strings.HasPrefix(ref, "#/") {
+				var current any = document
+				for _, part := range strings.Split(ref[2:], "/") {
+					object, ok := current.(map[string]any)
+					if !ok {
+						t.Fatalf("invalid reference %s", ref)
+					}
+					current, ok = object[part]
+					if !ok {
+						t.Fatalf("unresolved reference %s", ref)
+					}
+				}
+			}
+			for _, item := range value {
+				visit(item)
+			}
+		case []any:
+			for _, item := range value {
+				visit(item)
+			}
+		}
+	}
+	visit(document)
 }

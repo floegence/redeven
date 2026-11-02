@@ -110,28 +110,30 @@ const (
 )
 
 type CloudLinkBinding struct {
-	Cloud                    *rc.Status     `json:"cloud,omitempty"`
-	State                    CloudLinkState `json:"state"`
-	ConnectionState          string         `json:"connection_state"`
-	CloudOrigin              string         `json:"cloud_origin,omitempty"`
-	CloudID                  string         `json:"cloud_id,omitempty"`
-	EnvPublicID              string         `json:"env_public_id,omitempty"`
-	AccessPointOrigin        string         `json:"access_point_origin,omitempty"`
-	LocalEnvironmentPublicID string         `json:"local_environment_public_id,omitempty"`
-	BindingGeneration        int64          `json:"binding_generation,omitempty"`
-	RemoteEnabled            bool           `json:"remote_enabled"`
-	LastConnectedAtUnixMS    int64          `json:"last_connected_at_unix_ms,omitempty"`
-	LastDisconnectedAtUnixMS int64          `json:"last_disconnected_at_unix_ms,omitempty"`
-	LastErrorCode            string         `json:"last_error_code,omitempty"`
-	LastErrorMessage         string         `json:"last_error_message,omitempty"`
+	Route                    *rc.RouteSelection `json:"route,omitempty"`
+	RouteRevision            int64              `json:"route_revision,omitempty"`
+	Cloud                    *rc.Status         `json:"cloud,omitempty"`
+	State                    CloudLinkState     `json:"state"`
+	ConnectionState          string             `json:"connection_state"`
+	CloudOrigin              string             `json:"cloud_origin,omitempty"`
+	CloudID                  string             `json:"cloud_id,omitempty"`
+	EnvPublicID              string             `json:"env_public_id,omitempty"`
+	AccessPointOrigin        string             `json:"access_point_origin,omitempty"`
+	LocalEnvironmentPublicID string             `json:"local_environment_public_id,omitempty"`
+	BindingGeneration        int64              `json:"binding_generation,omitempty"`
+	RemoteEnabled            bool               `json:"remote_enabled"`
+	LastConnectedAtUnixMS    int64              `json:"last_connected_at_unix_ms,omitempty"`
+	LastDisconnectedAtUnixMS int64              `json:"last_disconnected_at_unix_ms,omitempty"`
+	LastErrorCode            string             `json:"last_error_code,omitempty"`
+	LastErrorMessage         string             `json:"last_error_message,omitempty"`
 }
 
-// GatewayMembership is trusted presentation metadata, never member credentials.
-type GatewayMembership struct {
+// GatewayAttachment is trusted presentation metadata, never member credentials.
+type GatewayAttachment struct {
 	GatewayID           string           `json:"gateway_id"`
 	GatewayName         string           `json:"gateway_name"`
 	IdentityFingerprint string           `json:"identity_fingerprint"`
-	MemberID            string           `json:"member_id"`
+	AttachmentID        string           `json:"attachment_id"`
 	RuntimePublicID     string           `json:"runtime_public_id"`
 	Phase               string           `json:"phase"`
 	Endpoints           []GatewayAddress `json:"endpoints"`
@@ -141,7 +143,7 @@ type GatewayAddress struct {
 }
 
 type Snapshot struct {
-	GatewayMemberships    []GatewayMembership `json:"gateway_memberships,omitempty"`
+	GatewayAttachments    []GatewayAttachment `json:"gateway_memberships,omitempty"`
 	RuntimeVersion        string              `json:"runtime_version,omitempty"`
 	RuntimeCommit         string              `json:"runtime_commit,omitempty"`
 	RuntimeBuildTime      string              `json:"runtime_build_time,omitempty"`

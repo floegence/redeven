@@ -1,6 +1,6 @@
 import { app, type Session } from 'electron';
 import crypto from 'node:crypto';
-import type { GatewayMemberTransport } from './gatewayMemberTransport';
+import type { RuntimeAttachmentTransport } from './gatewayMemberTransport';
 import { isGatewayApplicationHostname } from './pluginOrigin';
 
 const gatewayMemberCredentials = new Map<number, { token: string; partitions: Set<Session> }>();
@@ -12,7 +12,7 @@ app.on('login', (event, webContents, _request, authInfo, callback) => {
   callback('redeven', credentials.token);
 });
 
-export async function prepareGatewayMemberPartition(webSession: Session, proxy: GatewayMemberTransport): Promise<void> {
+export async function prepareRuntimeAttachmentPartition(webSession: Session, proxy: RuntimeAttachmentTransport): Promise<void> {
   const port = Number(new URL(proxy.proxyURL).port);
   let credentials = gatewayMemberCredentials.get(port);
   if (!credentials) { credentials = { token: proxy.token, partitions: new Set() }; gatewayMemberCredentials.set(port, credentials); }
@@ -31,7 +31,7 @@ export async function prepareGatewayMemberPartition(webSession: Session, proxy: 
   await webSession.closeAllConnections();
 }
 
-export function clearGatewayMemberPartition(webSession: Session): void {
+export function clearRuntimeAttachmentPartition(webSession: Session): void {
   let owned = false;
   for (const credentials of gatewayMemberCredentials.values()) {
     if (credentials.partitions.delete(webSession)) owned = true;
@@ -41,10 +41,10 @@ export function clearGatewayMemberPartition(webSession: Session): void {
   void Promise.all([webSession.closeAllConnections(), webSession.clearAuthCache()]).catch(() => undefined);
 }
 
-export async function closeGatewayMemberTransport(transport: GatewayMemberTransport): Promise<void> {
+export async function closeRuntimeAttachmentTransport(transport: RuntimeAttachmentTransport): Promise<void> {
   const port = Number(new URL(transport.proxyURL).port);
   const credentials = gatewayMemberCredentials.get(port);
-  for (const webSession of credentials?.partitions ?? []) clearGatewayMemberPartition(webSession);
+  for (const webSession of credentials?.partitions ?? []) clearRuntimeAttachmentPartition(webSession);
   gatewayMemberCredentials.delete(port);
   await transport.close();
 }

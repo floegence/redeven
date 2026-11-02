@@ -2,7 +2,6 @@ package gatewayhost
 
 import (
 	"context"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -13,15 +12,20 @@ import (
 func TestOpenReadsCompleteOfficialServiceRecord(t *testing.T) {
 	root := t.TempDir()
 	token := strings.Repeat("x", 43)
-	owner, err := gatewayservice.New(gatewayservice.Options{StateRoot: root, HostAdminToken: token, MemberURL: "https://gateway.internal:7443"})
+	owner, err := gatewayservice.New(gatewayservice.Options{StateRoot: root, HostAdminToken: token, PublicURL: "https://gateway.internal:7443", PublicListen: "127.0.0.1:0"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(owner.Handler())
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	server, listeners, err := owner.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer server.Close()
 	// The real CLI publishes all these fields. A partial projection must not
 	// weaken the shared strict JSON reader or reject a healthy Gateway.
-	record := map[string]any{"status": "running", "pid": 123, "listen": strings.TrimPrefix(server.URL, "http://"), "member_listen": "127.0.0.1:7443", "state_root": root, "executable": "/fixture/redeven-gateway", "process_started_at_unix_ms": 1}
+	record := map[string]any{"status": "running", "pid": 123, "listen": listeners[0].Addr().String(), "public_listen": "127.0.0.1:7443", "state_root": root, "executable": "/fixture/redeven-gateway", "process_started_at_unix_ms": 1}
 	if err := gatewaystate.Write(root+"/gateway-service.pid.json", record); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +38,7 @@ func TestOpenReadsCompleteOfficialServiceRecord(t *testing.T) {
 	}
 	defer client.Close()
 	catalog, err := client.Catalog(context.Background())
-	if err != nil || !catalog.Gateway.Permissions.ManageMembers {
+	if err != nil || !catalog.Gateway.Permissions.ManageAttachments {
 		t.Fatal("official catalog rejected", err)
 	}
 	record["status"] = "stopped"

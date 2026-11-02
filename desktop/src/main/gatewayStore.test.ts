@@ -16,7 +16,7 @@ import {
   normalizeGatewayBaseURL,
   normalizeGatewayStoreSnapshot,
   stableGatewayID,
-  retireGatewayMemberObservation,
+  retireRuntimeAttachmentObservation,
   type GatewayRecord,
 } from './gatewayStore';
 
@@ -35,22 +35,22 @@ describe('GatewayStore', () => {
   });
 
   it('retires only the confirmed member from the same pinned Gateway directory', () => {
-    const record = normalizeGatewayStoreSnapshot({ gateways: [{ gateway_id: 'registration', display_name: 'Office',
+    const record = normalizeGatewayStoreSnapshot({ gateways: [{ connection_id: 'registration', display_name: 'Office',
       connection: { kind: 'url', base_url: 'https://office.example' },
       trust_profile: { trust_profile_id: 'trust', paired_client_key_id: 'client', paired_client_private_key_ref: 'secret-ref',
         gateway_id: 'machine', gateway_public_key: 'PUBLIC KEY', gateway_public_key_fingerprint: 'SHA256:pinned',
         binding_audience: 'https://office.example/', created_at_unix_ms: 1 },
     }] }).gateways[0]!;
-    const source = gatewayRecordToSourceWithCatalog(record, { environments: [memberFixture, { ...memberFixture, member_id: 'other' }] });
-    const member = { gateway_id: 'machine', member_id: memberFixture.member_id };
-    expect(retireGatewayMemberObservation(record, source, member).environments.map(item => item.member_id)).toEqual(['other']);
-    expect(retireGatewayMemberObservation(record, source, { ...member, gateway_id: 'another-machine' })).toBe(source);
-    expect(retireGatewayMemberObservation(record, { ...source, identity_fingerprint: 'SHA256:changed' }, member).environments).toHaveLength(2);
-    expect(retireGatewayMemberObservation(record, source, { ...member, member_id: 'unknown' })).toBe(source);
+    const source = gatewayRecordToSourceWithCatalog(record, { environments: [memberFixture, { ...memberFixture, attachment_id: 'other' }] });
+    const member = { gateway_id: 'machine', attachment_id: memberFixture.attachment_id };
+    expect(retireRuntimeAttachmentObservation(record, source, member).environments.map(item => item.attachment_id)).toEqual(['other']);
+    expect(retireRuntimeAttachmentObservation(record, source, { ...member, gateway_id: 'another-machine' })).toBe(source);
+    expect(retireRuntimeAttachmentObservation(record, { ...source, identity_fingerprint: 'SHA256:changed' }, member).environments).toHaveLength(2);
+    expect(retireRuntimeAttachmentObservation(record, source, { ...member, attachment_id: 'unknown' })).toBe(source);
   });
 
   it('does not reuse a retained secret after the user clears the configured credential', () => {
-    const record = normalizeGatewayStoreSnapshot({ gateways: [{ gateway_id: 'ssh', display_name: 'SSH',
+    const record = normalizeGatewayStoreSnapshot({ gateways: [{ connection_id: 'ssh', display_name: 'SSH',
       connection: { kind: 'ssh_host', ssh_destination: 'bastion', runtime_root: '/data/gateway', auth_mode: 'password', ssh_password_configured: false },
     }] }).gateways[0];
     expect(gatewayRecordSSHPasswordRef(record)).toBe('');
@@ -62,7 +62,7 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(defaultGatewayStorePath(root));
 
     await store.upsert({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Bastion Gateway',
       connection: {
         kind: 'url',
@@ -110,23 +110,23 @@ describe('GatewayStore', () => {
     });
   });
 
-  it('initializes fresh stores at schema v4', async () => {
+  it('initializes fresh stores at schema v5', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     const store = new GatewayStore(filePath);
 
-    expect(await store.load()).toEqual({ schema_version: 4, gateways: [] });
+    expect(await store.load()).toEqual({ schema_version: 5, gateways: [] });
     await store.upsert({
-      gateway_id: 'gw_fresh',
+      connection_id: 'gw_fresh',
       display_name: 'Fresh Gateway',
       connection: { kind: 'url', base_url: 'https://gateway.example/' },
       now_ms: 10,
     });
 
     expect(JSON.parse(await fs.readFile(filePath, 'utf8'))).toMatchObject({
-      schema_version: 4,
-      gateways: [expect.objectContaining({ schema_version: 4, gateway_id: 'gw_fresh' })],
+      schema_version: 5,
+      gateways: [expect.objectContaining({ schema_version: 5, connection_id: 'gw_fresh' })],
     });
   });
 
@@ -137,19 +137,19 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(filePath);
 
     await store.upsert({
-      gateway_id: 'gw_direct',
+      connection_id: 'gw_direct',
       display_name: 'Devbox Runtime management',
       connection: { kind: 'ssh_host', ssh_destination: 'devbox', auth_mode: 'key_agent', runtime_root: '~/.redeven' },
       now_ms: 10,
     });
     await store.upsert({
-      gateway_id: 'gw_container',
+      connection_id: 'gw_container',
       display_name: 'Container Runtime management',
       connection: { kind: 'local_container', container_engine: 'docker', container_id: 'container', runtime_root: '/workspace/.redeven' },
       now_ms: 20,
     });
     const reopened = new GatewayStore(filePath);
-    expect((await reopened.list()).map(record => record.gateway_id).sort()).toEqual(['gw_container', 'gw_direct']);
+    expect((await reopened.list()).map(record => record.connection_id).sort()).toEqual(['gw_container', 'gw_direct']);
     expect(await reopened.get('gw_direct')).toMatchObject({ connection: { kind: 'ssh_host' } });
   });
 
@@ -157,7 +157,7 @@ describe('GatewayStore', () => {
     const root = await createTempRoot(); cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const legacy = { schema_version: version, gateway_id: 'gw_old', display_name: 'My Runtime',
+    const legacy = { schema_version: version, connection_id: 'gw_old', display_name: 'My Runtime',
       runtime_environment_id: 'env_preserved', local_enabled: true,
       connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
       created_at_ms: 10, updated_at_ms: 20 };
@@ -165,14 +165,14 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(filePath);
     // Background sync can read first, before the launcher asks for a snapshot.
     expect(await store.list()).toEqual([]);
-    await store.upsert({ gateway_id: 'gw_other', connection: { kind: 'url', base_url: 'https://gateway.example/' } });
+    await store.upsert({ connection_id: 'gw_other', connection: { kind: 'url', base_url: 'https://gateway.example/' } });
     const reopened = new GatewayStore(filePath);
     expect(await reopened.get('gw_old')).toBeNull();
-    expect(JSON.parse(await fs.readFile(filePath, 'utf8')).gateways.map((record: GatewayRecord) => record.gateway_id))
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8')).gateways.map((record: GatewayRecord) => record.connection_id))
       .toEqual(['gw_other']);
   });
 
-  it('migrates the exact v1 store to v4 and preserves user records', async () => {
+  it('migrates the exact v1 store to v5 and preserves user records', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
@@ -193,10 +193,10 @@ describe('GatewayStore', () => {
     const snapshot = await new GatewayStore(filePath).load();
 
     expect(snapshot).toMatchObject({
-      schema_version: 4,
+      schema_version: 5,
       gateways: [{
-        schema_version: 4,
-        gateway_id: 'gw_v1',
+        schema_version: 5,
+        connection_id: 'gw_v1',
         display_name: 'Existing Gateway',
         local_enabled: false,
         created_at_ms: 10,
@@ -235,13 +235,13 @@ describe('GatewayStore', () => {
     const root = await createTempRoot(); cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     const store = new GatewayStore(filePath);
-    await store.upsert({ gateway_id: 'gw_preserved', display_name: 'Preserved', now_ms: 20,
+    await store.upsert({ connection_id: 'gw_preserved', display_name: 'Preserved', now_ms: 20,
       connection: { kind: 'url', base_url: 'https://gateway.example/office/' },
       trust_profile: { trust_profile_id: 'trust_id', paired_client_key_id: 'client_id', paired_client_private_key_ref: 'gateway-client-key:gw_preserved:client_id',
         gateway_id: 'gw_preserved', gateway_public_key: 'PUBLIC KEY', gateway_public_key_fingerprint: 'SHA256:identity',
         binding_audience: 'https://gateway.example/office/', created_at_unix_ms: 10 } });
     const expected = await store.load();
-    const legacy = { ...expected, schema_version: 2, gateways: expected.gateways.map(record => ({ ...record, schema_version: 2 })) };
+    const legacy = { ...expected, schema_version: 2, gateways: expected.gateways.map(record => ({ ...record, gateway_id: record.connection_id, connection_id: undefined, schema_version: 2 })) };
     const original = JSON.stringify(legacy);
     await fs.writeFile(filePath, original);
     const failing = new GatewayStore(filePath, async () => { throw Object.assign(new Error('atomic migration failure'), { code: 'ENOENT' }); });
@@ -255,7 +255,7 @@ describe('GatewayStore', () => {
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const original = '{"schema_version":5,"gateways":[]}\n';
+    const original = '{"schema_version":6,"gateways":[]}\n';
     await fs.writeFile(filePath, original, 'utf8');
 
     await expect(new GatewayStore(filePath).load()).rejects.toMatchObject({
@@ -264,7 +264,7 @@ describe('GatewayStore', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
   });
 
-  it('leaves v1 bytes intact when the v4 migration cannot commit', async () => {
+  it('leaves v1 bytes intact when the v5 migration cannot commit', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
@@ -279,16 +279,16 @@ describe('GatewayStore', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(original);
   });
 
-  it('keeps the last committed snapshot when a v4 mutation cannot persist', async () => {
+  it('keeps the last committed snapshot when a v5 mutation cannot persist', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     const original = `${JSON.stringify({
-      schema_version: 4,
+      schema_version: 5,
       gateways: [{
-        schema_version: 4,
-        gateway_id: 'gw_committed',
+        schema_version: 5,
+        connection_id: 'gw_committed',
         display_name: 'Committed Gateway',
         local_enabled: true,
         connection: { kind: 'url', base_url: 'https://gateway.example/', allow_loopback_http: false },
@@ -310,8 +310,8 @@ describe('GatewayStore', () => {
   it('normalizes duplicate records and projects source rows without env secrets', () => {
     const snapshot = normalizeGatewayStoreSnapshot({
       gateways: [
-        { gateway_id: 'gw_demo', display_name: 'B', connection: { kind: 'url', base_url: 'https://b.example/' } },
-        { gateway_id: 'gw_demo', display_name: 'A', connection: { kind: 'url', base_url: 'https://a.example/' } },
+        { connection_id: 'gw_demo', display_name: 'B', connection: { kind: 'url', base_url: 'https://b.example/' } },
+        { connection_id: 'gw_demo', display_name: 'A', connection: { kind: 'url', base_url: 'https://a.example/' } },
       ],
     }, 1);
 
@@ -319,7 +319,7 @@ describe('GatewayStore', () => {
     expect(snapshot.gateways[0]?.display_name).toBe('A');
     const source = gatewayRecordToSource(snapshot.gateways[0] as GatewayRecord);
     expect(source).toMatchObject({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       management_capability: 'access_only',
       status: 'pairing_required',
       trust_state: 'unpaired',
@@ -342,7 +342,7 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(defaultGatewayStorePath(root));
 
     const created = await store.upsert({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Demo Gateway',
       connection: { kind: 'url', base_url: 'https://gateway.example/' },
       now_ms: 10,
@@ -355,7 +355,7 @@ describe('GatewayStore', () => {
     expect(gatewayRecordToSource(disabled).local_enabled).toBe(false);
 
     const edited = await store.upsert({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Renamed Gateway',
       connection: { kind: 'url', base_url: 'https://gateway.example/' },
       now_ms: 20,
@@ -372,7 +372,7 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(defaultGatewayStorePath(root));
 
     await expect(store.upsert({
-      gateway_id: '../gw demo',
+      connection_id: '../gw demo',
       display_name: 'Unsafe Gateway',
       connection: { kind: 'url', base_url: 'https://gateway.example/' },
     })).rejects.toMatchObject({
@@ -380,7 +380,7 @@ describe('GatewayStore', () => {
     });
 
     expect(normalizeGatewayStoreSnapshot({
-      gateways: [{ gateway_id: '../gw demo', connection: { kind: 'url', base_url: 'https://gateway.example/' } }],
+      gateways: [{ connection_id: '../gw demo', connection: { kind: 'url', base_url: 'https://gateway.example/' } }],
     }).gateways).toHaveLength(0);
   });
 
@@ -404,7 +404,7 @@ describe('GatewayStore', () => {
   it('projects SSH Gateway details without leaking password secret refs', () => {
     const record = normalizeGatewayStoreSnapshot({
       gateways: [{
-        gateway_id: 'gw_ssh',
+        connection_id: 'gw_ssh',
         display_name: 'SSH Gateway',
         connection: {
           kind: 'ssh_host',
@@ -443,7 +443,7 @@ describe('GatewayStore', () => {
   it('projects SSH container Gateway management capability without persisting runtime state', () => {
     const record = normalizeGatewayStoreSnapshot({
       gateways: [{
-        gateway_id: 'gw_container',
+        connection_id: 'gw_container',
         display_name: 'Container Gateway',
         connection: {
           kind: 'ssh_container',
@@ -472,11 +472,11 @@ describe('GatewayStore', () => {
   it('normalizes managed local host and container Gateway records', () => {
     const snapshot = normalizeGatewayStoreSnapshot({
       gateways: [{
-        gateway_id: 'gw_local',
+        connection_id: 'gw_local',
         display_name: 'Local Gateway',
         connection: { kind: 'local_host', runtime_root: '/tmp/redeven' },
       }, {
-        gateway_id: 'gw_local_container',
+        connection_id: 'gw_local_container',
         display_name: 'Local Container Gateway',
         connection: {
           kind: 'local_container',
@@ -513,7 +513,7 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(defaultGatewayStorePath(root));
 
     await store.upsert({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Demo Gateway',
       connection: {
         kind: 'url',
@@ -533,7 +533,7 @@ describe('GatewayStore', () => {
     });
 
     const updated = await store.upsert({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Demo Gateway',
       connection: {
         kind: 'url',
@@ -557,7 +557,7 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(defaultGatewayStorePath(root));
 
     await store.upsert({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Demo Gateway',
       connection: {
         kind: 'url',
@@ -578,7 +578,7 @@ describe('GatewayStore', () => {
 
     const marked = await store.markCatalogSynced('gw_demo', 20);
     expect(marked).toMatchObject({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Demo Gateway',
       connection: { kind: 'url', base_url: 'https://gateway.example/' },
       last_catalog_sync_at_ms: 20,
@@ -599,7 +599,7 @@ describe('GatewayStore', () => {
     const store = new GatewayStore(defaultGatewayStorePath(root));
 
     await store.upsert({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       display_name: 'Demo Gateway',
       connection: { kind: 'url', base_url: 'https://gateway.example/' },
       now_ms: 10,
@@ -622,7 +622,7 @@ describe('GatewayStore', () => {
 
     const loaded = await new GatewayStore(defaultGatewayStorePath(root)).get('gw_demo');
     expect(loaded).toMatchObject({
-      gateway_id: 'gw_demo',
+      connection_id: 'gw_demo',
       local_enabled: false,
       last_catalog_sync_at_ms: 40,
       trust_profile: expect.objectContaining({
@@ -634,7 +634,7 @@ describe('GatewayStore', () => {
   it('projects paired catalog rows without leaking trust material', () => {
     const record = normalizeGatewayStoreSnapshot({
       gateways: [{
-        gateway_id: 'gw_demo',
+        connection_id: 'gw_demo',
         display_name: 'Stored Gateway',
         connection: { kind: 'url', base_url: 'https://gateway.example/' },
         trust_profile: {
@@ -652,13 +652,13 @@ describe('GatewayStore', () => {
 
     const source = gatewayRecordToSourceWithCatalog(record, {
       status: 'online',
-      environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Demo Env' }],
+      environments: [{ ...memberFixture, attachment_id: 'env_demo', display_name: 'Demo Env' }],
     });
 
     expect(source).toMatchObject({
       display_name: 'Stored Gateway',
       status: 'online',
-      environments: [expect.objectContaining({ member_id: 'env_demo' })],
+      environments: [expect.objectContaining({ attachment_id: 'env_demo' })],
     });
     expect(JSON.stringify(source)).not.toContain('paired_client_private_key_ref');
     expect(gatewayRecordToSourceWithError(record, 'token proof signature private_key')).toMatchObject({

@@ -1,12 +1,13 @@
-const sensitiveKey = /token|secret|password|authorization|cookie|signature|private_key|proof|invitation|connect_artifact|api_key|psk/iu;
+const sensitiveKey = /token|secret|password|authorization|cookie|signature|private_key|proof|invitation|connect_artifact|api_key|access_code|psk/iu;
 
 /** Redact capability material before truncation, including host command output. */
 export function redactGatewayDiagnosticText(value: string): string {
   return value
+    .replace(/rdgc1\.[A-Za-z0-9_-]+/gu, '[redacted]')
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/gu, '[redacted]')
     .replace(/\b((?:proxy-)?authorization|cookie|set-cookie)\s*:\s*[^\r\n]+/giu, '$1: [redacted]')
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9_+/.=-]+/giu, '$1 [redacted]')
-    .replace(/(["']?(?:[a-z0-9_-]*_)?(?:token|secret|password|signature|private_key|proof|invitation|connect_artifact|api_key|psk)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s&,;]+)/giu, '$1[redacted]');
+    .replace(/(["']?(?:[a-z0-9_-]*_)?(?:token|secret|password|signature|private_key|proof|invitation|connect_artifact|api_key|access_code|psk)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s&,;]+)/giu, '$1[redacted]');
 }
 
 export function redactGatewayDiagnosticValue(value: unknown): unknown {

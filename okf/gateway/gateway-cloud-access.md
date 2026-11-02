@@ -1,44 +1,38 @@
 ---
 type: Gateway Contract
-title: Gateway Cloud access
-tags: [gateway, cloud, security, networking, identity]
+title: Optional Runtime Cloud egress
+tags: [gateway, security, access]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Gateway Cloud v3 manages a Gateway machine and its local directory. RCPP v5 independently enrolls and recovers a Runtime over either direct HTTPS or the selected Gateway proxy. Gateway local v6 owns membership, invitations and restricted egress. Cloud owns environment identity, Namespace ownership and approval. Runtime owns one Cloud association, one selected route and one Flowersec connection controller.
+Cloud is optional Runtime functionality. Gateway has no Cloud binding or credentials. A Runtime can explicitly select an attached Gateway as a restricted network exit; that selection changes transport, never Cloud ownership or independent access authority.
 
 # Contract
 
-## Independent approval and membership
-Joining a Gateway establishes local membership only. A directory cannot obtain Runtime credentials.
+## Independent enrollment
+Runtime owns one Cloud association, owner-issued setup authorization and its existing Flowersec connection controller. Gateway attachment consent cannot authorize Cloud registration. Runtime may select a Gateway route before initial Cloud enrollment, using route/association revision zero; enrollment verifies the actual Cloud target when it becomes known.
 
-Namespace authorization, local egress permission and batch-enrollment delegation are separate decisions.
+Route operations retain an operation ID, expected revisions, target fingerprint, confirmation and queryable result. Changing an attachment, certificate, route or Cloud identity invalidates previous consent. An unknown result queries the original operation. A canceled committed operation remains committed.
 
-## Required network path
-Runtime control registration, independent recovery, data transport and enabled official-platform requests use the explicitly selected route. Gateway outages and denied egress never trigger a direct Internet fallback or global proxy environment variables.
+## Local egress
+New Gateways deny egress with an empty destination list. Host administrators configure exact canonical host:port destinations and per-attachment inherit/allow/deny overrides. Wildcards, URLs, paths, duplicate or malformed authorities are rejected. Executable policy uses attachment.admit, access.open and egress.open; no Cloud approval is consulted.
 
-Ownership changes require separate authorization.
+Admission requires the current Runtime attachment certificate, current local policy and unexpired credentials. The published Flowersec HTTPSProxy carries inner HTTPS without exporting Runtime Cloud keys. Public product policy rejects private resolved destinations; the isolated acceptance harness explicitly opts into its private fixture network. No unrestricted proxy or global proxy environment mutation is introduced.
 
-## One recovery owner
-Registration, heartbeat and credential replenishment share one connection controller and independent credential source.
+Disabled egress closes only egress reservations. Independent reverse application streams remain available. Removing an attachment closes all streams depending on that attachment. Credential expiry and stale timers cannot restore withdrawn policy. Policy snapshots copy destination lists so callers cannot widen authority by mutating them.
 
-Unknown results resume that operation.
-
-Each route operation can be queried after an unknown result; cancellation reports a committed operation truthfully.
-
-## Management notifications and closure
-Each Gateway has one authenticated HTTPS notification owner. Reconnection starts with an authoritative snapshot.
-
-No short data lease is introduced during ordinary control outages.
+## No fallback or cross-path revocation
+Runtime registration, recovery, Cloud transport and enabled official-platform traffic use the explicitly chosen route. Route failure reports unavailable; it never silently dials Cloud directly. Cloud logout, user removal or binding revocation cannot alter Gateway device trust, attachments or environment passwords/MFA. Cloud sessions remain subject to their own authorization and Runtime security checks.
 
 # Boundaries
-
-One connection controller owns Runtime Cloud execution. Unknown or retired configuration is rejected read-only and requires explicit new configuration and registration. Released upstream Flowersec supplies HTTPS proxy, credential source, notifications and retry control; local sibling dependency wiring is prohibited.
+Cloud owns users, roles and resource bindings. Runtime owns Cloud enrollment and sessions. Gateway owns only local device admission and constrained forwarding. There is no Gateway Cloud notification owner, Namespace delegation or publication state.
 
 # Evidence
 
-- `redeven:internal/runtimecloud/protocol/contracts.go` — Mirrored independent identity, binding, recovery and route DTOs.
-
-- `redeven:internal/gatewaycloud/protocol/testdata/wire-v3.json` — Shared machine-management wire fixture.
+- redeven:internal/gatewayegress/controller.go — Local policy and certificate admission with fenced expiration.
+- redeven:internal/gatewayegress/controller_test.go — Egress-only revocation and stale-timer isolation.
+- redeven:internal/gatewayegress/isolation_test.go — Isolated Runtime reaches a fixture only through authenticated Gateway proxy.
+- redeven:internal/agent/cloud_route_test.go — Route confirmation before Cloud enrollment and version fencing.
+- redeven:internal/agent/runtime_cloud.go — Runtime-owned Cloud recovery.

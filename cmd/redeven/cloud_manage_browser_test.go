@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -33,18 +34,30 @@ func TestCloudManagementBrowserRecoveryExits(t *testing.T) {
 	}
 	id := ""
 	state := "awaiting_confirmation"
+	var unbound atomic.Bool
 	owner := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/v2/cloud-link" {
-			_, _ = io.WriteString(w, `{"ok":true,"data":{"binding":{"cloud_origin":"https://cloud.example","cloud":{"association_revision":1,"enabled":true,"approval_state":"revoked","reason_code":"AUTHORIZATION_REVOKED","connection_state":"retrying","route":{"kind":"gateway","member_id":"missing"},"route_revision":3,"next_attempt_at_unix_ms":2000000000000}},"runtime_service":{"gateway_memberships":[]}}}`)
+			if unbound.Load() {
+				_, _ = io.WriteString(w,
+					`{"ok":true,"data":{"binding":{"state":"unbound","route_revision":0},"runtime_service":{"gateway_memberships":[{"gateway_name":"Independent Gateway","attachment_id":"offline","phase":"joined"}]}}}`)
+				return
+			}
+
+			_, _ = io.WriteString(w, `{"ok":true,"data":{"binding":{"cloud_origin":"https://cloud.example","cloud":{"association_revision":1,"enabled":true,"approval_state":"revoked","reason_code":"AUTHORIZATION_REVOKED","connection_state":"retrying","route":{"kind":"gateway","attachment_id":"missing"},"route_revision":3,"next_attempt_at_unix_ms":2000000000000}},"runtime_service":{"gateway_memberships":[]}}}`)
 			return
 		}
 		if r.URL.Path == "/v2/cloud/route/preflight" {
 			var req struct {
-				ID string `json:"operation_id"`
+				ID               string `json:"operation_id"`
+				ExpectedRevision int64  `json:"expected_route_revision"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
 			id = req.ID
+			if unbound.Load() && req.ExpectedRevision != 0 {
+				http.Error(w, "wrong initial revision", 400)
+				return
+			}
 		}
 		if r.URL.Path == "/v2/cloud/route/commit" {
 			state = "committed"
@@ -110,4 +123,29 @@ try {
 	} else {
 		t.Log(string(output))
 	}
+	unbound.Store(true)
+	command = exec.CommandContext(ctx, "node", "--input-type=module")
+	command.Env = append(os.Environ(), "CLOUD_MANAGE_URL="+origin+"/#browser-owner-token", "CLOUD_MANAGE_PLAYWRIGHT="+module)
+	command.Stdin = strings.NewReader(`
+import assert from 'node:assert/strict';
+const {chromium}=await import(process.env.CLOUD_MANAGE_PLAYWRIGHT);
+const browser=await chromium.launch({headless:true});
+try {
+ const page=await browser.newPage();await page.goto(process.env.CLOUD_MANAGE_URL);
+ await page.getByText('This Runtime is not enrolled. Use a Cloud setup ticket.').waitFor();
+ assert.equal(await page.getByRole('button',{name:'Retry connection'}).isEnabled(),false);
+ assert.equal(await page.getByRole('button',{name:'Verify route',exact:true}).isEnabled(),true);
+ await page.locator('#route').selectOption('offline');
+ await page.getByRole('button',{name:'Verify route',exact:true}).click();
+ await page.getByRole('status').getByText(/Operation /).waitFor();
+ assert.match(await page.locator('#operation').inputValue(),/^[A-Za-z0-9_-]{43}$/);
+ console.log('PASS unbound Runtime can prepare a Gateway route before initial Cloud enrollment');
+} finally {await browser.close();}
+`)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("unbound route browser: %v\n%s", err, output)
+	} else {
+		t.Log(string(output))
+	}
+
 }

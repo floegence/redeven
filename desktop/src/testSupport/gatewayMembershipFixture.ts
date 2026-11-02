@@ -1,20 +1,20 @@
-import { GATEWAY_PROTOCOL_VERSION, type GatewayMember, type GatewayInvitationCodeDelivery } from '../shared/gatewayMembership';
+import { GATEWAY_PROTOCOL_VERSION, type RuntimeAttachment, type GatewayInvitationCodeDelivery } from '../shared/gatewayMembership';
 import type { GatewayCatalogResponse } from '../main/gatewayClient';
 import type { GatewayRecord } from '../main/gatewayStore';
 
-export const memberFixture: GatewayMember = {
-  member_id: 'member_fixture', runtime_public_id: 'runtime_fixture', member_version: 1, display_name: 'Runtime',
-  state: 'active', connected: true, last_seen_at_unix_ms: 1, cloud_permission: 'inherit', effective_cloud_allowed: false,
+export const memberFixture: RuntimeAttachment = {
+  attachment_id: 'member_fixture', runtime_public_id: 'runtime_fixture', attachment_version: 1, display_name: 'Runtime',
+  state: 'active', connected: true, last_seen_at_unix_ms: 1, egress_permission: 'inherit', effective_egress_allowed: false,
   metadata: { hostname: 'runtime.internal', os: 'linux', arch: 'arm64', version: 'test' },
 };
 export const catalogFixture: GatewayCatalogResponse = {
   protocol_version: GATEWAY_PROTOCOL_VERSION, gateway: { gateway_id: 'gateway_fixture', display_name: 'Gateway', gateway_public_key_fingerprint: 'fixture', listener_address: ':7443',
     listener_addresses: [':7443'], active_listener_addresses:[],allowed_hosts:[],listener_restart_required:false, listener_running: true, endpoint_last_used_at: {},
-    member_endpoints: [{ endpoint_id: 'lan', address: 'https://gateway.internal:7443', scope: 'lan', priority: 0 }], member_tls_root_pem: 'fixture', permissions: { access: true, manage_members: true, configure_cloud: true } },
-  members: [memberFixture], revision: 1, policy: { revision: 1, default_cloud_allowed: false, publication_mode: 'manual' }, hook_status: { 'member.admit': 'not_configured', 'access.open': 'not_configured', 'cloud.publish': 'not_configured' },
+    endpoints: [{ endpoint_id: 'lan', address: 'https://gateway.internal:7443', scope: 'lan', priority: 0 }], tls_root_pem: 'fixture', permissions: { access: true, manage_attachments: true, manage_network: true } },
+  attachments: [memberFixture], revision: 1, policy: { revision: 1, default_egress_allowed: false, destinations: [] }, hook_status: { 'attachment.admit': 'not_configured', 'access.open': 'not_configured', 'egress.open': 'not_configured' },
 };
 export const gatewayRecordFixture: GatewayRecord = {
-  schema_version: 4, gateway_id: 'registration_fixture', display_name: 'Gateway', local_enabled: true,
+  schema_version: 5, connection_id: 'registration_fixture', display_name: 'Gateway', local_enabled: true,
   connection: { kind: 'url', base_url: 'https://gateway.example/' }, created_at_ms: 1, updated_at_ms: 1,
 };
 

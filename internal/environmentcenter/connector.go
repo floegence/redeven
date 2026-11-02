@@ -72,9 +72,9 @@ func connect(ctx context.Context, record GatewayRecord, route Route, device stri
 		client.close()
 		return nil, err
 	}
-	var member *gp.Member
-	for _, candidate := range catalog.Members {
-		if candidate.MemberID == route.MemberID && candidate.RuntimePublicID == route.RuntimeID && candidate.State == "active" {
+	var member *gp.RuntimeAttachment
+	for _, candidate := range catalog.Attachments {
+		if candidate.AttachmentID == route.AttachmentID && candidate.RuntimePublicID == route.RuntimeID && candidate.State == "active" {
 			copy := candidate
 			member = &copy
 			break
@@ -82,18 +82,18 @@ func connect(ctx context.Context, record GatewayRecord, route Route, device stri
 	}
 	if member == nil {
 		client.close()
-		return nil, &gatewayError{Code: "MEMBER_REMOVED"}
+		return nil, &gatewayError{Code: "ATTACHMENT_REMOVED"}
 	}
 	if !member.Connected {
 		client.close()
-		return nil, &gatewayError{Code: "MEMBER_OFFLINE", Retryable: true}
+		return nil, &gatewayError{Code: "ATTACHMENT_OFFLINE", Retryable: true}
 	}
-	if len(catalog.Gateway.MemberEndpoints) == 0 {
+	if len(catalog.Gateway.Endpoints) == 0 {
 		client.close()
 		return nil, &gatewayError{Code: "GATEWAY_NO_ENDPOINTS"}
 	}
 	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM([]byte(catalog.Gateway.MemberTLSRootPEM)) {
+	if !roots.AppendCertsFromPEM([]byte(catalog.Gateway.TLSRootPEM)) {
 		client.close()
 		return nil, ErrDenied
 	}
@@ -102,13 +102,13 @@ func connect(ctx context.Context, record GatewayRecord, route Route, device stri
 		client.close()
 		return nil, err
 	}
-	network, proxy, err := newEndpointEgress(ctx, catalog.Gateway.MemberEndpoints)
+	network, proxy, err := newEndpointEgress(ctx, catalog.Gateway.Endpoints)
 	if err != nil {
 		client.close()
 		return nil, err
 	}
-	source := &connectorSource{client: client, route: route, version: member.MemberVersion}
-	controller, err := flowersec.NewConnectionController(source, flowersec.ConnectionControllerOptions{Connector: flowersec.ConnectorOptions{HTTPSProxy: proxy, TrustRoots: roots, Origin: catalog.Gateway.MemberEndpoints[0].Address}, MaximumAttempts: 12})
+	source := &connectorSource{client: client, route: route, version: member.AttachmentVersion}
+	controller, err := flowersec.NewConnectionController(source, flowersec.ConnectionControllerOptions{Connector: flowersec.ConnectorOptions{HTTPSProxy: proxy, TrustRoots: roots, Origin: catalog.Gateway.Endpoints[0].Address}, MaximumAttempts: 12})
 	if err != nil {
 		network.Close()
 		client.close()
@@ -135,10 +135,10 @@ func (c *connection) RoundTrip(request *http.Request) (*http.Response, error) {
 	// Refresh signed service identity before opening an HTTP connection. A valid
 	// rotation replaces the pool, while rollback and identity changes fail closed.
 	var service gp.MemberServiceResponse
-	if err = c.source.client.request(ctx, "access/service", gp.MemberServiceRequest{ProtocolVersion: gp.Version, MemberID: c.source.route.MemberID, ExpectedMemberVersion: c.source.version}, &service, true); err != nil {
+	if err = c.source.client.request(ctx, "access/service", gp.MemberServiceRequest{ProtocolVersion: gp.Version, AttachmentID: c.source.route.AttachmentID, ExpectedAttachmentVersion: c.source.version}, &service, true); err != nil {
 		return nil, err
 	}
-	if service.ProtocolVersion != gp.Version || service.MemberID != c.source.route.MemberID || service.MemberVersion != c.source.version || service.Delegation.GatewayID != c.source.client.record.GatewayID || service.Delegation.MemberID != c.source.route.MemberID || service.Delegation.RuntimePublicID != c.source.route.RuntimeID {
+	if service.ProtocolVersion != gp.Version || service.AttachmentID != c.source.route.AttachmentID || service.AttachmentVersion != c.source.version || service.Delegation.GatewayID != c.source.client.record.GatewayID || service.Delegation.AttachmentID != c.source.route.AttachmentID || service.Delegation.RuntimePublicID != c.source.route.RuntimeID {
 		return nil, ErrDenied
 	}
 	if err = gatewaymembership.VerifyMemberService(service.Service, service.Delegation, time.Now()); err != nil {
@@ -159,7 +159,7 @@ func (c *connection) RoundTrip(request *http.Request) (*http.Response, error) {
 	c.source.offer.Service = service.Service
 	c.source.mu.Unlock()
 	if c.transport == nil || c.session != session || c.fingerprint != service.Service.CertificateSHA256 {
-		next, err := webconnector.New(c.ctx, webconnector.Options{Session: session, Service: service.Service, Delegation: service.Delegation, GatewayID: c.source.client.record.GatewayID, MemberID: c.source.route.MemberID, RuntimeID: c.source.route.RuntimeID, BrowserOrigin: c.source.route.Origin, DeviceReference: c.device, ClientCertificate: c.certificate})
+		next, err := webconnector.New(c.ctx, webconnector.Options{Session: session, Service: service.Service, Delegation: service.Delegation, GatewayID: c.source.client.record.GatewayID, AttachmentID: c.source.route.AttachmentID, RuntimeID: c.source.route.RuntimeID, BrowserOrigin: c.source.route.Origin, DeviceReference: c.device, ClientCertificate: c.certificate})
 		if err != nil {
 			c.mu.Unlock()
 			return nil, err

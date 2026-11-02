@@ -11,6 +11,6 @@ export function environmentInteractionIdentity(environment: DesktopEnvironmentEn
 
 /** Gateway health and catalog changes do not change the saved connection authority. */
 export function gatewayInteractionIdentity(gateway: DesktopGatewaySource): string {
-  return JSON.stringify([gateway.gateway_id, gateway.identity_fingerprint, gateway.connection_kind,
+  return JSON.stringify([gateway.connection_id, gateway.identity_fingerprint, gateway.connection_kind,
     gateway.gateway_url, gateway.ssh_details, gateway.runtime_root, gateway.container_engine, gateway.container_id, gateway.container_ref]);
 }

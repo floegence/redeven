@@ -54,8 +54,7 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
     const entry = role === 'cloud' ? fixture.cloud : fixture.runtime;
     const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     tabs[role === 'cloud' ? 1 : 0]?.click();
-    await settle();
-    expect(owner(role).closest('[aria-hidden="true"]')).toBeNull();
+    await vi.waitFor(() => expect(owner(role).closest('[aria-hidden="true"]')).toBeNull());
     expect(owner(role).dataset.ownerId).toBe(entry.id);
   };
   return { ...fixture, owner, select, settings, performAction, publish: (value: DesktopWelcomeSnapshot) => { snapshot = value; receive?.(value); } };
@@ -521,14 +520,14 @@ describe('linked environment owner interactions', () => {
       compatibility: 'compatible' as const,
       capabilities: { ...original.runtime_service!.capabilities!, runtime_gateway: { supported: true } },
     } };
-    const gateway = { gateway_id: 'local-gateway', display_name: 'Gateway-local', local_enabled: true as const,
+    const gateway = { connection_id: 'local-gateway', display_name: 'Gateway-local', local_enabled: true as const,
       connection_kind: method === 'saved URL' ? 'url' as const : 'ssh_host' as const, management_capability: 'access_only' as const,
       capabilities: [], status: 'unknown' as const, trust_state: 'paired' as const,
       gateway_url: 'https://office.local:7443/',
       created_at_ms: 1, updated_at_ms: 1, environments: [],
-      member_endpoints: [{ endpoint_id: 'local', address: 'https://office.local:7443', scope: 'lan' as const, priority: 0 }],
+      endpoints: [{ endpoint_id: 'local', address: 'https://office.local:7443', scope: 'lan' as const, priority: 0 }],
     };
-    const snapshot = { ...fixture.snapshot, gateway_sources: [{ ...gateway, member_endpoints: method === 'saved URL' ? undefined : gateway.member_endpoints }],
+    const snapshot = { ...fixture.snapshot, gateway_sources: [{ ...gateway, endpoints: method === 'saved URL' ? undefined : gateway.endpoints }],
       environments: fixture.snapshot.environments.map(entry => entry.id === runtime.id ? runtime : entry),
     };
     const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
@@ -540,7 +539,7 @@ describe('linked environment owner interactions', () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     button(dialog, 'Connect and continue').click(); await settle();
     const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
-    const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.member_endpoints[0].address;
+    const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.endpoints[0].address;
     if (method !== 'typed') {
       const picker = dialog.querySelector<HTMLElement>('[data-gateway-picker]')!;
       [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Saved Gateway')!.click();

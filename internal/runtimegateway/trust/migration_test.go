@@ -36,7 +36,7 @@ func TestLegacyPairingPreservesAccessWithoutPromotingProfileWrite(t *testing.T) 
 		t.Fatal(err)
 	}
 	permissions := store.ClientPermissions(id)
-	if !permissions.Access || permissions.ManageMembers || permissions.ConfigureCloud {
+	if !permissions.Access || permissions.ManageAttachments || permissions.ManageNetwork {
 		t.Fatalf("legacy permissions were elevated: %+v", permissions)
 	}
 	metadata, _, err := store.GatewayMetadata("new-url")

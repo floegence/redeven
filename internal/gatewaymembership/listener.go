@@ -29,7 +29,7 @@ func NewListener(store *Store, connections *Connections, desktopAllowed func(str
 	l := &Listener{store: store, connections: connections, admissions: make(map[string]Admission), desktopAllowed: desktopAllowed, clients: map[string]map[string]context.CancelFunc{}}
 	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
 		CheckOrigin:       func(request *http.Request) bool { return originAllowed(store, request) },
-		MaxInboundStreams: gp.MaxMemberConnections,
+		MaxInboundStreams: gp.MaxAttachmentConnections,
 		MaxDirectSessions: gp.MaxGatewayConnections * 2,
 		Authorize: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (controlplane.AuthorizationResponse, error) {
 			response, admission, err := store.ConsumeAdmission(request, desktopAllowed)
@@ -71,15 +71,18 @@ func originAllowed(store *Store, request *http.Request) bool {
 	return false
 }
 
-func (l *Listener) Server(tlsConfig *tls.Config, egress http.Handler) (*flowersec.WebSocketHTTPServer, error) {
+func (l *Listener) Server(tlsConfig *tls.Config, egress http.Handler, clients ...http.Handler) (*flowersec.WebSocketHTTPServer, error) {
 	return flowersec.NewWebSocketHTTPServer(flowersec.WebSocketHTTPServerOptions{
-		Handler: l.acceptor.Handler(), AuthorizeWebSocketRequest: l.store.AllowsHost, ApplicationHandler: l.applicationHandler(egress),
+		Handler: l.acceptor.Handler(), AuthorizeWebSocketRequest: l.store.AllowsHost, ApplicationHandler: l.applicationHandler(egress, clients...),
 		TLSConfig: tlsConfig, ReadHeaderTimeout: 10 * time.Second,
 	})
 }
 
-func (l *Listener) applicationHandler(egress http.Handler) http.Handler {
+func (l *Listener) applicationHandler(egress http.Handler, clients ...http.Handler) http.Handler {
 	mux := http.NewServeMux()
+	if len(clients) > 0 && clients[0] != nil {
+		mux.Handle("/gateway/", clients[0])
+	}
 	l.store.RegisterMemberHandlers(mux)
 	mux.Handle("GET "+InvitationExchangePath, l.exchange)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,9 +90,9 @@ func (l *Listener) applicationHandler(egress http.Handler) http.Handler {
 			http.Error(w, "HOST_NOT_ALLOWED", http.StatusForbidden)
 			return
 		}
-		if r.Method == http.MethodConnect || r.URL.Path == "/v6/member/cloud" {
+		if r.Method == http.MethodConnect {
 			if egress == nil {
-				http.Error(w, "CLOUD_NOT_CONFIGURED", http.StatusForbidden)
+				http.Error(w, "EGRESS_NOT_CONFIGURED", http.StatusForbidden)
 				return
 			}
 			egress.ServeHTTP(w, r)
@@ -135,7 +138,7 @@ func (l *Listener) serveSession(ctx context.Context, session flowersec.Session, 
 	}()
 	stop := context.AfterFunc(ctx, func() { _ = session.Close() })
 	defer stop()
-	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{MaxConcurrentStreams: gp.MaxMemberConnections})
+	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{MaxConcurrentStreams: gp.MaxAttachmentConnections})
 	if err != nil {
 		return err
 	}
@@ -143,7 +146,7 @@ func (l *Listener) serveSession(ctx context.Context, session flowersec.Session, 
 		if len(incoming.Metadata.Values()) != 0 {
 			return ErrDenied
 		}
-		upstream, reservation, cancel, err := l.connections.OpenReverse(ctx, admission.MemberID, admission.MemberVersion)
+		upstream, reservation, cancel, err := l.connections.OpenReverse(ctx, admission.AttachmentID, admission.AttachmentVersion)
 		if err != nil {
 			return err
 		}

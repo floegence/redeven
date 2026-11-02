@@ -5,7 +5,7 @@ import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
-import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose, GatewayMembershipStatus } from '../shared/gatewayJoin';
+import type { GatewayJoinPreview, GatewayAttachmentOperation, GatewayEnrollmentPurpose, GatewayAttachmentStatus } from '../shared/gatewayJoin';
 import type { GatewayEndpoint } from '../shared/gatewayMembership';
 import { gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import type { DesktopI18n } from '../shared/i18n';
@@ -31,7 +31,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [open, setOpen] = createSignal(false);
   const [address, setAddress] = createSignal(props.address ?? '');
   const [code, setCode] = createSignal(props.code ?? '');
-  const [joined, setJoined] = createSignal<GatewayMembershipStatus>();
+  const [joined, setJoined] = createSignal<GatewayAttachmentStatus>();
   const [uncertainGateway, setUncertainGateway] = createSignal<string>();
   const [preview, setPreview] = createSignal<GatewayJoinPreview>();
   const [previewInvalidated, setPreviewInvalidated] = createSignal(false);
@@ -79,13 +79,13 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   createEffect(() => {
     const delivery = endpointDelivery();
     if (!delivery) return;
-    const gateway = props.gateways?.find(value => value.gateway_id === delivery.gatewayID);
-    if (!gateway || JSON.stringify(gateway.member_endpoints ?? []) !== delivery.baseline) setEndpointDelivery(undefined);
+    const gateway = props.gateways?.find(value => value.connection_id === delivery.gatewayID);
+    if (!gateway || JSON.stringify(gateway.endpoints ?? []) !== delivery.baseline) setEndpointDelivery(undefined);
   });
   const sources = createMemo(() => (props.gateways ?? []).map(gateway => {
     const delivery = endpointDelivery();
-    return delivery?.gatewayID === gateway.gateway_id && delivery.baseline === JSON.stringify(gateway.member_endpoints ?? [])
-      ? { ...gateway, member_endpoints: delivery.endpoints } : gateway;
+    return delivery?.gatewayID === gateway.connection_id && delivery.baseline === JSON.stringify(gateway.endpoints ?? [])
+      ? { ...gateway, endpoints: delivery.endpoints } : gateway;
   }));
   const suggestions = createMemo(() => savedGatewaySuggestions(sources(), props.targetID));
   let addressInteracted = false;
@@ -100,11 +100,11 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const savedTabID = addressTabsID + '-saved-tab', newTabID = addressTabsID + '-new-tab';
   const savedPanelID = addressTabsID + '-saved-panel', newPanelID = addressTabsID + '-new-panel';
   const selectedSuggestion = createMemo(() => suggestions().find(suggestion => suggestion.gatewayID === savedGatewayID()));
-  const selectedGateway = createMemo(() => selectedSuggestion() && sources().find(gateway => gateway.gateway_id === savedGatewayID()));
+  const selectedGateway = createMemo(() => selectedSuggestion() && sources().find(gateway => gateway.connection_id === savedGatewayID()));
   const selectedAddresses = () => selectedSuggestion()?.addresses ?? [];
   const selectedSavedAddress = createMemo(() => selectedAddresses().includes(savedAddress()) ? savedAddress() : '');
   const effectiveAddress = createMemo(() => addressMode() === 'saved' ? selectedSavedAddress() : address().trim());
-  const canManageGateway = () => !!selectedGateway()?.permissions?.manage_members && selectedGateway()?.connection_kind !== 'url';
+  const canManageGateway = () => !!selectedGateway()?.permissions?.manage_attachments && selectedGateway()?.connection_kind !== 'url';
   const endpointDraft = () => endpointDrafts()[savedGatewayID()] ?? '';
   const draftAddress = () => selectedGateway() ? gatewayRuntimeAddress(endpointDraft(), selectedGateway()!, props.targetID) : null;
   const focusAddress = () => (addressMode() === 'saved' ? savedGatewayInput?.querySelector<HTMLElement>('[data-floe-dropdown-trigger]') : addressInput)?.focus();
@@ -161,17 +161,17 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     const gateway = selectedGateway(), origin = draftAddress();
     if (!gateway || !origin || !canManageGateway() || blocked() || busy()) return;
     invalidate(); const current = generation;
-    const baseline = JSON.stringify(gateway.member_endpoints ?? []);
-    const endpoints = [...(gateway.member_endpoints ?? [])];
+    const baseline = JSON.stringify(gateway.endpoints ?? []);
+    const endpoints = [...(gateway.endpoints ?? [])];
     if (!endpoints.some(endpoint => endpoint.address === origin)) endpoints.push({
       endpoint_id: 'endpoint_' + crypto.randomUUID().replaceAll('-', ''), address: origin, scope: 'lan', priority: endpoints.length,
     });
     setPending('saving-address');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'update_gateway_endpoints', gateway_id: gateway.gateway_id, endpoints });
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'update_gateway_endpoints', gateway_id: gateway.connection_id, endpoints });
       if (current !== generation) return;
       if (!result?.ok || !result.gateway_endpoints?.some(endpoint => endpoint.address === origin)) { setError(text('gatewayMembers.failed')); return; }
-      setEndpointDelivery({ gatewayID: gateway.gateway_id, baseline, endpoints: result.gateway_endpoints });
+      setEndpointDelivery({ gatewayID: gateway.connection_id, baseline, endpoints: result.gateway_endpoints });
       setSavedAddress(origin); setCode('');
       queueMicrotask(() => codeInput?.focus());
     } catch { if (current === generation) setError(text('gatewayMembers.failed')); }
@@ -190,7 +190,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     if (!gateway || !selectedSavedAddress() || !canManageGateway() || blocked() || busy()) return;
     invalidate(); const current = generation; setPending('creating-invitation');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'invite_gateway_runtime', gateway_id: gateway.gateway_id });
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'invite_gateway_runtime', gateway_id: gateway.connection_id });
       if (current !== generation) return;
       if (!result?.ok || !result.gateway_invitation_code?.share_addresses.includes(selectedSavedAddress())) { setError(text('gatewayMembers.failed')); return; }
       setCode(result.gateway_invitation_code.code);
@@ -316,7 +316,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     const request = props.connectionRequest ?? 0;
     if (canConnect() && !blocked() && !busy() && request > lastConnectionRequest) { lastConnectionRequest = request; void connect(); }
   });
-  function reconcileMembership(status: GatewayMembershipStatus) {
+  function reconcileMembership(status: GatewayAttachmentStatus) {
     const id = joined()?.gateway_id ?? uncertainGateway();
     if (!id) return;
     const member = status.memberships?.find(value => value.gateway_id === id) ?? (status.gateway_id === id ? status : undefined);
@@ -355,7 +355,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     } catch { if (current === generation) setError(text('gatewayJoin.unreachable')); }
     finally { if (current === generation) setPending(null); }
   }
-  async function act(operation: GatewayMembershipOperation) {
+  async function act(operation: GatewayAttachmentOperation) {
     const consent = preview();
     if (uncertainGateway() || joined() || blocked() || connectionLost() || busy() || !consent || previewInvalidated() || consent.expires_at_unix_ms <= Date.now() || consent.purpose !== purpose() || operation !== purpose()) return;
     const current = generation; setPending('joining'); setError('');
@@ -452,7 +452,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
                         </label>
                         <p id={addressTabsID + '-setup-help'} class="text-xs text-muted-foreground">{text('gatewayDiscovery.addressRequirement')}</p>
                         <Show when={selectedGateway()?.allowed_hosts?.length}><p class="break-all text-xs text-muted-foreground">{text('gatewayNetwork.allowedHosts')}: {selectedGateway()?.allowed_hosts?.join(', ')}</p></Show>
-                        <Button class="self-start cursor-pointer" variant="outline" disabled={busy() || blocked() || !draftAddress() || (selectedGateway()?.member_endpoints?.length ?? 0) >= 16}
+                        <Button class="self-start cursor-pointer" variant="outline" disabled={busy() || blocked() || !draftAddress() || (selectedGateway()?.endpoints?.length ?? 0) >= 16}
                           onClick={() => void saveGatewayAddress()}><StableText reserve={[text('gatewayDiscovery.saveAddress'), text('gatewayNetwork.saving')]}>{text(pending() === 'saving-address' ? 'gatewayNetwork.saving' : 'gatewayDiscovery.saveAddress')}</StableText></Button>
                       </Show>
                     </div>

@@ -111,7 +111,7 @@ func TestMigrationDoesNotElevateDeniedClients(t *testing.T) {
 			keys, _ := security.GenerateKeyPair()
 			id := security.ClientKeyID(keys.PublicKeyPEM)
 			path := filepath.Join(t.TempDir(), "trust.json")
-			raw, err := json.Marshal(map[string]any{"schema_version": 2, "gateway": map[string]any{"gateway_id": "stable", "public_key": identity.PublicKeyPEM, "private_key": identity.PrivateKeyPEM}, "clients": map[string]any{id: map[string]any{"client_key_id": id, "client_public_key": keys.PublicKeyPEM, "permissions": gp.GatewayPermissions{Access: allowed, ManageMembers: true, ConfigureCloud: true}}}})
+			raw, err := json.Marshal(map[string]any{"schema_version": 2, "gateway": map[string]any{"gateway_id": "stable", "public_key": identity.PublicKeyPEM, "private_key": identity.PrivateKeyPEM}, "clients": map[string]any{id: map[string]any{"client_key_id": id, "client_public_key": keys.PublicKeyPEM, "permissions": gp.GatewayPermissions{Access: allowed, ManageAttachments: true, ManageNetwork: true}}}})
 			if err != nil {
 				t.Fatal(err)
 			}

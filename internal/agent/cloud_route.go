@@ -28,9 +28,12 @@ func routePreflightFingerprint(cfg *config.Config, selection config.CloudRoute) 
 	if err := probe.ValidateCloudRoute(); err != nil {
 		return "", err
 	}
-	coordinates := []any{cfg.CloudAssociation.CloudID, cfg.CloudAssociation.CloudOrigin, cfg.CloudAssociation.RegionOrigin, selection}
+	coordinates := []any{selection}
+	if cfg.CloudAssociation != nil {
+		coordinates = append(coordinates, cfg.CloudAssociation.CloudID, cfg.CloudAssociation.CloudOrigin, cfg.CloudAssociation.RegionOrigin)
+	}
 	if member := probe.CloudRouteMember(); member != nil {
-		coordinates = append(coordinates, member.GatewayID, member.MemberID, member.MemberVersion, member.GatewayPublicKey, member.GatewayTLSRootPEM, member.ConnectionEndpoints(), member.ClientCertificatePEM)
+		coordinates = append(coordinates, member.GatewayID, member.AttachmentID, member.AttachmentVersion, member.GatewayPublicKey, member.GatewayTLSRootPEM, member.ConnectionEndpoints(), member.ClientCertificatePEM)
 	}
 	raw, err := json.Marshal(coordinates)
 	if err != nil {
@@ -64,7 +67,7 @@ func (a *Agent) PreflightCloudRoute(ctx context.Context, request rc.RoutePreflig
 		return nil, errors.New("invalid Cloud route operation ID")
 	}
 	cfg := a.remoteConfigSnapshot()
-	if cfg == nil || cfg.CloudAssociation == nil || cfg.CloudRoute == nil || cfg.CloudRoute.Revision != request.ExpectedRouteRevision || request.ExpectedRouteRevision == 1<<63-1 {
+	if cfg == nil || cloudRouteRevision(cfg) != request.ExpectedRouteRevision || request.ExpectedRouteRevision == 1<<63-1 {
 		return nil, config.ErrCloudRouteConflict
 	}
 	if existing, err := findRouteOperation(cfg, request.OperationID); err == nil {
@@ -73,7 +76,7 @@ func (a *Agent) PreflightCloudRoute(ctx context.Context, request rc.RoutePreflig
 		}
 		return existing, nil
 	}
-	selection := config.CloudRoute{Kind: config.CloudRouteKind(request.Selection.Kind), MemberID: request.Selection.MemberID, Revision: request.ExpectedRouteRevision + 1}
+	selection := config.CloudRoute{Kind: config.CloudRouteKind(request.Selection.Kind), AttachmentID: request.Selection.AttachmentID, Revision: request.ExpectedRouteRevision + 1}
 	probe := *cfg
 	probe.CloudRoute = &selection
 	if err := probe.ValidateCloudRoute(); err != nil {
@@ -83,46 +86,48 @@ func (a *Agent) PreflightCloudRoute(ctx context.Context, request rc.RoutePreflig
 	if err != nil {
 		return nil, err
 	}
-	proxy, err := probe.CloudProxy()
-	if err != nil {
-		return nil, err
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: a.controlTrustRoots}
-	if proxy != nil {
-		transport = proxy.HTTPTransport()
+	if cfg.CloudAssociation != nil {
+		proxy, err := probe.CloudProxy()
+		if err != nil {
+			return nil, err
+		}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: a.controlTrustRoots}
+		if proxy != nil {
+			transport = proxy.HTTPTransport()
+			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: a.controlTrustRoots}
+		}
+		defer transport.CloseIdleConnections()
+		client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.CloudAssociation.CloudOrigin+"/.well-known/redeven-cloud.json", nil)
+		if err != nil {
+			return nil, err
+		}
+		response, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer response.Body.Close()
+		raw, err := io.ReadAll(io.LimitReader(response.Body, 65537))
+		if err != nil || len(raw) > 65536 || response.StatusCode != http.StatusOK {
+			return nil, errors.New("cloud route preflight failed")
+		}
+		var discovery struct {
+			ProtocolVersion string `json:"protocol_version"`
+			CloudID         string `json:"cloud_id"`
+		}
+		if json.Unmarshal(raw, &discovery) != nil || discovery.ProtocolVersion != rc.ProtocolVersion || discovery.CloudID != cfg.CloudAssociation.CloudID {
+			return nil, errors.New("cloud route preflight returned a different Cloud identity or protocol")
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 	}
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.CloudAssociation.CloudOrigin+"/.well-known/redeven-cloud.json", nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 65537))
-	if err != nil || len(raw) > 65536 || response.StatusCode != http.StatusOK {
-		return nil, errors.New("cloud route preflight failed")
-	}
-	var discovery struct {
-		ProtocolVersion string `json:"protocol_version"`
-		CloudID         string `json:"cloud_id"`
-	}
-	if json.Unmarshal(raw, &discovery) != nil || discovery.ProtocolVersion != rc.ProtocolVersion || discovery.CloudID != cfg.CloudAssociation.CloudID {
-		return nil, errors.New("cloud route preflight returned a different Cloud identity or protocol")
-	}
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	operation := rc.RouteOperation{RouteFingerprint: fingerprint, OperationID: request.OperationID, ExpectedRouteRevision: request.ExpectedRouteRevision, AssociationRevision: cfg.CloudAssociation.Revision, Selection: request.Selection, State: "awaiting_confirmation", ExpiresAtUnixMS: time.Now().Add(2 * time.Minute).UnixMilli()}
+	operation := rc.RouteOperation{RouteFingerprint: fingerprint, OperationID: request.OperationID, ExpectedRouteRevision: request.ExpectedRouteRevision, AssociationRevision: cloudAssociationRevision(cfg), Selection: request.Selection, State: "awaiting_confirmation", ExpiresAtUnixMS: time.Now().Add(2 * time.Minute).UnixMilli()}
 	_, err = config.Update(a.configPath, func(current *config.Config) error {
-		if !sameCloudRouteOwner(cfg, current) {
+		if cloudAssociationRevision(cfg) != cloudAssociationRevision(current) || cloudRouteRevision(cfg) != cloudRouteRevision(current) {
 			return config.ErrCloudRouteConflict
 		}
 		currentFingerprint, err := routePreflightFingerprint(current, selection)
@@ -167,10 +172,10 @@ func (a *Agent) CommitCloudRoute(ctx context.Context, request rc.RouteCommitRequ
 		if operation.State == "committed" {
 			return nil
 		}
-		if operation.State != "awaiting_confirmation" || operation.ExpiresAtUnixMS <= time.Now().UnixMilli() || current.CloudAssociation == nil || current.CloudAssociation.Revision != operation.AssociationRevision || current.CloudRoute == nil || current.CloudRoute.Revision != operation.ExpectedRouteRevision || operation.ExpectedRouteRevision == 1<<63-1 {
+		if operation.State != "awaiting_confirmation" || operation.ExpiresAtUnixMS <= time.Now().UnixMilli() || cloudAssociationRevision(current) != operation.AssociationRevision || cloudRouteRevision(current) != operation.ExpectedRouteRevision || operation.ExpectedRouteRevision == 1<<63-1 {
 			return config.ErrCloudRouteConflict
 		}
-		selection := config.CloudRoute{Kind: config.CloudRouteKind(operation.Selection.Kind), MemberID: operation.Selection.MemberID, Revision: operation.ExpectedRouteRevision + 1}
+		selection := config.CloudRoute{Kind: config.CloudRouteKind(operation.Selection.Kind), AttachmentID: operation.Selection.AttachmentID, Revision: operation.ExpectedRouteRevision + 1}
 		fingerprint, err := routePreflightFingerprint(current, selection)
 		if err != nil || fingerprint != operation.RouteFingerprint {
 			return config.ErrCloudRouteConflict
@@ -242,4 +247,17 @@ func (a *Agent) closeCloudRouteSessions(revision int64) {
 	for _, cancel := range cancels {
 		cancel()
 	}
+}
+
+func cloudRouteRevision(cfg *config.Config) int64 {
+	if cfg != nil && cfg.CloudRoute != nil {
+		return cfg.CloudRoute.Revision
+	}
+	return 0
+}
+func cloudAssociationRevision(cfg *config.Config) int64 {
+	if cfg != nil && cfg.CloudAssociation != nil {
+		return cfg.CloudAssociation.Revision
+	}
+	return 0
 }

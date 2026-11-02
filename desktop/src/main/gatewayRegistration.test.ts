@@ -9,7 +9,7 @@ const container = { kind: 'container_process', runtime_root: '/data/gateway', co
 describe('explicit Gateway registration boundary', () => {
   it('rejects caller-selected management permissions even with an access code', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'upsert_gateway', connection_kind: 'url',
-      display_name: 'Office', gateway_url: 'https://gateway.example/', access_code: 'code', permissions: { access: true, manage_members: true, configure_cloud: true }, allow_loopback_http: false })).toBeNull();
+      display_name: 'Office', gateway_url: 'https://gateway.example/', access_code: 'code', permissions: { access: true, manage_attachments: true, manage_network: true }, allow_loopback_http: false })).toBeNull();
   });
   it.each([
     ['local_host', { kind: 'local_host' }, host], ['local_container', { kind: 'local_host' }, container],

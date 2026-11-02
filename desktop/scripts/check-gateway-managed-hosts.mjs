@@ -81,7 +81,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
   ].filter(connection => kinds.length === 0 || kinds.includes(connection.kind))) {
     // Deliberately preserve a local registration ID unrelated to the wire ID,
     // as happens after editing a host, URL, container or data-root coordinate.
-    let record = { schema_version: 4, gateway_id: `qualification-${connection.kind}`, display_name: connection.kind,
+    let record = { schema_version: 5, connection_id: `qualification-${connection.kind}`, display_name: connection.kind,
       local_enabled: true, connection, created_at_ms: 1, updated_at_ms: 1 };
     activeRecord = record;
     const initial = await lifecycle.inspectService(record);
@@ -91,7 +91,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     const material = trust.createGatewayPairingMaterial(record);
     const challenge = await session.client.pairingChallenge(record, trust.pairingChallengeRequest(material));
     trust.assertGatewayPairingChallenge({ record, material, challenge });
-    const permissions = { access: true, manage_members: true, configure_cloud: true };
+    const permissions = { access: true, manage_attachments: true, manage_network: true };
     const request = trust.buildPairingCompleteRequest(material, challenge);
     const completion = await session.client.completePairing(record, request);
     trust.assertGatewayPairingCompleteResponse(material, challenge, completion);
@@ -99,7 +99,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     activeRecord = record;
     const catalog = await lifecycle.catalog(record);
     assert.deepEqual(catalog.gateway.permissions, permissions);
-    assert.deepEqual(catalog.gateway.member_endpoints, []);
+    assert.deepEqual(catalog.gateway.endpoints, []);
     await assert.rejects(session.client.invite(record));
     const endpoints = [{ endpoint_id: 'lan', address: 'https://localhost:7443', scope: 'lan', priority: 0 }];
     await session.client.updateEndpoints(record, endpoints);
@@ -109,16 +109,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     assert.deepEqual(invitation.share_addresses, endpoints.map(endpoint => endpoint.address));
     assert.match(invitation.code, /^[0-9A-HJKMNP-TV-Z]{26}$/u);
     assert.equal(invitation.expires_at_unix_ms - invitation.issued_at_unix_ms, 600_000);
-    assert.equal(catalog.members.length, 0, 'Only a Runtime can complete membership');
-    await session.client.updatePolicy(record, { ...catalog.policy, default_cloud_allowed: true });
+    assert.equal(catalog.attachments.length, 0, 'Only a Runtime can complete membership');
+    await session.client.updatePolicy(record, { ...catalog.policy, default_egress_allowed: true });
     await lifecycle.restartGateway(record);
     const restored = await lifecycle.catalog(record);
-    assert.equal(restored.policy.default_cloud_allowed, true);
+    assert.equal(restored.policy.default_egress_allowed, true);
     assert.equal(restored.gateway.gateway_id, invitation.gateway_id);
-    assert.deepEqual(restored.gateway.member_endpoints, endpoints);
+    assert.deepEqual(restored.gateway.endpoints, endpoints);
     await (await lifecycle.client(record, { startPolicy: 'require_ready' })).updateEndpoints(record, []);
     await lifecycle.restartGateway(record);
-    assert.deepEqual((await lifecycle.catalog(record)).gateway.member_endpoints, []);
+    assert.deepEqual((await lifecycle.catalog(record)).gateway.endpoints, []);
     await lifecycle.stopGateway(record);
     assert.equal((await lifecycle.inspectService(record)).status, 'not_started');
     await lifecycle.clear(record);

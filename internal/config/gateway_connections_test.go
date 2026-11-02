@@ -59,7 +59,7 @@ func TestCurrentGatewayConfigurationRoundTripPreservesCredentials(t *testing.T) 
 	store, _ := gatewayfixture.New(t, "https://one.internal:7443", "127.0.0.1:7443")
 	member := gatewayfixture.Enroll(t, store, "runtime")
 	original := &Config{LocalEnvironmentPublicID: "runtime", AgentInstanceID: "agent"}
-	original.SetGatewayMember(member.GatewayID, member)
+	original.SetRuntimeAttachment(member.GatewayID, member)
 	encoded, err := json.Marshal(original)
 	if err != nil {
 		t.Fatal(err)

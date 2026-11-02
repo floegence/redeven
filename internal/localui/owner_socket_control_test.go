@@ -16,7 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/webbinding"
 )
 
-func TestGatewayOnlyOwnerCanManageMembershipWithoutTCP(t *testing.T) {
+func TestGatewayOnlyOwnerCanManageAttachmentshipWithoutTCP(t *testing.T) {
 	s := newTestServer(t, accessgate.New(accessgate.Options{}))
 	s.a = newRuntimeHealthTestAgent(t, s.configPath, s.accessGate)
 	socketDir, err := os.MkdirTemp("/tmp", "rdv-member-*")

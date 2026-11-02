@@ -297,7 +297,7 @@ describe('environment Flower context envelope', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       gatewaySources: [{
-        gateway_id: 'bastion',
+        connection_id: 'bastion',
         display_name: 'Bastion Gateway',
         local_enabled: true,
         connection_kind: 'url',
@@ -308,7 +308,7 @@ describe('environment Flower context envelope', () => {
         endpoint_label: 'https://gateway.example.invalid',
         created_at_ms: 10,
         updated_at_ms: 20,
-        environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Demo Gateway' }],
+        environments: [{ ...memberFixture, attachment_id: 'env_demo', display_name: 'Demo Gateway' }],
       }],
     });
     const environment = snapshot.environments.find((entry) => entry.kind === 'gateway_environment');

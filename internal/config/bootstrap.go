@@ -390,7 +390,7 @@ func resolveCloudLinkConfig(ctx context.Context, args cloudLinkResolveArgs) (*Co
 	defer client.Close()
 	var enrolled *rc.RecoverResponse
 	if !attempt.RecoveryOnly {
-		enrolled, err = client.Enroll(ctx, assignment.NamespacePublicID, ed25519.PrivateKey(keyRaw), nil, rc.EnrollRequest{OperationID: attempt.BootstrapDeliveryRequestIDB64u, RuntimePublicID: attempt.LocalEnvironmentPublicID, PublicKeyB64u: attempt.PublicKeyB64u, Authorization: rc.EnrollmentAuthorization{RuntimeLinkTicket: credential, EnvPublicID: envID}, Metadata: attempt.Metadata})
+		enrolled, err = client.Enroll(ctx, assignment.NamespacePublicID, ed25519.PrivateKey(keyRaw), rc.EnrollRequest{OperationID: attempt.BootstrapDeliveryRequestIDB64u, RuntimePublicID: attempt.LocalEnvironmentPublicID, PublicKeyB64u: attempt.PublicKeyB64u, Authorization: rc.EnrollmentAuthorization{RuntimeLinkTicket: credential, EnvPublicID: envID}, Metadata: attempt.Metadata})
 	}
 	var remote *runtimecloud.Error
 	if runtimecloud.DeliveryExpired(err) {

@@ -3,6 +3,7 @@ package gatewayservice
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -18,13 +19,13 @@ import (
 func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 	root := t.TempDir()
 	token := strings.Repeat("t", 32)
-	server, err := New(Options{StateRoot: root, HostAdminToken: token, MemberListen: "127.0.0.1:0", MemberURL: "https://gateway.internal:7443"})
+	server, err := New(Options{StateRoot: root, HostAdminToken: token, PublicListen: "127.0.0.1:0", PublicURL: "https://gateway.internal:7443"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	admin, listeners, err := server.Start(ctx, "127.0.0.1:0")
+	admin, listeners, err := server.Start(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,6 +44,8 @@ func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 	request = httptest.NewRequest("POST", "http://127.0.0.1/gateway/v6/network-settings", bytes.NewReader(raw))
 	request.RemoteAddr = "127.0.0.1:5000"
 	request.Header.Set(HostAdminHeader, token)
+	request.Header.Set(OperationIDHeader, rand.Text())
+	request = request.WithContext(context.WithValue(request.Context(), hostSocketKey{}, server))
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 	var result struct {
@@ -58,7 +61,7 @@ func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 	client := &http.Client{Transport: transport}
 	// Both the product exchange and the released protocol upgrade boundary must
 	// reject a disallowed Host before accepting any authentication material.
-	for _, path := range []string{"/v6/member/invitation-exchange", flowersec.WebSocketDirectPath} {
+	for _, path := range []string{"/v6/attachment/invitation-exchange", flowersec.WebSocketDirectPath} {
 		for _, host := range []string{"evil.example", "gateway.internal"} {
 			req, _ := http.NewRequest("GET", "https://"+listeners[1].Addr().String()+path, nil)
 			req.Host = host
@@ -73,7 +76,7 @@ func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 
 		}
 	}
-	req, _ := http.NewRequest("GET", "https://"+listeners[1].Addr().String()+"/v6/member/unknown", nil)
+	req, _ := http.NewRequest("GET", "https://"+listeners[1].Addr().String()+"/v6/attachment/unknown", nil)
 	req.Host = "gateway.internal"
 	allowed, err := client.Do(req)
 	if err != nil {
@@ -90,7 +93,7 @@ func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 	}
 	nextCtx, nextCancel := context.WithCancel(context.Background())
 	defer nextCancel()
-	nextAdmin, nextListeners, err := reopened.Start(nextCtx, "127.0.0.1:0")
+	nextAdmin, nextListeners, err := reopened.Start(nextCtx)
 	if err != nil {
 		t.Fatal(err)
 	}

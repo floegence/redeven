@@ -10,4 +10,4 @@ if [[ -z "$REDEVEN_CODE_SERVER_BIN" || ! -x "$REDEVEN_CODE_SERVER_BIN" ]]; then
   exit 1
 fi
 export REDEVEN_CODE_SERVER_BIN
-REDEVEN_GATEWAY_ACCESS_BROWSER=1 GOWORK=off go test ./internal/localui -run '^TestGatewayMemberBrowserSession$' -count=1 -timeout=3m -v
+REDEVEN_GATEWAY_ACCESS_BROWSER=1 GOWORK=off go test ./internal/localui -run '^TestIndependentGatewayBrowserSession$' -count=1 -timeout=3m -v

@@ -3,7 +3,7 @@ type: Protocol Contract
 title: RCPP v5 Cloud API
 tags: [protocol, cloud, openapi, desktop, runtime, access]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -13,11 +13,11 @@ RCPP v5 separates Cloud authorization from network route. CloudRuntimeBinding ow
 
 Cloud discovery and `/api/rcpp/v5` preserve native OAuth, Desktop authorization, environment access and authoritative ticket resolution.
 
-Runtime and Desktop use published Flowersec 5.11.0 only.
+Runtime and Desktop use published Flowersec 5.11.1 only.
 
 # Boundaries
 
-Gateway owns members, invitations, local access, egress admission and forwarding resources. No redirect, cached authority, direct fallback, binding migration or Gateway closure relay remains.
+Gateway owns Runtime attachments, invitations, local access, egress admission and forwarding resources. No redirect, cached authority, direct fallback, binding migration or Gateway closure relay remains.
 
 # Evidence
 

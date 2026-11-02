@@ -4,7 +4,7 @@ title: Runtime transport dependencies
 tags: [architecture, dependencies, terminal]
 quality_exception: Published Flowersec transport and Floeterm boundary covering session ownership, protocol profiles, and shared admission.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -14,6 +14,10 @@ Runtime composes Transport v3 and published Flowersec connection/session/RPC/str
 
 ## AI Flower RPC registration
 The local direct and remote agent production session profiles register the complete AI inventory before Flowersec freezes a session. A declared method therefore cannot fail at the router with a missing-handler 404. Stop remains one RPC lifecycle command without a fallback transport.
+
+## Independent Gateway composition
+
+The upstream-first review uses published Flowersec 5.11.1 WebSocketHTTPServerOptions.ApplicationHandler to compose client HTTP with Runtime transport on one TLS endpoint, and its egress.HTTPSProxy for explicit Runtime Cloud routing. No upstream mechanism change, local dependency overlay or copied implementation is required.
 
 ## Mechanism
 The released runtime dependency set includes Floeterm terminal-go v0.19.2 and Flowersec Go v5.11.1.

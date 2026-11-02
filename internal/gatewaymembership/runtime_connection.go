@@ -50,7 +50,7 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.current().Clone()
-	if r == nil || r.MemberID != s.memberID {
+	if r == nil || r.AttachmentID != s.memberID {
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(ErrDenied)
 	}
 	if r.Leaving {
@@ -90,11 +90,11 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 		s.failedEndpoints = make(map[string]bool)
 		r.GatewayEndpoints = endpoints
 	}
-	if err := r.Request(ctx, "/v6/member/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &offer, true); err != nil {
+	if err := r.Request(ctx, "/v6/attachment/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &offer, true); err != nil {
 		return flowersec.ArtifactLease{}, memberSourceError(err)
 	}
 	s.attemptedEndpointID = r.LastEndpointID
-	if offer.ProtocolVersion != gp.Version || offer.MemberID != r.MemberID || offer.MemberVersion != r.MemberVersion || offer.ChannelID == "" || offer.ChannelID == r.LastSpentChannelID || offer.Generation == 0 {
+	if offer.ProtocolVersion != gp.Version || offer.AttachmentID != r.AttachmentID || offer.AttachmentVersion != r.AttachmentVersion || offer.ChannelID == "" || offer.ChannelID == r.LastSpentChannelID || offer.Generation == 0 {
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(ErrInvalidProof)
 	}
 	artifact, err := flowersec.ParseArtifact(offer.Artifact)
@@ -105,7 +105,7 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		next := s.current().Clone()
-		if next == nil || next.MemberID != r.MemberID || next.MemberVersion != r.MemberVersion || next.LastSpentChannelID == offer.ChannelID {
+		if next == nil || next.AttachmentID != r.AttachmentID || next.AttachmentVersion != r.AttachmentVersion || next.LastSpentChannelID == offer.ChannelID {
 			return ErrDenied
 		}
 		next.LastSpentChannelID = offer.ChannelID
@@ -121,7 +121,7 @@ func (s *runtimeSource) connected() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current := s.current()
-	if current == nil || current.MemberID != s.memberID {
+	if current == nil || current.AttachmentID != s.memberID {
 		return ErrDenied
 	}
 	endpointID := s.attemptedEndpointID
@@ -147,7 +147,7 @@ func (s *runtimeSource) renew(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.current().Clone()
-	if r == nil || r.MemberID != s.memberID {
+	if r == nil || r.AttachmentID != s.memberID {
 		return ErrDenied
 	}
 	if r.PendingJoin != nil || r.PendingEndpointUpdate != nil || r.Leaving {
@@ -187,7 +187,7 @@ func NewRuntimeConnection(current func() *RuntimeConfig, persist func(*RuntimeCo
 	if err != nil {
 		return nil, err
 	}
-	source := &runtimeSource{current: current, persist: persist, memberID: r.MemberID}
+	source := &runtimeSource{current: current, persist: persist, memberID: r.AttachmentID}
 	endpoints := r.orderedEndpoints()
 	if len(endpoints) == 0 {
 		return nil, ErrState
@@ -272,7 +272,7 @@ func (r *RuntimeConnection) Run(ctx context.Context, application func(string) Ru
 }
 
 func (r *RuntimeConnection) serve(ctx context.Context, session flowersec.Session, application func(string) RuntimeApplication) error {
-	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{MaxConcurrentStreams: gp.MaxMemberConnections})
+	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{MaxConcurrentStreams: gp.MaxAttachmentConnections})
 	if err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func (r *RuntimeConnection) serve(ctx context.Context, session flowersec.Session
 			return ErrDenied
 		}
 		config := r.source.current()
-		if config == nil || config.MemberID != r.source.memberID {
+		if config == nil || config.AttachmentID != r.source.memberID {
 			return ErrDenied
 		}
 		pair, err := tls.X509KeyPair([]byte(config.Service.CertificatePEM), []byte(config.ServicePrivateKeyPEM))

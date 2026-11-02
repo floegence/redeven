@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { createDesktopI18n } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
-import type { GatewayJoinPreview, GatewayMembershipStatus } from '../shared/gatewayJoin';
+import type { GatewayJoinPreview, GatewayAttachmentStatus } from '../shared/gatewayJoin';
 import type { DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
@@ -22,7 +22,7 @@ function addressTab(label: string) {
  if (!found) throw new Error(`Missing address tab: ${label}`); return found;
 }
 function activeAddressPanel() { return document.querySelector<HTMLElement>('[role="tabpanel"]:not([aria-hidden="true"])'); }
-function status(value: GatewayMembershipStatus): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_membership:value}; }
+function status(value: GatewayAttachmentStatus): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_membership:value}; }
 function verified(value=preview): DesktopLauncherActionResult { return {ok:true,outcome:'gateway_membership_updated',gateway_preview:value}; }
 function mount(perform: ReturnType<typeof vi.fn>, gateways: readonly DesktopGatewaySource[] = [], initialAddress = "https://gateway.internal:7443") {
  vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
@@ -165,7 +165,7 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();expect(document.activeElement).toBe(trigger);
  });
  it('adds another Gateway without Cloud ownership choices and retains failed consent',async()=>{
-  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:true,phase:'joined',memberships:[{joined:true,phase:'joined',gateway_id:'previous',member_id:'previous'}]})).mockResolvedValueOnce(verified({...preview,existing_environment_id:'existing'})).mockResolvedValueOnce({ok:false,gateway_error_code:'GATEWAY_UNREACHABLE'});
+  const perform=vi.fn().mockResolvedValue({ok:true}).mockResolvedValueOnce(status({joined:true,phase:'joined',memberships:[{joined:true,phase:'joined',gateway_id:'previous',attachment_id:'previous'}]})).mockResolvedValueOnce(verified({...preview,existing_environment_id:'existing'})).mockResolvedValueOnce({ok:false,gateway_error_code:'GATEWAY_UNREACHABLE'});
   mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
   expect(document.querySelector('input[type="radio"]')).toBeNull();expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
   expect(document.body.textContent).not.toContain(i18n.t('gatewayJoin.preserveHelp'));
@@ -188,9 +188,9 @@ describe('Runtime Gateway address and code interaction',()=>{
 });
 
 const localGateway: DesktopGatewaySource = {
- gateway_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
+ connection_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
  management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
- created_at_ms:1,updated_at_ms:1,environments:[],member_endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}],
+ created_at_ms:1,updated_at_ms:1,environments:[],endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}],
 };
 describe('saved Gateway selection',()=>{
  it('uses a themed field trigger instead of a native saved Gateway select',async()=>{
@@ -205,9 +205,9 @@ describe('saved Gateway selection',()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
   mount(perform,['local_host','ssh_host'].map((connection_kind,index)=>({...localGateway,
    gateway_id:`saved-${index}`,display_name:index?'Gateway-gzcom':'Gateway-local',
-   connection_kind:connection_kind as DesktopGatewaySource['connection_kind'],member_endpoints:[],
+   connection_kind:connection_kind as DesktopGatewaySource['connection_kind'],endpoints:[],
    listener_addresses:[':7443'],active_listener_addresses:['[::]:7443'],allowed_hosts:[],
-   permissions:{access:true,manage_members:true,configure_cloud:true},
+   permissions:{access:true,manage_attachments:true,manage_network:true},
   })),'');await settle();
   const picker=document.querySelector<HTMLElement>('[data-gateway-picker]');
   expect(picker).not.toBeNull();
@@ -234,7 +234,7 @@ describe('saved Gateway selection',()=>{
  });
  it('offers a saved URL before its first catalog sync',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
-  mount(perform,[{...localGateway,connection_kind:'url',status:'unknown',trust_state:undefined,member_endpoints:undefined,gateway_url:'https://saved.example:7443/'}],'');await settle();
+  mount(perform,[{...localGateway,connection_kind:'url',status:'unknown',trust_state:undefined,endpoints:undefined,gateway_url:'https://saved.example:7443/'}],'');await settle();
   await chooseSavedGateway('local-gateway');await settle();
   expect(document.querySelector<HTMLElement>('[data-gateway-picker]')?.dataset.value).toBe('local-gateway');
  });
@@ -313,7 +313,7 @@ describe('saved Gateway selection',()=>{
  it('distinguishes confirmed endpoints and reflects only the currently filled address',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
   const alternate={endpoint_id:'public',address:'https://office.example:7443',scope:'public' as const,priority:1};
-  mount(perform,[{...localGateway,member_endpoints:[...localGateway.member_endpoints!,alternate]}],'');await settle();
+  mount(perform,[{...localGateway,endpoints:[...localGateway.endpoints!,alternate]}],'');await settle();
   const picker=document.querySelector<HTMLElement>('[data-gateway-picker]');
   expect(await pickerOptions(picker!)).toHaveLength(1);
   await chooseSavedGateway('local-gateway');await settle();
@@ -335,7 +335,7 @@ describe('saved Gateway selection',()=>{
  });
  it('keeps registrations visible when Host restrictions reject their addresses',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
-  mount(perform,[{...localGateway,allowed_hosts:['other.example']},{...localGateway,gateway_id:'disabled',local_enabled:false}],'');await settle();
+  mount(perform,[{...localGateway,allowed_hosts:['other.example']},{...localGateway,connection_id:'disabled',local_enabled:false}],'');await settle();
   const picker=document.querySelector<HTMLElement>('[data-gateway-picker]')!;
   expect(await pickerOptions(picker)).toHaveLength(1);await chooseSavedGateway('local-gateway');await settle();
   expect(document.querySelector('[data-gateway-address-setup]')).not.toBeNull();
@@ -343,8 +343,8 @@ describe('saved Gateway selection',()=>{
  });
 });
 
-const unconfiguredGateway: DesktopGatewaySource = {...localGateway,member_endpoints:[],allowed_hosts:[],
- permissions:{access:true,manage_members:true,configure_cloud:true}};
+const unconfiguredGateway: DesktopGatewaySource = {...localGateway,endpoints:[],allowed_hosts:[],
+ permissions:{access:true,manage_attachments:true,manage_network:true}};
 function editEndpoint(value:string){const input=document.querySelector<HTMLInputElement>('[data-gateway-endpoint-draft]')!;input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));return input;}
 describe('saved Gateway address completion',()=>{
  it('saves through the endpoint API, creates an invitation and requires verification then consent',async()=>{
@@ -377,7 +377,7 @@ describe('saved Gateway address completion',()=>{
   });
   const {setGateways}=mount(perform,[unconfiguredGateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();
   editEndpoint('https://office.example');button(i18n.t('gatewayDiscovery.saveAddress')).click();await settle();
-  setGateways([{...unconfiguredGateway,member_endpoints:endpoints as DesktopGatewaySource['member_endpoints']}]);await settle();
+  setGateways([{...unconfiguredGateway,endpoints:endpoints as DesktopGatewaySource['endpoints']}]);await settle();
   expect(document.querySelector('[data-gateway-selected-address]')?.textContent).toBe('https://office.example');
   setGateways([unconfiguredGateway]);await settle();
   expect(document.querySelector('[data-gateway-endpoint-draft]')).not.toBeNull();
@@ -389,7 +389,7 @@ describe('saved Gateway address completion',()=>{
   const gateway={...localGateway,permissions:unconfiguredGateway.permissions};
   const {setGateways}=mount(perform,[gateway],'');await settle();await chooseSavedGateway('local-gateway');await settle();
   button(i18n.t('gatewayMembers.createInvitation')).click();await settle();
-  setGateways([{...gateway,permissions:{access:true,manage_members:false,configure_cloud:false}}]);await settle();
+  setGateways([{...gateway,permissions:{access:true,manage_attachments:false,manage_network:false}}]);await settle();
   complete({ok:true,gateway_invitation_code:{code:'late-code',share_addresses:['https://office.local:7443']}});await settle();
   expect(document.querySelector<HTMLInputElement>('input[autocomplete=off]:not([placeholder])')?.value).not.toBe('late-code');
  });
@@ -411,7 +411,7 @@ describe('saved Gateway address completion',()=>{
   expect(document.querySelector('[data-gateway-selected-address]')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(true);
  });
  it.each(['url','local_host'] as const)('explains missing management authority for %s without hiding the Gateway',async connection_kind=>{
-  mount(vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'})),[{...unconfiguredGateway,connection_kind,permissions:{access:true,manage_members:false,configure_cloud:false}}],'');await settle();await chooseSavedGateway('local-gateway');await settle();
+  mount(vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'})),[{...unconfiguredGateway,connection_kind,permissions:{access:true,manage_attachments:false,manage_network:false}}],'');await settle();await chooseSavedGateway('local-gateway');await settle();
   expect(document.body.textContent).toContain(i18n.t('gatewayDiscovery.cannotManage'));
   expect(document.querySelector('[data-gateway-endpoint-draft]')).toBeNull();
  });

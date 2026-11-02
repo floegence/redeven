@@ -334,10 +334,10 @@ func (c *Config) ValidateLocalMinimal() error {
 		return errors.New("too many Gateway memberships")
 	}
 	for _, member := range c.Gateways {
-		if member == nil || seenGateways[member.GatewayID] || seenMembers[member.MemberID] {
+		if member == nil || seenGateways[member.GatewayID] || seenMembers[member.AttachmentID] {
 			return errors.New("duplicate or missing Gateway membership")
 		}
-		seenGateways[member.GatewayID], seenMembers[member.MemberID] = true, true
+		seenGateways[member.GatewayID], seenMembers[member.AttachmentID] = true, true
 		if err := member.Validate(c.LocalEnvironmentPublicID); err != nil {
 			return fmt.Errorf("invalid Gateway membership: %w", err)
 		}

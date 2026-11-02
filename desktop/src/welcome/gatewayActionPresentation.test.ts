@@ -7,7 +7,7 @@ import { runGatewaySourceAction } from './gatewaySourceActionRunner';
 
 function gateway(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
   return {
-    gateway_id: 'gw-demo',
+    connection_id: 'gw-demo',
     display_name: 'Gateway-demo',
     local_enabled: true,
     connection_kind: 'url',
@@ -68,7 +68,7 @@ describe('buildGatewayActionPresentation', () => {
     const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action(intent),
       affected_sessions: [{ session_key: 'gateway-session', label: 'Private environment' }] });
     expect(panel.execution_mode).toBe('confirm');
-    expect(panel.continuation_action).toEqual({ kind: intent, gateway_id: source.gateway_id, impact_acknowledged: true });
+    expect(panel.continuation_action).toEqual({ kind: intent, gateway_id: source.connection_id, impact_acknowledged: true });
     expect(panel.affected_sessions).toHaveLength(1);
   });
 

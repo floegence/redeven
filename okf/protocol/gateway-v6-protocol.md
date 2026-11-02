@@ -1,38 +1,30 @@
 ---
-type: Protocol Contract
-title: Gateway v6 protocol
-tags: [gateway, protocol, security, identity]
+type: Gateway Contract
+title: Gateway v6 independent device protocol
+tags: [gateway, protocol, identity]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Gateway serves only redeven-gateway-v6, defined by spec/openapi/gateway-v6.yaml. Signed invitations carry admin-confirmed addresses; authenticated exchange returns the signed descriptor/all endpoints. Gateway owns paired Desktop permissions and Runtime-initiated membership. Mismatch/old config fails unchanged; old URL-profile/HTTP-forward routes are absent. Cloud v3 remains separate.
+Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.
 
 # Contract
 
-## Wire authority
-The signed Desktop surface includes pairing, identity proof, catalog, invitation, member removal, member and default policy, reevaluation, member access offer and service description, and Cloud configuration/status.
+## Identities and wire fields
+The stable gateway_id is independent of Desktop connection_id. RuntimeAttachment uses attachment_id and attachment_version. Catalogs contain attachments; Gateway metadata contains endpoints and tls_root_pem shared by clients and Runtimes. Device identities are not user memberships. Internal package/file names do not add a Cloud or user authority.
 
-A Runtime mTLS certificate must be current for that exact member and version.
+Client public routes are pairing/challenge, pairing/complete, identity, catalog, access/open and access/service under /gateway/v6. Runtime-owned routes use /v6/attachment for invitation-exchange, join, cancel-join, update-endpoints, rotate, leave and connect. Current attachment certificate/version and signed Runtime service identity are required.
 
-Service descriptions are signed separately and bind the Runtime's TLS application identity.
+Host-only routes issue invitations/client codes, list/revoke devices, update addresses/network/egress policy, remove or reevaluate attachments and query operation results. They are not registered on the public listener. ManageAttachments and ManageNetwork are request capabilities from verified host context, never device roles.
 
-## Compatibility ownership
+## Freshness and state
+Runtime metadata versions do not gate attachment admission. Wire/authority mismatches fail explicitly; no old protocol translator or Cloud fallback is installed. Schema 6 attachment state rejects unsupported input unchanged. Expected attachment and policy versions fence relevant mutations; operation IDs recover known results and preserve uncertainty.
 
-`protocol.Version` and `protocol.CompatibilityEpoch` own Gateway wire and host-authority admission. Desktop mirrors these in `gatewayMembership.ts`; Runtime Service compatibility changes do not change either. Preserve the deployed signed `compatibility_epoch` value 69 independently of Runtime release cadence. It remains covered by identity and pairing signatures. Different binary releases/commits are allowed within this contract; incompatible wire or authority contracts still fail explicitly. Runtime member version metadata is descriptive, not a software-version admission condition.
-
-## Version and persistence
-Member version controls removal and replacement. Directory and policy revisions prevent stale messages from restoring permissions.
-
-[Gateway Cloud access](../gateway/gateway-cloud-access.md) owns publication, recovery and revocation.
-
-# Boundaries
-
-The OpenAPI document and signed DTOs are the protocol authority. Unknown routes, stale generations, and legacy URL-profile requests remain rejected rather than silently translated.
+[Device trust and operations](../gateway/gateway-client-access.md) owns credential bootstrap and private result recovery. [Optional Runtime Cloud egress](../gateway/gateway-cloud-access.md) owns network policy and route isolation.
 
 # Evidence
 
-- `redeven:spec/openapi/gateway-v6.yaml` — Closed OpenAPI surface.
-
-- `redeven:internal/runtimegateway/protocol/membership.go` — Member identity, policy and application contracts.
+- redeven:spec/openapi/gateway-v6.yaml — Current route and DTO inventory.
+- redeven:internal/runtimegateway/protocol/openapi_contract_test.go — Go, Desktop and OpenAPI authority/field alignment.
+- redeven:internal/runtimegateway/protocol/membership.go — RuntimeAttachment and local egress policy.

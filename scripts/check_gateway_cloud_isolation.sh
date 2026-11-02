@@ -15,10 +15,10 @@ trap cleanup EXIT
 cd "${REPO_ROOT}"
 docker info >/dev/null
 REDEVEN_GATEWAY_ISOLATION_ROLE=prepare REDEVEN_GATEWAY_ISOLATION_STATE="${STATE_DIR}" \
-  GOWORK=off go test ./internal/gatewaycloud -run '^TestGatewayNetworkIsolationProcess$' -count=1
+  GOWORK=off go test ./internal/gatewayegress -run '^TestGatewayNetworkIsolationProcess$' -count=1
 arch="$(docker version --format '{{.Server.Arch}}')"
 CGO_ENABLED=0 GOOS=linux GOARCH="${arch}" GOWORK=off \
-  go test -c -o "${STATE_DIR}/isolation.test" ./internal/gatewaycloud
+  go test -c -o "${STATE_DIR}/isolation.test" ./internal/gatewayegress
 mkdir -p "${STATE_DIR}/cloud" "${STATE_DIR}/gateway" "${STATE_DIR}/runtime"
 for role in cloud gateway runtime; do mv "${STATE_DIR}/${role}.json" "${STATE_DIR}/${role}/${role}.json"; done
 mv "${STATE_DIR}/members.json" "${STATE_DIR}/gateway/members.json"

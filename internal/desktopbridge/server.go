@@ -104,7 +104,11 @@ func NewTrustedBridgeSurfaceDialer(localUIBridgeURL string, runtimeControlURL st
 }
 
 func NewGatewaySurfaceDialer(gatewayURL, memberURL, hostAdminToken string) SurfaceDialer {
-	return newSurfaceDialer("", "", dialAddrFromURL(gatewayURL), dialAddrFromURL(memberURL), hostAdminToken)
+	gatewayAddress := dialAddrFromURL(gatewayURL)
+	if strings.HasPrefix(gatewayURL, "unix:") {
+		gatewayAddress = gatewayURL
+	}
+	return newSurfaceDialer("", "", gatewayAddress, dialAddrFromURL(memberURL), hostAdminToken)
 }
 
 func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr string, memberAddr string, hostAdminToken string) SurfaceDialer {
@@ -117,7 +121,7 @@ func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr
 			addr = runtimeControlAddr
 		case StreamSurfaceGatewayProtocol:
 			addr = gatewayAddr
-		case StreamSurfaceGatewayMember:
+		case StreamSurfaceRuntimeAttachment:
 			addr = memberAddr
 		default:
 			return nil, fmt.Errorf("unknown bridge surface %q", surface)
@@ -126,7 +130,11 @@ func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr
 			return nil, fmt.Errorf("bridge surface %s is unavailable", surface)
 		}
 		dialer := net.Dialer{Timeout: 10 * time.Second}
-		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		network := "tcp"
+		if surface == StreamSurfaceGatewayProtocol && strings.HasPrefix(addr, "unix:") {
+			network, addr = "unix", strings.TrimPrefix(addr, "unix:")
+		}
+		conn, err := dialer.DialContext(ctx, network, addr)
 		if err != nil {
 			return nil, err
 		}

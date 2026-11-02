@@ -3,10 +3,10 @@ import { classifyEnvironmentFailure } from '../../../desktop/src/envcenter/core'
 import type { Member, Operation, Route } from './contracts.generated';
 
 export function webCenterEntry(route: Route, member: Member | undefined, sourceError: string): EnvironmentEntry & { route: Route } {
-  const matched = member?.member_id === route.member_id && member.runtime_public_id === route.runtime_id ? member : undefined;
+  const matched = member?.attachment_id === route.attachment_id && member.runtime_public_id === route.runtime_id ? member : undefined;
   const connected = matched?.connected === true && !sourceError;
   return { id: route.id, label: route.label || matched?.display_name || route.runtime_id,
-    gateway_id: route.source_id, gateway_env_id: route.member_id,
+    gateway_id: route.source_id, gateway_env_id: route.attachment_id,
     gateway_member: { connected, metadata: { hostname: matched?.metadata.hostname ?? route.runtime_id } },
     runtime_operations: { open: { availability: connected ? 'available' : 'unavailable' } }, route };
 }

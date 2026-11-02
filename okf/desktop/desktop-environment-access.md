@@ -3,11 +3,11 @@ type: Desktop Contract
 title: Verified Environment access routes
 tags: [desktop, gateway, runtime, identity, access]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Desktop associates Gateway routes only after matching member ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.
+Desktop associates Gateway routes only after matching attachment ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.
 
 # Contract
 
@@ -31,7 +31,7 @@ The existing main Open button uses the saved default. Implicit defaults use stab
 ## Membership discovery and migration
 Members are discovered from the signed v6 directory and matched to trusted Runtime membership summaries.
 
-Existing Cloud-only Runtime configurations must rejoin and cannot silently gain the new member delegation. [Gateway Cloud access](../gateway/gateway-cloud-access.md) owns proof-based preservation of a formal environment ID.
+Runtime attachment requires local consent and never adds Cloud enrollment delegation. Existing unsupported state is rejected unchanged. Optional Cloud binding and explicit transport route remain independent.
 
 # Boundaries
 

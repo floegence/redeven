@@ -14,8 +14,8 @@ import (
 
 type Admission struct {
 	ChannelID         string `json:"channel_id"`
-	MemberID          string `json:"member_id"`
-	MemberVersion     int64  `json:"member_version"`
+	AttachmentID      string `json:"attachment_id"`
+	AttachmentVersion int64  `json:"attachment_version"`
 	CertificateSHA256 string `json:"certificate_sha256"`
 	PolicyRevision    int64  `json:"policy_revision"`
 	Generation        uint64 `json:"generation"`
@@ -30,15 +30,15 @@ func (Admission) String() string   { return "Gateway.Admission" }
 func (Admission) GoString() string { return "Gateway.Admission" }
 
 type ConnectionOffer struct {
-	ProtocolVersion string              `json:"protocol_version"`
-	ChannelID       string              `json:"channel_id"`
-	MemberID        string              `json:"member_id"`
-	MemberVersion   int64               `json:"member_version"`
-	Generation      uint64              `json:"generation"`
-	Artifact        json.RawMessage     `json:"artifact"`
-	Service         gp.MemberService    `json:"service"`
-	Delegation      gp.MemberDelegation `json:"delegation"`
-	ExpiresAtUnixMS int64               `json:"expires_at_unix_ms"`
+	ProtocolVersion   string              `json:"protocol_version"`
+	ChannelID         string              `json:"channel_id"`
+	AttachmentID      string              `json:"attachment_id"`
+	AttachmentVersion int64               `json:"attachment_version"`
+	Generation        uint64              `json:"generation"`
+	Artifact          json.RawMessage     `json:"artifact"`
+	Service           gp.MemberService    `json:"service"`
+	Delegation        gp.MemberDelegation `json:"delegation"`
+	ExpiresAtUnixMS   int64               `json:"expires_at_unix_ms"`
 }
 
 func (ConnectionOffer) String() string   { return "Gateway.ConnectionOffer" }
@@ -69,7 +69,7 @@ func (s *Store) AccessOffer(ctx context.Context, memberID, desktopKeyID string) 
 	if !ok || member.Member.State != "active" || desktopKeyID == "" {
 		return ConnectionOffer{}, ErrDenied
 	}
-	decision := s.hooks.Evaluate(ctx, gp.HookInput{Version: 1, Action: gp.HookAccessOpen, GatewayID: s.identity.ID, MemberID: memberID, RuntimePublicID: member.Member.RuntimePublicID, DesktopKeyID: desktopKeyID, PolicyRevision: policy.Revision})
+	decision := s.hooks.Evaluate(ctx, gp.HookInput{Version: 1, Action: gp.HookAccessOpen, GatewayID: s.identity.ID, AttachmentID: memberID, RuntimePublicID: member.Member.RuntimePublicID, DesktopKeyID: desktopKeyID, PolicyRevision: policy.Revision})
 	if !decision.Allowed {
 		return ConnectionOffer{}, ErrDenied
 	}
@@ -113,7 +113,7 @@ func (s *Store) offerLocked(member MemberRecord, desktopKeyID string, endpointDe
 		return ConnectionOffer{}, err
 	}
 	expires := now.Add(2 * time.Minute).Truncate(time.Second)
-	issued, err := controlplane.NewIssuer().IssueDirect(controlplane.DirectIssueOptions{Session: controlplane.SessionOptions{ChannelID: channelID, ExpiresAt: expires, MaxInboundStreams: gp.MaxMemberConnections}, Endpoints: endpoints, RendezvousGroupID: s.identity.ID, ListenerAudience: s.identity.ID, UpstreamAddress: "127.0.0.1:1"})
+	issued, err := controlplane.NewIssuer().IssueDirect(controlplane.DirectIssueOptions{Session: controlplane.SessionOptions{ChannelID: channelID, ExpiresAt: expires, MaxInboundStreams: gp.MaxAttachmentConnections}, Endpoints: endpoints, RendezvousGroupID: s.identity.ID, ListenerAudience: s.identity.ID, UpstreamAddress: "127.0.0.1:1"})
 	if err != nil {
 		return ConnectionOffer{}, err
 	}
@@ -126,9 +126,9 @@ func (s *Store) offerLocked(member MemberRecord, desktopKeyID string, endpointDe
 		if member.ConnectionGeneration == 0 {
 			return ConnectionOffer{}, ErrState
 		}
-		next.Members[member.Member.MemberID] = member
+		next.Members[member.Member.AttachmentID] = member
 	}
-	next.Admissions[issued.LookupKey()] = Admission{ChannelID: channelID, MemberID: member.Member.MemberID, MemberVersion: member.Member.MemberVersion, Generation: member.ConnectionGeneration, DesktopKeyID: desktopKeyID, Authorization: authorization, CertificateSHA256: member.ClientCertificateSHA256, PolicyRevision: s.state.Policy.Revision, ExpiresAtUnixMS: expires.UnixMilli()}
+	next.Admissions[issued.LookupKey()] = Admission{ChannelID: channelID, AttachmentID: member.Member.AttachmentID, AttachmentVersion: member.Member.AttachmentVersion, Generation: member.ConnectionGeneration, DesktopKeyID: desktopKeyID, Authorization: authorization, CertificateSHA256: member.ClientCertificateSHA256, PolicyRevision: s.state.Policy.Revision, ExpiresAtUnixMS: expires.UnixMilli()}
 	if desktopKeyID == "" {
 		admission := next.Admissions[issued.LookupKey()]
 		admission.EndpointID = endpointDescriptors[0].EndpointID
@@ -137,7 +137,7 @@ func (s *Store) offerLocked(member MemberRecord, desktopKeyID string, endpointDe
 	if err := s.commit(next); err != nil {
 		return ConnectionOffer{}, err
 	}
-	return ConnectionOffer{ProtocolVersion: gp.Version, ChannelID: channelID, MemberID: member.Member.MemberID, MemberVersion: member.Member.MemberVersion, Generation: member.ConnectionGeneration, Artifact: issued.ArtifactJSON(), Service: member.Service, Delegation: member.Delegation, ExpiresAtUnixMS: expires.UnixMilli()}, nil
+	return ConnectionOffer{ProtocolVersion: gp.Version, ChannelID: channelID, AttachmentID: member.Member.AttachmentID, AttachmentVersion: member.Member.AttachmentVersion, Generation: member.ConnectionGeneration, Artifact: issued.ArtifactJSON(), Service: member.Service, Delegation: member.Delegation, ExpiresAtUnixMS: expires.UnixMilli()}, nil
 }
 
 func (s *Store) EndpointUsage() map[string]int64 {
@@ -153,13 +153,13 @@ func (s *Store) EndpointUsage() map[string]int64 {
 func (s *Store) recordEndpointUse(admission Admission) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	member, ok := s.state.Members[admission.MemberID]
-	if !ok || member.Member.State != "active" || member.Member.MemberVersion != admission.MemberVersion {
+	member, ok := s.state.Members[admission.AttachmentID]
+	if !ok || member.Member.State != "active" || member.Member.AttachmentVersion != admission.AttachmentVersion {
 		return ErrDenied
 	}
 	next := s.clone()
 	member.Member.LastSeenAtUnixMS = time.Now().UnixMilli()
-	next.Members[admission.MemberID] = member
+	next.Members[admission.AttachmentID] = member
 	for _, endpoint := range next.AdvertisedEndpoints {
 		if endpoint.EndpointID == admission.EndpointID {
 			next.EndpointLastUsedAt[endpoint.EndpointID] = member.Member.LastSeenAtUnixMS
@@ -174,8 +174,8 @@ func (s *Store) ConsumeAdmission(request controlplane.RuntimeAuthorizationReques
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ticket, ok := s.state.Admissions[request.LookupKey()]
-	member, exists := s.state.Members[ticket.MemberID]
-	if !ok || !exists || ticket.Consumed || ticket.ExpiresAtUnixMS <= time.Now().UnixMilli() || member.Member.State != "active" || member.Member.MemberVersion != ticket.MemberVersion || (ticket.DesktopKeyID == "" && (ticket.Generation != member.ConnectionGeneration || ticket.CertificateSHA256 != member.ClientCertificateSHA256 || member.ClientExpiresAtUnixMS <= time.Now().UnixMilli())) || ticket.PolicyRevision != s.state.Policy.Revision {
+	member, exists := s.state.Members[ticket.AttachmentID]
+	if !ok || !exists || ticket.Consumed || ticket.ExpiresAtUnixMS <= time.Now().UnixMilli() || member.Member.State != "active" || member.Member.AttachmentVersion != ticket.AttachmentVersion || (ticket.DesktopKeyID == "" && (ticket.Generation != member.ConnectionGeneration || ticket.CertificateSHA256 != member.ClientCertificateSHA256 || member.ClientExpiresAtUnixMS <= time.Now().UnixMilli())) || ticket.PolicyRevision != s.state.Policy.Revision {
 		return controlplane.AuthorizationResponse{}, Admission{}, ErrDenied
 	}
 	if ticket.DesktopKeyID != "" && (desktopAllowed == nil || !desktopAllowed(ticket.DesktopKeyID)) {

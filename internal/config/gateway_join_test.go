@@ -23,7 +23,7 @@ func TestPendingGatewayJoinCanStartWithoutCloudAuthority(t *testing.T) {
 	if cfg.ValidateRemoteStrict() == nil {
 		t.Fatal("pending membership authorized Cloud control")
 	}
-	cfg.GatewayMember("").GatewayID = "different_gateway"
+	cfg.RuntimeAttachment("").GatewayID = "different_gateway"
 	if cfg.ValidateGatewayManagement() == nil {
 		t.Fatal("startup accepted an inconsistent member identity")
 	}

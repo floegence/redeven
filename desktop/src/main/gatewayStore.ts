@@ -24,7 +24,7 @@ import {
 } from '../shared/desktopSSH';
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
 
-export const GATEWAY_STORE_SCHEMA_VERSION = 4;
+export const GATEWAY_STORE_SCHEMA_VERSION = 5;
 
 export type GatewayURLConnection = Readonly<{
   kind: 'url';
@@ -91,6 +91,7 @@ export type GatewayConnection =
 
 export type GatewayTrustProfile = Readonly<{
   trust_profile_id: string;
+  tls_root_pem?: string;
   paired_client_key_id: string;
   paired_client_private_key_ref: string;
   gateway_id: string;
@@ -103,8 +104,8 @@ export type GatewayTrustProfile = Readonly<{
 }>;
 
 export type GatewayRecord = Readonly<{
-  schema_version: 4;
-  gateway_id: string;
+  schema_version: 5;
+  connection_id: string;
   display_name: string;
   local_enabled: boolean;
   connection: GatewayConnection;
@@ -115,7 +116,7 @@ export type GatewayRecord = Readonly<{
 }>;
 
 export type GatewayStoreSnapshot = Readonly<{
-  schema_version: 4;
+  schema_version: 5;
   gateways: readonly GatewayRecord[];
 }>;
 
@@ -218,7 +219,7 @@ export function gatewayRecordSSHPasswordRef(record: GatewayRecord): string {
   ) {
     return '';
   }
-  return connection.ssh_password_ref ?? gatewaySSHPasswordSecretRef(record.gateway_id);
+  return connection.ssh_password_ref ?? gatewaySSHPasswordSecretRef(record.connection_id);
 }
 
 function normalizeGatewaySSHPasswordRefForRecord(connection: GatewayConnection, gatewayID: string): GatewayConnection {
@@ -446,6 +447,7 @@ function normalizeTrustProfile(value: unknown): GatewayTrustProfile | undefined 
   }
   return {
     trust_profile_id: trustProfileID,
+    ...(compact(candidate.tls_root_pem) ? { tls_root_pem: compact(candidate.tls_root_pem) } : {}),
     paired_client_key_id: pairedClientKeyID,
     paired_client_private_key_ref: pairedClientPrivateKeyRef,
     gateway_id: gatewayID,
@@ -463,7 +465,7 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     return null;
   }
   const candidate = value as Record<string, unknown>;
-  const gatewayID = normalizeGatewayID(candidate.gateway_id);
+  const gatewayID = normalizeGatewayID(candidate.connection_id);
   let connection = normalizeGatewayConnection(candidate.connection);
   if (!gatewayID || !connection) {
     return null;
@@ -475,7 +477,7 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     : undefined;
   return {
     schema_version: GATEWAY_STORE_SCHEMA_VERSION,
-    gateway_id: gatewayID,
+    connection_id: gatewayID,
     display_name: compact(candidate.display_name) || gatewayID,
     local_enabled: candidate.local_enabled !== false,
     connection,
@@ -501,7 +503,7 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
   const connectionKind = record.connection.kind as DesktopGatewayConnectionKind;
   return {
     identity_fingerprint: record.trust_profile?.gateway_public_key_fingerprint,
-    gateway_id: record.gateway_id,
+    connection_id: record.connection_id,
     display_name: record.display_name,
     local_enabled: record.local_enabled,
     connection_kind: connectionKind,
@@ -570,7 +572,7 @@ export function gatewayRecordToSourceWithCatalog(
     permissions?: DesktopGatewaySource['permissions'];
     policy?: DesktopGatewaySource['policy'];
     catalog_revision?: number;
-    member_endpoints?: DesktopGatewaySource['member_endpoints'];
+    endpoints?: DesktopGatewaySource['endpoints'];
     hook_status?: DesktopGatewaySource['hook_status'];
   }>,
 ): DesktopGatewaySource {
@@ -596,7 +598,7 @@ export function gatewayRecordToSourceWithCatalog(
     listener_restart_required: catalog.listener_restart_required,
     allowed_hosts: catalog.allowed_hosts,
     endpoint_last_used_at: catalog.endpoint_last_used_at,
-    member_endpoints: catalog.member_endpoints,
+    endpoints: catalog.endpoints,
     environments: [...(catalog.environments ?? [])],
     permissions: catalog.permissions, policy: catalog.policy,
     catalog_revision: catalog.catalog_revision, hook_status: catalog.hook_status,
@@ -604,16 +606,16 @@ export function gatewayRecordToSourceWithCatalog(
 }
 
 /** A confirmed Runtime leave invalidates its exact cached directory observation. */
-export function retireGatewayMemberObservation(
+export function retireRuntimeAttachmentObservation(
   record: GatewayRecord,
   source: DesktopGatewaySource,
-  member: Readonly<{ gateway_id?: string; member_id?: string }>,
+  member: Readonly<{ gateway_id?: string; attachment_id?: string }>,
 ): DesktopGatewaySource {
-  if (!member.member_id || !record.trust_profile || source.gateway_id !== record.gateway_id
+  if (!member.attachment_id || !record.trust_profile || source.connection_id !== record.connection_id
     || record.trust_profile.gateway_id !== member.gateway_id
     || source.identity_fingerprint !== record.trust_profile.gateway_public_key_fingerprint
-    || !source.environments.some(item => item.member_id === member.member_id)) return source;
-  return { ...source, environments: source.environments.filter(item => item.member_id !== member.member_id) };
+    || !source.environments.some(item => item.attachment_id === member.attachment_id)) return source;
+  return { ...source, environments: source.environments.filter(item => item.attachment_id !== member.attachment_id) };
 }
 
 export function gatewayRecordToSourceWithError(record: GatewayRecord, message: string, code = ''): DesktopGatewaySource {
@@ -663,14 +665,14 @@ export function normalizeGatewayStoreSnapshot(value: unknown, now = Date.now()):
   for (const rawRecord of candidate.gateways ?? []) {
     const record = normalizeGatewayRecord(rawRecord, now);
     if (record) {
-      byID.set(record.gateway_id, record);
+      byID.set(record.connection_id, record);
     }
   }
   return {
     schema_version: GATEWAY_STORE_SCHEMA_VERSION,
     gateways: [...byID.values()].sort((left, right) => (
       left.display_name.toLowerCase().localeCompare(right.display_name.toLowerCase())
-      || left.gateway_id.localeCompare(right.gateway_id)
+      || left.connection_id.localeCompare(right.connection_id)
     )),
   };
 }
@@ -690,7 +692,7 @@ function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
   if (schemaVersion > GATEWAY_STORE_SCHEMA_VERSION) {
     throw new GatewayStoreError('GATEWAY_STORE_FUTURE_SCHEMA', 'Gateway store was created by a newer Redeven Desktop.');
   }
-  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3 && schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION) {
+  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3 && schemaVersion !== 4 && schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION) {
     throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_UNSUPPORTED', 'Gateway store schema version is unsupported.');
   }
   if (!Array.isArray(candidate.gateways)) {
@@ -736,14 +738,14 @@ function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
         gateway_id: stableGatewayID(compact((persisted.trust_profile as Record<string, unknown>).binding_audience)),
       }, last_catalog_sync_at_ms: undefined }
       : persisted;
-    const record = normalizeGatewayRecord(migratedRecord, now);
+    const record = normalizeGatewayRecord(schemaVersion < 5 ? { ...migratedRecord, connection_id: persisted.gateway_id } : migratedRecord, now);
     if (!record || (persisted.trust_profile !== undefined && record.trust_profile === undefined)) {
       throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store contains data that cannot be normalized without loss.');
     }
-    if (gatewayIDs.has(record.gateway_id)) {
+    if (gatewayIDs.has(record.connection_id)) {
       throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store contains duplicate gateway ids.');
     }
-    gatewayIDs.add(record.gateway_id);
+    gatewayIDs.add(record.connection_id);
     records.push(record);
   }
 
@@ -791,7 +793,7 @@ function replaceGatewayRecord(snapshot: GatewayStoreSnapshot, record: GatewayRec
     schema_version: GATEWAY_STORE_SCHEMA_VERSION,
     gateways: normalizeGatewayStoreSnapshot({
       gateways: [
-        ...snapshot.gateways.filter((item) => item.gateway_id !== record.gateway_id),
+        ...snapshot.gateways.filter((item) => item.connection_id !== record.connection_id),
         record,
       ],
     }, now).gateways,
@@ -845,11 +847,11 @@ export class GatewayStore {
     if (!cleanGatewayID) {
       return null;
     }
-    return (await this.list()).find((record) => record.gateway_id === cleanGatewayID) ?? null;
+    return (await this.list()).find((record) => record.connection_id === cleanGatewayID) ?? null;
   }
 
   async upsert(input: Readonly<{
-    gateway_id: string;
+    connection_id: string;
     display_name?: string;
     connection: GatewayConnection;
     trust_profile?: GatewayTrustProfile;
@@ -857,12 +859,12 @@ export class GatewayStore {
   }>): Promise<GatewayRecord> {
     return this.mutate(async () => {
       const now = timestampMS(input.now_ms, Date.now());
-      const gatewayID = normalizeGatewayID(input.gateway_id);
+      const gatewayID = normalizeGatewayID(input.connection_id);
       if (!gatewayID) {
         throw new GatewayStoreError('GATEWAY_ID_REQUIRED', 'Gateway id is required.');
       }
       const snapshot = await this.load();
-      const existing = snapshot.gateways.find((record) => record.gateway_id === gatewayID);
+      const existing = snapshot.gateways.find((record) => record.connection_id === gatewayID);
       const nextBindingAudience = gatewayBindingAudience(input.connection);
       const connectionIdentityUnchanged = existing ? gatewayBindingAudience(existing.connection) === nextBindingAudience : false;
       const existingTrustProfile = existing?.trust_profile?.binding_audience === nextBindingAudience
@@ -870,7 +872,7 @@ export class GatewayStore {
         : undefined;
       const record = normalizeGatewayRecord({
         schema_version: GATEWAY_STORE_SCHEMA_VERSION,
-        gateway_id: gatewayID,
+        connection_id: gatewayID,
         display_name: compact(input.display_name) || existing?.display_name || defaultGatewayDisplayName(input.connection),
         local_enabled: existing?.local_enabled ?? true,
         connection: input.connection,
@@ -891,7 +893,7 @@ export class GatewayStore {
     return this.mutate(async () => {
       const cleanGatewayID = normalizeGatewayID(gatewayID);
       const snapshot = await this.load();
-      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID);
+      const existing = snapshot.gateways.find((record) => record.connection_id === cleanGatewayID);
       if (!existing) {
         throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
       }
@@ -913,7 +915,7 @@ export class GatewayStore {
     return this.mutate(async () => {
       const cleanGatewayID = normalizeGatewayID(gatewayID);
       const snapshot = await this.load();
-      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID);
+      const existing = snapshot.gateways.find((record) => record.connection_id === cleanGatewayID);
       if (!existing) {
         throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
       }
@@ -935,7 +937,7 @@ export class GatewayStore {
     return this.mutate(async () => {
       const cleanGatewayID = normalizeGatewayID(gatewayID);
       const snapshot = await this.load();
-      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID);
+      const existing = snapshot.gateways.find((record) => record.connection_id === cleanGatewayID);
       if (!existing) {
         throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
       }
@@ -957,13 +959,13 @@ export class GatewayStore {
     return this.mutate(async () => {
       const cleanGatewayID = normalizeGatewayID(gatewayID);
       const snapshot = await this.load();
-      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID) ?? null;
+      const existing = snapshot.gateways.find((record) => record.connection_id === cleanGatewayID) ?? null;
       if (!existing) {
         return null;
       }
       const nextSnapshot: GatewayStoreSnapshot = {
         schema_version: GATEWAY_STORE_SCHEMA_VERSION,
-        gateways: snapshot.gateways.filter((record) => record.gateway_id !== cleanGatewayID),
+        gateways: snapshot.gateways.filter((record) => record.connection_id !== cleanGatewayID),
       };
       await this.commitSnapshot(nextSnapshot);
       return existing;

@@ -47,7 +47,7 @@ func (s *runtimeControlServer) handleGatewayJoin(w http.ResponseWriter, r *http.
 		return
 	}
 	s.notifyRuntimeServiceChanged()
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayMembershipStatus()})
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayAttachmentStatus()})
 }
 
 func (s *runtimeControlServer) handleGatewayStatus(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func (s *runtimeControlServer) handleGatewayStatus(w http.ResponseWriter, r *htt
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayMembershipStatus()})
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayAttachmentStatus()})
 }
 
 func (s *runtimeControlServer) handleGatewayRetry(w http.ResponseWriter, r *http.Request) {
@@ -88,11 +88,11 @@ func (s *runtimeControlServer) handleGatewayRetry(w http.ResponseWriter, r *http
 			return
 		}
 	}
-	if err := s.agent.RetryGatewayMembership(body.GatewayID); err != nil {
+	if err := s.agent.RetryGatewayAttachment(body.GatewayID); err != nil {
 		writeRuntimeControlError(w, http.StatusConflict, "GATEWAY_RETRY_FAILED", "Gateway reconnection could not start.")
 		return
 	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayMembershipStatus()})
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayAttachmentStatus()})
 }
 
 func (s *runtimeControlServer) handleGatewayLeave(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +129,7 @@ func (s *runtimeControlServer) handleGatewayLeave(w http.ResponseWriter, r *http
 	}
 
 	s.notifyRuntimeServiceChanged()
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayMembershipStatus()})
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayAttachmentStatus()})
 }
 
 func gatewayEnrollmentErrorCode(err error) string {
@@ -184,33 +184,4 @@ func (s *runtimeControlServer) handleGatewayPreview(w http.ResponseWriter, r *ht
 		return
 	}
 	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: preview})
-}
-
-func (s *runtimeControlServer) handleGatewayPublish(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	if r.Header.Get("Origin") != "" {
-		writeRuntimeControlError(w, http.StatusForbidden, "GATEWAY_TRUSTED_CHANNEL_REQUIRED", "Cloud publication requires trusted Runtime management.")
-		return
-	}
-	if r.Method != http.MethodPost {
-		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
-		return
-	}
-	var body struct {
-		GatewayID string `json:"gateway_id"`
-	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
-	dec.DisallowUnknownFields()
-	if dec.Decode(&body) != nil || dec.Decode(new(any)) != io.EOF || body.GatewayID == "" {
-		writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_PUBLICATION_INVALID", "Select a Gateway for Namespace enrollment.")
-		return
-	}
-	if err := s.agent.PublishGateway(r.Context(), body.GatewayID); err != nil {
-		writeRuntimeControlError(w, http.StatusConflict, "GATEWAY_PUBLICATION_FAILED", "Cloud publication could not be saved. Check Gateway access, or use Change route for an existing Cloud association.")
-		return
-	}
-	s.notifyRuntimeServiceChanged()
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.GatewayMembershipStatus()})
 }

@@ -13,8 +13,8 @@ import (
 func TestPolicyUpdatePreservesOverridesWithoutTransientRevocation(t *testing.T) {
 	ctx := context.Background()
 	store, _ := membershipStore(t)
-	ids := make(map[gp.CloudPermission]string)
-	for _, permission := range []gp.CloudPermission{gp.CloudInherit, gp.CloudAllow, gp.CloudDeny} {
+	ids := make(map[gp.EgressPermission]string)
+	for _, permission := range []gp.EgressPermission{gp.EgressInherit, gp.EgressAllow, gp.EgressDeny} {
 		invitation, err := store.Invite("admin")
 		if err != nil {
 			t.Fatal(err)
@@ -24,49 +24,42 @@ func TestPolicyUpdatePreservesOverridesWithoutTransientRevocation(t *testing.T) 
 		if err != nil {
 			t.Fatal(err)
 		}
-		ids[permission] = response.MemberID
-		if err := store.UpdateMemberPolicy(ctx, gp.MemberPolicyUpdate{MemberID: response.MemberID, ExpectedMemberVersion: 1, CloudPermission: permission}); err != nil {
+		ids[permission] = response.AttachmentID
+		if err := store.UpdateMemberPolicy(ctx, gp.MemberPolicyUpdate{AttachmentID: response.AttachmentID, ExpectedAttachmentVersion: 1, EgressPermission: permission}); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err := store.SetCloudNamespace(ctx, "namespace_a"); err != nil {
-		t.Fatal(err)
 	}
 	// Observe every persisted transaction, including any accidental intermediate
 	// invalidation that would close existing explicitly allowed Cloud sessions.
 	store.SetCommitHandler(func(members []MemberRecord, policy gp.GatewayPolicy) {
 		for _, member := range members {
-			if member.Member.MemberID == ids[gp.CloudAllow] && !EffectiveCloudAllowed(member, policy) {
+			if member.Member.AttachmentID == ids[gp.EgressAllow] && !EffectiveEgressAllowed(member, policy) {
 				t.Error("default edit revoked an explicitly allowed member")
 			}
-			if member.Member.MemberID == ids[gp.CloudDeny] && EffectiveCloudAllowed(member, policy) {
+			if member.Member.AttachmentID == ids[gp.EgressDeny] && EffectiveEgressAllowed(member, policy) {
 				t.Error("default edit widened an explicitly denied member")
 			}
 		}
 	})
 	for _, allow := range []bool{true, false, true} {
 		_, policy, _ := store.Snapshot()
-		policy.DefaultCloudAllowed = allow
+		policy.DefaultEgressAllowed = allow
 		if err := store.UpdatePolicy(ctx, policy.Revision, policy); err != nil {
 			t.Fatal(err)
 		}
 		members, current, _ := store.Snapshot()
 		for _, member := range members {
-			if member.Member.MemberID == ids[gp.CloudInherit] && (cloudPolicyAllows(member, current) != allow || EffectiveCloudAllowed(member, current) != allow) {
+			if member.Member.AttachmentID == ids[gp.EgressInherit] && (egressPolicyAllows(member, current) != allow || EffectiveEgressAllowed(member, current) != allow) {
 				t.Fatal("inherited member did not follow the committed default")
 			}
 		}
-		if err := store.AcknowledgeCloudDirectory("namespace_a", current.Revision, members); err != nil {
-			t.Fatal(err)
-		}
 	}
 	_, policy, _ := store.Snapshot()
-	policy.PublicationMode = gp.PublicationAutomatic
 	if err := store.UpdatePolicy(ctx, policy.Revision, policy); err != nil {
 		t.Fatal(err)
 	}
 	// Choosing the same effective override must not revoke a live member either.
-	if err := store.UpdateMemberPolicy(ctx, gp.MemberPolicyUpdate{MemberID: ids[gp.CloudAllow], ExpectedMemberVersion: 1, CloudPermission: gp.CloudInherit}); err != nil {
+	if err := store.UpdateMemberPolicy(ctx, gp.MemberPolicyUpdate{AttachmentID: ids[gp.EgressAllow], ExpectedAttachmentVersion: 1, EgressPermission: gp.EgressInherit}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -76,17 +69,17 @@ func TestCanceledPolicyUpdateCommitsNothing(t *testing.T) {
 	_, policy, revision := store.Snapshot()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	policy.DefaultCloudAllowed = true
+	policy.DefaultEgressAllowed = true
 	if err := store.UpdatePolicy(ctx, policy.Revision, policy); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled update: %v", err)
 	}
 	_, current, after := store.Snapshot()
-	if current.DefaultCloudAllowed || after != revision {
+	if current.DefaultEgressAllowed || after != revision {
 		t.Fatal("canceled request modified policy")
 	}
 }
 
-func TestReevaluationRequiresCurrentMemberVersion(t *testing.T) {
+func TestReevaluationRequiresCurrentAttachmentVersion(t *testing.T) {
 	store, _ := membershipStore(t)
 	invite, err := store.Invite("admin")
 	if err != nil {
@@ -98,14 +91,14 @@ func TestReevaluationRequiresCurrentMemberVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, before := store.Snapshot()
-	if err := store.ReevaluateCloud(t.Context(), response.MemberID, 2); !errors.Is(err, ErrConflict) {
+	if err := store.ReevaluateEgress(t.Context(), response.AttachmentID, 2); !errors.Is(err, ErrConflict) {
 		t.Fatal("stale member version accepted", err)
 	}
 	_, _, after := store.Snapshot()
 	if before != after {
 		t.Fatal("rejected reevaluation changed policy")
 	}
-	if err := store.ReevaluateCloud(t.Context(), response.MemberID, 1); err != nil {
+	if err := store.ReevaluateEgress(t.Context(), response.AttachmentID, 1); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -122,9 +115,9 @@ func TestMemberSnapshotCannotMutateRotationDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.mu.Lock()
-	member := store.state.Members[response.MemberID]
+	member := store.state.Members[response.AttachmentID]
 	member.Rotation = &rotationDelivery{RequestSHA256: "original"}
-	store.state.Members[response.MemberID] = member
+	store.state.Members[response.AttachmentID] = member
 	store.mu.Unlock()
 	members, _, _ := store.Snapshot()
 	members[0].Rotation.RequestSHA256 = "mutated"
@@ -138,9 +131,6 @@ func TestHookRefreshStorageFailureClosesOldCloudGrants(t *testing.T) {
 	for _, invalidate := range []bool{false, true} {
 		t.Run(map[bool]string{false: "refresh", true: "invalidate"}[invalidate], func(t *testing.T) {
 			store, _ := membershipStore(t)
-			if err := store.SetCloudNamespace(t.Context(), "namespace"); err != nil {
-				t.Fatal(err)
-			}
 			invitation, err := store.Invite("admin")
 			if err != nil {
 				t.Fatal(err)
@@ -150,7 +140,7 @@ func TestHookRefreshStorageFailureClosesOldCloudGrants(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := store.UpdateMemberPolicy(t.Context(), gp.MemberPolicyUpdate{MemberID: response.MemberID, ExpectedMemberVersion: 1, CloudPermission: gp.CloudAllow}); err != nil {
+			if err := store.UpdateMemberPolicy(t.Context(), gp.MemberPolicyUpdate{AttachmentID: response.AttachmentID, ExpectedAttachmentVersion: 1, EgressPermission: gp.EgressAllow}); err != nil {
 				t.Fatal(err)
 			}
 			var applied []MemberRecord
@@ -172,10 +162,10 @@ func TestHookRefreshStorageFailureClosesOldCloudGrants(t *testing.T) {
 				t.Fatal("expected persistence failure")
 			}
 			records, policy, _ := store.Snapshot()
-			if EffectiveCloudAllowed(records[0], policy) {
+			if EffectiveEgressAllowed(records[0], policy) {
 				t.Fatal("storage failure preserved the old directory grant")
 			}
-			if EffectiveCloudAllowed(applied[0], appliedPolicy) {
+			if EffectiveEgressAllowed(applied[0], appliedPolicy) {
 				t.Fatal("storage failure preserved the installed egress grant")
 			}
 			if _, _, _, err := store.DurableSnapshot(); err == nil {
@@ -197,18 +187,15 @@ func TestHookRefreshStorageFailureClosesOldCloudGrants(t *testing.T) {
 			if err := store.RefreshHooks(HookConfig{}); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.ReevaluateCloud(t.Context(), response.MemberID, 1); err != nil {
+			if err := store.ReevaluateEgress(t.Context(), response.AttachmentID, 1); err != nil {
 				t.Fatal(err)
 			}
 			records, policy, _ = store.Snapshot()
-			if !records[0].HookCloudAllowed || !EffectiveCloudAllowed(records[0], policy) {
+			if !records[0].HookEgressAllowed || !EffectiveEgressAllowed(records[0], policy) {
 				t.Fatal("explicit reevaluation did not restore local egress")
 			}
-			if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, records); err != nil {
-				t.Fatal(err)
-			}
 			records, policy, _ = store.Snapshot()
-			if !EffectiveCloudAllowed(records[0], policy) {
+			if !EffectiveEgressAllowed(records[0], policy) {
 				t.Fatal("confirmed denial did not allow reevaluated policy")
 			}
 		})

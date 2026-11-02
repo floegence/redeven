@@ -50,7 +50,7 @@ func TestGatewayBusinessCannotForwardOrClaimPermission(t *testing.T) {
 
 func TestRuntimeGatewayCatalogRemainsInspectableWithoutDesktop(t *testing.T) {
 	backend := &ResourceBackend{GatewayCatalog: func(context.Context) (gp.CatalogResponse, error) {
-		return gp.CatalogResponse{Gateway: gp.GatewayMetadata{GatewayID: "gateway"}, Members: []gp.Member{{MemberID: "member", RuntimePublicID: "runtime", MemberVersion: 2, State: "active", Connected: false, DisplayName: "Saved"}}}, nil
+		return gp.CatalogResponse{Gateway: gp.GatewayMetadata{GatewayID: "gateway"}, Attachments: []gp.RuntimeAttachment{{AttachmentID: "member", RuntimePublicID: "runtime", AttachmentVersion: 2, State: "active", Connected: false, DisplayName: "Saved"}}}, nil
 	}}
 	meta := &session.Meta{UserPublicID: "user_local", CanRead: true, CanAdmin: true}
 	directory, err := backend.Runtimes(t.Context(), meta)

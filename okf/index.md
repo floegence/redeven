@@ -175,7 +175,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Gateway
 
-- [Gateway Cloud access](gateway/gateway-cloud-access.md)
+- [Optional Runtime Cloud egress](gateway/gateway-cloud-access.md)
 - [Gateway client access](gateway/gateway-client-access.md)
 - [Gateway service](gateway/gateway-service.md)
 - [Gateway network settings](gateway/gateway-network-settings.md)

@@ -1,26 +1,19 @@
 package protocol
 
 const (
-	MemberConnectionStream = "redeven.gateway.member.https.v6"
-	MemberAccessStream     = "redeven.gateway.access.https.v6"
-	MaxMembers             = 1024
-	MaxMemberConnections   = 32
-	MaxGatewayConnections  = 1024
+	MemberConnectionStream   = "redeven.gateway.member.https.v6"
+	MemberAccessStream       = "redeven.gateway.access.https.v6"
+	MaxAttachments           = 1024
+	MaxAttachmentConnections = 32
+	MaxGatewayConnections    = 1024
 )
 
-type CloudPermission string
+type EgressPermission string
 
 const (
-	CloudInherit CloudPermission = "inherit"
-	CloudAllow   CloudPermission = "allow"
-	CloudDeny    CloudPermission = "deny"
-)
-
-type PublicationMode string
-
-const (
-	PublicationManual    PublicationMode = "manual"
-	PublicationAutomatic PublicationMode = "automatic"
+	EgressInherit EgressPermission = "inherit"
+	EgressAllow   EgressPermission = "allow"
+	EgressDeny    EgressPermission = "deny"
 )
 
 type GatewayEndpointScope string
@@ -66,19 +59,18 @@ func (EnrollmentDescriptor) String() string   { return "Gateway.EnrollmentDescri
 func (EnrollmentDescriptor) GoString() string { return "Gateway.EnrollmentDescriptor" }
 
 // MemberDelegation is signed by the Runtime at local confirmation. The signed
-// Gateway identity scopes future local access and Cloud publication. Cloud
-// still requires its own challenge-bound proof and Namespace approval.
+// Gateway identity scopes independent local access only. Cloud
+// enrollment and authorization remain independent Runtime responsibilities.
 type MemberDelegation struct {
-	ProtocolVersion        string `json:"protocol_version"`
-	GatewayID              string `json:"gateway_id"`
-	MemberID               string `json:"member_id"`
-	RuntimePublicID        string `json:"runtime_public_id"`
-	PublicKeyB64u          string `json:"public_key_b64u"`
-	InvitationID           string `json:"invitation_id"`
-	ConsentedAtUnixMS      int64  `json:"consented_at_unix_ms"`
-	ManageAccess           bool   `json:"manage_access"`
-	ManageCloudPublication bool   `json:"manage_cloud_publication"`
-	Signature              string `json:"signature"`
+	ProtocolVersion   string `json:"protocol_version"`
+	GatewayID         string `json:"gateway_id"`
+	AttachmentID      string `json:"attachment_id"`
+	RuntimePublicID   string `json:"runtime_public_id"`
+	PublicKeyB64u     string `json:"public_key_b64u"`
+	InvitationID      string `json:"invitation_id"`
+	ConsentedAtUnixMS int64  `json:"consented_at_unix_ms"`
+	ManageAccess      bool   `json:"manage_access"`
+	Signature         string `json:"signature"`
 }
 
 // MemberService describes the Runtime's fixed HTTPS application entry. Trust
@@ -117,84 +109,84 @@ func (MemberJoinRequest) GoString() string { return "Gateway.MemberJoinRequest" 
 type MemberJoinResponse struct {
 	ProtocolVersion       string `json:"protocol_version"`
 	GatewayID             string `json:"gateway_id"`
-	MemberID              string `json:"member_id"`
-	MemberVersion         int64  `json:"member_version"`
+	AttachmentID          string `json:"attachment_id"`
+	AttachmentVersion     int64  `json:"attachment_version"`
 	DeliveryID            string `json:"delivery_id"`
 	ClientCertificatePEM  string `json:"client_certificate_pem"`
 	ClientExpiresAtUnixMS int64  `json:"client_expires_at_unix_ms"`
 }
 
 type MemberEndpointUpdateRequest struct {
-	ProtocolVersion string `json:"protocol_version"`
-	GatewayID       string `json:"gateway_id"`
-	InvitationID    string `json:"invitation_id"`
-	Token           string `json:"token"`
-	MemberID        string `json:"member_id"`
-	MemberVersion   int64  `json:"member_version"`
-	DeliveryID      string `json:"delivery_id"`
-	Signature       string `json:"signature"`
+	ProtocolVersion   string `json:"protocol_version"`
+	GatewayID         string `json:"gateway_id"`
+	InvitationID      string `json:"invitation_id"`
+	Token             string `json:"token"`
+	AttachmentID      string `json:"attachment_id"`
+	AttachmentVersion int64  `json:"attachment_version"`
+	DeliveryID        string `json:"delivery_id"`
+	Signature         string `json:"signature"`
 }
 
 func (MemberEndpointUpdateRequest) String() string   { return "Gateway.MemberEndpointUpdateRequest" }
 func (MemberEndpointUpdateRequest) GoString() string { return "Gateway.MemberEndpointUpdateRequest" }
 
 type MemberEndpointUpdateResponse struct {
-	ProtocolVersion string `json:"protocol_version"`
-	GatewayID       string `json:"gateway_id"`
-	MemberID        string `json:"member_id"`
-	MemberVersion   int64  `json:"member_version"`
-	DeliveryID      string `json:"delivery_id"`
+	ProtocolVersion   string `json:"protocol_version"`
+	GatewayID         string `json:"gateway_id"`
+	AttachmentID      string `json:"attachment_id"`
+	AttachmentVersion int64  `json:"attachment_version"`
+	DeliveryID        string `json:"delivery_id"`
 }
 
 type MemberRotateRequest struct {
-	ProtocolVersion string        `json:"protocol_version"`
-	GatewayID       string        `json:"gateway_id"`
-	MemberID        string        `json:"member_id"`
-	MemberVersion   int64         `json:"member_version"`
-	DeliveryID      string        `json:"delivery_id"`
-	ClientCSRPEM    string        `json:"client_csr_pem"`
-	Service         MemberService `json:"service"`
-	Signature       string        `json:"signature"`
+	ProtocolVersion   string        `json:"protocol_version"`
+	GatewayID         string        `json:"gateway_id"`
+	AttachmentID      string        `json:"attachment_id"`
+	AttachmentVersion int64         `json:"attachment_version"`
+	DeliveryID        string        `json:"delivery_id"`
+	ClientCSRPEM      string        `json:"client_csr_pem"`
+	Service           MemberService `json:"service"`
+	Signature         string        `json:"signature"`
 }
 
 type MemberRotateResponse struct {
 	ProtocolVersion       string `json:"protocol_version"`
-	MemberID              string `json:"member_id"`
-	MemberVersion         int64  `json:"member_version"`
+	AttachmentID          string `json:"attachment_id"`
+	AttachmentVersion     int64  `json:"attachment_version"`
 	DeliveryID            string `json:"delivery_id"`
 	ClientCertificatePEM  string `json:"client_certificate_pem"`
 	ClientExpiresAtUnixMS int64  `json:"client_expires_at_unix_ms"`
 }
 
-type Member struct {
-	MemberID              string          `json:"member_id"`
-	RuntimePublicID       string          `json:"runtime_public_id"`
-	MemberVersion         int64           `json:"member_version"`
-	DisplayName           string          `json:"display_name"`
-	State                 string          `json:"state"`
-	Connected             bool            `json:"connected"`
-	LastSeenAtUnixMS      int64           `json:"last_seen_at_unix_ms"`
-	CloudPermission       CloudPermission `json:"cloud_permission"`
-	EffectiveCloudAllowed bool            `json:"effective_cloud_allowed"`
-	Metadata              MemberMetadata  `json:"metadata"`
+type RuntimeAttachment struct {
+	AttachmentID           string           `json:"attachment_id"`
+	RuntimePublicID        string           `json:"runtime_public_id"`
+	AttachmentVersion      int64            `json:"attachment_version"`
+	DisplayName            string           `json:"display_name"`
+	State                  string           `json:"state"`
+	Connected              bool             `json:"connected"`
+	LastSeenAtUnixMS       int64            `json:"last_seen_at_unix_ms"`
+	EgressPermission       EgressPermission `json:"egress_permission"`
+	EffectiveEgressAllowed bool             `json:"effective_egress_allowed"`
+	Metadata               MemberMetadata   `json:"metadata"`
 }
 
 type GatewayPolicy struct {
-	Revision            int64           `json:"revision"`
-	DefaultCloudAllowed bool            `json:"default_cloud_allowed"`
-	PublicationMode     PublicationMode `json:"publication_mode"`
+	Revision             int64    `json:"revision"`
+	DefaultEgressAllowed bool     `json:"default_egress_allowed"`
+	Destinations         []string `json:"destinations"`
 }
 
 type MemberPolicyUpdate struct {
-	MemberID              string          `json:"member_id"`
-	ExpectedMemberVersion int64           `json:"expected_member_version"`
-	CloudPermission       CloudPermission `json:"cloud_permission"`
+	AttachmentID              string           `json:"attachment_id"`
+	ExpectedAttachmentVersion int64            `json:"expected_attachment_version"`
+	EgressPermission          EgressPermission `json:"egress_permission"`
 }
 
 type MemberOperationResult struct {
-	MemberID  string  `json:"member_id"`
-	Member    *Member `json:"member,omitempty"`
-	ErrorCode string  `json:"error_code,omitempty"`
+	AttachmentID string             `json:"attachment_id"`
+	Member       *RuntimeAttachment `json:"member,omitempty"`
+	ErrorCode    string             `json:"error_code,omitempty"`
 }
 
 type HookAction string
@@ -208,46 +200,23 @@ const (
 )
 
 const (
-	HookMemberAdmit  HookAction = "member.admit"
-	HookAccessOpen   HookAction = "access.open"
-	HookCloudPublish HookAction = "cloud.publish"
+	HookAttachmentAdmit HookAction = "attachment.admit"
+	HookAccessOpen      HookAction = "access.open"
+	HookEgressOpen      HookAction = "egress.open"
 )
 
 type HookInput struct {
-	Version           int        `json:"version"`
-	Action            HookAction `json:"action"`
-	GatewayID         string     `json:"gateway_id"`
-	MemberID          string     `json:"member_id"`
-	RuntimePublicID   string     `json:"runtime_public_id"`
-	DesktopKeyID      string     `json:"desktop_key_id,omitempty"`
-	NamespacePublicID string     `json:"namespace_public_id,omitempty"`
-	PolicyRevision    int64      `json:"policy_revision"`
+	Version         int        `json:"version"`
+	Action          HookAction `json:"action"`
+	GatewayID       string     `json:"gateway_id"`
+	AttachmentID    string     `json:"attachment_id"`
+	RuntimePublicID string     `json:"runtime_public_id"`
+	DesktopKeyID    string     `json:"desktop_key_id,omitempty"`
+	PolicyRevision  int64      `json:"policy_revision"`
 }
 
 type HookResult struct {
 	Version    int    `json:"version"`
 	Allowed    bool   `json:"allowed"`
 	ReasonCode string `json:"reason_code"`
-}
-
-// MemberCloudContext is a Gateway observation, never a Runtime Cloud credential.
-// The Runtime proves its identity independently to Cloud before receiving a binding.
-type MemberCloudContext struct {
-	ProtocolVersion   string `json:"protocol_version"`
-	GatewayID         string `json:"gateway_id"`
-	MemberID          string `json:"member_id"`
-	MemberVersion     int64  `json:"member_version"`
-	CloudOrigin       string `json:"cloud_origin,omitempty"`
-	RegionOrigin      string `json:"region_origin,omitempty"`
-	NamespacePublicID string `json:"namespace_public_id,omitempty"`
-	GatewayPublicID   string `json:"gateway_public_id,omitempty"`
-	PolicyRevision    int64  `json:"policy_revision"`
-	Allowed           bool   `json:"allowed"`
-	State             string `json:"state"`
-}
-
-type ConfigureCloudRequest struct {
-	ProtocolVersion string `json:"protocol_version"`
-	CloudOrigin     string `json:"cloud_origin"`
-	Reauthorize     bool   `json:"reauthorize"`
 }

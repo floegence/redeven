@@ -76,7 +76,7 @@ type GatewayRecord struct {
 type Route struct {
 	ID                      string `json:"id"`
 	SourceID                string `json:"source_id"`
-	MemberID                string `json:"member_id"`
+	AttachmentID            string `json:"attachment_id"`
 	RuntimeID               string `json:"runtime_id"`
 	Origin                  string `json:"origin"`
 	Label                   string `json:"label"`

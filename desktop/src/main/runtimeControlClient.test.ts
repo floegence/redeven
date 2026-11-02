@@ -115,7 +115,7 @@ afterEach(async () => {
 
 describe('runtimeControlClient', () => {
   it('sends explicit Gateway targets and isolates Cloud consent from pairing confirmation', async () => {
-    const membership = { joined: true, phase: 'joined', gateway_id: 'one', member_id: 'member-one', route_selected: false };
+    const membership = { joined: true, phase: 'joined', gateway_id: 'one', attachment_id: 'member-one', route_selected: false };
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify({ ok: true, data: { joined: true, phase: 'joined', memberships: [membership] } }));
@@ -124,15 +124,14 @@ describe('runtimeControlClient', () => {
     expect((await manageRuntimeGateway(control, 'status')).memberships).toEqual([membership]);
     await manageRuntimeGateway(control, 'leave', undefined, 'one', false);
     await manageRuntimeGateway(control, 'leave', undefined, 'one', true);
-    await manageRuntimeGateway(control, 'publish', undefined, 'one');
     await manageRuntimeGateway(control, 'join', 'a'.repeat(43));
-    expect(server.requests.map(request => request.url)).toEqual(['/v2/gateway/status', '/v2/gateway/leave', '/v2/gateway/leave', '/v2/gateway/publish', '/v2/gateway/join']);
+    expect(server.requests.map(request => request.url)).toEqual(['/v2/gateway/status', '/v2/gateway/leave', '/v2/gateway/leave', '/v2/gateway/join']);
     expect(server.bodies.slice(1).map(body => JSON.parse(body))).toEqual([
       { gateway_id: 'one' }, { gateway_id: 'one', route_impact_acknowledged: true },
-      { gateway_id: 'one' }, { preview_id: 'a'.repeat(43) },
+      { preview_id: 'a'.repeat(43) },
     ]);
     await expect(manageRuntimeGateway(control, 'join')).rejects.toMatchObject({ code: 'GATEWAY_JOIN_INVALID' });
-    expect(server.requests).toHaveLength(5);
+    expect(server.requests).toHaveLength(4);
   });
   it('uses one typed route operation across preflight, query, commit and cancellation',async()=>{
     const operationID='a'.repeat(43);

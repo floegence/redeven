@@ -118,8 +118,8 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
 
 function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
   return {
-    schema_version: 4,
-    gateway_id: 'gw_bastion',
+    schema_version: 5,
+    connection_id: 'gw_bastion',
     display_name: 'Bastion',
     local_enabled: true,
     connection: {
@@ -140,8 +140,8 @@ function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
 
 function containerGateway(): GatewayRecord {
   return {
-    schema_version: 4,
-    gateway_id: 'gw_container',
+    schema_version: 5,
+    connection_id: 'gw_container',
     display_name: 'Container Gateway',
     local_enabled: true,
     connection: {
@@ -162,8 +162,8 @@ function containerGateway(): GatewayRecord {
 
 function localGateway(): GatewayRecord {
   return {
-    schema_version: 4,
-    gateway_id: 'gw_local',
+    schema_version: 5,
+    connection_id: 'gw_local',
     display_name: 'Local Environment service',
     local_enabled: true,
     connection: {
@@ -299,7 +299,7 @@ describe('GatewayLifecycleManager', () => {
 
   it('uses the Gateway profile state root for SSH host Gateway bridges', async () => {
     const record = sshGateway({
-      gateway_id: 'gw_home',
+      connection_id: 'gw_home',
       display_name: 'Home Gateway',
       connection: {
         kind: 'ssh_host',
@@ -333,7 +333,7 @@ describe('GatewayLifecycleManager', () => {
   it('keeps Gateway SSH host sessions isolated from regular SSH runtimes on the same install root', async () => {
     const sessionCache = new Map();
     const first = sshGateway({
-      gateway_id: 'gw_first',
+      connection_id: 'gw_first',
       display_name: 'First Gateway',
       connection: {
         kind: 'ssh_host',
@@ -344,7 +344,7 @@ describe('GatewayLifecycleManager', () => {
     });
     const second = {
       ...first,
-      gateway_id: 'gw_second',
+      connection_id: 'gw_second',
       display_name: 'Second Gateway',
     };
     const lifecycle = new GatewayLifecycleManager({
@@ -391,7 +391,7 @@ describe('GatewayLifecycleManager', () => {
 
   it('passes stored SSH passwords through Gateway service setup and bridge attach', async () => {
     const record = sshGateway({
-      gateway_id: 'gw_password',
+      connection_id: 'gw_password',
       display_name: 'Password Gateway',
       connection: {
         kind: 'ssh_host',
@@ -427,7 +427,7 @@ describe('GatewayLifecycleManager', () => {
       return '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway';
     });
     const record = sshGateway({
-      gateway_id: 'gw_parallel',
+      connection_id: 'gw_parallel',
       display_name: 'Parallel Gateway',
       connection: {
         kind: 'ssh_host',
@@ -786,8 +786,8 @@ describe('GatewayLifecycleManager', () => {
 
   it('does not allow Desktop to manage URL Gateways as local services', async () => {
     const record: GatewayRecord = {
-      schema_version: 4,
-      gateway_id: 'gw_url',
+      schema_version: 5,
+      connection_id: 'gw_url',
       display_name: 'URL Gateway',
     local_enabled: true,
       connection: {

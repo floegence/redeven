@@ -1,52 +1,37 @@
 ---
 type: Gateway Contract
-title: Gateway service
-tags: [gateway, desktop, access, identity]
+title: Independent Gateway service
+tags: [gateway, security, access]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
-redeven-gateway owns durable membership, one-time invitations, client grants, policy and restricted forwarding. Runtime verifies address/code, previews signed enrollment then explicitly joins. Gateway never scans/dials Runtime addresses or manages Runtime lifecycle. LAN needs no Cloud; Gateway loss affects its paths, not independent management authority.
+Gateway is an independent Runtime attachment, client-device admission and relay service. A fresh Gateway and Runtime work without a Cloud account, cached Cloud authority or public Internet. Cloud membership, organizations and user roles belong only to Cloud. Gateway and Runtime maintain device trust and environment authentication, never a local user directory.
 
 # Contract
 
-## Membership authority
-An administrator verified through the Gateway host creates a ten-minute, single-use invitation code and shares an administrator-confirmed Gateway address. Gateway never obtains Runtime Cloud credentials from its directory.
+## Authority ownership
+Gateway owns its stable identity, paired client keys, Runtime attachments, local network policy and active transports. Runtime explicitly consents to each attachment and owns its application TLS identity, environment password/MFA, sessions and host execution restrictions. Gateway administration grants no Runtime lifecycle or application authority.
 
-Desktop display association uses the trusted Runtime management membership summary and the paired Gateway key; public health proof remains a separate observation and grants no authority.
+Gateway has no Cloud machine registration, Namespace assignment, management renewal, delegated Runtime publication or Cloud command receiver. Runtime may independently enroll with Cloud. Gateway failure affects only traffic using that Gateway.
 
-## Policy and executable hooks
-New installations deny Cloud by default.
+## Public and private endpoints
+One advertised HTTPS origin serves client pairing/identity/catalog/application admission, Runtime invitation exchange/enrollment/mTLS attachment, and optional restricted egress. All advertised origins prove one stable Gateway identity. Host restrictions apply before protocol admission. The public handler never mounts management or operation-query routes.
 
-Programs use an absolute executable and argument array, never a shell. Desktop member management and `redeven-gateway members reevaluate --member ID --version N` check the current member version before applying the same reevaluation.
+The native Gateway packages support Linux and macOS. Administration uses a temporary private directory (0700), Unix socket (0600), and private host credential. SSH/container bridges reach that same host socket. A loopback TCP address or request header is not host proof. Windows Desktop manages remote/container Gateways; this change does not introduce a native Windows Gateway package or named-pipe implementation.
 
-## Own-process management
-The separate Gateway archive and state root contain no Runtime lifecycle data. Saving, refresh, pairing or member management never starts a stopped service implicitly.
+## State and lifecycle
+Gateway state schema 6 owns local attachments and policy; authority epoch 70 owns the independent Gateway wire break. Unsupported attachment state and retired cloud-access.json fail before creating identities or rewriting data. Desktop saved-connection schema 5 migrates its local locator to connection_id while retaining the independently pinned gateway_id and device credentials.
 
-Cancellation still stops development startup and exact owned-process cleanup remains required.
-
-## Compatibility and updates
-
-Gateway release tags and source commits are diagnostics, not admission gates. Desktop validates the installed binary against its own installation stamp, then observes service readiness and the actual Gateway wire/authority contract. An unrelated Desktop or Runtime release never forces Gateway replacement. Start/restart reuse an intact installed package; explicit Update validates the staged archive against the selected release and commit before activation. Package corruption, stopped service, pairing failure and protocol incompatibility remain distinct diagnoses; authorization rejection never implies an outdated build.
-
-Gateway v6 owns its authority epoch independently of Runtime Service. The existing value 69 is preserved so deployed services remain compatible; change it only for a reviewed Gateway authority break. Runtime metadata versions do not gate membership. Preserve signed identity, consent, permissions, freshness and current protocol validation; best-effort compatibility does not accept unknown security contracts. A feature failure affects that operation, not unrelated members or Runtime lifecycle authority.
-
-## Address changes and upgrade
-[Gateway network settings](gateway-network-settings.md) owns atomic network configuration, next-start listener changes, request Host admission and its persistent migration boundary.
-
-If all fail, the membership stays intact and reports Gateway unavailable.
-
-Optional Cloud publishing remains a separate flow.
+Saving, refresh, pairing and attachment management never implicitly start a stopped service. Removing a Desktop connection does not remove remote attachments or stop its service. Release/build metadata is diagnostic; unrelated Runtime releases do not change Gateway authority.
 
 # Boundaries
-
-Gateway owns membership, policy, invitations, and restricted forwarding. Gateway never dials arbitrary Runtime addresses or turns observations into authority.
+Published Flowersec supplies invitation exchange, connection controllers, ByteStreams, relay and HTTPS proxy mechanisms. Redeven supplies product identity, explicit consent, local policy and host adapters. No sibling dependency links, copied transport implementations or Go replacements are used.
 
 # Evidence
 
-- `redeven:desktop/src/main/gatewayServiceHost.test.ts` — Different release/commit reuse and independent package integrity.
-
-- `redeven:internal/config/cloud_config_version_test.go` - Unsupported configuration fails without rewriting operator state.
-
-- `redeven:internal/gatewaymembership/store.go` — Sole durable membership and invitation delivery.
+- redeven:internal/gatewayservice/public_endpoint_test.go — One public endpoint admits pairing and rejects host routes.
+- redeven:internal/gatewayservice/host_admin_test.go — Private socket context plus credential; loopback/header spoof rejection.
+- redeven:internal/gatewayservice/server_test.go — Unsupported state remains unchanged.
+- redeven:desktop/src/main/gatewayStore.test.ts — Saved registration migration and pinned identity preservation.

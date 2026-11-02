@@ -159,7 +159,7 @@ const testProvider = normalizeDesktopCloud({
 
 function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
   return {
-    gateway_id: 'legacy-direct',
+    connection_id: 'legacy-direct',
     display_name: 'Legacy direct target',
     local_enabled: true,
     connection_kind: 'ssh_container',

@@ -8,16 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven/internal/gatewaycloud"
 	"github.com/floegence/redeven/internal/gatewaystate"
 	"github.com/floegence/redeven/internal/lockfile"
 )
-
-func TestCloudConnectDefaultsToOfficialCloud(t *testing.T) {
-	if gatewaycloud.DefaultCloudOrigin != "https://"+strings.Join([]string{"redeven", "com"}, ".") {
-		t.Fatalf("default Cloud origin = %q", gatewaycloud.DefaultCloudOrigin)
-	}
-}
 
 func TestGatewayStartupExitReportsFailureWithoutWaitingForPIDDisappearance(t *testing.T) {
 	root := t.TempDir()
@@ -121,7 +114,7 @@ func TestGatewayServiceStoppedRequiresReleasedServiceLock(t *testing.T) {
 }
 
 func TestGatewayServiceServeArgsContainOnlyGatewayArguments(t *testing.T) {
-	args := gatewayServiceServeArgs("/tmp/state", "127.0.0.1:0")
+	args := gatewayServiceServeArgs("/tmp/state")
 	joined := strings.Join(args, "\x00")
 	if !strings.Contains(joined, "serve\x00--state-root\x00/tmp/state") || strings.Contains(joined, "runtime") {
 		t.Fatalf("Gateway child args contain Runtime lifecycle configuration: %#v", args)
@@ -133,7 +126,7 @@ func TestGatewayServiceStartsWithoutRuntimeState(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cli := &cli{stdin: strings.NewReader(""), stdout: &strings.Builder{}, stderr: &strings.Builder{}}
-	if got := cli.runGatewayService(ctx, stateRoot, "127.0.0.1:0", false, false, "", "127.0.0.1:0", ""); got != 0 {
+	if got := cli.runGatewayService(ctx, stateRoot, false, false, "", "127.0.0.1:0", ""); got != 0 {
 		t.Fatalf("service exit = %d", got)
 	}
 	if _, err := os.Stat(filepath.Join(stateRoot, "runtime-lifecycle")); !os.IsNotExist(err) {

@@ -98,11 +98,11 @@ func (b *ResourceBackend) Runtimes(ctx context.Context, meta *session.Meta) (Run
 		return directory, nil
 	}
 	directory.Sources = append(directory.Sources, RuntimeSource{Name: catalog.Gateway.DisplayName, Source: "gateway_host", Location: "execution_machine", State: "available"})
-	for _, member := range catalog.Members {
+	for _, member := range catalog.Attachments {
 		if member.State != "active" {
 			continue
 		}
-		ref := gatewayRuntimeRef(catalog.Gateway.GatewayID, member.MemberID)
+		ref := gatewayRuntimeRef(catalog.Gateway.GatewayID, member.AttachmentID)
 		associated := false
 		for i := range directory.Targets {
 			target := &directory.Targets[i]
@@ -115,7 +115,7 @@ func (b *ResourceBackend) Runtimes(ctx context.Context, meta *session.Meta) (Run
 			continue
 		}
 		online := member.Connected
-		directory.Targets = append(directory.Targets, RuntimeTarget{RuntimeRef: gatewayRuntimeRef(catalog.Gateway.GatewayID, member.MemberID), Generation: strconv.FormatInt(member.MemberVersion, 10), Identity: member.RuntimePublicID, Name: member.DisplayName, Source: "gateway_host", Location: "execution_machine", ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Registered: true, Online: &online, Actions: []string{"status"}, Reason: "desktop_gateway_required"})
+		directory.Targets = append(directory.Targets, RuntimeTarget{RuntimeRef: gatewayRuntimeRef(catalog.Gateway.GatewayID, member.AttachmentID), Generation: strconv.FormatInt(member.AttachmentVersion, 10), Identity: member.RuntimePublicID, Name: member.DisplayName, Source: "gateway_host", Location: "execution_machine", ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Registered: true, Online: &online, Actions: []string{"status"}, Reason: "desktop_gateway_required"})
 	}
 	return directory, nil
 }
@@ -159,9 +159,9 @@ func (b *ResourceBackend) Runtime(ctx context.Context, meta *session.Meta, req R
 		if err != nil {
 			return RuntimeResult{}, ErrTargetUnavailable
 		}
-		for _, member := range catalog.Members {
-			if member.State == "active" && gatewayRuntimeRef(catalog.Gateway.GatewayID, member.MemberID) == req.RuntimeRef {
-				if req.Generation != strconv.FormatInt(member.MemberVersion, 10) || req.Identity != member.RuntimePublicID {
+		for _, member := range catalog.Attachments {
+			if member.State == "active" && gatewayRuntimeRef(catalog.Gateway.GatewayID, member.AttachmentID) == req.RuntimeRef {
+				if req.Generation != strconv.FormatInt(member.AttachmentVersion, 10) || req.Identity != member.RuntimePublicID {
 					return RuntimeResult{}, ErrResourceChanged
 				}
 				online := member.Connected

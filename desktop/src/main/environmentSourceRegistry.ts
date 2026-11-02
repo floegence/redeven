@@ -37,16 +37,16 @@ export function providerEnvironmentSource(
 }
 
 export function gatewayEnvironmentSource(
-  gateway: Pick<DesktopGatewaySource, 'gateway_id' | 'display_name'>,
+  gateway: Pick<DesktopGatewaySource, 'connection_id' | 'display_name'>,
 ): DesktopEnvironmentSource | null {
-  const sourceID = desktopGatewaySourceID(gateway.gateway_id);
+  const sourceID = desktopGatewaySourceID(gateway.connection_id);
   if (!sourceID) {
     return null;
   }
   return {
     kind: 'gateway',
     source_id: sourceID,
-    label: compact(gateway.display_name) || gateway.gateway_id,
+    label: compact(gateway.display_name) || gateway.connection_id,
   };
 }
 

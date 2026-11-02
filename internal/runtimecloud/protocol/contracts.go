@@ -77,20 +77,12 @@ type SignedRequest struct {
 }
 
 type EnrollmentAuthorization struct {
-	RuntimeLinkTicket   string          `json:"runtime_link_ticket,omitempty"`
-	EnvPublicID         string          `json:"env_public_id,omitempty"`
-	GatewayPublicID     string          `json:"gateway_public_id,omitempty"`
-	MemberID            string          `json:"member_id,omitempty"`
-	MemberVersion       int64           `json:"member_version,omitempty"`
-	Delegation          json.RawMessage `json:"delegation,omitempty"`
-	MemberAuthorization string          `json:"member_authorization,omitempty"`
+	RuntimeLinkTicket string `json:"runtime_link_ticket"`
+	EnvPublicID       string `json:"env_public_id"`
 }
 
 func (a EnrollmentAuthorization) Valid() bool {
-	if a.RuntimeLinkTicket != "" {
-		return a.EnvPublicID != "" && a.GatewayPublicID == "" && a.MemberID == "" && a.MemberVersion == 0 && len(a.Delegation) == 0 && a.MemberAuthorization == ""
-	}
-	return a.EnvPublicID == "" && a.GatewayPublicID != "" && a.MemberID != "" && a.MemberVersion > 0 && len(a.Delegation) > 0 && a.MemberAuthorization != ""
+	return a.RuntimeLinkTicket != "" && a.EnvPublicID != ""
 }
 
 type RecoverAuthorizationResponse struct {
@@ -215,8 +207,8 @@ type CredentialIssueRequest struct {
 }
 
 type RouteSelection struct {
-	Kind     string `json:"kind"`
-	MemberID string `json:"member_id,omitempty"`
+	Kind         string `json:"kind"`
+	AttachmentID string `json:"attachment_id,omitempty"`
 }
 
 type RoutePreflightRequest struct {

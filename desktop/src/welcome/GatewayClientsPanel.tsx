@@ -20,12 +20,25 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
   const [now, setNow] = createSignal(Date.now());
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [uncertainOperation, setUncertainOperation] = createSignal('');
   const [revoking, setRevoking] = createSignal('');
   const [copied, setCopied] = createSignal<'code' | 'address' | 'all'>();
   const currentGatewayID = createMemo(() => props.gatewayID);
   let generation = 0;
   const timer = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => { generation++; clearInterval(timer); });
+  async function acknowledgeOperation() {
+    const id = uncertainOperation(), gatewayID = props.gatewayID;
+    if (!id || !gatewayID || busy() || props.available === false) return;
+    const owner = generation; setBusy(true);
+    try {
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'acknowledge_gateway_operation', gateway_id: gatewayID, operation_id: id });
+      if (owner !== generation) return;
+      if (result?.ok) { setUncertainOperation(''); setError(''); }
+      else setError(props.i18n.t('gatewayMembers.failed'));
+    } catch { if (owner === generation) setError(props.i18n.t('gatewayMembers.failed')); }
+    finally { if (owner === generation) setBusy(false); }
+  }
   async function perform(request: DesktopLauncherActionRequest) {
     if (busy() || props.available === false) return;
     const current = generation;
@@ -33,7 +46,10 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
     try {
       const result = await window.redevenDesktopLauncher?.performAction(request);
       if (current !== generation) return;
-      if (!result?.ok) throw new Error();
+      if (!result?.ok) {
+        if (result?.gateway_error_code === 'OPERATION_RESULT_UNKNOWN') { setUncertainOperation(result.gateway_operation_id ?? ''); setError(props.i18n.t('gatewayMembers.operationUnknown', { id: result.gateway_operation_id ?? '' })); return; }
+        throw new Error();
+      }
       if (result.gateway_clients) setClients(result.gateway_clients);
       if (result.gateway_access_code) { setNow(Date.now()); setCode(result.gateway_access_code); setCopied(undefined); }
       setRevoking('');
@@ -42,7 +58,7 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
   }
   createEffect(() => {
     const gatewayID = currentGatewayID();
-    generation++; setBusy(false); setClients([]); setCode(undefined); setRevoking(''); setAddress(untrack(() => props.endpoints?.[0]?.address ?? ''));
+    generation++; setUncertainOperation(''); setBusy(false); setClients([]); setCode(undefined); setRevoking(''); setAddress(untrack(() => props.endpoints?.[0]?.address ?? ''));
     untrack(() => void perform({ kind: 'list_gateway_clients', gateway_id: gatewayID }));
   });
   createEffect(on(() => props.available, value => {
@@ -70,13 +86,14 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspe
       <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder={props.i18n.t('gatewayNetwork.addressPlaceholder')} aria-invalid={address() !== '' && !validAddress() || undefined} disabled={props.available === false || busy()} onInput={event => { setAddress(event.currentTarget.value); setCopied(undefined); }} /></label>
       <details class="redeven-gateway-disclosure text-xs text-muted-foreground"><summary class="cursor-pointer">{props.i18n.t('gatewayClients.codeHelpTitle')}</summary><p class="pt-2 leading-relaxed">{props.i18n.t('gatewayClients.codeHelp')}</p></details>
       <Show when={code()}>{value => <div class="redeven-gateway-content-enter redeven-gateway-access-code">
-        <code>{value().access_code}</code>
+        <code class="block min-w-0 max-w-full truncate select-all" title={props.i18n.t('gatewayClients.createCode')}>{value().access_code}</code>
           <Button variant="outline" size="sm" icon={Copy} disabled={!remaining() || !validAddress() || props.available === false} onClick={() => void copyCode('code')}>{props.i18n.t(copied() === 'code' ? 'environmentCenter.copied' : 'common.copy')}</Button>
         <Button variant="outline" size="sm" disabled={!remaining() || !validAddress() || props.available === false} onClick={() => void copyCode('address')}>{props.i18n.t(copied() === 'address' ? 'gatewayJoin.copied' : 'gatewayJoin.copyAddress')}</Button>
         <Button variant="outline" size="sm" disabled={!remaining() || !validAddress() || props.available === false} onClick={() => void copyCode('all')}>{props.i18n.t(copied() === 'all' ? 'gatewayJoin.copied' : 'gatewayExperience.copyConnection')}</Button>
         <p class="basis-full text-xs text-muted-foreground" role="status">{remaining() ? props.i18n.t('gatewayClients.codeExpires', { time: `${Math.floor(remaining() / 60)}:${String(remaining() % 60).padStart(2, '0')}` }) : props.i18n.t('gatewayClients.codeExpired')}</p>
       </div>}</Show>
-    </section><Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show></Dialog>
+    </section><Show when={uncertainOperation()}><Button variant="outline" size="sm" disabled={busy() || props.available === false} onClick={() => void acknowledgeOperation()}>{props.i18n.t('gatewayMembers.operationReviewed')}</Button></Show>
+      <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show></Dialog>
     <section class="redeven-gateway-settings-section">
       <div class="redeven-gateway-section-heading"><div><h3>{props.i18n.t('gatewayClients.authorizedClients')}</h3></div>
         <Button variant="ghost" size="sm" disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', gateway_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>

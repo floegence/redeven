@@ -16,7 +16,7 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 
 function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
   return {
-    gateway_id: 'bastion',
+    connection_id: 'bastion',
     display_name: 'Bastion',
     local_enabled: true,
     connection_kind: 'url',
@@ -28,7 +28,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     endpoint_label: 'https://gateway.example.invalid',
     created_at_ms: 10,
     updated_at_ms: 20,
-    environments: [{ ...memberFixture, member_id: 'env_demo', display_name: 'Demo' }],
+    environments: [{ ...memberFixture, attachment_id: 'env_demo', display_name: 'Demo' }],
     ...overrides,
   };
 }
@@ -74,10 +74,10 @@ describe('environmentLibraryProjection', () => {
     expect(relation).toBeTruthy();
     expect(relation?.primary_entry.kind).toBe('local_environment');
     expect(relation?.primary_entry.id).toBe(linkedLocal.id);
-    expect(relation?.member_ids).toEqual([linkedLocal.id, linkedProvider.id]);
+    expect(relation?.attachment_ids).toEqual([linkedLocal.id, linkedProvider.id]);
     expect(relation?.pinned).toBe(false);
-    expect(groups.filter((group) => group.member_ids.includes(linkedLocal.id))).toHaveLength(1);
-    expect(groups.filter((group) => group.member_ids.includes(linkedProvider.id))).toHaveLength(1);
+    expect(groups.filter((group) => group.attachment_ids.includes(linkedLocal.id))).toHaveLength(1);
+    expect(groups.filter((group) => group.attachment_ids.includes(linkedProvider.id))).toHaveLength(1);
   });
 
   it('keeps a provider entry independent when the runtime target identity does not match', () => {
@@ -166,7 +166,7 @@ describe('environmentLibraryProjection', () => {
     expect(dissolved[0]).toMatchObject({
       id: linkedLocal.id,
       primary_entry: linkedLocal,
-      member_ids: [linkedLocal.id],
+      attachment_ids: [linkedLocal.id],
     });
     expect(dissolved[0].provider_entry).toBeUndefined();
   });
@@ -203,7 +203,7 @@ describe('environmentLibraryProjection', () => {
       gatewaySources: [
         gatewaySource(),
         gatewaySource({
-          gateway_id: 'office',
+          connection_id: 'office',
           display_name: 'Office',
           status: 'trust_changed',
           trust_state: 'trust_changed',

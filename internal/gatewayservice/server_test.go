@@ -26,10 +26,10 @@ func TestGatewayDoesNotExposeRuntimeLifecycleRoutes(t *testing.T) {
 }
 
 func TestRejectedGatewayConfigurationDoesNotCreateOrRewriteState(t *testing.T) {
-	for _, name := range []string{"membership-migration.json", "environments.json", "members.json"} {
+	for _, name := range []string{"membership-migration.json", "environments.json", "members.json", "cloud-access.json"} {
 		root := t.TempDir()
 		file := filepath.Join(root, name)
-		body := []byte(`{"schema_version":4,"retired_secret":"do-not-expose"}`)
+		body := []byte(`{"schema_version":5,"retired_secret":"do-not-expose"}`)
 		if err := os.WriteFile(file, body, 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -48,13 +48,13 @@ func TestRejectedGatewayConfigurationDoesNotCreateOrRewriteState(t *testing.T) {
 
 func TestGatewayStartsWithoutRuntimeState(t *testing.T) {
 	stateRoot := t.TempDir()
-	server, err := New(Options{StateRoot: stateRoot, MemberListen: "127.0.0.1:0"})
+	server, err := New(Options{StateRoot: stateRoot, PublicListen: "127.0.0.1:0"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	httpServer, _, err := server.Start(ctx, "127.0.0.1:0")
+	httpServer, _, err := server.Start(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

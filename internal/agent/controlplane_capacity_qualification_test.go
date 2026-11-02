@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -20,28 +19,18 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
-	"github.com/floegence/redeven/internal/gatewaycloud"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
-	"github.com/floegence/redeven/internal/periodic"
 )
 
 // This opt-in harness runs on an independent load host. All credentials come
 // from real enrolled fixtures; it never seeds or substitutes an authority DB.
 type capacityManifest struct {
-	Scenario        string            `json:"scenario,omitempty"`
-	DurationSeconds int               `json:"duration_seconds"`
-	StartupRate     int               `json:"startup_rate"`
-	RuntimeConfigs  []string          `json:"runtime_configs"`
-	CAFile          string            `json:"ca_file,omitempty"`
-	Gateways        []capacityGateway `json:"gateways,omitempty"`
-	HTTP            []capacityHTTP    `json:"http,omitempty"`
-	Environment     json.RawMessage   `json:"environment"`
-}
-type capacityGateway struct {
-	Origin      string `json:"cloud_origin"`
-	NamespaceID string `json:"namespace_public_id"`
-	GatewayID   string `json:"gateway_public_id"`
-	PrivateKey  string `json:"private_key_b64u"`
+	Scenario        string          `json:"scenario,omitempty"`
+	DurationSeconds int             `json:"duration_seconds"`
+	StartupRate     int             `json:"startup_rate"`
+	RuntimeConfigs  []string        `json:"runtime_configs"`
+	CAFile          string          `json:"ca_file,omitempty"`
+	HTTP            []capacityHTTP  `json:"http,omitempty"`
+	Environment     json.RawMessage `json:"environment"`
 }
 type capacityHTTP struct {
 	Name       string            `json:"name"`
@@ -222,10 +211,7 @@ func TestControlplaneCapacityQualification(t *testing.T) {
 			t.Fatal("qualification ended before all clients started")
 		}
 	}
-	for _, entry := range manifest.Gateways {
-		wg.Add(1)
-		go func() { defer wg.Done(); capacityGatewayObservation(ctx, entry, roots, metrics) }()
-	}
+
 	for _, entry := range manifest.HTTP {
 		if entry.RPS < 1 || entry.Name == "" {
 			t.Fatal("invalid HTTP workload")
@@ -386,41 +372,6 @@ func capacityRoots(path string) (*x509.CertPool, error) {
 		return nil, errors.New("invalid qualification CA")
 	}
 	return roots, nil
-}
-func capacityGatewayObservation(ctx context.Context, entry capacityGateway, roots *x509.CertPool, metrics *capacityMetrics) {
-	key, err := gc.DecodeKey(entry.PrivateKey)
-	if err != nil || len(key) != ed25519.PrivateKeySize {
-		metrics.Failures.Add(1)
-		return
-	}
-	client, err := gatewaycloud.NewClient(entry.Origin, capacityHTTPTransport(roots))
-	if err != nil {
-		metrics.Failures.Add(1)
-		return
-	}
-	defer client.Close()
-	identity := gatewaycloud.Identity{PrivateKey: ed25519.PrivateKey(key), NamespacePublicID: entry.NamespaceID, GatewayPublicID: entry.GatewayID}
-	timer := time.NewTimer(time.Nanosecond)
-	defer timer.Stop()
-	first := true
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		}
-		start := time.Now()
-		_, err := client.GatewayStatus(ctx, identity)
-		if ctx.Err() != context.Canceled {
-			metrics.observe("gateway_signed_status", time.Since(start), err)
-		}
-		delay := 5 * time.Second
-		if first {
-			delay = periodic.InitialDelay(delay)
-			first = false
-		}
-		timer.Reset(delay)
-	}
 }
 func capacityHTTPTransport(roots *x509.CertPool) *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()

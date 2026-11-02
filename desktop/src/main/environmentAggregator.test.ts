@@ -5,7 +5,7 @@ import { buildGatewayEnvironmentEntries } from './environmentAggregator';
 
 describe('Gateway environment projection', () => {
   it('consumes an opened member Runtime distribution without changing catalog identity or authority', () => {
-    const input = { gatewaySources: [{ gateway_id: 'observed-gateway', display_name: 'Gateway', local_enabled: true,
+    const input = { gatewaySources: [{ connection_id: 'observed-gateway', display_name: 'Gateway', local_enabled: true,
       connection_kind: 'url' as const, management_capability: 'access_only' as const, capabilities: ['member_access' as const],
       status: 'online' as const, created_at_ms: 1, updated_at_ms: 1, environments: [memberFixture] }] };
     const catalog = buildGatewayEnvironmentEntries(input)[0];
@@ -18,12 +18,12 @@ describe('Gateway environment projection', () => {
   it('projects catalog entries as access-only environments', () => {
     const [entry] = buildGatewayEnvironmentEntries({
       gatewaySources: [{
-        gateway_id: 'gw-1',
+        connection_id: 'gw-1',
         display_name: 'Gateway',
         local_enabled: true,
         connection_kind: 'url',
         management_capability: 'access_only',
-        capabilities: ['member_access'], permissions: { access: true, manage_members: true, configure_cloud: true },
+        capabilities: ['member_access'], permissions: { access: true, manage_attachments: true, manage_network: true },
         status: 'online',
         created_at_ms: 1,
         updated_at_ms: 1,
@@ -38,7 +38,7 @@ describe('Gateway environment projection', () => {
 it.each([['darwin', 'macos'], ['linux', 'linux'], ['win32', 'windows'], ['unknown', undefined], ['', undefined]])(
   'uses Gateway member OS %s without inferring from architecture or Gateway host', (os, expected) => {
     const [entry] = buildGatewayEnvironmentEntries({ gatewaySources: [{
-      gateway_id: 'os-gateway', display_name: 'Windows gateway', local_enabled: true, connection_kind: 'url',
+      connection_id: 'os-gateway', display_name: 'Windows gateway', local_enabled: true, connection_kind: 'url',
       management_capability: 'access_only', capabilities: ['member_access'], status: 'online', created_at_ms: 1, updated_at_ms: 1,
       environments: [{ ...memberFixture, metadata: { ...memberFixture.metadata, os, arch: 'darwin' } }],
     }] });

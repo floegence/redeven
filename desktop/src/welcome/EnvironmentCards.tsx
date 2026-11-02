@@ -4,11 +4,10 @@ import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccess
 import { RuntimeGatewayConnectionsDialog } from './RuntimeGatewayConnectionsDialog';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { RuntimeServiceCloudLinkBinding } from '../shared/runtimeService';
-import type { RuntimeGatewayMembership } from '../shared/runtimeService';
+import type { RuntimeGatewayAttachment } from '../shared/runtimeService';
 import type { GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { environmentAccessPresentation } from './environmentAccessPresentation';
-import { RuntimeGatewayPublicationStatus } from './RuntimeGatewayPublicationStatus';
 import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useTheme } from '@floegence/floe-webapp-core';
@@ -230,8 +229,8 @@ export function EnvironmentCardsPanel(
   // Retained data supplies presentation only. Submission authority always comes from allGroups.
   const renderedGroups = createMemo<readonly EnvironmentLibraryDisplayGroup[]>(previous => {
     const held = heldOwners();
-    const locked = (previous ?? []).filter(group => (group.owner_ids ?? group.member_ids).some(id => held.has(id)));
-    const reserved = new Set(locked.flatMap(group => [...group.member_ids, ...(group.owner_ids ?? [])]));
+    const locked = (previous ?? []).filter(group => (group.owner_ids ?? group.attachment_ids).some(id => held.has(id)));
+    const reserved = new Set(locked.flatMap(group => [...group.attachment_ids, ...(group.owner_ids ?? [])]));
     const latest = new Map(props.allGroups.flatMap(group => group.member_entries).map(entry => [entry.id, entry]));
     // IMPORTANT: An open owner keeps one host across regrouping; observations update facts, not topology.
     const retained: readonly EnvironmentLibraryDisplayGroup[] = locked.map(group => ({ ...group,
@@ -245,9 +244,9 @@ export function EnvironmentCardsPanel(
       if (host) return [host];
       if (reserved.has(group.primary_entry.id)) return [];
       const entries = group.member_entries.filter(entry => !reserved.has(entry.id));
-      return [{ ...group, member_entries: entries, member_ids: entries.map(entry => entry.id),
+      return [{ ...group, member_entries: entries, attachment_ids: entries.map(entry => entry.id),
         provider_entry: group.provider_entry && !reserved.has(group.provider_entry.id) ? group.provider_entry : undefined,
-        owner_ids: (group.owner_ids ?? group.member_ids).filter(id => !reserved.has(id)),
+        owner_ids: (group.owner_ids ?? group.attachment_ids).filter(id => !reserved.has(id)),
       }];
     });
     return [...next, ...retained.filter(group => !next.some(item => item.id === group.id))];
@@ -266,11 +265,11 @@ export function EnvironmentCardsPanel(
   }));
   const activeOwnerID = (group: EnvironmentLibraryDisplayGroup) => {
     const selected = selectedOwnerIDs()[group.id];
-    return selected && (group.owner_ids ?? group.member_ids).includes(selected) ? selected
+    return selected && (group.owner_ids ?? group.attachment_ids).includes(selected) ? selected
       : props.defaultCloud && group.provider_entry ? group.provider_entry.id : group.primary_entry.id;
   };
   const selectOwner = (group: EnvironmentLibraryDisplayGroup, ownerID: string) => {
-    if (!(group.owner_ids ?? group.member_ids).includes(ownerID)) return;
+    if (!(group.owner_ids ?? group.attachment_ids).includes(ownerID)) return;
     setActiveEnvironmentOverlayState(closedEnvironmentLibraryOverlayState());
     setSelectedOwnerIDs(current => ({ ...current, [group.id]: ownerID }));
   };
@@ -409,8 +408,8 @@ export function EnvironmentCardsPanel(
     }
     if (request.canReveal && !request.canReveal()) return;
     if (!request.intent && !progress) return;
-    const group = props.groups.find(group => group.member_ids.includes(environment.id));
-    if (group) selectOwner(group, (group.owner_ids ?? group.member_ids).includes(environment.id) ? environment.id : group.primary_entry.id);
+    const group = props.groups.find(group => group.attachment_ids.includes(environment.id));
+    if (group) selectOwner(group, (group.owner_ids ?? group.attachment_ids).includes(environment.id) ? environment.id : group.primary_entry.id);
     handledLifecycleProgressFocusRequestID = request.request_id;
     if (progress) {
       const disclosure = focusEnvironmentLifecycleDisclosure(null, environment.id, progress);
@@ -493,7 +492,7 @@ export function EnvironmentCardsPanel(
     const disclosure = lifecycleDisclosureState();
     return disclosure?.environment_id === environmentID ? disclosure : null;
   };
-  const renderOwner = (environmentID: string, groupID: string, gatewayView?: Readonly<{entry: () => DesktopEnvironmentEntry; member: () => RuntimeGatewayMembership | undefined; selector: JSX.Element}>) => {
+  const renderOwner = (environmentID: string, groupID: string, gatewayView?: Readonly<{entry: () => DesktopEnvironmentEntry; member: () => RuntimeGatewayAttachment | undefined; selector: JSX.Element}>) => {
     const group = createMemo<EnvironmentLibraryDisplayGroup>(previous => projectedGroupsByID()[groupID] ?? previous);
     const entry = createMemo<DesktopEnvironmentEntry>(previous => gatewayView?.entry() ?? projectedEntriesByID()[environmentID] ?? previous);
     return <EnvironmentOwnerSurface
@@ -501,7 +500,7 @@ export function EnvironmentCardsPanel(
       i18n={props.i18n}
       presentation={props.presentation}
       Facts={props.Facts}
-      ownerAvailable={props.allGroups.some(group => group.member_ids.includes(environmentID) || group.gateway_tab_id === environmentID)}
+      ownerAvailable={props.allGroups.some(group => group.attachment_ids.includes(environmentID) || group.gateway_tab_id === environmentID)}
       onInteractionActive={active => setSessionOwners(current => {
         if (current.has(environmentID) === active) return current;
         const next = new Set(current); if (active) next.add(environmentID); else next.delete(environmentID); return next;
@@ -599,7 +598,7 @@ export function EnvironmentCardsPanel(
     const panelID = (ownerID: string) => `${relationID}-panel-${encodeURIComponent(ownerID)}`;
     const hasTabs = () => Boolean(group().provider_entry || group().gateway_tab_id);
     const active = () => activeOwnerID(group());
-    const memberIDs = createMemo(() => group().owner_ids ?? group().member_ids, undefined, {
+    const memberIDs = createMemo(() => group().owner_ids ?? group().attachment_ids, undefined, {
       equals: (left, right) => left.length === right.length && left.every((id, index) => id === right[index]),
     });
     const gatewayTabID = createMemo(() => group().gateway_tab_id);
@@ -610,12 +609,12 @@ export function EnvironmentCardsPanel(
       if (selected && !gatewayMembers().some(member => member.gateway_id === selected)
         && !heldOwners().has(group().gateway_tab_id ?? '')) setSelectedGateway('');
     });
-    const gatewayMember = createMemo<RuntimeGatewayMembership | undefined>(previous => {
+    const gatewayMember = createMemo<RuntimeGatewayAttachment | undefined>(previous => {
       const selected = selectedGateway();
       return selected ? gatewayMembers().find(item => item.gateway_id === selected) ?? (previous?.gateway_id === selected ? previous : undefined)
         : gatewayMembers()[0] ?? previous;
     });
-    const gatewayEntry = () => group().gateway_entries?.find(entry => entry.gateway_env_id === gatewayMember()?.member_id
+    const gatewayEntry = () => group().gateway_entries?.find(entry => entry.gateway_env_id === gatewayMember()?.attachment_id
       && entry.gateway_identity_fingerprint === gatewayMember()?.identity_fingerprint
       && entry.gateway_member?.runtime_public_id === gatewayMember()?.runtime_public_id) ?? group().primary_entry;
     const gatewaySelector = <Show when={gatewayMembers().length > 1}><label class="mb-2 flex min-w-0 items-center gap-2 text-xs"><span class="shrink-0 text-muted-foreground">{props.i18n.t('gatewayConnections.tab')}</span><select class="min-w-0 flex-1 cursor-pointer rounded-md border border-border bg-background px-2 py-1 text-xs" aria-label={props.i18n.t('gatewayConnections.select')} value={gatewayMember()?.gateway_id} onChange={event => {setSelectedGateway(event.currentTarget.value);setActiveEnvironmentOverlayState(closedEnvironmentLibraryOverlayState());}}><KeyedFor each={gatewayMembers()} by={member => member.gateway_id}>{member => <option value={member().gateway_id}>{member().gateway_name || member().gateway_id}</option>}</KeyedFor></select></label></Show>;
@@ -798,7 +797,7 @@ function EnvironmentOwnerSurface(
     relationshipRole?: 'runtime' | 'cloud';
     managementEnvironment?: DesktopEnvironmentEntry;
     gatewayPerspective?: boolean;
-    gatewayMember?: RuntimeGatewayMembership;
+    gatewayMember?: RuntimeGatewayAttachment;
     gatewaySelector?: JSX.Element;
     paired: boolean;
     connectionStatus: () => JSX.Element;
@@ -933,10 +932,10 @@ function EnvironmentOwnerSurface(
     setGatewayJoinAddress(purpose === 'update-endpoints' ? props.gatewayMember?.endpoints[0]?.address ?? '' : '');
     setGatewayJoinOpenRequest(value => value + 1);
   };
-  const [gatewayMode,setGatewayMode]=createSignal<'leave'|'publish'>();
+  const [gatewayMode,setGatewayMode]=createSignal<'leave'>();
   const [gatewayActionID, setGatewayActionID] = createSignal<string>();
   createEffect(() => props.onInteractionActive(joinOpen() || cloudOpen() || !!gatewayMode()));
-  const openGatewayConfirmation = (mode: 'leave' | 'publish') => {
+  const openGatewayConfirmation = (mode: 'leave') => {
     setGatewayActionID(props.gatewayPerspective ? props.gatewayMember?.gateway_id : undefined);
     setGatewayMode(mode);
   };
@@ -954,7 +953,6 @@ function EnvironmentOwnerSurface(
       }, ...(runtime().runtime_service?.gateway_memberships?.length ? [
        {id:'gateway-update-endpoints',label:props.i18n.t('gatewayJoin.updateEndpoints')+'…',disabled:operationState().actionsDisabled,onRun:()=>openGatewayEnrollment('update-endpoints')},
        {id:'gateway-leave',label:props.i18n.t('gatewayConnections.unpairTitle')+'…',tone:'danger' as const,disabled:operationState().actionsDisabled,onRun:()=>openGatewayConfirmation('leave')},
-       {id:'gateway-publish',label:props.i18n.t('gatewayConnections.publishTitle')+'…',disabled:operationState().actionsDisabled,onRun:()=>openGatewayConfirmation('publish')},
       ] : [])];
     }
     return [];
@@ -1063,17 +1061,16 @@ function EnvironmentOwnerSurface(
         />
         <Show when={props.paired && props.relationshipRole === 'cloud' && !runtime().runtime_service?.bindings?.cloud_link.cloud}>{props.connectionStatus()}</Show>
         <Show when={targetID() && cloudBinding()}>
-          <RuntimeCloudConnections targetID={targetID()!} binding={cloudBinding()!} available={targetAvailable() && !!runtime().runtime_service?.bindings?.cloud_link.cloud} onOpenChange={setCloudOpen}
+          <RuntimeCloudConnections targetID={targetID()!} binding={cloudBinding()!} available={targetAvailable()} onOpenChange={setCloudOpen}
             memberships={runtime().runtime_service?.gateway_memberships ?? []} i18n={props.i18n} openInBrowser={props.openInBrowser}
             onChanged={async () => { if (!await props.refreshEnvironmentRuntime(runtime(), 'connect')) throw new Error('Runtime status could not be refreshed'); }} />
         </Show>
         <Show when={runtime().kind !== 'provider_environment' && targetID()}>
           <RuntimeGatewayJoinPanel gateways={props.gateways} targetLabel={runtime().provider_runtime_link_target?.label ?? runtime().label} focusOwner={() => ownerElement?.focus()} targetID={targetID()!} i18n={props.i18n} purpose={gatewayJoinPurpose()} address={gatewayJoinAddress()} openRequest={gatewayJoinOpenRequest()} authorityKey={JSON.stringify([targetAvailable(), environmentInteractionIdentity(runtime()), !!runtime().runtime_service?.capabilities?.runtime_gateway?.supported])} submissionBlocked={!targetAvailable() || !runtime().runtime_service?.capabilities?.runtime_gateway?.supported} hideTrigger onClose={()=>{setJoinOpen(false);void props.refreshEnvironmentRuntime(runtime(),'connect');}} />
           <RuntimeGatewayConnectionsDialog targetID={targetID()!} mode={gatewayMode()} available={targetAvailable() && !!runtime().runtime_service?.capabilities?.runtime_gateway?.supported}
-            gatewayID={gatewayActionID()} authorityKey={JSON.stringify([environmentInteractionIdentity(runtime()), (runtime().runtime_service?.gateway_memberships ?? []).map(member => [member.gateway_id, member.member_id, member.identity_fingerprint, member.runtime_public_id])])}
+            gatewayID={gatewayActionID()} authorityKey={JSON.stringify([environmentInteractionIdentity(runtime()), (runtime().runtime_service?.gateway_memberships ?? []).map(member => [member.gateway_id, member.attachment_id, member.identity_fingerprint, member.runtime_public_id])])}
             i18n={props.i18n} onClose={()=>setGatewayMode(undefined)} onChanged={()=>void props.refreshEnvironmentRuntime(runtime(),'connect')} focusOwner={()=>ownerElement?.focus()} />
         </Show>
-        <Show when={props.environment.runtime_service?.gateway_publication}>{access => <RuntimeGatewayPublicationStatus access={access()} i18n={props.i18n} openInBrowser={props.openInBrowser} />}</Show>
       </CardContent>
       <Show when={!props.environment.pinned && props.otherPinnedOwner}>
         <div class="redeven-other-owner-pin"><Pin class="h-3 w-3" />

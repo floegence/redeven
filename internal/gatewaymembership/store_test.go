@@ -52,8 +52,8 @@ func memberRequest(t *testing.T, invitation gp.EnrollmentDescriptor, runtimeID s
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := MemberID(invitation.InvitationID, base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey)))
-	delegation := gp.MemberDelegation{ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, MemberID: id, RuntimePublicID: runtimeID, PublicKeyB64u: base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey)), InvitationID: invitation.InvitationID, ConsentedAtUnixMS: time.Now().UnixMilli(), ManageAccess: true, ManageCloudPublication: true}
+	id := AttachmentID(invitation.InvitationID, base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey)))
+	delegation := gp.MemberDelegation{ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, AttachmentID: id, RuntimePublicID: runtimeID, PublicKeyB64u: base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey)), InvitationID: invitation.InvitationID, ConsentedAtUnixMS: time.Now().UnixMilli(), ManageAccess: true}
 	if err := SignDelegation(&delegation, key); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 	}
 	var first gp.MemberJoinResponse
 	for response := range results {
-		if first.MemberID == "" {
+		if first.AttachmentID == "" {
 			first = response
 		}
 		if !reflect.DeepEqual(response, first) {
@@ -143,7 +143,7 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 		}
 	}
 	members, policy, _ := store.Snapshot()
-	if len(members) != 1 || policy.DefaultCloudAllowed || members[0].Member.MemberVersion != 1 {
+	if len(members) != 1 || policy.DefaultEgressAllowed || members[0].Member.AttachmentVersion != 1 {
 		t.Fatalf("members %+v policy %+v", members, policy)
 	}
 	other, _ := memberRequest(t, invitation, "runtime_b")
@@ -170,7 +170,7 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(response, first) {
 		t.Fatalf("recovery %v", err)
 	}
-	if err := reopened.Remove(first.MemberID, first.MemberVersion); err != nil {
+	if err := reopened.Remove(first.AttachmentID, first.AttachmentVersion); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reopened.Join(context.Background(), request); !errors.Is(err, ErrDenied) {
@@ -179,7 +179,7 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 }
 
 func TestOldMembershipSchemasAreRejectedWithoutRewrite(t *testing.T) {
-	for _, version := range []int{1, 2, 3, 4} {
+	for _, version := range []int{1, 2, 3, 4, 5} {
 		store, identity := membershipStore(t)
 		legacy := store.clone()
 		legacy.SchemaVersion = version
@@ -201,7 +201,7 @@ func TestFutureMembershipSchemaIsRejectedWithoutRewrite(t *testing.T) {
 	store, identity := membershipStore(t)
 	store.mu.Lock()
 	future := store.clone()
-	future.SchemaVersion = 6
+	future.SchemaVersion = 7
 	if err := gatewaystate.Write(store.path, future); err != nil {
 		store.mu.Unlock()
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func TestFutureMembershipSchemaIsRejectedWithoutRewrite(t *testing.T) {
 func TestCloudInvitationCommandRecoversTheSameDelivery(t *testing.T) {
 	store, identity := membershipStore(t)
 	deadline := time.Now().Add(time.Minute)
-	first, err := store.InviteForCommand("namespace_admin", "command_one", deadline)
+	first, err := store.InviteForOperation("namespace_admin", "command_one", deadline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,15 +235,15 @@ func TestCloudInvitationCommandRecoversTheSameDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 3 {
-		got, err := reopened.InviteForCommand("namespace_admin", "command_one", deadline)
+		got, err := reopened.InviteForOperation("namespace_admin", "command_one", deadline)
 		if err != nil || !reflect.DeepEqual(got, first) {
 			t.Fatal("invitation delivery changed after restart", err)
 		}
 	}
-	if _, err := reopened.InviteForCommand("another_admin", "command_one", deadline); err == nil {
+	if _, err := reopened.InviteForOperation("another_admin", "command_one", deadline); err == nil {
 		t.Fatal("command replay crossed the approving administrator")
 	}
-	if _, err := reopened.InviteForCommand("namespace_admin", "expired_command", time.Now().Add(-time.Minute)); err == nil {
+	if _, err := reopened.InviteForOperation("namespace_admin", "expired_command", time.Now().Add(-time.Minute)); err == nil {
 		t.Fatal("expired command created an invitation")
 	}
 	request, _ := memberRequest(t, first, "runtime_delivery")
@@ -251,10 +251,10 @@ func TestCloudInvitationCommandRecoversTheSameDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.Remove(response.MemberID, response.MemberVersion); err != nil {
+	if err := reopened.Remove(response.AttachmentID, response.AttachmentVersion); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err := reopened.InviteForCommand("namespace_admin", "command_one", deadline)
+	recovered, err := reopened.InviteForOperation("namespace_admin", "command_one", deadline)
 	if err != nil || !reflect.DeepEqual(recovered, first) {
 		t.Fatal("issuance retry changed the spent invitation", err)
 	}
@@ -288,19 +288,19 @@ func TestMemberProofDoesNotCrossGatewayIdentityOrServiceOrigin(t *testing.T) {
 }
 
 func TestCloudDefaultsAndOverridesHaveOneEffectivePolicy(t *testing.T) {
-	member := MemberRecord{Member: gp.Member{State: "active"}, HookCloudAllowed: true}
+	member := MemberRecord{Member: gp.RuntimeAttachment{State: "active"}, HookEgressAllowed: true}
 	for _, allowDefault := range []bool{false, true} {
-		for _, override := range []gp.CloudPermission{gp.CloudInherit, gp.CloudAllow, gp.CloudDeny} {
-			member.Member.CloudPermission = override
-			want := override == gp.CloudAllow || (override == gp.CloudInherit && allowDefault)
-			if got := EffectiveCloudAllowed(member, gp.GatewayPolicy{DefaultCloudAllowed: allowDefault}); got != want {
+		for _, override := range []gp.EgressPermission{gp.EgressInherit, gp.EgressAllow, gp.EgressDeny} {
+			member.Member.EgressPermission = override
+			want := override == gp.EgressAllow || (override == gp.EgressInherit && allowDefault)
+			if got := EffectiveEgressAllowed(member, gp.GatewayPolicy{DefaultEgressAllowed: allowDefault}); got != want {
 				t.Fatalf("default=%v override=%s got=%v", allowDefault, override, got)
 			}
 		}
 	}
-	member.Member.CloudPermission = gp.CloudAllow
-	member.HookCloudAllowed = false
-	if EffectiveCloudAllowed(member, gp.GatewayPolicy{DefaultCloudAllowed: true}) {
+	member.Member.EgressPermission = gp.EgressAllow
+	member.HookEgressAllowed = false
+	if EffectiveEgressAllowed(member, gp.GatewayPolicy{DefaultEgressAllowed: true}) {
 		t.Fatal("built-in policy widened hook rejection")
 	}
 }

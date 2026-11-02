@@ -43,7 +43,6 @@ func (a *CloudAssociation) Clone() *CloudAssociation {
 	copy := *a
 	if a.EnrollmentAuthorization != nil {
 		authorization := *a.EnrollmentAuthorization
-		authorization.Delegation = append(json.RawMessage(nil), authorization.Delegation...)
 		copy.EnrollmentAuthorization = &authorization
 	}
 	if a.Binding != nil {
@@ -156,13 +155,13 @@ const (
 // CloudRoute selects one explicit transport. Its revision is independent of
 // Cloud binding generation; route failures never authorize direct fallback.
 type CloudRoute struct {
-	Kind     CloudRouteKind `json:"kind"`
-	MemberID string         `json:"member_id,omitempty"`
-	Revision int64          `json:"route_revision"`
+	Kind         CloudRouteKind `json:"kind"`
+	AttachmentID string         `json:"attachment_id,omitempty"`
+	Revision     int64          `json:"route_revision"`
 }
 
 func (r CloudRoute) Valid() bool {
-	return r.Revision > 0 && (r.Kind == CloudRouteDirect && r.MemberID == "" || r.Kind == CloudRouteGateway && r.MemberID != "" && strings.TrimSpace(r.MemberID) == r.MemberID)
+	return r.Revision > 0 && (r.Kind == CloudRouteDirect && r.AttachmentID == "" || r.Kind == CloudRouteGateway && r.AttachmentID != "" && strings.TrimSpace(r.AttachmentID) == r.AttachmentID)
 }
 
 func (c *Config) ValidateCloudAssociation() error {
@@ -194,7 +193,7 @@ func (c *Config) CloudRouteMember() *gatewaymembership.RuntimeConfig {
 		return nil
 	}
 	for _, member := range c.Gateways {
-		if member != nil && member.MemberID == c.CloudRoute.MemberID {
+		if member != nil && member.AttachmentID == c.CloudRoute.AttachmentID {
 			return member
 		}
 	}

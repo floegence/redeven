@@ -70,7 +70,7 @@ func TestCloudSnapshotSeparatesApprovalConnectionAndRoute(t *testing.T) {
 			a.cfg.CloudOrigin, a.cfg.CloudID, a.cfg.AccessPointOrigin, a.cfg.EnvironmentID, a.cfg.BindingGeneration = "https://cloud.example", "redeven", "https://region.example", "env", 7
 			a.cfg.CloudRoute.Kind = route
 			if route == config.CloudRouteGateway {
-				a.cfg.CloudRoute.MemberID = "offline-member"
+				a.cfg.CloudRoute.AttachmentID = "offline-member"
 			}
 			a.remoteEnabled = true
 			a.controlChannelEnabled = true
@@ -103,7 +103,7 @@ func TestGatewayPairingKeepsCloudManagementAndDirectRoute(t *testing.T) {
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
 	a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{gatewayfixture.Enroll(t, store, "runtime")}
 	snapshot := a.RuntimeServiceSnapshot()
-	if !snapshot.Capabilities.CloudLink.Supported || len(snapshot.GatewayMemberships) != 1 || snapshot.Bindings.CloudLink.Cloud.Route.Kind != "direct" {
+	if !snapshot.Capabilities.CloudLink.Supported || len(snapshot.GatewayAttachments) != 1 || snapshot.Bindings.CloudLink.Cloud.Route.Kind != "direct" {
 		t.Fatal("pairing implicitly selected or managed Cloud access")
 	}
 }
@@ -116,7 +116,7 @@ func TestNamespaceEnrollmentFailureIsReturnedWithoutReplacingOriginalOperation(t
 	a.cfg.CloudAssociation.EnrollmentSubmitted = false
 	a.cfg.CloudAssociation.EnrollmentOperationID = strings.Repeat("A", 43)
 	a.cfg.CloudAssociation.DeliveryRequestID = strings.Repeat("A", 43)
-	a.cfg.CloudAssociation.EnrollmentAuthorization = &rc.EnrollmentAuthorization{GatewayPublicID: "gateway", MemberID: member.MemberID, MemberVersion: member.MemberVersion, Delegation: json.RawMessage(`{}`)}
+	a.cfg.CloudAssociation.EnrollmentAuthorization = &rc.EnrollmentAuthorization{RuntimeLinkTicket: "owner-ticket", EnvPublicID: "env"}
 	attempts := 0
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/challenges") {

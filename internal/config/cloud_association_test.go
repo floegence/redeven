@@ -10,8 +10,6 @@ import (
 
 	"github.com/floegence/redeven/internal/gatewaymembership"
 	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
-	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
-	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
 
 func testCloudAssociation() *CloudAssociation {
@@ -21,7 +19,7 @@ func testCloudAssociation() *CloudAssociation {
 }
 
 func TestCloudAssociationSurvivesRouteFailureAndMemberRemoval(t *testing.T) {
-	cfg := &Config{LocalEnvironmentPublicID: "runtime", CloudAssociation: testCloudAssociation(), CloudRoute: &CloudRoute{Kind: CloudRouteGateway, MemberID: "selected", Revision: 1}}
+	cfg := &Config{LocalEnvironmentPublicID: "runtime", CloudAssociation: testCloudAssociation(), CloudRoute: &CloudRoute{Kind: CloudRouteGateway, AttachmentID: "selected", Revision: 1}}
 	if err := cfg.ValidateCloudAssociation(); err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +29,7 @@ func TestCloudAssociationSurvivesRouteFailureAndMemberRemoval(t *testing.T) {
 	if err := cfg.ValidateCloudAssociation(); err != nil {
 		t.Fatalf("route loss changed Cloud authorization: %v", err)
 	}
-	cfg.Gateways = []*gatewaymembership.RuntimeConfig{{MemberID: "unrelated", GatewayID: "other"}}
+	cfg.Gateways = []*gatewaymembership.RuntimeConfig{{AttachmentID: "unrelated", GatewayID: "other"}}
 	if cfg.CloudRouteMember() != nil {
 		t.Fatal("unrelated membership must not silently replace the selected route")
 	}
@@ -75,31 +73,5 @@ func TestCloudRouteCommitUsesRevisionAndPreservesAssociation(t *testing.T) {
 	_, err = saveCloudRoute("config", 3, CloudRoute{Kind: CloudRouteDirect}, persistence)
 	if !errors.Is(err, writeErr) || cfg.CloudRoute.Revision != 3 {
 		t.Fatal("failed persistence must retain the current route")
-	}
-}
-
-func TestNamespaceReenrollmentPreservesDirectRouteAndClosureReceipts(t *testing.T) {
-	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
-	member := gatewayfixture.Enroll(t, store, "runtime")
-	association := testCloudAssociation()
-	association.ApprovalState = rc.ApprovalIdentityRequired
-	association.ClosureOutbox = []rc.ClosureAck{{ClosurePublicID: "closure", BindingPublicID: "binding", Generation: 7}}
-	cfg := &Config{LocalEnvironmentPublicID: "runtime", CloudAssociation: association, CloudRoute: &CloudRoute{Kind: CloudRouteDirect, Revision: 9}, Gateways: []*gatewaymembership.RuntimeConfig{member}, EnvironmentID: "environment"}
-	context := gp.MemberCloudContext{Allowed: true, CloudOrigin: association.CloudOrigin, RegionOrigin: association.RegionOrigin, NamespacePublicID: association.NamespacePublicID, GatewayPublicID: "gateway", MemberID: member.MemberID}
-	next, err := cfg.PrepareNamespaceCloud(member.MemberID, context)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if next.CloudAssociation.Revision != 2 || next.CloudAssociation.PublicKeyB64u != association.PublicKeyB64u || next.CloudAssociation.Binding.Generation != 7 || next.EnvironmentID != "environment" || *next.CloudRoute != *cfg.CloudRoute || len(next.CloudAssociation.ClosureOutbox) != 1 {
-		t.Fatal("explicit reenrollment replaced ownership, route or closure receipts")
-	}
-	context.NamespacePublicID = "another"
-	if _, err := cfg.PrepareNamespaceCloud(member.MemberID, context); err == nil {
-		t.Fatal("Gateway delegation took over a different Namespace")
-	}
-	cfg.CloudAssociation.ApprovalState = rc.ApprovalRevoked
-	context.NamespacePublicID = association.NamespacePublicID
-	if _, err := cfg.PrepareNamespaceCloud(member.MemberID, context); err == nil {
-		t.Fatal("revocation was bypassed instead of requiring Cloud reapproval")
 	}
 }

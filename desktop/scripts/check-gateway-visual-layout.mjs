@@ -26,10 +26,10 @@ try {
   const gateway = { ...source.gateway_sources[0], display_name: 'Office Gateway', connection_kind: 'local_host', management_capability: 'managed_local_host',
     status: 'online', trust_state: 'paired', sync_state: 'ready', local_enabled: true,
     identity_fingerprint: 'SHA256:6d9f27c4e8093a1bdf6857eac23094f17ce932bd781c054a6f8b20195d4e7ac3',
-    member_endpoints: [{ address: 'https://gateway.example.invalid:8443' }],
-    permissions: { access: true, manage_members: true, configure_cloud: true },
+    endpoints: [{ address: 'https://gateway.example.invalid:8443' }],
+    permissions: { access: true, manage_attachments: true, manage_network: true },
     service_state: { status: 'ready', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } };
-  const snapshot = { ...source, gateway_sources: [gateway, { ...gateway, gateway_id: gateway.gateway_id + '-secondary', display_name: 'Studio Gateway' }], open_windows: [] };
+  const snapshot = { ...source, gateway_sources: [gateway, { ...gateway, connection_id: gateway.connection_id + '-secondary', display_name: 'Studio Gateway' }], open_windows: [] };
   const scenarios = widths.map(width => ({ width, touch: false, largeText: false }));
   if (!process.env.REDEVEN_GATEWAY_QA_WIDTHS) scenarios.push({ width: 430, touch: true, largeText: false }, { width: 430, touch: false, largeText: true });
   for (const locale of locales) for (const { width, touch, largeText } of scenarios) {
@@ -116,7 +116,7 @@ try {
       await button(workspace, 'gatewayExperience.allGateways').click();
       for (const variant of [
         { ...gateway, display_name: 'Office Gateway / International engineering and operations', connection_kind: 'ssh_host', endpoint_label: 'gateway-administration.example.invalid:2222' },
-        { ...gateway, display_name: 'Office Gateway / Access only', connection_kind: 'url', management_capability: 'access_only', endpoint_label: 'https://gateway.example.invalid:8443', permissions: { access: true, manage_members: false, configure_cloud: false } },
+        { ...gateway, display_name: 'Office Gateway / Access only', connection_kind: 'url', management_capability: 'access_only', endpoint_label: 'https://gateway.example.invalid:8443', permissions: { access: true, manage_attachments: false, manage_network: false } },
         { ...gateway, local_enabled: false, status: 'offline' },
       ]) {
         await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), { ...snapshot, gateway_sources: [variant] });

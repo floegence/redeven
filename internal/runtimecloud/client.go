@@ -148,7 +148,7 @@ func (c *Client) Recover(ctx context.Context, namespace, runtimeID, bindingID st
 	}
 	return result, err
 }
-func (c *Client) Enroll(ctx context.Context, namespace string, key, memberKey ed25519.PrivateKey, request rc.EnrollRequest) (*rc.RecoverResponse, error) {
+func (c *Client) Enroll(ctx context.Context, namespace string, key ed25519.PrivateKey, request rc.EnrollRequest) (*rc.RecoverResponse, error) {
 	challenge, err := call[rc.ChallengeRequest, rc.ChallengeResponse](c, ctx, "challenges", rc.ChallengeRequest{ProtocolVersion: rc.ProtocolVersion, NamespacePublicID: namespace, RuntimePublicID: request.RuntimePublicID, Purpose: rc.PurposeEnroll})
 	if err != nil {
 		return nil, err
@@ -156,11 +156,6 @@ func (c *Client) Enroll(ctx context.Context, namespace string, key, memberKey ed
 	proof := challenge.Proof
 	if proof.CloudOrigin != c.origin || proof.NamespacePublicID != namespace || proof.RuntimePublicID != request.RuntimePublicID || proof.Purpose != rc.PurposeEnroll || proof.ProtocolVersion != rc.ProtocolVersion || proof.BindingPublicID != "" || proof.ExpiresAtUnixMS <= time.Now().UnixMilli() || proof.ExpiresAtUnixMS > time.Now().Add(5*time.Minute).UnixMilli() {
 		return nil, &ProtocolError{Message: "Runtime Cloud challenge does not match enrollment"}
-	}
-	if len(memberKey) > 0 {
-		if err := rc.SignEnrollmentMembership(proof, &request, memberKey); err != nil {
-			return nil, err
-		}
 	}
 	body, err := json.Marshal(request)
 	if err != nil {

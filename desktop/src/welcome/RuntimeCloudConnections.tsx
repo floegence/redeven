@@ -2,14 +2,14 @@ import {Button, Dialog, KeyedFor} from '@floegence/floe-webapp-core/ui';
 import {createEffect, createMemo, createSignal, on, onCleanup, Show} from 'solid-js';
 import type {DesktopI18n} from '../shared/i18n';
 import type {DesktopCloudRuntimeLinkTargetID} from '../shared/providerRuntimeLinkTarget';
-import type {RuntimeGatewayMembership, RuntimeServiceCloudLinkBinding} from '../shared/runtimeService';
+import type {RuntimeGatewayAttachment, RuntimeServiceCloudLinkBinding} from '../shared/runtimeService';
 import type {CloudRouteOperation, RuntimeCloudOperation} from '../shared/runtimeCloud';
 
 /** Only Runtime commits a route. This view retains the original operation ID. */
 export function RuntimeCloudConnections(props: Readonly<{
  available?: boolean; onOpenChange?: (open: boolean) => void;
  targetID: DesktopCloudRuntimeLinkTargetID; binding: RuntimeServiceCloudLinkBinding;
- memberships: readonly RuntimeGatewayMembership[]; i18n: DesktopI18n;
+ memberships: readonly RuntimeGatewayAttachment[]; i18n: DesktopI18n;
  onChanged: () => void | Promise<void>; openInBrowser: (url: string) => unknown;
 }>) {
  const t = props.i18n.t;
@@ -22,7 +22,7 @@ export function RuntimeCloudConnections(props: Readonly<{
  const [sessionTarget, setSessionTarget] = createSignal(props.targetID);
  const available = createMemo(() => props.available !== false);
  const invalid = () => props.available === false || authorityRevoked() || (open() && sessionKey() !== storageKey());
- const selectionInvalid = () => selected() !== 'direct' && !props.memberships.some(member => member.member_id === selected());
+ const selectionInvalid = () => selected() !== 'direct' && !props.memberships.some(member => member.attachment_id === selected());
  const storageKey = createMemo(() => `redeven-cloud-route:${JSON.stringify([props.targetID, props.binding.cloud_origin, props.binding.cloud_id, props.binding.env_public_id, cloud()?.association_revision])}`);
  let generation = 0;
  onCleanup(() => { generation++; });
@@ -85,16 +85,16 @@ export function RuntimeCloudConnections(props: Readonly<{
   finally { if (owner === generation) setBusy(false); }
  }
  async function preflight() {
-  if (!cloud() || pending() || corrupt() || invalid() || selectionInvalid() || busy()) return;
+  if (pending() || corrupt() || invalid() || selectionInvalid() || busy()) return;
   try {
    const raw = crypto.getRandomValues(new Uint8Array(32));
    const id = btoa(String.fromCharCode(...raw)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
    remember(id);
-   await run({operation:'preflight',operation_id:id,expected_route_revision:cloud()!.route_revision,selection:selected() === 'direct' ? {kind:'direct'} : {kind:'gateway',member_id:selected()}});
+   await run({operation:'preflight',operation_id:id,expected_route_revision:cloud()?.route_revision ?? props.binding.route_revision ?? 0,selection:selected() === 'direct' ? {kind:'direct'} : {kind:'gateway',attachment_id:selected()}});
   } catch {setError(t('cloudRoute.storageFailed'));}
  }
- const routeLabel = () => cloud()?.route.kind === 'direct' ? t('cloudRoute.direct') : props.memberships.find(m => m.member_id === cloud()?.route.member_id)?.gateway_name || t('cloudRoute.gatewayUnavailable');
- return <><Show when={cloud()}>{status => <div class="mt-3 space-y-2 rounded-md border border-border p-3 text-sm">
+ const routeLabel = () => cloud()?.route.kind === 'direct' ? t('cloudRoute.direct') : props.memberships.find(m => m.attachment_id === cloud()?.route.attachment_id)?.gateway_name || t('cloudRoute.gatewayUnavailable');
+ return <><Show when={!cloud() && props.memberships.length > 0}><div class="mt-3 flex flex-wrap items-center gap-2 text-sm"><span>{t('cloudRoute.selected')}: {props.binding.route?.kind === 'gateway' ? props.memberships.find(item => item.attachment_id === props.binding.route?.attachment_id)?.gateway_name || t('cloudRoute.gatewayUnavailable') : t('cloudRoute.direct')}</span><Button size="sm" disabled={!available()} onClick={() => {setSelected(props.binding.route?.attachment_id ?? 'direct');changeOpen(true);}}>{pending() ? t('cloudRoute.pendingOperation') : t('cloudRoute.change')}</Button></div></Show><Show when={cloud()}>{status => <div class="mt-3 space-y-2 rounded-md border border-border p-3 text-sm">
   <p>{t('cloudRoute.approval')}: {t(`cloudRoute.${status().approval_state}`)}</p>
   <p>{t('cloudRoute.connection')}: {t(status().connection_state === 'connected' ? 'cloudRoute.connected' : 'cloudRoute.disconnected')}</p>
   <p>{t('cloudRoute.selected')}: {routeLabel()}</p>
@@ -102,7 +102,7 @@ export function RuntimeCloudConnections(props: Readonly<{
   <Show when={status().next_attempt_at_unix_ms}><p>{t('cloudRoute.nextAttempt', {time:new Date(status().next_attempt_at_unix_ms!).toLocaleTimeString()})}</p></Show>
   <Show when={!['approved','pending','revoked'].includes(status().approval_state)}><p class="text-xs text-muted-foreground">{t('cloudRoute.reauthorizeHelp')}</p></Show>
   <div class="flex flex-wrap gap-2">
-   <Button size="sm" class="cursor-pointer" onClick={() => {setSelected(status().route.kind === 'direct' ? 'direct' : status().route.member_id!);changeOpen(true);}}>{t('cloudRoute.change')}</Button>
+   <Button size="sm" class="cursor-pointer" onClick={() => {setSelected(status().route.kind === 'direct' ? 'direct' : status().route.attachment_id!);changeOpen(true);}}>{t('cloudRoute.change')}</Button>
    <Button size="sm" variant="outline" class="cursor-pointer" disabled={busy() || invalid()} onClick={() => void run({operation:'retry',expected_association_revision:status().association_revision})}>{t('cloudRoute.retry')}</Button>
    <Button size="sm" variant="ghost" class="cursor-pointer" onClick={() => props.binding.cloud_origin && props.openInBrowser(props.binding.cloud_origin)}>{t('cloudRoute.manageApproval')}</Button>
    <Show when={status().enabled}><Button size="sm" variant="ghost" class="cursor-pointer" disabled={busy() || invalid()} onClick={() => {
@@ -129,7 +129,7 @@ export function RuntimeCloudConnections(props: Readonly<{
      <select class="redeven-native-select" value={selected()} disabled={busy() || !!pending() || corrupt()} onChange={event => setSelected(event.currentTarget.value)}>
       <Show when={selectionInvalid()}><option value={selected()} disabled>{t('cloudRoute.gatewayUnavailable')}</option></Show>
       <option value="direct">{t('cloudRoute.direct')}</option>
-      <KeyedFor each={props.memberships} by={member => member.member_id}>{member => <option value={member().member_id}>{member().gateway_name || member().gateway_id}</option>}</KeyedFor>
+      <KeyedFor each={props.memberships} by={member => member.attachment_id}>{member => <option value={member().attachment_id}>{member().gateway_name || member().gateway_id}</option>}</KeyedFor>
      </select>
     </label>
     <Show when={error()}><p role="alert" class="text-error">{error()}</p></Show>

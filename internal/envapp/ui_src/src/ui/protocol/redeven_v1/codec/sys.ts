@@ -164,11 +164,11 @@ function fromWireCloudStatus(value: unknown): RuntimeServiceCloudStatus | undefi
     || typeof v.enabled !== 'boolean' || typeof v.connection_state !== 'string'
     || !['approved','pending','revoked','identity_required','action_required'].includes(String(v.approval_state))
     || !route || !['direct','gateway'].includes(String(route.kind))
-    || route.kind === 'gateway' && !route.member_id || route.kind === 'direct' && route.member_id) return undefined;
+    || route.kind === 'gateway' && !route.attachment_id || route.kind === 'direct' && route.attachment_id) return undefined;
   return {associationRevision:Number(v.association_revision), enabled:v.enabled,
     approvalState:v.approval_state as RuntimeServiceCloudStatus['approvalState'],
     reasonCode:typeof v.reason_code === 'string' ? v.reason_code : undefined,
-    connectionState:v.connection_state, route:{kind:route.kind as 'direct' | 'gateway',memberId:typeof route.member_id === 'string' ? route.member_id : undefined},
+    connectionState:v.connection_state, route:{kind:route.kind as 'direct' | 'gateway',memberId:typeof route.attachment_id === 'string' ? route.attachment_id : undefined},
     routeRevision:Number(v.route_revision),nextAttemptAtUnixMs:typeof v.next_attempt_at_unix_ms === 'number' ? v.next_attempt_at_unix_ms : undefined};
 }
 

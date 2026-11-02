@@ -13,20 +13,20 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"strconv"
-	"strings"
+
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/floegence/redeven/internal/gatewayflow"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
 var ErrInvalidPolicy = errors.New("invalid Gateway egress policy")
 
 type Member struct {
 	AdmissionExpiresAtUnixMS int64
-	MemberVersion            uint64
+	AttachmentVersion        uint64
 	ID                       string
 	Generation               uint64
 	CertificateSHA256        string
@@ -101,7 +101,7 @@ func (s *Server) ReplaceMembers(members []Member) error {
 	ids := make(map[string]struct{}, len(members))
 	for _, member := range members {
 		raw, err := hex.DecodeString(member.CertificateSHA256)
-		if member.ID == "" || member.MemberVersion == 0 || member.Generation == 0 || err != nil || len(raw) != sha256.Size || hex.EncodeToString(raw) != member.CertificateSHA256 || len(member.Destinations) == 0 {
+		if member.ID == "" || member.AttachmentVersion == 0 || member.Generation == 0 || err != nil || len(raw) != sha256.Size || hex.EncodeToString(raw) != member.CertificateSHA256 || len(member.Destinations) == 0 {
 			return ErrInvalidPolicy
 		}
 		if _, exists := next[member.CertificateSHA256]; exists {
@@ -111,7 +111,7 @@ func (s *Server) ReplaceMembers(members []Member) error {
 			return ErrInvalidPolicy
 		}
 		ids[member.ID] = struct{}{}
-		policy := memberPolicy{admissionExpiresAtUnixMS: member.AdmissionExpiresAtUnixMS, id: member.ID, memberVersion: member.MemberVersion, generation: member.Generation, destinations: make(map[string]struct{}, len(member.Destinations))}
+		policy := memberPolicy{admissionExpiresAtUnixMS: member.AdmissionExpiresAtUnixMS, id: member.ID, memberVersion: member.AttachmentVersion, generation: member.Generation, destinations: make(map[string]struct{}, len(member.Destinations))}
 		for _, address := range member.Destinations {
 			if !validAuthority(address) {
 				return ErrInvalidPolicy
@@ -266,7 +266,7 @@ func (s *Server) reserve(fingerprint, destination string, cancel context.CancelF
 	if _, ok := member.destinations[destination]; !ok {
 		return nil, http.StatusForbidden
 	}
-	reservation, err := s.options.Budget.Reserve(member.id, member.memberVersion, gatewayflow.Cloud, cancel)
+	reservation, err := s.options.Budget.Reserve(member.id, member.memberVersion, gatewayflow.Egress, cancel)
 	if err != nil {
 		return nil, http.StatusTooManyRequests
 	}
@@ -276,12 +276,7 @@ func (s *Server) reserve(fingerprint, destination string, cancel context.CancelF
 }
 
 func validAuthority(address string) bool {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil || host == "" || strings.ContainsAny(host, " \t\r\n/\\@?#%") || strings.ToLower(host) != host || strings.HasSuffix(host, ".") {
-		return false
-	}
-	n, err := strconv.Atoi(port)
-	return err == nil && n > 0 && n <= 65535 && strconv.Itoa(n) == port
+	return gp.ValidateEgressDestinations([]string{address}) == nil
 }
 
 func (s *Server) dialDestination(ctx context.Context, address string) (net.Conn, error) {

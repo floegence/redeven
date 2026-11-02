@@ -16,10 +16,10 @@ try {
   const { createDesktopI18n, REDEVEN_SUPPORTED_LOCALES } = await load('../src/shared/i18n/index.ts');
   const { memberFixture, catalogFixture, invitationFixture } = await load('../src/testSupport/gatewayMembershipFixture.ts');
   const source = compactEnvironmentPreviewFixture().coverage;
-  const members = ['Inherited', 'Explicit'].map((display_name, i) => ({ ...memberFixture, member_id: `member_${i}`, display_name, cloud_permission: i ? 'deny' : 'inherit' }));
+  const members = ['Inherited', 'Explicit'].map((display_name, i) => ({ ...memberFixture, attachment_id: `member_${i}`, display_name, egress_permission: i ? 'deny' : 'inherit' }));
   const gateway = { ...source.gateway_sources[0], sync_state: 'ready', policy: catalogFixture.policy,
     connection_kind: 'local_host', management_capability: 'managed_local_host',
-    permissions: catalogFixture.gateway.permissions, member_endpoints: catalogFixture.gateway.member_endpoints,
+    permissions: catalogFixture.gateway.permissions, endpoints: catalogFixture.gateway.endpoints,
     listener_addresses: catalogFixture.gateway.listener_addresses, listener_running: true, environments: members };
   const snapshot = { ...source, open_windows: [], environments: [], gateway_sources: [gateway] };
   const locales = process.argv.length > 2 ? process.argv.slice(2) : REDEVEN_SUPPORTED_LOCALES;
@@ -46,12 +46,12 @@ try {
           if (request.kind === 'invite_gateway_runtime') return ++inviteAttempts === 1
             ? { ok: false, scope: 'gateway', code: 'gateway_catalog_failed', message: 'Unavailable' }
             : { ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: invitation };
-          if (request.kind === 'update_gateway_members') return { ok: true, outcome: 'gateway_members_updated', gateway_member_results: request.items.map((item, index) => ({ member_id: item.member_id, ...(index ? { error_code: 'MEMBER_VERSION_CONFLICT' } : {}) })) };
+          if (request.kind === 'update_gateway_members') return { ok: true, outcome: 'gateway_members_updated', gateway_member_results: request.items.map((item, index) => ({ attachment_id: item.attachment_id, ...(index ? { error_code: 'ATTACHMENT_VERSION_CONFLICT' } : {}) })) };
           return { ok: true, outcome: 'gateway_members_updated' };
         };
         await document.fonts.ready;
       }, { dark, largeText, invitation: { ...invitationFixture, expires_at_unix_ms: Date.now() + 60_000 } });
-      const card = page.locator(`[data-gateway-id="${gateway.gateway_id}"]`);
+      const card = page.locator(`[data-gateway-id="${gateway.connection_id}"]`);
       await card.getByRole('button', { name: i18n.t('gatewayExperience.manage'), exact: true }).click();
       const workspace = page.locator('[data-gateway-management-page]');
       const nav = workspace.locator('[data-gateway-management-nav]');
@@ -97,15 +97,15 @@ try {
       await workspace.getByText(i18n.t('gatewayMembers.memberChanged'), { exact: true }).waitFor();
       const diagnostic = membersPanel.locator('.redeven-gateway-member-row details');
       assert.equal(await diagnostic.getAttribute('open'), null);
-      assert.equal(await workspace.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).isVisible(), false);
+      assert.equal(await workspace.getByText('ATTACHMENT_VERSION_CONFLICT', { exact: true }).isVisible(), false);
       await diagnostic.locator('summary').click();
-      await workspace.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).waitFor();
+      await workspace.getByText('ATTACHMENT_VERSION_CONFLICT', { exact: true }).waitFor();
       await diagnostic.locator('summary').click();
       assert.equal(await workspace.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}/${width}: localized failure fits`);
       await page.screenshot({ path: `${output}/${locale}-${width}-member-error.png` });
       await workspace.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
       const batches = (await page.evaluate(() => window.settingsFixture.requests)).filter(r => r.kind === 'update_gateway_members');
-      assert.deepEqual(batches.map(r => r.items.map(item => item.member_id)), [['member_0', 'member_1'], ['member_1']]);
+      assert.deepEqual(batches.map(r => r.items.map(item => item.attachment_id)), [['member_0', 'member_1'], ['member_1']]);
       assert.equal(await workspace.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}/${width}: dialog fits`);
       assert.equal(await workspace.locator('[data-floe-dialog-header] p').count(), 0);
       for (const control of await workspace.locator('button:enabled, select:enabled, [role="checkbox"]:not([aria-disabled="true"])').all()) {
@@ -115,7 +115,7 @@ try {
       await workspace.getByRole('button', { name: i18n.t('gatewayExperience.allGateways'), exact: true }).click(); await workspace.waitFor({ state: 'hidden' });
       await page.waitForFunction(() => document.activeElement?.matches('.redeven-gateway-card__name button'));
       // Failed refresh retains the last directory; access-only identities never gain mutation rights.
-      await page.evaluate(({ snapshot, gateway }) => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...gateway, sync_state: 'catalog_failed', permissions: { access: true, manage_members: false, configure_cloud: false } }] }), { snapshot, gateway });
+      await page.evaluate(({ snapshot, gateway }) => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...gateway, sync_state: 'catalog_failed', permissions: { access: true, manage_attachments: false, manage_network: false } }] }), { snapshot, gateway });
       await card.getByText(i18n.t('gatewayAccess.environmentListStale'), { exact: true }).waitFor();
       assert.equal(await card.locator('.redeven-gateway-card__count').innerText(), i18n.tn('plural.environmentCount', 2));
       report.cases.push({ locale, width, dark, largeText, invitationRetry: true, partialBatch: true, policyPreview: true, restoredFocus: true, staleDirectory: true });

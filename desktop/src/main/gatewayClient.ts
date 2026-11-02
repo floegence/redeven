@@ -1,7 +1,7 @@
 import type { GatewayNetworkSettings } from '../shared/gatewayMembership';
 import { normalizeGatewayNetworkSettings } from '../shared/gatewayNetworkSettings';
-import type { GatewayMemberServiceResponse } from '../shared/gatewayMembership';
-import { randomBytes } from 'node:crypto';
+import type { RuntimeAttachmentServiceResponse } from '../shared/gatewayMembership';
+import { createHash, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import type net from 'node:net';
@@ -15,12 +15,12 @@ import {
 } from './gatewayTrust';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 import {
-  GATEWAY_PROTOCOL_VERSION, type GatewayPermissions, type GatewayMember, type GatewayEndpoint,
-  type GatewayPolicy, type GatewayInvitationCodeDelivery, type GatewayMemberOffer,
-  type GatewayMemberOperationResult, type GatewayCloudPermission, type GatewayHookStatuses, type GatewayHookStatus, type GatewayClientAccessCode, type GatewayAuthorizedClient,
+  GATEWAY_PROTOCOL_VERSION, type GatewayPermissions, type RuntimeAttachment, type GatewayEndpoint,
+  type GatewayPolicy, type GatewayInvitationCodeDelivery, type RuntimeAttachmentOffer,
+  type RuntimeAttachmentOperationResult, type GatewayEgressPermission, type GatewayHookStatuses, type GatewayHookStatus, type GatewayClientAccessCode, type GatewayAuthorizedClient,
 } from '../shared/gatewayMembership';
 
-export type GatewayRequestOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal }>;
+export type GatewayRequestOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal; tlsRootPEM?: string; operationID?: string }>;
 export type GatewayCatalogResponse = Readonly<{
   protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
   gateway: Readonly<{
@@ -32,18 +32,20 @@ export type GatewayCatalogResponse = Readonly<{
     listener_restart_required?: boolean;
     allowed_hosts?: readonly string[];
     endpoint_last_used_at?: Readonly<Record<string, number>>;
-    member_endpoints: readonly GatewayEndpoint[]; member_tls_root_pem: string; permissions: GatewayPermissions;
+    endpoints: readonly GatewayEndpoint[]; tls_root_pem: string; permissions: GatewayPermissions;
   }>;
-  members: readonly GatewayMember[];
+  attachments: readonly RuntimeAttachment[];
   policy: GatewayPolicy;
   revision: number;
   hook_status: GatewayHookStatuses;
 }>;
-export type GatewayMemberPolicyUpdate = Readonly<{
-  member_id: string; expected_member_version: number; cloud_permission: GatewayCloudPermission;
+export type RuntimeAttachmentPolicyUpdate = Readonly<{
+  attachment_id: string; expected_attachment_version: number; egress_permission: GatewayEgressPermission;
 }>;
 
 export class GatewayClientError extends Error {
+  operationCompleted = false;
+  operationID?: string;
   constructor(readonly code: string, message: string, readonly statusCode: number | null = null, readonly retryable = false) {
     super(message); this.name = 'GatewayClientError';
   }
@@ -95,9 +97,9 @@ function version(value: unknown): typeof GATEWAY_PROTOCOL_VERSION {
 }
 function permissions(value: unknown): GatewayPermissions {
   const item = object(value);
-  return { access: boolean(item.access), manage_members: boolean(item.manage_members), configure_cloud: boolean(item.configure_cloud) };
+  return { access: boolean(item.access), manage_attachments: boolean(item.manage_attachments), manage_network: boolean(item.manage_network) };
 }
-function cloudPermission(value: unknown): GatewayCloudPermission {
+function cloudPermission(value: unknown): GatewayEgressPermission {
   if (value !== 'inherit' && value !== 'allow' && value !== 'deny') return invalid();
   return value;
 }
@@ -107,40 +109,40 @@ function hookStatus(value: unknown): GatewayHookStatus {
 }
 function policy(value: unknown): GatewayPolicy {
   const item = object(value);
-  if (item.publication_mode !== 'manual' && item.publication_mode !== 'automatic') return invalid();
-  return { revision: integer(item.revision, 1), default_cloud_allowed: boolean(item.default_cloud_allowed), publication_mode: item.publication_mode };
+  if (!Array.isArray(item.destinations) || item.destinations.length > 64) return invalid();
+  return { revision: integer(item.revision, 1), default_egress_allowed: boolean(item.default_egress_allowed), destinations: item.destinations.map(value => text(value, 260)) };
 }
-function member(value: unknown): GatewayMember {
+function member(value: unknown): RuntimeAttachment {
   const item = object(value), metadata = object(item.metadata);
   if (item.state !== 'active' && item.state !== 'removed') return invalid();
   return {
-    member_id: id(item.member_id), runtime_public_id: id(item.runtime_public_id), member_version: integer(item.member_version, 1),
+    attachment_id: id(item.attachment_id), runtime_public_id: id(item.runtime_public_id), attachment_version: integer(item.attachment_version, 1),
     display_name: text(item.display_name), state: item.state, connected: boolean(item.connected),
-    last_seen_at_unix_ms: integer(item.last_seen_at_unix_ms), cloud_permission: cloudPermission(item.cloud_permission),
-    effective_cloud_allowed: boolean(item.effective_cloud_allowed), metadata: {
+    last_seen_at_unix_ms: integer(item.last_seen_at_unix_ms), egress_permission: cloudPermission(item.egress_permission),
+    effective_egress_allowed: boolean(item.effective_egress_allowed), metadata: {
       hostname: text(metadata.hostname), os: text(metadata.os, 64), arch: text(metadata.arch, 64), version: text(metadata.version, 128),
     },
   };
 }
 export function normalizeGatewayCatalogResponse(value: unknown): GatewayCatalogResponse {
   const item = object(value), gateway = object(item.gateway), hooks = object(item.hook_status);
-  const memberEndpoints = endpointList(gateway.member_endpoints, false);
-  if (!Array.isArray(item.members) || item.members.length > 1024) return invalid();
-  const members = item.members.map(member);
-  if (new Set(members.map(value => value.member_id)).size !== members.length) return invalid();
+  const memberEndpoints = endpointList(gateway.endpoints, false);
+  if (!Array.isArray(item.attachments) || item.attachments.length > 1024) return invalid();
+  const attachments = item.attachments.map(member);
+  if (new Set(attachments.map(value => value.attachment_id)).size !== attachments.length) return invalid();
   return {
     protocol_version: version(item.protocol_version), gateway: {
       gateway_id: id(gateway.gateway_id), display_name: text(gateway.display_name),
-      gateway_public_key_fingerprint: text(gateway.gateway_public_key_fingerprint), listener_address: text(gateway.listener_address), member_endpoints: memberEndpoints,
+      gateway_public_key_fingerprint: text(gateway.gateway_public_key_fingerprint), listener_address: text(gateway.listener_address), endpoints: memberEndpoints,
       listener_addresses: Array.isArray(gateway.listener_addresses) ? gateway.listener_addresses.map(value => text(value)) : [],
       listener_running: gateway.listener_running === true,
       active_listener_addresses: Array.isArray(gateway.active_listener_addresses) ? gateway.active_listener_addresses.map(value => text(value)) : [],
       listener_restart_required: gateway.listener_restart_required === true,
       allowed_hosts: Array.isArray(gateway.allowed_hosts) ? gateway.allowed_hosts.map(value => text(value)) : [],
       endpoint_last_used_at: Object.fromEntries(Object.entries(object(gateway.endpoint_last_used_at ?? {})).map(([key, value]) => [id(key), integer(value, 0)])),
-      member_tls_root_pem: text(gateway.member_tls_root_pem, 16_384), permissions: permissions(gateway.permissions),
-    }, members, policy: policy(item.policy), revision: integer(item.revision, 1),
-    hook_status: { 'member.admit': hookStatus(hooks['member.admit']), 'access.open': hookStatus(hooks['access.open']), 'cloud.publish': hookStatus(hooks['cloud.publish']) },
+      tls_root_pem: text(gateway.tls_root_pem, 16_384), permissions: permissions(gateway.permissions),
+    }, attachments, policy: policy(item.policy), revision: integer(item.revision, 1),
+    hook_status: { 'attachment.admit': hookStatus(hooks['attachment.admit']), 'access.open': hookStatus(hooks['access.open']), 'egress.open': hookStatus(hooks['egress.open']) },
   };
 }
 function envelope(raw: string, status: number): unknown {
@@ -174,6 +176,30 @@ export class GatewayClient {
     const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 20_000)]) : AbortSignal.timeout(options.timeoutMs ?? 20_000);
     signal.throwIfAborted();
     const path = `/gateway/v6/${route}`;
+    const mutation = this.bridge && !['identity', 'catalog', 'pairing/challenge', 'pairing/complete', 'access/open', 'access/service', 'clients/list', 'operations/query'].includes(route);
+    const pendingKey = mutation ? 'gateway-host-operation:' + record.connection_id + ':' + createHash('sha256').update(JSON.stringify([gatewayProtocolID(record), record.trust_profile?.gateway_public_key_fingerprint, route, body])).digest('hex') : undefined;
+    const pendingID = pendingKey ? await this.secretStore.readSecret(pendingKey) : undefined;
+    const operationID = options.operationID || pendingID || (mutation ? randomBytes(24).toString('base64url') : undefined);
+    const recoveryKey = operationID ? 'gateway-host-operation-result:' + record.connection_id + ':' + operationID : undefined;
+    const recover = async () => {
+      try {
+        const result = await this.request(record, 'operations/query', { protocol_version: GATEWAY_PROTOCOL_VERSION }, { ...options, operationID });
+        if (pendingKey) await this.secretStore.deleteSecret(pendingKey);
+        if (recoveryKey) await this.secretStore.deleteSecret(recoveryKey);
+        return result;
+      } catch (error) {
+        if (error instanceof GatewayClientError && error.operationCompleted) {
+          if (pendingKey) await this.secretStore.deleteSecret(pendingKey);
+          if (recoveryKey) await this.secretStore.deleteSecret(recoveryKey);
+          throw error;
+        }
+        if (recoveryKey && pendingKey) await this.secretStore.writeSecret(recoveryKey, JSON.stringify({ pendingKey, gatewayID: gatewayProtocolID(record), fingerprint: record.trust_profile?.gateway_public_key_fingerprint }));
+        const unknown = new GatewayClientError('OPERATION_RESULT_UNKNOWN', 'The result is uncertain. Inspect the Gateway state and query the original operation before taking further action.');
+        unknown.operationID = operationID;
+        throw unknown;
+      }
+    };
+    if (pendingID && mutation) return recover();
     const headers = authenticated ? await createGatewayAuthHeaders({ record, method: 'POST', route: path, body, secret_store: this.secretStore }) : {};
     signal.throwIfAborted();
     let url: URL;
@@ -192,10 +218,11 @@ export class GatewayClient {
     const payload = JSON.stringify(body);
     if (Buffer.byteLength(payload) > 64 << 10) throw new GatewayClientError('INVALID_REQUEST', 'Gateway request exceeds its size limit.');
     try {
-      return await new Promise((resolve, reject) => {
+      if (pendingKey && operationID) await this.secretStore.writeSecret(pendingKey, operationID);
+      const result = await new Promise((resolve, reject) => {
         const request = (url.protocol === 'https:' ? https.request : http.request)(url, {
-          method: 'POST', agent: agent ?? false, signal, headers: {
-            ...headers, 'Content-Type': 'application/json', Accept: 'application/json',
+          method: 'POST', agent: agent ?? false, signal, ...(url.protocol === 'https:' ? { ca: options.tlsRootPEM ?? record.trust_profile?.tls_root_pem, minVersion: 'TLSv1.3' as const } : {}), headers: {
+            ...headers, ...(operationID ? { 'X-Redeven-Operation-ID': operationID } : {}), 'Content-Type': 'application/json', Accept: 'application/json',
             'Content-Length': Buffer.byteLength(payload), Connection: 'close',
             ...(this.bridge ? { 'X-Redeven-Gateway-Transport': 'desktop_bridge' } : {}),
           },
@@ -207,15 +234,39 @@ export class GatewayClient {
             else parts.push(part);
           });
           response.once('error', reject);
-          response.once('end', () => { try { resolve(envelope(Buffer.concat(parts).toString('utf8'), response.statusCode ?? 500)); } catch (error) { reject(error); } });
+          response.once('end', () => { try { resolve(envelope(Buffer.concat(parts).toString('utf8'), response.statusCode ?? 500)); } catch (error) {
+            if (error instanceof GatewayClientError) error.operationCompleted = response.headers['x-redeven-operation-state'] === 'completed';
+            reject(error);
+          } });
         });
         request.once('error', error => reject(error instanceof GatewayClientError ? error : new GatewayClientError(signal.aborted ? 'GATEWAY_CANCELED' : 'GATEWAY_UNREACHABLE', 'Gateway request could not complete.', null, true)));
         request.end(payload);
       });
+      if (pendingKey) await this.secretStore.deleteSecret(pendingKey);
+      return result;
     } catch (error) {
+      const uncertain = !(error instanceof GatewayClientError) || ['GATEWAY_UNREACHABLE', 'GATEWAY_CANCELED', 'GATEWAY_INVALID_RESPONSE', 'GATEWAY_RESPONSE_LIMIT', 'OPERATION_RESULT_UNKNOWN'].includes(error.code);
+      if (mutation && operationID && uncertain && !options.signal?.aborted) return await recover();
+      if (pendingKey && !uncertain) await this.secretStore.deleteSecret(pendingKey);
+      if (error instanceof GatewayClientError && operationID) error.operationID = operationID;
       if (error instanceof GatewayClientError) throw error;
       throw new GatewayClientError(signal.aborted ? 'GATEWAY_CANCELED' : 'GATEWAY_UNREACHABLE', 'Gateway request could not complete.', null, true);
     } finally { agent?.destroy(); }
+  }
+
+  /** Explicit user reconciliation retires recovery state; it performs no mutation. */
+  async acknowledgeOperation(record: GatewayRecord, operationID: string): Promise<void> {
+    if (!this.bridge || !/^[A-Za-z0-9_-]{16,128}$/u.test(operationID)) throw new GatewayClientError('HOST_MANAGEMENT_REQUIRED', 'A verified host connection is required.');
+    await this.catalog(record);
+    const recoveryKey = 'gateway-host-operation-result:' + record.connection_id + ':' + operationID;
+    const raw = await this.secretStore.readSecret(recoveryKey);
+    if (!raw) return;
+    const value = object(JSON.parse(raw));
+    const key = text(value.pendingKey, 512);
+    if (!key.startsWith('gateway-host-operation:' + record.connection_id + ':') || value.gatewayID !== gatewayProtocolID(record)
+      || value.fingerprint !== record.trust_profile?.gateway_public_key_fingerprint) throw new GatewayClientError('GATEWAY_ID_MISMATCH', 'The recovery operation belongs to another Gateway identity.');
+    if (await this.secretStore.readSecret(key) === operationID) await this.secretStore.deleteSecret(key);
+    await this.secretStore.deleteSecret(recoveryKey);
   }
 
   async catalog(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayCatalogResponse> {
@@ -228,7 +279,7 @@ export class GatewayClient {
 
   async issueAccessCode(record: GatewayRecord): Promise<GatewayClientAccessCode> {
     const value = object(await this.request(record, 'clients/access-codes', { protocol_version: GATEWAY_PROTOCOL_VERSION }, {}));
-    return { access_code: text(value.access_code, 128), expires_at_unix_ms: integer(value.expires_at_unix_ms, 1) };
+    return { access_code: text(value.access_code, 32768), expires_at_unix_ms: integer(value.expires_at_unix_ms, 1) };
   }
   async listClients(record: GatewayRecord): Promise<readonly GatewayAuthorizedClient[]> {
     const value = object(await this.request(record, 'clients/list', { protocol_version: GATEWAY_PROTOCOL_VERSION }, {}));
@@ -275,31 +326,31 @@ export class GatewayClient {
     return endpointList(value.endpoints, false);
   }
 
-  async openMember(record: GatewayRecord, memberID: string, options: GatewayRequestOptions = {}): Promise<GatewayMemberOffer> {
-    const offer = object(await this.request(record, 'access/open', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID) }, options));
+  async openMember(record: GatewayRecord, memberID: string, options: GatewayRequestOptions = {}): Promise<RuntimeAttachmentOffer> {
+    const offer = object(await this.request(record, 'access/open', { protocol_version: GATEWAY_PROTOCOL_VERSION, attachment_id: id(memberID) }, options));
     version(offer.protocol_version);
-    if (offer.member_id !== memberID) return invalid();
-    integer(offer.member_version, 1); integer(offer.generation, 1); integer(offer.expires_at_unix_ms, 1); id(offer.channel_id);
+    if (offer.attachment_id !== memberID) return invalid();
+    integer(offer.attachment_version, 1); integer(offer.generation, 1); integer(offer.expires_at_unix_ms, 1); id(offer.channel_id);
     // The transport validates the full signed delegation, certificate and SDK
     // artifact before connecting. No unverified endpoint reaches a dialer.
     object(offer.artifact); object(offer.service); object(offer.delegation);
-    return offer as unknown as GatewayMemberOffer;
+    return offer as unknown as RuntimeAttachmentOffer;
   }
 
-  async memberService(record: GatewayRecord, memberID: string, memberVersion: number, options: GatewayRequestOptions = {}): Promise<GatewayMemberServiceResponse> {
-    const response = object(await this.request(record, 'access/service', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID), expected_member_version: integer(memberVersion, 1) }, options));
+  async memberService(record: GatewayRecord, memberID: string, memberVersion: number, options: GatewayRequestOptions = {}): Promise<RuntimeAttachmentServiceResponse> {
+    const response = object(await this.request(record, 'access/service', { protocol_version: GATEWAY_PROTOCOL_VERSION, attachment_id: id(memberID), expected_attachment_version: integer(memberVersion, 1) }, options));
     version(response.protocol_version);
-    if (response.member_id !== memberID || response.member_version !== memberVersion) return invalid();
+    if (response.attachment_id !== memberID || response.attachment_version !== memberVersion) return invalid();
     object(response.service); object(response.delegation);
-    return response as unknown as GatewayMemberServiceResponse;
+    return response as unknown as RuntimeAttachmentServiceResponse;
   }
 
   memberConnectionPath(catalog: GatewayCatalogResponse): NodeConnectionPath | undefined {
     if (!this.bridge) return undefined;
-    const endpoints = catalog.gateway.member_endpoints.map(item => new URL(item.address));
+    const endpoints = catalog.gateway.endpoints.map(item => new URL(item.address));
     return { connect: async ({ hostname, port, signal }) => {
       signal.throwIfAborted();
-      if (!endpoints.some(endpoint => hostname === endpoint.hostname.replace(/^\[|\]$/gu, '') && port === Number(endpoint.port || 443))) throw new GatewayClientError('MEMBER_TARGET_DENIED', 'Gateway member endpoint does not match.');
+      if (!endpoints.some(endpoint => hostname === endpoint.hostname.replace(/^\[|\]$/gu, '') && port === Number(endpoint.port || 443))) throw new GatewayClientError('ATTACHMENT_TARGET_DENIED', 'Gateway member endpoint does not match.');
       const socket = openGatewayBridgeSocket(this.bridge!, 'gateway_member');
       const abort = () => socket.destroy();
       signal.addEventListener('abort', abort, { once: true });
@@ -309,21 +360,21 @@ export class GatewayClient {
     } };
   }
 
-  async removeMember(record: GatewayRecord, memberID: string, expectedMemberVersion: number, options: GatewayRequestOptions = {}): Promise<void> {
-    await this.request(record, 'members/remove', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID), expected_member_version: integer(expectedMemberVersion, 1) }, options);
+  async removeMember(record: GatewayRecord, memberID: string, expectedAttachmentVersion: number, options: GatewayRequestOptions = {}): Promise<void> {
+    await this.request(record, 'attachments/remove', { protocol_version: GATEWAY_PROTOCOL_VERSION, attachment_id: id(memberID), expected_attachment_version: integer(expectedAttachmentVersion, 1) }, options);
   }
 
-  async reevaluateMember(record: GatewayRecord, memberID: string, expectedMemberVersion: number, options: GatewayRequestOptions = {}): Promise<void> {
-    await this.request(record, 'members/reevaluate', { protocol_version: GATEWAY_PROTOCOL_VERSION, member_id: id(memberID), expected_member_version: integer(expectedMemberVersion, 1) }, options);
+  async reevaluateMember(record: GatewayRecord, memberID: string, expectedAttachmentVersion: number, options: GatewayRequestOptions = {}): Promise<void> {
+    await this.request(record, 'attachments/reevaluate', { protocol_version: GATEWAY_PROTOCOL_VERSION, attachment_id: id(memberID), expected_attachment_version: integer(expectedAttachmentVersion, 1) }, options);
   }
 
-  async updateMembers(record: GatewayRecord, items: readonly GatewayMemberPolicyUpdate[], options: GatewayRequestOptions = {}): Promise<readonly GatewayMemberOperationResult[]> {
-    const value = await this.request(record, 'members/policy', { protocol_version: GATEWAY_PROTOCOL_VERSION, items }, options);
+  async updateMembers(record: GatewayRecord, items: readonly RuntimeAttachmentPolicyUpdate[], options: GatewayRequestOptions = {}): Promise<readonly RuntimeAttachmentOperationResult[]> {
+    const value = await this.request(record, 'attachments/policy', { protocol_version: GATEWAY_PROTOCOL_VERSION, items }, options);
     if (!Array.isArray(value) || value.length !== items.length) return invalid();
     return value.map((raw, index) => {
       const item = object(raw);
-      if (item.member_id !== items[index].member_id) return invalid();
-      return { member_id: id(item.member_id), ...(item.error_code ? { error_code: text(item.error_code, 80) } : {}), ...(item.member ? { member: member(item.member) } : {}) };
+      if (item.attachment_id !== items[index].attachment_id) return invalid();
+      return { attachment_id: id(item.attachment_id), ...(item.error_code ? { error_code: text(item.error_code, 80) } : {}), ...(item.member ? { member: member(item.member) } : {}) };
     });
   }
 

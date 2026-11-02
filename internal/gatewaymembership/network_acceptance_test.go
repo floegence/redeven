@@ -174,7 +174,7 @@ func TestRuntimeNetworkEndpointAcceptance(t *testing.T) {
 	waitGatewayCondition(t, ctx, func() bool {
 		return runtime.Snapshot().State == flowersec.ConnectionConnected && current().LastEndpointID == "public" && store.EndpointUsage()["public"] > 0
 	})
-	if current().MemberID != original.MemberID || current().MemberVersion != original.MemberVersion || current().ClientCertificatePEM != original.ClientCertificatePEM {
+	if current().AttachmentID != original.AttachmentID || current().AttachmentVersion != original.AttachmentVersion || current().ClientCertificatePEM != original.ClientCertificatePEM {
 		t.Fatal("failover changed membership identity or credentials")
 	}
 	if current().ConnectionEndpoints()[0] != publicEndpoint {
@@ -194,7 +194,7 @@ func TestRuntimeNetworkEndpointAcceptance(t *testing.T) {
 	}
 	closePublic()
 	waitGatewayCondition(t, ctx, func() bool { return runtime.Snapshot().State != flowersec.ConnectionConnected })
-	if err := current().Request(ctx, "/v6/member/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &ConnectionOffer{}, true); !errors.Is(err, errGatewayUnavailable) {
+	if err := current().Request(ctx, "/v6/attachment/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &ConnectionOffer{}, true); !errors.Is(err, errGatewayUnavailable) {
 		t.Fatalf("all unreachable routes must return Gateway unavailable: %v", err)
 	}
 	if store.EndpointUsage()["public_new"] != 0 {
@@ -208,7 +208,7 @@ func TestRuntimeNetworkEndpointAcceptance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.MemberID != original.MemberID || updated.Delegation != original.Delegation || updated.ClientCertificatePEM != original.ClientCertificatePEM {
+	if updated.AttachmentID != original.AttachmentID || updated.Delegation != original.Delegation || updated.ClientCertificatePEM != original.ClientCertificatePEM {
 		t.Fatal("endpoint update changed identity")
 	}
 	if err := persist(updated); err != nil {
@@ -349,7 +349,7 @@ func TestRuntimeReconnectsWhenDomainIPChanges(t *testing.T) {
 		return runtime.Snapshot().State == flowersec.ConnectionConnected && current().LastSpentChannelID != original.LastSpentChannelID
 	})
 	updated := current()
-	if updated.MemberID != original.MemberID || updated.ClientCertificatePEM != original.ClientCertificatePEM || updated.GatewayEndpoints[0] != original.GatewayEndpoints[0] {
+	if updated.AttachmentID != original.AttachmentID || updated.ClientCertificatePEM != original.ClientCertificatePEM || updated.GatewayEndpoints[0] != original.GatewayEndpoints[0] {
 		t.Fatal("DNS address change replaced membership or required new endpoints")
 	}
 }

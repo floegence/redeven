@@ -16,7 +16,7 @@ try {
   for (const [locale, width] of [['en-US', 1280], ['zh-CN', 430]]) {
     const i18n = createDesktopI18n(locale);
     const source = compactEnvironmentPreviewFixture().coverage;
-    const failed = { ...source.gateway_sources[0], gateway_id: 'failed-gateway', display_name: 'Failed Gateway',
+    const failed = { ...source.gateway_sources[0], connection_id: 'failed-gateway', display_name: 'Failed Gateway',
       connection_kind: 'local_host', management_capability: 'managed_local_host', local_enabled: true,
       status: 'pairing_required', trust_state: 'unpaired', sync_state: 'gateway_unreachable', environments: [], diagnosis: undefined,
       service_state: { status: 'needs_reinstall', can_start: false, can_stop: false, can_restart: false, can_update: false,

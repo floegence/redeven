@@ -1080,7 +1080,7 @@ export function buildEnvironmentLibrarySummaryModel(
   snapshot: DesktopWelcomeSnapshot,
   groups: readonly EnvironmentLibraryDisplayGroup[],
 ): EnvironmentLibrarySummaryModel {
-  const visibleEnvironmentIDs = new Set(groups.flatMap(group => group.member_ids));
+  const visibleEnvironmentIDs = new Set(groups.flatMap(group => group.attachment_ids));
   const summary: {
     ready_count: number;
     running_count: number;
@@ -2437,11 +2437,11 @@ export function gatewaySourceFilterOptions(
 ): readonly GatewaySourceFilterOption[] {
   return snapshot.gateway_sources
     .map((gateway) => {
-      const value = gatewaySourceFilterValue(gateway.gateway_id);
+      const value = gatewaySourceFilterValue(gateway.connection_id);
       return value
         ? {
             value,
-            label: gateway.display_name || gateway.gateway_id,
+            label: gateway.display_name || gateway.connection_id,
             count: 1,
           }
         : null;
@@ -2755,7 +2755,7 @@ function gatewayEnvironmentSummaryDetail(
   if (desktopGatewayNeedsResolution(gateway.status)) {
     return 'Resolve this Gateway before its managed environments can appear in the Environments tab.';
   }
-  if (gateway.status === 'online' && gateway.permissions?.manage_members) {
+  if (gateway.status === 'online' && gateway.permissions?.manage_attachments) {
     return 'Invite a Runtime to join this Gateway. Paired Desktops with access permission can open its members.';
   }
   return 'No Runtime members are currently registered with this Gateway.';
@@ -2769,8 +2769,8 @@ export function buildGatewaySourceRowModel(
   const primaryAction = gatewaySourcePrimaryAction(gateway);
   const environmentCount = gateway.environments.length;
   return {
-    gateway_id: gateway.gateway_id,
-    label: gateway.display_name || gateway.gateway_id,
+    gateway_id: gateway.connection_id,
+    label: gateway.display_name || gateway.connection_id,
     transport_label: desktopGatewayConnectionKindLabel(gateway.connection_kind),
     status_label: gateway.local_enabled === false
       ? 'Disabled'

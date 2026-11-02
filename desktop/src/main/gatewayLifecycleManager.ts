@@ -1,4 +1,3 @@
-import type { GatewayCloudConfiguration, GatewayCloudSummary } from '../shared/gatewayCloud';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -21,7 +20,6 @@ import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
   GatewayServiceStartError,
-  manageGatewayCloud,
   gatewayServiceBinaryPath,
   probeManagedGatewayServiceDeep,
   probeManagedGatewayServiceStatus,
@@ -155,7 +153,7 @@ export class GatewayLifecycleManager {
   lifecycleFingerprint(record: GatewayRecord, intent: RuntimeLifecycleIntent): string {
     return runtimeLifecycleFingerprint({
       intent,
-      gateway_id: record.gateway_id,
+      gateway_id: record.connection_id,
       connection: record.connection,
       runtime_release_tag: this.options.runtime_release_tag,
       target_commit: this.options.target_commit ?? '',
@@ -208,12 +206,12 @@ export class GatewayLifecycleManager {
     try {
       const probe = await probeManagedGatewayServiceStatus({
         sshTransportManager: this.options.ssh_transport_manager,
-        sshCredentialScope: record.gateway_id,
+        sshCredentialScope: record.connection_id,
         target: gatewaySSHDetails(record),
         hostAccess: gatewayHostAccess(record),
         placement: gatewayPlacement(record),
         stateRoot: gatewayServiceStateRoot(record),
-        gatewayID: record.gateway_id,
+        gatewayID: record.connection_id,
         releaseTag: this.gatewayReleaseTag(),
         releaseBaseURL: this.gatewayReleaseBaseURL(record),
         assetCacheRoot: this.options.asset_cache_root,
@@ -274,12 +272,12 @@ export class GatewayLifecycleManager {
     const sshPassword = await this.gatewaySSHPassword(record);
     return probeManagedGatewayServiceDeep({
       sshTransportManager: this.options.ssh_transport_manager,
-      sshCredentialScope: record.gateway_id,
+      sshCredentialScope: record.connection_id,
       target: gatewaySSHDetails(record),
       hostAccess: gatewayHostAccess(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
-      gatewayID: record.gateway_id,
+      gatewayID: record.connection_id,
       releaseTag: this.gatewayReleaseTag(),
       releaseBaseURL: this.gatewayReleaseBaseURL(record),
       assetCacheRoot: this.options.asset_cache_root,
@@ -410,24 +408,15 @@ export class GatewayLifecycleManager {
     }
   }
 
-  async manageCloud(record: GatewayRecord, configuration?: GatewayCloudConfiguration, signal?: AbortSignal, operationKey?: string): Promise<GatewayCloudSummary> {
-    if (record.connection.kind === 'url') throw new GatewayNotManageableError();
-    return this.runLifecycle(record, 'start', { signal, operationKey }, async currentSignal => {
-      const options = await this.serviceOptions(record, { signal: currentSignal });
-      if (configuration) await this.ensureBridgeSession(record, { signal: currentSignal });
-      return manageGatewayCloud(options, configuration ? { cloud_origin: this.options.cloud_origin, ...configuration } : undefined);
-    });
-  }
-
   private async serviceOptions(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }>) {
     return {
       sshTransportManager: this.options.ssh_transport_manager,
-      sshCredentialScope: record.gateway_id,
+      sshCredentialScope: record.connection_id,
       target: gatewaySSHDetails(record),
       hostAccess: gatewayHostAccess(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
-      gatewayID: record.gateway_id,
+      gatewayID: record.connection_id,
       releaseTag: this.gatewayReleaseTag(),
       releaseBaseURL: this.gatewayReleaseBaseURL(record),
       assetCacheRoot: this.options.asset_cache_root,
@@ -447,7 +436,7 @@ export class GatewayLifecycleManager {
     const sshPassword = await this.gatewaySSHPassword(record);
     await stopManagedGatewayService({
       sshTransportManager: this.options.ssh_transport_manager,
-      sshCredentialScope: record.gateway_id,
+      sshCredentialScope: record.connection_id,
       target: gatewaySSHDetails(record),
       hostAccess: gatewayHostAccess(record),
       placement: gatewayPlacement(record),
@@ -554,9 +543,9 @@ export class GatewayLifecycleManager {
         bridge_command_kind: 'gateway',
         require_local_ui: false,
         ssh_password: sshPassword,
-        ssh_credential_scope: record.gateway_id,
+        ssh_credential_scope: record.connection_id,
         ssh_transport_manager: this.options.ssh_transport_manager,
-        fallback_local_id: record.gateway_id,
+        fallback_local_id: record.connection_id,
         signal: options.signal,
       });
     } catch (error) {
@@ -592,12 +581,12 @@ export class GatewayLifecycleManager {
     try {
       return await ensureManagedGatewayServiceReady({
         sshTransportManager: this.options.ssh_transport_manager,
-        sshCredentialScope: record.gateway_id,
+        sshCredentialScope: record.connection_id,
         target: gatewaySSHDetails(record),
         hostAccess: gatewayHostAccess(record),
         placement,
         stateRoot: gatewayServiceStateRoot(record),
-        gatewayID: record.gateway_id,
+        gatewayID: record.connection_id,
         releaseTag: this.gatewayReleaseTag(),
         releaseBaseURL: this.gatewayReleaseBaseURL(record),
         assetCacheRoot: this.options.asset_cache_root,
@@ -750,16 +739,16 @@ function gatewayServiceStateRoot(record: GatewayRecord): string {
   return desktopSSHRuntimeRootSubpath(
     record.connection.runtime_root,
     DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR,
-    record.gateway_id,
+    record.connection_id,
     'state',
   );
 }
 
 function gatewayLifecycleTargetID(record: GatewayRecord): string {
   if (record.connection.kind === 'url') {
-    return `gateway:url:${record.gateway_id}`;
+    return `gateway:url:${record.connection_id}`;
   }
-  return desktopRuntimeTargetID(gatewayHostAccess(record), gatewayPlacement(record), record.gateway_id);
+  return desktopRuntimeTargetID(gatewayHostAccess(record), gatewayPlacement(record), record.connection_id);
 }
 
 function gatewayLifecycleCoordinatorTargetKey(record: GatewayRecord): string {

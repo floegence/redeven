@@ -123,11 +123,11 @@ try {
     const i18n = createDesktopI18n(locale);
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: 'reduce' });
     page.on('pageerror', error => report.errors.push(error.message));
-    const gateways = [{ gateway_id: 'saved-office', display_name: 'Office Gateway', local_enabled: true,
+    const gateways = [{ connection_id: 'saved-office', display_name: 'Office Gateway', local_enabled: true,
       connection_kind: kind, management_capability: 'access_only', capabilities: [], status: 'offline',
       trust_state: 'paired', listener_running: false, created_at_ms: 1, updated_at_ms: 1, environments: [],
       ...(kind === 'url' ? { gateway_url: 'https://office.example:7443/' }
-        : { member_endpoints: [{ endpoint_id: 'public', address: 'https://office.example:7443', priority: 0, scope: 'public' }] }),
+        : { endpoints: [{ endpoint_id: 'public', address: 'https://office.example:7443', priority: 0, scope: 'public' }] }),
     }];
     await page.addInitScript(mockActions, { environment, connected: true, gateways });
     await page.goto(new URL(`gateway-auth.html?locale=${locale}&theme=${theme}`, server.resolvedUrls.local[0]).href);
@@ -156,10 +156,10 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: 'reduce' });
     page.on('pageerror', error => report.errors.push(error.message));
     const gateways = ['ssh_host', 'local_host'].map((connection_kind, index) => ({
-      gateway_id: 'empty-' + index, display_name: index ? 'Gateway-local' : 'Gateway-gzcom', local_enabled: true,
+      connection_id: 'empty-' + index, display_name: index ? 'Gateway-local' : 'Gateway-gzcom', local_enabled: true,
       connection_kind, management_capability: 'managed_local_host', capabilities: [], status: 'online', trust_state: 'paired',
       listener_running: true, listener_addresses: [':7443'], active_listener_addresses: ['[::]:7443'],
-      allowed_hosts: [], member_endpoints: [], permissions: { access: true, manage_members: true, configure_cloud: true },
+      allowed_hosts: [], endpoints: [], permissions: { access: true, manage_attachments: true, manage_network: true },
       created_at_ms: 1, updated_at_ms: 1, environments: [],
     }));
     await page.addInitScript(mockActions, { environment, connected: true, gateways });
@@ -188,7 +188,7 @@ try {
   }
   if (process.env.REDEVEN_GATEWAY_INVENTORY_FILE) {
     const gateways = JSON.parse(await readFile(process.env.REDEVEN_GATEWAY_INVENTORY_FILE, 'utf8'));
-    assert.ok(gateways.length && gateways.every(gateway => !gateway.member_endpoints.length));
+    assert.ok(gateways.length && gateways.every(gateway => !gateway.endpoints.length));
     const i18n = createDesktopI18n('zh-CN');
     const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: 'reduce' });
     await page.addInitScript(mockActions, { environment, connected: true, gateways });

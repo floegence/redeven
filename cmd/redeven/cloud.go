@@ -19,7 +19,7 @@ const cloudHelp = `Usage: redeven cloud <status|manage|retry|disconnect|route|qu
 
  --state-root PATH          Runtime state root
  --route direct|gateway    Preflight the selected Cloud route
- --member-id ID            Gateway member for --route gateway
+ --attachment-id ID            Runtime attachment for --route gateway
  --operation-id ID         Original route operation ID for query, commit or cancel
  --yes                     Confirm commit or disconnect in automation
 
@@ -43,7 +43,7 @@ func (c *cli) cloudCmd(args []string) int {
 	flags := newCLIFlagSet("cloud " + action)
 	root := flags.String("state-root", "", "Runtime state root")
 	kind := flags.String("route", "", "Cloud route")
-	member := flags.String("member-id", "", "Gateway member")
+	member := flags.String("attachment-id", "", "Gateway member")
 	operationID := flags.String("operation-id", "", "Original operation ID")
 	yes := flags.Bool("yes", false, "Confirm committed changes")
 	if err := parseCommandFlags(flags, args[1:]); err != nil {
@@ -90,7 +90,7 @@ func (c *cli) cloudCmd(args []string) int {
 	switch action {
 	case "retry":
 		if cloud == nil {
-			fmt.Fprintln(c.stderr, "Enroll this Runtime with a setup ticket or gateway publish first.")
+			fmt.Fprintln(c.stderr, "Enroll this Runtime with a setup ticket first.")
 			return 1
 		}
 		method, path, body = http.MethodPost, "/v2/cloud/retry", rc.RetryRequest{ExpectedAssociationRevision: cloud.AssociationRevision}
@@ -100,17 +100,18 @@ func (c *cli) cloudCmd(args []string) int {
 		}
 		method, path = http.MethodPost, "/v2/cloud-link/disconnect"
 	case "route":
-		if cloud == nil {
-			fmt.Fprintln(c.stderr, "Enroll this Runtime before choosing a Cloud route.")
-			return 1
-		}
 		id, err := runtimecloud.NewOperationID()
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
 		}
 		fmt.Fprintln(c.stdout, "Route operation ID:", id)
-		method, path, body = http.MethodPost, "/v2/cloud/route/preflight", rc.RoutePreflightRequest{OperationID: id, ExpectedRouteRevision: cloud.RouteRevision, Selection: rc.RouteSelection{Kind: *kind, MemberID: *member}}
+		method, path, body = http.MethodPost, "/v2/cloud/route/preflight", rc.RoutePreflightRequest{OperationID: id, ExpectedRouteRevision: func() int64 {
+			if cloud != nil {
+				return cloud.RouteRevision
+			}
+			return status.RuntimeService.Bindings.CloudLink.RouteRevision
+		}(), Selection: rc.RouteSelection{Kind: *kind, AttachmentID: *member}}
 	case "query", "cancel", "commit":
 		if !validOperationID(*operationID) {
 			fmt.Fprintln(c.stderr, "Use the original operation ID printed by cloud route.")
@@ -130,7 +131,7 @@ func (c *cli) cloudCmd(args []string) int {
 				_ = json.NewEncoder(c.stdout).Encode(original)
 				return 0
 			}
-			fmt.Fprintf(c.stdout, "Selected route: %s %s\n", original.Selection.Kind, original.Selection.MemberID)
+			fmt.Fprintf(c.stdout, "Selected route: %s %s\n", original.Selection.Kind, original.Selection.AttachmentID)
 			if !*yes && !c.confirmGatewayAction("Reconnect Cloud sessions through this route? Background tasks continue; Cloud identity and ownership remain.") {
 				return 1
 			}

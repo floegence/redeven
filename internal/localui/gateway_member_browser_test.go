@@ -3,6 +3,7 @@ package localui
 import (
 	"context"
 	"encoding/json"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"io"
 	"log/slog"
 	"net"
@@ -16,7 +17,6 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/accessgate"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/pquerna/otp/totp"
@@ -24,7 +24,7 @@ import (
 
 // Exercise the real public Runtime application without Runtime TCP listeners,
 // Cloud, URL profiles, HTTP rewriting, or global Chromium certificate overrides.
-func TestGatewayMemberBrowserSession(t *testing.T) {
+func TestIndependentGatewayBrowserSession(t *testing.T) {
 	if os.Getenv("REDEVEN_GATEWAY_ACCESS_BROWSER") != "1" {
 		t.Skip("run scripts/check_gateway_access_browser.sh")
 	}
@@ -52,13 +52,13 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 	memberAddress := reservation.Addr().String()
 	reservation.Close()
 	hostToken := strings.Repeat("a", 43)
-	gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(state, "gateway"), HostAdminToken: hostToken, MemberURL: "https://" + memberAddress, MemberListen: memberAddress})
+	gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(state, "gateway"), HostAdminToken: hostToken, PublicURL: "https://" + memberAddress, PublicListen: memberAddress})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	server, listeners, err := gateway.Start(ctx, "127.0.0.1:0")
+	server, listeners, err := gateway.Start(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,10 +88,10 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
-		gateway.Handler().ServeHTTP(response, request)
+		gatewayfixture.HostHandler(t, listeners[0].Addr().String()).ServeHTTP(response, request)
 		var envelope struct {
 			OK   bool                      `json:"ok"`
-			Data gc.InvitationCodeDelivery `json:"data"`
+			Data gp.InvitationCodeDelivery `json:"data"`
 		}
 		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &envelope) != nil {
 			t.Fatal("invitation unavailable", response.Code)
@@ -111,10 +111,10 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 			t.Fatal("Runtime opened TCP ingress")
 		}
 		deadline := time.Now().Add(15 * time.Second)
-		for time.Now().Before(deadline) && runtime.a.GatewayMembershipStatus().Phase != "joined" {
+		for time.Now().Before(deadline) && runtime.a.GatewayAttachmentStatus().Phase != "joined" {
 			time.Sleep(25 * time.Millisecond)
 		}
-		if runtime.a.GatewayMembershipStatus().Phase != "joined" {
+		if runtime.a.GatewayAttachmentStatus().Phase != "joined" {
 			t.Fatal("outbound membership did not connect")
 		}
 		var recovery []string
@@ -142,7 +142,7 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 	codeRequest.RemoteAddr = "127.0.0.1:1234"
 	codeRequest.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 	codeResponse := httptest.NewRecorder()
-	gateway.Handler().ServeHTTP(codeResponse, codeRequest)
+	gatewayfixture.HostHandler(t, listeners[0].Addr().String()).ServeHTTP(codeResponse, codeRequest)
 	var accessCode struct {
 		Data gp.ClientAccessCodeResponse `json:"data"`
 	}
@@ -151,7 +151,7 @@ func TestGatewayMemberBrowserSession(t *testing.T) {
 	}
 	plain, _ := start(false)
 	secure, recovery := start(true)
-	fixture := map[string]any{"accessCode": accessCode.Data.AccessCode, "hostToken": hostToken, "gateway": "http://" + listeners[0].Addr().String() + "/", "plainMember": plain.a.GatewayMembership().MemberID, "secureMember": secure.a.GatewayMembership().MemberID, "recoveryCodes": recovery, "state": state, "goPID": os.Getpid(), "workspace": workspace, "webService": webService.URL}
+	fixture := map[string]any{"accessCode": accessCode.Data.AccessCode, "hostToken": hostToken, "managementSocket": listeners[0].Addr().String(), "gateway": "https://" + listeners[1].Addr().String() + "/", "plainMember": plain.a.GatewayAttachment().AttachmentID, "secureMember": secure.a.GatewayAttachment().AttachmentID, "recoveryCodes": recovery, "state": state, "goPID": os.Getpid(), "workspace": workspace, "webService": webService.URL}
 	configPath := filepath.Join(state, "fixture.json")
 	raw, err := json.Marshal(fixture)
 	if err != nil {

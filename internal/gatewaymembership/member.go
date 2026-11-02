@@ -34,8 +34,8 @@ func (s *Store) authenticateLocked(leaf *x509.Certificate) (MemberRecord, error)
 func (s *Store) Leave(leaf *x509.Certificate, request gp.RemoveMemberRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	member, ok := s.state.Members[request.MemberID]
-	if leaf == nil || request.ExpectedMemberVersion < 1 || request.ProtocolVersion != gp.Version || leaf.Subject.CommonName != request.MemberID || !time.Now().Before(leaf.NotAfter) || time.Now().Before(leaf.NotBefore) {
+	member, ok := s.state.Members[request.AttachmentID]
+	if leaf == nil || request.ExpectedAttachmentVersion < 1 || request.ProtocolVersion != gp.Version || leaf.Subject.CommonName != request.AttachmentID || !time.Now().Before(leaf.NotAfter) || time.Now().Before(leaf.NotBefore) {
 		return ErrDenied
 	}
 	// A removed, acknowledged record may be compacted. The verified member CA
@@ -47,7 +47,7 @@ func (s *Store) Leave(leaf *x509.Certificate, request gp.RemoveMemberRequest) er
 	if member.ClientCertificateSHA256 != fingerprint && (member.Rotation == nil || member.Rotation.PreviousSHA256 != fingerprint || time.Now().UnixMilli() >= member.Rotation.PreviousExpiresAtUnixMS) {
 		return ErrDenied
 	}
-	return s.removeLocked(request.MemberID, request.ExpectedMemberVersion)
+	return s.removeLocked(request.AttachmentID, request.ExpectedAttachmentVersion)
 }
 
 // CancelJoin handles a lost enrollment response without issuing credentials or
@@ -66,11 +66,11 @@ func (s *Store) CancelJoin(request gp.MemberJoinRequest) error {
 	defer s.mu.Unlock()
 	record, exists := s.state.Invitations[request.InvitationID]
 	if !exists {
-		if member, ok := s.state.Members[request.Delegation.MemberID]; ok && member.Delegation == request.Delegation {
+		if member, ok := s.state.Members[request.Delegation.AttachmentID]; ok && member.Delegation == request.Delegation {
 			if member.Member.State == "removed" {
 				return nil
 			}
-			return s.removeLocked(member.Member.MemberID, member.Member.MemberVersion)
+			return s.removeLocked(member.Member.AttachmentID, member.Member.AttachmentVersion)
 		}
 		return nil
 	}
@@ -81,8 +81,8 @@ func (s *Store) CancelJoin(request gp.MemberJoinRequest) error {
 	if record.Canceled {
 		return nil
 	}
-	if member, ok := s.state.Members[request.Delegation.MemberID]; ok && member.Member.State == "active" {
-		if err := s.removeLocked(member.Member.MemberID, member.Member.MemberVersion); err != nil {
+	if member, ok := s.state.Members[request.Delegation.AttachmentID]; ok && member.Member.State == "active" {
+		if err := s.removeLocked(member.Member.AttachmentID, member.Member.AttachmentVersion); err != nil {
 			return err
 		}
 	}
@@ -107,8 +107,8 @@ func (s *Store) Rotate(leaf *x509.Certificate, request gp.MemberRotateRequest) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
-	member, ok := s.state.Members[request.MemberID]
-	if leaf == nil || !ok || member.Member.State != "active" || leaf.Subject.CommonName != request.MemberID || now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) || request.ProtocolVersion != gp.Version || request.GatewayID != s.identity.ID || request.MemberVersion != member.Member.MemberVersion || !validID(request.DeliveryID) {
+	member, ok := s.state.Members[request.AttachmentID]
+	if leaf == nil || !ok || member.Member.State != "active" || leaf.Subject.CommonName != request.AttachmentID || now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) || request.ProtocolVersion != gp.Version || request.GatewayID != s.identity.ID || request.AttachmentVersion != member.Member.AttachmentVersion || !validID(request.DeliveryID) {
 		return gp.MemberRotateResponse{}, ErrDenied
 	}
 	signature := request.Signature
@@ -133,16 +133,16 @@ func (s *Store) Rotate(leaf *x509.Certificate, request gp.MemberRotateRequest) (
 	if _, err := s.authenticateLocked(leaf); err != nil {
 		return gp.MemberRotateResponse{}, err
 	}
-	certificate, nextFingerprint, expires, err := issueClientCertificate(s.state.Endpoint, request.ClientCSRPEM, request.MemberID)
+	certificate, nextFingerprint, expires, err := issueClientCertificate(s.state.Endpoint, request.ClientCSRPEM, request.AttachmentID)
 	if err != nil {
 		return gp.MemberRotateResponse{}, err
 	}
-	response := gp.MemberRotateResponse{ProtocolVersion: gp.Version, MemberID: request.MemberID, MemberVersion: request.MemberVersion, DeliveryID: request.DeliveryID, ClientCertificatePEM: certificate, ClientExpiresAtUnixMS: expires}
+	response := gp.MemberRotateResponse{ProtocolVersion: gp.Version, AttachmentID: request.AttachmentID, AttachmentVersion: request.AttachmentVersion, DeliveryID: request.DeliveryID, ClientCertificatePEM: certificate, ClientExpiresAtUnixMS: expires}
 	member.Rotation = &rotationDelivery{PreviousSHA256: fingerprint, PreviousExpiresAtUnixMS: member.ClientExpiresAtUnixMS, RequestSHA256: hash, Response: response}
 	member.ClientCertificatePEM, member.ClientCertificateSHA256, member.ClientExpiresAtUnixMS = certificate, nextFingerprint, expires
 	member.Service = request.Service
 	next := s.clone()
-	next.Members[request.MemberID] = member
+	next.Members[request.AttachmentID] = member
 	if err := s.commit(next); err != nil {
 		return gp.MemberRotateResponse{}, err
 	}
@@ -174,7 +174,7 @@ func (s *Store) fenceHookGrantsLocked() error {
 	next := s.clone()
 	next.Policy.Revision++
 	for id, member := range next.Members {
-		member.HookCloudAllowed = false
+		member.HookEgressAllowed = false
 		next.Members[id] = member
 	}
 	next = s.nextRevision(next)
@@ -193,11 +193,11 @@ func (s *Store) ServiceIdentity(memberID string, version int64) (gp.MemberServic
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	member, ok := s.state.Members[memberID]
-	if !ok || member.Member.State != "active" || member.Member.MemberVersion != version {
+	if !ok || member.Member.State != "active" || member.Member.AttachmentVersion != version {
 		return gp.MemberServiceResponse{}, ErrDenied
 	}
 	if err := VerifyMemberService(member.Service, member.Delegation, time.Now()); err != nil {
 		return gp.MemberServiceResponse{}, err
 	}
-	return gp.MemberServiceResponse{ProtocolVersion: gp.Version, MemberID: memberID, MemberVersion: version, Service: member.Service, Delegation: member.Delegation}, nil
+	return gp.MemberServiceResponse{ProtocolVersion: gp.Version, AttachmentID: memberID, AttachmentVersion: version, Service: member.Service, Delegation: member.Delegation}, nil
 }

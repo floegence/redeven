@@ -1,20 +1,19 @@
 import type { GatewayEndpoint } from './gatewayMembership';
 
-export type GatewayMembershipPhase = 'not_joined' | 'joining' | 'gateway_offline' | 'joined' | 'reauthorization_required' | 'removal_pending';
-export type GatewayMembershipStatus = Readonly<{
+export type GatewayAttachmentPhase = 'not_joined' | 'joining' | 'gateway_offline' | 'joined' | 'reauthorization_required' | 'removal_pending';
+export type GatewayAttachmentStatus = Readonly<{
   joined: boolean;
-  phase: GatewayMembershipPhase;
+  phase: GatewayAttachmentPhase;
   gateway_id?: string;
   gateway_name?: string;
   route_selected?: boolean;
-  cloud_enrollment_required?: boolean;
-  memberships?: readonly GatewayMembershipStatus[];
+  memberships?: readonly GatewayAttachmentStatus[];
   endpoints?: readonly GatewayEndpoint[];
   last_endpoint_id?: string;
-  member_id?: string;
+  attachment_id?: string;
   existing_environment_id?: string;
 }>;
-export type GatewayMembershipOperation = 'join' | 'replace' | 'update-endpoints' | 'status' | 'retry' | 'leave' | 'publish';
+export type GatewayAttachmentOperation = 'join' | 'replace' | 'update-endpoints' | 'status' | 'retry' | 'leave';
 
 export type GatewayEnrollmentPurpose = 'join' | 'replace' | 'update-endpoints';
 export type GatewayPreviewInput = Readonly<{ address: string; code: string; purpose: GatewayEnrollmentPurpose }>;

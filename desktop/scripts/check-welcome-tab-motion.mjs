@@ -150,7 +150,7 @@ try {
         const content = document.querySelector('.redeven-center-content');
         const tabs = [...document.querySelectorAll('.redeven-console-tab')];
         const check = (condition, message) => { if (!condition) throw new Error(message); };
-        const gateways = [0, 1].map(index => ({ gateway_id: `motion-gateway-${index}`, display_name: `Gateway ${index + 1}`,
+        const gateways = [0, 1].map(index => ({ connection_id: `motion-gateway-${index}`, display_name: `Gateway ${index + 1}`,
           local_enabled: true, connection_kind: 'url', management_capability: 'access_only', capabilities: [],
           status: 'pairing_required', trust_state: 'unpaired', gateway_url: `https://gateway-${index}.example.invalid`,
           created_at_ms: 1, updated_at_ms: 1, environments: [] }));

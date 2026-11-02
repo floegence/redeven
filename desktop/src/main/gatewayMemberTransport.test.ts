@@ -6,12 +6,12 @@ import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { createGatewayMemberTransport, verifyMemberServiceProof } from './gatewayMemberTransport';
-import type { GatewayEndpoint, GatewayMemberOffer, GatewayMemberServiceResponse } from '../shared/gatewayMembership';
+import { createRuntimeAttachmentTransport, verifyMemberServiceProof } from './gatewayMemberTransport';
+import type { GatewayEndpoint, RuntimeAttachmentOffer, RuntimeAttachmentServiceResponse } from '../shared/gatewayMembership';
 
 describe('Gateway member endpoint configuration', () => {
   it('reports missing addresses before acquiring a member capability', async () => {
-    await expect(createGatewayMemberTransport({
+    await expect(createRuntimeAttachmentTransport({
       memberID: 'member', memberVersion: 1, runtimeID: 'runtime', gatewayID: 'gateway',
       gatewayEndpoints: [], gatewayTLSRootPEM: '',
       acquire: async () => { throw new Error('must not acquire'); },
@@ -48,22 +48,22 @@ describe.runIf(process.env.REDEVEN_GATEWAY_INTEROP === '1')('Gateway Go/Node rev
       const next = ++id; pending.set(next, { resolve, reject }); peer.stdin.write(`${JSON.stringify({ id: next, action })}\n`);
     });
     const lifetime = new AbortController();
-    let transport: Awaited<ReturnType<typeof createGatewayMemberTransport>> | undefined;
+    let transport: Awaited<ReturnType<typeof createRuntimeAttachmentTransport>> | undefined;
     try {
       const data = await ready;
       expect((data.endpoints as GatewayEndpoint[]).length).toBe(2);
-      const offer = await command('offer') as GatewayMemberOffer;
-      verifyMemberServiceProof(offer.service, offer.delegation, String(data.gateway_id), String(data.member_id), String(data.runtime_id));
+      const offer = await command('offer') as RuntimeAttachmentOffer;
+      verifyMemberServiceProof(offer.service, offer.delegation, String(data.gateway_id), String(data.attachment_id), String(data.runtime_id));
       for (const protocol_version of ['redeven-gateway-v4', 'redeven-gateway-v5', 'redeven-gateway-v7']) {
         const invalid = { ...offer.delegation, protocol_version } as unknown as typeof offer.delegation;
-        expect(() => verifyMemberServiceProof(offer.service, invalid, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
+        expect(() => verifyMemberServiceProof(offer.service, invalid, String(data.gateway_id), String(data.attachment_id), String(data.runtime_id))).toThrow();
       }
-      expect(() => verifyMemberServiceProof(offer.service, { ...offer.delegation, manage_cloud_publication: false }, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
-      expect(() => verifyMemberServiceProof({ ...offer.service, certificate_sha256: '0'.repeat(64) }, offer.delegation, String(data.gateway_id), String(data.member_id), String(data.runtime_id))).toThrow();
-      transport = await createGatewayMemberTransport({
-        memberID: String(data.member_id), memberVersion: Number(data.member_version), runtimeID: String(data.runtime_id),
+      expect(() => verifyMemberServiceProof(offer.service, { ...offer.delegation, manage_access: false }, String(data.gateway_id), String(data.attachment_id), String(data.runtime_id))).toThrow();
+      expect(() => verifyMemberServiceProof({ ...offer.service, certificate_sha256: '0'.repeat(64) }, offer.delegation, String(data.gateway_id), String(data.attachment_id), String(data.runtime_id))).toThrow();
+      transport = await createRuntimeAttachmentTransport({
+        memberID: String(data.attachment_id), memberVersion: Number(data.attachment_version), runtimeID: String(data.runtime_id),
         gatewayID: String(data.gateway_id), gatewayEndpoints: data.endpoints as GatewayEndpoint[], gatewayTLSRootPEM: String(data.gateway_tls_root_pem),
-        signal: lifetime.signal, refreshService: async () => await command('service') as GatewayMemberServiceResponse, acquire: async () => await command('offer') as GatewayMemberOffer,
+        signal: lifetime.signal, refreshService: async () => await command('service') as RuntimeAttachmentServiceResponse, acquire: async () => await command('offer') as RuntimeAttachmentOffer,
       });
       const owner = transport;
       const fetch = (path: string, body?: string, keepAlive = false) => new Promise<string>((resolve, reject) => {

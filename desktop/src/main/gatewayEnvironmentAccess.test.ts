@@ -5,7 +5,7 @@ import { gatewayRecordFixture, memberFixture, catalogFixture } from '../testSupp
 import { GatewayClient } from './gatewayClient';
 
 const mocks = vi.hoisted(() => ({ transport: vi.fn(), probe: vi.fn() }));
-vi.mock('./gatewayMemberTransport', () => ({ createGatewayMemberTransport: mocks.transport }));
+vi.mock('./gatewayMemberTransport', () => ({ createRuntimeAttachmentTransport: mocks.transport }));
 vi.mock('./runtimeState', () => ({ probeExternalLocalUIStartup: mocks.probe }));
 const agent = new https.Agent();
 const close = vi.fn(async () => {});
@@ -26,7 +26,7 @@ describe('member access owner', () => {
   it.each(['removed', 'offline', 'denied'])('rejects %s before opening a transport', async state => {
     const member = { ...memberFixture, ...(state === 'removed' ? { state: 'removed' as const } : state === 'offline' ? { connected: false } : {}) };
     const catalog = state === 'denied' ? { ...catalogFixture, gateway: { ...catalogFixture.gateway, permissions: { ...catalogFixture.gateway.permissions, access: false } } } : catalogFixture;
-    await expect(prepareGatewayEnvironmentAccess(gatewayRecordFixture, member, catalog, client)).rejects.toMatchObject({ code: 'MEMBER_OFFLINE' });
+    await expect(prepareGatewayEnvironmentAccess(gatewayRecordFixture, member, catalog, client)).rejects.toMatchObject({ code: 'ATTACHMENT_OFFLINE' });
     expect(mocks.transport).not.toHaveBeenCalled();
   });
   it('closes the owned transport after an unsuccessful application probe without trying another route', async () => {

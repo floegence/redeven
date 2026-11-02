@@ -87,7 +87,7 @@ describe('Welcome health refresh relationship continuity', () => {
       const pending = store.refresh([{ ...linkedTarget, probe: () => new Promise(done => { resolve = done; }) }], { force: true });
       expect(store.snapshot().managedRuntimePresenceByTargetID[linkedTarget.key]).toBeUndefined();
       const during = groups();
-      expect(during.map(group => [group.id, group.member_ids])).toEqual(initialGroups.map(group => [group.id, group.member_ids]));
+      expect(during.map(group => [group.id, group.attachment_ids])).toEqual(initialGroups.map(group => [group.id, group.attachment_ids]));
       const refreshing = during.find(group => group.id === pair.id)!;
       expect(refreshing.primary_entry.runtime_health.local_ui_address_issues).toEqual(pair.primary_entry.runtime_health.local_ui_address_issues);
       expect(refreshing.primary_entry.runtime_health.freshness).toBe('checking');
@@ -97,7 +97,7 @@ describe('Welcome health refresh relationship continuity', () => {
       expect(refreshing.primary_entry.provider_runtime_link_target?.runtime_control_status.state).toBe('missing');
       resolve(await linkedTarget.probe());
       await pending;
-      expect(groups().map(group => [group.id, group.member_ids])).toEqual(initialGroups.map(group => [group.id, group.member_ids]));
+      expect(groups().map(group => [group.id, group.attachment_ids])).toEqual(initialGroups.map(group => [group.id, group.attachment_ids]));
 
       // A completed unlink is authoritative; continuity must not retain a stale pair.
       const observed = await linkedTarget.probe();

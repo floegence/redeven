@@ -85,14 +85,14 @@ await session.run(async () => {
     let current = await snapshot();
     const source = current.gateway_sources.find((item) => item.display_name === 'Local qualification');
     assert.ok(source, 'Saved Local Gateway must appear in the production snapshot');
-    const id = source.gateway_id;
+    const id = source.connection_id;
     report.gatewayID = id;
     report.cases.push('Local Gateway default form saves through production IPC and persistent store');
     assert.equal(source.runtime_root, 'remote_default');
     assert.notEqual(source.service_state?.status, 'ready', 'Save must not start a Gateway');
     const registration = {
       kind: 'upsert_gateway',
-      gateway_id: id,
+      connection_id: id,
       display_name: source.display_name,
       connection_kind: 'local_host',
       host_access: { kind: 'local_host' },
@@ -113,8 +113,8 @@ await session.run(async () => {
       ...registration,
       permissions: {
         access: true,
-        manage_members: true,
-        configure_cloud: true,
+        manage_attachments: true,
+        manage_network: true,
       },
     });
     assert.equal(needsStart.ok, false);
@@ -132,7 +132,7 @@ await session.run(async () => {
       stdio: 'inherit',
     });
     await session.command('Gateway service', fixtureBinary, ['service-stop', '--state-root', serviceRoot]);
-    execFileSync(fixtureBinary, ['service-start', '--state-root', serviceRoot, '--member-listen', '127.0.0.1:0'], { stdio: 'pipe' });
+    execFileSync(fixtureBinary, ['service-start', '--state-root', serviceRoot, '--public-listen', '127.0.0.1:0'], { stdio: 'pipe' });
     execFileSync(fixtureBinary, ['service-stop', '--state-root', serviceRoot], {
       stdio: 'pipe',
     });
@@ -151,8 +151,8 @@ await session.run(async () => {
           ...registration,
           permissions: {
             access: true,
-            manage_members: true,
-            configure_cloud: true,
+            manage_attachments: true,
+            manage_network: true,
           },
         })
       ).ok,
@@ -161,8 +161,8 @@ await session.run(async () => {
     const paired = (await snapshot()).gateway_sources.find((item) => item.gateway_id === id);
     assert.deepEqual(paired.permissions, {
       access: true,
-      manage_members: true,
-      configure_cloud: true,
+      manage_attachments: true,
+      manage_network: true,
     });
     assert.equal(
       (await action({ kind: 'invite_gateway_runtime', gateway_id: id })).ok,
@@ -211,12 +211,12 @@ await session.run(async () => {
       false,
       'Invitation does not manufacture a member',
     );
-    const policy = { ...paired.policy, default_cloud_allowed: true };
+    const policy = { ...paired.policy, default_egress_allowed: true };
     assert.equal((await action({ kind: 'update_gateway_policy', gateway_id: id, policy })).ok, true);
     await run('restart_gateway');
     const restored = (await snapshot()).gateway_sources.find((item) => item.gateway_id === id);
-    assert.equal(restored.policy.default_cloud_allowed, true);
-    assert.equal(restored.permissions.manage_members, true);
+    assert.equal(restored.policy.default_egress_allowed, true);
+    assert.equal(restored.permissions.manage_attachments, true);
     report.cases.push('Access-only pairing denies invitations; explicit permissions and policy survive restart');
     assert.equal(
       (

@@ -8,7 +8,7 @@ const i18n=createDesktopI18n('en-US');
 const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
 let dispose:(()=>void)|undefined;
 const id='A'.repeat(43);
-const cloud={association_revision:1,enabled:true,approval_state:'revoked' as const,reason_code:'AUTHORIZATION_REVOKED',connection_state:'authorization_required',route:{kind:'gateway' as const,member_id:'missing'},route_revision:3,next_attempt_at_unix_ms:Date.now()+30000};
+const cloud={association_revision:1,enabled:true,approval_state:'revoked' as const,reason_code:'AUTHORIZATION_REVOKED',connection_state:'authorization_required',route:{kind:'gateway' as const,attachment_id:'missing'},route_revision:3,next_attempt_at_unix_ms:Date.now()+30000};
 const operation={operation_id:id,expected_route_revision:3,association_revision:1,selection:{kind:'direct' as const},state:'awaiting_confirmation' as const,expires_at_unix_ms:Date.now()+60000};
 function button(key:Parameters<typeof i18n.t>[0]) {const found=[...document.querySelectorAll('button')].find(b=>controlText(b)===i18n.t(key));if(!found)throw new Error(key);return found;}
 function mount(perform:ReturnType<typeof vi.fn>,enabled=true) {
@@ -92,4 +92,17 @@ it('never revives route consent when authority disappears and returns', async ()
  expect(button('cloudRoute.confirm').disabled).toBe(true);button('cloudRoute.confirm').click();expect(perform).toHaveBeenCalledTimes(1);
  expect(select.value).toBe('direct');button('interactionContinuity.revalidate').click();await settle();
  expect(document.body.textContent).not.toContain(i18n.t('cloudRoute.ready'));expect(button('cloudRoute.query').disabled).toBe(false);
+});
+
+it('selects and commits a Gateway route before Cloud enrollment', async () => {
+ const perform=vi.fn(async request=>({ok:true,cloud_route_operation:{operation_id:request.operation_id,expected_route_revision:0,association_revision:0,selection:{kind:'gateway',attachment_id:'local'},state:request.operation==='commit'?'committed':'awaiting_confirmation',expires_at_unix_ms:Date.now()+60000}}));
+ vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
+ const changed=vi.fn();
+ dispose=render(()=><RuntimeCloudConnections targetID="ssh:runtime" binding={{state:'unbound',remote_enabled:false,route_revision:0}} memberships={[{gateway_id:'gateway',gateway_name:'Office',identity_fingerprint:'key',attachment_id:'local',runtime_public_id:'runtime',phase:'joined',endpoints:[]}]} i18n={i18n} onChanged={changed} openInBrowser={()=>{}}/>,document.body);
+ await settle();button('cloudRoute.change').click();await settle();
+ const select=document.querySelector<HTMLSelectElement>('[role="dialog"] select')!;select.value='local';select.dispatchEvent(new Event('change',{bubbles:true}));
+ button('cloudRoute.verify').click();await settle();
+ expect(perform).toHaveBeenCalledWith(expect.objectContaining({operation:'preflight',expected_route_revision:0,selection:{kind:'gateway',attachment_id:'local'}}));
+ button('cloudRoute.confirm').click();await settle();
+ expect(perform.mock.calls.map(([request])=>request.operation)).toEqual(['preflight','commit']);expect(changed).toHaveBeenCalledOnce();
 });

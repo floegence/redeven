@@ -10,11 +10,10 @@ import (
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-const InvitationExchangePath = "/v6/member/invitation-exchange"
+const InvitationExchangePath = "/v6/attachment/invitation-exchange"
 const invitationExchangePurpose = "redeven.gateway.enrollment.v1"
 
 var (
@@ -23,33 +22,33 @@ var (
 	ErrInvitationInvalid = flowersec.RejectInvitationExchange("GATEWAY_INVITATION_INVALID")
 )
 
-func (s *Store) IssueInvitationCode(createdBy string) (gc.InvitationCodeDelivery, error) {
+func (s *Store) IssueInvitationCode(createdBy string) (gp.InvitationCodeDelivery, error) {
 	descriptor, err := s.Invite(createdBy)
 	if err != nil {
-		return gc.InvitationCodeDelivery{}, err
+		return gp.InvitationCodeDelivery{}, err
 	}
 	return s.codeDelivery(descriptor)
 }
 
-func (s *Store) IssueInvitationCodeForCommand(createdBy, commandID string, expires time.Time) (gc.InvitationCodeDelivery, error) {
-	descriptor, err := s.InviteForCommand(createdBy, commandID, expires)
+func (s *Store) IssueInvitationCodeForOperation(createdBy, commandID string, expires time.Time) (gp.InvitationCodeDelivery, error) {
+	descriptor, err := s.InviteForOperation(createdBy, commandID, expires)
 	if err != nil {
-		return gc.InvitationCodeDelivery{}, err
+		return gp.InvitationCodeDelivery{}, err
 	}
 	return s.codeDelivery(descriptor)
 }
 
-func (s *Store) codeDelivery(descriptor gp.EnrollmentDescriptor) (gc.InvitationCodeDelivery, error) {
+func (s *Store) codeDelivery(descriptor gp.EnrollmentDescriptor) (gp.InvitationCodeDelivery, error) {
 	code, err := flowersec.DeriveInvitationCode(s.identity.PrivateKey.Seed(), descriptor.InvitationID)
 	if err != nil {
-		return gc.InvitationCodeDelivery{}, err
+		return gp.InvitationCodeDelivery{}, err
 	}
 	addresses := make([]string, 0, len(descriptor.Endpoints))
 	for _, endpoint := range descriptor.Endpoints {
 		addresses = append(addresses, endpoint.Address)
 	}
-	delivery := gc.InvitationCodeDelivery{ProtocolVersion: gp.Version, InvitationID: descriptor.InvitationID, GatewayID: descriptor.GatewayID, GatewayName: descriptor.GatewayName, GatewayPublicKey: descriptor.GatewayPublicKey, ShareAddress: addresses[0], ShareAddresses: addresses, Code: code.Text(), IssuedAtUnixMS: descriptor.IssuedAtUnixMS, ExpiresAtUnixMS: descriptor.ExpiresAtUnixMS}
-	err = gc.SignInvitationCodeDelivery(&delivery, s.identity.PrivateKey)
+	delivery := gp.InvitationCodeDelivery{ProtocolVersion: gp.Version, InvitationID: descriptor.InvitationID, GatewayID: descriptor.GatewayID, GatewayName: descriptor.GatewayName, GatewayPublicKey: descriptor.GatewayPublicKey, ShareAddress: addresses[0], ShareAddresses: addresses, Code: code.Text(), IssuedAtUnixMS: descriptor.IssuedAtUnixMS, ExpiresAtUnixMS: descriptor.ExpiresAtUnixMS}
+	err = gp.SignInvitationCodeDelivery(&delivery, s.identity.PrivateKey)
 	return delivery, err
 }
 

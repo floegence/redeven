@@ -143,7 +143,7 @@ export function createGatewayPairingMaterial(record: GatewayRecord): GatewayPair
     client_public_key: clientPublicKey,
     client_private_key: clientPrivateKey,
     client_key_id: clientKeyID,
-    private_key_ref: `gateway-client-key:${record.gateway_id}:${clientKeyID}`,
+    private_key_ref: `gateway-client-key:${record.connection_id}:${clientKeyID}`,
     binding_audience: gatewayBindingAudience(record.connection),
   };
 }
@@ -311,7 +311,7 @@ export function assertGatewayPairingCompleteResponse(
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
   }
   if (response.gateway_id !== challenge.gateway_id || response.client_key_id !== material.client_key_id
-    || canonicalJSON(response.permissions) !== canonicalJSON({ access: true, manage_members: false, configure_cloud: false })) {
+    || canonicalJSON(response.permissions) !== canonicalJSON({ access: true, manage_attachments: false, manage_network: false })) {
     throw new GatewayTrustError('GATEWAY_PAIRING_COMPLETE_MISMATCH', 'Gateway pairing completion response does not match this pairing request.');
   }
   if (!Number.isFinite(Number(response.paired_at_unix_ms)) || Number(response.paired_at_unix_ms) <= 0) {

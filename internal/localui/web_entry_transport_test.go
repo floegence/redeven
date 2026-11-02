@@ -215,7 +215,7 @@ func newWebEntryFixture(t *testing.T, options ...webFixtureOptions) *webEntryFix
 	memberDone := make(chan error, 1)
 	go func() { memberDone <- member.Run(ctx, runtime.gatewayMemberApplication) }()
 	t.Cleanup(func() { cancel(); <-memberDone })
-	for (connections != nil && !connections.IsConnected(current().MemberID)) || (connections == nil && member.Snapshot().State != flowersec.ConnectionConnected) {
+	for (connections != nil && !connections.IsConnected(current().AttachmentID)) || (connections == nil && member.Snapshot().State != flowersec.ConnectionConnected) {
 		select {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
@@ -227,7 +227,7 @@ func newWebEntryFixture(t *testing.T, options ...webFixtureOptions) *webEntryFix
 		return &webEntryFixture{secret: secret, recoveryCodes: recoveryCodes, runtime: runtime, bindings: bindings, binding: binding}
 	}
 	joined := current()
-	offer, err := store.AccessOffer(ctx, joined.MemberID, "web-connector")
+	offer, err := store.AccessOffer(ctx, joined.AttachmentID, "web-connector")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func newWebEntryFixture(t *testing.T, options ...webFixtureOptions) *webEntryFix
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = session.Close() })
-	transport, err := webconnector.New(ctx, webconnector.Options{Session: session, Service: offer.Service, Delegation: offer.Delegation, GatewayID: joined.GatewayID, MemberID: joined.MemberID, RuntimeID: joined.RuntimePublicID, BrowserOrigin: origin, DeviceReference: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ClientCertificate: certificate})
+	transport, err := webconnector.New(ctx, webconnector.Options{Session: session, Service: offer.Service, Delegation: offer.Delegation, GatewayID: joined.GatewayID, AttachmentID: joined.AttachmentID, RuntimeID: joined.RuntimePublicID, BrowserOrigin: origin, DeviceReference: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ClientCertificate: certificate})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,3 +1,5 @@
+import http from 'node:http';
+import { decodeGatewayClientAccessPackage } from '../../src/main/gatewayClientAccess';
 import { app, BrowserWindow, session } from 'electron';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -9,8 +11,8 @@ import { createNativeFixtureWindow } from './codespace-native-window';
 import { GatewayClient } from '../../src/main/gatewayClient';
 import { redactGatewayDiagnosticValue } from '../../src/shared/gatewayDiagnostics';
 import { prepareGatewayEnvironmentAccess } from '../../src/main/gatewayEnvironmentAccess';
-import { prepareGatewayMemberPartition, closeGatewayMemberTransport } from '../../src/main/gatewayMemberPartition';
-import type { GatewayMemberTransport } from '../../src/main/gatewayMemberTransport';
+import { prepareRuntimeAttachmentPartition, closeRuntimeAttachmentTransport } from '../../src/main/gatewayMemberPartition';
+import type { RuntimeAttachmentTransport } from '../../src/main/gatewayMemberTransport';
 import { createGatewayPairingMaterial, pairingChallengeRequestWithCode, buildPairingCompleteRequest,
   assertGatewayPairingCompleteResponse, completeGatewayPairing } from '../../src/main/gatewayTrust';
 import type { GatewayRecord } from '../../src/main/gatewayStore';
@@ -20,30 +22,32 @@ app.on('window-all-closed', () => {});
 void app.whenReady().then(async () => {
   const cases: string[] = [];
   const windows: BrowserWindow[] = [];
-  const transports: GatewayMemberTransport[] = [];
+  const transports: RuntimeAttachmentTransport[] = [];
   const output = process.env.REDEVEN_GATEWAY_OUTPUT!;
   const secrets = new Map<string, string>();
   const secretStore = { writeSecret: (key: string, value: string) => { secrets.set(key, value); },
     readSecret: (key: string) => secrets.get(key) ?? '', deleteSecret: (key: string) => { secrets.delete(key); } };
   const client = new GatewayClient(secretStore);
-  let record: GatewayRecord = { schema_version: 4, gateway_id: 'pending', display_name: 'Qualification Gateway', local_enabled: true,
-    connection: { kind: 'url', base_url: fixture.gateway, allow_loopback_http: true }, created_at_ms: 1, updated_at_ms: 1 };
+  let record: GatewayRecord = { schema_version: 5, connection_id: 'pending', display_name: 'Qualification Gateway', local_enabled: true,
+    connection: { kind: 'url', base_url: fixture.gateway, allow_loopback_http: false }, created_at_ms: 1, updated_at_ms: 1 };
+  const access = decodeGatewayClientAccessPackage(fixture.accessCode);
   const material = createGatewayPairingMaterial(record);
-  const challenge = await client.pairingChallenge(record, pairingChallengeRequestWithCode(material, fixture.accessCode));
-  record = { ...record, gateway_id: challenge.gateway_id };
-  const completed = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));
+  const challenge = await client.pairingChallenge(record, pairingChallengeRequestWithCode(material, access.access_code), {tlsRootPEM: access.tls_root_pem});
+  assert.equal(challenge.gateway_id, access.gateway_id);
+  assert.equal(challenge.gateway_public_key.trim(), access.gateway_public_key.trim());
+  const completed = await client.completePairing(record, buildPairingCompleteRequest(material, challenge), {tlsRootPEM: access.tls_root_pem});
   assertGatewayPairingCompleteResponse(material, challenge, completed);
-  record = { ...record, trust_profile: await completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }) };
+  record = { ...record, trust_profile: { ...await completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }), tls_root_pem: access.tls_root_pem } };
   const catalog = await client.catalog(record);
-  assert.equal(catalog.members.length, 2);
-  assert.ok(catalog.members.every(member => member.connected));
+  assert.equal(catalog.attachments.length, 2);
+  assert.ok(catalog.attachments.every(member => member.connected));
   cases.push('v6 client enrollment and automatic directory from two outbound Runtime members without Cloud');
   const open = async (memberID: string) => {
-    const member = catalog.members.find(member => member.member_id === memberID)!;
+    const member = catalog.attachments.find(member => member.attachment_id === memberID)!;
     const access = await prepareGatewayEnvironmentAccess(record, member, catalog, client);
     transports.push(access.transport);
     const webSession = session.fromPartition(`gateway-qualification:${randomUUID()}`);
-    await prepareGatewayMemberPartition(webSession, access.transport);
+    await prepareRuntimeAttachmentPartition(webSession, access.transport);
     const window = new BrowserWindow({ show: false, webPreferences: { session: webSession, contextIsolation: true, sandbox: true } });
     windows.push(window);
     await window.loadURL(`${access.transport.origin}/_redeven_proxy/env/`);
@@ -142,23 +146,26 @@ void app.whenReady().then(async () => {
     }
     cases.push('member reverse stream cannot reach trusted Runtime management');
     const incorrect = session.fromPartition(`gateway-incorrect-certificate:${randomUUID()}`);
-    await prepareGatewayMemberPartition(incorrect, { ...secure.transport, service: { ...secure.transport.service, certificate_sha256: '0'.repeat(64) } });
+    await prepareRuntimeAttachmentPartition(incorrect, { ...secure.transport, service: { ...secure.transport.service, certificate_sha256: '0'.repeat(64) } });
     const rejected = new BrowserWindow({ show: false, webPreferences: { session: incorrect, contextIsolation: true, sandbox: true } });
     windows.push(rejected);
     await assert.rejects(rejected.loadURL(`${secure.transport.origin}/api/local/health`));
     cases.push('production partition verifier rejects a different Runtime certificate');
-    const member = catalog.members.find(member => member.member_id === fixture.plainMember)!;
-    await assert.rejects(client.removeMember(record, member.member_id, member.member_version), { code: 'HOST_MANAGEMENT_REQUIRED' });
-    const removal = await fetch(new URL('gateway/v6/members/remove', fixture.gateway), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Redeven-Gateway-Host-Token': fixture.hostToken }, body: JSON.stringify({ protocol_version: 'redeven-gateway-v6', member_id: member.member_id, expected_member_version: member.member_version }) });
-    assert.equal(removal.status, 200);
+    const member = catalog.attachments.find(member => member.attachment_id === fixture.plainMember)!;
+    await assert.rejects(client.removeMember(record, member.attachment_id, member.attachment_version), { code: 'HOST_MANAGEMENT_REQUIRED' });
+    await new Promise<void>((resolve,reject)=>{
+      const request=http.request({socketPath:fixture.managementSocket,path:'/gateway/v6/attachments/remove',method:'POST',headers:{'Content-Type':'application/json','X-Redeven-Gateway-Host-Token':fixture.hostToken,'X-Redeven-Operation-ID':'qualification-remove-attachment'}},response=>{
+        response.resume();response.once('end',()=>response.statusCode===200?resolve():reject(new Error('Host removal failed: '+response.statusCode)));
+      });request.once('error',reject);request.end(JSON.stringify({protocol_version:'redeven-gateway-v6',attachment_id:member.attachment_id,expected_attachment_version:member.attachment_version}));
+    });
     await assert.rejects(prepareGatewayEnvironmentAccess(record, member, catalog, client));
-    assert.equal((await client.catalog(record)).members.length, 1);
+    assert.equal((await client.catalog(record)).attachments.length, 1);
     assert.equal(await unlocked(secure), true);
     cases.push('member removal rejects new access while other members keep serving');
     await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'running', scenarioStatus: 'passed', cases }, null, 2));
   } finally {
     for (const window of windows) if (!window.isDestroyed()) window.destroy();
-    await Promise.all(transports.map(closeGatewayMemberTransport));
+    await Promise.all(transports.map(closeRuntimeAttachmentTransport));
   }
   app.exit(0);
 }).catch(error => { console.error('Gateway qualification failed:', redactGatewayDiagnosticValue(error instanceof Error ? error.stack : String(error))); app.exit(1); });

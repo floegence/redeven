@@ -3,6 +3,7 @@ package localui
 import (
 	"context"
 	"encoding/json"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,16 +14,16 @@ import (
 
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/config"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayservice"
+	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
 func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	hostToken := strings.Repeat("a", 43)
-	var deliveries []gc.InvitationCodeDelivery
-	var gateways []*gatewayservice.Server
+	var deliveries []gp.InvitationCodeDelivery
+	var gateways []http.Handler
 	for range 2 {
 		reservation, err := net.Listen("tcp4", "127.0.0.1:0")
 		if err != nil {
@@ -30,23 +31,23 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		}
 		address := reservation.Addr().String()
 		_ = reservation.Close()
-		gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(t.TempDir(), "gateway"), HostAdminToken: hostToken, MemberURL: "https://" + address, MemberListen: address})
+		gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: filepath.Join(t.TempDir(), "gateway"), HostAdminToken: hostToken, PublicURL: "https://" + address, PublicListen: address})
 		if err != nil {
 			t.Fatal(err)
 		}
-		server, _, err := gateway.Start(ctx, "127.0.0.1:0")
+		server, listeners, err := gateway.Start(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer server.Close()
-		gateways = append(gateways, gateway)
+		gateways = append(gateways, gatewayfixture.HostHandler(t, listeners[0].Addr().String()))
 		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v6/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v6"}`))
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
-		gateway.Handler().ServeHTTP(response, request)
+		gatewayfixture.HostHandler(t, listeners[0].Addr().String()).ServeHTTP(response, request)
 		var result struct {
-			Data gc.InvitationCodeDelivery `json:"data"`
+			Data gp.InvitationCodeDelivery `json:"data"`
 		}
 		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &result) != nil {
 			t.Fatal("invitation unavailable", response.Code)
@@ -83,7 +84,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		t.Fatal("Gateway connections did not settle")
 	}
 	waitFor(func() bool {
-		members := runtime.a.GatewayMembershipStatus().Memberships
+		members := runtime.a.GatewayAttachmentStatus().Memberships
 		return len(members) == 2 && members[0].Phase == "joined" && members[1].Phase == "joined"
 	})
 	saved, err := config.Load(runtime.configPath)
@@ -93,19 +94,19 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 	if len(saved.Gateways) != 2 || saved.CloudGateway() != nil {
 		t.Fatal("pairing changed Cloud ownership")
 	}
-	runtime.a.CloseGatewayMembership()
-	if err := runtime.a.StartGatewayMembership(ctx, runtime.gatewayMemberApplication); err != nil {
+	runtime.a.CloseGatewayAttachment()
+	if err := runtime.a.StartGatewayAttachment(ctx, runtime.gatewayMemberApplication); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(func() bool {
-		members := runtime.a.GatewayMembershipStatus().Memberships
+		members := runtime.a.GatewayAttachmentStatus().Memberships
 		return len(members) == 2 && members[0].Phase == "joined" && members[1].Phase == "joined"
 	})
 	if err := runtime.a.LeaveGateway(deliveries[0].GatewayID); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(func() bool {
-		members := runtime.a.GatewayMembershipStatus().Memberships
+		members := runtime.a.GatewayAttachmentStatus().Memberships
 		return len(members) == 1 && members[0].GatewayID == deliveries[1].GatewayID && members[0].Phase == "joined"
 	})
 	saved, err = config.Load(runtime.configPath)
@@ -120,7 +121,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
-		gateway.Handler().ServeHTTP(response, request)
+		gateway.ServeHTTP(response, request)
 		if response.Code != 200 {
 			t.Fatal("catalog unavailable", index, response.Code)
 		}
@@ -129,7 +130,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 				Members []struct {
 					State     string `json:"state"`
 					Connected bool   `json:"connected"`
-				} `json:"members"`
+				} `json:"attachments"`
 			} `json:"data"`
 		}
 		if json.Unmarshal(response.Body.Bytes(), &catalog) != nil {

@@ -24,7 +24,7 @@ func TestRuntimeMembershipUsesGatewayPairingFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := &Agent{cfg: &config.Config{LocalEnvironmentPublicID: "runtime", Gateways: []*gatewaymembership.RuntimeConfig{member}}}
-	summaries := a.RuntimeServiceSnapshot().GatewayMemberships
+	summaries := a.RuntimeServiceSnapshot().GatewayAttachments
 	if len(summaries) != 1 || summaries[0].IdentityFingerprint != fingerprint {
 		t.Fatalf("Runtime membership must match the Gateway pairing identity: got %+v, want %s", summaries, fingerprint)
 	}

@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway access sessions
 tags: [gateway, desktop, access, security, sessions]
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -12,7 +12,7 @@ Desktop opens a joined Runtime over its existing outbound Flowersec connection t
 # Contract
 
 ## Reverse application streams
-After local consent, Runtime redeems its invitation with its own identity and initiates a persistent Flowersec session to the member TLS endpoint. Gateway opens a reverse ByteStream on that Runtime's connection and relays both streams with bounded buffers and cancellation.
+After local consent, Runtime redeems its invitation with its own identity and initiates a persistent Flowersec session to the unified public TLS endpoint. Gateway opens a reverse ByteStream on that Runtime's connection and relays both streams with bounded buffers and cancellation.
 
 TLS, WebSocket, streaming responses and secure cookies retain their original semantics.
 
@@ -24,7 +24,7 @@ The catalog alone does not authorize service or Runtime process operations.
 ## Limits and revocation
 The shared budget admits at most 32 business connections per member and 1,024 in total, including pending opens. One member exceeding a limit cannot consume another member's allocation.
 
-Cloud closure receipts and partition limits are owned by [Gateway Cloud access](gateway-cloud-access.md).
+Cloud authorization never closes independent Gateway streams. Local egress cancellation is scoped separately by [Optional Runtime Cloud egress](gateway-cloud-access.md).
 
 # Boundaries
 

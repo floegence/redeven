@@ -6,7 +6,7 @@ export type EnvironmentLibraryDisplayGroup = Readonly<{
   primary_entry: DesktopEnvironmentEntry;
   provider_entry?: DesktopEnvironmentEntry;
   member_entries: readonly DesktopEnvironmentEntry[];
-  member_ids: readonly string[];
+  attachment_ids: readonly string[];
   owner_ids?: readonly string[];
   gateway_entries?: readonly DesktopEnvironmentEntry[];
   gateway_tab_id?: string;
@@ -49,7 +49,7 @@ export function buildEnvironmentLibraryDisplayGroups(
     const gatewayTabID = hasGateway ? `${id}:gateway-access` : undefined;
     return {
       id, primary_entry: primary, provider_entry: provider,
-      member_entries: ordered, member_ids: ordered.map(entry => entry.id),
+      member_entries: ordered, attachment_ids: ordered.map(entry => entry.id),
       owner_ids: [primary.id, ...(provider ? [provider.id] : []), ...(gatewayTabID ? [gatewayTabID] : [])],
       gateway_entries: gateways.length ? gateways : undefined, gateway_tab_id: gatewayTabID,
       search_text: [ordered.map(environmentLibrarySearchText).join('\n'),

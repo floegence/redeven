@@ -628,13 +628,13 @@ function runtimeHealth(overrides: Partial<DesktopRuntimeHealth> = {}): DesktopRu
 
 function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
   return {
-    gateway_id: 'bastion',
+    connection_id: 'bastion',
     display_name: 'Bastion',
     local_enabled: true,
     connection_kind: 'url',
     management_capability: 'access_only',
     capabilities: [],
-    permissions: { access: true, manage_members: false, configure_cloud: false },
+    permissions: { access: true, manage_attachments: false, manage_network: false },
     status: 'online',
     trust_state: 'paired',
     endpoint_label: 'https://gateway.example.invalid',
@@ -648,7 +648,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     },
     created_at_ms: 10,
     updated_at_ms: 20,
-    environments: [{ ...memberFixture, member_id: 'finance', display_name: 'Finance Dashboard' }],
+    environments: [{ ...memberFixture, attachment_id: 'finance', display_name: 'Finance Dashboard' }],
     ...overrides,
   };
 }
@@ -2727,7 +2727,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(linkedGroups[0]).toMatchObject({
       primary_entry: expect.objectContaining({ kind: 'local_environment' }),
       provider_entry: expect.objectContaining({ kind: 'provider_environment' }),
-      member_ids: [localOnlyEntry?.id, localOnlyProviderEntry?.id],
+      attachment_ids: [localOnlyEntry?.id, localOnlyProviderEntry?.id],
     });
     expect(filterEnvironmentLibraryDisplayGroups(
       buildEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot.environments),
@@ -3424,10 +3424,10 @@ describe('Gateway view models', () => {
       gatewaySources: [
         gatewaySource(),
         gatewaySource({
-          gateway_id: 'office',
+          connection_id: 'office',
           display_name: 'Office',
           endpoint_label: 'ssh://office',
-          environments: [{ ...memberFixture, member_id: 'office-demo', display_name: 'Office Demo' }],
+          environments: [{ ...memberFixture, attachment_id: 'office-demo', display_name: 'Office Demo' }],
         }),
       ],
     });
@@ -3558,7 +3558,7 @@ describe('Gateway view models', () => {
     expect(JSON.stringify(secretSafeRow)).not.toContain('ssh_password');
 
     expect(buildGatewaySourceRowModel(gatewaySource({
-      gateway_id: 'lab',
+      connection_id: 'lab',
       display_name: 'Lab Docker',
       connection_kind: 'ssh_container',
       management_capability: 'managed_ssh_container',
@@ -3916,7 +3916,7 @@ describe('Gateway view models', () => {
 
   it('guides member administrators toward invitations', () => {
     const writableEmptyRow = buildGatewaySourceRowModel(gatewaySource({
-      capabilities: ['member_manage'], permissions: { access: true, manage_members: true, configure_cloud: false },
+      capabilities: ['member_manage'], permissions: { access: true, manage_attachments: true, manage_network: false },
       environments: [],
     }));
     const readOnlyEmptyRow = buildGatewaySourceRowModel(gatewaySource({

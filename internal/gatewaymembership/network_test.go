@@ -45,7 +45,7 @@ func TestNetworkSettingsPreserveAuthorityAndRecoverAfterRestart(t *testing.T) {
 
 func TestAllowedHostsMatchRequestAuthorityWithoutTrustingForwardedHeaders(t *testing.T) {
 	s, _ := membershipStore(t)
-	request := httptest.NewRequest("GET", "https://arbitrary.example:7443/v6/member/invitation-exchange", nil)
+	request := httptest.NewRequest("GET", "https://arbitrary.example:7443/v6/attachment/invitation-exchange", nil)
 	if !s.AllowsHost(request) {
 		t.Fatal("default must allow all Hosts")
 	}
@@ -95,7 +95,7 @@ func TestNetworkSettingsRejectInvalidAndFailedWritesAtomically(t *testing.T) {
 func TestCurrentNetworkSettingsPreserveHostnameBindingsAndRejectDrift(t *testing.T) {
 	s, identity := membershipStore(t)
 	old := s.clone()
-	old.SchemaVersion = 5
+	old.SchemaVersion = 6
 	old.Endpoint.ListenAddress = "localhost:7443"
 	old.Endpoint.ListenAddresses = []string{"localhost:7443"}
 	old.Endpoint.AllowedHosts = []string{}

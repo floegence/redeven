@@ -2,60 +2,64 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayhost"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-const membershipHelp = `Usage:
+const attachmentHelp = `Usage:
+  redeven-gateway operations query --operation-id ID [--state-root PATH]
   redeven-gateway invite [--state-root PATH]
   redeven-gateway endpoints show [--state-root PATH]
   redeven-gateway endpoints set --file PATH [--state-root PATH]
   redeven-gateway clients access-code [--state-root PATH]
   redeven-gateway clients list [--state-root PATH]
   redeven-gateway clients revoke --client ID [--state-root PATH]
-  redeven-gateway members list [--state-root PATH]
-  redeven-gateway members remove --member ID --version N [--state-root PATH]
-  redeven-gateway members reevaluate --member ID --version N [--state-root PATH]
-  redeven-gateway members policy --member ID --version N --cloud inherit|allow|deny [--state-root PATH]
+  redeven-gateway attachments list [--state-root PATH]
+  redeven-gateway attachments remove --attachment ID --version N [--state-root PATH]
+  redeven-gateway attachments reevaluate --attachment ID --version N [--state-root PATH]
+  redeven-gateway attachments policy --attachment ID --version N --egress inherit|allow|deny [--state-root PATH]
   redeven-gateway policy show [--state-root PATH]
-  redeven-gateway policy set [--default-cloud allow|deny] [--publication-mode manual|automatic] [--apply] [--state-root PATH]
+  redeven-gateway policy set [--default-egress allow|deny] [--destinations host:443,host:8443] [--apply] [--state-root PATH]
 
 Invitation codes expire after ten minutes and can be used by one Runtime. The command prints the administrator's address and code; it never writes a join file.
 The endpoints file is a JSON array of endpoint_id, address, scope and priority.
-Policy set previews affected members; --apply saves with a version check.
-Automatic publication still requires Namespace authorization in Redeven Cloud.
+Policy set previews affected attachments; --apply saves with a version check.
+Egress is local network policy; an empty destination list disables forwarding.
+Mutating commands accept --operation-id ID. Preserve the ID to query an uncertain result.
 Host commands require the running Gateway's private local administrator credential.
 `
 
 func hostAdminTokenPath(root string) string { return gatewayhost.TokenPath(root) }
 
-func (c *cli) membershipCmd(args []string) int {
+func (c *cli) attachmentCmd(args []string) int {
 	command, action, rest := args[0], "", args[1:]
 	if command != "invite" && len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
 		action, rest = rest[0], rest[1:]
 	}
 	flags := newFlagSet(command)
+	operationID := flags.String("operation-id", "", "Stable operation ID for mutation or result recovery")
 	root := flags.String("state-root", "", "Gateway state root")
 	filePath := flags.String("file", "", "JSON file containing administrator-confirmed connection endpoints")
 	clientKeyID := flags.String("client", "", "Client key ID")
-	member := flags.String("member", "", "Member ID")
-	version := flags.Int64("version", 0, "Expected member version")
-	cloud := flags.String("cloud", "", "Member Cloud permission: inherit, allow, deny")
-	defaultCloud := flags.String("default-cloud", "", "New member default: allow, deny")
-	mode := flags.String("publication-mode", "", "Publication mode: manual, automatic")
+	member := flags.String("attachment", "", "Runtime attachment ID")
+	version := flags.Int64("version", 0, "Expected attachment version")
+	cloud := flags.String("egress", "", "Runtime egress permission: inherit, allow, deny")
+	defaultCloud := flags.String("default-egress", "", "New attachment default: allow, deny")
+	destinations := flags.String("destinations", "", "Comma-separated exact host:port destinations; use none to disable forwarding")
 	apply := flags.Bool("apply", false, "Save the previewed policy change")
 	if err := parseFlags(flags, rest); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			writeText(c.stdout, membershipHelp)
+			writeText(c.stdout, attachmentHelp)
 			return 0
 		}
 		writeError(c.stderr, err.Error())
@@ -63,27 +67,29 @@ func (c *cli) membershipCmd(args []string) int {
 	}
 	valid := flags.NArg() == 0 && (command == "endpoints" || *filePath == "") && ((command == "clients" && action == "revoke") || *clientKeyID == "")
 	switch command + "/" + action {
+	case "operations/query":
+		valid = valid && *operationID != "" && *clientKeyID == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *destinations == "" && !*apply
 	case "clients/access-code", "clients/list":
-		valid = valid && *clientKeyID == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
+		valid = valid && *clientKeyID == "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *destinations == "" && !*apply
 	case "clients/revoke":
-		valid = valid && *clientKeyID != "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
+		valid = valid && *clientKeyID != "" && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *destinations == "" && !*apply
 	case "endpoints/show", "endpoints/set":
-		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply && ((action == "show" && *filePath == "") || (action == "set" && *filePath != ""))
+		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *destinations == "" && !*apply && ((action == "show" && *filePath == "") || (action == "set" && *filePath != ""))
 	case "invite/":
-		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
-	case "members/list", "policy/show":
-		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
-	case "members/remove", "members/reevaluate":
-		valid = valid && *member != "" && *version > 0 && *cloud == "" && *defaultCloud == "" && *mode == "" && !*apply
-	case "members/policy":
-		valid = valid && *member != "" && *version > 0 && (*cloud == "inherit" || *cloud == "allow" || *cloud == "deny") && *defaultCloud == "" && *mode == "" && !*apply
+		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *destinations == "" && !*apply
+	case "attachments/list", "policy/show":
+		valid = valid && *member == "" && *version == 0 && *cloud == "" && *defaultCloud == "" && *destinations == "" && !*apply
+	case "attachments/remove", "attachments/reevaluate":
+		valid = valid && *member != "" && *version > 0 && *cloud == "" && *defaultCloud == "" && *destinations == "" && !*apply
+	case "attachments/policy":
+		valid = valid && *member != "" && *version > 0 && (*cloud == "inherit" || *cloud == "allow" || *cloud == "deny") && *defaultCloud == "" && *destinations == "" && !*apply
 	case "policy/set":
-		valid = valid && (*defaultCloud != "" || *mode != "") && (*defaultCloud == "" || *defaultCloud == "allow" || *defaultCloud == "deny") && (*mode == "" || *mode == "manual" || *mode == "automatic") && *member == "" && *version == 0 && *cloud == ""
+		valid = valid && (*defaultCloud != "" || *destinations != "") && (*defaultCloud == "" || *defaultCloud == "allow" || *defaultCloud == "deny") && *member == "" && *version == 0 && *cloud == ""
 	default:
 		valid = false
 	}
 	if !valid {
-		writeText(c.stderr, membershipHelp)
+		writeText(c.stderr, attachmentHelp)
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -94,8 +100,14 @@ func (c *cli) membershipCmd(args []string) int {
 		return 1
 	}
 	defer client.client.Close()
+	client.operationID = *operationID
+	if client.operationID == "" {
+		client.operationID = rand.Text()
+	}
 	var result any
 	switch command + "/" + action {
+	case "operations/query":
+		err = client.request(ctx, "/gateway/v6/operations/query", gp.CatalogRequest{ProtocolVersion: gp.Version}, &result)
 	case "clients/access-code":
 		err = client.request(ctx, "/gateway/v6/clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, &result)
 	case "clients/list":
@@ -120,16 +132,16 @@ func (c *cli) membershipCmd(args []string) int {
 		err = client.request(ctx, "/gateway/v6/endpoints", gp.EndpointUpdateRequest{ProtocolVersion: gp.Version, Endpoints: endpoints}, &updated)
 		result = updated.Endpoints
 	case "invite/":
-		var delivery gc.InvitationCodeDelivery
+		var delivery gp.InvitationCodeDelivery
 		err = client.request(ctx, "/gateway/v6/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &delivery)
 		result = delivery
-	case "members/remove":
-		err = client.request(ctx, "/gateway/v6/members/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
-	case "members/reevaluate":
-		err = client.request(ctx, "/gateway/v6/members/reevaluate", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
-	case "members/policy":
+	case "attachments/remove":
+		err = client.request(ctx, "/gateway/v6/attachments/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, AttachmentID: *member, ExpectedAttachmentVersion: *version}, &result)
+	case "attachments/reevaluate":
+		err = client.request(ctx, "/gateway/v6/attachments/reevaluate", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, AttachmentID: *member, ExpectedAttachmentVersion: *version}, &result)
+	case "attachments/policy":
 		var results []gp.MemberOperationResult
-		err = client.request(ctx, "/gateway/v6/members/policy", gp.UpdateMembersRequest{ProtocolVersion: gp.Version, Items: []gp.MemberPolicyUpdate{{MemberID: *member, ExpectedMemberVersion: *version, CloudPermission: gp.CloudPermission(*cloud)}}}, &results)
+		err = client.request(ctx, "/gateway/v6/attachments/policy", gp.UpdateMembersRequest{ProtocolVersion: gp.Version, Items: []gp.MemberPolicyUpdate{{AttachmentID: *member, ExpectedAttachmentVersion: *version, EgressPermission: gp.EgressPermission(*cloud)}}}, &results)
 		result = results
 	default:
 		var catalog gp.CatalogResponse
@@ -137,12 +149,12 @@ func (c *cli) membershipCmd(args []string) int {
 		if err != nil {
 			break
 		}
-		if command == "members" {
-			result = catalog.Members
+		if command == "attachments" {
+			result = catalog.Attachments
 			break
 		}
 		if command == "endpoints" {
-			result = catalog.Gateway.MemberEndpoints
+			result = catalog.Gateway.Endpoints
 			break
 		}
 		if action == "show" {
@@ -151,14 +163,21 @@ func (c *cli) membershipCmd(args []string) int {
 		}
 		policy := catalog.Policy
 		if *defaultCloud != "" {
-			policy.DefaultCloudAllowed = *defaultCloud == "allow"
+			policy.DefaultEgressAllowed = *defaultCloud == "allow"
 		}
-		if *mode != "" {
-			policy.PublicationMode = gp.PublicationMode(*mode)
+		if *destinations != "" {
+			policy.Destinations = []string{}
+			if *destinations != "none" {
+				policy.Destinations = strings.Split(*destinations, ",")
+			}
+			if err := gp.ValidateEgressDestinations(policy.Destinations); err != nil {
+				writeError(c.stderr, err.Error())
+				return 2
+			}
 		}
-		affected := []gp.Member{}
-		for _, item := range catalog.Members {
-			if item.CloudPermission == gp.CloudInherit && policy.DefaultCloudAllowed != catalog.Policy.DefaultCloudAllowed {
+		affected := []gp.RuntimeAttachment{}
+		for _, item := range catalog.Attachments {
+			if policyAffectsAttachment(item, catalog.Policy, policy) {
 				affected = append(affected, item)
 			}
 		}
@@ -169,9 +188,9 @@ func (c *cli) membershipCmd(args []string) int {
 			}
 		}
 		result = struct {
-			Policy   gp.GatewayPolicy `json:"policy"`
-			Affected []gp.Member      `json:"affected_members"`
-			Applied  bool             `json:"applied"`
+			Policy   gp.GatewayPolicy       `json:"policy"`
+			Affected []gp.RuntimeAttachment `json:"affected_attachments"`
+			Applied  bool                   `json:"applied"`
 		}{policy, affected, *apply && err == nil}
 	}
 	if err != nil {
@@ -191,19 +210,35 @@ func (c *cli) membershipCmd(args []string) int {
 	return 0
 }
 
-type hostAdminClient struct{ client *gatewayhost.Client }
+type hostAdminClient struct {
+	client      *gatewayhost.Client
+	operationID string
+}
 
 func newHostAdminClient(root string) (*hostAdminClient, error) {
 	status := readServiceStatus(root)
 	if status.Status != "running" {
-		return nil, errors.New("gateway is not running; start it before managing members")
+		return nil, errors.New("gateway is not running; start it before managing attachments")
 	}
 	client, err := gatewayhost.New(root, status.Listen)
 	if err != nil {
 		return nil, err
 	}
-	return &hostAdminClient{client}, nil
+	return &hostAdminClient{client: client}, nil
 }
 func (c *hostAdminClient) request(ctx context.Context, route string, input, output any) error {
-	return c.client.Request(ctx, route, input, output)
+	if c.operationID == "" {
+		return c.client.Request(ctx, route, input, output)
+	}
+	return c.client.RequestWithOperation(ctx, route, input, output, c.operationID)
+}
+
+func policyAffectsAttachment(item gp.RuntimeAttachment, before, after gp.GatewayPolicy) bool {
+	if item.State != "active" || item.EgressPermission == gp.EgressDeny {
+		return false
+	}
+	oldDestinations, newDestinations := slices.Clone(before.Destinations), slices.Clone(after.Destinations)
+	slices.Sort(oldDestinations)
+	slices.Sort(newDestinations)
+	return (item.EgressPermission == gp.EgressInherit && before.DefaultEgressAllowed != after.DefaultEgressAllowed) || (!slices.Equal(oldDestinations, newDestinations) && (item.EgressPermission == gp.EgressAllow || before.DefaultEgressAllowed || after.DefaultEgressAllowed))
 }

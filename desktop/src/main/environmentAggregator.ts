@@ -83,7 +83,7 @@ export function buildGatewayEnvironmentEntries(
   const disabledGatewayIDs = new Set(
     input.gatewaySources
       .filter((gateway) => gateway.local_enabled === false)
-      .map((gateway) => gateway.gateway_id),
+      .map((gateway) => gateway.connection_id),
   );
   for (const gateway of input.gatewaySources) {
     if (gateway.local_enabled === false) {
@@ -137,12 +137,12 @@ function buildGatewayEnvironmentEntry(
   source: DesktopEnvironmentSource,
   createdAtMS: number,
 ): DesktopEnvironmentEntry | null {
-  const id = desktopGatewayEnvironmentEntryID(gateway.gateway_id, environment.member_id);
+  const id = desktopGatewayEnvironmentEntryID(gateway.connection_id, environment.attachment_id);
   if (!id) {
     return null;
   }
-  const displayName = compact(environment.display_name) || environment.member_id;
-  const gatewayLabel = compact(gateway.display_name) || gateway.gateway_id;
+  const displayName = compact(environment.display_name) || environment.attachment_id;
+  const gatewayLabel = compact(gateway.display_name) || gateway.connection_id;
   const isOpenable = desktopGatewayCanOpenEnvironment(gateway, environment);
   const needsResolve = desktopGatewayNeedsResolution(gateway.status);
   const runtimeOperations = gatewayRuntimeOperations({
@@ -154,16 +154,16 @@ function buildGatewayEnvironmentEntry(
     kind: 'gateway_environment',
     registration_ref: {
       kind: 'gateway_environment',
-      gateway_id: gateway.gateway_id,
-      gateway_env_id: environment.member_id,
+      gateway_id: gateway.connection_id,
+      gateway_env_id: environment.attachment_id,
     },
     label: displayName,
     local_ui_url: '',
     secondary_text: environment.metadata.hostname || gatewayLabel,
-    gateway_id: gateway.gateway_id,
+    gateway_id: gateway.connection_id,
     gateway_identity_fingerprint: gateway.identity_fingerprint,
     gateway_label: gatewayLabel,
-    gateway_env_id: environment.member_id,
+    gateway_env_id: environment.attachment_id,
     gateway_status: gateway.status,
     gateway_connection_kind: gateway.connection_kind,
     gateway_trust_state: gateway.trust_state,

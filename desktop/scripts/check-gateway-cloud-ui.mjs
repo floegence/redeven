@@ -7,7 +7,7 @@ import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 const output = fileURLToPath(new URL('../dist/gateway-cloud-acceptance/', import.meta.url));
 const officialCloudOrigin = `https://${['redeven', 'com'].join('.')}`;
 await mkdir(output, { recursive: true });
-const server = await createSSHSettingsPreviewServer(0, ['gateway-cloud.html', 'gateway-cloud-panel.html']);
+const server = await createSSHSettingsPreviewServer(0, ['gateway-cloud.html']);
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], errors: [] };
@@ -104,60 +104,8 @@ try {
     report.cases.push(`${locale}: verified preview requires an explicit existing environment choice`);
     await page.close();
   }
-  for (const locale of listDesktopI18nLocales()) {
-    const i18n = createDesktopI18n(locale);
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
-    page.on('pageerror', error => report.errors.push(error.message));
-    await page.addInitScript(() => {
-      window.gatewayRequests = [];
-      window.openedGatewayURLs = [];
-      window.redevenDesktopLauncher = { performAction: async request => {
-        window.gatewayRequests.push(request);
-        if (request.kind === 'inspect_gateway_cloud') {
-          return { ok: true, outcome: 'gateway_cloud_inspected', gateway_cloud: { configured: false, state: 'unconfigured' } };
-        }
-        const origin = `https://${['redeven', 'com'].join('.')}`;
-        return { ok: true, outcome: 'gateway_cloud_configured', gateway_cloud: {
-          configured: true, state: 'pending', cloud_origin: origin,
-          gateway_public_id: 'gateway-acceptance', namespace_public_id: 'namespace-acceptance',
-          management_url: `${origin}/namespaces/namespace-acceptance/gateways/gateway-acceptance`,
-        } };
-      } };
-      window.redevenDesktopShell = { openExternalURL: async url => {
-        window.openedGatewayURLs.push(url);
-        return { ok: true };
-      } };
-    });
-    await page.goto(new URL(`gateway-cloud-panel.html?locale=${locale}`, server.resolvedUrls.local[0]).href);
-    const trigger = page.getByRole('button', { name: i18n.t('gatewayCloud.title'), exact: true });
-    await trigger.click();
-    const dialog = page.getByRole('dialog');
-    await dialog.waitFor();
-    await page.waitForFunction(() => window.gatewayRequests.length === 1);
-    assert.equal(await dialog.locator('input').count(), 0, `${locale}: Cloud address input must not be rendered`);
-    assert.equal(await dialog.getByText(i18n.t('gatewayCloud.nextStep'), { exact: true }).count(), 1, `${locale}: Cloud approval next step must be visible`);
-    assert.equal(await dialog.getByText('namespace-acceptance', { exact: true }).count(), 0, `${locale}: internal Namespace ID must stay hidden`);
-    const configure = dialog.getByRole('button', { name: i18n.t('gatewayCloud.configure'), exact: true });
-    assert.equal(await configure.isEnabled(), true, `${locale}: configure action must be available without an address`);
-    await configure.click();
-    await page.waitForFunction(() => window.gatewayRequests.length === 2 && window.openedGatewayURLs.length === 1);
-    assert.deepEqual(await page.evaluate(() => window.gatewayRequests[1]), {
-      kind: 'configure_gateway_cloud', gateway_id: 'gateway-acceptance', configuration: {},
-    }, `${locale}: renderer must submit intent only`);
-    assert.deepEqual(await page.evaluate(() => window.openedGatewayURLs), [
-      `${officialCloudOrigin}/namespaces/namespace-acceptance/gateways/gateway-acceptance`,
-    ], `${locale}: configuration must open the Cloud management page`);
-    const cloudDialogText = await dialog.innerText();
-    assert.ok(cloudDialogText.includes(i18n.t('gatewayCloud.pending')), `${locale}: Cloud approval state must be visible`);
-    assert.doesNotMatch(cloudDialogText, /namespace|命名空间|命名空間/iu, `${locale}: internal ownership terms must stay hidden`);
-    assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayCloud.manage'), exact: true }).count(), 1, `${locale}: follow-up action must describe opening the Runtime in Cloud`);
-    assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, `${locale}: narrow dialog must fit`);
-    await captureDialog(page, `${locale}-panel.png`);
-    report.cases.push(`${locale}: fixed Cloud origin, no address input, Namespace approval and management handoff`);
-    await page.close();
-  }
   assert.deepEqual(report.errors, []);
-  console.log(`Gateway Cloud UI: ${report.cases.length} locales passed.`);
+  console.log(`Gateway independent join UI: ${report.cases.length} locales passed.`);
 } finally {
   await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
   await browser.close();

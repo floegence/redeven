@@ -3,11 +3,11 @@ type: Validation Guide
 title: Control-plane capacity qualification
 tags: [gateway, controlplane, validation, performance]
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats, signed Gateway observations, and credential recovery. A full acceptance result combines client latency and recovery counts with independent server CPU, RSS, database, queue, and challenge-backlog measurements.
+Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats and Runtime-owned credential recovery. A full acceptance result combines client latency and recovery counts with independent server CPU, RSS, database, queue, and challenge-backlog measurements.
 
 # Contract
 
@@ -28,6 +28,6 @@ This opt-in qualification is separate from ordinary commit and push checks. Cred
 
 # Evidence
 
-- `redeven:internal/agent/controlplane_capacity_qualification_test.go` — Production control lifecycle and signed Gateway observation harness.
+- `redeven:internal/agent/controlplane_capacity_qualification_test.go` — Production Runtime control lifecycle harness.
 
 - `redeven:scripts/run_controlplane_capacity.sh` — Independent load-host invocation and fixture limits.

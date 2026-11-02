@@ -37,7 +37,7 @@ func TestMemberConnectionOffersFencePreviousAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Generation != first.Generation+1 || second.MemberVersion != first.MemberVersion {
+	if second.Generation != first.Generation+1 || second.AttachmentVersion != first.AttachmentVersion {
 		t.Fatal("connection generation changed authorization version")
 	}
 	// The opaque authorization record is persisted before the offer is returned.
@@ -58,13 +58,13 @@ func TestMemberConnectionOffersFencePreviousAttempts(t *testing.T) {
 	if saved.ExpiresAtUnixMS > time.Now().Add(2*time.Minute).UnixMilli() {
 		t.Fatal("redemption exceeds the bounded admission window")
 	}
-	if err := store.Remove(response.MemberID, response.MemberVersion); err != nil {
+	if err := store.Remove(response.AttachmentID, response.AttachmentVersion); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.MemberOffer(pair.Leaf, invitation.Endpoints[0]); err == nil {
 		t.Fatal("removed member acquired another offer")
 	}
-	if _, err := store.AccessOffer(context.Background(), response.MemberID, "paired_desktop"); err == nil {
+	if _, err := store.AccessOffer(context.Background(), response.AttachmentID, "paired_desktop"); err == nil {
 		t.Fatal("removed member acquired Desktop access")
 	}
 }

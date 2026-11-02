@@ -121,14 +121,14 @@ function App() {
   async function verifySetup() { const result = await api<Setup>('setup/verify', { operation: setup()!.operation, code: code(), replacement: replacement() }); setSetup(current => ({ ...current!, ...result })); setCode(''); }
   async function commitSetup() { await api('setup/commit', { operation: setup()!.operation, saved: saved(), replacement: replacement() }); setSetup(undefined); setSaved(false); setReplacement(false); setChallenge(''); await refreshStatus(); }
   const entries = createMemo(() => directory().routes.map(route => {
-    const member = catalogs()[route.source_id]?.members.find(member => member.member_id === route.member_id && member.runtime_public_id === route.runtime_id);
+    const member = catalogs()[route.source_id]?.attachments.find(member => member.attachment_id === route.attachment_id && member.runtime_public_id === route.runtime_id);
     return webCenterEntry(route, member, sourceErrors()[route.source_id] ?? '');
   }));
   const visible = createMemo(() => filterEnvironmentFacts(entries(), query(), e => [e.label, e.gateway_member?.metadata.hostname, e.route.origin].join('\n'),
     e => (!sourceFilter() || e.gateway_id === sourceFilter()) && (!favorites() || e.route.favorite)));
   const listI18n = { t: (key: ListTranslationKey) => t(({ 'gatewayMembers.connected': 'connected', 'gatewayMembers.offline': 'offline', 'gatewayAccess.checkingAccess': 'checking', 'environmentAction.open': 'open' } as const)[key]) };
   const openController = createEnvironmentOpenController(createWebCenterHost(async target => {
-      const route = directory().routes.find(route => route.id === target.environment_id && route.source_id === target.gateway_id && route.member_id === target.gateway_env_id);
+      const route = directory().routes.find(route => route.id === target.environment_id && route.source_id === target.gateway_id && route.attachment_id === target.gateway_env_id);
       if (!route) throw new Error('CENTER_INVALID_TARGET');
       const tab = tabs.get(route.id);
       const handoff = createEnvironmentHandoffGuard();
@@ -187,7 +187,7 @@ function App() {
   }
   async function addRoute() {
     const target = routeTarget()!;
-    const input = { source_id: target.source.id, member_id: target.member.member_id, runtime_id: target.member.runtime_public_id, origin: routeOrigin().trim(), label: target.member.display_name, expected_revision: directory().revision };
+    const input = { source_id: target.source.id, attachment_id: target.member.attachment_id, runtime_id: target.member.runtime_public_id, origin: routeOrigin().trim(), label: target.member.display_name, expected_revision: directory().revision };
     authorize(await actionDigest('route:add', input), async grant => { const result = await api<{ binding: unknown }>('routes/add', { input, grant }); setBinding(JSON.stringify(result.binding, null, 2)); setRouteTarget(undefined); await loadDirectory(); });
   }
   async function showDevices() { setPage('devices'); await work(async () => setDevices(await api<Device[]>('devices'))); }
@@ -223,7 +223,7 @@ function App() {
               <Show when={directory().sources.length > 0} fallback={<section class="center-card empty"><span class="empty-mark">⌘</span><h2>{t('environments')}</h2><p>{t('empty')}</p><button class="primary" onClick={() => setShowAdd(true)}>{t('addGateway')}</button></section>}>
                 <For each={directory().sources.filter(source => !sourceFilter() || sourceFilter() === source.id)}>{source => <section class="center-card source"><div class="section-heading"><h2>{source.name || source.url}</h2><span>{source.url}</span><button onClick={() => setRemoveSource(source)}>{t("remove")}</button></div><Show when={sourceErrors()[source.id]}><p role="status" class="source-error">{sourceErrors()[source.id]}</p></Show>
                   <GatewayEnvironmentList i18n={listI18n} environments={visible().filter(entry => entry.gateway_id === source.id)} progress={progress()} disabled={false} open={entry => void open(entry)} details={entry => <div class="route-tools"><small>{entry.route.origin}</small><button aria-pressed={entry.route.favorite} onClick={() => void work(async () => { await api('routes/favorite', { id: entry.id, value: !entry.route.favorite, revision: directory().revision }); await loadDirectory(); })}>{entry.route.favorite ? '★' : '☆'} {t('favorites')}</button><button onClick={() => void work(async () => setBinding(JSON.stringify(await api('binding?route=' + encodeURIComponent(entry.id)), null, 2)))}>{t('bind')}</button><button onClick={() => { setRotateTarget(entry.route); setBindingRevision(''); }}>{t('rotateBinding')}</button></div>} />
-                  <For each={filterEnvironmentFacts(catalogs()[source.id]?.members ?? [], query(), member => [member.display_name, member.metadata.hostname, member.runtime_public_id].join(' '), member => !favorites() && member.state === 'active' && !directory().routes.some(route => route.source_id === source.id && route.member_id === member.member_id))}>{member => <div class="unbound"><div><strong>{member.display_name}</strong><small>{member.metadata.hostname} · {t('bindingPending')}</small></div><button onClick={() => { setRouteTarget({ source, member }); setRouteOrigin(''); }}>{t('bind')}</button></div>}</For>
+                  <For each={filterEnvironmentFacts(catalogs()[source.id]?.attachments ?? [], query(), member => [member.display_name, member.metadata.hostname, member.runtime_public_id].join(' '), member => !favorites() && member.state === 'active' && !directory().routes.some(route => route.source_id === source.id && route.attachment_id === member.attachment_id))}>{member => <div class="unbound"><div><strong>{member.display_name}</strong><small>{member.metadata.hostname} · {t('bindingPending')}</small></div><button onClick={() => { setRouteTarget({ source, member }); setRouteOrigin(''); }}>{t('bind')}</button></div>}</For>
                 </section>}</For><Show when={visible().length === 0 && directory().routes.length > 0}><p>{t('noMatches')}</p></Show>
               </Show>
               <Show when={directory().bookmarks.length}><section class="center-card"><h2>{t('bookmarks')}</h2><p>{t('bookmarkHelp')}</p><For each={directory().bookmarks.filter(bookmark => (!query() || (bookmark.name + bookmark.url).toLocaleLowerCase().includes(query().toLocaleLowerCase())))}>{bookmark => <div class="unbound"><div><strong>{bookmark.name}</strong><small>{bookmark.url}</small></div><a class="direct-link" href={bookmark.url} target="_blank" rel="noopener noreferrer">{t('open')}</a><button onClick={() => void work(async () => { await api('bookmarks/remove', { id: bookmark.id, revision: directory().revision }); await loadDirectory(); })}>{t('remove')}</button></div>}</For></section></Show>

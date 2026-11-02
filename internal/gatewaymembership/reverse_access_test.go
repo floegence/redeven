@@ -114,7 +114,7 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 	if _, err := runtime.controller.WaitForSession(ctx); err != nil {
 		t.Fatalf("member connection: %v; snapshot=%+v", err, runtime.Snapshot())
 	}
-	for !connections.IsConnected(current().MemberID) {
+	for !connections.IsConnected(current().AttachmentID) {
 		select {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
@@ -122,7 +122,7 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 		}
 	}
 	member := current()
-	offer, err := store.AccessOffer(ctx, member.MemberID, "desktop")
+	offer, err := store.AccessOffer(ctx, member.AttachmentID, "desktop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,11 +174,11 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 	if _, err := io.ReadFull(streaming.Body, prefix); err != nil {
 		t.Fatal(err)
 	}
-	pendingOffer, err := store.AccessOffer(ctx, member.MemberID, "desktop")
+	pendingOffer, err := store.AccessOffer(ctx, member.AttachmentID, "desktop")
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherOffer, err := store.AccessOffer(ctx, member.MemberID, "other-desktop")
+	otherOffer, err := store.AccessOffer(ctx, member.AttachmentID, "other-desktop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 		_ = rejected.Close()
 		t.Fatal("revoked pending ticket connected")
 	}
-	if !connections.IsConnected(member.MemberID) || runtime.Snapshot().State != flowersec.ConnectionConnected {
+	if !connections.IsConnected(member.AttachmentID) || runtime.Snapshot().State != flowersec.ConnectionConnected {
 		t.Fatal("client revocation disconnected Runtime membership")
 	}
 	originalDesktop := desktop
@@ -242,7 +242,7 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer originalDesktop.Close()
-	if err := store.Remove(member.MemberID, member.MemberVersion); err != nil {
+	if err := store.Remove(member.AttachmentID, member.AttachmentVersion); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := io.ReadAll(streaming.Body); err == nil {
@@ -251,7 +251,7 @@ func TestReverseAccessOverOutboundMembership(t *testing.T) {
 	if _, err := client.Get(offer.Service.Origin + "/app"); err == nil {
 		t.Fatal("removed membership opened another reverse stream")
 	}
-	for budget.Count(member.MemberID, 0, "") != 0 {
+	for budget.Count(member.AttachmentID, 0, "") != 0 {
 		select {
 		case <-ctx.Done():
 			t.Fatal("forwarding workers retained budget after removal")

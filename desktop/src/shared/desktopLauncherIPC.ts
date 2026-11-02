@@ -2,9 +2,8 @@ import { selectEnvironmentSnapshot } from '../envcenter/core';
 import {normalizeRuntimeCloudOperation, type RuntimeCloudOperation, type CloudRouteOperation} from './runtimeCloud';
 import { normalizeGatewayNetworkSettings } from './gatewayNetworkSettings';
 import type { GatewayNetworkSettings } from './gatewayMembership';
-import type { GatewayEndpoint, GatewayMember, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayInvitationCodeDelivery, GatewayMemberOperationResult, GatewayCloudPermission } from './gatewayMembership';
-import { type GatewayMembershipStatus, type GatewayMembershipOperation, type GatewayEnrollmentPurpose, type GatewayJoinPreview } from './gatewayJoin';
-import { normalizeGatewayCloudConfiguration, type GatewayCloudConfiguration, type GatewayCloudSummary } from './gatewayCloud';
+import type { GatewayEndpoint, RuntimeAttachment, GatewayClientAccessCode, GatewayAuthorizedClient, GatewayPolicy, GatewayInvitationCodeDelivery, RuntimeAttachmentOperationResult, GatewayEgressPermission } from './gatewayMembership';
+import { type GatewayAttachmentStatus, type GatewayAttachmentOperation, type GatewayEnrollmentPurpose, type GatewayJoinPreview } from './gatewayJoin';
 import type { EnvironmentAccessRoute } from './environmentAccess';
 import type { DesktopControlPlaneSummary } from './cloud';
 import { normalizeControlPlaneOrigin } from './cloud';
@@ -113,7 +112,6 @@ export type DesktopLauncherOperationSubjectKind =
   | 'gateway'
   | 'control_plane';
 export type DesktopLauncherActionOutcome =
-  | 'gateway_cloud_updated'
   | 'gateway_membership_updated'
   | 'opened_environment_window'
   | 'focused_environment_window'
@@ -210,8 +208,6 @@ export type DesktopLauncherActionKind =
   | 'manage_runtime_cloud'
   | 'manage_runtime_gateway'
   | 'close_runtime_gateway'
-  | 'configure_gateway_cloud'
-  | 'inspect_gateway_cloud'
   | 'open_local_environment'
   | 'open_provider_environment'
   | 'open_gateway_environment'
@@ -253,6 +249,7 @@ export type DesktopLauncherActionKind =
   | 'delete_gateway'
   | 'upsert_environment_registration'
   | 'invite_gateway_runtime'
+  | 'acknowledge_gateway_operation'
   | 'issue_gateway_access_code'
   | 'list_gateway_clients'
   | 'revoke_gateway_client'
@@ -441,7 +438,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   gateway_trust_state?: DesktopGatewayTrustState;
   gateway_status_message?: string;
   gateway_endpoint_label?: string;
-  gateway_member?: GatewayMember;
+  gateway_member?: RuntimeAttachment;
   gateway_access_result?: DesktopGatewayEnvironment['last_access_result'];
   gateway_sync_state?: DesktopGatewaySource['sync_state'];
   environment_source?: DesktopEnvironmentSource;
@@ -679,9 +676,7 @@ export type DesktopLauncherActionRequest = Readonly<
   | ({kind: 'manage_runtime_cloud'; runtime_target_id: DesktopCloudRuntimeLinkTargetID} & RuntimeCloudOperation)
   | { kind: 'close_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token: number }
   | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token?: number; operation: 'preview'; address: string; code: string; purpose: GatewayEnrollmentPurpose }
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token?: number; ssh_password?: string; operation: GatewayMembershipOperation; preview_id?: string; gateway_id?: string; route_impact_acknowledged?: boolean }
-  | { kind: 'configure_gateway_cloud'; gateway_id: string; configuration: GatewayCloudConfiguration }
-  | { kind: 'inspect_gateway_cloud'; gateway_id: string }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token?: number; ssh_password?: string; operation: GatewayAttachmentOperation; preview_id?: string; gateway_id?: string; route_impact_acknowledged?: boolean }
   | {
       kind: 'open_local_environment';
       environment_id: string;
@@ -870,15 +865,16 @@ export type DesktopLauncherActionRequest = Readonly<
       registration: DesktopEnvironmentRegistrationUpsert;
     }
   | { kind: 'invite_gateway_runtime'; gateway_id: string }
+  | { kind: 'acknowledge_gateway_operation'; gateway_id: string; operation_id: string }
   | { kind: 'issue_gateway_access_code'; gateway_id: string }
   | { kind: 'list_gateway_clients'; gateway_id: string }
   | { kind: 'revoke_gateway_client'; gateway_id: string; client_key_id: string }
   | { kind: 'update_gateway_network_settings'; gateway_id: string; settings: GatewayNetworkSettings }
   | { kind: 'update_gateway_endpoints'; gateway_id: string; endpoints: readonly GatewayEndpoint[] }
-  | { kind: 'remove_gateway_member'; gateway_id: string; member_id: string; member_version: number }
-  | { kind: 'reevaluate_gateway_member'; gateway_id: string; member_id: string; member_version: number }
+  | { kind: 'remove_gateway_member'; gateway_id: string; attachment_id: string; attachment_version: number }
+  | { kind: 'reevaluate_gateway_member'; gateway_id: string; attachment_id: string; attachment_version: number }
   | { kind: 'update_gateway_policy'; gateway_id: string; policy: GatewayPolicy }
-  | { kind: 'update_gateway_members'; gateway_id: string; items: readonly { member_id: string; expected_member_version: number; cloud_permission: GatewayCloudPermission }[] }
+  | { kind: 'update_gateway_members'; gateway_id: string; items: readonly { attachment_id: string; expected_attachment_version: number; egress_permission: GatewayEgressPermission }[] }
   | { kind: 'set_environment_access_route'; environment_id: string; route_id: string }
   | {
       kind: 'delete_environment_registration';
@@ -916,9 +912,8 @@ export type DesktopLauncherActionSuccess = Readonly<{
  cloud_error_code?: string;
  cloud_route_operation?: CloudRouteOperation;
  gateway_preview?: GatewayJoinPreview;
-  gateway_member_results?: readonly GatewayMemberOperationResult[];
-  gateway_cloud?: GatewayCloudSummary;
-  gateway_membership?: GatewayMembershipStatus;
+  gateway_member_results?: readonly RuntimeAttachmentOperationResult[];
+  gateway_membership?: GatewayAttachmentStatus;
   gateway_endpoints?: readonly GatewayEndpoint[];
   gateway_network_settings?: Readonly<{ settings: GatewayNetworkSettings; restart_required: boolean }>;
   ok: true;
@@ -967,6 +962,7 @@ export type DesktopReinstallTargetPreview = Readonly<{
 export type DesktopLauncherActionFailure = Readonly<{
  cloud_error_code?: string;
  gateway_error_code?: string;
+ gateway_operation_id?: string;
   ok: false;
   code: DesktopLauncherActionFailureCode;
   scope: DesktopLauncherActionFailureScope;
@@ -1188,6 +1184,10 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
   switch (kind) {
+    case 'acknowledge_gateway_operation': {
+      const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id), operation_id = compact(input.operation_id);
+      return gateway_id && /^[A-Za-z0-9_-]{16,128}$/u.test(operation_id) ? { kind, gateway_id, operation_id } : null;
+    }
     case 'revoke_gateway_client': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
       const clientKeyID = compact((candidate as { client_key_id?: unknown }).client_key_id);
@@ -1224,30 +1224,30 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'remove_gateway_member':
     case 'reevaluate_gateway_member': {
       const input = candidate as Record<string, unknown>;
-      const gateway_id = compact(input.gateway_id), member_id = compact(input.member_id);
-      const member_version = input.member_version;
-      return gateway_id && member_id && Number.isSafeInteger(member_version) && Number(member_version) > 0
-        ? { kind, gateway_id, member_id, member_version: Number(member_version) } : null;
+      const gateway_id = compact(input.gateway_id), attachment_id = compact(input.attachment_id);
+      const attachment_version = input.attachment_version;
+      return gateway_id && attachment_id && Number.isSafeInteger(attachment_version) && Number(attachment_version) > 0
+        ? { kind, gateway_id, attachment_id, attachment_version: Number(attachment_version) } : null;
     }
     case 'update_gateway_policy': {
       const input = candidate as Record<string, unknown>, policy = input.policy as Partial<GatewayPolicy> | undefined;
       const gateway_id = compact(input.gateway_id);
       if (!gateway_id || !policy || !Number.isSafeInteger(policy.revision) || Number(policy.revision) < 1
-        || typeof policy.default_cloud_allowed !== 'boolean' || !['manual', 'automatic'].includes(String(policy.publication_mode))) return null;
-      return { kind, gateway_id, policy: { revision: Number(policy.revision), default_cloud_allowed: policy.default_cloud_allowed, publication_mode: policy.publication_mode as GatewayPolicy['publication_mode'] } };
+        || typeof policy.default_egress_allowed !== 'boolean' || (!Array.isArray(policy.destinations) || policy.destinations.length > 64 || policy.destinations.some(value => typeof value !== 'string' || value.length > 260))) return null;
+      return { kind, gateway_id, policy: { revision: Number(policy.revision), default_egress_allowed: policy.default_egress_allowed, destinations: [...policy.destinations!] } };
     }
     case 'update_gateway_members': {
       const input = candidate as Record<string, unknown>, gateway_id = compact(input.gateway_id);
       if (!gateway_id || !Array.isArray(input.items) || !input.items.length || input.items.length > 1024) return null;
-      const items: { member_id: string; expected_member_version: number; cloud_permission: GatewayCloudPermission }[] = [];
+      const items: { attachment_id: string; expected_attachment_version: number; egress_permission: GatewayEgressPermission }[] = [];
       for (const raw of input.items) {
         if (!raw || typeof raw !== 'object') return null;
-        const item = raw as Record<string, unknown>, member_id = compact(item.member_id);
-        if (!member_id || !Number.isSafeInteger(item.expected_member_version) || Number(item.expected_member_version) < 1
-          || !['inherit', 'allow', 'deny'].includes(String(item.cloud_permission))) return null;
-        items.push({ member_id, expected_member_version: Number(item.expected_member_version), cloud_permission: item.cloud_permission as GatewayCloudPermission });
+        const item = raw as Record<string, unknown>, attachment_id = compact(item.attachment_id);
+        if (!attachment_id || !Number.isSafeInteger(item.expected_attachment_version) || Number(item.expected_attachment_version) < 1
+          || !['inherit', 'allow', 'deny'].includes(String(item.egress_permission))) return null;
+        items.push({ attachment_id, expected_attachment_version: Number(item.expected_attachment_version), egress_permission: item.egress_permission as GatewayEgressPermission });
       }
-      return new Set(items.map(item => item.member_id)).size === items.length ? { kind, gateway_id, items } : null;
+      return new Set(items.map(item => item.attachment_id)).size === items.length ? { kind, gateway_id, items } : null;
     }
     case 'set_environment_access_route': {
       const input = candidate as { environment_id?: unknown; route_id?: unknown };
@@ -1616,23 +1616,13 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       }
       const confirming = operation === 'join' || operation === 'replace' || operation === 'update-endpoints';
       if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','preview_id','gateway_id','route_impact_acknowledged','connection_token','ssh_password'].includes(key))
-        || !['join','replace','update-endpoints','status','retry','leave','publish'].includes(operation)
+        || !['join','replace','update-endpoints','status','retry','leave'].includes(operation)
         || (confirming ? typeof input.preview_id !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(input.preview_id) : input.preview_id !== undefined)) return null;
       const gatewayID = compact(input.gateway_id);
-      if (input.gateway_id !== undefined && (!['retry','leave','publish'].includes(operation) || !gatewayID || gatewayID.length > 256)) return null;
-      if (operation === 'publish' && !gatewayID) return null;
+      if (input.gateway_id !== undefined && (!['retry','leave'].includes(operation) || !gatewayID || gatewayID.length > 256)) return null;
       if (input.route_impact_acknowledged !== undefined && (operation !== 'leave' || typeof input.route_impact_acknowledged !== 'boolean')) return null;
-      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayMembershipOperation, ...connection,
+      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayAttachmentOperation, ...connection,
         ...(typeof input.ssh_password === 'string' ? { ssh_password: input.ssh_password } : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(input.route_impact_acknowledged === true ? {route_impact_acknowledged: true} : {}), ...(confirming ? { preview_id: input.preview_id as string } : {}) };
-    }
-    case 'configure_gateway_cloud': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
-      const configuration = normalizeGatewayCloudConfiguration((candidate as { configuration?: unknown }).configuration);
-      return gatewayID && configuration ? { kind, gateway_id: gatewayID, configuration } : null;
-    }
-    case 'inspect_gateway_cloud': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
-      return gatewayID ? { kind, gateway_id: gatewayID } : null;
     }
     case 'start_gateway':
     case 'stop_gateway':

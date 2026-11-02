@@ -12,7 +12,7 @@ import (
 	"github.com/floegence/redeven/internal/gatewaymembership"
 )
 
-func TestGatewayMemberOriginRemainsPublicAndPasswordProtected(t *testing.T) {
+func TestRuntimeAttachmentOriginRemainsPublicAndPasswordProtected(t *testing.T) {
 	service, _, err := gatewaymembership.NewServiceCertificate("runtime_test")
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestGatewayMemberOriginRemainsPublicAndPasswordProtected(t *testing.T) {
 	}
 }
 
-func TestGatewayMemberWebSocketRequiresExactOrigin(t *testing.T) {
+func TestRuntimeAttachmentWebSocketRequiresExactOrigin(t *testing.T) {
 	service, _, err := gatewaymembership.NewServiceCertificate("runtime_test")
 	if err != nil {
 		t.Fatal(err)

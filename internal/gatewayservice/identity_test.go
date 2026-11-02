@@ -1,6 +1,8 @@
 package gatewayservice
 
 import (
+	"context"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -32,13 +34,15 @@ func TestGatewayAddressProofUsesPersistentMachineKey(t *testing.T) {
 	}
 	public := challenge.GatewayPublicKey
 	for _, endpoint := range []string{"https://first.example", "https://second.example"} {
-		server, err = New(Options{StateRoot: root, HostAdminToken: token, MemberURL: endpoint})
+		server, err = New(Options{StateRoot: root, HostAdminToken: token, PublicURL: endpoint})
 		if err != nil {
 			t.Fatal(err)
 		}
 		request := httptest.NewRequest(http.MethodPost, endpoint+"/gateway/v6/identity", strings.NewReader(`{"protocol_version":"redeven-gateway-v6","nonce":"caller-challenge-with-entropy"}`))
 		request.RemoteAddr = "127.0.0.1:12345"
 		request.Header.Set(HostAdminHeader, token)
+		request.Header.Set(OperationIDHeader, rand.Text())
+		request = request.WithContext(context.WithValue(request.Context(), hostSocketKey{}, server))
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, request)
 		if response.Code != http.StatusOK {

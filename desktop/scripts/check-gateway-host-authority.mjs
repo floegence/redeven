@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
+import https from 'node:https';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
 const { GatewayClient } = require('../dist/main/gatewayClient.js');
 const trust = require('../dist/main/gatewayTrust.js');
+const { decodeGatewayClientAccessPackage } = require('../dist/main/gatewayClientAccess.js');
 const { startRuntimePlacementBridgeSession } = require('../dist/main/runtimePlacementBridgeSession.js');
 const { DefaultDesktopSSHTransportManager } = require('../dist/main/sshTransportManager.js');
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-gateway-authority-'));
@@ -34,16 +36,19 @@ const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', tim
 const originalPath = process.env.PATH;
 let nativeStarted = false;
 async function enroll(record, client, code) {
+  const access = code ? decodeGatewayClientAccessPackage(code) : undefined;
+  const options = access ? { tlsRootPEM: access.tls_root_pem } : {};
   const material = trust.createGatewayPairingMaterial(record);
-  const request = code ? trust.pairingChallengeRequestWithCode(material, code) : trust.pairingChallengeRequest(material);
-  const challenge = await client.pairingChallenge(record, { ...request, client_name: 'Qualification Desktop' });
+  const request = code ? trust.pairingChallengeRequestWithCode(material, access.access_code) : trust.pairingChallengeRequest(material);
+  const challenge = await client.pairingChallenge(record, { ...request, client_name: 'Qualification Desktop' }, options);
+  if (access) { assert.equal(challenge.gateway_id, access.gateway_id); assert.equal(challenge.gateway_public_key, access.gateway_public_key); }
   trust.assertGatewayPairingChallenge({ record, material, challenge });
   const proof = trust.buildPairingCompleteRequest(material, challenge);
-  const complete = await client.completePairing(record, proof);
+  const complete = await client.completePairing(record, proof, options);
   trust.assertGatewayPairingCompleteResponse(material, challenge, complete);
-  assert.deepEqual(complete.permissions, { access: true, manage_members: false, configure_cloud: false });
-  assert.deepEqual(await client.completePairing(record, proof), complete, 'Lost completion response is retryable');
-  return { ...record, trust_profile: await trust.completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }) };
+  assert.deepEqual(complete.permissions, { access: true, manage_attachments: false, manage_network: false });
+  assert.deepEqual(await client.completePairing(record, proof, options), complete, 'Lost completion response is retryable');
+  return { ...record, trust_profile: { ...await trust.completeGatewayPairing({ record, material, challenge, trust_accepted: true, secret_store: secretStore }), ...(access ? { tls_root_pem: access.tls_root_pem } : {}) } };
 }
 try {
   docker('info');
@@ -63,15 +68,15 @@ try {
   await mkdir(wrapper);
   await writeFile(path.join(wrapper, 'ssh'), '#!/bin/sh\nexec /usr/bin/ssh -i "' + path.join(temp, 'key') + '" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="' + path.join(temp, 'known_hosts') + '" "$@"\n', { mode: 0o700 });
   process.env.PATH = wrapper + path.delimiter + originalPath;
-  const nativeStatus = JSON.parse(execFileSync(nativeBinary, ['service-start', '--state-root', state, '--member-listen', '127.0.0.1:0'], { encoding: 'utf8' }));
+  const nativeStatus = JSON.parse(execFileSync(nativeBinary, ['service-start', '--state-root', state, '--public-listen', '127.0.0.1:0', '--public-url', 'https://127.0.0.1'], { encoding: 'utf8' }));
   nativeStarted = true;
-  docker('exec', container, '/gateway', 'service-start', '--state-root', '/root/gateway-state', '--member-listen', '127.0.0.1:0');
-  docker('exec', sshHost, '/gateway', 'service-start', '--state-root', '/root/gateway-state', '--listen', '0.0.0.0:20000', '--member-listen', '127.0.0.1:0');
+  docker('exec', container, '/gateway', 'service-start', '--state-root', '/root/gateway-state', '--public-listen', '127.0.0.1:0', '--public-url', 'https://127.0.0.1');
+  docker('exec', sshHost, '/gateway', 'service-start', '--state-root', '/root/gateway-state', '--public-listen', '0.0.0.0:20000', '--public-url', 'https://127.0.0.1');
   const sshAccess = user => ({ kind: 'ssh_host', ssh: { ssh_destination: user + '@127.0.0.1', ssh_port: port, auth_mode: 'key_agent', connect_timeout_seconds: 10 } });
   const containerPlacement = { kind: 'container_process', runtime_root: '/root/gateway-state', container_engine: 'docker', container_id: container, container_ref: container, container_label: container, bridge_strategy: 'exec_stream' };
   const placements = [
-    { name: 'local', host: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: state }, binary: nativeBinary, baseURL: 'http://' + nativeStatus.listen + '/' },
-    { name: 'ssh', host: sshAccess('root'), placement: { kind: 'host_process', runtime_root: '/root/gateway-state' }, binary: '/gateway', baseURL: 'http://127.0.0.1:' + adminPort + '/' },
+    { name: 'local', host: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: state }, binary: nativeBinary, baseURL: 'https://' + nativeStatus.public_listen + '/' },
+    { name: 'ssh', host: sshAccess('root'), placement: { kind: 'host_process', runtime_root: '/root/gateway-state' }, binary: '/gateway', baseURL: 'https://127.0.0.1:' + adminPort + '/' },
     { name: 'local-container', host: { kind: 'local_host' }, placement: containerPlacement, binary: '/gateway' },
     { name: 'ssh-container', host: sshAccess('root'), placement: containerPlacement, binary: '/gateway' },
   ];
@@ -94,29 +99,35 @@ try {
     console.log('Checking host CLI authorization: ' + placement.name);
     assert.equal(JSON.parse(await invokeCLI(['clients', 'access-code'])).access_code.length > 0, true, 'Host CLI issues a ten-minute code');
     console.log('Checking signed host identity: ' + placement.name);
-    const record = await enroll({ schema_version: 4, gateway_id: randomUUID(), display_name: placement.name, local_enabled: true, connection, created_at_ms: 1, updated_at_ms: 1 }, client);
+    const record = await enroll({ schema_version: 5, connection_id: randomUUID(), display_name: placement.name, local_enabled: true, connection, created_at_ms: 1, updated_at_ms: 1 }, client);
     await client.verifyAddress(record);
     const catalog = await client.catalog(record);
-    assert.deepEqual(catalog.gateway.permissions, { access: true, manage_members: true, configure_cloud: true });
+    assert.deepEqual(catalog.gateway.permissions, { access: true, manage_attachments: true, manage_network: true });
     assert.equal((await client.listClients(record)).length, 0, 'Host management is not a revocable URL grant');
     if (placement.baseURL) {
       const code = await client.issueAccessCode(record);
       const persisted = placement.name === 'local' ? await readFile(path.join(state, 'gateway-trust.json'), 'utf8') : docker('exec', sshHost, 'cat', '/root/gateway-state/gateway-trust.json');
       assert.equal(persisted.includes(code.access_code), false, 'Access code persisted only as a digest');
       const urlClient = new GatewayClient(secretStore);
-      const consumer = await enroll({ schema_version: 4, gateway_id: randomUUID(), display_name: 'URL consumer', local_enabled: true, connection: { kind: 'url', base_url: placement.baseURL, allow_loopback_http: true }, created_at_ms: 1, updated_at_ms: 1 }, urlClient, code.access_code);
+      const consumer = await enroll({ schema_version: 5, connection_id: randomUUID(), display_name: 'URL consumer', local_enabled: true, connection: { kind: 'url', base_url: placement.baseURL }, created_at_ms: 1, updated_at_ms: 1 }, urlClient, code.access_code);
       await urlClient.verifyAddress(consumer);
-      assert.deepEqual((await urlClient.catalog(consumer)).gateway.permissions, { access: true, manage_members: false, configure_cloud: false });
+      assert.deepEqual((await urlClient.catalog(consumer)).gateway.permissions, { access: true, manage_attachments: false, manage_network: false });
       await assert.rejects(urlClient.listClients(consumer), { code: 'HOST_MANAGEMENT_REQUIRED' });
       const headers = await trust.createGatewayAuthHeaders({ record: consumer, method: 'POST', route: '/gateway/v6/clients/access-codes', body: { protocol_version: 'redeven-gateway-v6' }, secret_store: secretStore });
-      const forbidden = await fetch(new URL('gateway/v6/clients/access-codes', placement.baseURL), { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'X-Redeven-Gateway-Transport': 'desktop_bridge' }, body: JSON.stringify({ protocol_version: 'redeven-gateway-v6' }) });
-      assert.equal(forbidden.status, 403, 'Direct HTTP cannot bypass main-process management restriction');
+      const forbidden = await new Promise((resolve, reject) => {
+        const request = https.request(new URL('gateway/v6/clients/access-codes', placement.baseURL), {
+          method: 'POST', ca: consumer.trust_profile.tls_root_pem, minVersion: 'TLSv1.3',
+          headers: { ...headers, 'Content-Type': 'application/json', 'X-Redeven-Gateway-Transport': 'desktop_bridge' },
+        }, response => { response.resume(); response.on('end', () => resolve(response.statusCode)); });
+        request.on('error', reject); request.end(JSON.stringify({ protocol_version: 'redeven-gateway-v6' }));
+      });
+      assert.equal(forbidden, 404, 'Public TLS listener does not mount host administration');
       assert.equal((await client.listClients(record)).length, 1);
       assert.equal(JSON.parse(await invokeCLI(['clients', 'list'])).clients.length, 1, 'Host CLI lists the same authorized client');
       await client.revokeClient(record, consumer.trust_profile.paired_client_key_id);
       await assert.rejects(urlClient.catalog(consumer), { code: 'UNAUTHORIZED' });
       assert.equal((await client.listClients(record))[0].revoked_at_unix_ms > 0, true);
-      assert.equal((await client.catalog(record)).gateway.permissions.manage_members, true);
+      assert.equal((await client.catalog(record)).gateway.permissions.manage_attachments, true);
       await invokeCLI(['clients', 'revoke', '--client', consumer.trust_profile.paired_client_key_id]);
       assert.equal((await client.listClients(record))[0].revoked_at_unix_ms > 0, true, 'Host CLI revocation is idempotent');
     }

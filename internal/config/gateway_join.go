@@ -10,7 +10,7 @@ func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata
 	if c == nil || choice != "" {
 		return nil, gatewaymembership.ErrState
 	}
-	if current := c.GatewayMember(invitation.GatewayID); current != nil {
+	if current := c.RuntimeAttachment(invitation.GatewayID); current != nil {
 		if current.Leaving || current.Delegation.InvitationID != invitation.InvitationID {
 			return nil, gatewaymembership.ErrConflict
 		}
@@ -28,7 +28,7 @@ func (c *Config) PrepareGatewayJoin(invitation gp.EnrollmentDescriptor, metadata
 	if err != nil {
 		return nil, err
 	}
-	next.SetGatewayMember(invitation.GatewayID, member)
+	next.SetRuntimeAttachment(invitation.GatewayID, member)
 	return &next, nil
 }
 

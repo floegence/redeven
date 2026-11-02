@@ -225,7 +225,7 @@ func TestFailedPairingDoesNotPublishTrust(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected injected persistence failure")
 	}
-	if store.IsPaired(clientID, audience) || store.ClientPermissions(clientID).ManageMembers {
+	if store.IsPaired(clientID, audience) || store.ClientPermissions(clientID).ManageAttachments {
 		t.Fatal("failed pairing published client trust and member-management permission in memory")
 	}
 	retained, err := os.ReadFile(statePath + ".retained")

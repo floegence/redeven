@@ -11,7 +11,7 @@ const locales=process.argv.slice(2).filter(argument=>argument!=='--setup-only');
 assert.ok(locales.every(locale=>supportedLocales.includes(locale)),'arguments must be supported locale codes');
 const localGateway={gateway_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
  management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
- created_at_ms:1,updated_at_ms:1,environments:[],member_endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}]};
+ created_at_ms:1,updated_at_ms:1,environments:[],endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}]};
 const output=fileURLToPath(new URL('../dist/gateway-runtime-connections/',import.meta.url));
 await mkdir(output,{recursive:true});
 const server=await createSSHSettingsPreviewServer(0);

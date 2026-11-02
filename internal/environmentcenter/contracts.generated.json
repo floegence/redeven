@@ -44,15 +44,15 @@
         "input": {
           "additionalProperties": false,
           "properties": {
+            "attachment_id": {
+              "type": "string"
+            },
             "expected_revision": {
               "maximum": 9007199254740991,
               "minimum": -9007199254740991,
               "type": "integer"
             },
             "label": {
-              "type": "string"
-            },
-            "member_id": {
               "type": "string"
             },
             "origin": {
@@ -67,7 +67,7 @@
           },
           "required": [
             "source_id",
-            "member_id",
+            "attachment_id",
             "runtime_id",
             "origin",
             "label",
@@ -388,135 +388,17 @@
     "Catalog": {
       "additionalProperties": false,
       "properties": {
-        "gateway": {
-          "additionalProperties": false,
-          "properties": {
-            "active_listener_addresses": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "allowed_hosts": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "display_name": {
-              "type": "string"
-            },
-            "endpoint_last_used_at": {
-              "additionalProperties": {
-                "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
-                "type": "integer"
-              },
-              "type": "object"
-            },
-            "gateway_id": {
-              "type": "string"
-            },
-            "gateway_public_key_fingerprint": {
-              "type": "string"
-            },
-            "listener_address": {
-              "type": "string"
-            },
-            "listener_addresses": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "listener_restart_required": {
-              "type": "boolean"
-            },
-            "listener_running": {
-              "type": "boolean"
-            },
-            "member_endpoints": {
-              "items": {
-                "additionalProperties": false,
-                "properties": {
-                  "address": {
-                    "type": "string"
-                  },
-                  "endpoint_id": {
-                    "type": "string"
-                  },
-                  "priority": {
-                    "maximum": 9007199254740991,
-                    "minimum": -9007199254740991,
-                    "type": "integer"
-                  },
-                  "scope": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "endpoint_id",
-                  "address",
-                  "scope",
-                  "priority"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "member_tls_root_pem": {
-              "type": "string"
-            },
-            "permissions": {
-              "additionalProperties": false,
-              "properties": {
-                "access": {
-                  "type": "boolean"
-                },
-                "configure_cloud": {
-                  "type": "boolean"
-                },
-                "manage_members": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "access",
-                "manage_members",
-                "configure_cloud"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "gateway_id",
-            "display_name",
-            "gateway_public_key_fingerprint",
-            "listener_address",
-            "listener_addresses",
-            "active_listener_addresses",
-            "allowed_hosts",
-            "listener_restart_required",
-            "listener_running",
-            "endpoint_last_used_at",
-            "member_endpoints",
-            "member_tls_root_pem",
-            "permissions"
-          ],
-          "type": "object"
-        },
-        "hook_status": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "type": "object"
-        },
-        "members": {
+        "attachments": {
           "items": {
             "additionalProperties": false,
             "properties": {
-              "cloud_permission": {
+              "attachment_id": {
                 "type": "string"
+              },
+              "attachment_version": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
               },
               "connected": {
                 "type": "boolean"
@@ -524,18 +406,13 @@
               "display_name": {
                 "type": "string"
               },
-              "effective_cloud_allowed": {
+              "effective_egress_allowed": {
                 "type": "boolean"
               },
-              "last_seen_at_unix_ms": {
-                "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
-                "type": "integer"
-              },
-              "member_id": {
+              "egress_permission": {
                 "type": "string"
               },
-              "member_version": {
+              "last_seen_at_unix_ms": {
                 "maximum": 9007199254740991,
                 "minimum": -9007199254740991,
                 "type": "integer"
@@ -572,29 +449,155 @@
               }
             },
             "required": [
-              "member_id",
+              "attachment_id",
               "runtime_public_id",
-              "member_version",
+              "attachment_version",
               "display_name",
               "state",
               "connected",
               "last_seen_at_unix_ms",
-              "cloud_permission",
-              "effective_cloud_allowed",
+              "egress_permission",
+              "effective_egress_allowed",
               "metadata"
             ],
             "type": "object"
           },
           "type": "array"
         },
+        "gateway": {
+          "additionalProperties": false,
+          "properties": {
+            "active_listener_addresses": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "allowed_hosts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "display_name": {
+              "type": "string"
+            },
+            "endpoint_last_used_at": {
+              "additionalProperties": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "endpoints": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  },
+                  "endpoint_id": {
+                    "type": "string"
+                  },
+                  "priority": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "endpoint_id",
+                  "address",
+                  "scope",
+                  "priority"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "gateway_id": {
+              "type": "string"
+            },
+            "gateway_public_key_fingerprint": {
+              "type": "string"
+            },
+            "listener_address": {
+              "type": "string"
+            },
+            "listener_addresses": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "listener_restart_required": {
+              "type": "boolean"
+            },
+            "listener_running": {
+              "type": "boolean"
+            },
+            "permissions": {
+              "additionalProperties": false,
+              "properties": {
+                "access": {
+                  "type": "boolean"
+                },
+                "manage_attachments": {
+                  "type": "boolean"
+                },
+                "manage_network": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "access",
+                "manage_attachments",
+                "manage_network"
+              ],
+              "type": "object"
+            },
+            "tls_root_pem": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "gateway_id",
+            "display_name",
+            "gateway_public_key_fingerprint",
+            "listener_address",
+            "listener_addresses",
+            "active_listener_addresses",
+            "allowed_hosts",
+            "listener_restart_required",
+            "listener_running",
+            "endpoint_last_used_at",
+            "endpoints",
+            "tls_root_pem",
+            "permissions"
+          ],
+          "type": "object"
+        },
+        "hook_status": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
         "policy": {
           "additionalProperties": false,
           "properties": {
-            "default_cloud_allowed": {
+            "default_egress_allowed": {
               "type": "boolean"
             },
-            "publication_mode": {
-              "type": "string"
+            "destinations": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
             },
             "revision": {
               "maximum": 9007199254740991,
@@ -604,8 +607,8 @@
           },
           "required": [
             "revision",
-            "default_cloud_allowed",
-            "publication_mode"
+            "default_egress_allowed",
+            "destinations"
           ],
           "type": "object"
         },
@@ -621,7 +624,7 @@
       "required": [
         "protocol_version",
         "gateway",
-        "members",
+        "attachments",
         "policy",
         "revision",
         "hook_status"
@@ -764,6 +767,9 @@
           "items": {
             "additionalProperties": false,
             "properties": {
+              "attachment_id": {
+                "type": "string"
+              },
               "binding_revision": {
                 "maximum": 9007199254740991,
                 "minimum": -9007199254740991,
@@ -776,9 +782,6 @@
                 "type": "string"
               },
               "label": {
-                "type": "string"
-              },
-              "member_id": {
                 "type": "string"
               },
               "origin": {
@@ -799,7 +802,7 @@
             "required": [
               "id",
               "source_id",
-              "member_id",
+              "attachment_id",
               "runtime_id",
               "origin",
               "label",
@@ -890,8 +893,13 @@
     "Member": {
       "additionalProperties": false,
       "properties": {
-        "cloud_permission": {
+        "attachment_id": {
           "type": "string"
+        },
+        "attachment_version": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
         },
         "connected": {
           "type": "boolean"
@@ -899,18 +907,13 @@
         "display_name": {
           "type": "string"
         },
-        "effective_cloud_allowed": {
+        "effective_egress_allowed": {
           "type": "boolean"
         },
-        "last_seen_at_unix_ms": {
-          "maximum": 9007199254740991,
-          "minimum": -9007199254740991,
-          "type": "integer"
-        },
-        "member_id": {
+        "egress_permission": {
           "type": "string"
         },
-        "member_version": {
+        "last_seen_at_unix_ms": {
           "maximum": 9007199254740991,
           "minimum": -9007199254740991,
           "type": "integer"
@@ -947,15 +950,15 @@
         }
       },
       "required": [
-        "member_id",
+        "attachment_id",
         "runtime_public_id",
-        "member_version",
+        "attachment_version",
         "display_name",
         "state",
         "connected",
         "last_seen_at_unix_ms",
-        "cloud_permission",
-        "effective_cloud_allowed",
+        "egress_permission",
+        "effective_egress_allowed",
         "metadata"
       ],
       "type": "object"
@@ -1175,6 +1178,9 @@
     "Route": {
       "additionalProperties": false,
       "properties": {
+        "attachment_id": {
+          "type": "string"
+        },
         "binding_revision": {
           "maximum": 9007199254740991,
           "minimum": -9007199254740991,
@@ -1187,9 +1193,6 @@
           "type": "string"
         },
         "label": {
-          "type": "string"
-        },
-        "member_id": {
           "type": "string"
         },
         "origin": {
@@ -1210,7 +1213,7 @@
       "required": [
         "id",
         "source_id",
-        "member_id",
+        "attachment_id",
         "runtime_id",
         "origin",
         "label",
@@ -1223,15 +1226,15 @@
     "RouteInput": {
       "additionalProperties": false,
       "properties": {
+        "attachment_id": {
+          "type": "string"
+        },
         "expected_revision": {
           "maximum": 9007199254740991,
           "minimum": -9007199254740991,
           "type": "integer"
         },
         "label": {
-          "type": "string"
-        },
-        "member_id": {
           "type": "string"
         },
         "origin": {
@@ -1246,7 +1249,7 @@
       },
       "required": [
         "source_id",
-        "member_id",
+        "attachment_id",
         "runtime_id",
         "origin",
         "label",
@@ -1304,6 +1307,9 @@
         "route": {
           "additionalProperties": false,
           "properties": {
+            "attachment_id": {
+              "type": "string"
+            },
             "binding_revision": {
               "maximum": 9007199254740991,
               "minimum": -9007199254740991,
@@ -1316,9 +1322,6 @@
               "type": "string"
             },
             "label": {
-              "type": "string"
-            },
-            "member_id": {
               "type": "string"
             },
             "origin": {
@@ -1339,7 +1342,7 @@
           "required": [
             "id",
             "source_id",
-            "member_id",
+            "attachment_id",
             "runtime_id",
             "origin",
             "label",

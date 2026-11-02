@@ -33,7 +33,7 @@ func TestConnectorProxyPreservesTransportFailuresWithoutTrustingRuntimeHeaders(t
 		status int
 		want   string
 	}{
-		{"offline", &gatewayError{Code: "MEMBER_OFFLINE"}, 0, "MEMBER_OFFLINE"},
+		{"offline", &gatewayError{Code: "ATTACHMENT_OFFLINE"}, 0, "ATTACHMENT_OFFLINE"},
 		{"permission", ErrDenied, 0, "CENTER_ACCESS_DENIED"},
 		{"private detail", errors.New("private endpoint or credential detail"), 0, "CENTER_CONNECTION_FAILED"},
 		{"successful application", nil, 200, ""},
@@ -49,7 +49,7 @@ func TestConnectorProxyPreservesTransportFailuresWithoutTrustingRuntimeHeaders(t
 				if test.err != nil {
 					return nil, test.err
 				}
-				return &http.Response{StatusCode: test.status, Header: http.Header{connectorErrorHeader: {"MEMBER_OFFLINE"}}, Body: io.NopCloser(strings.NewReader("business response"))}, nil
+				return &http.Response{StatusCode: test.status, Header: http.Header{connectorErrorHeader: {"ATTACHMENT_OFFLINE"}}, Body: io.NopCloser(strings.NewReader("business response"))}, nil
 			}}}}}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				worker.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ownerKey{}, true)))
@@ -99,7 +99,7 @@ func TestConnectorPreservesLeaseFailureClassification(t *testing.T) {
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]any{"Protocol": 1, "Error": "MEMBER_OFFLINE"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"Protocol": 1, "Error": "ATTACHMENT_OFFLINE"})
 	})}
 	defer server.Close()
 	go func() { _ = server.Serve(listener) }()
@@ -107,18 +107,18 @@ func TestConnectorPreservesLeaseFailureClassification(t *testing.T) {
 	defer cancel()
 	owner := &workerConnection{ctx: ctx, cancel: cancel, socket: socket, uid: os.Geteuid(), input: connectorLeaseRequest{Protocol: 1}}
 	_, err = owner.generation(ctx)
-	if err == nil || connectionCode(err) != "MEMBER_OFFLINE" {
+	if err == nil || connectionCode(err) != "ATTACHMENT_OFFLINE" {
 		t.Fatalf("worker lost actionable failure: %v", err)
 	}
 }
 
 func TestConnectionCodeExposesOnlyBoundedMachineCodes(t *testing.T) {
-	for _, code := range []string{"", "secret@example.test", "private key material", strings.Repeat("A", 81), "MEMBER_OFFLINE\nsecret"} {
+	for _, code := range []string{"", "secret@example.test", "private key material", strings.Repeat("A", 81), "ATTACHMENT_OFFLINE\nsecret"} {
 		if got := connectionCode(&gatewayError{Code: code}); got != "CENTER_CONNECTION_FAILED" {
 			t.Fatalf("unsafe error code escaped: %q", got)
 		}
 	}
-	for _, code := range []string{"MEMBER_OFFLINE", "CENTER_BUSY", "CENTER_ACCESS_DENIED", "CENTER_CONNECTOR_UNSUPPORTED"} {
+	for _, code := range []string{"ATTACHMENT_OFFLINE", "CENTER_BUSY", "CENTER_ACCESS_DENIED", "CENTER_CONNECTOR_UNSUPPORTED"} {
 		if got := connectionCode(&gatewayError{Code: code}); got != code {
 			t.Fatalf("machine code lost: %q", got)
 		}

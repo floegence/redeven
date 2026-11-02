@@ -1,5 +1,5 @@
 /** Runtime Cloud wire contract: authorization and route are independent facts. */
-export type CloudRouteSelection = Readonly<{kind: 'direct' | 'gateway'; member_id?: string}>;
+export type CloudRouteSelection = Readonly<{kind: 'direct' | 'gateway'; attachment_id?: string}>;
 export type RuntimeCloudStatus = Readonly<{
   association_revision: number; enabled: boolean;
   approval_state: 'approved' | 'pending' | 'revoked' | 'identity_required' | 'action_required';
@@ -19,9 +19,9 @@ const record = (value: unknown): Record<string, unknown> | null => value && type
 const positive = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 export function normalizeCloudRouteSelection(value: unknown): CloudRouteSelection | null {
   const v = record(value);
-  if (!v || Object.keys(v).some(key => !['kind','member_id'].includes(key))) return null;
-  if (v.kind === 'direct' && v.member_id === undefined) return {kind: 'direct'};
-  if (v.kind === 'gateway' && typeof v.member_id === 'string' && v.member_id.length > 0 && v.member_id.length <= 128) return {kind: 'gateway', member_id: v.member_id};
+  if (!v || Object.keys(v).some(key => !['kind','attachment_id'].includes(key))) return null;
+  if (v.kind === 'direct' && v.attachment_id === undefined) return {kind: 'direct'};
+  if (v.kind === 'gateway' && typeof v.attachment_id === 'string' && v.attachment_id.length > 0 && v.attachment_id.length <= 128) return {kind: 'gateway', attachment_id: v.attachment_id};
   return null;
 }
 export function normalizeRuntimeCloudStatus(value: unknown): RuntimeCloudStatus | undefined {
@@ -35,8 +35,8 @@ export function normalizeRuntimeCloudStatus(value: unknown): RuntimeCloudStatus 
 }
 export function normalizeCloudRouteOperation(value: unknown): CloudRouteOperation | null {
   const v = record(value), selection = normalizeCloudRouteSelection(v?.selection);
-  if (!v || !selection || !/^[A-Za-z0-9_-]{43}$/u.test(String(v.operation_id)) || !positive(v.association_revision)
-    || !positive(v.expected_route_revision) || !positive(v.expires_at_unix_ms)
+  if (!v || !selection || !/^[A-Za-z0-9_-]{43}$/u.test(String(v.operation_id)) || !(Number.isSafeInteger(v.association_revision) && Number(v.association_revision)>=0)
+    || !(Number.isSafeInteger(v.expected_route_revision) && Number(v.expected_route_revision)>=0) || !positive(v.expires_at_unix_ms)
     || !['awaiting_confirmation','committed','cancelled'].includes(String(v.state))
     || v.state === 'committed' && (!positive(v.committed_route_revision) || v.committed_route_revision !== Number(v.expected_route_revision)+1)) return null;
   return {...v, selection} as CloudRouteOperation;
@@ -48,6 +48,6 @@ export function normalizeRuntimeCloudOperation(value: unknown): RuntimeCloudOper
   if (!/^[A-Za-z0-9_-]{43}$/u.test(String(v.operation_id))) return null;
   if (['commit','query','cancel'].includes(String(v.operation)) && Object.keys(v).every(key => ['operation','operation_id'].includes(key))) return v as RuntimeCloudOperation;
   const selection = normalizeCloudRouteSelection(v.selection);
-  if (v.operation === 'preflight' && positive(v.expected_route_revision) && selection && Object.keys(v).every(key => ['operation','operation_id','expected_route_revision','selection'].includes(key))) return {...v, selection} as RuntimeCloudOperation;
+  if (v.operation === 'preflight' && Number.isSafeInteger(v.expected_route_revision) && Number(v.expected_route_revision)>=0 && selection && Object.keys(v).every(key => ['operation','operation_id','expected_route_revision','selection'].includes(key))) return {...v, selection} as RuntimeCloudOperation;
   return null;
 }

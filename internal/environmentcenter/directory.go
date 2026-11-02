@@ -99,7 +99,7 @@ func sameSite(portal, environment string) bool {
 
 type RouteInput struct {
 	SourceID         string `json:"source_id"`
-	MemberID         string `json:"member_id"`
+	AttachmentID     string `json:"attachment_id"`
 	RuntimeID        string `json:"runtime_id"`
 	Origin           string `json:"origin"`
 	Label            string `json:"label"`
@@ -115,7 +115,7 @@ func (c *Center) addRoute(token, grant string, input RouteInput) (Route, webbind
 	if input.ExpectedRevision != c.state.DirectoryRevision {
 		return Route{}, webbinding.Binding{}, ErrConflict
 	}
-	if !sameSite(c.key.Origin, input.Origin) || input.MemberID == "" || input.RuntimeID == "" || len(input.Label) > 120 || len(input.MemberID) > 128 || len(input.RuntimeID) > 128 {
+	if !sameSite(c.key.Origin, input.Origin) || input.AttachmentID == "" || input.RuntimeID == "" || len(input.Label) > 120 || len(input.AttachmentID) > 128 || len(input.RuntimeID) > 128 {
 		return Route{}, webbinding.Binding{}, ErrDenied
 	}
 	sourceExists := false
@@ -129,7 +129,7 @@ func (c *Center) addRoute(token, grant string, input RouteInput) (Route, webbind
 		return Route{}, webbinding.Binding{}, ErrBusy
 	}
 	for _, r := range c.state.Routes {
-		if r.Origin == input.Origin || r.SourceID == input.SourceID && r.MemberID == input.MemberID {
+		if r.Origin == input.Origin || r.SourceID == input.SourceID && r.AttachmentID == input.AttachmentID {
 			return Route{}, webbinding.Binding{}, ErrConflict
 		}
 	}
@@ -137,7 +137,7 @@ func (c *Center) addRoute(token, grant string, input RouteInput) (Route, webbind
 	if err != nil {
 		return Route{}, webbinding.Binding{}, err
 	}
-	r := Route{ID: randomID(), SourceID: input.SourceID, MemberID: input.MemberID, RuntimeID: input.RuntimeID, Origin: input.Origin, Label: input.Label, Revision: 1, Certificate: cert, PrivateKey: key}
+	r := Route{ID: randomID(), SourceID: input.SourceID, AttachmentID: input.AttachmentID, RuntimeID: input.RuntimeID, Origin: input.Origin, Label: input.Label, Revision: 1, Certificate: cert, PrivateKey: key}
 	next := c.state
 	next.Routes = append(append([]Route(nil), next.Routes...), r)
 	next.DirectoryRevision++

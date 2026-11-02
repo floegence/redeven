@@ -13,11 +13,11 @@ func TestGatewayClassifiesTransientAdmissionConflicts(t *testing.T) {
 		code  string
 		retry bool
 	}{
-		{"MEMBER_VERSION_CONFLICT", true},
-		{"MEMBER_OFFLINE", true},
-		{"MEMBER_CAPACITY", true},
+		{"ATTACHMENT_VERSION_CONFLICT", true},
+		{"ATTACHMENT_OFFLINE", true},
+		{"ATTACHMENT_CAPACITY", true},
 		{"GATEWAY_UNAVAILABLE", true},
-		{"MEMBER_DENIED", false},
+		{"ATTACHMENT_DENIED", false},
 		{"CLIENT_ACCESS_REVOKED", false},
 		{"UNKNOWN_CONFLICT", false},
 	} {

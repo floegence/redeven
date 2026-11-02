@@ -3,7 +3,7 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { savedGatewaySuggestions } from './savedGatewaySuggestions';
 
 const gateway: DesktopGatewaySource = {
-  gateway_id: 'saved', display_name: 'Office Gateway', local_enabled: true, connection_kind: 'url',
+  connection_id: 'saved', display_name: 'Office Gateway', local_enabled: true, connection_kind: 'url',
   management_capability: 'access_only', capabilities: [], status: 'unknown',
   created_at_ms: 1, updated_at_ms: 1, environments: [], gateway_url: 'https://office.example:7443/',
 };
@@ -16,8 +16,8 @@ describe('saved Gateway addresses', () => {
     ]);
   });
   it('preserves distinct registrations and prioritizes their advertised endpoints', () => {
-    const source = { ...gateway, member_endpoints: [endpoint('https://second.example', 2), endpoint('https://first.example', 1)] };
-    expect(savedGatewaySuggestions([source, { ...source, gateway_id: 'duplicate' }], 'ssh:runtime').map(item => item.addresses))
+    const source = { ...gateway, endpoints: [endpoint('https://second.example', 2), endpoint('https://first.example', 1)] };
+    expect(savedGatewaySuggestions([source, { ...source, connection_id: 'duplicate' }], 'ssh:runtime').map(item => item.addresses))
       .toEqual([['https://first.example', 'https://second.example'], ['https://first.example', 'https://second.example']]);
   });
   it.each(['offline', 'unknown', 'starting', 'error'] as const)('retains known endpoints while the observed status is %s', status => {
@@ -30,13 +30,13 @@ describe('saved Gateway addresses', () => {
   });
   it.each(['https://localhost:7443', 'https://gateway.localhost:7443', 'https://127.0.0.1:7443', 'https://[::1]:7443'])(
     'restricts loopback address %s to a local Runtime', address => {
-      const source = { ...gateway, member_endpoints: [endpoint(address)] };
+      const source = { ...gateway, endpoints: [endpoint(address)] };
       expect(savedGatewaySuggestions([source], 'ssh:runtime')[0]?.addresses).toEqual([]);
       expect(savedGatewaySuggestions([source], 'local:local')[0]?.addresses).toEqual([address]);
     });
   it('does not bypass advertised Host restrictions using the saved URL', () => {
     expect(savedGatewaySuggestions([{ ...gateway, allowed_hosts: ['office.example'],
-      member_endpoints: [endpoint('https://rejected.example')] }], 'ssh:runtime')[0]?.addresses).toEqual([]);
+      endpoints: [endpoint('https://rejected.example')] }], 'ssh:runtime')[0]?.addresses).toEqual([]);
   });
   it.each(['revoked', 'trust_changed'] as const)('excludes explicitly rejected trust state %s', trust_state => {
     expect(savedGatewaySuggestions([{ ...gateway, trust_state }], 'ssh:runtime')).toEqual([]);

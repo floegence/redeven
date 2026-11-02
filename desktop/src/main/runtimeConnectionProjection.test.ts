@@ -46,7 +46,7 @@ describe('Runtime connection ownership from raw snapshot inputs', () => {
       const runtime = groups.find(group => group.primary_entry.kind === kind && group.primary_entry.runtime_service?.gateway_memberships?.length)!;
       expect(runtime.provider_entry?.env_public_id).toBe('env_0_0');
       expect(runtime.gateway_entries).toHaveLength(2);
-      expect(runtime.member_ids).toHaveLength(4);
+      expect(runtime.attachment_ids).toHaveLength(4);
       expect(runtime.primary_entry.provider_runtime_link_target?.can_disconnect_cloud).toBe(false);
       expect(groups).toHaveLength(8);
       expect(environmentLibraryCount(groups, '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);

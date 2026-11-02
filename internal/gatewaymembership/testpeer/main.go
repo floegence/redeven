@@ -155,7 +155,7 @@ func run() error {
 			snapshot = runtime.Snapshot()
 		}
 	}
-	for !flows.IsConnected(current().MemberID) {
+	for !flows.IsConnected(current().AttachmentID) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -164,7 +164,7 @@ func run() error {
 	}
 	member := current()
 	encoder := json.NewEncoder(os.Stdout)
-	if err := encoder.Encode(map[string]any{"ready": true, "gateway_id": member.GatewayID, "endpoints": member.ConnectionEndpoints(), "gateway_tls_root_pem": member.GatewayTLSRootPEM, "runtime_id": member.RuntimePublicID, "member_id": member.MemberID, "member_version": member.MemberVersion}); err != nil {
+	if err := encoder.Encode(map[string]any{"ready": true, "gateway_id": member.GatewayID, "endpoints": member.ConnectionEndpoints(), "gateway_tls_root_pem": member.GatewayTLSRootPEM, "runtime_id": member.RuntimePublicID, "attachment_id": member.AttachmentID, "attachment_version": member.AttachmentVersion}); err != nil {
 		return err
 	}
 	scanner := bufio.NewScanner(os.Stdin)
@@ -179,9 +179,9 @@ func run() error {
 		var data any
 		switch request.Action {
 		case "offer":
-			data, err = store.AccessOffer(ctx, member.MemberID, "desktop")
+			data, err = store.AccessOffer(ctx, member.AttachmentID, "desktop")
 		case "service":
-			data, err = store.ServiceIdentity(member.MemberID, member.MemberVersion)
+			data, err = store.ServiceIdentity(member.AttachmentID, member.AttachmentVersion)
 		case "rotate":
 			next := current()
 			err = next.Rotate(ctx, func(updated *gm.RuntimeConfig) error {
@@ -191,7 +191,7 @@ func run() error {
 				return nil
 			})
 		case "remove":
-			err = store.Remove(member.MemberID, member.MemberVersion)
+			err = store.Remove(member.AttachmentID, member.AttachmentVersion)
 		case "stop":
 			return nil
 		default:

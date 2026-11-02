@@ -45,7 +45,7 @@ await session.run(async () => {
   const stamp = 'schema_version=3\ninstalled_by=redeven-desktop\nslot_release_tag=' + gatewayVersion + '\nsource_commit=' + gatewayCommit + '\n';
   await writeFile(stampPath, stamp);
   await session.command('Stop isolated Gateway', gatewayBinary, ['service-stop', '--state-root', gatewayState]);
-  const started = JSON.parse(execFileSync(gatewayBinary, ['service-start', '--state-root', gatewayState, '--member-listen', '127.0.0.1:0'], { encoding: 'utf8' }));
+  const started = JSON.parse(execFileSync(gatewayBinary, ['service-start', '--state-root', gatewayState, '--public-listen', '127.0.0.1:0'], { encoding: 'utf8' }));
   console.log('Real Gateway started', { pid: started.pid });
   const userDataRoot = path.join(state, 'desktop/user-data');
   const codec = createDesktopSecretCodec({ isPackaged: false, developmentInstanceID: marker, stateRoot: state, userDataRoot, safeStorage: null });
@@ -80,16 +80,16 @@ await session.run(async () => {
     await new Promise(resolve => setTimeout(resolve, 250));
   } }, 90000, 'Real Runtime readiness');
   console.log('Real Runtime ready');
-  const saved = await action({ kind: 'upsert_gateway', gateway_id: gatewayID, display_name: 'Empty-address Gateway', connection_kind: 'local_host',
+  const saved = await action({ kind: 'upsert_gateway', connection_id: gatewayID, display_name: 'Empty-address Gateway', connection_kind: 'local_host',
     host_access: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: gatewayRoot } });
   assert.equal(saved.ok, true, JSON.stringify(saved));
   const paired = await action({ kind: 'pair_gateway', gateway_id: gatewayID });
   assert.equal(paired.ok, true, JSON.stringify(paired));
   const source = await bounded(async () => { while (true) { const value = (await snapshot()).gateway_sources.find(value => value.gateway_id === gatewayID);
-    if (value?.permissions?.manage_members && value.active_listener_addresses?.length) return value;
+    if (value?.permissions?.manage_attachments && value.active_listener_addresses?.length) return value;
     await new Promise(resolve => setTimeout(resolve, 200));
   } }, 30000, 'Paired empty-address Gateway catalog');
-  assert.deepEqual(source.member_endpoints, []);
+  assert.deepEqual(source.endpoints, []);
   const before = JSON.parse(await readFile(path.join(gatewayState, 'members.json'), 'utf8'));
   const origin = 'https://' + source.active_listener_addresses[0];
   console.log('Real saved Gateway has no endpoints', { gatewayID, origin });

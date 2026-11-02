@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"io"
 	"net"
 	"net/http"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/environmentcenter"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewaymembership"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
@@ -91,11 +91,11 @@ func TestCenterBrowserQualification(t *testing.T) {
 	}
 	reserved.Close()
 	hostToken := strings.Repeat("c", 43)
-	gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: t.TempDir(), HostAdminToken: hostToken, MemberURL: memberURL, MemberListen: memberAddress})
+	gateway, err := gatewayservice.New(gatewayservice.Options{StateRoot: t.TempDir(), HostAdminToken: hostToken, PublicURL: memberURL, PublicListen: memberAddress})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, listeners, err := gateway.Start(ctx, "127.0.0.1:0")
+	admin, listeners, err := gateway.Start(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestCenterBrowserQualification(t *testing.T) {
 		req.RemoteAddr = "127.0.0.1:12345"
 		req.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
-		gateway.Handler().ServeHTTP(response, req)
+		gatewayfixture.HostHandler(t, listeners[0].Addr().String()).ServeHTTP(response, req)
 		var envelope struct {
 			OK   bool            `json:"ok"`
 			Data json.RawMessage `json:"data"`
@@ -121,10 +121,6 @@ func TestCenterBrowserQualification(t *testing.T) {
 			}
 		}
 	}
-	gatewayHTTP := httptest.NewUnstartedServer(gateway.Handler())
-	gatewayHTTP.TLS = &tls.Config{Certificates: []tls.Certificate{trustedBrowserCertificate(t, "127.0.0.1", "localhost")}, MinVersion: tls.VersionTLS13}
-	gatewayHTTP.StartTLS()
-	defer gatewayHTTP.Close()
 	var code gp.ClientAccessCodeResponse
 	hostCall("clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, &code)
 	targets := []*webEntryFixture{}
@@ -193,7 +189,7 @@ func TestCenterBrowserQualification(t *testing.T) {
 	}
 	for index := 0; index < activeTargets; index++ {
 		id := "center-runtime-" + string(rune('a'+index))
-		var delivery gc.InvitationCodeDelivery
+		var delivery gp.InvitationCodeDelivery
 		hostCall("invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &delivery)
 		if id == "center-runtime-a" && external.Host != "" {
 			remote(delivery.Code+"\n", "gateway join --gateway "+memberURL+" --code-stdin --yes")
@@ -204,7 +200,7 @@ func TestCenterBrowserQualification(t *testing.T) {
 				var catalog gp.CatalogResponse
 				hostCall("catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog)
 				joined := false
-				for _, member := range catalog.Members {
+				for _, member := range catalog.Attachments {
 					joined = joined || member.RuntimePublicID == external.RuntimeID && member.State == "active"
 				}
 				if joined {
@@ -233,7 +229,7 @@ func TestCenterBrowserQualification(t *testing.T) {
 		// Real signed members populate the source catalog; ten active targets
 		// have application processes. No UI response interception is used.
 		for i := activeTargets; i < 100; i++ {
-			var delivery gc.InvitationCodeDelivery
+			var delivery gp.InvitationCodeDelivery
 			hostCall("invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &delivery)
 			descriptor, err := gatewaymembership.PreviewInvitation(ctx, memberURL, delivery.Code)
 			if err != nil {
@@ -505,7 +501,7 @@ func TestCenterBrowserQualification(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer control.Close()
-	fixture := map[string]any{"origin": origin, "gateway": gatewayHTTP.URL, "accessCode": code.AccessCode, "setupToken": setupToken, "control": control.URL, "workspace": workspace, "webService": webService.URL, "editorInstalled": os.Getenv("REDEVEN_CODE_SERVER_BIN") != "", "targets": []map[string]any{}}
+	fixture := map[string]any{"origin": origin, "gateway": memberURL, "accessCode": code.AccessCode, "setupToken": setupToken, "control": control.URL, "workspace": workspace, "webService": webService.URL, "editorInstalled": os.Getenv("REDEVEN_CODE_SERVER_BIN") != "", "targets": []map[string]any{}}
 	if os.Getenv("REDEVEN_CENTER_LARGE_FILE") == "1" {
 		filePath := filepath.Join(workspace, "large-stream.bin")
 		file, err := os.OpenFile(filePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)

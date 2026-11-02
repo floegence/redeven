@@ -10,16 +10,16 @@ import (
 )
 
 // RegisterMemberHandlers adds only Runtime-owned enrollment and rotation. Admin
-// invitation and member policy operations belong to the paired Gateway API.
+// invitation and attachment policy operations require the private host channel.
 func (s *Store) RegisterMemberHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v6/member/cancel-join", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v6/attachment/cancel-join", func(w http.ResponseWriter, r *http.Request) {
 		var request gp.MemberJoinRequest
 		if !decodeMemberRequest(w, r, &request) {
 			return
 		}
 		writeMemberResponse(w, gp.CatalogRequest{ProtocolVersion: gp.Version}, s.CancelJoin(request))
 	})
-	mux.HandleFunc("POST /v6/member/leave", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v6/attachment/leave", func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 {
 			writeMemberResponse(w, nil, ErrDenied)
 			return
@@ -30,7 +30,7 @@ func (s *Store) RegisterMemberHandlers(mux *http.ServeMux) {
 		}
 		writeMemberResponse(w, gp.CatalogRequest{ProtocolVersion: gp.Version}, s.Leave(r.TLS.PeerCertificates[0], request))
 	})
-	mux.HandleFunc("POST /v6/member/join", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v6/attachment/join", func(w http.ResponseWriter, r *http.Request) {
 		var request gp.MemberJoinRequest
 		if !decodeMemberRequest(w, r, &request) {
 			return
@@ -38,7 +38,7 @@ func (s *Store) RegisterMemberHandlers(mux *http.ServeMux) {
 		response, err := s.Join(r.Context(), request)
 		writeMemberResponse(w, response, err)
 	})
-	mux.HandleFunc("POST /v6/member/update-endpoints", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v6/attachment/update-endpoints", func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 {
 			writeMemberResponse(w, nil, ErrDenied)
 			return
@@ -50,7 +50,7 @@ func (s *Store) RegisterMemberHandlers(mux *http.ServeMux) {
 		response, err := s.RedeemEndpointUpdate(r.TLS.PeerCertificates[0], request)
 		writeMemberResponse(w, response, err)
 	})
-	mux.HandleFunc("POST /v6/member/rotate", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v6/attachment/rotate", func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 {
 			writeMemberResponse(w, nil, ErrDenied)
 			return
@@ -62,7 +62,7 @@ func (s *Store) RegisterMemberHandlers(mux *http.ServeMux) {
 		response, err := s.Rotate(r.TLS.PeerCertificates[0], request)
 		writeMemberResponse(w, response, err)
 	})
-	mux.HandleFunc("POST /v6/member/connect", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v6/attachment/connect", func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 {
 			writeMemberResponse(w, nil, ErrDenied)
 			return
@@ -84,13 +84,13 @@ func (s *Store) RegisterMemberHandlers(mux *http.ServeMux) {
 func decodeMemberRequest(w http.ResponseWriter, r *http.Request, out any) bool {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Header.Get("Origin") != "" || r.Header.Get("Content-Type") != "application/json" {
-		http.Error(w, "MEMBER_REQUEST_INVALID", http.StatusBadRequest)
+		http.Error(w, "ATTACHMENT_REQUEST_INVALID", http.StatusBadRequest)
 		return false
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(out) != nil || decoder.Decode(new(any)) != io.EOF {
-		http.Error(w, "MEMBER_REQUEST_INVALID", http.StatusBadRequest)
+		http.Error(w, "ATTACHMENT_REQUEST_INVALID", http.StatusBadRequest)
 		return false
 	}
 	return true
@@ -99,12 +99,12 @@ func decodeMemberRequest(w http.ResponseWriter, r *http.Request, out any) bool {
 func writeMemberResponse(w http.ResponseWriter, value any, err error) {
 	w.Header().Set("Cache-Control", "no-store")
 	if err != nil {
-		status, code := http.StatusForbidden, "MEMBER_DENIED"
+		status, code := http.StatusForbidden, "ATTACHMENT_DENIED"
 		if errors.Is(err, ErrConflict) {
-			status, code = http.StatusConflict, "MEMBER_VERSION_CONFLICT"
+			status, code = http.StatusConflict, "ATTACHMENT_VERSION_CONFLICT"
 		}
 		if errors.Is(err, ErrCapacity) {
-			status, code = http.StatusTooManyRequests, "MEMBER_CAPACITY"
+			status, code = http.StatusTooManyRequests, "ATTACHMENT_CAPACITY"
 		}
 		if errors.Is(err, errGatewayUnavailable) {
 			status, code = http.StatusServiceUnavailable, "GATEWAY_UNAVAILABLE"

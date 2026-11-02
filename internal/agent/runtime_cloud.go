@@ -2,10 +2,8 @@ package agent
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"errors"
 	"net/http"
 	"slices"
@@ -13,7 +11,6 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/v5/egress"
 	"github.com/floegence/redeven/internal/config"
-	"github.com/floegence/redeven/internal/gatewaymembership"
 	"github.com/floegence/redeven/internal/runtimecloud"
 	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -37,7 +34,7 @@ func sameCloudRouteOwner(left, right *config.Config) bool {
 		return true
 	}
 	lm, rm := left.CloudRouteMember(), right.CloudRouteMember()
-	return lm != nil && rm != nil && !rm.Leaving && lm.MemberID == rm.MemberID && lm.MemberVersion == rm.MemberVersion && lm.GatewayID == rm.GatewayID && slices.Equal(lm.ConnectionEndpoints(), rm.ConnectionEndpoints()) && lm.GatewayTLSRootPEM == rm.GatewayTLSRootPEM && lm.ClientCertificatePEM == rm.ClientCertificatePEM && lm.ClientPrivateKeyPEM == rm.ClientPrivateKeyPEM
+	return lm != nil && rm != nil && !rm.Leaving && lm.AttachmentID == rm.AttachmentID && lm.AttachmentVersion == rm.AttachmentVersion && lm.GatewayID == rm.GatewayID && slices.Equal(lm.ConnectionEndpoints(), rm.ConnectionEndpoints()) && lm.GatewayTLSRootPEM == rm.GatewayTLSRootPEM && lm.ClientCertificatePEM == rm.ClientCertificatePEM && lm.ClientPrivateKeyPEM == rm.ClientPrivateKeyPEM
 }
 
 func runtimeCloudProxy(cfg *config.Config) (*egress.HTTPSProxy, error) {
@@ -99,20 +96,7 @@ func (a *Agent) recoverRuntimeCloud(ctx context.Context, owner *config.Config, c
 	}
 	var result *rc.RecoverResponse
 	if !association.EnrollmentSubmitted && association.EnrollmentAuthorization != nil {
-		var member *gatewaymembership.RuntimeConfig
-		for _, candidate := range next.Gateways {
-			if candidate.MemberID == association.EnrollmentAuthorization.MemberID {
-				member = candidate
-			}
-		}
-		if member == nil {
-			return nil, errors.New("gateway enrollment member is unavailable")
-		}
-		memberKey, decodeErr := base64.RawURLEncoding.DecodeString(member.PrivateKeyB64u)
-		if decodeErr != nil || len(memberKey) != ed25519.PrivateKeySize {
-			return nil, errors.New("gateway enrollment member identity is invalid")
-		}
-		result, err = client.Enroll(ctx, association.NamespacePublicID, key, ed25519.PrivateKey(memberKey), rc.EnrollRequest{OperationID: association.EnrollmentOperationID, RuntimePublicID: association.RuntimePublicID, PublicKeyB64u: association.PublicKeyB64u, Authorization: *association.EnrollmentAuthorization, Metadata: association.EnrollmentMetadata})
+		result, err = client.Enroll(ctx, association.NamespacePublicID, key, rc.EnrollRequest{OperationID: association.EnrollmentOperationID, RuntimePublicID: association.RuntimePublicID, PublicKeyB64u: association.PublicKeyB64u, Authorization: *association.EnrollmentAuthorization, Metadata: association.EnrollmentMetadata})
 	} else {
 		result, err = client.Recover(ctx, association.NamespacePublicID, association.RuntimePublicID, bindingID, key, rc.RecoverRequest{RuntimePublicID: association.RuntimePublicID, BindingPublicID: bindingID, DeliveryRequestID: association.DeliveryRequestID})
 	}

@@ -38,7 +38,7 @@ function fixture() {
 describe('Gateway v6 trust', () => {
   it('pins machine identity independently from the local registration and signs requests with that identity', async () => {
     const f = fixture(), profile = await f.pair(), record = { ...f.record, trust_profile: profile };
-    expect(profile.gateway_id).toBe('machine_stable'); expect(profile.gateway_id).not.toBe(f.record.gateway_id);
+    expect(profile.gateway_id).toBe('machine_stable'); expect(profile.gateway_id).not.toBe(f.record.connection_id);
     expect(gatewayProtocolID(record)).toBe(profile.gateway_id);
     const headers = await createGatewayAuthHeaders({ record, method: 'POST', route: '/gateway/v6/catalog', body: {}, secret_store: f.secret_store, timestamp_unix_ms: 1000, nonce: 'request-nonce' });
     expect(headers).toMatchObject({ 'x-redeven-gateway-id': 'machine_stable', 'x-redeven-client-key-id': f.material.client_key_id, 'x-redeven-client-nonce': 'request-nonce' });
@@ -61,7 +61,7 @@ describe('Gateway v6 trust', () => {
   });
   it('enrolls an access-only identity without caller-selected permissions', () => {
     const f = fixture();
-    const permissions: GatewayPermissions = { access: true, manage_members: false, configure_cloud: false };
+    const permissions: GatewayPermissions = { access: true, manage_attachments: false, manage_network: false };
     const request = buildPairingCompleteRequest(f.material, f.challenge);
     const { proof, ...payload } = request;
     expect(verifyGatewaySignature(f.material.client_public_key, pairingProofPayload(payload), proof)).toBe(true);
@@ -72,7 +72,7 @@ describe('Gateway v6 trust', () => {
     response.proof = signGatewayPayload(f.machine.client_private_key, pairingCompleteResponsePayload({ ...body,
       client_nonce: f.material.client_nonce, gateway_nonce: f.challenge.gateway_nonce, binding_audience: f.material.binding_audience }));
     expect(() => assertGatewayPairingCompleteResponse(f.material, f.challenge, response)).not.toThrow();
-    expect(() => assertGatewayPairingCompleteResponse(f.material, f.challenge, { ...response, permissions: { ...permissions, configure_cloud: true } })).toThrow();
+    expect(() => assertGatewayPairingCompleteResponse(f.material, f.challenge, { ...response, permissions: { ...permissions, manage_network: true } })).toThrow();
     expect(buildPairingCompleteRequest(f.material, f.challenge)).not.toHaveProperty('permissions');
   });
   it('fences unpaired, revoked and edited destinations and deletes the revoked secure key', async () => {

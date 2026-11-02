@@ -1,10 +1,11 @@
+import { decodeGatewayClientAccessPackage } from './gatewayClientAccess';
 import { createRuntimeFlowerReadOwner, awaitRuntimeFlowerRead } from './runtimeFlowerReadOwner';
 import { retainDesktopRuntimePlatformFacts } from './desktopRuntimePlatformFacts';
 import { ManagedWebEntranceNavigation, redactManagedEntranceAddress, applyManagedWebEntrance } from './managedWebEntranceNavigation';
 import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
 import { registeredTessivenConnections } from './tessivenRegisteredConnections';
 import { TessivenRuntimes, withExecutionRuntimePath, type TessivenRuntimeInventory, type TessivenRuntimePath, type TessivenRuntimeTarget } from './tessivenRuntimes';
-import { prepareGatewayMemberPartition, clearGatewayMemberPartition, closeGatewayMemberTransport } from './gatewayMemberPartition';
+import { prepareRuntimeAttachmentPartition, clearRuntimeAttachmentPartition, closeRuntimeAttachmentTransport } from './gatewayMemberPartition';
 import { manageRuntimeCloud, manageRuntimeGateway, previewRuntimeGateway } from './runtimeControlClient';
 import { connectTessivenHost, type TessivenHost, type HostMessage } from './tessivenHost';
 import { preflightTessivenSource, requestTessivenTarget } from './runtimeControlClient';
@@ -50,7 +51,7 @@ import { TEMPLATE_SOURCE_ACQUIRE_CHANNEL, TEMPLATE_SOURCE_CANCEL_CHANNEL } from 
 import { CodeSpaceBrowserSessions } from './codespaceBrowserSessions';
 import { CodeSpaceNativeWindow, CodeSpaceNativeWindowError, codeSpaceWindowFailure } from './codespaceNativeWindows';
 import { createLocalNativeCodeSpaceRoute } from './codespaceNativeRoute';
-import type { GatewayMemberTransport } from './gatewayMemberTransport';
+import type { RuntimeAttachmentTransport } from './gatewayMemberTransport';
 import { hostname } from 'node:os';
 import { prepareGatewayEnvironmentAccess, type GatewayEnvironmentAccess } from './gatewayEnvironmentAccess';
 import { createRemoteNativeCodeSpaceRoute } from './codespaceNativeRemote';
@@ -220,7 +221,7 @@ import {
   gatewayRecordToSource,
   gatewayRecordToSourceWithCatalog,
   gatewayRecordToSourceWithError,
-  retireGatewayMemberObservation,
+  retireRuntimeAttachmentObservation,
   gatewayRecordSSHPasswordRef,
   stableGatewayID,
   type GatewayRecord,
@@ -860,8 +861,8 @@ type DesktopSessionRecord = {
   restart_capable: boolean;
   restart_handoff?: RuntimeSessionHandoff;
   bridge_lease?: RuntimePlacementBridgeLease;
-  gateway_member_transport?: GatewayMemberTransport;
-  gateway_member_version?: number;
+  gateway_member_transport?: RuntimeAttachmentTransport;
+  gateway_attachment_version?: number;
   gateway_failure_unsubscribe?: () => void;
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
@@ -5388,7 +5389,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
 
 async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySource[]> {
   const records = await gatewayStore().list();
-  const recordIDs = new Set(records.map((record) => record.gateway_id));
+  const recordIDs = new Set(records.map((record) => record.connection_id));
   for (const gatewayID of gatewaySyncStateByID.keys()) {
     if (!recordIDs.has(gatewayID)) {
       gatewaySyncStateByID.delete(gatewayID);
@@ -5397,8 +5398,8 @@ async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySo
     }
   }
   return Promise.all(records.map(async (record) => {
-    const syncRecord = gatewaySyncStateByID.get(record.gateway_id);
-    const diagnosis = gatewayDiagnosisByID.get(record.gateway_id);
+    const syncRecord = gatewaySyncStateByID.get(record.connection_id);
+    const diagnosis = gatewayDiagnosisByID.get(record.connection_id);
     const source = syncRecord?.source
       ? mergeGatewaySourceRecord(syncRecord.source, record, syncRecord, undefined, diagnosis)
       : mergeGatewaySourceRecord(gatewayRecordToSource(record), record, syncRecord, undefined, diagnosis);
@@ -5408,7 +5409,7 @@ async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySo
 
 function defaultGatewaySyncRecord(record: GatewayRecord): GatewaySyncRecord {
   return {
-    gateway_id: record.gateway_id,
+    gateway_id: record.connection_id,
     sync_state: 'idle',
     background_sync_running: false,
     last_sync_attempt_at_ms: record.last_catalog_sync_at_ms ?? 0,
@@ -5431,7 +5432,7 @@ function mergeGatewaySourceRecord(
     ...base,
     ...source,
     environments: source.environments.map(environment => ({ ...environment,
-      last_access_result: gatewayAccessResults.get(JSON.stringify([record.gateway_id, environment.member_id])),
+      last_access_result: gatewayAccessResults.get(JSON.stringify([record.connection_id, environment.attachment_id])),
     })),
     display_name: base.display_name,
     connection_kind: base.connection_kind,
@@ -5458,12 +5459,12 @@ function mergeGatewaySourceRecord(
     last_synced_at_ms: sync.last_synced_at_ms,
     last_sync_error_code: sync.last_sync_error_code,
     last_sync_error_message: sync.last_sync_error_message,
-    diagnosis: diagnosis ?? gatewayDiagnosisByID.get(record.gateway_id) ?? source.diagnosis,
+    diagnosis: diagnosis ?? gatewayDiagnosisByID.get(record.connection_id) ?? source.diagnosis,
   };
 }
 
 function setGatewaySyncRecord(record: GatewayRecord, nextRecord: GatewaySyncRecord): void {
-  const previous = gatewaySyncStateByID.get(record.gateway_id);
+  const previous = gatewaySyncStateByID.get(record.connection_id);
   if (
     previous
     && previous.sync_state === nextRecord.sync_state
@@ -5476,13 +5477,13 @@ function setGatewaySyncRecord(record: GatewayRecord, nextRecord: GatewaySyncReco
   ) {
     return;
   }
-  gatewaySyncStateByID.set(record.gateway_id, nextRecord);
+  gatewaySyncStateByID.set(record.connection_id, nextRecord);
   broadcastDesktopWelcomeSnapshots();
 }
 
 function setGatewayDiagnosis(record: GatewayRecord, diagnosis: DesktopGatewayDiagnosis): void {
   const completedDiagnosis = completeGatewayDiagnosis(diagnosis);
-  const previous = gatewayDiagnosisByID.get(record.gateway_id);
+  const previous = gatewayDiagnosisByID.get(record.connection_id);
   if (
     previous
     && previous.checked_at_unix_ms === completedDiagnosis.checked_at_unix_ms
@@ -5492,7 +5493,7 @@ function setGatewayDiagnosis(record: GatewayRecord, diagnosis: DesktopGatewayDia
   ) {
     return;
   }
-  gatewayDiagnosisByID.set(record.gateway_id, completedDiagnosis);
+  gatewayDiagnosisByID.set(record.connection_id, completedDiagnosis);
   broadcastDesktopWelcomeSnapshots();
 }
 
@@ -5577,7 +5578,7 @@ function gatewaySyncRecordFromError(
 ): GatewaySyncRecord {
   const code = gatewaySyncErrorCode(error);
   const message = error instanceof Error ? error.message : String(error);
-  const previous = gatewaySyncStateByID.get(record.gateway_id) ?? defaultGatewaySyncRecord(record);
+  const previous = gatewaySyncStateByID.get(record.connection_id) ?? defaultGatewaySyncRecord(record);
   const errorState = gatewaySyncStateForError(error);
   const sourceWithError = gatewayRecordToSourceWithError(record, message, code);
   const errorSourceBase = error instanceof GatewayReinstallRequiredError
@@ -5604,7 +5605,7 @@ function gatewaySyncRecordFromError(
     serviceState ?? previous.source?.service_state,
   );
   return {
-    gateway_id: record.gateway_id,
+    gateway_id: record.connection_id,
     sync_state: errorState,
     background_sync_running: false,
     last_sync_attempt_at_ms: attemptAtMS,
@@ -5757,14 +5758,16 @@ async function pairGatewayWithClient(
     beforeStoreWrite?: () => Promise<GatewayRecord> | GatewayRecord;
   }> = {},
 ): Promise<GatewayRecord> {
+  const access = record.connection.kind === 'url' ? decodeGatewayClientAccessPackage(options.accessCode ?? '') : undefined;
   const material = createGatewayPairingMaterial(record);
   options.onStage?.('fetching_pairing_challenge');
   const challengeRequest = record.connection.kind === 'url'
-    ? pairingChallengeRequestWithCode(material, options.accessCode ?? '')
+    ? pairingChallengeRequestWithCode(material, access!.access_code)
     : pairingChallengeRequest(material);
   const challenge = await client.pairingChallenge(record, { ...challengeRequest, client_name: hostname().slice(0, 160) }, {
-    signal: options.signal,
+    signal: options.signal, tlsRootPEM: access?.tls_root_pem,
   });
+  if (access && (challenge.gateway_id !== access.gateway_id || challenge.gateway_public_key.trim() !== access.gateway_public_key.trim())) throw new GatewayClientError('GATEWAY_ID_MISMATCH', 'Gateway identity does not match the client access information.');
   assertGatewayPairingChallenge({
     record,
     material,
@@ -5775,7 +5778,7 @@ async function pairGatewayWithClient(
   let completion;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      completion = await client.completePairing(record, completionRequest, { signal: options.signal });
+      completion = await client.completePairing(record, completionRequest, { signal: options.signal, tlsRootPEM: access?.tls_root_pem });
       break;
     } catch (error) {
       if (options.signal?.aborted || !(error instanceof GatewayClientError) || error.code !== 'GATEWAY_UNREACHABLE' || attempt === 2) throw error;
@@ -5791,7 +5794,7 @@ async function pairGatewayWithClient(
     trust_accepted: true,
     secret_store: secretStore,
   });
-  return gatewayStore().updateTrustProfile(currentRecord.gateway_id, trustProfile);
+  return gatewayStore().updateTrustProfile(currentRecord.connection_id, { ...trustProfile, ...(access ? { tls_root_pem: access.tls_root_pem } : {}) });
 }
 
 async function syncGatewayRecord(
@@ -5806,22 +5809,22 @@ async function syncGatewayRecord(
   }> = {},
 ): Promise<DesktopGatewaySource> {
   const priority = options.priority ?? (options.progress ? 'foreground' : 'background');
-  const existingTaskRecord = gatewaySyncTaskByID.get(record.gateway_id);
+  const existingTaskRecord = gatewaySyncTaskByID.get(record.connection_id);
   if (existingTaskRecord) {
     if (priority === 'background' || existingTaskRecord.priority === 'foreground') {
       return existingTaskRecord.task;
     }
-    supersedeGatewaySyncTask(record.gateway_id);
+    supersedeGatewaySyncTask(record.connection_id);
   }
   const controller = new AbortController();
-  const taskToken = Symbol(`gateway-sync:${record.gateway_id}`);
+  const taskToken = Symbol(`gateway-sync:${record.connection_id}`);
   const signal = abortSignalAny([controller.signal, options.progress?.signal]);
   const shouldCommitSyncUpdate = () => !supersededGatewaySyncTaskTokens.has(taskToken) && !controller.signal.aborted;
   const assertSyncActive = async (): Promise<GatewayRecord> => {
     if (!shouldCommitSyncUpdate() || signal?.aborted) {
       throw new GatewaySyncCanceledError();
     }
-    const latestRecord = await gatewayStore().get(record.gateway_id);
+    const latestRecord = await gatewayStore().get(record.connection_id);
     if (!latestRecord) {
       throw new GatewaySyncCanceledError('Gateway sync was canceled because the Gateway was removed.');
     }
@@ -5838,7 +5841,7 @@ async function syncGatewayRecord(
   const task = (async () => {
     const attemptAtMS = Date.now();
     const mode = options.mode ?? 'auto';
-    const previous = gatewaySyncStateByID.get(record.gateway_id) ?? defaultGatewaySyncRecord(record);
+    const previous = gatewaySyncStateByID.get(record.connection_id) ?? defaultGatewaySyncRecord(record);
     if (!record.local_enabled) {
       return mergeGatewaySourceRecord(previous.source ?? gatewayRecordToSource(record), record, {
         ...previous,
@@ -5850,7 +5853,7 @@ async function syncGatewayRecord(
     }
     commitGatewaySyncRecord(record, {
       ...previous,
-      gateway_id: record.gateway_id,
+      gateway_id: record.connection_id,
       background_sync_running: priority === 'background',
       last_sync_attempt_at_ms: attemptAtMS,
       last_sync_error_code: '',
@@ -5893,7 +5896,7 @@ async function syncGatewayRecord(
             trust_state: 'unpaired',
             catalog_state: 'pairing_failed',
           };
-          gatewayDiagnosisByID.set(currentRecord.gateway_id, diagnosis);
+          gatewayDiagnosisByID.set(currentRecord.connection_id, diagnosis);
           const syncRecord = gatewaySyncRecordFromError(
             currentRecord,
             new GatewayTrustError('GATEWAY_PAIRING_REQUIRED', diagnosis.detail),
@@ -5924,24 +5927,24 @@ async function syncGatewayRecord(
       const catalog = await refreshCatalog(currentRecord);
       currentRecord = await assertSyncActive();
       const syncedAtMS = Date.now();
-      const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.gateway_id, syncedAtMS).catch(() => currentRecord);
+      const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.connection_id, syncedAtMS).catch(() => currentRecord);
       await assertSyncActive();
-      const catalogEnvironments = [...catalog.members];
+      const catalogEnvironments = [...catalog.attachments];
       for (const sessionRecord of sessionsByKey.values()) {
         const target = sessionRecord.target;
-        if (target.kind !== 'gateway_environment' || target.gateway_id !== currentRecord.gateway_id) continue;
-        const member = catalogEnvironments.find(member => member.member_id === target.gateway_env_id);
+        if (target.kind !== 'gateway_environment' || target.gateway_id !== currentRecord.connection_id) continue;
+        const member = catalogEnvironments.find(member => member.attachment_id === target.gateway_env_id);
         // Missing observations and offline control connections are not revocations.
-        if (member && (member.state === 'removed' || member.member_version !== sessionRecord.gateway_member_version)) {
-          failGatewaySessionTransport(sessionRecord, new GatewayClientError('MEMBER_REMOVED', 'Gateway membership changed.'));
+        if (member && (member.state === 'removed' || member.attachment_version !== sessionRecord.gateway_attachment_version)) {
+          failGatewaySessionTransport(sessionRecord, new GatewayClientError('ATTACHMENT_REMOVED', 'Gateway membership changed.'));
         }
       }
       const source = mergeGatewaySourceRecord(gatewayRecordToSourceWithCatalog(syncedRecord, {
         status: 'online',
         capabilities: [
           ...(catalog.gateway.permissions.access ? ['member_access' as const] : []),
-          ...(catalog.gateway.permissions.manage_members ? ['member_manage' as const] : []),
-          ...(catalog.gateway.permissions.configure_cloud ? ['cloud_configure' as const] : []),
+          ...(catalog.gateway.permissions.manage_attachments ? ['member_manage' as const] : []),
+          ...(catalog.gateway.permissions.manage_network ? ['network_configure' as const] : []),
         ],
         permissions: catalog.gateway.permissions, policy: catalog.policy, catalog_revision: catalog.revision,
         listener_address: catalog.gateway.listener_address,
@@ -5951,10 +5954,10 @@ async function syncGatewayRecord(
         listener_restart_required: catalog.gateway.listener_restart_required,
         allowed_hosts: catalog.gateway.allowed_hosts,
         endpoint_last_used_at: catalog.gateway.endpoint_last_used_at,
-        member_endpoints: catalog.gateway.member_endpoints, hook_status: catalog.hook_status,
+        endpoints: catalog.gateway.endpoints, hook_status: catalog.hook_status,
         environments: catalogEnvironments,
       }), syncedRecord, {
-        gateway_id: syncedRecord.gateway_id,
+        gateway_id: syncedRecord.connection_id,
         sync_state: 'ready',
         background_sync_running: false,
         last_sync_attempt_at_ms: attemptAtMS,
@@ -5963,7 +5966,7 @@ async function syncGatewayRecord(
         last_sync_error_message: '',
       }, serviceState);
       commitGatewaySyncRecord(syncedRecord, {
-        gateway_id: syncedRecord.gateway_id,
+        gateway_id: syncedRecord.connection_id,
         sync_state: 'ready',
         background_sync_running: false,
         last_sync_attempt_at_ms: attemptAtMS,
@@ -5972,32 +5975,32 @@ async function syncGatewayRecord(
         last_sync_error_message: '',
         source,
       });
-      gatewayDiagnosisByID.delete(syncedRecord.gateway_id);
+      gatewayDiagnosisByID.delete(syncedRecord.connection_id);
       return source;
     } catch (error) {
       if (error instanceof GatewaySyncCanceledError || isAbortLikeError(error)) {
-        const latestRecord = await gatewayStore().get(record.gateway_id).catch(() => null) ?? record;
+        const latestRecord = await gatewayStore().get(record.connection_id).catch(() => null) ?? record;
         commitGatewaySyncRecord(latestRecord, {
-          ...(gatewaySyncStateByID.get(record.gateway_id) ?? defaultGatewaySyncRecord(latestRecord)),
-          gateway_id: latestRecord.gateway_id,
+          ...(gatewaySyncStateByID.get(record.connection_id) ?? defaultGatewaySyncRecord(latestRecord)),
+          gateway_id: latestRecord.connection_id,
           background_sync_running: false,
         });
         throw error;
       }
-      const latestRecord = await gatewayStore().get(record.gateway_id).catch(() => null) ?? record;
+      const latestRecord = await gatewayStore().get(record.connection_id).catch(() => null) ?? record;
       const diagnosis = completeGatewayDiagnosis(gatewayDiagnosisForError(latestRecord, error, serviceState));
-      gatewayDiagnosisByID.set(latestRecord.gateway_id, diagnosis);
+      gatewayDiagnosisByID.set(latestRecord.connection_id, diagnosis);
       const syncRecord = gatewaySyncRecordFromError(latestRecord, error, attemptAtMS, serviceState);
       commitGatewaySyncRecord(latestRecord, syncRecord);
       throw error;
     }
   })().finally(() => {
     supersededGatewaySyncTaskTokens.delete(taskToken);
-    if (gatewaySyncTaskByID.get(record.gateway_id)?.task === task) {
-      gatewaySyncTaskByID.delete(record.gateway_id);
+    if (gatewaySyncTaskByID.get(record.connection_id)?.task === task) {
+      gatewaySyncTaskByID.delete(record.connection_id);
     }
   });
-  gatewaySyncTaskByID.set(record.gateway_id, {
+  gatewaySyncTaskByID.set(record.connection_id, {
     priority,
     token: taskToken,
     controller,
@@ -6008,7 +6011,7 @@ async function syncGatewayRecord(
 
 async function syncGatewayIfNeeded(record: GatewayRecord, options: Readonly<{ force?: boolean }> = {}): Promise<void> {
   if (gatewayLifecycleManager().activeLifecycle(record)) return;
-  const syncRecord = gatewaySyncStateByID.get(record.gateway_id);
+  const syncRecord = gatewaySyncStateByID.get(record.connection_id);
   if (!options.force && !gatewayNeedsAutoSync(record, syncRecord)) {
     return;
   }
@@ -6029,7 +6032,7 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
     }
     await syncGatewayIfNeeded(record, options).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[redeven:gateway-sync] Gateway sync failed for ${safeLogText(record.gateway_id, 128)}: ${safeLogText(message, 512)}`);
+      console.warn(`[redeven:gateway-sync] Gateway sync failed for ${safeLogText(record.connection_id, 128)}: ${safeLogText(message, 512)}`);
     });
   }));
 }
@@ -6067,7 +6070,7 @@ async function upsertGatewayFromLauncher(
         : await gatewayLifecycleManager().client(candidate, { startPolicy: 'require_ready' });
       await client.verifyAddress(candidate);
     });
-    record = await gatewayStore().upsert({ gateway_id: gatewayID, display_name: request.display_name, connection, trust_profile: trustProfile });
+    record = await gatewayStore().upsert({ connection_id: gatewayID, display_name: request.display_name, connection, trust_profile: trustProfile });
   } catch (error) {
     if (newSecretRef) await Promise.resolve(gatewaySecretStore().deleteSecret(newSecretRef)).catch(() => undefined);
     throw error;
@@ -6120,14 +6123,15 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
   }
 }
 
-async function manageGatewayMemberFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' }>,
+async function manageRuntimeAttachmentFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'acknowledge_gateway_operation' | 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.gateway_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
   if (record.connection.kind === 'url') return launcherActionFailure('gateway_not_manageable', 'gateway', 'Manage this Gateway through its host connection.');
   try {
     const client = await gatewayLifecycleManager().client(record, { startPolicy: 'require_ready' });
+    if (request.kind === 'acknowledge_gateway_operation') { await client.acknowledgeOperation(record, request.operation_id); return launcherActionSuccess('gateway_members_updated'); }
     if (request.kind === 'issue_gateway_access_code') return { ...launcherActionSuccess('gateway_members_updated'), gateway_access_code: await client.issueAccessCode(record) };
     if (request.kind === 'list_gateway_clients') return { ...launcherActionSuccess('gateway_members_updated'), gateway_clients: await client.listClients(record) };
     if (request.kind === 'revoke_gateway_client') {
@@ -6143,26 +6147,26 @@ async function manageGatewayMemberFromLauncher(
     if (request.kind === 'update_gateway_network_settings') network = await client.updateNetworkSettings(record, request.settings);
     else if (request.kind === 'update_gateway_endpoints') endpoints = await client.updateEndpoints(record, request.endpoints);
     else if (request.kind === 'remove_gateway_member') {
-      await client.removeMember(record, request.member_id, request.member_version);
-      for (const session of liveGatewayEnvironmentSessions(record.gateway_id, request.member_id)) {
-        failGatewaySessionTransport(session, new GatewayClientError('MEMBER_REMOVED', 'Gateway membership was removed.'));
+      await client.removeMember(record, request.attachment_id, request.attachment_version);
+      for (const session of liveGatewayEnvironmentSessions(record.connection_id, request.attachment_id)) {
+        failGatewaySessionTransport(session, new GatewayClientError('ATTACHMENT_REMOVED', 'Gateway membership was removed.'));
       }
-    } else if (request.kind === 'reevaluate_gateway_member') await client.reevaluateMember(record, request.member_id, request.member_version);
+    } else if (request.kind === 'reevaluate_gateway_member') await client.reevaluateMember(record, request.attachment_id, request.attachment_version);
     else if (request.kind === 'update_gateway_policy') await client.updatePolicy(record, request.policy);
     else if (request.kind === 'update_gateway_members') results = await client.updateMembers(record, request.items);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
     return { ...launcherActionSuccess('gateway_members_updated'), gateway_member_results: results, gateway_network_settings: network, gateway_endpoints: endpoints };
-  } catch (error) { return gatewayActionFailure(record, error); }
+  } catch (error) { return { ...gatewayActionFailure(record, error), gateway_error_code: error instanceof GatewayClientError ? error.code : undefined, gateway_operation_id: error instanceof GatewayClientError ? error.operationID : undefined }; }
 }
 
 function gatewayActionFailure(record: GatewayRecord, error: unknown, gatewayEnvironmentID?: string): DesktopLauncherActionFailure {
   const requiresService = error instanceof GatewayServiceStartRequiredError;
   return launcherActionFailure(gatewayLauncherActionFailureCode(error), 'dialog',
     error instanceof Error ? error.message : String(error), {
-      gatewayID: record.gateway_id, gatewayLabel: record.display_name, gatewayEnvironmentID,
+      gatewayID: record.connection_id, gatewayLabel: record.display_name, gatewayEnvironmentID,
       shouldRefreshSnapshot: true,
       ...(requiresService && error.service_state.can_start ? {
-        continuationAction: { kind: 'start_gateway' as const, gateway_id: record.gateway_id },
+        continuationAction: { kind: 'start_gateway' as const, gateway_id: record.connection_id },
       } : {}),
       ...(error instanceof GatewayClientError && error.code === 'TARGET_UNAVAILABLE' ? { failure: desktopOperationFailurePresentation({
         code: 'operation_failed', title: 'Target unavailable', titleKey: 'gatewayAccess.targetUnavailable',
@@ -6671,9 +6675,9 @@ async function setGatewayEnabledFromLauncher(
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().setLocalEnabled(request.gateway_id, request.enabled);
   if (!request.enabled) {
-    gatewaySyncStateByID.delete(record.gateway_id);
-    gatewayDiagnosisByID.delete(record.gateway_id);
-    supersedeGatewaySyncTask(record.gateway_id);
+    gatewaySyncStateByID.delete(record.connection_id);
+    gatewayDiagnosisByID.delete(record.connection_id);
+    supersedeGatewaySyncTask(record.connection_id);
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('disabled_gateway');
   }
@@ -6692,14 +6696,14 @@ async function refreshGatewayFromLauncher(
       shouldRefreshSnapshot: true,
     });
   }
-  const operationKey = `${record.gateway_id}:refresh`;
+  const operationKey = `${record.connection_id}:refresh`;
   if (!record.local_enabled) {
     return launcherActionFailure('action_invalid', 'gateway', 'Enable this Gateway on this Desktop before refreshing it.', {
-      gatewayID: record.gateway_id,
+      gatewayID: record.connection_id,
       gatewayLabel: record.display_name,
       continuationAction: {
         kind: 'set_gateway_enabled',
-        gateway_id: record.gateway_id,
+        gateway_id: record.connection_id,
         enabled: true,
       },
       shouldRefreshSnapshot: true,
@@ -6714,8 +6718,8 @@ async function refreshGatewayFromLauncher(
     operation_key: operationKey,
     action: 'refresh_gateway',
     subject_kind: 'gateway',
-    subject_id: record.gateway_id,
-    gateway_id: record.gateway_id,
+    subject_id: record.connection_id,
+    gateway_id: record.connection_id,
     active_progress_surface: 'gateway',
     phase: 'checking_gateway_service',
     title: 'Refresh Gateway',
@@ -6761,7 +6765,7 @@ async function refreshGatewayFromLauncher(
     });
     scheduleCurrentLauncherOperationRemoval(operationKey, operationAttemptOwner);
     return launcherActionFailure('action_invalid', 'gateway', 'Gateway refresh was canceled.', {
-      gatewayID: record.gateway_id,
+      gatewayID: record.connection_id,
       gatewayLabel: record.display_name,
       operationKey,
       shouldRefreshSnapshot: true,
@@ -6815,7 +6819,7 @@ async function refreshGatewayFromLauncher(
     if (isAbortLikeError(error) || signal?.aborted) {
       return finishCanceled();
     }
-    const latestRecord = await gatewayStore().get(record.gateway_id).catch(() => null) ?? record;
+    const latestRecord = await gatewayStore().get(record.connection_id).catch(() => null) ?? record;
     const diagnosis = await checkGatewayRecord(latestRecord, {
       signal,
       onGatewayServiceProgress: (progress) => {
@@ -6844,7 +6848,7 @@ async function refreshGatewayFromLauncher(
       next_actions: gatewayDiagnosisNextActions(operationKey),
     });
     return launcherActionFailure(gatewayLauncherActionFailureCode(error), 'gateway', diagnosis.detail, {
-      gatewayID: record.gateway_id,
+      gatewayID: record.connection_id,
       gatewayLabel: record.display_name,
       operationKey,
       failure,
@@ -6892,21 +6896,21 @@ async function runGatewayServiceActionFromLauncher(
   const activeService = gatewayLifecycleManager().activeLifecycle(record);
   if (activeService) {
     return launcherActionFailure('action_invalid', 'gateway', 'Another Gateway service action is already running.', {
-      gatewayID: record.gateway_id, operationKey: activeService.operation_key, shouldRefreshSnapshot: true,
+      gatewayID: record.connection_id, operationKey: activeService.operation_key, shouldRefreshSnapshot: true,
     });
   }
-  const operationKey = `${record.gateway_id}:${request.kind}`;
+  const operationKey = `${record.connection_id}:${request.kind}`;
   const active = launcherOperations.get(operationKey);
   if (launcherOperationIsActive(active)) {
     rebroadcastLauncherOperationProgress(active);
     return launcherActionSuccess('gateway_sync_in_progress');
   }
   const affected = [...sessionsByKey.values()].filter(session => session.target.kind === 'gateway_environment'
-    && session.target.gateway_id === record.gateway_id
+    && session.target.gateway_id === record.connection_id
     && session.lifecycle !== 'closing');
   if (request.kind !== 'start_gateway' && affected.length && !request.impact_acknowledged) {
     return launcherActionFailure('action_invalid', 'gateway', 'This action disconnects sessions opened through this Gateway.', {
-      gatewayID: record.gateway_id, gatewayLabel: record.display_name,
+      gatewayID: record.connection_id, gatewayLabel: record.display_name,
       continuationAction: { ...request, impact_acknowledged: true }, shouldRefreshSnapshot: true,
     });
   }
@@ -6918,15 +6922,15 @@ async function runGatewayServiceActionFromLauncher(
   } as const;
   const selected = presentation[request.kind];
   const operation = launcherOperations.create({
-    operation_key: operationKey, action: request.kind, subject_kind: 'gateway', subject_id: record.gateway_id,
-    gateway_id: record.gateway_id, active_progress_surface: 'gateway', phase: 'checking_gateway_service',
+    operation_key: operationKey, action: request.kind, subject_kind: 'gateway', subject_id: record.connection_id,
+    gateway_id: record.connection_id, active_progress_surface: 'gateway', phase: 'checking_gateway_service',
     title: selected.title, title_key: selected.key, detail: '', cancelable: true,
     environment_label: record.display_name,
     step_progress: gatewayServiceStepProgress(undefined, 'checking_gateway_service'),
   });
   const owner = { action: operation.action, started_at_unix_ms: operation.started_at_unix_ms };
   const signal = launcherOperations.operationSignal(operationKey) ?? undefined;
-  supersedeGatewaySyncTask(record.gateway_id);
+  supersedeGatewaySyncTask(record.connection_id);
   try {
     let sessionsInvalidated = false;
     const manager = gatewayLifecycleManager();
@@ -6936,13 +6940,13 @@ async function runGatewayServiceActionFromLauncher(
     await execute(record, { signal, operationKey, onProgress: progress => {
       if (request.kind !== 'start_gateway' && progress.phase === 'stopping_gateway' && !sessionsInvalidated) {
         sessionsInvalidated = true;
-        for (const session of affected) failGatewaySessionTransport(session, new GatewayClientError('MEMBER_REMOVED', 'Gateway access ended.'));
+        for (const session of affected) failGatewaySessionTransport(session, new GatewayClientError('ATTACHMENT_REMOVED', 'Gateway access ended.'));
       }
       launcherOperations.updateCurrentAttempt(operationKey, owner, { phase: progress.phase, title_key: selected.key, detail: progress.detail,
         step_progress: gatewayServiceStepProgress(launcherOperations.get(operationKey)?.step_progress, progress.phase),
       });
     } });
-    gatewayDiagnosisByID.delete(record.gateway_id);
+    gatewayDiagnosisByID.delete(record.connection_id);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
     launcherOperations.finishCurrentAttempt(operationKey, owner, 'succeeded', {
       phase: launcherOperations.get(operationKey)?.phase ?? request.kind, title: selected.title, title_key: selected.key, detail: '',
@@ -6965,7 +6969,7 @@ async function runGatewayServiceActionFromLauncher(
       step_progress: finishGatewayServiceStepProgress(launcherOperations.get(operationKey)?.step_progress, canceled ? 'canceled' : 'failed'),
     });
     return launcherActionFailure(gatewayServiceFailureCode(error), 'gateway', failure.summary, {
-      gatewayID: record.gateway_id, gatewayLabel: record.display_name, operationKey, failure, shouldRefreshSnapshot: true,
+      gatewayID: record.connection_id, gatewayLabel: record.display_name, operationKey, failure, shouldRefreshSnapshot: true,
     });
   } finally {
     broadcastDesktopWelcomeSnapshots();
@@ -8502,7 +8506,7 @@ async function prepareWebServiceWindowPartition(
   const webSession = session.fromPartition(partition);
   installDesktopDiagnosticsHooks(webSession, forwardID, loopbackGateway, graphicalWindow, sessionRecord.transport.partition);
   if (loopbackGateway) await webSession.setProxy({ mode: 'direct' });
-  else if (sessionRecord.gateway_member_transport) await prepareGatewayMemberPartition(webSession, sessionRecord.gateway_member_transport);
+  else if (sessionRecord.gateway_member_transport) await prepareRuntimeAttachmentPartition(webSession, sessionRecord.gateway_member_transport);
   else {
     if (sessionRecord.transport.proxyPolicy === 'gateway') throw new Error('Gateway proxy transport is missing its session owner.');
     await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });
@@ -8511,7 +8515,7 @@ async function prepareWebServiceWindowPartition(
 
 function clearWebServiceWindowPartition(partition: string): void {
   const webSession = session.fromPartition(partition);
-  clearGatewayMemberPartition(webSession);
+  clearRuntimeAttachmentPartition(webSession);
   webSession.webRequest.onBeforeRequest(null);
   webSession.webRequest.onBeforeSendHeaders(null);
   webSession.webRequest.onHeadersReceived(null);
@@ -9328,7 +9332,7 @@ function failNativeLocalSessionTransport(
 function failGatewaySessionTransport(record: DesktopSessionRecord, error: GatewayClientError): void {
   if (record.closing || record.target.kind !== 'gateway_environment') return;
   if (record.transport_recovery_snapshot?.failure?.code === 'gateway_member_removed') return;
-  const code = error.code === 'MEMBER_REMOVED' ? 'gateway_member_removed'
+  const code = error.code === 'ATTACHMENT_REMOVED' ? 'gateway_member_removed'
     : error.code === 'GATEWAY_TARGET_UNAVAILABLE' ? 'gateway_target_unavailable' : 'gateway_unavailable';
   record.transport_recovery_snapshot = { generation: 0, revision: (record.transport_recovery_snapshot?.revision ?? 0) + 1,
     phase: 'failed', attempt_count: 0, failure: { code, error_name: 'GatewayClientError', technical_detail: code },
@@ -9336,7 +9340,7 @@ function failGatewaySessionTransport(record: DesktopSessionRecord, error: Gatewa
   recordGatewayAccessResult(record.target.gateway_id, record.target.gateway_env_id,
     code === 'gateway_member_removed' ? 'member_removed' : code === 'gateway_target_unavailable' ? 'target_unavailable' : 'gateway_unavailable');
   sendSessionTransportRecoverySnapshot(record);
-  if (record.gateway_member_transport) void closeGatewayMemberTransport(record.gateway_member_transport);
+  if (record.gateway_member_transport) void closeRuntimeAttachmentTransport(record.gateway_member_transport);
 }
 
 function markSessionAppReady(
@@ -9507,12 +9511,12 @@ function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, start
   return path.join(app.getPath('userData'), 'session-diagnostics', desktopSessionStateKeyFragment(target.session_key));
 }
 
-async function prepareDesktopSessionTransport(transport: DesktopSessionTransport, gatewayMember?: GatewayMemberTransport): Promise<void> {
+async function prepareDesktopSessionTransport(transport: DesktopSessionTransport, gatewayMember?: RuntimeAttachmentTransport): Promise<void> {
   if (transport.proxyPolicy === 'gateway') {
     if (!gatewayMember) throw new Error('Gateway proxy transport is missing its session owner.');
     const webSession = session.fromPartition(transport.partition);
     installDesktopDiagnosticsHooks(webSession, undefined, undefined, false, transport.partition);
-    await prepareGatewayMemberPartition(webSession, gatewayMember);
+    await prepareRuntimeAttachmentPartition(webSession, gatewayMember);
     return;
   }
   if (transport.proxyPolicy !== 'direct') {
@@ -9565,8 +9569,8 @@ async function createSessionRecord(
     runtimeTargetKey?: string;
     reuseSessionWindow?: DesktopSessionRecord;
     restartHandoff?: RuntimeSessionHandoff;
-    gatewayMember?: GatewayMemberTransport;
-    gatewayMemberVersion?: number;
+    gatewayMember?: RuntimeAttachmentTransport;
+    gatewayAttachmentVersion?: number;
   }> = {},
 ): Promise<DesktopSessionRecord> {
   const identityKeys = options.runtimeLifecycleGenerationIdentityKeys ?? [
@@ -9684,7 +9688,7 @@ async function createSessionRecord(
   sessionRecord = {
     document_generation: crypto.randomUUID(),
     gateway_member_transport: options.gatewayMember,
-    gateway_member_version: options.gatewayMemberVersion,
+    gateway_attachment_version: options.gatewayAttachmentVersion,
     runtime_target_key: options.runtimeTargetKey,
     restart_capable: false,
     restart_handoff: options.restartHandoff,
@@ -9881,7 +9885,7 @@ async function finalizeSessionClosure(
 
     if (sessionRecord.gateway_member_transport) {
       sessionRecord.gateway_failure_unsubscribe?.();
-      await closeGatewayMemberTransport(sessionRecord.gateway_member_transport);
+      await closeRuntimeAttachmentTransport(sessionRecord.gateway_member_transport);
       sessionRecord.gateway_member_transport = undefined;
     }
 
@@ -10910,13 +10914,13 @@ async function tessivenRuntimeInventory(
   const authenticatedSessions = new Map(
     await Promise.all(
       gatewayCatalogs.flatMap(({ gateway, catalog }) =>
-        (catalog?.members ?? []).flatMap((member) => {
+        (catalog?.attachments ?? []).flatMap((member) => {
           const owner = liveGatewayEnvironmentSessions(
-            gateway.gateway_id,
-            member.member_id,
+            gateway.connection_id,
+            member.attachment_id,
           ).find(
             (value) =>
-              value.gateway_member_version === member.member_version &&
+              value.gateway_attachment_version === member.attachment_version &&
               !sessionTransportRecoveryFailed(value),
           );
           return owner
@@ -10938,7 +10942,7 @@ async function tessivenRuntimeInventory(
   for (const { gateway, catalog } of gatewayCatalogs) {
     if (!catalog) {
       sources.push({
-        source: `gateway:${gateway.gateway_id}`,
+        source: `gateway:${gateway.connection_id}`,
         name: gateway.display_name,
         location: 'current_device',
         state: 'unavailable',
@@ -10947,21 +10951,21 @@ async function tessivenRuntimeInventory(
       continue;
     }
     sources.push({
-      source: `gateway:${gateway.gateway_id}`,
+      source: `gateway:${gateway.connection_id}`,
       name: gateway.display_name,
       location: 'current_device',
       state: 'available',
     });
-    for (const member of catalog.members.filter(
+    for (const member of catalog.attachments.filter(
       (member) => member.state === 'active',
     )) {
-      const runtimeRef = `gateway:${gateway.gateway_id}:member:${member.member_id}`;
+      const runtimeRef = `gateway:${gateway.connection_id}:member:${member.attachment_id}`;
       const sessions = liveGatewayEnvironmentSessions(
-        gateway.gateway_id,
-        member.member_id,
+        gateway.connection_id,
+        member.attachment_id,
       ).filter(
         (value) =>
-          value.gateway_member_version === member.member_version &&
+          value.gateway_attachment_version === member.attachment_version &&
           !sessionTransportRecoveryFailed(value),
       );
       const owner = sessions[0];
@@ -10973,13 +10977,13 @@ async function tessivenRuntimeInventory(
         generation: tessivenRuntimeGeneration([
           gateway.updated_at_ms,
           catalog.gateway.gateway_public_key_fingerprint,
-          member.member_version,
+          member.attachment_version,
           owner?.session_key,
           owner?.document_generation,
         ]),
         identity: member.runtime_public_id,
         name: member.display_name,
-        source: `gateway:${gateway.gateway_id}`,
+        source: `gateway:${gateway.connection_id}`,
         location: 'current_device',
         observed_at: new Date().toISOString(),
         registered: true,
@@ -11011,8 +11015,8 @@ async function tessivenRuntimeInventory(
           await preflightTessivenHostEffect(source, message, connectSignal);
           const result = await openGatewayEnvironmentFromLauncher({
             kind: 'open_gateway_environment',
-            gateway_id: gateway.gateway_id,
-            gateway_env_id: member.member_id,
+            gateway_id: gateway.connection_id,
+            gateway_env_id: member.attachment_id,
             environment_id: member.runtime_public_id,
             label: member.display_name,
           });
@@ -11031,7 +11035,7 @@ async function tessivenRuntimeInventory(
         }),
       };
       paths.push(gatewayPath);
-      const alias = `gateway-host:${catalog.gateway.gateway_id}:member:${member.member_id}`;
+      const alias = `gateway-host:${catalog.gateway.gateway_id}:member:${member.attachment_id}`;
       paths.push({
         ...gatewayPath,
         target: { ...target, runtime_ref: alias, source: 'gateway_host' },
@@ -11135,14 +11139,14 @@ async function tessivenGatewayAuthenticated(
 async function executeTessivenGatewayBusiness(
   source: RuntimeFlowerTarget,
   gateway: GatewayRecord,
-  observedMember: GatewayCatalogResponse['members'][number],
+  observedMember: GatewayCatalogResponse['attachments'][number],
   target: TessivenRuntimeTarget,
   owner: DesktopSessionRecord | undefined,
   message: HostMessage,
   signal: AbortSignal,
 ): Promise<unknown> {
   const currentGateway = (await gatewayStore().list()).find(
-    (value) => value.gateway_id === gateway.gateway_id,
+    (value) => value.connection_id === gateway.connection_id,
   );
   if (!currentGateway || currentGateway.updated_at_ms !== gateway.updated_at_ms)
     throw new RuntimeControlError(
@@ -11155,14 +11159,14 @@ async function executeTessivenGatewayBusiness(
     signal,
   });
   const catalog = await client.catalog(currentGateway, { signal });
-  const member = catalog.members.find(
+  const member = catalog.attachments.find(
     (value) =>
-      value.state === 'active' && value.member_id === observedMember.member_id,
+      value.state === 'active' && value.attachment_id === observedMember.attachment_id,
   );
   if (
     !catalog.gateway.permissions.access ||
     !member?.connected ||
-    member.member_version !== observedMember.member_version ||
+    member.attachment_version !== observedMember.attachment_version ||
     member.runtime_public_id !== target.identity
   )
     throw new RuntimeControlError(
@@ -11173,7 +11177,7 @@ async function executeTessivenGatewayBusiness(
   if (
     !owner?.gateway_member_transport ||
     sessionsByKey.get(owner.session_key) !== owner ||
-    owner.gateway_member_version !== member.member_version ||
+    owner.gateway_attachment_version !== member.attachment_version ||
     sessionTransportRecoveryFailed(owner) ||
     !(await tessivenGatewayAuthenticated(owner, signal))
   )
@@ -14809,7 +14813,7 @@ async function openGatewayEnvironmentFromLauncher(
       },
     );
   }
-  const targetID = `gateway:${encodeURIComponent(record.gateway_id)}:env:${encodeURIComponent(request.gateway_env_id)}`;
+  const targetID = `gateway:${encodeURIComponent(record.connection_id)}:env:${encodeURIComponent(request.gateway_env_id)}`;
   const operationKey = `${targetID}:open`;
   const progress = (phase: DesktopOpenConnectionPhase) => buildOpenConnectionProgress({
     hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: '' },
@@ -14817,8 +14821,8 @@ async function openGatewayEnvironmentFromLauncher(
     targetID, targetLabel: request.label ?? request.gateway_env_id, targetDetail: record.display_name, location: 'runtime_gateway',
   });
   const operation = launcherOperations.create({
-    operation_key: operationKey, action: 'open_gateway_environment', subject_kind: 'gateway', subject_id: record.gateway_id,
-    environment_id: request.environment_id, environment_label: request.label, gateway_id: record.gateway_id,
+    operation_key: operationKey, action: 'open_gateway_environment', subject_kind: 'gateway', subject_id: record.connection_id,
+    environment_id: request.environment_id, environment_label: request.label, gateway_id: record.connection_id,
     active_progress_surface: 'open', phase: 'checking_runtime_record',
     title: 'Checking Gateway access', detail: 'Desktop is verifying Gateway trust and catalog access.',
     title_key: 'gatewayAccess.checkingAccess', detail_key: 'gatewayAccess.checkingAccessDetail',
@@ -14835,11 +14839,11 @@ async function openGatewayEnvironmentFromLauncher(
     if (source.trust_state !== 'paired') throw new GatewayTrustError('GATEWAY_PAIRING_REQUIRED', 'Pair this Gateway before opening its environments.');
     const client = await gatewayLifecycleManager().client(record, { startPolicy: 'require_ready', signal });
     const catalog = await client.catalog(record, { signal });
-    const environment = catalog.members.find(member => member.member_id === request.gateway_env_id);
-    if (!environment || environment.state !== 'active') throw new GatewayClientError('MEMBER_REMOVED', 'This Runtime is no longer a Gateway member.');
+    const environment = catalog.attachments.find(member => member.attachment_id === request.gateway_env_id);
+    if (!environment || environment.state !== 'active') throw new GatewayClientError('ATTACHMENT_REMOVED', 'This Runtime is no longer a Gateway member.');
     if (!catalog.gateway.permissions.access) throw new GatewayClientError('ACCESS_REQUIRED', 'Pair with Gateway access permission to open this member.');
-    const existing = liveGatewayEnvironmentSessions(record.gateway_id, request.gateway_env_id).find(candidate =>
-      candidate.gateway_member_version === environment.member_version && !sessionTransportRecoveryFailed(candidate));
+    const existing = liveGatewayEnvironmentSessions(record.connection_id, request.gateway_env_id).find(candidate =>
+      candidate.gateway_attachment_version === environment.attachment_version && !sessionTransportRecoveryFailed(candidate));
     if (existing) {
       if (existing.lifecycle === 'opening') throw new GatewayClientError('GATEWAY_OPEN_IN_PROGRESS', 'This Gateway environment is already opening.');
       focusEnvironmentSession(existing.session_key, { stealAppFocus: true });
@@ -14853,14 +14857,14 @@ async function openGatewayEnvironmentFromLauncher(
     if (!runtimeServiceIsOpenable(access.startup.runtime_service)) {
       throw new GatewayClientError('GATEWAY_RUNTIME_NOT_READY', 'The target Runtime is not ready to open.');
     }
-    const target = buildGatewayDesktopTarget({ gatewayID: record.gateway_id, gatewayLabel: record.display_name,
-      gatewayEnvID: environment.member_id, label: request.label ?? environment.display_name,
+    const target = buildGatewayDesktopTarget({ gatewayID: record.connection_id, gatewayLabel: record.display_name,
+      gatewayEnvID: environment.attachment_id, label: request.label ?? environment.display_name,
       gatewaySessionID: access.sessionID });
     launcherOperations.update(operationKey, { phase: 'opening_window', title: 'Opening environment',
       detail: 'Desktop is opening the Runtime environment.', open_progress: progress('opening_window') });
     signal?.throwIfAborted();
     opened = await createSessionRecord(target, access.startup, { stealAppFocus: true,
-      gatewayMember: access.transport, gatewayMemberVersion: environment.member_version });
+      gatewayMember: access.transport, gatewayAttachmentVersion: environment.attachment_version });
     const cancelOpen = () => { if (opened) void finalizeSessionClosure(opened.session_key); };
     signal?.addEventListener('abort', cancelOpen, { once: true });
     try {
@@ -14874,15 +14878,15 @@ async function openGatewayEnvironmentFromLauncher(
     return launcherActionSuccess('opened_environment_window', { sessionKey: target.session_key });
   } catch (error) {
     if (opened) await finalizeSessionClosure(opened.session_key).catch(() => undefined);
-    else if (access) await closeGatewayMemberTransport(access.transport).catch(() => undefined);
+    else if (access) await closeRuntimeAttachmentTransport(access.transport).catch(() => undefined);
     const code = error instanceof GatewayClientError || error instanceof GatewayTrustError ? error.code : gatewaySyncErrorCode(error);
     const gatewayUnavailable = error instanceof GatewayServiceUnavailableError || ['GATEWAY_UNREACHABLE', 'GATEWAY_TIMEOUT', 'GATEWAY_BRIDGE_UNAVAILABLE', 'GATEWAY_BRIDGE_FAILED', 'GATEWAY_BRIDGE_WRITE_FAILED'].includes(code);
-    if (!signal?.aborted && (gatewayUnavailable || ['MEMBER_REMOVED', 'GATEWAY_TARGET_UNAVAILABLE'].includes(code))) {
-      recordGatewayAccessResult(record.gateway_id, request.gateway_env_id,
-        gatewayUnavailable ? 'gateway_unavailable' : code === 'MEMBER_REMOVED' ? 'member_removed' : 'target_unavailable');
+    if (!signal?.aborted && (gatewayUnavailable || ['ATTACHMENT_REMOVED', 'GATEWAY_TARGET_UNAVAILABLE'].includes(code))) {
+      recordGatewayAccessResult(record.connection_id, request.gateway_env_id,
+        gatewayUnavailable ? 'gateway_unavailable' : code === 'ATTACHMENT_REMOVED' ? 'member_removed' : 'target_unavailable');
     }
     const summaryKey = gatewayUnavailable ? 'gatewayAccess.unavailable'
-      : code === 'MEMBER_REMOVED' ? 'gatewayAccess.memberRemoved'
+      : code === 'ATTACHMENT_REMOVED' ? 'gatewayAccess.memberRemoved'
       : error instanceof GatewayServiceUpdateRequiredError ? 'gatewayAccess.packageRepairRequired'
       : error instanceof GatewayServiceStartRequiredError ? 'toast.gatewayStartRequired'
       : code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' ? 'gatewayAccess.protocolMismatch'
@@ -14906,7 +14910,7 @@ async function openGatewayEnvironmentFromLauncher(
     scheduleLauncherOperationRemoval(operationKey);
     return signal?.aborted ? launcherActionSuccess('canceled_launcher_operation') : launcherActionFailure(
       'environment_route_unavailable', 'environment', failure.summary, { environmentID: request.environment_id,
-        gatewayID: record.gateway_id, gatewayLabel: record.display_name, shouldRefreshSnapshot: true, failure });
+        gatewayID: record.connection_id, gatewayLabel: record.display_name, shouldRefreshSnapshot: true, failure });
   }
 }
 
@@ -18849,7 +18853,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         if (record.trust_profile) {
           await syncGatewayRecord(record, { force: true, priority: 'foreground', mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
         }
-        return { ...launcherActionSuccess('saved_gateway'), gateway_id: record.gateway_id };
+        return { ...launcherActionSuccess('saved_gateway'), gateway_id: record.connection_id };
       } catch (error) {
         let saved: GatewayRecord | null = null;
         try {
@@ -18870,7 +18874,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           'action_invalid',
           'dialog',
           String(redactGatewayDiagnosticValue(error instanceof Error ? error.message : String(error))),
-          { shouldRefreshSnapshot: true, gatewayID: saved?.gateway_id,
+          { shouldRefreshSnapshot: true, gatewayID: saved?.connection_id,
             failure: desktopOperationFailurePresentation({ code: 'operation_failed', title: 'Gateway setup failed',
               titleKey: 'connectionDialog.addGatewayTitle', summary: 'Gateway setup could not finish. Review the details, correct the connection, and retry.',
               summaryKey: 'gatewayAccess.setupFailed',
@@ -18895,9 +18899,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return manageRuntimeGatewayFromLauncher(request);
     case 'close_runtime_gateway':
       return launcherActionFailure('action_invalid', 'environment', 'Gateway dialog closure requires its owning window.');
-    case 'configure_gateway_cloud':
-    case 'inspect_gateway_cloud':
-      return runGatewayCloudActionFromLauncher(request);
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
@@ -18933,6 +18934,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           error instanceof Error ? error.message : String(error),
         );
       }
+    case 'acknowledge_gateway_operation':
     case 'issue_gateway_access_code':
     case 'list_gateway_clients':
     case 'revoke_gateway_client':
@@ -18943,7 +18945,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'reevaluate_gateway_member':
     case 'update_gateway_policy':
     case 'update_gateway_members':
-      return manageGatewayMemberFromLauncher(request);
+      return manageRuntimeAttachmentFromLauncher(request);
     case 'set_environment_access_route': {
       const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
       await mutateDesktopPreferences(current => selectEnvironmentAccessRoute(current, snapshot.environments, request.environment_id, request.route_id));
@@ -20486,25 +20488,6 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-async function runGatewayCloudActionFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'configure_gateway_cloud' | 'inspect_gateway_cloud' }>): Promise<DesktopLauncherActionResult> {
-  const record = await gatewayStore().get(request.gateway_id);
-  if (!record || record.connection.kind === 'url') return launcherActionFailure('action_invalid', 'gateway', 'This Gateway requires a trusted host management connection.', { gatewayID: request.gateway_id });
-  const key = `${record.gateway_id}:cloud`;
-  if (launcherOperationIsActive(launcherOperations.get(key))) return launcherActionFailure('action_invalid', 'gateway', 'A Gateway Cloud operation is already running.', { gatewayID: request.gateway_id });
-  const operation = launcherOperations.create({ operation_key: key, action: request.kind, subject_kind: 'gateway', subject_id: record.gateway_id, gateway_id: record.gateway_id, active_progress_surface: 'gateway', phase: 'connecting_cloud', title: 'Redeven Cloud', title_key: 'gatewayCloud.title', detail: '', cancelable: true });
-  const owner = { action: operation.action, started_at_unix_ms: operation.started_at_unix_ms };
-  const signal = launcherOperations.operationSignal(key) ?? undefined;
-  try {
-    const status = await gatewayLifecycleManager().manageCloud(record, request.kind === 'configure_gateway_cloud' ? request.configuration : undefined, signal, key);
-    launcherOperations.finishCurrentAttempt(key, owner, 'succeeded', { phase: 'cloud_ready', detail: '' });
-    scheduleCurrentLauncherOperationRemoval(key, owner);
-    return { ok: true, outcome: 'gateway_cloud_updated', gateway_cloud: status };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Gateway Cloud operation failed.';
-    launcherOperations.finishCurrentAttempt(key, owner, signal?.aborted ? 'canceled' : 'failed', { phase: 'cloud_failed', detail: message });
-    return launcherActionFailure('action_invalid', 'gateway', message, { gatewayID: request.gateway_id, operationKey: key });
-  }
-}
 
 async function performRuntimeGatewayDialogAction(
   event: Electron.IpcMainInvokeEvent,
@@ -20530,7 +20513,7 @@ async function performRuntimeGatewayDialogAction(
 }
 
 async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'manage_runtime_gateway' }>): Promise<DesktopLauncherActionResult> {
-  const mutating = request.operation === 'publish' || request.operation === 'replace' || request.operation === 'leave' && request.route_impact_acknowledged === true;
+  const mutating = request.operation === 'replace' || request.operation === 'leave' && request.route_impact_acknowledged === true;
   if (mutating && explicitCloudLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('cloud_link_failed', 'environment', 'A Cloud connection action is already in progress.');
   if (mutating) {
     explicitCloudLinkTargets.add(request.runtime_target_id);
@@ -20553,13 +20536,13 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
     if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
     if (leavingMember) {
       for (const record of await gatewayStore().list()) {
-        const sync = gatewaySyncStateByID.get(record.gateway_id);
+        const sync = gatewaySyncStateByID.get(record.connection_id);
         if (!sync?.source) continue;
-        const source = retireGatewayMemberObservation(record, sync.source, leavingMember);
+        const source = retireRuntimeAttachmentObservation(record, sync.source, leavingMember);
         if (source === sync.source) continue;
-        supersedeGatewaySyncTask(record.gateway_id);
+        supersedeGatewaySyncTask(record.connection_id);
         setGatewaySyncRecord(record, { ...sync, source, background_sync_running: false });
-        gatewayAccessResults.delete(JSON.stringify([record.gateway_id, leavingMember.member_id]));
+        gatewayAccessResults.delete(JSON.stringify([record.connection_id, leavingMember.attachment_id]));
       }
     }
     return { ...launcherActionSuccess('gateway_membership_updated'), gateway_membership: result };

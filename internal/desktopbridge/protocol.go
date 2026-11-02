@@ -73,10 +73,10 @@ type RuntimeControl struct {
 type StreamSurface string
 
 const (
-	StreamSurfaceLocalUI         StreamSurface = "local_ui"
-	StreamSurfaceRuntimeControl  StreamSurface = "runtime_control"
-	StreamSurfaceGatewayProtocol StreamSurface = "gateway_protocol"
-	StreamSurfaceGatewayMember   StreamSurface = "gateway_member"
+	StreamSurfaceLocalUI           StreamSurface = "local_ui"
+	StreamSurfaceRuntimeControl    StreamSurface = "runtime_control"
+	StreamSurfaceGatewayProtocol   StreamSurface = "gateway_protocol"
+	StreamSurfaceRuntimeAttachment StreamSurface = "gateway_member"
 )
 
 func (surface StreamSurface) Authority() string {
@@ -87,7 +87,7 @@ func (surface StreamSurface) Authority() string {
 		return "runtime-control"
 	case StreamSurfaceGatewayProtocol:
 		return "gateway-protocol"
-	case StreamSurfaceGatewayMember:
+	case StreamSurfaceRuntimeAttachment:
 		return "gateway-member"
 	default:
 		return ""
@@ -103,7 +103,7 @@ func SurfaceFromAuthority(authority string) (StreamSurface, bool) {
 	case "gateway-protocol":
 		return StreamSurfaceGatewayProtocol, true
 	case "gateway-member":
-		return StreamSurfaceGatewayMember, true
+		return StreamSurfaceRuntimeAttachment, true
 	default:
 		return "", false
 	}

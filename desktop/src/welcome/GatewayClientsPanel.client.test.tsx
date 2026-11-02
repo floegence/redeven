@@ -24,6 +24,17 @@ function mount(perform: ReturnType<typeof vi.fn>) {
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway client enrollment', () => {
+  it('keeps an unknown operation fenced until explicit review without reissuing', async () => {
+    const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [] });
+    mount(perform); await settle(); button('gatewayExperience.connectClient').click(); await settle();
+    perform.mockResolvedValueOnce({ ok: false, gateway_error_code: 'OPERATION_RESULT_UNKNOWN', gateway_operation_id: 'unknown_operation_123' });
+    button('gatewayClients.createCode').click(); await settle();
+    expect(document.body.textContent).toContain('unknown_operation_123');
+    button('gatewayMembers.operationReviewed').click(); await settle();
+    expect(perform.mock.calls.at(-1)?.[0]).toEqual({ kind: 'acknowledge_gateway_operation', gateway_id: 'gateway-one', operation_id: 'unknown_operation_123' });
+    expect(perform.mock.calls.filter(([request]) => request.kind === 'issue_gateway_access_code')).toHaveLength(1);
+    expect(document.body.textContent).not.toContain('unknown_operation_123');
+  });
   it('requires an address and explicit issuance, preserves drafts, and copies complete client details', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [] });
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });

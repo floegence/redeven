@@ -7,10 +7,10 @@ import (
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-// evaluateCloud evaluates a prospective transaction without holding the store
+// evaluateEgress evaluates a prospective transaction without holding the store
 // lock. No intermediate policy is published and an interrupted request commits
 // nothing. Eight workers share the same global hook concurrency limit.
-func (s *Store) evaluateCloud(ctx context.Context, next *memberState, ids []string) error {
+func (s *Store) evaluateEgress(ctx context.Context, next *memberState, ids []string) error {
 	if ctx == nil {
 		return ErrState
 	}
@@ -22,10 +22,10 @@ func (s *Store) evaluateCloud(ctx context.Context, next *memberState, ids []stri
 			for i := range jobs {
 				member := next.Members[ids[i]]
 				allowed := false
-				if ctx.Err() == nil && next.CloudNamespaceID != "" && member.Member.State == "active" && member.Member.CloudPermission != gp.CloudDeny && (member.Member.CloudPermission == gp.CloudAllow || next.Policy.DefaultCloudAllowed) {
-					allowed = s.hooks.Evaluate(ctx, gp.HookInput{Version: 1, Action: gp.HookCloudPublish, GatewayID: s.identity.ID, MemberID: member.Member.MemberID, RuntimePublicID: member.Member.RuntimePublicID, NamespacePublicID: next.CloudNamespaceID, PolicyRevision: next.Policy.Revision}).Allowed
+				if ctx.Err() == nil && member.Member.State == "active" && member.Member.EgressPermission != gp.EgressDeny && (member.Member.EgressPermission == gp.EgressAllow || next.Policy.DefaultEgressAllowed) {
+					allowed = s.hooks.Evaluate(ctx, gp.HookInput{Version: 1, Action: gp.HookEgressOpen, GatewayID: s.identity.ID, AttachmentID: member.Member.AttachmentID, RuntimePublicID: member.Member.RuntimePublicID, PolicyRevision: next.Policy.Revision}).Allowed
 				}
-				member.HookCloudAllowed, member.HookPolicyRevision = allowed, next.Policy.Revision
+				member.HookEgressAllowed, member.HookPolicyRevision = allowed, next.Policy.Revision
 				results[i] = member
 			}
 		})
@@ -50,7 +50,7 @@ func (s *Store) evaluateCloud(ctx context.Context, next *memberState, ids []stri
 	return nil
 }
 
-func policyMemberIDs(next memberState) []string {
+func policyAttachmentIDs(next memberState) []string {
 	ids := make([]string, 0, len(next.Members))
 	for id := range next.Members {
 		ids = append(ids, id)
@@ -59,7 +59,7 @@ func policyMemberIDs(next memberState) []string {
 }
 
 func (s *Store) commitPolicy(ctx context.Context, next memberState, revision int64, ids []string) error {
-	if err := s.evaluateCloud(ctx, &next, ids); err != nil {
+	if err := s.evaluateEgress(ctx, &next, ids); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -71,9 +71,10 @@ func (s *Store) commitPolicy(ctx context.Context, next memberState, revision int
 }
 
 func (s *Store) UpdatePolicy(ctx context.Context, expected int64, policy gp.GatewayPolicy) error {
-	if policy.PublicationMode != gp.PublicationManual && policy.PublicationMode != gp.PublicationAutomatic {
-		return ErrState
+	if err := gp.ValidateEgressDestinations(policy.Destinations); err != nil {
+		return err
 	}
+	policy.Destinations = append([]string{}, policy.Destinations...)
 	s.mu.Lock()
 	if s.state.Policy.Revision != expected {
 		s.mu.Unlock()
@@ -83,58 +84,39 @@ func (s *Store) UpdatePolicy(ctx context.Context, expected int64, policy gp.Gate
 	s.mu.Unlock()
 	policy.Revision = expected + 1
 	next.Policy = policy
-	return s.commitPolicy(ctx, next, revision, policyMemberIDs(next))
+	return s.commitPolicy(ctx, next, revision, policyAttachmentIDs(next))
 }
 
 func (s *Store) UpdateMemberPolicy(ctx context.Context, update gp.MemberPolicyUpdate) error {
-	if update.CloudPermission != gp.CloudAllow && update.CloudPermission != gp.CloudDeny && update.CloudPermission != gp.CloudInherit {
+	if update.EgressPermission != gp.EgressAllow && update.EgressPermission != gp.EgressDeny && update.EgressPermission != gp.EgressInherit {
 		return ErrState
 	}
 	s.mu.Lock()
-	member, ok := s.state.Members[update.MemberID]
+	member, ok := s.state.Members[update.AttachmentID]
 	if !ok || member.Member.State != "active" {
 		s.mu.Unlock()
 		return ErrDenied
 	}
-	if member.Member.MemberVersion != update.ExpectedMemberVersion {
+	if member.Member.AttachmentVersion != update.ExpectedAttachmentVersion {
 		s.mu.Unlock()
 		return ErrConflict
 	}
 	next, revision := s.clone(), s.state.Revision
 	s.mu.Unlock()
-	member.Member.CloudPermission = update.CloudPermission
-	next.Members[update.MemberID] = member
-	return s.commitPolicy(ctx, next, revision, []string{update.MemberID})
+	member.Member.EgressPermission = update.EgressPermission
+	next.Members[update.AttachmentID] = member
+	return s.commitPolicy(ctx, next, revision, []string{update.AttachmentID})
 }
 
-// SetCloudNamespace is called only by the authenticated Cloud association owner.
-// The namespace is never taken from a Desktop or Runtime policy request.
-func (s *Store) SetCloudNamespace(ctx context.Context, namespaceID string) error {
-	if namespaceID != "" && !validID(namespaceID) {
-		return ErrState
-	}
-	s.mu.Lock()
-	if s.state.CloudNamespaceID == namespaceID {
-		s.mu.Unlock()
-		return nil
-	}
-	next, revision := s.clone(), s.state.Revision
-	s.mu.Unlock()
-	next.CloudNamespaceID = namespaceID
-	next.Policy.Revision++
-	return s.commitPolicy(ctx, next, revision, policyMemberIDs(next))
-}
-
-// ReevaluateCloud uses the current authoritative namespace and commits only the
-// exact snapshot evaluated. It cannot restore an explicitly revoked Cloud binding.
-func (s *Store) ReevaluateCloud(ctx context.Context, memberID string, expectedVersion int64) error {
+// ReevaluateEgress applies the current local policy to one exact attachment version.
+func (s *Store) ReevaluateEgress(ctx context.Context, memberID string, expectedVersion int64) error {
 	s.mu.Lock()
 	member, ok := s.state.Members[memberID]
 	if !ok || member.Member.State != "active" {
 		s.mu.Unlock()
 		return ErrDenied
 	}
-	if member.Member.MemberVersion != expectedVersion {
+	if member.Member.AttachmentVersion != expectedVersion {
 		s.mu.Unlock()
 		return ErrConflict
 	}

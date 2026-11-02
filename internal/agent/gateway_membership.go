@@ -5,7 +5,6 @@ import (
 	"errors"
 	"runtime"
 	"sync"
-	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/config"
@@ -26,7 +25,7 @@ type gatewayMemberOwner struct {
 	connections map[string]*gatewayMemberConnection
 }
 
-func (a *Agent) GatewayMembership(ids ...string) *gatewaymembership.RuntimeConfig {
+func (a *Agent) GatewayAttachment(ids ...string) *gatewaymembership.RuntimeConfig {
 	if a == nil {
 		return nil
 	}
@@ -36,22 +35,22 @@ func (a *Agent) GatewayMembership(ids ...string) *gatewaymembership.RuntimeConfi
 		return nil
 	}
 	if len(ids) > 0 {
-		return a.cfg.GatewayMember(ids[0]).Clone()
+		return a.cfg.RuntimeAttachment(ids[0]).Clone()
 	}
 	if member := a.cfg.CloudGateway(); member != nil {
 		return member.Clone()
 	}
-	return a.cfg.GatewayMember("").Clone()
+	return a.cfg.RuntimeAttachment("").Clone()
 }
 
-func (a *Agent) persistGatewayMemberFor(id string, member *gatewaymembership.RuntimeConfig) error {
+func (a *Agent) persistRuntimeAttachmentFor(id string, member *gatewaymembership.RuntimeConfig) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.cfg == nil {
 		return gatewaymembership.ErrState
 	}
-	current := a.cfg.GatewayMember(id)
-	if current == nil || member == nil && !current.Leaving || member != nil && (current.MemberID != member.MemberID || current.GatewayID != member.GatewayID || current.Revision != member.Revision) {
+	current := a.cfg.RuntimeAttachment(id)
+	if current == nil || member == nil && !current.Leaving || member != nil && (current.AttachmentID != member.AttachmentID || current.GatewayID != member.GatewayID || current.Revision != member.Revision) {
 		return gatewaymembership.ErrConflict
 	}
 	next := *a.cfg
@@ -59,7 +58,7 @@ func (a *Agent) persistGatewayMemberFor(id string, member *gatewaymembership.Run
 		member = member.Clone()
 		member.Revision++
 	}
-	next.SetGatewayMember(id, member)
+	next.SetRuntimeAttachment(id, member)
 	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return err
 	}
@@ -70,16 +69,16 @@ func (a *Agent) persistGatewayMemberFor(id string, member *gatewaymembership.Run
 	return nil
 }
 
-func (a *Agent) persistGatewayMember(member *gatewaymembership.RuntimeConfig) error {
+func (a *Agent) persistRuntimeAttachment(member *gatewaymembership.RuntimeConfig) error {
 	if member == nil {
-		current := a.GatewayMembership()
+		current := a.GatewayAttachment()
 		if current == nil {
 			return gatewaymembership.ErrConflict
 		}
-		return a.persistGatewayMemberFor(current.GatewayID, nil)
+		return a.persistRuntimeAttachmentFor(current.GatewayID, nil)
 	}
 	id := member.GatewayID
-	err := a.persistGatewayMemberFor(id, member)
+	err := a.persistRuntimeAttachmentFor(id, member)
 	if err == nil {
 		member.Revision++
 	}
@@ -87,17 +86,17 @@ func (a *Agent) persistGatewayMember(member *gatewaymembership.RuntimeConfig) er
 }
 
 // Each member has an independent published SDK reconnect controller.
-func (a *Agent) StartGatewayMembership(ctx context.Context, application func(string) gatewaymembership.RuntimeApplication) error {
+func (a *Agent) StartGatewayAttachment(ctx context.Context, application func(string) gatewaymembership.RuntimeApplication) error {
 	if a == nil {
 		return nil
 	}
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
 	a.gatewayMember.ctx, a.gatewayMember.application = ctx, application
-	return a.startGatewayMemberLocked()
+	return a.startRuntimeAttachmentLocked()
 }
 
-func (a *Agent) startGatewayMemberLocked() error {
+func (a *Agent) startRuntimeAttachmentLocked() error {
 	if a.gatewayMember.ctx == nil || a.gatewayMember.application == nil {
 		return nil
 	}
@@ -119,8 +118,8 @@ func (a *Agent) startGatewayMemberLocked() error {
 				continue
 			}
 		}
-		connection, err := gatewaymembership.NewRuntimeConnection(func() *gatewaymembership.RuntimeConfig { return a.GatewayMembership(id) }, func(next *gatewaymembership.RuntimeConfig) error {
-			err := a.persistGatewayMemberFor(id, next)
+		connection, err := gatewaymembership.NewRuntimeConnection(func() *gatewaymembership.RuntimeConfig { return a.GatewayAttachment(id) }, func(next *gatewaymembership.RuntimeConfig) error {
+			err := a.persistRuntimeAttachmentFor(id, next)
 			if err == nil && next != nil {
 				next.Revision++
 			}
@@ -137,7 +136,7 @@ func (a *Agent) startGatewayMemberLocked() error {
 	return nil
 }
 
-func (a *Agent) stopGatewayMemberLocked(ids ...string) {
+func (a *Agent) stopRuntimeAttachmentLocked(ids ...string) {
 	for id, running := range a.gatewayMember.connections {
 		if len(ids) > 0 && id != ids[0] {
 			continue
@@ -149,20 +148,20 @@ func (a *Agent) stopGatewayMemberLocked(ids ...string) {
 }
 
 func (a *Agent) updateGatewayEndpoints(invitation gp.EnrollmentDescriptor) error {
-	a.stopGatewayMemberLocked(invitation.GatewayID)
-	member := a.GatewayMembership(invitation.GatewayID)
+	a.stopRuntimeAttachmentLocked(invitation.GatewayID)
+	member := a.GatewayAttachment(invitation.GatewayID)
 	var err error
 	if member == nil {
 		err = gatewaymembership.ErrState
 	} else if member.PendingEndpointUpdate == nil || member.PendingEndpointUpdate.InvitationID != invitation.InvitationID {
 		member, err = member.PrepareConnectionEndpoints(invitation)
 		if err == nil {
-			err = a.persistGatewayMember(member)
+			err = a.persistRuntimeAttachment(member)
 		}
 	}
 	// Repeated consent retains the staged request. Only the reconnect controller
 	// owns its delivery, including response recovery and cancellation.
-	restartErr := a.startGatewayMemberLocked()
+	restartErr := a.startRuntimeAttachmentLocked()
 	if err != nil {
 		return err
 	}
@@ -192,7 +191,7 @@ func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string,
 	a.setRemoteConfigLocked(next)
 	a.mu.Unlock()
 	if replace {
-		a.stopGatewayMemberLocked()
+		a.stopRuntimeAttachmentLocked()
 		if previous != nil {
 			a.stopControlChannel()
 		}
@@ -200,37 +199,34 @@ func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string,
 			a.closeCloudRouteSessions(next.CloudRoute.Revision)
 		}
 	}
-	return a.startGatewayMemberLocked()
+	return a.startRuntimeAttachmentLocked()
 }
 
-type GatewayMembershipStatus struct {
-	RouteSelected           bool                      `json:"route_selected"`
-	CloudEnrollmentRequired bool                      `json:"cloud_enrollment_required"`
-	Joined                  bool                      `json:"joined"`
-	GatewayID               string                    `json:"gateway_id,omitempty"`
-	GatewayName             string                    `json:"gateway_name,omitempty"`
-	Endpoints               []gp.GatewayEndpoint      `json:"endpoints,omitempty"`
-	LastEndpointID          string                    `json:"last_endpoint_id,omitempty"`
-	MemberID                string                    `json:"member_id,omitempty"`
-	Phase                   string                    `json:"phase"`
-	ExistingEnvironmentID   string                    `json:"existing_environment_id,omitempty"`
-	Memberships             []GatewayMembershipStatus `json:"memberships,omitempty"`
+type GatewayAttachmentStatus struct {
+	RouteSelected bool `json:"route_selected"`
+
+	Joined                bool                      `json:"joined"`
+	GatewayID             string                    `json:"gateway_id,omitempty"`
+	GatewayName           string                    `json:"gateway_name,omitempty"`
+	Endpoints             []gp.GatewayEndpoint      `json:"endpoints,omitempty"`
+	LastEndpointID        string                    `json:"last_endpoint_id,omitempty"`
+	AttachmentID          string                    `json:"attachment_id,omitempty"`
+	Phase                 string                    `json:"phase"`
+	ExistingEnvironmentID string                    `json:"existing_environment_id,omitempty"`
+	Memberships           []GatewayAttachmentStatus `json:"memberships,omitempty"`
 }
 
-func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
+func (a *Agent) GatewayAttachmentStatus() GatewayAttachmentStatus {
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
 	cfg := a.remoteConfigSnapshot()
 	if cfg == nil {
-		return GatewayMembershipStatus{Phase: "not_joined"}
+		return GatewayAttachmentStatus{Phase: "not_joined"}
 	}
-	out := GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID}
-	if c := cfg.CloudAssociation; c != nil {
-		out.CloudEnrollmentRequired = c.ApprovalState == "identity_required" || c.ApprovalState == "action_required"
-	}
+	out := GatewayAttachmentStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID}
 	for _, member := range cfg.Gateways {
-		status := GatewayMembershipStatus{Joined: true, GatewayID: member.GatewayID, GatewayName: member.GatewayName, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline"}
-		status.RouteSelected = cfg.CloudRoute != nil && cfg.CloudRoute.Kind == config.CloudRouteGateway && cfg.CloudRoute.MemberID == member.MemberID
+		status := GatewayAttachmentStatus{Joined: true, GatewayID: member.GatewayID, GatewayName: member.GatewayName, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, AttachmentID: member.AttachmentID, Phase: "gateway_offline"}
+		status.RouteSelected = cfg.CloudRoute != nil && cfg.CloudRoute.Kind == config.CloudRouteGateway && cfg.CloudRoute.AttachmentID == member.AttachmentID
 		if member.PendingJoin != nil {
 			status.Phase = "joining"
 		}
@@ -255,17 +251,14 @@ func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
 		out = members[0]
 		out.Memberships = members
 		out.ExistingEnvironmentID = cfg.EnvironmentID
-		if c := cfg.CloudAssociation; c != nil {
-			out.CloudEnrollmentRequired = c.ApprovalState == "identity_required" || c.ApprovalState == "action_required"
-		}
 	}
 	return out
 }
 
-func (a *Agent) RetryGatewayMembership(ids ...string) error {
+func (a *Agent) RetryGatewayAttachment(ids ...string) error {
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
-	if len(ids) > 0 && ids[0] != "" && a.GatewayMembership(ids[0]) == nil {
+	if len(ids) > 0 && ids[0] != "" && a.GatewayAttachment(ids[0]) == nil {
 		return gatewaymembership.ErrState
 	}
 	for id, running := range a.gatewayMember.connections {
@@ -273,16 +266,16 @@ func (a *Agent) RetryGatewayMembership(ids ...string) error {
 			running.connection.RetryNow()
 		}
 	}
-	return a.startGatewayMemberLocked()
+	return a.startRuntimeAttachmentLocked()
 }
 
-func (a *Agent) CloseGatewayMembership() {
+func (a *Agent) CloseGatewayAttachment() {
 	if a == nil {
 		return
 	}
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
-	a.stopGatewayMemberLocked()
+	a.stopRuntimeAttachmentLocked()
 }
 
 var ErrGatewayRouteImpactRequired = errors.New("GATEWAY_ROUTE_IMPACT_REQUIRED")
@@ -302,7 +295,7 @@ func (a *Agent) leaveGateway(id string, routeImpactAcknowledged bool) error {
 	defer a.cloudLinkMu.Unlock()
 	a.gatewayMember.mu.Lock()
 	defer a.gatewayMember.mu.Unlock()
-	member := a.GatewayMembership(id)
+	member := a.GatewayAttachment(id)
 	if member == nil {
 		if len(a.remoteConfigSnapshot().Gateways) == 0 {
 			return nil
@@ -310,15 +303,15 @@ func (a *Agent) leaveGateway(id string, routeImpactAcknowledged bool) error {
 		return gatewaymembership.ErrConflict
 	}
 	cfg := a.remoteConfigSnapshot()
-	affected := cfg.CloudGateway() != nil && cfg.CloudGateway().MemberID == member.MemberID
+	affected := cfg.CloudGateway() != nil && cfg.CloudGateway().AttachmentID == member.AttachmentID
 	if affected && !routeImpactAcknowledged {
 		return ErrGatewayRouteImpactRequired
 	}
-	a.stopGatewayMemberLocked(member.GatewayID)
+	a.stopRuntimeAttachmentLocked(member.GatewayID)
 	if !member.Leaving {
 		member.Leaving = true
-		if err := a.persistGatewayMember(member); err != nil {
-			_ = a.startGatewayMemberLocked()
+		if err := a.persistRuntimeAttachment(member); err != nil {
+			_ = a.startRuntimeAttachmentLocked()
 			return err
 		}
 	}
@@ -328,53 +321,7 @@ func (a *Agent) leaveGateway(id string, routeImpactAcknowledged bool) error {
 			a.closeCloudRouteSessions(cfg.CloudRoute.Revision)
 		}
 	}
-	return a.startGatewayMemberLocked()
-}
-
-// PublishGateway records one independent Runtime Cloud enrollment. Existing
-// associations use the route coordinator instead of migrating environments.
-func (a *Agent) PublishGateway(ctx context.Context, gatewayID string) error {
-	a.cloudLinkMu.Lock()
-	defer a.cloudLinkMu.Unlock()
-	before := a.remoteConfigSnapshot()
-	member := before.GatewayMember(gatewayID)
-	if member == nil || member.Leaving || member.PendingJoin != nil {
-		return gatewaymembership.ErrState
-	}
-	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	var association gp.MemberCloudContext
-	if err := member.Request(callCtx, "/v6/member/cloud", gp.CatalogRequest{ProtocolVersion: gp.Version}, &association, true); err != nil {
-		return err
-	}
-	next, err := before.PrepareNamespaceCloud(member.MemberID, association)
-	if err != nil {
-		return err
-	}
-	next.CloudAssociation.EnrollmentMetadata.Version = a.version
-	a.mu.Lock()
-	persisted, err := config.Update(a.configPath, func(current *config.Config) error {
-		memberNow := current.GatewayMember(gatewayID)
-		if memberNow == nil || memberNow.MemberID != member.MemberID || memberNow.Revision != member.Revision || before.CloudAssociation == nil && current.CloudAssociation != nil || before.CloudAssociation != nil && !sameCloudOwner(before, current) {
-			return gatewaymembership.ErrConflict
-		}
-		current.CloudAssociation, current.CloudRoute, current.ControlArtifactPool = next.CloudAssociation, next.CloudRoute, nil
-		current.CloudID, current.CloudOrigin, current.AccessPointOrigin = next.CloudID, next.CloudOrigin, next.AccessPointOrigin
-		return nil
-	})
-	if err != nil {
-		a.mu.Unlock()
-		return err
-	}
-	next = persisted
-	a.setRemoteConfigLocked(next)
-	a.controlChannelEnabled, a.remoteEnabled, a.effectiveRunMode = true, true, "hybrid"
-	running := a.runCtx != nil
-	a.mu.Unlock()
-	if running {
-		a.startOrRestartControlChannel()
-	}
-	return nil
+	return a.startRuntimeAttachmentLocked()
 }
 
 // RuntimePublicID is the persistent local identity, independent of Cloud routes.

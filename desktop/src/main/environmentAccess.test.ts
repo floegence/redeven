@@ -36,7 +36,7 @@ describe('environment access ownership', () => {
     expect(decorateEnvironmentAccess([direct], prefs)[0]?.default_access_route_missing).toBe(true);
   });
   it('fences member identity and version changes and detaches edited direct destinations', () => {
-    for (const patch of [{ gateway_identity_fingerprint: 'other' }, { gateway_member: { ...memberFixture, member_version: 2 } }, { gateway_env_id: 'other' }]) {
+    for (const patch of [{ gateway_identity_fingerprint: 'other' }, { gateway_member: { ...memberFixture, attachment_version: 2 } }, { gateway_env_id: 'other' }]) {
       expect(environmentAccessBinding({ ...gateway, ...patch })).not.toBe(environmentAccessBinding(gateway));
     }
     const prefs = rememberEnvironmentIdentity(rememberEnvironmentIdentity(defaultDesktopPreferences(), other, identity), direct, identity);
@@ -76,7 +76,7 @@ describe('access preference persistence', () => {
 });
 
 it('groups only membership proven by the trusted Runtime and the paired Gateway key',()=>{
- const runtime={...direct,kind:'ssh_environment',runtime_service:{gateway_memberships:[{gateway_id:'remote-server-id',gateway_name:'Office',identity_fingerprint:'fingerprint',member_id:'member',runtime_public_id:memberFixture.runtime_public_id,phase:'joined',cloud_publication:false,endpoints:[]}]}} as unknown as DesktopEnvironmentEntry;
+ const runtime={...direct,kind:'ssh_environment',runtime_service:{gateway_memberships:[{gateway_id:'remote-server-id',gateway_name:'Office',identity_fingerprint:'fingerprint',attachment_id:'member',runtime_public_id:memberFixture.runtime_public_id,phase:'joined',cloud_publication:false,endpoints:[]}]}} as unknown as DesktopEnvironmentEntry;
  const preferences=rememberEnvironmentIdentity(defaultDesktopPreferences(),runtime,identity);
  expect(decorateEnvironmentAccess([runtime,gateway],preferences)[1]?.access_group_id).toBe(runtime.id);
  expect(decorateEnvironmentAccess([runtime,gateway],defaultDesktopPreferences())[1]?.access_group_id).toBe(runtime.id);

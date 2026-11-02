@@ -7,7 +7,7 @@
     "frontmatter": {
       "okf_version": "0.2"
     },
-    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Independent Web Environment Center](architecture/web-environment-center.md)\n- [Web Center access security](security/web-center-access.md)\n- [Web Center deployment](operations/web-center-deployment.md)\n\n- [Flower startup and recovery presentation](architecture/flower-startup-presentation.md)\n- [Flower startup performance acceptance](operations/flower-startup-performance.md)\n- [Flower conversation switch qualification](operations/flower-thread-switch-qualification.md)\n- [Flower conversation selection and detail reads](ui/flower-thread-selection.md)\n\n- [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md)\n\n- [Tessiven DSL versioning](architecture/tessiven-dsl-versioning.md)\n- [Tessiven stable canvas presentation](architecture/tessiven-canvas-presentation.md)\n- [Tessiven canvas contract](architecture/tessiven-canvas-contract.md)\n\n- [Native Runtime bridge](architecture/native-runtime-bridge.md)\n\n- [Flower working files and deliverables](ai/flower-task-files.md)\n- [Flower browser source ownership](architecture/flower-browser-sources.md)\n- [Flower browser Linux preparation](architecture/flower-browser-linux-preparation.md)\n- [Database schema migration ownership](architecture/database-schema-migrations.md)\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md)\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md)\n- [Observation and target action events](architecture/observation-events.md)\n- [Local UI surface](architecture/local-ui-surface.md)\n- [Env App session event transport](architecture/env-event-transport.md)\n- [Activity navigation restoration](ui/activity-navigation-restoration.md)\n- [Env App resource snapshots](ui/env-resource-cache.md)\n- [Redeven loading and layout continuity](ui/page-loading-continuity.md)\n- [Env App document reload presentation](ui/document-reload-presentation.md)\n- [Web Services interface](architecture/web-services-interface.md)\n- [Web Service browser sessions](architecture/web-service-browser-sessions.md)\n- [Managed host application preparation](architecture/host-application-preparation.md)\n- [Remote desktop sessions](architecture/remote-desktop.md)\n- [Deploy remote desktop through SSH](architecture/remote-desktop-ssh-deployment.md)\n- [Restore remote desktop sharing approval](architecture/remote-desktop-authorization.md)\n- [Remote desktop connection launcher](architecture/remote-desktop-launcher.md)\n- [Graphical window transport](architecture/graphical-window-transport.md)\n- [Graphical window transport qualification](operations/graphical-window-transport-results.md)\n- [Remote desktop viewer interaction](architecture/remote-desktop-viewer.md)\n- [Remote desktop media and input scheduling](architecture/remote-desktop-media.md)\n- [Wayland cursor and scheduling optimization evidence](operations/remote-desktop-wayland-optimization-results.md)\n- [Wayland legacy MemFd capture compatibility](operations/remote-desktop-wayland-buffer-results.md)\n- [Wayland capture pool optimization evidence](operations/remote-desktop-capture-pool-results.md)\n- [Remote desktop validation](operations/remote-desktop-validation.md)\n- [Remote desktop acceptance results](operations/remote-desktop-results.md)\n- [Desktop latency and NVIDIA encoding](operations/remote-desktop-latency-results.md)\n- [Desktop drag latency](operations/remote-desktop-drag-latency.md)\n- [Physical desktop responsiveness and local input](operations/remote-desktop-responsive-input-results.md)\n- [Orange AFBC capture qualification](operations/remote-desktop-orange-afbc-results.md)\n- [Physical-device remote desktop Viewer qualification](operations/remote-desktop-device-viewer-results.md)\n- [Orange Viewer follow-up](operations/remote-desktop-orange-viewer-results.md)\n- [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md)\n- [LAN experiment decision ledger](operations/remote-desktop-lan-experiment-ledger.md)\n- [Published LAN C05 outcomes](operations/remote-desktop-lan-c05-results.md)\n- [Published six-frame qualification C05](operations/remote-desktop-lan-published-c05.md)\n- [Remote desktop platform reacceptance](operations/remote-desktop-platform-reacceptance.md)\n- [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md)\n- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md)\n- [Host Applications](architecture/host-applications.md)\n- [Cross-platform application behavior](architecture/host-application-behavior.md)\n- [Linux application lifecycle](architecture/linux-application-lifecycle.md)\n- [Host application input](architecture/host-application-input.md)\n- [Host application pointer gestures](architecture/host-application-pointer.md)\n- [Host application display](architecture/host-application-display.md)\n- [Native Linux picture streams](architecture/host-application-native-stream.md)\n- [Host application viewer resources](architecture/host-application-viewer-resources.md)\n- [Host application viewer](architecture/host-application-viewer.md)\n- [Host Application Platforms](architecture/host-application-platforms.md)\n- [macOS Application Picture](architecture/macos-application-picture.md)\n- [Native macOS Applications](architecture/macos-host-applications.md)\n- [macOS application window lifecycle](architecture/macos-application-window-lifecycle.md)\n- [macOS application menus](architecture/macos-application-menus.md)\n- [macOS application capture ownership](architecture/macos-application-capture-owner.md)\n- [macOS application management and graceful quit](architecture/macos-application-management.md): Manage live host applications, distinguish quit from sharing, and reject stale process targets.\n- [Host Application Setup](operations/host-application-setup.md)\n- [Host Application Validation](operations/host-application-validation.md)\n- [Host application picture performance](operations/host-application-performance.md)\n- [Host application input validation](operations/host-application-input-validation.md)\n- [Linux desktop and package compatibility validation](operations/host-application-desktop-validation.md)\n- [Host application platform validation](operations/host-application-platform-validation.md)\n- [Host application cursor acceptance](operations/host-application-cursor-validation.md)\n- [Host Application Lifecycle](operations/host-application-lifecycle.md)\n- [Runtime Binary Portability](architecture/runtime-binary-portability.md)\n- [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md)\n- [Web Service system-browser authorization](architecture/web-service-browser-authorization.md)\n- [Managed Web Service opening](architecture/managed-web-service-opening.md)\n- [Managed Web Service Templates](architecture/managed-web-service-templates.md)\n- [Redeven Service Template format compatibility](architecture/service-template-format-compatibility.md)\n- [GitHub service template sources](architecture/managed-service-git-sources.md)\n- [Independent Host service lifecycle](architecture/independent-host-services.md)\n- [Managed Web Services](architecture/managed-web-services.md)\n- [Web Service management recovery](architecture/service-management-recovery.md)\n- [Service resource ownership](architecture/service-resource-ownership.md)\n- [Managed Service operation progress](architecture/managed-service-operation-progress.md)\n- [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md)\n- [Managed Service version interaction](architecture/managed-service-version-interaction.md)\n- [Managed Service instance configuration](architecture/managed-service-instance-configuration.md)\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md)\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md)\n- [Runtime system monitoring](architecture/runtime-system-monitoring.md)\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md)\n- [Runtime artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md)\n- [Runtime terminal lifecycle](architecture/runtime-terminal-lifecycle.md)\n- [Product RPC request encoding](architecture/product-rpc-request-encoding.md)\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md)\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md)\n- [Env App terminal and surface composition](architecture/env-app-terminal-and-surface-composition.md)\n- [Env App connection and recovery](architecture/env-app-connection-and-recovery.md)\n- [Whole-window status surfaces](ui/window-status-surfaces.md)\n- [Env App page asset recovery](ui/page-asset-recovery.md)\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md)\n- [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md)\n- [Plugin platform integration](architecture/plugin-platform-integration.md)\n- [Plugin process sessions](architecture/plugin-process-sessions.md)\n- [Plugin background entries](architecture/plugin-background-entries.md)\n- [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md)\n- [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md)\n- [Plugin market consumption](architecture/plugin-market-consumption.md)\n- [Native container operation observation](architecture/containers-operation-observation.md)\n- [Native container resources](architecture/container-resources-capability.md)\n- [Container runtime execution](architecture/container-runtime-execution.md)\n- [Volume usage observation](architecture/container-volume-usage.md)\n- [Container service management](architecture/container-service-management.md)\n- [Native container console](architecture/container-resources-console.md)\n\n## Security\n\n- [Runtime access sessions](security/runtime-access-sessions.md)\n- [Runtime two-factor authentication](security/runtime-two-factor-authentication.md)\n- [Local UI network exposure](security/local-ui-network-exposure.md)\n- [Local UI certificates](security/local-ui-certificates.md)\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md)\n- [Plugin platform integration security](security/plugin-platform-integration-security.md)\n\n## Desktop\n\n- [Verified Environment access routes](desktop/desktop-environment-access.md)\n\n- [Host application component cache](desktop/host-application-component-cache.md)\n- [Desktop qualification lifecycle](desktop/desktop-test-lifecycle.md)\n- [Desktop development sessions and bundles](desktop/desktop-development-bundles.md)\n- [Desktop Web Service browser window](desktop/web-service-browser-window.md)\n- [Desktop host application titlebar](desktop/host-application-titlebar.md)\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md)\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md)\n- [Desktop Environment library](desktop/desktop-environment-library.md)\n- [Preserve Desktop interaction sessions](desktop/desktop-interaction-continuity.md)\n- [Environment card presentation](desktop/desktop-environment-card-presentation.md)\n- [Desktop Welcome navigation](desktop/desktop-welcome-navigation.md)\n- [Desktop Environment connections](desktop/desktop-environment-connections.md)\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md)\n- [Runtime platform facts and icons](desktop/desktop-runtime-platform.md)\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md)\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md)\n- [Desktop WSL runtime operations](desktop/desktop-wsl-runtime-operations.md)\n- [Desktop session and model source](desktop/desktop-session-model-source.md)\n- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md)\n- [Desktop environment settings](desktop/desktop-environment-settings.md)\n- [Desktop environment settings presentation](desktop/desktop-environment-settings-presentation.md)\n- [Desktop SSH environment settings](desktop/desktop-ssh-environment-settings.md)\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md)\n- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md)\n- [Desktop application updates](desktop/desktop-application-updates.md)\n\n## Gateway\n\n- [Gateway Cloud access](gateway/gateway-cloud-access.md)\n- [Gateway client access](gateway/gateway-client-access.md)\n- [Gateway service](gateway/gateway-service.md)\n- [Gateway network settings](gateway/gateway-network-settings.md)\n- [Gateway Desktop interactions](gateway/gateway-desktop-interactions.md)\n- [Gateway access sessions](gateway/gateway-access-sessions.md)\n- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md)\n\n## Code\n\n- [CodeSpace system-browser access](desktop/codespace-system-browser.md)\n- [Native Desktop CodeSpace access](desktop/codespace-native-access.md)\n- [Browser Editor runtime](code/browser-editor-runtime.md)\n\n- [Flower MCP runtime](ai/mcp-runtime.md)\n- [Flower Agent Plugins](ai/flower-agent-plugins.md)\n- [Flower plugin catalog integration](ai/flower-plugin-catalogs.md)\n## UI\n\n- [Tessiven canvas](ui/tessiven-canvas.md)\n- [Tessiven relationship summaries](ui/tessiven-relationship-summaries.md)\n- [Tessiven canvas navigation and rendering](ui/tessiven-canvas-navigation.md)\n- [Tessiven Flower replies](ui/tessiven-flower-replies.md)\n\n- [Runtime settings](ui/runtime-settings.md)\n- [Flower extensions](ui/flower-extensions.md)\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md)\n- [Env App floating layer order](ui/env-app-floating-layer-order.md)\n- [Dialog content placement](ui/dialog-content.md)\n- [Adaptive desktop layout](ui/adaptive-desktop-layout.md)\n- [Mobile shell navigation](ui/mobile-shell-navigation.md)\n- [File preview window actions](ui/file-preview-window-actions.md)\n- [File preview dismissal](ui/file-preview-dismissal.md)\n- [File preview viewport and rendering](ui/file-preview-viewport-and-rendering.md)\n- [Static PPTX file preview](ui/file-preview-pptx.md)\n- [HTML file preview](ui/file-preview-html.md)\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md)\n- [Shared surface material](ui/surface-material.md)\n- [Product accessibility for AI agents](ui/agent-accessibility.md)\n- [Input focus boundaries](ui/input-focus-boundaries.md)\n- [Git browser visual states](ui/git-browser-visual-states.md)\n- [Git diff request lifecycle](ui/git-diff-request-lifecycle.md)\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md)\n- [Workbench composition surfaces and editing](ui/workbench-composition.md)\n- [Workbench input ownership](ui/workbench-input-ownership.md)\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md)\n- [Terminal fonts across client devices](ui/terminal-fonts.md)\n- [Terminal session groups](ui/terminal-session-groups.md)\n- [Official installation progress](ui/plugin-installation-progress.md)\n- [Plugin package review](ui/plugin-package-review.md)\n- [Plugin layout continuity](ui/plugin-layout-continuity.md)\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md)\n- [File icon presentation](ui/file-icon-presentation.md)\n- [Files context menus](ui/files-context-menu.md)\n- [Plugin Center interaction](ui/plugin-center-interaction.md)\n- [Plugin surfaces](ui/plugin-surfaces.md)\n- [Flower thread Goals](ai/flower-goals.md)\n- [Flower turn launcher](ui/flower-turn-launcher.md)\n- [Flower Activity origin page references](ui/flower-page-context.md)\n- [Flower conversation references](ui/flower-thread-references.md)\n- [Flower composer references](ui/flower-composer-references.md)\n- [Flower input history](ui/flower-input-history.md)\n- [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md)\n- [Floating Files window dismissal](ui/files-floating-window-dismissal.md)\n- [Personal directory favorites](ui/directory-favorites.md)\n- [Flower working directory navigation](ui/flower-working-directory-navigation.md)\n- [Flower mobile navigation](ui/flower-mobile-navigation.md)\n- [Flower Activity companion](ui/flower-activity-companion.md)\n- [Ask Flower window boundaries](ui/ask-flower-window.md)\n- [Flower companion composer and motion](ui/flower-companion-composer.md)\n- [Flower companion presence](ui/flower-companion-presence.md)\n- [Flower read state](ui/flower-read-state.md)\n- [Flower live timeline](ui/flower-live-timeline.md)\n- [Flower file edit preparation](ui/flower-edit-preparation.md)\n- [Flower timeline ordering](ui/flower-timeline-ordering.md)\n- [Flower terminal turn process disclosure](ui/flower-turn-process-disclosure.md)\n- [Flower reasoning selection ownership](ui/flower-reasoning-selection.md)\n- [Flower personal conversation preferences](ui/flower-conversation-preferences.md)\n- [Flower model and navigation presentation](ui/flower-model-navigation.md)\n- [Flower setup and settings](ui/flower-setup-and-settings.md)\n- [Flower provider configuration](ui/flower-provider-configuration.md)\n- [Flower ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md)\n- [Flower failure recovery](ui/flower-failure-recovery.md)\n- [Flower composer attachments](ui/flower-composer-attachments.md)\n- [Flower file activity presentation](ui/flower-file-activity.md)\n- [Flower consecutive tool sequences](ui/flower-tool-sequences.md)\n- [Flower activity disclosure interaction](ui/flower-activity-interaction.md)\n- [Flower conversation sidebar](ui/flower-thread-sidebar.md)\n- [Flower inline media](ui/flower-inline-media.md)\n- [Flower explicit long-thread qualification](operations/flower-long-thread-gate.md)\n- [Flower streaming stability](ui/flower-streaming-stability.md)\n- [Flower live queue CPU qualification](operations/flower-live-queue-performance.md)\n- [Flower request-history CPU qualification](operations/flower-request-history-performance.md)\n- [Flower received output progress](ui/flower-output-progress.md)\n- [Flower code highlighting](ui/flower-code-highlighting.md): Verify syntax colors, stable code selection/copy, and bounded background work in both hosts.\n- [Flower message appearance](ui/flower-message-appearance.md)\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md)\n- [Flower interactions and context state](ui/flower-approval-context.md)\n- [Asynchronous layout stability](ui/asynchronous-layout-stability.md)\n- [Shared interface scale](ui/interface-scale.md)\n- [Flower approval surface](ui/flower-approval-surface.md)\n- [Flower citations](ui/flower-citations.md)\n- [Flower subagent detail window](ui/flower-subagent-detail-window.md)\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md)\n- [Flower parent event timeline](ui/flower-parent-events.md)\n\n## AI\n\n- [Tessiven Runtime discovery and operations](ai/tessiven-runtime-operations.md)\n- [Tessiven Flower and service operations](ai/tessiven-flower-and-operations.md)\n\n- [Authorized platform model gateway](ai/platform-model-gateway.md)\n\n- [Model directory and selection](ai/model-directory-and-selection.md)\n- [Model web search](ai/model-web-search.md)\n- [Local ChatGPT plan authentication](ai/chatgpt-local-authentication.md)\n- [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md)\n- [Provider configuration validation](ai/provider-configuration-validation.md)\n- [Provider API and catalog review](ai/provider-api-catalog-review.md)\n\n- [Direct image reading and retention](ai/image-read-and-retention.md)\n- [AI tool runtime](ai/ai-tool-runtime.md)\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md)\n- [Flower backup and recovery](ai/flower-backup-and-recovery.md)\n- [Flower historical writer acceptance](ai/flower-upgrade-compatibility.md)\n- [Flower attachment resources](ai/flower-attachment-resources.md)\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md)\n- [Computer and browser use runtime](ai/computer-use-runtime.md)\n- [Computer semantic snapshots](ai/computer-use-semantics.md)\n- [Computer script execution](ai/computer-use-scripts.md)\n- [Computer script read and validation boundaries](ai/computer-script-read-contract.md)\n- [Optional built-in browser installation](ai/computer-use-browser-installation.md)\n- [Built-in browser Linux system preparation](ai/computer-use-browser-system.md)\n- [Browser and desktop settings](ai/computer-use-environment-settings.md)\n- [Guided Chrome connection](ai/computer-use-browser-connection.md)\n- [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md)\n- [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md)\n- [Semantic desktop operations](ai/computer-use-desktop.md)\n- [Computer target selection across threads](ai/computer-use-target-selection.md)\n- [Computer use safety pauses and user control](ai/computer-use-takeover.md)\n- [Private browser observation and input](ai/computer-use-private-browser-control.md)\n- [Computer use media and visual requests](ai/computer-use-media.md)\n- [Flower computer viewer presentation](ui/flower-computer-viewer.md)\n- [Computer use qualification](ai/computer-use-qualification.md)\n- [Computer use qualification evidence](ai/computer-use-qualification-evidence.md)\n- [Browser drag timing qualification](ai/computer-drag-qualification.md)\n- [Media contention and native read qualification](ai/computer-media-read-qualification.md)\n- [Computer use paired model measurements](ai/computer-use-performance.md)\n- [Codex design evidence](ai/computer-use-design-evidence.md)\n- [AI tool approval runtime](ai/tool-approval-runtime.md)\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md)\n- [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md)\n- [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md)\n- [AI model and context runtime](ai/model-context-runtime.md)\n- [Model provider surface and history](ai/model-provider-surface-and-history.md)\n- [Model request recovery](ai/model-request-recovery.md)\n- [Model request measurement](ai/model-request-measurement.md)\n- [Model request reuse](ai/model-request-reuse.md)\n- [Flower context compaction and Goal continuation](ai/flower-context-compaction.md)\n- [Model context usage and compaction](ai/model-context-usage-and-compaction.md)\n- [Flower context compaction qualification](operations/flower-compaction-qualification.md)\n- [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md)\n- [Flower context distribution qualification](operations/flower-context-distribution-qualification.md)\n- [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md)\n- [DeepSeek Responses](ai/deepseek-responses.md)\n- [Flower canonical thread queries](ai/flower-thread-queries.md)\n- [Floret thread runtime integration](ai/floret-thread-runtime.md)\n- [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md)\n- [Flower subagent parent events](ai/subagent-parent-events.md)\n- [Flower subagent runtime](ai/subagent-runtime.md)\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md)\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md)\n- [Flower plugin generation](ai/flower-plugin-generation.md)\n- [Flower context action records](ai/flower-context-action-records.md)\n- [Redeven environment operations](ai/redeven-env-operations.md)\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md)\n- [OKF tool suite](ai/okf-search-tool.md)\n\n## Protocol\n\n- [Gateway v6 protocol](protocol/gateway-v6-protocol.md)\n- [RCPP v5 Cloud API](protocol/rcpp-v5-cloud-api.md)\n\n## Release\n\n- [Self-contained installer distribution](release/self-contained-installer.md)\n- [CI and release gates](release/ci-and-release-gates.md)\n- [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md)\n- [Plugin integration gate](release/plugin-integration-gates.md)\n- [OKF release assets](release/okf-release-assets.md)\n- [Automated service-template catalog updates](release/service-template-updates.md)\n\n- [Managed runtime facts](ai/flower-managed-model-context.md): canonical request-boundary snapshots and safe recovery.",
+    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Independent Web Environment Center](architecture/web-environment-center.md)\n- [Web Center access security](security/web-center-access.md)\n- [Web Center deployment](operations/web-center-deployment.md)\n\n- [Flower startup and recovery presentation](architecture/flower-startup-presentation.md)\n- [Flower startup performance acceptance](operations/flower-startup-performance.md)\n- [Flower conversation switch qualification](operations/flower-thread-switch-qualification.md)\n- [Flower conversation selection and detail reads](ui/flower-thread-selection.md)\n\n- [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md)\n\n- [Tessiven DSL versioning](architecture/tessiven-dsl-versioning.md)\n- [Tessiven stable canvas presentation](architecture/tessiven-canvas-presentation.md)\n- [Tessiven canvas contract](architecture/tessiven-canvas-contract.md)\n\n- [Native Runtime bridge](architecture/native-runtime-bridge.md)\n\n- [Flower working files and deliverables](ai/flower-task-files.md)\n- [Flower browser source ownership](architecture/flower-browser-sources.md)\n- [Flower browser Linux preparation](architecture/flower-browser-linux-preparation.md)\n- [Database schema migration ownership](architecture/database-schema-migrations.md)\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md)\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md)\n- [Observation and target action events](architecture/observation-events.md)\n- [Local UI surface](architecture/local-ui-surface.md)\n- [Env App session event transport](architecture/env-event-transport.md)\n- [Activity navigation restoration](ui/activity-navigation-restoration.md)\n- [Env App resource snapshots](ui/env-resource-cache.md)\n- [Redeven loading and layout continuity](ui/page-loading-continuity.md)\n- [Env App document reload presentation](ui/document-reload-presentation.md)\n- [Web Services interface](architecture/web-services-interface.md)\n- [Web Service browser sessions](architecture/web-service-browser-sessions.md)\n- [Managed host application preparation](architecture/host-application-preparation.md)\n- [Remote desktop sessions](architecture/remote-desktop.md)\n- [Deploy remote desktop through SSH](architecture/remote-desktop-ssh-deployment.md)\n- [Restore remote desktop sharing approval](architecture/remote-desktop-authorization.md)\n- [Remote desktop connection launcher](architecture/remote-desktop-launcher.md)\n- [Graphical window transport](architecture/graphical-window-transport.md)\n- [Graphical window transport qualification](operations/graphical-window-transport-results.md)\n- [Remote desktop viewer interaction](architecture/remote-desktop-viewer.md)\n- [Remote desktop media and input scheduling](architecture/remote-desktop-media.md)\n- [Wayland cursor and scheduling optimization evidence](operations/remote-desktop-wayland-optimization-results.md)\n- [Wayland legacy MemFd capture compatibility](operations/remote-desktop-wayland-buffer-results.md)\n- [Wayland capture pool optimization evidence](operations/remote-desktop-capture-pool-results.md)\n- [Remote desktop validation](operations/remote-desktop-validation.md)\n- [Remote desktop acceptance results](operations/remote-desktop-results.md)\n- [Desktop latency and NVIDIA encoding](operations/remote-desktop-latency-results.md)\n- [Desktop drag latency](operations/remote-desktop-drag-latency.md)\n- [Physical desktop responsiveness and local input](operations/remote-desktop-responsive-input-results.md)\n- [Orange AFBC capture qualification](operations/remote-desktop-orange-afbc-results.md)\n- [Physical-device remote desktop Viewer qualification](operations/remote-desktop-device-viewer-results.md)\n- [Orange Viewer follow-up](operations/remote-desktop-orange-viewer-results.md)\n- [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md)\n- [LAN experiment decision ledger](operations/remote-desktop-lan-experiment-ledger.md)\n- [Published LAN C05 outcomes](operations/remote-desktop-lan-c05-results.md)\n- [Published six-frame qualification C05](operations/remote-desktop-lan-published-c05.md)\n- [Remote desktop platform reacceptance](operations/remote-desktop-platform-reacceptance.md)\n- [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md)\n- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md)\n- [Host Applications](architecture/host-applications.md)\n- [Cross-platform application behavior](architecture/host-application-behavior.md)\n- [Linux application lifecycle](architecture/linux-application-lifecycle.md)\n- [Host application input](architecture/host-application-input.md)\n- [Host application pointer gestures](architecture/host-application-pointer.md)\n- [Host application display](architecture/host-application-display.md)\n- [Native Linux picture streams](architecture/host-application-native-stream.md)\n- [Host application viewer resources](architecture/host-application-viewer-resources.md)\n- [Host application viewer](architecture/host-application-viewer.md)\n- [Host Application Platforms](architecture/host-application-platforms.md)\n- [macOS Application Picture](architecture/macos-application-picture.md)\n- [Native macOS Applications](architecture/macos-host-applications.md)\n- [macOS application window lifecycle](architecture/macos-application-window-lifecycle.md)\n- [macOS application menus](architecture/macos-application-menus.md)\n- [macOS application capture ownership](architecture/macos-application-capture-owner.md)\n- [macOS application management and graceful quit](architecture/macos-application-management.md): Manage live host applications, distinguish quit from sharing, and reject stale process targets.\n- [Host Application Setup](operations/host-application-setup.md)\n- [Host Application Validation](operations/host-application-validation.md)\n- [Host application picture performance](operations/host-application-performance.md)\n- [Host application input validation](operations/host-application-input-validation.md)\n- [Linux desktop and package compatibility validation](operations/host-application-desktop-validation.md)\n- [Host application platform validation](operations/host-application-platform-validation.md)\n- [Host application cursor acceptance](operations/host-application-cursor-validation.md)\n- [Host Application Lifecycle](operations/host-application-lifecycle.md)\n- [Runtime Binary Portability](architecture/runtime-binary-portability.md)\n- [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md)\n- [Web Service system-browser authorization](architecture/web-service-browser-authorization.md)\n- [Managed Web Service opening](architecture/managed-web-service-opening.md)\n- [Managed Web Service Templates](architecture/managed-web-service-templates.md)\n- [Redeven Service Template format compatibility](architecture/service-template-format-compatibility.md)\n- [GitHub service template sources](architecture/managed-service-git-sources.md)\n- [Independent Host service lifecycle](architecture/independent-host-services.md)\n- [Managed Web Services](architecture/managed-web-services.md)\n- [Web Service management recovery](architecture/service-management-recovery.md)\n- [Service resource ownership](architecture/service-resource-ownership.md)\n- [Managed Service operation progress](architecture/managed-service-operation-progress.md)\n- [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md)\n- [Managed Service version interaction](architecture/managed-service-version-interaction.md)\n- [Managed Service instance configuration](architecture/managed-service-instance-configuration.md)\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md)\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md)\n- [Runtime system monitoring](architecture/runtime-system-monitoring.md)\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md)\n- [Runtime artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md)\n- [Runtime terminal lifecycle](architecture/runtime-terminal-lifecycle.md)\n- [Product RPC request encoding](architecture/product-rpc-request-encoding.md)\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md)\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md)\n- [Env App terminal and surface composition](architecture/env-app-terminal-and-surface-composition.md)\n- [Env App connection and recovery](architecture/env-app-connection-and-recovery.md)\n- [Whole-window status surfaces](ui/window-status-surfaces.md)\n- [Env App page asset recovery](ui/page-asset-recovery.md)\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md)\n- [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md)\n- [Plugin platform integration](architecture/plugin-platform-integration.md)\n- [Plugin process sessions](architecture/plugin-process-sessions.md)\n- [Plugin background entries](architecture/plugin-background-entries.md)\n- [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md)\n- [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md)\n- [Plugin market consumption](architecture/plugin-market-consumption.md)\n- [Native container operation observation](architecture/containers-operation-observation.md)\n- [Native container resources](architecture/container-resources-capability.md)\n- [Container runtime execution](architecture/container-runtime-execution.md)\n- [Volume usage observation](architecture/container-volume-usage.md)\n- [Container service management](architecture/container-service-management.md)\n- [Native container console](architecture/container-resources-console.md)\n\n## Security\n\n- [Runtime access sessions](security/runtime-access-sessions.md)\n- [Runtime two-factor authentication](security/runtime-two-factor-authentication.md)\n- [Local UI network exposure](security/local-ui-network-exposure.md)\n- [Local UI certificates](security/local-ui-certificates.md)\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md)\n- [Plugin platform integration security](security/plugin-platform-integration-security.md)\n\n## Desktop\n\n- [Verified Environment access routes](desktop/desktop-environment-access.md)\n\n- [Host application component cache](desktop/host-application-component-cache.md)\n- [Desktop qualification lifecycle](desktop/desktop-test-lifecycle.md)\n- [Desktop development sessions and bundles](desktop/desktop-development-bundles.md)\n- [Desktop Web Service browser window](desktop/web-service-browser-window.md)\n- [Desktop host application titlebar](desktop/host-application-titlebar.md)\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md)\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md)\n- [Desktop Environment library](desktop/desktop-environment-library.md)\n- [Preserve Desktop interaction sessions](desktop/desktop-interaction-continuity.md)\n- [Environment card presentation](desktop/desktop-environment-card-presentation.md)\n- [Desktop Welcome navigation](desktop/desktop-welcome-navigation.md)\n- [Desktop Environment connections](desktop/desktop-environment-connections.md)\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md)\n- [Runtime platform facts and icons](desktop/desktop-runtime-platform.md)\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md)\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md)\n- [Desktop WSL runtime operations](desktop/desktop-wsl-runtime-operations.md)\n- [Desktop session and model source](desktop/desktop-session-model-source.md)\n- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md)\n- [Desktop environment settings](desktop/desktop-environment-settings.md)\n- [Desktop environment settings presentation](desktop/desktop-environment-settings-presentation.md)\n- [Desktop SSH environment settings](desktop/desktop-ssh-environment-settings.md)\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md)\n- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md)\n- [Desktop application updates](desktop/desktop-application-updates.md)\n\n## Gateway\n\n- [Optional Runtime Cloud egress](gateway/gateway-cloud-access.md)\n- [Gateway client access](gateway/gateway-client-access.md)\n- [Gateway service](gateway/gateway-service.md)\n- [Gateway network settings](gateway/gateway-network-settings.md)\n- [Gateway Desktop interactions](gateway/gateway-desktop-interactions.md)\n- [Gateway access sessions](gateway/gateway-access-sessions.md)\n- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md)\n\n## Code\n\n- [CodeSpace system-browser access](desktop/codespace-system-browser.md)\n- [Native Desktop CodeSpace access](desktop/codespace-native-access.md)\n- [Browser Editor runtime](code/browser-editor-runtime.md)\n\n- [Flower MCP runtime](ai/mcp-runtime.md)\n- [Flower Agent Plugins](ai/flower-agent-plugins.md)\n- [Flower plugin catalog integration](ai/flower-plugin-catalogs.md)\n## UI\n\n- [Tessiven canvas](ui/tessiven-canvas.md)\n- [Tessiven relationship summaries](ui/tessiven-relationship-summaries.md)\n- [Tessiven canvas navigation and rendering](ui/tessiven-canvas-navigation.md)\n- [Tessiven Flower replies](ui/tessiven-flower-replies.md)\n\n- [Runtime settings](ui/runtime-settings.md)\n- [Flower extensions](ui/flower-extensions.md)\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md)\n- [Env App floating layer order](ui/env-app-floating-layer-order.md)\n- [Dialog content placement](ui/dialog-content.md)\n- [Adaptive desktop layout](ui/adaptive-desktop-layout.md)\n- [Mobile shell navigation](ui/mobile-shell-navigation.md)\n- [File preview window actions](ui/file-preview-window-actions.md)\n- [File preview dismissal](ui/file-preview-dismissal.md)\n- [File preview viewport and rendering](ui/file-preview-viewport-and-rendering.md)\n- [Static PPTX file preview](ui/file-preview-pptx.md)\n- [HTML file preview](ui/file-preview-html.md)\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md)\n- [Shared surface material](ui/surface-material.md)\n- [Product accessibility for AI agents](ui/agent-accessibility.md)\n- [Input focus boundaries](ui/input-focus-boundaries.md)\n- [Git browser visual states](ui/git-browser-visual-states.md)\n- [Git diff request lifecycle](ui/git-diff-request-lifecycle.md)\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md)\n- [Workbench composition surfaces and editing](ui/workbench-composition.md)\n- [Workbench input ownership](ui/workbench-input-ownership.md)\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md)\n- [Terminal fonts across client devices](ui/terminal-fonts.md)\n- [Terminal session groups](ui/terminal-session-groups.md)\n- [Official installation progress](ui/plugin-installation-progress.md)\n- [Plugin package review](ui/plugin-package-review.md)\n- [Plugin layout continuity](ui/plugin-layout-continuity.md)\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md)\n- [File icon presentation](ui/file-icon-presentation.md)\n- [Files context menus](ui/files-context-menu.md)\n- [Plugin Center interaction](ui/plugin-center-interaction.md)\n- [Plugin surfaces](ui/plugin-surfaces.md)\n- [Flower thread Goals](ai/flower-goals.md)\n- [Flower turn launcher](ui/flower-turn-launcher.md)\n- [Flower Activity origin page references](ui/flower-page-context.md)\n- [Flower conversation references](ui/flower-thread-references.md)\n- [Flower composer references](ui/flower-composer-references.md)\n- [Flower input history](ui/flower-input-history.md)\n- [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md)\n- [Floating Files window dismissal](ui/files-floating-window-dismissal.md)\n- [Personal directory favorites](ui/directory-favorites.md)\n- [Flower working directory navigation](ui/flower-working-directory-navigation.md)\n- [Flower mobile navigation](ui/flower-mobile-navigation.md)\n- [Flower Activity companion](ui/flower-activity-companion.md)\n- [Ask Flower window boundaries](ui/ask-flower-window.md)\n- [Flower companion composer and motion](ui/flower-companion-composer.md)\n- [Flower companion presence](ui/flower-companion-presence.md)\n- [Flower read state](ui/flower-read-state.md)\n- [Flower live timeline](ui/flower-live-timeline.md)\n- [Flower file edit preparation](ui/flower-edit-preparation.md)\n- [Flower timeline ordering](ui/flower-timeline-ordering.md)\n- [Flower terminal turn process disclosure](ui/flower-turn-process-disclosure.md)\n- [Flower reasoning selection ownership](ui/flower-reasoning-selection.md)\n- [Flower personal conversation preferences](ui/flower-conversation-preferences.md)\n- [Flower model and navigation presentation](ui/flower-model-navigation.md)\n- [Flower setup and settings](ui/flower-setup-and-settings.md)\n- [Flower provider configuration](ui/flower-provider-configuration.md)\n- [Flower ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md)\n- [Flower failure recovery](ui/flower-failure-recovery.md)\n- [Flower composer attachments](ui/flower-composer-attachments.md)\n- [Flower file activity presentation](ui/flower-file-activity.md)\n- [Flower consecutive tool sequences](ui/flower-tool-sequences.md)\n- [Flower activity disclosure interaction](ui/flower-activity-interaction.md)\n- [Flower conversation sidebar](ui/flower-thread-sidebar.md)\n- [Flower inline media](ui/flower-inline-media.md)\n- [Flower explicit long-thread qualification](operations/flower-long-thread-gate.md)\n- [Flower streaming stability](ui/flower-streaming-stability.md)\n- [Flower live queue CPU qualification](operations/flower-live-queue-performance.md)\n- [Flower request-history CPU qualification](operations/flower-request-history-performance.md)\n- [Flower received output progress](ui/flower-output-progress.md)\n- [Flower code highlighting](ui/flower-code-highlighting.md): Verify syntax colors, stable code selection/copy, and bounded background work in both hosts.\n- [Flower message appearance](ui/flower-message-appearance.md)\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md)\n- [Flower interactions and context state](ui/flower-approval-context.md)\n- [Asynchronous layout stability](ui/asynchronous-layout-stability.md)\n- [Shared interface scale](ui/interface-scale.md)\n- [Flower approval surface](ui/flower-approval-surface.md)\n- [Flower citations](ui/flower-citations.md)\n- [Flower subagent detail window](ui/flower-subagent-detail-window.md)\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md)\n- [Flower parent event timeline](ui/flower-parent-events.md)\n\n## AI\n\n- [Tessiven Runtime discovery and operations](ai/tessiven-runtime-operations.md)\n- [Tessiven Flower and service operations](ai/tessiven-flower-and-operations.md)\n\n- [Authorized platform model gateway](ai/platform-model-gateway.md)\n\n- [Model directory and selection](ai/model-directory-and-selection.md)\n- [Model web search](ai/model-web-search.md)\n- [Local ChatGPT plan authentication](ai/chatgpt-local-authentication.md)\n- [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md)\n- [Provider configuration validation](ai/provider-configuration-validation.md)\n- [Provider API and catalog review](ai/provider-api-catalog-review.md)\n\n- [Direct image reading and retention](ai/image-read-and-retention.md)\n- [AI tool runtime](ai/ai-tool-runtime.md)\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md)\n- [Flower backup and recovery](ai/flower-backup-and-recovery.md)\n- [Flower historical writer acceptance](ai/flower-upgrade-compatibility.md)\n- [Flower attachment resources](ai/flower-attachment-resources.md)\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md)\n- [Computer and browser use runtime](ai/computer-use-runtime.md)\n- [Computer semantic snapshots](ai/computer-use-semantics.md)\n- [Computer script execution](ai/computer-use-scripts.md)\n- [Computer script read and validation boundaries](ai/computer-script-read-contract.md)\n- [Optional built-in browser installation](ai/computer-use-browser-installation.md)\n- [Built-in browser Linux system preparation](ai/computer-use-browser-system.md)\n- [Browser and desktop settings](ai/computer-use-environment-settings.md)\n- [Guided Chrome connection](ai/computer-use-browser-connection.md)\n- [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md)\n- [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md)\n- [Semantic desktop operations](ai/computer-use-desktop.md)\n- [Computer target selection across threads](ai/computer-use-target-selection.md)\n- [Computer use safety pauses and user control](ai/computer-use-takeover.md)\n- [Private browser observation and input](ai/computer-use-private-browser-control.md)\n- [Computer use media and visual requests](ai/computer-use-media.md)\n- [Flower computer viewer presentation](ui/flower-computer-viewer.md)\n- [Computer use qualification](ai/computer-use-qualification.md)\n- [Computer use qualification evidence](ai/computer-use-qualification-evidence.md)\n- [Browser drag timing qualification](ai/computer-drag-qualification.md)\n- [Media contention and native read qualification](ai/computer-media-read-qualification.md)\n- [Computer use paired model measurements](ai/computer-use-performance.md)\n- [Codex design evidence](ai/computer-use-design-evidence.md)\n- [AI tool approval runtime](ai/tool-approval-runtime.md)\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md)\n- [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md)\n- [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md)\n- [AI model and context runtime](ai/model-context-runtime.md)\n- [Model provider surface and history](ai/model-provider-surface-and-history.md)\n- [Model request recovery](ai/model-request-recovery.md)\n- [Model request measurement](ai/model-request-measurement.md)\n- [Model request reuse](ai/model-request-reuse.md)\n- [Flower context compaction and Goal continuation](ai/flower-context-compaction.md)\n- [Model context usage and compaction](ai/model-context-usage-and-compaction.md)\n- [Flower context compaction qualification](operations/flower-compaction-qualification.md)\n- [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md)\n- [Flower context distribution qualification](operations/flower-context-distribution-qualification.md)\n- [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md)\n- [DeepSeek Responses](ai/deepseek-responses.md)\n- [Flower canonical thread queries](ai/flower-thread-queries.md)\n- [Floret thread runtime integration](ai/floret-thread-runtime.md)\n- [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md)\n- [Flower subagent parent events](ai/subagent-parent-events.md)\n- [Flower subagent runtime](ai/subagent-runtime.md)\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md)\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md)\n- [Flower plugin generation](ai/flower-plugin-generation.md)\n- [Flower context action records](ai/flower-context-action-records.md)\n- [Redeven environment operations](ai/redeven-env-operations.md)\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md)\n- [OKF tool suite](ai/okf-search-tool.md)\n\n## Protocol\n\n- [Gateway v6 protocol](protocol/gateway-v6-protocol.md)\n- [RCPP v5 Cloud API](protocol/rcpp-v5-cloud-api.md)\n\n## Release\n\n- [Self-contained installer distribution](release/self-contained-installer.md)\n- [CI and release gates](release/ci-and-release-gates.md)\n- [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md)\n- [Plugin integration gate](release/plugin-integration-gates.md)\n- [OKF release assets](release/okf-release-assets.md)\n- [Automated service-template catalog updates](release/service-template-updates.md)\n\n- [Managed runtime facts](ai/flower-managed-model-context.md): canonical request-boundary snapshots and safe recovery.",
     "sections": [
       {
         "title": "Architecture",
@@ -125,7 +125,7 @@
               "performance",
               "validation"
             ],
-            "summary": "Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats, signed Gateway observations, and credential recovery. A full acceptance result combines client latency and recovery counts with independent server CPU, RSS, database, queue, and challenge-backlog measurements.",
+            "summary": "Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats and Runtime-owned credential recovery. A full acceptance result combines client latency and recovery counts with independent server CPU, RSS, database, queue, and challenge-backlog measurements.",
             "section_count": 2
           },
           {
@@ -1842,7 +1842,7 @@
               "identity",
               "runtime"
             ],
-            "summary": "Desktop associates Gateway routes only after matching member ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.",
+            "summary": "Desktop associates Gateway routes only after matching attachment ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.",
             "section_count": 2
           },
           {
@@ -2217,43 +2217,39 @@
             "concept_id": "gateway.gateway-cloud-access",
             "path": "gateway/gateway-cloud-access.md",
             "type": "Gateway Contract",
-            "title": "Gateway Cloud access",
+            "title": "Optional Runtime Cloud egress",
             "tags": [
-              "cloud",
+              "access",
               "gateway",
-              "identity",
-              "networking",
               "security"
             ],
-            "summary": "Gateway Cloud v3 manages a Gateway machine and its local directory. RCPP v5 independently enrolls and recovers a Runtime over either direct HTTPS or the selected Gateway proxy. Gateway local v6 owns membership, invitations and restricted egress. Cloud owns environment identity, Namespace ownership and approval. Runtime owns one Cloud association, one selected route and one Flowersec connection controller.",
+            "summary": "Cloud is optional Runtime functionality. Gateway has no Cloud binding or credentials. A Runtime can explicitly select an attached Gateway as a restricted network exit; that selection changes transport, never Cloud ownership or independent access authority.",
             "section_count": 2
           },
           {
             "concept_id": "gateway.gateway-client-access",
             "path": "gateway/gateway-client-access.md",
             "type": "Gateway Contract",
-            "title": "Gateway client access",
+            "title": "Gateway device trust and host operations",
             "tags": [
               "access",
-              "desktop",
               "gateway",
-              "identity"
+              "security"
             ],
-            "summary": "Gateway exposes two fixed paths: verified host administration and environment-only URL access. Clients cannot choose roles or persist management authority. Runtime lifecycle and application authentication remain independent; Cloud operations still require Cloud authorization.",
+            "summary": "Paired client devices receive independent Gateway access, never a user account, role or host-management grant. Public pairing works on a fresh private network through scoped TLS bootstrap. Runtime password/MFA and Web Center single-administrator protection remain separate.",
             "section_count": 2
           },
           {
             "concept_id": "gateway.gateway-service",
             "path": "gateway/gateway-service.md",
             "type": "Gateway Contract",
-            "title": "Gateway service",
+            "title": "Independent Gateway service",
             "tags": [
               "access",
-              "desktop",
               "gateway",
-              "identity"
+              "security"
             ],
-            "summary": "redeven-gateway owns durable membership, one-time invitations, client grants, policy and restricted forwarding. Runtime verifies address/code, previews signed enrollment then explicitly joins. Gateway never scans/dials Runtime addresses or manages Runtime lifecycle. LAN needs no Cloud; Gateway loss affects its paths, not independent management authority.",
+            "summary": "Gateway is an independent Runtime attachment, client-device admission and relay service. A fresh Gateway and Runtime work without a Cloud account, cached Cloud authority or public Internet. Cloud membership, organizations and user roles belong only to Cloud. Gateway and Runtime maintain device trust and environment authentication, never a local user directory.",
             "section_count": 2
           },
           {
@@ -2303,17 +2299,15 @@
           {
             "concept_id": "gateway.gateway-deployment-qualification",
             "path": "gateway/gateway-deployment-qualification.md",
-            "type": "Validation Guide",
-            "title": "Gateway deployment qualification",
+            "type": "Gateway Contract",
+            "title": "Independent Gateway qualification",
             "tags": [
-              "desktop",
               "gateway",
               "networking",
-              "security",
               "validation"
             ],
-            "summary": "Qualification must prove Runtime-to-Gateway connection direction and real application behavior. Unit tests alone do not establish Electron certificate handling, browser MFA, MySQL migration or an isolated network path. Record each command's actual result; source changes or installer builds are not proof that an application flow passed. These affected-feature checks are separate from release packaging and the aggregate push gate.",
-            "section_count": 2
+            "summary": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. These checks are separate from the aggregate main push gate and release packaging.",
+            "section_count": 1
           }
         ]
       },
@@ -4601,16 +4595,15 @@
           {
             "concept_id": "protocol.gateway-v6-protocol",
             "path": "protocol/gateway-v6-protocol.md",
-            "type": "Protocol Contract",
-            "title": "Gateway v6 protocol",
+            "type": "Gateway Contract",
+            "title": "Gateway v6 independent device protocol",
             "tags": [
               "gateway",
               "identity",
-              "protocol",
-              "security"
+              "protocol"
             ],
-            "summary": "Gateway serves only redeven-gateway-v6, defined by spec/openapi/gateway-v6.yaml. Signed invitations carry admin-confirmed addresses; authenticated exchange returns the signed descriptor/all endpoints. Gateway owns paired Desktop permissions and Runtime-initiated membership. Mismatch/old config fails unchanged; old URL-profile/HTTP-forward routes are absent. Cloud v3 remains separate.",
-            "section_count": 2
+            "summary": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.",
+            "section_count": 1
           },
           {
             "concept_id": "protocol.rcpp-v5-cloud-api",
@@ -5802,19 +5795,19 @@
         "label": "Gateway client access",
         "path": "gateway/gateway-client-access.md",
         "concept_id": "gateway.gateway-client-access",
-        "title": "Gateway client access"
+        "title": "Gateway device trust and host operations"
       },
       {
-        "label": "Gateway Cloud access",
+        "label": "Optional Runtime Cloud egress",
         "path": "gateway/gateway-cloud-access.md",
         "concept_id": "gateway.gateway-cloud-access",
-        "title": "Gateway Cloud access"
+        "title": "Optional Runtime Cloud egress"
       },
       {
         "label": "Gateway deployment qualification",
         "path": "gateway/gateway-deployment-qualification.md",
         "concept_id": "gateway.gateway-deployment-qualification",
-        "title": "Gateway deployment qualification"
+        "title": "Independent Gateway qualification"
       },
       {
         "label": "Gateway Desktop interactions",
@@ -5832,7 +5825,7 @@
         "label": "Gateway service",
         "path": "gateway/gateway-service.md",
         "concept_id": "gateway.gateway-service",
-        "title": "Gateway service"
+        "title": "Independent Gateway service"
       },
       {
         "label": "Control-plane capacity qualification",
@@ -6066,7 +6059,7 @@
         "label": "Gateway v6 protocol",
         "path": "protocol/gateway-v6-protocol.md",
         "concept_id": "protocol.gateway-v6-protocol",
-        "title": "Gateway v6 protocol"
+        "title": "Gateway v6 independent device protocol"
       },
       {
         "label": "RCPP v5 Cloud API",
@@ -16974,7 +16967,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Published Flowersec transport and Floeterm boundary covering session ownership, protocol profiles, and shared admission.",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "architecture",
           "dependencies",
@@ -16983,15 +16976,15 @@
         "title": "Runtime transport dependencies",
         "type": "Runtime Contract"
       },
-      "body_length": 2099,
+      "body_length": 2462,
       "summary": "Runtime composes Transport v3 and published Flowersec connection/session/RPC/stream primitives; Floeterm owns terminal lifecycle. Each Env App shares one current protocol session across RPC and live streams. Desktop SSH placement HTTP/2 is separate and does not redefine Flowersec wire or public SDK behavior.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## AI Flower RPC registration\nThe local direct and remote agent production session profiles register the complete AI inventory before Flowersec freezes a session. A declared method therefore cannot fail at the router with a missing-handler 404. Stop remains one RPC lifecycle command without a fallback transport.\n\n## Mechanism\nThe released runtime dependency set includes Floeterm terminal-go v0.19.2 and Flowersec Go v5.11.1.\n\nEnv App and Desktop consume Flowersec TypeScript v5.11.1.\n\nSwitching a Flower thread, Activity or Workbench mode, terminal view, or file consumer cannot reconnect Flowersec.\n\nTerminal ownership, live framing, history, attachment arbitration, and warmup are specified in [Runtime terminal lifecycle](runtime-terminal-lifecycle.md); this concept only defines the Flowersec/Floeterm dependency boundary and shared transport admission.",
-          "char_count": 860
+          "body": "## AI Flower RPC registration\nThe local direct and remote agent production session profiles register the complete AI inventory before Flowersec freezes a session. A declared method therefore cannot fail at the router with a missing-handler 404. Stop remains one RPC lifecycle command without a fallback transport.\n\n## Independent Gateway composition\n\nThe upstream-first review uses published Flowersec 5.11.1 WebSocketHTTPServerOptions.ApplicationHandler to compose client HTTP with Runtime transport on one TLS endpoint, and its egress.HTTPSProxy for explicit Runtime Cloud routing. No upstream mechanism change, local dependency overlay or copied implementation is required.\n\n## Mechanism\nThe released runtime dependency set includes Floeterm terminal-go v0.19.2 and Flowersec Go v5.11.1.\n\nEnv App and Desktop consume Flowersec TypeScript v5.11.1.\n\nSwitching a Flower thread, Activity or Workbench mode, terminal view, or file consumer cannot reconnect Flowersec.\n\nTerminal ownership, live framing, history, attachment arbitration, and warmup are specified in [Runtime terminal lifecycle](runtime-terminal-lifecycle.md); this concept only defines the Flowersec/Floeterm dependency boundary and shared transport admission.",
+          "char_count": 1223
         },
         {
           "id": "boundaries",
@@ -18356,7 +18349,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "access",
           "desktop",
@@ -18367,15 +18360,15 @@
         "title": "Verified Environment access routes",
         "type": "Desktop Contract"
       },
-      "body_length": 2748,
-      "summary": "Desktop associates Gateway routes only after matching member ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.",
+      "body_length": 2736,
+      "summary": "Desktop associates Gateway routes only after matching attachment ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Runtime state identity\nEach Runtime state directory owns an immutable Ed25519 seed in `access-identity.key`. Invalid or symlinked existing material fails closed and is never replaced.\n\nExisting TLS, Gateway trust and Runtime authentication remain authoritative.\n\n## Observation and grouping\nMain-process observations bind an entry ID to its configured connection and verified identity.\n\nRuntime membership summaries use the Gateway pairing fingerprint: SHA-256 of the canonical, trimmed Ed25519 SubjectPublicKeyInfo PEM, encoded as unpadded base64url with `SHA256:`.\n\nExisting registrations, Gateway member and Cloud binding authority remain in their respective stores.\n\n## Explicit default and one-time opening\nThe existing main Open button uses the saved default. Implicit defaults use stable registration / first-observation order, never probe completion order or a newly rebuilt Gateway catalog timestamp.\n\n[Gateway access sessions](../gateway/gateway-access-sessions.md) owns transport isolation and same-route session reuse.\n\n## Membership discovery and migration\nMembers are discovered from the signed v6 directory and matched to trusted Runtime membership summaries.\n\nExisting Cloud-only Runtime configurations must rejoin and cannot silently gain the new member delegation. [Gateway Cloud access](../gateway/gateway-cloud-access.md) owns proof-based preservation of a formal environment ID.",
-          "char_count": 1402
+          "body": "## Runtime state identity\nEach Runtime state directory owns an immutable Ed25519 seed in `access-identity.key`. Invalid or symlinked existing material fails closed and is never replaced.\n\nExisting TLS, Gateway trust and Runtime authentication remain authoritative.\n\n## Observation and grouping\nMain-process observations bind an entry ID to its configured connection and verified identity.\n\nRuntime membership summaries use the Gateway pairing fingerprint: SHA-256 of the canonical, trimmed Ed25519 SubjectPublicKeyInfo PEM, encoded as unpadded base64url with `SHA256:`.\n\nExisting registrations, Gateway member and Cloud binding authority remain in their respective stores.\n\n## Explicit default and one-time opening\nThe existing main Open button uses the saved default. Implicit defaults use stable registration / first-observation order, never probe completion order or a newly rebuilt Gateway catalog timestamp.\n\n[Gateway access sessions](../gateway/gateway-access-sessions.md) owns transport isolation and same-route session reuse.\n\n## Membership discovery and migration\nMembers are discovered from the signed v6 directory and matched to trusted Runtime membership summaries.\n\nRuntime attachment requires local consent and never adds Cloud enrollment delegation. Existing unsupported state is rejected unchanged. Optional Cloud binding and explicit transport route remain independent.",
+          "char_count": 1386
         },
         {
           "id": "boundaries",
@@ -18397,7 +18390,7 @@
           "description": "Public/private identity and independent Runtime auth."
         }
       ],
-      "snippet": "Desktop associates Gateway routes only after matching member ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cl",
+      "snippet": "Desktop associates Gateway routes only after matching attachment ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Loca",
       "links": [
         {
           "label": "Web Center",
@@ -18410,12 +18403,6 @@
           "path": "gateway/gateway-access-sessions.md",
           "concept_id": "gateway.gateway-access-sessions",
           "title": "Gateway access sessions"
-        },
-        {
-          "label": "Gateway Cloud access",
-          "path": "gateway/gateway-cloud-access.md",
-          "concept_id": "gateway.gateway-cloud-access",
-          "title": "Gateway Cloud access"
         },
         {
           "label": "Gateway Desktop interactions",
@@ -18648,7 +18635,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "cloud",
           "desktop",
@@ -18658,15 +18645,15 @@
         "title": "Desktop Environment library",
         "type": "Desktop Contract"
       },
-      "body_length": 2339,
+      "body_length": 2346,
       "summary": "Welcome projects authoritative owners into one library. Exact Runtime/Cloud links share a card; paired Gateways add access tabs. Independent registrations remain separate. Grouping grants no permission or fallback transport. Unlink restores cards; Cloud failures preserve known entries with stale-result context.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- The Environment header shows its title, description and actionable search/refresh/create controls, without an aggregate statistics row. Category filters retain their counts; cards retain individual Runtime/window states. A current snapshot issue remains visible below the description only while present, without reserving space in the normal header.\n- Pair Local/SSH/WSL with Cloud only when linked Runtime ID, Cloud origin, Cloud ID and ENV ID agree. Access-point origin is routing metadata, so directory changes do not split identity. Current health outranks old window startup reports; retained display grants no control.\n- [Card presentation](desktop-environment-card-presentation.md) owns tabs/layout. Search and equivalent snapshots preserve selection; source filters apply their default once. [Interaction continuity](desktop-interaction-continuity.md) owns drafts, authority, visibility and stale responses.\n- Trusted Gateway summaries provide name, endpoints, member identity/phase and Cloud publication ownership. One member needs no selector. Refresh cannot restore a retired selection; confirmation cannot substitute a disappeared member. Existing menu order and capability checks remain authoritative.\n- Redeven Cloud shows a section per signed-in account and shared grid. Offer Refresh normally or after synchronization failure, and Sign in again after expiry. Either owner pin places a group in Pinned; controls change only the active owner and explain the other owner's pin.",
-          "char_count": 1492
+          "body": "- The Environment header shows its title, description and actionable search/refresh/create controls, without an aggregate statistics row. Category filters retain their counts; cards retain individual Runtime/window states. A current snapshot issue remains visible below the description only while present, without reserving space in the normal header.\n- Pair Local/SSH/WSL with Cloud only when linked Runtime ID, Cloud origin, Cloud ID and ENV ID agree. Access-point origin is routing metadata, so directory changes do not split identity. Current health outranks old window startup reports; retained display grants no control.\n- [Card presentation](desktop-environment-card-presentation.md) owns tabs/layout. Search and equivalent snapshots preserve selection; source filters apply their default once. [Interaction continuity](desktop-interaction-continuity.md) owns drafts, authority, visibility and stale responses.\n- Trusted Gateway summaries provide name, endpoints, attachment identity/phase and its selected egress dependency. One member needs no selector. Refresh cannot restore a retired selection; confirmation cannot substitute a disappeared member. Existing menu order and capability checks remain authoritative.\n- Redeven Cloud shows a section per signed-in account and shared grid. Offer Refresh normally or after synchronization failure, and Sign in again after expiry. Either owner pin places a group in Pinned; controls change only the active owner and explain the other owner's pin.",
+          "char_count": 1499
         },
         {
           "id": "boundaries",
@@ -20360,7 +20347,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "access",
           "desktop",
@@ -20371,15 +20358,15 @@
         "title": "Gateway access sessions",
         "type": "Gateway Contract"
       },
-      "body_length": 1767,
+      "body_length": 1839,
       "summary": "Desktop opens a joined Runtime over its existing outbound Flowersec connection to Gateway. Gateway forwards bytes to the Runtime's fixed application entry; it has no Runtime URL to dial. TLS terminates in Desktop and Runtime. Password, MFA, Host/Origin checks and application authorization remain Runtime-owned. Access artifacts limit initial redemption; no Gateway timer shortens established business sessions.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Reverse application streams\nAfter local consent, Runtime redeems its invitation with its own identity and initiates a persistent Flowersec session to the member TLS endpoint. Gateway opens a reverse ByteStream on that Runtime's connection and relays both streams with bounded buffers and cancellation.\n\nTLS, WebSocket, streaming responses and secure cookies retain their original semantics.\n\n## Application and management separation\nA reverse stream enters the original public Runtime handler. It never acquires a trusted Desktop management marker.\n\nThe catalog alone does not authorize service or Runtime process operations.\n\n## Limits and revocation\nThe shared budget admits at most 32 business connections per member and 1,024 in total, including pending opens. One member exceeding a limit cannot consume another member's allocation.\n\nCloud closure receipts and partition limits are owned by [Gateway Cloud access](gateway-cloud-access.md).",
-          "char_count": 947
+          "body": "## Reverse application streams\nAfter local consent, Runtime redeems its invitation with its own identity and initiates a persistent Flowersec session to the unified public TLS endpoint. Gateway opens a reverse ByteStream on that Runtime's connection and relays both streams with bounded buffers and cancellation.\n\nTLS, WebSocket, streaming responses and secure cookies retain their original semantics.\n\n## Application and management separation\nA reverse stream enters the original public Runtime handler. It never acquires a trusted Desktop management marker.\n\nThe catalog alone does not authorize service or Runtime process operations.\n\n## Limits and revocation\nThe shared budget admits at most 32 business connections per member and 1,024 in total, including pending opens. One member exceeding a limit cannot consume another member's allocation.\n\nCloud authorization never closes independent Gateway streams. Local egress cancellation is scoped separately by [Optional Runtime Cloud egress](gateway-cloud-access.md).",
+          "char_count": 1019
         },
         {
           "id": "boundaries",
@@ -20392,10 +20379,10 @@
       "snippet": "Desktop opens a joined Runtime over its existing outbound Flowersec connection to Gateway. Gateway forwards bytes to the Runtime's fixed application entry; it has no Runtime URL to dial. TLS terminates in Desktop and Runtime. Password, MFA,",
       "links": [
         {
-          "label": "Gateway Cloud access",
+          "label": "Optional Runtime Cloud egress",
           "path": "gateway/gateway-cloud-access.md",
           "concept_id": "gateway.gateway-cloud-access",
-          "title": "Gateway Cloud access"
+          "title": "Optional Runtime Cloud egress"
         }
       ],
       "backlinks": [
@@ -20416,49 +20403,53 @@
       "path": "gateway/gateway-client-access.md",
       "concept_id": "gateway.gateway-client-access",
       "type": "Gateway Contract",
-      "title": "Gateway client access",
+      "title": "Gateway device trust and host operations",
       "tags": [
         "access",
-        "desktop",
         "gateway",
-        "identity"
+        "security"
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "access",
-          "desktop",
           "gateway",
-          "identity"
+          "security"
         ],
-        "title": "Gateway client access",
+        "title": "Gateway device trust and host operations",
         "type": "Gateway Contract"
       },
-      "body_length": 1871,
-      "summary": "Gateway exposes two fixed paths: verified host administration and environment-only URL access. Clients cannot choose roles or persist management authority. Runtime lifecycle and application authentication remain independent; Cloud operations still require Cloud authorization.",
+      "body_length": 3932,
+      "summary": "Paired client devices receive independent Gateway access, never a user account, role or host-management grant. Public pairing works on a fresh private network through scoped TLS bootstrap. Runtime password/MFA and Web Center single-administrator protection remain separate.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Host administration\nLocal, SSH, local-container and SSH-container connections acquire management only after actually reaching the target Gateway and verifying its private host credential. It never exposes the credential to Renderer, URL connections, Runtime channels or logs.\n\nRemoving a Desktop connection does not stop or delete the Gateway service.\n\n## URL enrollment and reconnection\nAdministrators create client access codes through POST `/gateway/v6/clients/access-codes` or `redeven-gateway clients access-code`. An identical completion retry returns the original result after response loss; other clients cannot consume that code.\n\nA client access code neither enrolls a Runtime nor grants Gateway administration.\n\n## Client visibility and revocation\nHost administrators list clients through POST `/gateway/v6/clients/list` or `redeven-gateway clients list`. The display name is a recognition label, never identity evidence.\n\nRevocation survives restart.\n\n## State and compatibility\nTrust schema 3 retains Gateway and client keys, preserves previously allowed environment access and removes legacy management grants. A handshake mismatch requests a Gateway/Desktop update, not identity replacement or state reinstallation.",
-          "char_count": 1233
+          "body": "## Two different invitations\nHost administrators issue Runtime invitation codes for Runtime-owned authenticated exchange and explicit consent. Client access information uses rdgc1 with purpose redeven-gateway-client, version 1, one-use secret, exact Gateway ID/key, scoped TLS CA and expiry. The purpose-specific parsers reject cross-use, unknown fields, malformed trust and expired input.\n\nThe client verifies HTTPS with only the delivered connection CA, then verifies the signed Gateway identity before persisting its device trust. It never disables TLS verification or installs a global CA. Access information expires after ten minutes; consumed material cannot pair another device. The original identical pairing completion can recover a lost response.\n\nDesktop and Web Center preserve the CA with their independent Gateway record. Display names identify devices for humans and never authenticate them. Revoking a device rejects new admission and closes its dependent channels without revoking another client or Cloud user.\n\n## Private management\nLocal/SSH/container adapters reach the private host socket and verify its credential. Public URLs expose only device access. Client capabilities are computed by the Gateway, not selected by the caller or persisted as host authority. Removing a saved Desktop connection retains the remote service and its data.\n\n## Mutation recovery\nPrivate host mutations carry X-Redeven-Operation-ID. A bounded private journal persists intent before execution and the resulting response afterward. The same ID/body returns the saved result; a different route/body conflicts. POST /gateway/v6/operations/query retrieves the original result over the private host channel. Receipts expire after 24 hours and the journal admits at most 1,024 operations in that window. It is a mode-0600 host-only credential store: issuance receipts can contain the original short-lived access package. Never include its contents in diagnostics or public responses. Expired receipts do not authorize an automatic repeat.\n\nA process interrupted between effect and receipt reports OPERATION_RESULT_UNKNOWN; it never replays that effect. Desktop retains the operation ID in its private credential store and queries it after a lost response. A completed failure clears the pending operation; an uncertain or expired result stays fenced and presents its ID for inspection. An explicit acknowledgement after reviewing current state clears only the saved recovery fence for the verified Gateway; it does not repeat the mutation. CLI mutations accept --operation-id, expose it on failure, and support operations query --operation-id over the same private channel. Runtime join, credential rotation, Cloud route and enrollment continue using their existing domain receipts. Observation/refresh does not create new authorization or resubmit consent.",
+          "char_count": 2853
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Verified host access owns Gateway administration. URL enrollment grants only environment access; neither path replaces Runtime consent or Cloud authorization.",
-          "char_count": 158
+          "body": "Gateway trust controls device transport admission. Runtime owns environment authentication and execution. Web Center is a trusted proxy that may see application plaintext; its entry protection and owner-approved bindings remain mandatory and independent of Cloud.",
+          "char_count": 263
         }
       ],
-      "snippet": "Gateway exposes two fixed paths: verified host administration and environment-only URL access. Clients cannot choose roles or persist management authority. Runtime lifecycle and application authentication remain independent; Cloud operation",
+      "snippet": "Paired client devices receive independent Gateway access, never a user account, role or host-management grant. Public pairing works on a fresh private network through scoped TLS bootstrap. Runtime password/MFA and Web Center single-administ",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Gateway v6 independent device protocol",
+          "path": "protocol/gateway-v6-protocol.md",
+          "concept_id": "protocol.gateway-v6-protocol",
+          "title": "Gateway v6 independent device protocol"
         }
       ]
     },
@@ -20466,53 +20457,43 @@
       "path": "gateway/gateway-cloud-access.md",
       "concept_id": "gateway.gateway-cloud-access",
       "type": "Gateway Contract",
-      "title": "Gateway Cloud access",
+      "title": "Optional Runtime Cloud egress",
       "tags": [
-        "cloud",
+        "access",
         "gateway",
-        "identity",
-        "networking",
         "security"
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-02",
         "tags": [
-          "cloud",
+          "access",
           "gateway",
-          "identity",
-          "networking",
           "security"
         ],
-        "title": "Gateway Cloud access",
+        "title": "Optional Runtime Cloud egress",
         "type": "Gateway Contract"
       },
-      "body_length": 2108,
-      "summary": "Gateway Cloud v3 manages a Gateway machine and its local directory. RCPP v5 independently enrolls and recovers a Runtime over either direct HTTPS or the selected Gateway proxy. Gateway local v6 owns membership, invitations and restricted egress. Cloud owns environment identity, Namespace ownership and approval. Runtime owns one Cloud association, one selected route and one Flowersec connection controller.",
+      "body_length": 3354,
+      "summary": "Cloud is optional Runtime functionality. Gateway has no Cloud binding or credentials. A Runtime can explicitly select an attached Gateway as a restricted network exit; that selection changes transport, never Cloud ownership or independent access authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Independent approval and membership\nJoining a Gateway establishes local membership only. A directory cannot obtain Runtime credentials.\n\nNamespace authorization, local egress permission and batch-enrollment delegation are separate decisions.\n\n## Required network path\nRuntime control registration, independent recovery, data transport and enabled official-platform requests use the explicitly selected route. Gateway outages and denied egress never trigger a direct Internet fallback or global proxy environment variables.\n\nOwnership changes require separate authorization.\n\n## One recovery owner\nRegistration, heartbeat and credential replenishment share one connection controller and independent credential source.\n\nUnknown results resume that operation.\n\nEach route operation can be queried after an unknown result; cancellation reports a committed operation truthfully.\n\n## Management notifications and closure\nEach Gateway has one authenticated HTTPS notification owner. Reconnection starts with an authoritative snapshot.\n\nNo short data lease is introduced during ordinary control outages.",
-          "char_count": 1098
+          "body": "## Independent enrollment\nRuntime owns one Cloud association, owner-issued setup authorization and its existing Flowersec connection controller. Gateway attachment consent cannot authorize Cloud registration. Runtime may select a Gateway route before initial Cloud enrollment, using route/association revision zero; enrollment verifies the actual Cloud target when it becomes known.\n\nRoute operations retain an operation ID, expected revisions, target fingerprint, confirmation and queryable result. Changing an attachment, certificate, route or Cloud identity invalidates previous consent. An unknown result queries the original operation. A canceled committed operation remains committed.\n\n## Local egress\nNew Gateways deny egress with an empty destination list. Host administrators configure exact canonical host:port destinations and per-attachment inherit/allow/deny overrides. Wildcards, URLs, paths, duplicate or malformed authorities are rejected. Executable policy uses attachment.admit, access.open and egress.open; no Cloud approval is consulted.\n\nAdmission requires the current Runtime attachment certificate, current local policy and unexpired credentials. The published Flowersec HTTPSProxy carries inner HTTPS without exporting Runtime Cloud keys. Public product policy rejects private resolved destinations; the isolated acceptance harness explicitly opts into its private fixture network. No unrestricted proxy or global proxy environment mutation is introduced.\n\nDisabled egress closes only egress reservations. Independent reverse application streams remain available. Removing an attachment closes all streams depending on that attachment. Credential expiry and stale timers cannot restore withdrawn policy. Policy snapshots copy destination lists so callers cannot widen authority by mutating them.\n\n## No fallback or cross-path revocation\nRuntime registration, recovery, Cloud transport and enabled official-platform traffic use the explicitly chosen route. Route failure reports unavailable; it never silently dials Cloud directly. Cloud logout, user removal or binding revocation cannot alter Gateway device trust, attachments or environment passwords/MFA. Cloud sessions remain subject to their own authorization and Runtime security checks.",
+          "char_count": 2266
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "One connection controller owns Runtime Cloud execution. Unknown or retired configuration is rejected read-only and requires explicit new configuration and registration. Released upstream Flowersec supplies HTTPS proxy, credential source, notifications and retry control; local sibling dependency wiring is prohibited.",
-          "char_count": 317
+          "body": "Cloud owns users, roles and resource bindings. Runtime owns Cloud enrollment and sessions. Gateway owns only local device admission and constrained forwarding. There is no Gateway Cloud notification owner, Namespace delegation or publication state.",
+          "char_count": 248
         }
       ],
-      "snippet": "Gateway Cloud v3 manages a Gateway machine and its local directory. RCPP v5 independently enrolls and recovers a Runtime over either direct HTTPS or the selected Gateway proxy. Gateway local v6 owns membership, invitations and restricted eg",
+      "snippet": "Cloud is optional Runtime functionality. Gateway has no Cloud binding or credentials. A Runtime can explicitly select an attached Gateway as a restricted network exit; that selection changes transport, never Cloud ownership or independent a",
       "backlinks": [
-        {
-          "label": "Verified Environment access routes",
-          "path": "desktop/desktop-environment-access.md",
-          "concept_id": "desktop.desktop-environment-access",
-          "title": "Verified Environment access routes"
-        },
         {
           "label": "Gateway access sessions",
           "path": "gateway/gateway-access-sessions.md",
@@ -20525,57 +20506,46 @@
           "title": "Redeven OKF Bundle"
         },
         {
-          "label": "Gateway v6 protocol",
+          "label": "Gateway v6 independent device protocol",
           "path": "protocol/gateway-v6-protocol.md",
           "concept_id": "protocol.gateway-v6-protocol",
-          "title": "Gateway v6 protocol"
+          "title": "Gateway v6 independent device protocol"
         }
       ]
     },
     {
       "path": "gateway/gateway-deployment-qualification.md",
       "concept_id": "gateway.gateway-deployment-qualification",
-      "type": "Validation Guide",
-      "title": "Gateway deployment qualification",
+      "type": "Gateway Contract",
+      "title": "Independent Gateway qualification",
       "tags": [
-        "desktop",
         "gateway",
         "networking",
-        "security",
         "validation"
       ],
       "frontmatter": {
-        "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "lifecycle": "active_evidence",
+        "reviewed_at": "2026-11-02",
         "tags": [
-          "desktop",
           "gateway",
           "networking",
-          "security",
           "validation"
         ],
-        "title": "Gateway deployment qualification",
-        "type": "Validation Guide"
+        "title": "Independent Gateway qualification",
+        "type": "Gateway Contract"
       },
-      "body_length": 1881,
-      "summary": "Qualification must prove Runtime-to-Gateway connection direction and real application behavior. Unit tests alone do not establish Electron certificate handling, browser MFA, MySQL migration or an isolated network path. Record each command's actual result; source changes or installer builds are not proof that an application flow passed. These affected-feature checks are separate from release packaging and the aggregate push gate.",
+      "body_length": 2801,
+      "summary": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. These checks are separate from the aggregate main push gate and release packaging.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## LAN application acceptance\n`scripts/check_gateway_access_browser.sh` starts production Gateway handlers and Runtime application handlers without Runtime TCP listeners or Cloud.\n\nNo global TLS exception, dependency overlay or system trust installation is permitted.\n\n## Network and Cloud acceptance\n`scripts/check_gateway_cloud_isolation.sh` provides a Docker network in which Runtime cannot reach Cloud IPs, public IPs or public DNS.\n\nAutomatic publication and manual unpublication must preserve their different approval semantics.\n\n## Product and release boundaries\nDesktop renderer qualification checks all ten locales, narrow viewports, large text, keyboard activation, cancel focus, failed refresh and partial batches.\n\nA local source fixture cannot certify those results. Do not delete another task's processes, volumes, branches or worktrees while preparing or cleaning acceptance resources.",
-          "char_count": 900
-        },
-        {
-          "id": "boundaries",
-          "title": "Boundaries",
-          "level": 1,
-          "body": "These checks qualify Gateway membership, access, and isolation behavior on task-owned resources. They do not replace unit contracts, release packaging evidence, or the aggregate push gate, and a passing local fixture cannot certify an installer or an unrelated deployment target.",
-          "char_count": 279
+          "body": "## Product paths\nscripts/check_gateway_access_browser.sh starts the production public Gateway and Runtime handlers with no Runtime inbound TCP listener or Cloud credentials. A real Electron client pairs through the advertised HTTPS endpoint using scoped trust, then exercises password, MFA/recovery, files, terminal, CodeSpace edit/save, cookies, service forwarding and inner certificate rejection.\n\nscripts/check_center.sh --browser exercises the actual Web Center UI in Chromium, Firefox and WebKit: single-administrator entry setup, fresh Gateway pairing, owner-approved Runtime bindings, real terminal/files/Git/editor/services, origin boundaries and independent device/Runtime/Gateway revocation. The fixture uses the same unified Gateway public listener, not a private-handler TCP shortcut.\n\nscripts/check_gateway_cloud_isolation.sh creates task-owned isolated Docker networks. Runtime cannot reach Cloud IPs, public routing or public DNS. Local Gateway egress policy alone admits authenticated inner HTTPS and Flowersec RPC. No Gateway Cloud identity exists. Fixture-only private destinations are explicit; product destination safety remains enabled.\n\n## Presentation and state\nGateway management qualification covers ten locales at 390, 430, 768 and 1280 pixels, explicit issuance, preserved drafts, revocation, keyboard menus and active-only scroll extent. Focused contracts verify wrong-purpose/expired trust packages, public management rejection, read-only old-state rejection, persisted connection migration and operation recovery.",
+          "char_count": 1543
         }
       ],
-      "snippet": "Qualification must prove Runtime-to-Gateway connection direction and real application behavior. Unit tests alone do not establish Electron certificate handling, browser MFA, MySQL migration or an isolated network path. Record each command's",
+      "snippet": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. These checks are separate from the aggregate main push gate and release packaging.",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -20597,7 +20567,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "desktop",
           "gateway",
@@ -20607,15 +20577,15 @@
         "title": "Gateway Desktop interactions",
         "type": "Interaction Contract"
       },
-      "body_length": 7173,
+      "body_length": 7238,
       "summary": "Desktop enrolls managed Local, SSH, WSL and container targets through one app-owned session. Runtime management, invitation verification and local consent remain separate authorities. Membership appears only after joining; observations preserve drafts, while confirmed faults require explicit recovery. No Runtime URL enrollment form exists.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Enrollment and authority\nOne app session serves creation and card actions for managed Local, SSH, WSL and container targets. Creation offers Not now or Add Gateway access after setup. Each opening leases the exact sender/target Env App bridge and connects before verification/consent; prior opening is no current proof. Env App closure retains the lease, while cancel, navigation/destruction and authority changes retire it. Admitted writes retain transport until settlement; reject late requests.\n\nTry saved management authentication first, including available SSH/OpenSSH credentials. Passive auth_required or missing saved passwords cannot preempt it. Only a current typed authentication failure exposes focused, Enter-submittable temporary credentials and stops credential-free retries. Distinguish authentication, Gateway and engine failures; unknown status is not rejection. Temporary passwords belong only to scoped status, never verification/consent; do not save preferences. Carry them unchanged through the admitted action/access verification, then clear on completion/failure/closure. Startup observations cannot race clearing or interrupt the action.\n\nProven stopped targets offer explicit Start. Start/restart/update share the lifecycle owner and request credentials only after typed SSH failure. Connection loss stops submissions/polling but retains drafts. Explicit recovery, authority change or Settings suspension revokes verification/consent; resume with a fresh connection/lease. Preserve step/code drafts and use inline feedback. Observations cannot cancel admitted actions.\n\n## Gateway selection and invitation\nSaved/manual tabs keep separate drafts/input nodes. Select enabled registration ID, never address or connectivity. Retain endpoint-less entries with setup guidance. Use confirmed member_endpoints, otherwise only a URL registration's canonical HTTPS origin; SSH/listener coordinates are not substitutes. Reject changed trust, invalid/Host-rejected origins and remote loopback without hiding registrations. Inventory cannot overwrite typing; removing a selected usable address revokes verification.\n\nmanage_members uses update_gateway_endpoints without changing listeners/restrictions. Retain authoritative IPC values only until catalog change; never restore removed addresses. Enrollment needs explicit invite_gateway_runtime or pasted code plus Runtime verification/consent. Saving/selecting/issuing alone never enrolls. Access-only users receive administrator guidance. Close/suspension/authority changes fence late responses; success consumes code and reopening clears consent/code.\n\nUnknown submission queries exact membership without resubmitting. Positive membership completes; authoritative absence clears uncertain/consumed material and returns to verification. Checks consume no code. Done restores the originating control.\n\n## Welcome and management\nKeep toolbar, horizontal Environment/Redeven Cloud/Gateway navigation, search/filter and bottom bar. Responsive compact cards become one column when narrow. Name/Manage opens an in-shell page: Overview, Clients, Runtimes, Network, Redeven Cloud, Service maintenance. Localized All Gateways restores search/scroll/focus. Global navigation suspends owners and reopening preserves drafts.\n\nCards group identity/management, equal full-row Connect client/Runtime actions, and observed status/refresh/recovery footer. Manage/More share Floe control geometry and touch sizing. Access-only cards omit enrollment. Shared Dropdown offers local Edit, Enable/Disable and confirmed Remove, explaining retained remote membership/service. Clients/Cloud initialize independently; URL access inherits no stale administration. One action owner survives filtering, without a hidden maintenance card.\n\nCreation separates existing service/new deployment and URL pairing/host transport. Save returns the exact registration and opens its overview/status/next action; it proves neither deployment nor connectivity. Connect Runtime distinguishes Desktop-managed targets from another administrator. Managed enrollment reuses the app session, including stopped/unopened targets. Other-admin uses the existing invitation issuer; missing addresses link to Network. Wait for outgoing modal presence. Hiding preserves admitted work/drafts; resume through card actions with fresh management/consent, without another issuer or banner.\n\nOnly active sections contribute scroll extent; visited sections stay mounted. Floe navigation wraps below 768 px. Dialogs own edit/enrollment/service tasks and keyboard return. Ready empty cards show counts without banners. Use semantic tokens and explicit locale catalogs. Compatible installed Gateways are reused; build/commit inequality cannot invent start/update requirements or reinterpret pairing rejection. [Service compatibility](gateway-service.md) owns readiness.\n\nRuntimes owns members/Cloud overrides/recheck/removal; Cloud owns global policy; Clients owns listings/revocation. Client enrollment prepares editable HTTPS, then explicitly issues code/expiry/address with individual/combined copy. Observations retain addresses/codes/drafts. Shared Dropdowns own choices; refresh failure preserves data. Settings/import grants no Runtime/Namespace authority. [Network](gateway-network-settings.md) owns validation/restart.\n\nTranslated panels stay viewport-bounded with shared keyboard/focus behavior and border-only focus. All locales supply hostname:port, listener/Host examples and plural timers. Localized member recovery keeps raw/future codes in details; policy feedback pairs action labels with hook IDs.\n\n## Service actions\nCard/service/network-restart actions share admission, foreground ownership and progress. Confirmation names action/target/affected sessions and title-row close. Pending replaces controls until authoritative progress. Closing cannot reopen or redispatch. Show observed steps/state/elapsed time, never fabricated percentages. Raw details collapse beneath timeline; failure retains recovery. Hide restores focus without canceling; reopen retains timing, and reconnect adopts current work before another confirmation.",
-          "char_count": 6150
+          "body": "## Enrollment and authority\nOne app session serves creation and card actions for managed Local, SSH, WSL and container targets. Creation offers Not now or Add Gateway access after setup. Each opening leases the exact sender/target Env App bridge and connects before verification/consent; prior opening is no current proof. Env App closure retains the lease, while cancel, navigation/destruction and authority changes retire it. Admitted writes retain transport until settlement; reject late requests.\n\nTry saved management authentication first, including available SSH/OpenSSH credentials. Passive auth_required or missing saved passwords cannot preempt it. Only a current typed authentication failure exposes focused, Enter-submittable temporary credentials and stops credential-free retries. Distinguish authentication, Gateway and engine failures; unknown status is not rejection. Temporary passwords belong only to scoped status, never verification/consent; do not save preferences. Carry them unchanged through the admitted action/access verification, then clear on completion/failure/closure. Startup observations cannot race clearing or interrupt the action.\n\nProven stopped targets offer explicit Start. Start/restart/update share the lifecycle owner and request credentials only after typed SSH failure. Connection loss stops submissions/polling but retains drafts. Explicit recovery, authority change or Settings suspension revokes verification/consent; resume with a fresh connection/lease. Preserve step/code drafts and use inline feedback. Observations cannot cancel admitted actions.\n\n## Gateway selection and invitation\nSaved/manual tabs keep separate drafts/input nodes. Select enabled registration ID, never address or connectivity. Retain endpoint-less entries with setup guidance. Use confirmed endpoints, otherwise only a URL registration's canonical HTTPS origin; SSH/listener coordinates are not substitutes. Reject changed trust, invalid/Host-rejected origins and remote loopback without hiding registrations. Inventory cannot overwrite typing; removing a selected usable address revokes verification.\n\nmanage_attachments uses update_gateway_endpoints without changing listeners/restrictions. Retain authoritative IPC values only until catalog change; never restore removed addresses. Enrollment needs explicit invite_gateway_runtime or pasted code plus Runtime verification/consent. Saving/selecting/issuing alone never enrolls. Access-only users receive administrator guidance. Close/suspension/authority changes fence late responses; success consumes code and reopening clears consent/code.\n\nUnknown submission queries exact membership without resubmitting. Positive membership completes; authoritative absence clears uncertain/consumed material and returns to verification. Checks consume no code. Done restores the originating control.\n\n## Welcome and management\nKeep toolbar, horizontal Environment/Redeven Cloud/Gateway navigation, search/filter and bottom bar. Responsive compact cards become one column when narrow. Name/Manage opens an in-shell page: Overview, Clients, Runtimes, Network and Service maintenance. Localized All Gateways restores search/scroll/focus. Global navigation suspends owners and reopening preserves drafts.\n\nCards group identity/management, equal full-row Connect client/Runtime actions, and observed status/refresh/recovery footer. Manage/More share Floe control geometry and touch sizing. Access-only cards omit enrollment. Shared Dropdown offers local Edit, Enable/Disable and confirmed Remove, explaining retained remote membership/service. Client trust and local network policy initialize independently; URL access inherits no stale administration. One action owner survives filtering, without a hidden maintenance card.\n\nCreation separates existing service/new deployment and URL pairing/host transport. Save returns the exact registration and opens its overview/status/next action; it proves neither deployment nor connectivity. Connect Runtime distinguishes Desktop-managed targets from another administrator. Managed enrollment reuses the app session, including stopped/unopened targets. Other-admin uses the existing invitation issuer; missing addresses link to Network. Wait for outgoing modal presence. Hiding preserves admitted work/drafts; resume through card actions with fresh management/consent, without another issuer or banner.\n\nOnly active sections contribute scroll extent; visited sections stay mounted. Floe navigation wraps below 768 px. Dialogs own edit/enrollment/service tasks and keyboard return. Ready empty cards show counts without banners. Use semantic tokens and explicit locale catalogs. Compatible installed Gateways are reused; build/commit inequality cannot invent start/update requirements or reinterpret pairing rejection. [Service compatibility](gateway-service.md) owns readiness.\n\nRuntimes owns attachments, local egress overrides, recheck and removal; Network owns destinations and default egress; Clients owns paired device listings/revocation. Client enrollment prepares editable HTTPS, then explicitly issues code/expiry/address with individual/combined copy. Observations retain addresses/codes/drafts. Shared Dropdowns own choices; refresh failure preserves data. Settings/import grants no Runtime/Namespace authority. [Network](gateway-network-settings.md) owns validation/restart.\n\nTranslated panels stay viewport-bounded with shared keyboard/focus behavior and border-only focus. All locales supply hostname:port, listener/Host examples and plural timers. Localized connection recovery keeps raw/future codes in details; policy feedback pairs action labels with hook IDs.\n\n## Service actions\nCard/service/network-restart actions share admission, foreground ownership and progress. Confirmation names action/target/affected sessions and title-row close. Pending replaces controls until authoritative progress. Closing cannot reopen or redispatch. Show observed steps/state/elapsed time, never fabricated percentages. Raw details collapse beneath timeline; failure retains recovery. Hide restores focus without canceling; reopen retains timing, and reconnect adopts current work before another confirmation.",
+          "char_count": 6214
         },
         {
           "id": "boundaries",
@@ -20637,7 +20607,7 @@
           "label": "Service compatibility",
           "path": "gateway/gateway-service.md",
           "concept_id": "gateway.gateway-service",
-          "title": "Gateway service"
+          "title": "Independent Gateway service"
         }
       ],
       "backlinks": [
@@ -20668,7 +20638,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-26",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "desktop",
           "gateway",
@@ -20679,7 +20649,7 @@
         "title": "Gateway network settings",
         "type": "Gateway Contract"
       },
-      "body_length": 1709,
+      "body_length": 1762,
       "summary": "Gateway independently owns admin-confirmed share endpoints, listeners and optional Host restrictions, saved atomically by verified host admin. Listener edits require explicit restart; live sockets persist. Empty restrictions allow hostnames without weakening TLS/invitation/member/Desktop authorization. Invalid input or failed writes preserve saved/live state.",
       "sections": [
         {
@@ -20693,8 +20663,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "## Request Host restriction\nThe default empty list accepts all request Host names. Forwarded headers cannot expand the list.\n\nThe separate native host administration listener retains its request-bound host proof and browser Origin rejection.\n\n## Durable upgrade and recovery\nMember state v4 appends `allowed_hosts` to the existing endpoint state. Future versions and invalid network shapes fail read-only. Atomic state replacement owns the save boundary; a write failure cannot install partial network settings in memory.",
-          "char_count": 521
+          "body": "## Request Host restriction\nThe default empty list accepts all request Host names. Forwarded headers cannot expand the list.\n\nThe private Unix host administration socket requires its host credential and rejects browser Origin. The unified public TLS listener mounts no management route.\n\n## Durable upgrade and recovery\nAttachment state schema 6 owns allowed_hosts, endpoints and local egress policy. Other versions and invalid network shapes fail read-only. Atomic state replacement owns the save boundary; a write failure cannot install partial network settings in memory.",
+          "char_count": 574
         }
       ],
       "snippet": "Gateway independently owns admin-confirmed share endpoints, listeners and optional Host restrictions, saved atomically by verified host admin. Listener edits require explicit restart; live sockets persist. Empty restrictions allow hostnames",
@@ -20704,12 +20674,6 @@
           "path": "gateway/gateway-desktop-interactions.md",
           "concept_id": "gateway.gateway-desktop-interactions",
           "title": "Gateway Desktop interactions"
-        },
-        {
-          "label": "Gateway service",
-          "path": "gateway/gateway-service.md",
-          "concept_id": "gateway.gateway-service",
-          "title": "Gateway service"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -20722,59 +20686,42 @@
       "path": "gateway/gateway-service.md",
       "concept_id": "gateway.gateway-service",
       "type": "Gateway Contract",
-      "title": "Gateway service",
+      "title": "Independent Gateway service",
       "tags": [
         "access",
-        "desktop",
         "gateway",
-        "identity"
+        "security"
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-26",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "access",
-          "desktop",
           "gateway",
-          "identity"
+          "security"
         ],
-        "title": "Gateway service",
+        "title": "Independent Gateway service",
         "type": "Gateway Contract"
       },
-      "body_length": 3457,
-      "summary": "redeven-gateway owns durable membership, one-time invitations, client grants, policy and restricted forwarding. Runtime verifies address/code, previews signed enrollment then explicitly joins. Gateway never scans/dials Runtime addresses or manages Runtime lifecycle. LAN needs no Cloud; Gateway loss affects its paths, not independent management authority.",
+      "body_length": 3268,
+      "summary": "Gateway is an independent Runtime attachment, client-device admission and relay service. A fresh Gateway and Runtime work without a Cloud account, cached Cloud authority or public Internet. Cloud membership, organizations and user roles belong only to Cloud. Gateway and Runtime maintain device trust and environment authentication, never a local user directory.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Membership authority\nAn administrator verified through the Gateway host creates a ten-minute, single-use invitation code and shares an administrator-confirmed Gateway address. Gateway never obtains Runtime Cloud credentials from its directory.\n\nDesktop display association uses the trusted Runtime management membership summary and the paired Gateway key; public health proof remains a separate observation and grants no authority.\n\n## Policy and executable hooks\nNew installations deny Cloud by default.\n\nPrograms use an absolute executable and argument array, never a shell. Desktop member management and `redeven-gateway members reevaluate --member ID --version N` check the current member version before applying the same reevaluation.\n\n## Own-process management\nThe separate Gateway archive and state root contain no Runtime lifecycle data. Saving, refresh, pairing or member management never starts a stopped service implicitly.\n\nCancellation still stops development startup and exact owned-process cleanup remains required.\n\n## Compatibility and updates\n\nGateway release tags and source commits are diagnostics, not admission gates. Desktop validates the installed binary against its own installation stamp, then observes service readiness and the actual Gateway wire/authority contract. An unrelated Desktop or Runtime release never forces Gateway replacement. Start/restart reuse an intact installed package; explicit Update validates the staged archive against the selected release and commit before activation. Package corruption, stopped service, pairing failure and protocol incompatibility remain distinct diagnoses; authorization rejection never implies an outdated build.\n\nGateway v6 owns its authority epoch independently of Runtime Service. The existing value 69 is preserved so deployed services remain compatible; change it only for a reviewed Gateway authority break. Runtime metadata versions do not gate membership. Preserve signed identity, consent, permissions, freshness and current protocol validation; best-effort compatibility does not accept unknown security contracts. A feature failure affects that operation, not unrelated members or Runtime lifecycle authority.\n\n## Address changes and upgrade\n[Gateway network settings](gateway-network-settings.md) owns atomic network configuration, next-start listener changes, request Host admission and its persistent migration boundary.\n\nIf all fail, the membership stays intact and reports Gateway unavailable.\n\nOptional Cloud publishing remains a separate flow.",
-          "char_count": 2539
+          "body": "## Authority ownership\nGateway owns its stable identity, paired client keys, Runtime attachments, local network policy and active transports. Runtime explicitly consents to each attachment and owns its application TLS identity, environment password/MFA, sessions and host execution restrictions. Gateway administration grants no Runtime lifecycle or application authority.\n\nGateway has no Cloud machine registration, Namespace assignment, management renewal, delegated Runtime publication or Cloud command receiver. Runtime may independently enroll with Cloud. Gateway failure affects only traffic using that Gateway.\n\n## Public and private endpoints\nOne advertised HTTPS origin serves client pairing/identity/catalog/application admission, Runtime invitation exchange/enrollment/mTLS attachment, and optional restricted egress. All advertised origins prove one stable Gateway identity. Host restrictions apply before protocol admission. The public handler never mounts management or operation-query routes.\n\nThe native Gateway packages support Linux and macOS. Administration uses a temporary private directory (0700), Unix socket (0600), and private host credential. SSH/container bridges reach that same host socket. A loopback TCP address or request header is not host proof. Windows Desktop manages remote/container Gateways; this change does not introduce a native Windows Gateway package or named-pipe implementation.\n\n## State and lifecycle\nGateway state schema 6 owns local attachments and policy; authority epoch 70 owns the independent Gateway wire break. Unsupported attachment state and retired cloud-access.json fail before creating identities or rewriting data. Desktop saved-connection schema 5 migrates its local locator to connection_id while retaining the independently pinned gateway_id and device credentials.\n\nSaving, refresh, pairing and attachment management never implicitly start a stopped service. Removing a Desktop connection does not remove remote attachments or stop its service. Release/build metadata is diagnostic; unrelated Runtime releases do not change Gateway authority.",
+          "char_count": 2108
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Gateway owns membership, policy, invitations, and restricted forwarding. Gateway never dials arbitrary Runtime addresses or turns observations into authority.",
-          "char_count": 158
+          "body": "Published Flowersec supplies invitation exchange, connection controllers, ByteStreams, relay and HTTPS proxy mechanisms. Redeven supplies product identity, explicit consent, local policy and host adapters. No sibling dependency links, copied transport implementations or Go replacements are used.",
+          "char_count": 296
         }
       ],
-      "evidence": [
-        {
-          "id": "redeven:internal/config/cloud_config_version_test.go:0:unsupported configuration fails without rewriting operator state.",
-          "source": "redeven:internal/config/cloud_config_version_test.go",
-          "description": "Unsupported configuration fails without rewriting operator state."
-        }
-      ],
-      "snippet": "redeven-gateway owns durable membership, one-time invitations, client grants, policy and restricted forwarding. Runtime verifies address/code, previews signed enrollment then explicitly joins. Gateway never scans/dials Runtime addresses or ",
-      "links": [
-        {
-          "label": "Gateway network settings",
-          "path": "gateway/gateway-network-settings.md",
-          "concept_id": "gateway.gateway-network-settings",
-          "title": "Gateway network settings"
-        }
-      ],
+      "snippet": "Gateway is an independent Runtime attachment, client-device admission and relay service. A fresh Gateway and Runtime work without a Cloud account, cached Cloud authority or public Internet. Cloud membership, organizations and user roles bel",
       "backlinks": [
         {
           "label": "Gateway Desktop interactions",
@@ -20802,7 +20749,7 @@
       ],
       "frontmatter": {
         "lifecycle": "active_evidence",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "controlplane",
           "gateway",
@@ -20812,8 +20759,8 @@
         "title": "Control-plane capacity qualification",
         "type": "Validation Guide"
       },
-      "body_length": 1542,
-      "summary": "Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats, signed Gateway observations, and credential recovery. A full acceptance result combines client latency and recovery counts with independent server CPU, RSS, database, queue, and challenge-backlog measurements.",
+      "body_length": 1503,
+      "summary": "Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats and Runtime-owned credential recovery. A full acceptance result combines client latency and recovery counts with independent server CPU, RSS, database, queue, and challenge-backlog measurements.",
       "sections": [
         {
           "id": "contract",
@@ -20830,7 +20777,7 @@
           "char_count": 214
         }
       ],
-      "snippet": "Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats, signed Gateway observations, and credential recov",
+      "snippet": "Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats and Runtime-owned credential recovery. A full acce",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -23329,51 +23276,48 @@
     {
       "path": "protocol/gateway-v6-protocol.md",
       "concept_id": "protocol.gateway-v6-protocol",
-      "type": "Protocol Contract",
-      "title": "Gateway v6 protocol",
+      "type": "Gateway Contract",
+      "title": "Gateway v6 independent device protocol",
       "tags": [
         "gateway",
         "identity",
-        "protocol",
-        "security"
+        "protocol"
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-26",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "gateway",
           "identity",
-          "protocol",
-          "security"
+          "protocol"
         ],
-        "title": "Gateway v6 protocol",
-        "type": "Protocol Contract"
+        "title": "Gateway v6 independent device protocol",
+        "type": "Gateway Contract"
       },
-      "body_length": 2086,
-      "summary": "Gateway serves only redeven-gateway-v6, defined by spec/openapi/gateway-v6.yaml. Signed invitations carry admin-confirmed addresses; authenticated exchange returns the signed descriptor/all endpoints. Gateway owns paired Desktop permissions and Runtime-initiated membership. Mismatch/old config fails unchanged; old URL-profile/HTTP-forward routes are absent. Cloud v3 remains separate.",
+      "body_length": 2235,
+      "summary": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Wire authority\nThe signed Desktop surface includes pairing, identity proof, catalog, invitation, member removal, member and default policy, reevaluation, member access offer and service description, and Cloud configuration/status.\n\nA Runtime mTLS certificate must be current for that exact member and version.\n\nService descriptions are signed separately and bind the Runtime's TLS application identity.\n\n## Compatibility ownership\n\n`protocol.Version` and `protocol.CompatibilityEpoch` own Gateway wire and host-authority admission. Desktop mirrors these in `gatewayMembership.ts`; Runtime Service compatibility changes do not change either. Preserve the deployed signed `compatibility_epoch` value 69 independently of Runtime release cadence. It remains covered by identity and pairing signatures. Different binary releases/commits are allowed within this contract; incompatible wire or authority contracts still fail explicitly. Runtime member version metadata is descriptive, not a software-version admission condition.\n\n## Version and persistence\nMember version controls removal and replacement. Directory and policy revisions prevent stale messages from restoring permissions.\n\n[Gateway Cloud access](../gateway/gateway-cloud-access.md) owns publication, recovery and revocation.",
-          "char_count": 1286
-        },
-        {
-          "id": "boundaries",
-          "title": "Boundaries",
-          "level": 1,
-          "body": "The OpenAPI document and signed DTOs are the protocol authority. Unknown routes, stale generations, and legacy URL-profile requests remain rejected rather than silently translated.",
-          "char_count": 180
+          "body": "## Identities and wire fields\nThe stable gateway_id is independent of Desktop connection_id. RuntimeAttachment uses attachment_id and attachment_version. Catalogs contain attachments; Gateway metadata contains endpoints and tls_root_pem shared by clients and Runtimes. Device identities are not user memberships. Internal package/file names do not add a Cloud or user authority.\n\nClient public routes are pairing/challenge, pairing/complete, identity, catalog, access/open and access/service under /gateway/v6. Runtime-owned routes use /v6/attachment for invitation-exchange, join, cancel-join, update-endpoints, rotate, leave and connect. Current attachment certificate/version and signed Runtime service identity are required.\n\nHost-only routes issue invitations/client codes, list/revoke devices, update addresses/network/egress policy, remove or reevaluate attachments and query operation results. They are not registered on the public listener. ManageAttachments and ManageNetwork are request capabilities from verified host context, never device roles.\n\n## Freshness and state\nRuntime metadata versions do not gate attachment admission. Wire/authority mismatches fail explicitly; no old protocol translator or Cloud fallback is installed. Schema 6 attachment state rejects unsupported input unchanged. Expected attachment and policy versions fence relevant mutations; operation IDs recover known results and preserve uncertainty.\n\n[Device trust and operations](../gateway/gateway-client-access.md) owns credential bootstrap and private result recovery. [Optional Runtime Cloud egress](../gateway/gateway-cloud-access.md) owns network policy and route isolation.",
+          "char_count": 1667
         }
       ],
-      "snippet": "Gateway serves only redeven-gateway-v6, defined by spec/openapi/gateway-v6.yaml. Signed invitations carry admin-confirmed addresses; authenticated exchange returns the signed descriptor/all endpoints. Gateway owns paired Desktop permissions",
+      "snippet": "Gateway v6, authority epoch 70, defines independent client-device trust and Runtime attachments. The public protocol and private host API are separate surfaces on the same service. Cloud machine management and publication are absent.",
       "links": [
         {
-          "label": "Gateway Cloud access",
+          "label": "Device trust and operations",
+          "path": "gateway/gateway-client-access.md",
+          "concept_id": "gateway.gateway-client-access",
+          "title": "Gateway device trust and host operations"
+        },
+        {
+          "label": "Optional Runtime Cloud egress",
           "path": "gateway/gateway-cloud-access.md",
           "concept_id": "gateway.gateway-cloud-access",
-          "title": "Gateway Cloud access"
+          "title": "Optional Runtime Cloud egress"
         }
       ],
       "backlinks": [
@@ -23399,7 +23343,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "access",
           "cloud",
@@ -23411,22 +23355,22 @@
         "title": "RCPP v5 Cloud API",
         "type": "Protocol Contract"
       },
-      "body_length": 1060,
+      "body_length": 1072,
       "summary": "RCPP v5 separates Cloud authorization from network route. CloudRuntimeBinding owns environment, Runtime identity, Namespace, user or Namespace principal and generation. One Runtime ConnectionController handles direct and Gateway enrollment, registration, heartbeat, reserve maintenance and recovery. Desktop never creates a second credential recovery owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Cloud discovery and `/api/rcpp/v5` preserve native OAuth, Desktop authorization, environment access and authoritative ticket resolution.\n\nRuntime and Desktop use published Flowersec 5.11.0 only.",
+          "body": "Cloud discovery and `/api/rcpp/v5` preserve native OAuth, Desktop authorization, environment access and authoritative ticket resolution.\n\nRuntime and Desktop use published Flowersec 5.11.1 only.",
           "char_count": 194
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Gateway owns members, invitations, local access, egress admission and forwarding resources. No redirect, cached authority, direct fallback, binding migration or Gateway closure relay remains.",
-          "char_count": 191
+          "body": "Gateway owns Runtime attachments, invitations, local access, egress admission and forwarding resources. No redirect, cached authority, direct fallback, binding migration or Gateway closure relay remains.",
+          "char_count": 203
         }
       ],
       "evidence": [
@@ -31615,5 +31559,5 @@
       ]
     }
   ],
-  "source_sha256": "d4954d3da3a1bac095fb7642f8d328e31ef668f9fa66094c9b99d0c3ceb79e95"
+  "source_sha256": "2b73038151341ec1f8da456ac9b92e7dc702f44fbad642be6317cd85d728bbf1"
 }

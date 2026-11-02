@@ -513,23 +513,14 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(enUS.gatewayJoin.title).toBe('Add Gateway access');
     expect(enUS.gatewayJoin.approve).toBe('Enable Gateway access');
     expect(enUS.gatewayJoin.joinGateway).toBe('After setup, add Gateway access');
-    expect(enUS.gatewayCloud.title).toBe('Connect to Cloud');
-    expect(enUS.gatewayCloud.configure).toBe('Connect to Cloud');
     expect(zhCN.gatewayJoin.title).toBe('添加 Gateway 访问');
     expect(zhCN.gatewayJoin.approve).toBe('启用 Gateway 访问');
     expect(zhCN.gatewayJoin.accessImpact).toContain('Cloud 和其他配对保持不变');
-    expect(zhCN.gatewayCloud.title).toBe('接入 Cloud');
-    expect(zhCN.gatewayCloud.configure).toBe('接入 Cloud');
-    expect(zhCN.gatewayCloud.pending).toBe('等待 Cloud 批准。');
-    expect(zhCN.gatewayCloud.manage).toBe('在 Cloud 中打开');
-    expect(enUS.gatewayCloud.description).toContain('each Runtime connects to Cloud');
     expect(enUS.gatewayClients.hostAccess).toContain('device running this Gateway');
     expect(enUS.gatewayClients.clientOnly).toContain('open the Runtimes it provides');
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
       const dictionary = DESKTOP_I18N_DICTIONARIES[locale];
       const gatewayHelp = [
-        dictionary.gatewayCloud.pending,
-        dictionary.gatewayCloud.manage,
         dictionary.gatewayJoin.preserveHelp,
         dictionary.gatewayJoin.replaceHelp,
         dictionary.gatewayJoin.bindingProofRequired,
@@ -541,10 +532,7 @@ describe('Desktop shared i18n dictionaries', () => {
   it.each(REDEVEN_SUPPORTED_LOCALES)('covers Gateway dynamic states and invitation plurals explicitly in %s', locale => {
     const dictionary = DESKTOP_I18N_DICTIONARIES[locale];
     const i18n = createDesktopI18n(locale);
-    for (const state of ['unconfigured', 'pending', 'active', 'revoked', 'expired', 'retired', 'registering'] as const) {
-      expect(dictionary.gatewayCloud[state]).toBeTruthy();
-      expect(i18n.t(`gatewayCloud.${state}`)).toBe(dictionary.gatewayCloud[state]);
-    }
+    expect('gatewayCloud' in dictionary).toBe(false);
     for (const state of Object.keys(enUS.gatewayMembership) as (keyof typeof enUS.gatewayMembership)[]) {
       expect(dictionary.gatewayMembership[state]).toBeTruthy();
       expect(i18n.t(`gatewayMembership.${state}`)).toBe(dictionary.gatewayMembership[state]);

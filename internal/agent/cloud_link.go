@@ -146,7 +146,7 @@ func (a *Agent) cloudLinkBindingLocked(errorCode string) runtimeservice.CloudLin
 		}
 		status := &rc.Status{AssociationRevision: association.Revision, Enabled: association.Enabled, ApprovalState: association.ApprovalState, ReasonCode: association.ReasonCode, ConnectionState: connectionState}
 		if route := a.cfg.CloudRoute; route != nil {
-			status.Route = rc.RouteSelection{Kind: string(route.Kind), MemberID: route.MemberID}
+			status.Route = rc.RouteSelection{Kind: string(route.Kind), AttachmentID: route.AttachmentID}
 			status.RouteRevision = route.Revision
 		}
 		if controller := a.controlController; controller != nil {
@@ -157,7 +157,12 @@ func (a *Agent) cloudLinkBindingLocked(errorCode string) runtimeservice.CloudLin
 		}
 		return runtimeservice.CloudLinkBinding{Cloud: status, State: state, ConnectionState: connectionState, LastErrorCode: code, LastErrorMessage: message, CloudOrigin: association.CloudOrigin, CloudID: association.CloudID, EnvPublicID: a.cfg.EnvironmentID, AccessPointOrigin: association.RegionOrigin, LocalEnvironmentPublicID: association.RuntimePublicID, BindingGeneration: a.cfg.BindingGeneration, RemoteEnabled: association.Enabled && a.remoteEnabled}
 	}
-	return runtimeservice.CloudLinkBinding{State: runtimeservice.CloudLinkStateUnbound, ConnectionState: "unlinked", LastErrorCode: strings.TrimSpace(errorCode)}
+	binding := runtimeservice.CloudLinkBinding{State: runtimeservice.CloudLinkStateUnbound, ConnectionState: "unlinked", LastErrorCode: strings.TrimSpace(errorCode)}
+	if route := a.cfg.CloudRoute; route != nil {
+		binding.Route = &rc.RouteSelection{Kind: string(route.Kind), AttachmentID: route.AttachmentID}
+		binding.RouteRevision = route.Revision
+	}
+	return binding
 }
 
 func (a *Agent) hasActiveProviderWorkLocked() bool {

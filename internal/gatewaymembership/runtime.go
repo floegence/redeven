@@ -34,8 +34,8 @@ type RuntimeConfig struct {
 	LastEndpointID        string                          `json:"last_endpoint_id,omitempty"`
 	GatewayPublicKey      string                          `json:"gateway_public_key"`
 	GatewayTLSRootPEM     string                          `json:"gateway_tls_root_pem"`
-	MemberID              string                          `json:"member_id"`
-	MemberVersion         int64                           `json:"member_version"`
+	AttachmentID          string                          `json:"attachment_id"`
+	AttachmentVersion     int64                           `json:"attachment_version"`
 	RuntimePublicID       string                          `json:"runtime_public_id"`
 	PrivateKeyB64u        string                          `json:"private_key_b64u"`
 	ClientPrivateKeyPEM   string                          `json:"client_private_key_pem"`
@@ -109,8 +109,8 @@ func PrepareRuntime(invitation gp.EnrollmentDescriptor, runtimeID string, metada
 		return nil, err
 	}
 	publicB64 := base64.RawURLEncoding.EncodeToString(public)
-	memberID := MemberID(invitation.InvitationID, publicB64)
-	delegation := gp.MemberDelegation{ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, MemberID: memberID, RuntimePublicID: runtimeID, PublicKeyB64u: publicB64, InvitationID: invitation.InvitationID, ConsentedAtUnixMS: time.Now().UnixMilli(), ManageAccess: true, ManageCloudPublication: true}
+	memberID := AttachmentID(invitation.InvitationID, publicB64)
+	delegation := gp.MemberDelegation{ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, AttachmentID: memberID, RuntimePublicID: runtimeID, PublicKeyB64u: publicB64, InvitationID: invitation.InvitationID, ConsentedAtUnixMS: time.Now().UnixMilli(), ManageAccess: true}
 	if err := SignDelegation(&delegation, key); err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func PrepareRuntime(invitation gp.EnrollmentDescriptor, runtimeID string, metada
 	if err := SignJoin(&request, key); err != nil {
 		return nil, err
 	}
-	return &RuntimeConfig{Revision: 1, ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, GatewayName: invitation.GatewayName, GatewayEndpoints: append([]gp.GatewayEndpoint(nil), invitation.Endpoints...), GatewayPublicKey: invitation.GatewayPublicKey, GatewayTLSRootPEM: invitation.GatewayTLSRootPEM, MemberID: memberID, RuntimePublicID: runtimeID, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ClientPrivateKeyPEM: clientKey, Service: service, ServicePrivateKeyPEM: serviceKey, Delegation: delegation, PendingJoin: &request}, nil
+	return &RuntimeConfig{Revision: 1, ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, GatewayName: invitation.GatewayName, GatewayEndpoints: append([]gp.GatewayEndpoint(nil), invitation.Endpoints...), GatewayPublicKey: invitation.GatewayPublicKey, GatewayTLSRootPEM: invitation.GatewayTLSRootPEM, AttachmentID: memberID, RuntimePublicID: runtimeID, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ClientPrivateKeyPEM: clientKey, Service: service, ServicePrivateKeyPEM: serviceKey, Delegation: delegation, PendingJoin: &request}, nil
 }
 
 func (r *RuntimeConfig) connectionEndpoints() []gp.GatewayEndpoint {
@@ -189,7 +189,7 @@ func (r *RuntimeConfig) NewGatewayEndpointTransport(authenticated bool) (*http.T
 // Validate checks durable identity without requiring the network or a currently
 // usable credential. Expired access must not prevent local Runtime startup.
 func (r *RuntimeConfig) Validate(runtimeID string) error {
-	if r == nil || r.Revision == 0 || r.RuntimePublicID != runtimeID || r.Delegation.RuntimePublicID != runtimeID || r.Delegation.GatewayID != r.GatewayID || r.Delegation.MemberID != r.MemberID || VerifyDelegation(r.Delegation) != nil {
+	if r == nil || r.Revision == 0 || r.RuntimePublicID != runtimeID || r.Delegation.RuntimePublicID != runtimeID || r.Delegation.GatewayID != r.GatewayID || r.Delegation.AttachmentID != r.AttachmentID || VerifyDelegation(r.Delegation) != nil {
 		return ErrState
 	}
 	if endpoints := r.connectionEndpoints(); len(endpoints) == 0 || validateGatewayEndpoints(endpoints) != nil {
@@ -210,10 +210,10 @@ func (r *RuntimeConfig) Validate(runtimeID string) error {
 		return ErrState
 	}
 	if r.PendingJoin != nil {
-		if r.MemberVersion != 0 || r.PendingJoin.Delegation != r.Delegation || r.PendingJoin.Service != r.Service || r.PendingRotation != nil {
+		if r.AttachmentVersion != 0 || r.PendingJoin.Delegation != r.Delegation || r.PendingJoin.Service != r.Service || r.PendingRotation != nil {
 			return ErrState
 		}
-	} else if r.MemberVersion < 1 {
+	} else if r.AttachmentVersion < 1 {
 		return ErrState
 	} else if _, err := tls.X509KeyPair([]byte(r.ClientCertificatePEM), []byte(r.ClientPrivateKeyPEM)); err != nil {
 		return ErrState
@@ -333,14 +333,14 @@ func (r *RuntimeConfig) Enroll(ctx context.Context, persist func(*RuntimeConfig)
 		return err
 	}
 	var response gp.MemberJoinResponse
-	if err := r.Request(ctx, "/v6/member/join", r.PendingJoin, &response, false); err != nil {
+	if err := r.Request(ctx, "/v6/attachment/join", r.PendingJoin, &response, false); err != nil {
 		return err
 	}
-	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.MemberID != r.MemberID || response.MemberVersion != 1 || response.DeliveryID != r.PendingJoin.DeliveryID {
+	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.AttachmentID != r.AttachmentID || response.AttachmentVersion != 1 || response.DeliveryID != r.PendingJoin.DeliveryID {
 		return ErrInvalidProof
 	}
 	next := r.Clone()
-	next.MemberVersion, next.ClientCertificatePEM, next.ClientExpiresAtUnixMS = response.MemberVersion, response.ClientCertificatePEM, response.ClientExpiresAtUnixMS
+	next.AttachmentVersion, next.ClientCertificatePEM, next.ClientExpiresAtUnixMS = response.AttachmentVersion, response.ClientCertificatePEM, response.ClientExpiresAtUnixMS
 	if err := next.validateClient(); err != nil {
 		return err
 	}
@@ -360,10 +360,10 @@ func (r *RuntimeConfig) Leave(ctx context.Context) error {
 	// signed request can cancel that delivery without enrolling again.
 	if r.PendingJoin != nil {
 		var response gp.CatalogRequest
-		return r.Request(ctx, "/v6/member/cancel-join", r.PendingJoin, &response, false)
+		return r.Request(ctx, "/v6/attachment/cancel-join", r.PendingJoin, &response, false)
 	}
 	var response gp.CatalogRequest
-	return r.Request(ctx, "/v6/member/leave", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: r.MemberID, ExpectedMemberVersion: r.MemberVersion}, &response, true)
+	return r.Request(ctx, "/v6/attachment/leave", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, AttachmentID: r.AttachmentID, ExpectedAttachmentVersion: r.AttachmentVersion}, &response, true)
 }
 
 func (r *RuntimeConfig) validateClient() error {
@@ -372,7 +372,7 @@ func (r *RuntimeConfig) validateClient() error {
 		return err
 	}
 	leaf := config.Certificates[0].Leaf
-	if leaf.Subject.CommonName != r.MemberID || leaf.NotAfter.UnixMilli() != r.ClientExpiresAtUnixMS {
+	if leaf.Subject.CommonName != r.AttachmentID || leaf.NotAfter.UnixMilli() != r.ClientExpiresAtUnixMS {
 		return ErrInvalidProof
 	}
 	_, err = leaf.Verify(x509.VerifyOptions{Roots: config.RootCAs, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
@@ -410,7 +410,7 @@ func (r *RuntimeConfig) Rotate(ctx context.Context, persist func(*RuntimeConfig)
 		if err != nil {
 			return err
 		}
-		request := gp.MemberRotateRequest{ProtocolVersion: gp.Version, GatewayID: r.GatewayID, MemberID: r.MemberID, MemberVersion: r.MemberVersion, DeliveryID: delivery, ClientCSRPEM: csr, Service: service}
+		request := gp.MemberRotateRequest{ProtocolVersion: gp.Version, GatewayID: r.GatewayID, AttachmentID: r.AttachmentID, AttachmentVersion: r.AttachmentVersion, DeliveryID: delivery, ClientCSRPEM: csr, Service: service}
 		if err := SignRotation(&request, ed25519.PrivateKey(key)); err != nil {
 			return err
 		}
@@ -422,10 +422,10 @@ func (r *RuntimeConfig) Rotate(ctx context.Context, persist func(*RuntimeConfig)
 		*r = *next
 	}
 	var response gp.MemberRotateResponse
-	if err := r.Request(ctx, "/v6/member/rotate", r.PendingRotation.Request, &response, true); err != nil {
+	if err := r.Request(ctx, "/v6/attachment/rotate", r.PendingRotation.Request, &response, true); err != nil {
 		return err
 	}
-	if response.ProtocolVersion != gp.Version || response.MemberID != r.MemberID || response.MemberVersion != r.MemberVersion || response.DeliveryID != r.PendingRotation.Request.DeliveryID {
+	if response.ProtocolVersion != gp.Version || response.AttachmentID != r.AttachmentID || response.AttachmentVersion != r.AttachmentVersion || response.DeliveryID != r.PendingRotation.Request.DeliveryID {
 		return ErrInvalidProof
 	}
 	next := r.Clone()

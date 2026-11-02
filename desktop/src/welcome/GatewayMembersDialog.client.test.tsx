@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
-import { GatewayMembersPanel } from './GatewayMembersDialog';
+import { RuntimeAttachmentsPanel } from './GatewayMembersDialog';
 import { createDesktopI18n, REDEVEN_SUPPORTED_LOCALES } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
 import { catalogFixture, invitationFixture, memberFixture } from '../testSupport/gatewayMembershipFixture';
@@ -13,11 +13,11 @@ let showMembers: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
 const i18n = createDesktopI18n('en-US');
 const gateway: DesktopGatewaySource = {
-  gateway_id: 'gateway_fixture', display_name: 'Gateway', local_enabled: true, connection_kind: 'local_host',
-  management_capability: 'access_only', capabilities: ['member_access', 'member_manage', 'cloud_configure'],
+  connection_id: 'gateway_fixture', display_name: 'Gateway', local_enabled: true, connection_kind: 'local_host',
+  management_capability: 'access_only', capabilities: ['member_access', 'member_manage', 'network_configure'],
   status: 'online', trust_state: 'paired', created_at_ms: 1, updated_at_ms: 1,
   listener_address: catalogFixture.gateway.listener_address,
-  permissions: catalogFixture.gateway.permissions, policy: catalogFixture.policy, member_endpoints: catalogFixture.gateway.member_endpoints, environments: [memberFixture],
+  permissions: catalogFixture.gateway.permissions, policy: catalogFixture.policy, endpoints: catalogFixture.gateway.endpoints, environments: [memberFixture],
 };
 function button(label: string) {
   if (label === i18n.t('gatewayMembers.createInvitation') && !document.querySelector('[data-gateway-invite-others]:not([hidden])')) {
@@ -40,7 +40,7 @@ function mount(perform: ReturnType<typeof vi.fn>, refresh = vi.fn(async () => {}
   const [current, setCurrent] = createSignal<DesktopGatewaySource | undefined>(source);
   const [enrolling, setEnrolling] = createSignal(false);
   showMembers = () => setEnrolling(false);
-  dispose = render(() => <><GatewayMembersPanel gateway={current()} section={section} enrolling={enrolling()} onEnrollmentChange={setEnrolling} onEnroll={() => {}} i18n={i18n} refresh={refresh} />{section === 'runtimes' && <GatewayMembersPanel gateway={current()} section="policy" i18n={i18n} refresh={refresh} />}</>, root);
+  dispose = render(() => <><RuntimeAttachmentsPanel gateway={current()} section={section} enrolling={enrolling()} onEnrollmentChange={setEnrolling} onEnroll={() => {}} i18n={i18n} refresh={refresh} />{section === 'runtimes' && <RuntimeAttachmentsPanel gateway={current()} section="policy" i18n={i18n} refresh={refresh} />}</>, root);
   return setCurrent;
 }
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
@@ -48,11 +48,11 @@ afterEach(() => { showMembers = undefined; dispose?.(); document.body.replaceChi
 
 describe('Gateway member management', () => {
   it.each([
-    ['MEMBER_DENIED', 'gatewayMembers.memberDenied'],
-    ['MEMBER_CAPACITY', 'gatewayMembers.memberCapacity'],
+    ['ATTACHMENT_DENIED', 'gatewayMembers.memberDenied'],
+    ['ATTACHMENT_CAPACITY', 'gatewayMembers.memberCapacity'],
     ['FUTURE_GATEWAY_FAILURE', 'gatewayMembers.failed'],
   ] as const)('keeps %s technical while presenting a translated recovery message', async (code, key) => {
-    mount(vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated', gateway_member_results: [{ member_id: memberFixture.member_id, error_code: code }] }));
+    mount(vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated', gateway_member_results: [{ attachment_id: memberFixture.attachment_id, error_code: code }] }));
     await settle();
     await select(document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!, 'allow');
     button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
@@ -64,11 +64,11 @@ describe('Gateway member management', () => {
     const localized = createDesktopI18n(locale);
     const perform = vi.fn(async (request: { kind: string }) => request.kind === 'invite_gateway_runtime'
       ? { ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: { ...invitationFixture, expires_at_unix_ms: Date.now() + 60_000 } }
-      : { ok: true, outcome: 'gateway_members_updated', gateway_member_results: [{ member_id: memberFixture.member_id, error_code: 'MEMBER_VERSION_CONFLICT' }] });
+      : { ok: true, outcome: 'gateway_members_updated', gateway_member_results: [{ attachment_id: memberFixture.attachment_id, error_code: 'ATTACHMENT_VERSION_CONFLICT' }] });
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const root = document.createElement('div'); document.body.append(root);
     const [enrolling, setEnrolling] = createSignal(false);
-    dispose = render(() => <><GatewayMembersPanel gateway={gateway} section="runtimes" enrolling={enrolling()} onEnrollmentChange={setEnrolling} onEnroll={() => {}} i18n={localized} refresh={async () => {}} /><GatewayMembersPanel gateway={gateway} section="policy" i18n={localized} refresh={async () => {}} /></>, root);
+    dispose = render(() => <><RuntimeAttachmentsPanel gateway={gateway} section="runtimes" enrolling={enrolling()} onEnrollmentChange={setEnrolling} onEnroll={() => {}} i18n={localized} refresh={async () => {}} /><RuntimeAttachmentsPanel gateway={gateway} section="policy" i18n={localized} refresh={async () => {}} /></>, root);
     await settle();
     for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookCloudPublication'] as const) {
       expect(document.body.textContent).toContain(localized.t(`gatewayMembers.${key}`));
@@ -81,11 +81,11 @@ describe('Gateway member management', () => {
     button(localized.t('gatewayMembers.confirmSave')).click(); await settle();
     const result = document.querySelector('li [role="status"]')!;
     expect(result.textContent).toBe(localized.t('gatewayMembers.memberChanged'));
-    expect(result.textContent).not.toContain('MEMBER_VERSION_CONFLICT');
+    expect(result.textContent).not.toContain('ATTACHMENT_VERSION_CONFLICT');
     const diagnostic = document.querySelector('li details')!;
     expect(diagnostic.hasAttribute('open')).toBe(false);
     expect(diagnostic.querySelector('summary')?.textContent).toBe(localized.t('gatewayJoin.technicalDetails'));
-    expect(diagnostic.querySelector('code')?.textContent).toBe('MEMBER_VERSION_CONFLICT');
+    expect(diagnostic.querySelector('code')?.textContent).toBe('ATTACHMENT_VERSION_CONFLICT');
     setEnrolling(true); await settle();
     document.querySelector<HTMLButtonElement>('[aria-label="' + localized.t('gatewayExperience.otherRuntime') + '"]')!.click(); await settle();
     button(localized.t('gatewayMembers.createInvitation')).click(); await settle();
@@ -97,7 +97,7 @@ describe('Gateway member management', () => {
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     const root = document.createElement('div'); document.body.append(root);
     const [enrolling, setEnrolling] = createSignal(false);
-    dispose = render(() => <GatewayMembersPanel gateway={gateway} section="runtimes" enrolling={enrolling()} onEnrollmentChange={setEnrolling} i18n={i18n} refresh={async () => {}} onEnroll={enroll} />, root);
+    dispose = render(() => <RuntimeAttachmentsPanel gateway={gateway} section="runtimes" enrolling={enrolling()} onEnrollmentChange={setEnrolling} i18n={i18n} refresh={async () => {}} onEnroll={enroll} />, root);
     await settle();
     const add = document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]');
     expect(add).not.toBeNull();
@@ -139,7 +139,7 @@ describe('Gateway member management', () => {
 
   it('requires a saved reachable address before creating an invitation', async () => {
     const perform = vi.fn();
-    mount(perform, undefined, { ...gateway, member_endpoints: [] }); await settle();
+    mount(perform, undefined, { ...gateway, endpoints: [] }); await settle();
     expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
     expect(perform).not.toHaveBeenCalled();
   });
@@ -150,14 +150,14 @@ describe('Gateway member management', () => {
     address.value = 'https://gateway.example:7443';
     address.dispatchEvent(new Event('input', { bubbles: true }));
     button(i18n.t('gatewayNetwork.save')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_network_settings', gateway_id: gateway.gateway_id,
-      settings: {listen_addresses:[gateway.listener_address],allowed_hosts:[],endpoints: [{ ...catalogFixture.gateway.member_endpoints[0]!, address: 'https://gateway.example:7443' }]} });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_network_settings', gateway_id: gateway.connection_id,
+      settings: {listen_addresses:[gateway.listener_address],allowed_hosts:[],endpoints: [{ ...catalogFixture.gateway.endpoints[0]!, address: 'https://gateway.example:7443' }]} });
   });
   it('cancels an address-removal animation when the edited Gateway changes', async () => {
     const setGateway = mount(vi.fn(), undefined, gateway, 'connection'); await settle();
     document.querySelector<HTMLButtonElement>(`.redeven-gateway-endpoint-shell button[aria-label="${i18n.t('gatewayMembers.removeAddress')}"]`)!.click();
-    const replacement = { ...catalogFixture.gateway.member_endpoints[0]!, endpoint_id: 'replacement_endpoint' };
-    setGateway({ ...gateway, gateway_id: 'replacement_gateway', member_endpoints: [replacement] }); await settle();
+    const replacement = { ...catalogFixture.gateway.endpoints[0]!, endpoint_id: 'replacement_endpoint' };
+    setGateway({ ...gateway, gateway_id: 'replacement_gateway', endpoints: [replacement] }); await settle();
     await new Promise(resolve => setTimeout(resolve, 220));
     expect(document.querySelector('[data-endpoint-id="replacement_endpoint"]')).toBeTruthy();
     expect(document.querySelector('.redeven-gateway-endpoint-shell--removing')).toBeNull();
@@ -167,8 +167,8 @@ describe('Gateway member management', () => {
     mount(perform); await settle();
     await select(document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!, 'allow');
     button(i18n.t('gatewayMembers.reevaluate')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', gateway_id: gateway.gateway_id,
-      member_id: memberFixture.member_id, member_version: memberFixture.member_version });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'reevaluate_gateway_member', gateway_id: gateway.connection_id,
+      attachment_id: memberFixture.attachment_id, attachment_version: memberFixture.attachment_version });
     expect(document.querySelector('li [data-floe-dropdown-trigger]')?.textContent).toContain(i18n.t('gatewayMembers.allow'));
   });
   it('keeps an issued invitation when the following refresh fails', async () => {
@@ -178,24 +178,24 @@ describe('Gateway member management', () => {
     expect(button(i18n.t('gatewayJoin.copyCode')).disabled).toBe(false);
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayMembers.refreshFailed'));
     expect(document.body.textContent).toContain(memberFixture.display_name);
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'invite_gateway_runtime', gateway_id: gateway.gateway_id });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'invite_gateway_runtime', gateway_id: gateway.connection_id });
   });
   it('keeps failed and missing batch results retryable, without resubmitting successful members', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated', gateway_member_results: [
-      { member_id: 'one', member: { ...memberFixture, member_id: 'one', cloud_permission: 'allow' } },
-      { member_id: 'two', error_code: 'MEMBER_VERSION_CONFLICT' },
+      { attachment_id: 'one', member: { ...memberFixture, attachment_id: 'one', egress_permission: 'allow' } },
+      { attachment_id: 'two', error_code: 'ATTACHMENT_VERSION_CONFLICT' },
     ] });
-    mount(perform, undefined, { ...gateway, environments: ['one', 'two', 'three'].map(member_id => ({ ...memberFixture, member_id, display_name: member_id })) }); await settle();
+    mount(perform, undefined, { ...gateway, environments: ['one', 'two', 'three'].map(attachment_id => ({ ...memberFixture, attachment_id, display_name: attachment_id })) }); await settle();
     for (const item of document.querySelectorAll<HTMLElement>('li [data-floe-dropdown-trigger]')) await select(item, 'allow');
     button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
     expect(document.body.textContent).toContain(i18n.t('gatewayMembers.memberChanged'));
     expect(document.body.textContent).toContain(i18n.t('gatewayMembers.saved'));
     button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
-    expect(perform.mock.calls[1]?.[0].items.map((item: { member_id: string }) => item.member_id)).toEqual(['two', 'three']);
+    expect(perform.mock.calls[1]?.[0].items.map((item: { attachment_id: string }) => item.attachment_id)).toEqual(['two', 'three']);
   });
   it('previews only inherited members affected by a default change and requires confirmation', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated' });
-    mount(perform, undefined, { ...gateway, environments: [memberFixture, { ...memberFixture, member_id: 'override', display_name: 'Override', cloud_permission: 'deny' }] }); await settle();
+    mount(perform, undefined, { ...gateway, environments: [memberFixture, { ...memberFixture, attachment_id: 'override', display_name: 'Override', egress_permission: 'deny' }] }); await settle();
     const checkbox = document.querySelector<HTMLElement>('[role="checkbox"], input[type="checkbox"]')!;
     checkbox.click(); await settle();
     const preview = [...document.querySelectorAll('p')].find(p => p.textContent?.startsWith(i18n.t('gatewayMembers.affected')));
@@ -204,7 +204,18 @@ describe('Gateway member management', () => {
     button(i18n.t('common.save')).click(); await settle();
     expect(perform).not.toHaveBeenCalled();
     button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_policy', gateway_id: gateway.gateway_id, policy: { ...catalogFixture.policy, default_cloud_allowed: true } });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'update_gateway_policy', gateway_id: gateway.connection_id, policy: { ...catalogFixture.policy, default_egress_allowed: true } });
+  });
+  it('previews destination changes for permitted attachments', async () => {
+    mount(vi.fn(), undefined, { ...gateway, policy: { ...catalogFixture.policy, default_egress_allowed: true }, environments: [
+      memberFixture, { ...memberFixture, attachment_id: 'allow', display_name: 'Allowed', egress_permission: 'allow' },
+      { ...memberFixture, attachment_id: 'deny', display_name: 'Denied', egress_permission: 'deny' },
+    ] }); await settle();
+    const input = document.querySelector<HTMLTextAreaElement>('textarea')!;
+    input.value = 'cloud.example:443'; input.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    const preview = [...document.querySelectorAll('p')].find(p => p.textContent?.startsWith(i18n.t('gatewayMembers.affected')));
+    expect(preview?.textContent).toContain(memberFixture.display_name);
+    expect(preview?.textContent).toContain('Allowed'); expect(preview?.textContent).not.toContain('Denied');
   });
   it('does not restore an old invitation into a closed and reopened dialog', async () => {
     let complete!: (result: DesktopLauncherActionResult) => void;
@@ -218,7 +229,7 @@ describe('Gateway member management', () => {
   });
   it('disables member and Cloud mutations for access-only pairing', async () => {
     const perform = vi.fn();
-    mount(perform, undefined, { ...gateway, permissions: { access: true, manage_members: false, configure_cloud: false } }); await settle();
+    mount(perform, undefined, { ...gateway, permissions: { access: true, manage_attachments: false, manage_network: false } }); await settle();
     expect(document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')?.disabled).toBe(true);
     expect(button(i18n.t('gatewayMembers.remove')).disabled).toBe(true);
     expect(button(i18n.t('gatewayMembers.reevaluate')).disabled).toBe(true);
@@ -239,8 +250,8 @@ describe('Gateway network configuration',()=>{
   const binding=document.getElementById('gateway-listen-addresses') as HTMLInputElement;
   binding.value='0.0.0.0:7555';binding.dispatchEvent(new Event('input',{bubbles:true}));
   button(i18n.t('gatewayNetwork.save')).click();await settle();
-  expect(perform).toHaveBeenCalledExactlyOnceWith({kind:'update_gateway_network_settings',gateway_id:gateway.gateway_id,
-   settings:{listen_addresses:['0.0.0.0:7555'],allowed_hosts:[],endpoints:gateway.member_endpoints}});
+  expect(perform).toHaveBeenCalledExactlyOnceWith({kind:'update_gateway_network_settings',gateway_id:gateway.connection_id,
+   settings:{listen_addresses:['0.0.0.0:7555'],allowed_hosts:[],endpoints:gateway.endpoints}});
  });
  it('keeps drafts and shows a useful validation error for invalid listener addresses',async()=>{
   const perform=vi.fn();mount(perform,undefined,gateway,'connection');await settle();
@@ -266,18 +277,18 @@ it('opens advanced settings and focuses an invalid Host restriction',async()=>{
 
 it('refreshes clean network fields from the authoritative catalog while preserving a typed draft',async()=>{
  const setGateway=mount(vi.fn(),undefined,gateway,'connection');await settle();
- const endpoint={...gateway.member_endpoints![0]!,address:'https://changed.example:7443'};
- setGateway({...gateway,member_endpoints:[endpoint],listener_addresses:['127.0.0.1:7555'],allowed_hosts:['changed.example']});await settle();
+ const endpoint={...gateway.endpoints![0]!,address:'https://changed.example:7443'};
+ setGateway({...gateway,endpoints:[endpoint],listener_addresses:['127.0.0.1:7555'],allowed_hosts:['changed.example']});await settle();
  const address=document.querySelector<HTMLInputElement>('.redeven-gateway-endpoint input')!;
  expect(address.value).toBe(endpoint.address);
  expect((document.getElementById('gateway-allowed-hosts') as HTMLInputElement).value).toBe('changed.example');
  address.value='https://draft.example:7443';address.dispatchEvent(new Event('input',{bubbles:true}));
- setGateway({...gateway,member_endpoints:[{...endpoint,address:'https://newer.example:7443'}]});await settle();
+ setGateway({...gateway,endpoints:[{...endpoint,address:'https://newer.example:7443'}]});await settle();
  expect(address.value).toBe('https://draft.example:7443');
 });
 it('disables invitation issuance when another settings tab removes all confirmed endpoints',async()=>{
  const setGateway=mount(vi.fn());await settle();
- setGateway({...gateway,member_endpoints:[]});await settle();
+ setGateway({...gateway,endpoints:[]});await settle();
  expect(button(i18n.t('gatewayMembers.createInvitation')).disabled).toBe(true);
  expect(document.body.textContent).toContain(i18n.t('gatewayMembers.noConnectionAddresses'));
 });
@@ -310,7 +321,7 @@ it('retains delivered invitation content but revokes copy consent across permiss
  const perform=vi.fn().mockResolvedValue({ok:true,outcome:'gateway_invitation_created',gateway_invitation_code:invitationFixture});
  const setGateway=mount(perform);await settle();button(i18n.t('gatewayMembers.createInvitation')).click();await settle();
  const copy=button(i18n.t('gatewayJoin.copyCode'));expect(copy.disabled).toBe(false);
- setGateway({...gateway,permissions:{access:true,manage_members:false,configure_cloud:false}});await settle();
+ setGateway({...gateway,permissions:{access:true,manage_attachments:false,manage_network:false}});await settle();
  expect(button(i18n.t('gatewayJoin.copyCode'))).toBe(copy);expect(copy.disabled).toBe(true);
  setGateway({...gateway});await settle();expect(copy.disabled).toBe(true);
  button(i18n.t('gatewayMembers.createInvitation')).click();await settle();expect(copy.disabled).toBe(false);

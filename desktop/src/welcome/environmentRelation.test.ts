@@ -133,7 +133,7 @@ describe('verified Gateway access beside Cloud ownership', () => {
       const groups = buildEnvironmentLibraryDisplayGroups(entries);
       expect(groups).toHaveLength(1);
       expect(groups[0].owner_ids).toEqual([runtime.id, cloud.id]);
-      expect(groups[0].member_ids).toEqual([runtime.id, cloud.id, gateway.id]);
+      expect(groups[0].attachment_ids).toEqual([runtime.id, cloud.id, gateway.id]);
       expect(groups[0].primary_entry).toBe(direct);
       expect(groups[0].provider_entry).toBe(cloud);
     }

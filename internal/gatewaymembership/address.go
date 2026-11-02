@@ -96,9 +96,9 @@ func (r *RuntimeConfig) PrepareConnectionEndpoints(invitation gp.EnrollmentDescr
 	// stable across a lost response or a local persistence failure. Gateway
 	// returns the exact committed receipt for this request instead of treating
 	// a retry as a second endpoint update.
-	digest := sha256.Sum256([]byte("redeven.gateway.endpoint-delivery.v1\x00" + invitation.InvitationID + "\x00" + r.MemberID + "\x00" + strconv.FormatInt(r.MemberVersion, 10)))
+	digest := sha256.Sum256([]byte("redeven.gateway.endpoint-delivery.v1\x00" + invitation.InvitationID + "\x00" + r.AttachmentID + "\x00" + strconv.FormatInt(r.AttachmentVersion, 10)))
 	delivery := "delivery_" + hex.EncodeToString(digest[:])[:48]
-	request := gp.MemberEndpointUpdateRequest{ProtocolVersion: gp.Version, GatewayID: r.GatewayID, InvitationID: invitation.InvitationID, Token: invitation.Token, MemberID: r.MemberID, MemberVersion: r.MemberVersion, DeliveryID: delivery}
+	request := gp.MemberEndpointUpdateRequest{ProtocolVersion: gp.Version, GatewayID: r.GatewayID, InvitationID: invitation.InvitationID, Token: invitation.Token, AttachmentID: r.AttachmentID, AttachmentVersion: r.AttachmentVersion, DeliveryID: delivery}
 	key, err := decodeKey(r.PrivateKeyB64u, ed25519.PrivateKeySize)
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (s *Store) RedeemEndpointUpdate(leaf *x509.Certificate, request gp.MemberEn
 	if err != nil {
 		return gp.MemberEndpointUpdateResponse{}, err
 	}
-	if request.ProtocolVersion != gp.Version || request.GatewayID != s.identity.ID || request.MemberID != member.Member.MemberID || request.MemberVersion != member.Member.MemberVersion || !validID(request.DeliveryID) {
+	if request.ProtocolVersion != gp.Version || request.GatewayID != s.identity.ID || request.AttachmentID != member.Member.AttachmentID || request.AttachmentVersion != member.Member.AttachmentVersion || !validID(request.DeliveryID) {
 		return gp.MemberEndpointUpdateResponse{}, ErrDenied
 	}
 	signature := request.Signature
@@ -133,7 +133,7 @@ func (s *Store) RedeemEndpointUpdate(leaf *x509.Certificate, request gp.MemberEn
 		return gp.MemberEndpointUpdateResponse{}, ErrDenied
 	}
 	if receipt := record.EndpointReceipt; receipt != nil {
-		if record.RequestSHA256 != hash || receipt.MemberID != request.MemberID || receipt.MemberVersion != request.MemberVersion {
+		if record.RequestSHA256 != hash || receipt.AttachmentID != request.AttachmentID || receipt.AttachmentVersion != request.AttachmentVersion {
 			return gp.MemberEndpointUpdateResponse{}, ErrDenied
 		}
 		return *receipt, nil
@@ -141,7 +141,7 @@ func (s *Store) RedeemEndpointUpdate(leaf *x509.Certificate, request gp.MemberEn
 	if record.ExpiresAtUnixMS <= time.Now().UnixMilli() {
 		return gp.MemberEndpointUpdateResponse{}, ErrInvitationExpired
 	}
-	response := gp.MemberEndpointUpdateResponse{ProtocolVersion: gp.Version, GatewayID: s.identity.ID, MemberID: request.MemberID, MemberVersion: request.MemberVersion, DeliveryID: request.DeliveryID}
+	response := gp.MemberEndpointUpdateResponse{ProtocolVersion: gp.Version, GatewayID: s.identity.ID, AttachmentID: request.AttachmentID, AttachmentVersion: request.AttachmentVersion, DeliveryID: request.DeliveryID}
 	record.EndpointReceipt, record.RequestSHA256, record.DeliveryID = &response, hash, request.DeliveryID
 	next := s.clone()
 	next.Invitations[request.InvitationID] = record
@@ -157,10 +157,10 @@ func (r *RuntimeConfig) DeliverPendingEndpointUpdate(ctx context.Context, persis
 	}
 	request := r.PendingEndpointUpdate
 	var response gp.MemberEndpointUpdateResponse
-	if err := r.Request(ctx, "/v6/member/update-endpoints", request, &response, true); err != nil {
+	if err := r.Request(ctx, "/v6/attachment/update-endpoints", request, &response, true); err != nil {
 		return err
 	}
-	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.MemberID != r.MemberID || response.MemberVersion != r.MemberVersion || response.DeliveryID != request.DeliveryID {
+	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.AttachmentID != r.AttachmentID || response.AttachmentVersion != r.AttachmentVersion || response.DeliveryID != request.DeliveryID {
 		return ErrInvalidProof
 	}
 	next := r.Clone()

@@ -1,7 +1,7 @@
-/** Gateway v6 is the membership and multi-endpoint access contract. */
+/** Gateway v6 is the device attachment and multi-endpoint access contract. */
 export const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v6' as const;
 /** Frozen at the reviewed v6 host-authority contract; unrelated Runtime changes do not bump it. */
-export const GATEWAY_COMPATIBILITY_EPOCH = 69;
+export const GATEWAY_COMPATIBILITY_EPOCH = 70;
 export const GATEWAY_ACCESS_STREAM = 'redeven.gateway.access.https.v6';
 
 export type GatewayEndpointScope = 'lan' | 'overlay' | 'public';
@@ -14,27 +14,27 @@ export type GatewayEndpoint = Readonly<{
 
 export type GatewayPermissions = Readonly<{
   access: boolean;
-  manage_members: boolean;
-  configure_cloud: boolean;
+  manage_attachments: boolean;
+  manage_network: boolean;
 }>;
 export type GatewayHookStatus = 'not_configured' | 'configured' | 'invalid';
-export type GatewayHookStatuses = Readonly<Record<'member.admit' | 'access.open' | 'cloud.publish', GatewayHookStatus>>;
-export type GatewayCloudPermission = 'inherit' | 'allow' | 'deny';
+export type GatewayHookStatuses = Readonly<Record<'attachment.admit' | 'access.open' | 'egress.open', GatewayHookStatus>>;
+export type GatewayEgressPermission = 'inherit' | 'allow' | 'deny';
 export type GatewayPolicy = Readonly<{
   revision: number;
-  default_cloud_allowed: boolean;
-  publication_mode: 'manual' | 'automatic';
+  default_egress_allowed: boolean;
+  destinations: readonly string[];
 }>;
-export type GatewayMember = Readonly<{
-  member_id: string;
+export type RuntimeAttachment = Readonly<{
+  attachment_id: string;
   runtime_public_id: string;
-  member_version: number;
+  attachment_version: number;
   display_name: string;
   state: 'active' | 'removed';
   connected: boolean;
   last_seen_at_unix_ms: number;
-  cloud_permission: GatewayCloudPermission;
-  effective_cloud_allowed: boolean;
+  egress_permission: GatewayEgressPermission;
+  effective_egress_allowed: boolean;
   metadata: Readonly<{ hostname: string; os: string; arch: string; version: string }>;
 }>;
 export type GatewayInvitationCodeDelivery = Readonly<{
@@ -42,7 +42,7 @@ export type GatewayInvitationCodeDelivery = Readonly<{
  gateway_public_key: string; share_address: string; share_addresses: readonly string[]; code: string;
  issued_at_unix_ms: number; expires_at_unix_ms: number; signature: string;
 }>;
-export type GatewayMemberService = Readonly<{
+export type RuntimeAttachmentService = Readonly<{
   revision: number;
   origin: string;
   certificate_pem: string;
@@ -50,36 +50,35 @@ export type GatewayMemberService = Readonly<{
   expires_at_unix_ms: number;
   signature: string;
 }>;
-export type GatewayMemberDelegation = Readonly<{
-  protocol_version: typeof GATEWAY_PROTOCOL_VERSION | 'redeven-gateway-v4';
+export type RuntimeAttachmentDelegation = Readonly<{
+  protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
   gateway_id: string;
-  member_id: string;
+  attachment_id: string;
   runtime_public_id: string;
   public_key_b64u: string;
   invitation_id: string;
   consented_at_unix_ms: number;
   manage_access: boolean;
-  manage_cloud_publication: boolean;
   signature: string;
 }>;
-export type GatewayMemberOffer = Readonly<{
+export type RuntimeAttachmentOffer = Readonly<{
   protocol_version: typeof GATEWAY_PROTOCOL_VERSION;
   channel_id: string;
-  member_id: string;
-  member_version: number;
+  attachment_id: string;
+  attachment_version: number;
   generation: number;
   artifact: unknown;
-  service: GatewayMemberService;
-  delegation: GatewayMemberDelegation;
+  service: RuntimeAttachmentService;
+  delegation: RuntimeAttachmentDelegation;
   expires_at_unix_ms: number;
 }>;
-export type GatewayMemberOperationResult = Readonly<{
-  member_id: string;
-  member?: GatewayMember;
+export type RuntimeAttachmentOperationResult = Readonly<{
+  attachment_id: string;
+  member?: RuntimeAttachment;
   error_code?: string;
 }>;
 
-export type GatewayMemberServiceResponse = Pick<GatewayMemberOffer, 'protocol_version' | 'member_id' | 'member_version' | 'service' | 'delegation'>;
+export type RuntimeAttachmentServiceResponse = Pick<RuntimeAttachmentOffer, 'protocol_version' | 'attachment_id' | 'attachment_version' | 'service' | 'delegation'>;
 
 export type GatewayClientAccessCode = Readonly<{ access_code: string; expires_at_unix_ms: number }>;
 export type GatewayAuthorizedClient = Readonly<{

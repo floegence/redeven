@@ -35,7 +35,7 @@ func PublicContracts() map[string]any {
 		"Directory": Directory{}, "Route": Route{}, "Bookmark": Bookmark{}, "BookmarkInput": BookmarkInput{},
 		"RotateRouteInput": RotateRouteInput{}, "RouteInput": RouteInput{}, "Operation": openOperation{}, "Setup": SetupResult{},
 		"Authentication": Authentication{}, "AuthenticationResult": AuthenticationResult{},
-		"Catalog": gp.CatalogResponse{}, "Member": gp.Member{},
+		"Catalog": gp.CatalogResponse{}, "Member": gp.RuntimeAttachment{},
 	}
 }
 

@@ -69,7 +69,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 
 	return runtimeservice.ApplyCompatibilityContract(runtimeservice.Snapshot{
-		GatewayMemberships: a.gatewayMembershipSummaries(),
+		GatewayAttachments: a.gatewayMembershipSummaries(),
 		RuntimeVersion:     strings.TrimSpace(a.version),
 		RuntimeCommit:      strings.TrimSpace(a.commit),
 		RuntimeBuildTime:   strings.TrimSpace(a.buildTime),
@@ -92,11 +92,11 @@ func (a *Agent) CurrentRuntimeServiceSnapshot() runtimeservice.Snapshot {
 	return a.RuntimeServiceSnapshot()
 }
 
-func (a *Agent) gatewayMembershipSummaries() []runtimeservice.GatewayMembership {
-	status := a.GatewayMembershipStatus()
-	out := make([]runtimeservice.GatewayMembership, 0, len(status.Memberships))
+func (a *Agent) gatewayMembershipSummaries() []runtimeservice.GatewayAttachment {
+	status := a.GatewayAttachmentStatus()
+	out := make([]runtimeservice.GatewayAttachment, 0, len(status.Memberships))
 	for _, item := range status.Memberships {
-		member := a.GatewayMembership(item.GatewayID)
+		member := a.GatewayAttachment(item.GatewayID)
 		if member == nil || member.Leaving {
 			continue
 		}
@@ -113,7 +113,7 @@ func (a *Agent) gatewayMembershipSummaries() []runtimeservice.GatewayMembership 
 		if err != nil {
 			continue
 		}
-		summary := runtimeservice.GatewayMembership{GatewayID: member.GatewayID, GatewayName: member.GatewayName, IdentityFingerprint: fingerprint, MemberID: member.MemberID, RuntimePublicID: member.RuntimePublicID, Phase: item.Phase}
+		summary := runtimeservice.GatewayAttachment{GatewayID: member.GatewayID, GatewayName: member.GatewayName, IdentityFingerprint: fingerprint, AttachmentID: member.AttachmentID, RuntimePublicID: member.RuntimePublicID, Phase: item.Phase}
 		for _, endpoint := range member.ConnectionEndpoints() {
 			summary.Endpoints = append(summary.Endpoints, runtimeservice.GatewayAddress{Address: endpoint.Address})
 		}

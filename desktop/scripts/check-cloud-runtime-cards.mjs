@@ -312,7 +312,7 @@ app.whenReady().then(async()=>{
         `schema_version=3\ninstalled_by=redeven-desktop\nslot_release_tag=v0.0.0-dev\nsource_commit=${sourceCommit}\ninstall_strategy=desktop_upload\n`,
       );
       await session.command('Gateway service', gatewayBinary, ['service-stop', '--state-root', serviceRoot]);
-      execFileSync(gatewayBinary, ['service-start', '--state-root', serviceRoot, '--member-listen', '127.0.0.1:0'], { stdio: 'pipe' });
+      execFileSync(gatewayBinary, ['service-start', '--state-root', serviceRoot, '--public-listen', '127.0.0.1:0'], { stdio: 'pipe' });
       execFileSync(gatewayBinary, ['service-stop', '--state-root', serviceRoot], { stdio: 'pipe' });
       const trustPath = path.join(serviceRoot, 'gateway-trust.json');
       const trust = JSON.parse(await readFile(trustPath, 'utf8'));
@@ -327,7 +327,7 @@ app.whenReady().then(async()=>{
       assert.equal((await action({ kind: 'pair_gateway', gateway_id: source.gateway_id })).ok, true);
       current = await snapshot();
       const paired = current.gateway_sources.find((item) => item.gateway_id === source.gateway_id);
-      assert.equal(paired.permissions.manage_members, true);
+      assert.equal(paired.permissions.manage_attachments, true);
       const active = paired.active_listener_addresses?.[0];
       assert.ok(active, `No listener in ${JSON.stringify(paired.service_state)}`);
       const address = `https://${active}`;

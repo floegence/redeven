@@ -28,7 +28,7 @@ func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
 				a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, LocalEnvironmentPublicID: "runtime"}, controlCancel: cancel, sessions: map[string]*activeSession{"data": {cancel: closeData}}}
 				if selected {
 					a.cfg.CloudAssociation = routeAgentFixture(t).cfg.CloudAssociation
-					a.cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: member.MemberID, Revision: 1}
+					a.cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: member.AttachmentID, Revision: 1}
 				}
 				before := a.remoteConfigSnapshot()
 				next := member.Clone()
@@ -44,7 +44,7 @@ func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
 				case "bookkeeping":
 					next.LastSpentChannelID = "channel_next"
 				}
-				if err := a.persistGatewayMember(next); err != nil {
+				if err := a.persistRuntimeAttachment(next); err != nil {
 					t.Fatal(err)
 				}
 				changed := selected && field != "bookkeeping"
@@ -86,7 +86,7 @@ func TestGatewayMaintenancePreservesSavedChatGPTBindingAfterRestart(t *testing.T
 	}
 	refreshed := member.Clone()
 	refreshed.LastSpentChannelID = "next-channel"
-	if err := a.persistGatewayMember(refreshed); err != nil {
+	if err := a.persistRuntimeAttachment(refreshed); err != nil {
 		t.Fatal(err)
 	}
 	restarted, err := config.LoadForStartup(path)
@@ -96,7 +96,7 @@ func TestGatewayMaintenancePreservesSavedChatGPTBindingAfterRestart(t *testing.T
 	if !reflect.DeepEqual(restarted.AI, saved.AI) || restarted.Shell != saved.Shell || restarted.CodeServerPortMin != saved.CodeServerPortMin || restarted.CodeServerPortMax != saved.CodeServerPortMax {
 		t.Fatal("connection maintenance overwrote saved local settings or ChatGPT binding")
 	}
-	if restarted.GatewayMember(member.GatewayID).LastSpentChannelID != "next-channel" {
+	if restarted.RuntimeAttachment(member.GatewayID).LastSpentChannelID != "next-channel" {
 		t.Fatal("connection maintenance was not persisted")
 	}
 }
@@ -109,7 +109,7 @@ func TestGatewayLeaveClosesOnlySelectedRouteAndPreservesCloudAuthority(t *testin
 			a := routeAgentFixture(t)
 			a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{member}
 			if selected {
-				a.cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: member.MemberID, Revision: 1}
+				a.cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: member.AttachmentID, Revision: 1}
 			}
 			if err := config.Save(a.configPath, a.cfg); err != nil {
 				t.Fatal(err)
@@ -136,7 +136,7 @@ func TestGatewayLeaveClosesOnlySelectedRouteAndPreservesCloudAuthority(t *testin
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !saved.GatewayMember("").Leaving || !reflect.DeepEqual(saved.CloudAssociation, previous.CloudAssociation) || *saved.CloudRoute != *previous.CloudRoute {
+			if !saved.RuntimeAttachment("").Leaving || !reflect.DeepEqual(saved.CloudAssociation, previous.CloudAssociation) || *saved.CloudRoute != *previous.CloudRoute {
 				t.Fatal("local removal changed Cloud authority or silently selected another route")
 			}
 			if (remote.Err() != nil) != selected || local.Err() != nil {
@@ -147,11 +147,11 @@ func TestGatewayLeaveClosesOnlySelectedRouteAndPreservesCloudAuthority(t *testin
 					t.Fatal("leaving member authorized direct fallback")
 				}
 			}
-			if err := a.persistGatewayMember(nil); err != nil {
+			if err := a.persistRuntimeAttachment(nil); err != nil {
 				t.Fatal(err)
 			}
 			saved, err = config.Load(a.configPath)
-			if err != nil || saved.GatewayMember("") != nil || !reflect.DeepEqual(saved.CloudAssociation, previous.CloudAssociation) {
+			if err != nil || saved.RuntimeAttachment("") != nil || !reflect.DeepEqual(saved.CloudAssociation, previous.CloudAssociation) {
 				t.Fatal("removal lost Cloud identity or authorization", err)
 			}
 			if selected {
@@ -177,9 +177,6 @@ func TestGatewayPairingDoesNotSelectRouteOrReplaceCloudAssociation(t *testing.T)
 	if !sameCloudOwner(previous, a.remoteConfigSnapshot()) || a.cfg.CloudAssociation.Binding.Generation != 7 {
 		t.Fatal("pairing replaced the direct Cloud owner")
 	}
-	if err := a.PublishGateway(t.Context(), invitation.GatewayID); err == nil {
-		t.Fatal("pending pairing replaced an existing Cloud association")
-	}
 }
 
 func TestGatewayReplacementClosesOldRouteWithoutMigratingCloud(t *testing.T) {
@@ -192,7 +189,7 @@ func TestGatewayReplacementClosesOldRouteWithoutMigratingCloud(t *testing.T) {
 	}
 	a := routeAgentFixture(t)
 	a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{member}
-	a.cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: member.MemberID, Revision: 1}
+	a.cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: member.AttachmentID, Revision: 1}
 	if err := config.Save(a.configPath, a.cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -207,16 +204,16 @@ func TestGatewayReplacementClosesOldRouteWithoutMigratingCloud(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.GatewayMember("").GatewayID != invitation.GatewayID || saved.GatewayMember("").PendingJoin == nil || !reflect.DeepEqual(saved.CloudAssociation, original.CloudAssociation) || *saved.CloudRoute != *original.CloudRoute {
+	if saved.RuntimeAttachment("").GatewayID != invitation.GatewayID || saved.RuntimeAttachment("").PendingJoin == nil || !reflect.DeepEqual(saved.CloudAssociation, original.CloudAssociation) || *saved.CloudRoute != *original.CloudRoute {
 		t.Fatal("replacement migrated Cloud or silently chose a new route")
 	}
 	if oldSession.Err() == nil || len(saved.GatewayRemovalOutbox) != 1 {
 		t.Fatal("replacement left old sessions active or lost removal delivery")
 	}
-	if err := a.persistGatewayMember(member); err == nil {
+	if err := a.persistRuntimeAttachment(member); err == nil {
 		t.Fatal("late member response overwrote replacement")
 	}
-	if err := a.persistGatewayMember(nil); err == nil {
+	if err := a.persistRuntimeAttachment(nil); err == nil {
 		t.Fatal("old removal completion deleted replacement")
 	}
 	if _, err := gatewayProxy(saved); err == nil {

@@ -1,7 +1,7 @@
 import { Button, Dialog, StableText, KeyedFor } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
-import type { GatewayMembershipStatus } from '../shared/gatewayJoin';
+import type { GatewayAttachmentStatus } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
 
 /** The Runtime owns the selected member and verifies Cloud interruption consent. */
@@ -9,7 +9,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   targetID: DesktopCloudRuntimeLinkTargetID;
   available?: boolean;
   i18n: DesktopI18n;
-  mode?: 'leave' | 'publish';
+  mode?: 'leave';
   gatewayID?: string;
   authorityKey?: string;
   onClose: () => void;
@@ -17,11 +17,10 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   focusOwner?: () => void;
 }>) {
   const unavailable = () => props.available === false;
-  const [status, setStatus] = createSignal<GatewayMembershipStatus>();
+  const [status, setStatus] = createSignal<GatewayAttachmentStatus>();
   const [selected, setSelected] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
-  const [displayMode, setDisplayMode] = createSignal<'leave' | 'publish'>(props.mode ?? 'leave');
   const targetID = createMemo(() => props.targetID);
   const mode = createMemo(() => props.mode);
   const gatewayID = createMemo(() => props.gatewayID);
@@ -68,7 +67,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
       generation++; setBusy(false);
       if (!operation) return;
       if (opening) {
-        setDisplayMode(operation); setStatus(undefined); setSelected(requested ?? ''); setInvalidated(false);
+        setStatus(undefined); setSelected(requested ?? ''); setInvalidated(false);
         void revalidate(requested);
       } else if (!status() && previous?.[2] === undefined && requested && available !== false) {
         setSelected(requested); void revalidate(requested);
@@ -104,11 +103,11 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   }
 
   const submitDisabled = () => invalidated() || unavailable() || !mode() || busy() || !member() || member()?.phase === 'removal_pending'
-    || mode() === 'publish' && Boolean(status()?.existing_environment_id) && !status()?.cloud_enrollment_required;
+;
 
   return (
     <Dialog open={!!mode()} onOpenChange={value => { if (!value) close(); }}
-      title={text(displayMode() === 'publish' ? 'gatewayConnections.publishTitle' : 'gatewayConnections.unpairTitle')}
+      title={text('gatewayConnections.unpairTitle')}
       closeLabel={text('common.close')} class="redeven-gateway-dialog">
       <div class="space-y-4">
         <Show when={members().length > 1 && !gatewayID()}>
@@ -128,15 +127,12 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
           <div class="space-y-2">
             <p class="truncate font-medium" title={item().gateway_name || item().gateway_id}>{item().gateway_name || item().gateway_id}</p>
             <p class="break-all text-xs text-muted-foreground">{item().endpoints?.[0]?.address}</p>
-            <p class="text-sm text-muted-foreground">{text(displayMode() === 'publish' ? 'gatewayConnections.publishHelp' : 'gatewayConnections.unpairImpact')}</p>
-            <Show when={displayMode() === 'leave' && item().route_selected}>
+            <p class="text-sm text-muted-foreground">{text('gatewayConnections.unpairImpact')}</p>
+            <Show when={item().route_selected}>
               <p role="alert" class="text-sm text-warning">{text('gatewayConnections.cloudImpact')}</p>
             </Show>
           </div>
         )}</Show>
-        <Show when={displayMode() === 'publish' && status()?.existing_environment_id}>
-          <p role="status" class="text-sm text-muted-foreground">{text('gatewayConnections.useRouteChange')}</p>
-        </Show>
         <Show when={status() && !members().length}>
           <p class="text-sm text-muted-foreground">{text('gatewayConnections.empty')}</p>
         </Show>
@@ -147,10 +143,10 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
         <div class="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" class="cursor-pointer whitespace-nowrap" onClick={close}>{text('common.cancel')}</Button>
-          <Button ref={confirm} variant={displayMode() === 'leave' ? 'destructive' : 'default'} class="cursor-pointer whitespace-nowrap"
+          <Button ref={confirm} variant="destructive" class="cursor-pointer whitespace-nowrap"
             disabled={submitDisabled()} onClick={() => void submit()}>
-            <StableText reserve={[text('gatewayConnections.unpair'), text('gatewayConnections.publish')]}>
-              {text(displayMode() === 'publish' ? 'gatewayConnections.publish' : 'gatewayConnections.unpair')}
+            <StableText reserve={[text('gatewayConnections.unpair')]}>
+              {text('gatewayConnections.unpair')}
             </StableText>
           </Button>
         </div>

@@ -1,5 +1,5 @@
 import {normalizeRuntimeCloudStatus, normalizeCloudRouteOperation, type RuntimeCloudOperation} from '../shared/runtimeCloud';
-import { normalizeGatewayJoinPreview, type GatewayJoinPreview, type GatewayPreviewInput, type GatewayMembershipStatus, type GatewayMembershipOperation } from '../shared/gatewayJoin';
+import { normalizeGatewayJoinPreview, type GatewayJoinPreview, type GatewayPreviewInput, type GatewayAttachmentStatus, type GatewayAttachmentOperation } from '../shared/gatewayJoin';
 import { parseSecurityResult, type SecurityRequest, type SecurityResult } from '../shared/runtimeSecurity';
 import http from 'node:http';
 import https from 'node:https';
@@ -40,7 +40,7 @@ type RuntimeControlServiceRoute =
   | 'v2/gateway/update-endpoints'
   | 'v2/gateway/status'
   | 'v2/gateway/retry'
-  | 'v2/gateway/leave' | 'v2/gateway/publish'
+  | 'v2/gateway/leave'
   | 'v2/tessiven/host'
   | 'v2/tessiven/preflight'
   | 'v2/tessiven/resources'
@@ -312,22 +312,21 @@ export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpo
   return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
 }
 
-export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, previewID?: string, gatewayID?: string, routeImpactAcknowledged?: boolean): Promise<GatewayMembershipStatus> {
+export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayAttachmentOperation, previewID?: string, gatewayID?: string, routeImpactAcknowledged?: boolean): Promise<GatewayAttachmentStatus> {
   const confirming = ['join','replace','update-endpoints'].includes(operation);
   if (confirming !== Boolean(previewID)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Confirmation requires a verified preview.');
   const result = (await requestRuntimeControl(endpoint, `v2/gateway/${operation}`, {
     method: operation === 'status' ? 'GET' : 'POST',
     ...(operation === 'status' ? {} : {body: { ...(confirming ? {preview_id: previewID} : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(routeImpactAcknowledged ? {route_impact_acknowledged: true} : {}) }}), timeoutMs: 30_000,
   })).data;
-  function parse(value: unknown, child = false): GatewayMembershipStatus {
+  function parse(value: unknown, child = false): GatewayAttachmentStatus {
     const data = value as Record<string, unknown> | undefined;
     if (!data || !['not_joined','joining','gateway_offline','joined','reauthorization_required','removal_pending'].includes(String(data.phase)) || typeof data.joined !== 'boolean'
-      || child && (typeof data.gateway_id !== 'string' || typeof data.member_id !== 'string' || data.memberships !== undefined)
+      || child && (typeof data.gateway_id !== 'string' || typeof data.attachment_id !== 'string' || data.memberships !== undefined)
       || data.memberships !== undefined && (!Array.isArray(data.memberships) || data.memberships.length > 16)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE','The Runtime did not return Gateway membership status.');
-    return {joined: data.joined, phase: data.phase as GatewayMembershipStatus['phase'],
-      ...Object.fromEntries(['gateway_id','gateway_name','last_endpoint_id','member_id','existing_environment_id'].filter(key => typeof data[key] === 'string').map(key => [key,data[key]])),
-      ...(Array.isArray(data.endpoints) ? {endpoints: data.endpoints as GatewayMembershipStatus['endpoints']} : {}),
-      ...(typeof data.cloud_enrollment_required === 'boolean' ? {cloud_enrollment_required:data.cloud_enrollment_required} : {}),
+    return {joined: data.joined, phase: data.phase as GatewayAttachmentStatus['phase'],
+      ...Object.fromEntries(['gateway_id','gateway_name','last_endpoint_id','attachment_id','existing_environment_id'].filter(key => typeof data[key] === 'string').map(key => [key,data[key]])),
+      ...(Array.isArray(data.endpoints) ? {endpoints: data.endpoints as GatewayAttachmentStatus['endpoints']} : {}),
       ...(typeof data.route_selected === 'boolean' ? {route_selected:data.route_selected} : {}),
       ...(Array.isArray(data.memberships) ? {memberships:data.memberships.map(item => parse(item,true))} : {}),
     };

@@ -334,6 +334,14 @@ func (s *Store) RecordVerified(clientKeyID string, hostAdmin bool) error {
 	return s.saveStateLocked(next)
 }
 
+func (s *Store) GatewayPublicKey() (string, error) {
+	state, err := s.ensureStateForRead()
+	if err != nil {
+		return "", err
+	}
+	return state.Gateway.PublicKey, nil
+}
+
 func (s *Store) GatewayPrivateKey() (string, error) {
 	state, err := s.ensureStateForRead()
 	if err != nil {

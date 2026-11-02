@@ -185,7 +185,7 @@ function defaultDiagnosticFacts(gateway: DesktopGatewaySource): readonly Gateway
   return [
     { label: 'Trust', value: trustStateLabel(gateway), tone: gateway.trust_state === 'paired' ? 'neutral' : 'warning' },
     { label: 'Transport', value: desktopGatewayConnectionKindLabel(gateway.connection_kind) },
-    { label: 'Endpoint', value: compact(gateway.endpoint_label) || compact(gateway.gateway_url) || gateway.gateway_id },
+    { label: 'Endpoint', value: compact(gateway.endpoint_label) || compact(gateway.gateway_url) || gateway.connection_id },
     ...(diagnosis ? [{ label: 'Diagnosis', value: diagnosis.summary }] : []),
     ...(diagnosis?.detail ? [{ label: 'Detail', value: diagnosis.detail }] : []),
     ...probeFacts,
@@ -208,27 +208,27 @@ function continuationActionFor(
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-      return { kind: action.intent, gateway_id: gateway.gateway_id };
+      return { kind: action.intent, gateway_id: gateway.connection_id };
     case 'refresh_gateway':
       return {
         kind: 'refresh_gateway',
-        gateway_id: gateway.gateway_id,
+        gateway_id: gateway.connection_id,
       };
     case 'pair_gateway':
       return {
         kind: 'pair_gateway',
-        gateway_id: gateway.gateway_id,
+        gateway_id: gateway.connection_id,
       };
     case 'enable_gateway':
       return {
         kind: 'set_gateway_enabled',
-        gateway_id: gateway.gateway_id,
+        gateway_id: gateway.connection_id,
         enabled: true,
       };
     case 'disable_gateway':
       return {
         kind: 'set_gateway_enabled',
-        gateway_id: gateway.gateway_id,
+        gateway_id: gateway.connection_id,
         enabled: false,
       };
     default:
@@ -596,7 +596,7 @@ export function buildGatewayActionPresentation(
     return buildPanel({ gateway, kind: 'service_confirmation', execution_mode: 'confirm', tone: 'warning',
       eyebrow: 'Gateway service', title: actionLabel(action.intent), aria_label: actionLabel(action.intent),
       detail: details[action.intent], affected_sessions: input.affected_sessions,
-      continuation_action: { kind: action.intent, gateway_id: gateway.gateway_id, impact_acknowledged: true },
+      continuation_action: { kind: action.intent, gateway_id: gateway.connection_id, impact_acknowledged: true },
       primary_action: action });
   }
 

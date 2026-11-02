@@ -30,7 +30,7 @@ import (
 	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
 
-func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
+func TestDirectCloudChangesPreserveRuntimeAttachments(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	cfg := cloudLinkRemoteConfig(t, "")
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
@@ -67,9 +67,9 @@ func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
 		// An independent reconnect may rotate credentials during the Cloud exchange.
 		a.mu.Lock()
 		next := *a.cfg
-		rotated := next.GatewayMember(member.GatewayID).Clone()
+		rotated := next.RuntimeAttachment(member.GatewayID).Clone()
 		rotated.Revision++
-		next.SetGatewayMember(member.GatewayID, rotated)
+		next.SetRuntimeAttachment(member.GatewayID, rotated)
 		if err := config.SaveConnection(cfgPath, &next); err != nil {
 			t.Error(err)
 		}
@@ -85,7 +85,7 @@ func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(saved.Gateways) != 1 || saved.Gateways[0].MemberID != member.MemberID || saved.Gateways[0].Revision != member.Revision+1 {
+	if len(saved.Gateways) != 1 || saved.Gateways[0].AttachmentID != member.AttachmentID || saved.Gateways[0].Revision != member.Revision+1 {
 		t.Fatal("Cloud connection overwrote concurrent Gateway progress")
 	}
 	if !reflect.DeepEqual(saved.AI, savedAI) || saved.Shell != "/bin/zsh" {

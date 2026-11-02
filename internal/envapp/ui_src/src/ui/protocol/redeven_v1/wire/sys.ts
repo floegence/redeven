@@ -97,7 +97,7 @@ export type wire_sys_ping_resp = {
           approval_state: 'approved' | 'pending' | 'revoked' | 'identity_required' | 'action_required';
           reason_code?: string;
           connection_state: string;
-          route: {kind: 'direct' | 'gateway'; member_id?: string};
+          route: {kind: 'direct' | 'gateway'; attachment_id?: string};
           route_revision: number;
           next_attempt_at_unix_ms?: number;
         };

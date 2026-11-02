@@ -19,7 +19,7 @@ func TestAddressUpdatePreservesMembershipAndRejectsIdentityReplacement(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	member.MemberVersion, member.ClientCertificatePEM, member.ClientExpiresAtUnixMS = joined.MemberVersion, joined.ClientCertificatePEM, joined.ClientExpiresAtUnixMS
+	member.AttachmentVersion, member.ClientCertificatePEM, member.ClientExpiresAtUnixMS = joined.AttachmentVersion, joined.ClientCertificatePEM, joined.ClientExpiresAtUnixMS
 	member.PendingJoin = nil
 	old := member.Clone()
 	if err := store.Readdress("https://moved.internal:9443", "127.0.0.1:9443"); err != nil {
@@ -33,7 +33,7 @@ func TestAddressUpdatePreservesMembershipAndRejectsIdentityReplacement(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(updated.GatewayEndpoints) != 1 || updated.GatewayEndpoints[0].Address != "https://moved.internal:9443" || updated.MemberID != old.MemberID || updated.MemberVersion != old.MemberVersion || updated.ClientCertificatePEM != old.ClientCertificatePEM || updated.Delegation != old.Delegation || member.ConnectionEndpoints()[0].Address != old.ConnectionEndpoints()[0].Address {
+	if len(updated.GatewayEndpoints) != 1 || updated.GatewayEndpoints[0].Address != "https://moved.internal:9443" || updated.AttachmentID != old.AttachmentID || updated.AttachmentVersion != old.AttachmentVersion || updated.ClientCertificatePEM != old.ClientCertificatePEM || updated.Delegation != old.Delegation || member.ConnectionEndpoints()[0].Address != old.ConnectionEndpoints()[0].Address {
 		t.Fatal("address update mutated authorization or previous state")
 	}
 	reopened, err := NewStore(store.path, identity, "", "", store.hooks)

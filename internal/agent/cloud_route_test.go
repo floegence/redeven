@@ -76,7 +76,7 @@ func TestCloudRoutePreflightCommitAndUnknownResultQuery(t *testing.T) {
 func TestCloudRouteFailureAndConcurrentChangePreserveWorkingRoute(t *testing.T) {
 	a := routeAgentFixture(t)
 	op := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
-	_, err := a.PreflightCloudRoute(t.Context(), rc.RoutePreflightRequest{OperationID: op, ExpectedRouteRevision: 1, Selection: rc.RouteSelection{Kind: "gateway", MemberID: "missing"}})
+	_, err := a.PreflightCloudRoute(t.Context(), rc.RoutePreflightRequest{OperationID: op, ExpectedRouteRevision: 1, Selection: rc.RouteSelection{Kind: "gateway", AttachmentID: "missing"}})
 	if err == nil || a.cfg.CloudRoute.Revision != 1 {
 		t.Fatal("failed preflight must preserve the working route")
 	}
@@ -104,13 +104,13 @@ func TestCloudRouteCommitRejectsChangedTargetTrust(t *testing.T) {
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
 	member := gatewayfixture.Enroll(t, store, "runtime")
 	a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{member}
-	selection := config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: member.MemberID, Revision: 2}
+	selection := config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: member.AttachmentID, Revision: 2}
 	fingerprint, err := routePreflightFingerprint(a.cfg, selection)
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
-	a.cfg.CloudRouteOperations = []rc.RouteOperation{{RouteFingerprint: fingerprint, OperationID: id, AssociationRevision: 1, ExpectedRouteRevision: 1, Selection: rc.RouteSelection{Kind: "gateway", MemberID: member.MemberID}, State: "awaiting_confirmation", ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}
+	a.cfg.CloudRouteOperations = []rc.RouteOperation{{RouteFingerprint: fingerprint, OperationID: id, AssociationRevision: 1, ExpectedRouteRevision: 1, Selection: rc.RouteSelection{Kind: "gateway", AttachmentID: member.AttachmentID}, State: "awaiting_confirmation", ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}
 	if err := config.Save(a.configPath, a.cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -123,5 +123,41 @@ func TestCloudRouteCommitRejectsChangedTargetTrust(t *testing.T) {
 	saved, err := config.Load(a.configPath)
 	if err != nil || saved.CloudRoute.Kind != config.CloudRouteDirect || saved.CloudRoute.Revision != 1 {
 		t.Fatal("failed commit changed original route", err)
+	}
+}
+
+func TestCloudRouteCanBeChosenBeforeCloudEnrollment(t *testing.T) {
+	a := routeAgentFixture(t)
+	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+	member := gatewayfixture.Enroll(t, store, "runtime")
+	a.cfg.Gateways = []*gatewaymembership.RuntimeConfig{member}
+	a.cfg.CloudAssociation = nil
+	a.cfg.CloudRoute = nil
+	a.cfg.ControlArtifactPool = nil
+	if err := config.Save(a.configPath, a.cfg); err != nil {
+		t.Fatal(err)
+	}
+	id := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
+	request := rc.RoutePreflightRequest{OperationID: id, Selection: rc.RouteSelection{Kind: "gateway", AttachmentID: member.AttachmentID}}
+	prepared, err := a.PreflightCloudRoute(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.AssociationRevision != 0 || a.cfg.CloudAssociation != nil || a.cfg.CloudRoute != nil {
+		t.Fatal("route preview created Cloud authority")
+	}
+	result, err := a.CommitCloudRoute(t.Context(), rc.RouteCommitRequest{OperationID: id, Confirmed: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := config.Load(a.configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CommittedRouteRevision != 1 || saved.CloudRoute.AttachmentID != member.AttachmentID || saved.CloudAssociation != nil || len(saved.Gateways) != 1 {
+		t.Fatal("route configuration changed independent identity")
+	}
+	if _, err := saved.CloudProxy(); err != nil {
+		t.Fatal(err)
 	}
 }

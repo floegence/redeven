@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -33,7 +34,12 @@ func newGatewayClient(record GatewayRecord) *gatewayClient {
 	// Gateway destinations are explicitly authorized by the sole administrator's
 	// action-bound step-up grant (or the UID-authenticated Connector channel).
 	// Private network Gateways are supported; redirects and proxies are denied.
-	transport := &http.Transport{Proxy: nil, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}, MaxConnsPerHost: 4, MaxIdleConns: 4, IdleConnTimeout: 30 * time.Second, ResponseHeaderTimeout: 15 * time.Second, MaxResponseHeaderBytes: 32 << 10}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13}
+	if record.TLSRoot != "" {
+		tlsConfig.RootCAs = x509.NewCertPool()
+		tlsConfig.RootCAs.AppendCertsFromPEM([]byte(record.TLSRoot))
+	}
+	transport := &http.Transport{Proxy: nil, TLSClientConfig: tlsConfig, MaxConnsPerHost: 4, MaxIdleConns: 4, IdleConnTimeout: 30 * time.Second, ResponseHeaderTimeout: 15 * time.Second, MaxResponseHeaderBytes: 32 << 10}
 	return &gatewayClient{record: record, http: &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrDenied }}}
 }
 func (g *gatewayClient) close() { g.http.CloseIdleConnections() }
@@ -110,7 +116,7 @@ func (g *gatewayClient) request(ctx context.Context, route string, body, out any
 		// Retry only its explicit transient codes; authorization remains terminal.
 		if response.StatusCode == http.StatusConflict {
 			switch code {
-			case "MEMBER_VERSION_CONFLICT", "MEMBER_OFFLINE", "MEMBER_CAPACITY", "GATEWAY_UNAVAILABLE":
+			case "ATTACHMENT_VERSION_CONFLICT", "ATTACHMENT_OFFLINE", "ATTACHMENT_CAPACITY", "GATEWAY_UNAVAILABLE":
 				retry = true
 			}
 		}
@@ -144,17 +150,17 @@ func (g *gatewayClient) catalog(ctx context.Context) (gp.CatalogResponse, error)
 		return catalog, err
 	}
 	fingerprint, _ := security.PublicKeyFingerprint(g.record.PublicKey)
-	if catalog.ProtocolVersion != gp.Version || catalog.Gateway.GatewayID != g.record.GatewayID || catalog.Gateway.GatewayPublicKeyFingerprint != fingerprint || !catalog.Gateway.Permissions.Access || catalog.Gateway.Permissions.ManageMembers || catalog.Gateway.Permissions.ConfigureCloud || len(catalog.Members) > gp.MaxMembers || len(catalog.Gateway.MemberEndpoints) > 16 || len(catalog.Gateway.MemberTLSRootPEM) > 16384 {
+	if catalog.ProtocolVersion != gp.Version || catalog.Gateway.GatewayID != g.record.GatewayID || catalog.Gateway.GatewayPublicKeyFingerprint != fingerprint || !catalog.Gateway.Permissions.Access || catalog.Gateway.Permissions.ManageAttachments || catalog.Gateway.Permissions.ManageNetwork || len(catalog.Attachments) > gp.MaxAttachments || len(catalog.Gateway.Endpoints) > 16 || len(catalog.Gateway.TLSRootPEM) > 16384 {
 		return gp.CatalogResponse{}, ErrDenied
 	}
 	seen := map[string]bool{}
-	for _, member := range catalog.Members {
-		if member.MemberID == "" || member.RuntimePublicID == "" || member.MemberVersion < 1 || seen[member.MemberID] {
+	for _, member := range catalog.Attachments {
+		if member.AttachmentID == "" || member.RuntimePublicID == "" || member.AttachmentVersion < 1 || seen[member.AttachmentID] {
 			return gp.CatalogResponse{}, ErrDenied
 		}
-		seen[member.MemberID] = true
+		seen[member.AttachmentID] = true
 	}
-	for _, endpoint := range catalog.Gateway.MemberEndpoints {
+	for _, endpoint := range catalog.Gateway.Endpoints {
 		if webbinding.ValidateOrigin(endpoint.Address) != nil {
 			return gp.CatalogResponse{}, ErrDenied
 		}
@@ -174,7 +180,11 @@ type pendingPair struct {
 }
 
 func beginPair(ctx context.Context, address, name, accessCode, session string) (*pendingPair, error) {
-	if webbinding.ValidateOrigin(address) != nil || len(name) > 120 || len(accessCode) > 128 {
+	if webbinding.ValidateOrigin(address) != nil || len(name) > 120 || len(accessCode) > 32768 {
+		return nil, ErrDenied
+	}
+	access, err := gp.DecodeClientAccessPackage(accessCode, time.Now())
+	if err != nil {
 		return nil, ErrDenied
 	}
 	keys, err := security.GenerateKeyPair()
@@ -182,8 +192,8 @@ func beginPair(ctx context.Context, address, name, accessCode, session string) (
 		return nil, err
 	}
 	public := strings.TrimSpace(keys.PublicKeyPEM)
-	record := GatewayRecord{ID: randomID(), Name: name, URL: address, ClientPrivateKey: keys.PrivateKeyPEM, ClientKeyID: security.ClientKeyID(public)}
-	material := gp.PairingChallengeRequest{ProtocolVersion: gp.Version, ClientNonce: randomID(), ClientPublicKey: public, BindingAudience: address, AccessCode: accessCode, ClientName: "Redeven Web Center"}
+	record := GatewayRecord{ID: randomID(), Name: name, URL: address, TLSRoot: access.TLSRootPEM, ClientPrivateKey: keys.PrivateKeyPEM, ClientKeyID: security.ClientKeyID(public)}
+	material := gp.PairingChallengeRequest{ProtocolVersion: gp.Version, ClientNonce: randomID(), ClientPublicKey: public, BindingAudience: address, AccessCode: access.AccessCode, ClientName: "Redeven Web Center"}
 	g := newGatewayClient(record)
 	defer g.close()
 	var challenge gp.PairingChallengeResponse
@@ -192,7 +202,7 @@ func beginPair(ctx context.Context, address, name, accessCode, session string) (
 	}
 	material.AccessCode = ""
 	fingerprint, err := security.PublicKeyFingerprint(challenge.GatewayPublicKey)
-	if err != nil || fingerprint != challenge.GatewayPublicKeyFingerprint || challenge.ProtocolVersion != gp.Version || challenge.CompatibilityEpoch != gp.CompatibilityEpoch || challenge.GatewayID == "" || challenge.GatewayNonce == "" || challenge.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+	if err != nil || fingerprint != challenge.GatewayPublicKeyFingerprint || challenge.ProtocolVersion != gp.Version || challenge.CompatibilityEpoch != gp.CompatibilityEpoch || challenge.GatewayID != access.GatewayID || strings.TrimSpace(challenge.GatewayPublicKey) != strings.TrimSpace(access.GatewayPublicKey) || challenge.GatewayNonce == "" || challenge.ExpiresAtUnixMS <= time.Now().UnixMilli() {
 		return nil, ErrDenied
 	}
 	payload, err := security.CanonicalJSON(map[string]any{"protocol_version": gp.Version, "client_nonce": material.ClientNonce, "gateway_nonce": challenge.GatewayNonce, "gateway_id": challenge.GatewayID, "binding_audience": address, "client_public_key": public, "gateway_public_key": challenge.GatewayPublicKey, "expires_at_unix_ms": challenge.ExpiresAtUnixMS, "compatibility_epoch": challenge.CompatibilityEpoch})
@@ -222,7 +232,7 @@ func (p *pendingPair) complete(ctx context.Context) (GatewayRecord, error) {
 	if err = g.request(ctx, "pairing/complete", req, &response, false); err != nil {
 		return GatewayRecord{}, err
 	}
-	if response.ProtocolVersion != gp.Version || response.GatewayID != p.record.GatewayID || response.ClientKeyID != p.record.ClientKeyID || !response.Permissions.Access || response.Permissions.ManageMembers || response.Permissions.ConfigureCloud || response.PairedAtUnixMS <= 0 {
+	if response.ProtocolVersion != gp.Version || response.GatewayID != p.record.GatewayID || response.ClientKeyID != p.record.ClientKeyID || !response.Permissions.Access || response.Permissions.ManageAttachments || response.Permissions.ManageNetwork || response.PairedAtUnixMS <= 0 {
 		return GatewayRecord{}, ErrDenied
 	}
 	payload, err = security.CanonicalJSON(map[string]any{"protocol_version": response.ProtocolVersion, "client_nonce": req.ClientNonce, "gateway_nonce": req.GatewayNonce, "gateway_id": response.GatewayID, "binding_audience": req.BindingAudience, "client_key_id": response.ClientKeyID, "permissions": response.Permissions, "paired_at_unix_ms": response.PairedAtUnixMS})
@@ -233,10 +243,10 @@ func (p *pendingPair) complete(ctx context.Context) (GatewayRecord, error) {
 }
 func (g *gatewayClient) offer(ctx context.Context, route Route, version int64) (gatewaymembership.ConnectionOffer, error) {
 	var offer gatewaymembership.ConnectionOffer
-	if err := g.request(ctx, "access/open", gp.OpenSessionRequest{ProtocolVersion: gp.Version, MemberID: route.MemberID}, &offer, true); err != nil {
+	if err := g.request(ctx, "access/open", gp.OpenSessionRequest{ProtocolVersion: gp.Version, AttachmentID: route.AttachmentID}, &offer, true); err != nil {
 		return offer, err
 	}
-	if offer.ProtocolVersion != gp.Version || offer.MemberID != route.MemberID || offer.MemberVersion != version || offer.Delegation.GatewayID != g.record.GatewayID || offer.Delegation.RuntimePublicID != route.RuntimeID || offer.Delegation.MemberID != route.MemberID || offer.ExpiresAtUnixMS <= time.Now().UnixMilli() {
+	if offer.ProtocolVersion != gp.Version || offer.AttachmentID != route.AttachmentID || offer.AttachmentVersion != version || offer.Delegation.GatewayID != g.record.GatewayID || offer.Delegation.RuntimePublicID != route.RuntimeID || offer.Delegation.AttachmentID != route.AttachmentID || offer.ExpiresAtUnixMS <= time.Now().UnixMilli() {
 		return offer, ErrDenied
 	}
 	if err := gatewaymembership.VerifyMemberService(offer.Service, offer.Delegation, time.Now()); err != nil {

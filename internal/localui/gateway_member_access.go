@@ -26,7 +26,7 @@ func (s *Server) StartGatewayOnly(ctx context.Context) error {
 		_ = s.Close()
 		return err
 	}
-	if err := s.a.StartGatewayMembership(ctx, s.gatewayMemberApplication); err != nil {
+	if err := s.a.StartGatewayAttachment(ctx, s.gatewayMemberApplication); err != nil {
 		_ = s.Close()
 		return err
 	}

@@ -1,3 +1,4 @@
+import { buildDesktopMain } from './build-main.mjs';
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import { build } from 'esbuild';
 import { buildPluginWebQualification } from '../../scripts/build_plugin_web_qualification.mjs';
@@ -32,14 +33,7 @@ await session.run(async () => {
     format: 'iife',
     globalName: 'GatewayAcceptance',
   });
-  await build({
-    entryPoints: [path.join(root, 'scripts/fixtures/gateway-access-electron.ts')],
-    outfile: runner,
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    external: ['electron', '@floegence/floe-webapp-core/*', '@floegence/flowersec-core/*'],
-  });
+  await buildDesktopMain({entryPoint: 'scripts/fixtures/gateway-access-electron.ts', outfile: runner, report: false});
   await session.evidence(path.join(output, 'report.json'));
   const child = await session.spawn(
     electron,

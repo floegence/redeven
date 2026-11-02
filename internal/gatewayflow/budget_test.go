@@ -16,7 +16,7 @@ func TestSharedBudgetAndClosureReceipts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloud, err := budget.Reserve("a", 1, Cloud, cloudCancel)
+	cloud, err := budget.Reserve("a", 1, Egress, cloudCancel)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,18 +27,18 @@ func TestSharedBudgetAndClosureReceipts(t *testing.T) {
 	if err != nil {
 		t.Fatal("one member exhausted another member's capacity", err)
 	}
-	if _, err := budget.Reserve("c", 1, Cloud, cloudCancel); !errors.Is(err, ErrCapacity) {
+	if _, err := budget.Reserve("c", 1, Egress, cloudCancel); !errors.Is(err, ErrCapacity) {
 		t.Fatalf("total limit: %v", err)
 	}
 	stats := budget.Statistics()
-	if stats.Active != 3 || stats.LAN != 2 || stats.Cloud != 1 || stats.Limit != 3 || stats.Accepted != 3 || stats.Rejected != 2 {
+	if stats.Active != 3 || stats.LAN != 2 || stats.Egress != 1 || stats.Limit != 3 || stats.Accepted != 3 || stats.Rejected != 2 {
 		t.Fatalf("shared admission counters: %+v", stats)
 	}
-	budget.Cancel("a", 1, Cloud)
+	budget.Cancel("a", 1, Egress)
 	if cloudCtx.Err() == nil || lanCtx.Err() != nil {
-		t.Fatal("Cloud revocation crossed the LAN boundary")
+		t.Fatal("Egress revocation crossed the LAN boundary")
 	}
-	if budget.Count("a", 1, Cloud) != 1 {
+	if budget.Count("a", 1, Egress) != 1 {
 		t.Fatal("closure acknowledged before workers stopped")
 	}
 	if budget.Statistics().Active != 3 {
@@ -46,10 +46,10 @@ func TestSharedBudgetAndClosureReceipts(t *testing.T) {
 	}
 	cloud.Release()
 	cloud.Release()
-	if stats := budget.Statistics(); stats.Active != 2 || stats.Cloud != 0 || stats.Accepted != 3 {
+	if stats := budget.Statistics(); stats.Active != 2 || stats.Egress != 0 || stats.Accepted != 3 {
 		t.Fatalf("released resource counters: %+v", stats)
 	}
-	if budget.Count("a", 1, Cloud) != 0 {
+	if budget.Count("a", 1, Egress) != 0 {
 		t.Fatal("completed closure still pending")
 	}
 	budget.Close()

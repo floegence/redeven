@@ -349,8 +349,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found := false
-		for _, member := range catalog.Members {
-			if member.MemberID == request.Input.MemberID && member.RuntimePublicID == request.Input.RuntimeID && member.State == "active" {
+		for _, member := range catalog.Attachments {
+			if member.AttachmentID == request.Input.AttachmentID && member.RuntimePublicID == request.Input.RuntimeID && member.State == "active" {
 				found = true
 			}
 		}

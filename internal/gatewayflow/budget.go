@@ -1,5 +1,5 @@
 // Package gatewayflow accounts for all Gateway business streams, including
-// pending opens. LAN reverse access and Cloud CONNECT share the same budget.
+// pending opens. LAN reverse access and Egress CONNECT share the same budget.
 package gatewayflow
 
 import (
@@ -15,8 +15,8 @@ var ErrCapacity = errors.New("GATEWAY_CONNECTION_LIMIT")
 type Kind string
 
 const (
-	LAN   Kind = "lan"
-	Cloud Kind = "cloud"
+	LAN    Kind = "lan"
+	Egress Kind = "egress"
 )
 
 type Budget struct {
@@ -28,17 +28,17 @@ type Budget struct {
 }
 
 type Reservation struct {
-	MemberID string
-	Version  uint64
-	Kind     Kind
-	budget   *Budget
-	cancel   context.CancelFunc
-	once     sync.Once
+	AttachmentID string
+	Version      uint64
+	Kind         Kind
+	budget       *Budget
+	cancel       context.CancelFunc
+	once         sync.Once
 }
 
 func New(perMember, total int) *Budget {
 	if perMember <= 0 {
-		perMember = gp.MaxMemberConnections
+		perMember = gp.MaxAttachmentConnections
 	}
 	if total <= 0 {
 		total = gp.MaxGatewayConnections
@@ -51,7 +51,7 @@ func New(perMember, total int) *Budget {
 func (b *Budget) Reserve(memberID string, version uint64, kind Kind, cancel context.CancelFunc) (*Reservation, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.closed || memberID == "" || version == 0 || cancel == nil || (kind != LAN && kind != Cloud) {
+	if b.closed || memberID == "" || version == 0 || cancel == nil || (kind != LAN && kind != Egress) {
 		b.rejected++
 		return nil, ErrCapacity
 	}
@@ -61,7 +61,7 @@ func (b *Budget) Reserve(memberID string, version uint64, kind Kind, cancel cont
 	}
 	count := 0
 	for r := range b.active {
-		if r.MemberID == memberID {
+		if r.AttachmentID == memberID {
 			count++
 		}
 	}
@@ -69,7 +69,7 @@ func (b *Budget) Reserve(memberID string, version uint64, kind Kind, cancel cont
 		b.rejected++
 		return nil, ErrCapacity
 	}
-	r := &Reservation{MemberID: memberID, Version: version, Kind: kind, budget: b, cancel: cancel}
+	r := &Reservation{AttachmentID: memberID, Version: version, Kind: kind, budget: b, cancel: cancel}
 	b.active[r] = struct{}{}
 	b.accepted++
 	return r, nil
@@ -88,7 +88,7 @@ func (b *Budget) Cancel(memberID string, through uint64, kind Kind) {
 	b.mu.Lock()
 	var cancellations []context.CancelFunc
 	for r := range b.active {
-		if r.MemberID == memberID && r.Version <= through && (kind == "" || r.Kind == kind) {
+		if r.AttachmentID == memberID && r.Version <= through && (kind == "" || r.Kind == kind) {
 			cancellations = append(cancellations, r.cancel)
 		}
 	}
@@ -103,7 +103,7 @@ func (b *Budget) Count(memberID string, through uint64, kind Kind) int {
 	defer b.mu.Unlock()
 	count := 0
 	for r := range b.active {
-		if (memberID == "" || r.MemberID == memberID) && (through == 0 || r.Version <= through) && (kind == "" || r.Kind == kind) {
+		if (memberID == "" || r.AttachmentID == memberID) && (through == 0 || r.Version <= through) && (kind == "" || r.Kind == kind) {
 			count++
 		}
 	}
@@ -126,8 +126,8 @@ func (b *Budget) Close() {
 // Statistics is a process-local snapshot. Active includes pending opens and
 // cancellations until their forwarding workers release the reservation.
 type Statistics struct {
-	Active, LAN, Cloud, Limit int
-	Accepted, Rejected        uint64
+	Active, LAN, Egress, Limit int
+	Accepted, Rejected         uint64
 }
 
 func (b *Budget) Statistics() Statistics {
@@ -138,7 +138,7 @@ func (b *Budget) Statistics() Statistics {
 		if r.Kind == LAN {
 			out.LAN++
 		} else {
-			out.Cloud++
+			out.Egress++
 		}
 	}
 	return out

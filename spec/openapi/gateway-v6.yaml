@@ -166,120 +166,10 @@
         }
       }
     },
-    "/gateway/v6/cloud/configure": {
-      "post": {
-        "operationId": "gateway_v5_cloud_configure",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
-        "security": [
-          {
-            "HostAdministrator": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfigureCloudRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Success. Responses use Cache-Control: no-store.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "ok",
-                    "data"
-                  ],
-                  "properties": {
-                    "ok": {
-                      "const": true
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Gateway"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/gateway/v6/cloud/status": {
-      "post": {
-        "operationId": "gateway_v5_cloud_status",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
-        "security": [
-          {
-            "HostAdministrator": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Success. Responses use Cache-Control: no-store.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "ok",
-                    "data"
-                  ],
-                  "properties": {
-                    "ok": {
-                      "const": true
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Summary"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/gateway/v6/members/reevaluate": {
+    "/gateway/v6/attachments/reevaluate": {
       "post": {
         "operationId": "gateway_v5_members_reevaluate",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -328,7 +218,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
     "/gateway/v6/catalog": {
@@ -392,7 +294,7 @@
     "/gateway/v6/invitation-codes": {
       "post": {
         "operationId": "gateway_v5_invitation_codes",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -441,13 +343,25 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
     "/gateway/v6/endpoints": {
       "post": {
         "operationId": "gateway_v5_endpoints",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -506,13 +420,25 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
-    "/gateway/v6/members/remove": {
+    "/gateway/v6/attachments/remove": {
       "post": {
         "operationId": "gateway_v5_members_remove",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -561,13 +487,25 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
-    "/gateway/v6/members/policy": {
+    "/gateway/v6/attachments/policy": {
       "post": {
         "operationId": "gateway_v5_members_policy",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -619,13 +557,25 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
     "/gateway/v6/policy": {
       "post": {
         "operationId": "gateway_v5_policy",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -674,7 +624,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
     "/gateway/v6/access/open": {
@@ -793,7 +755,7 @@
         }
       }
     },
-    "/v6/member/join": {
+    "/v6/attachment/join": {
       "post": {
         "operationId": "v5_member_join",
         "description": "Redeem the Gateway invitation with Runtime-signed local consent; repeated delivery retains the same member.",
@@ -832,7 +794,7 @@
         }
       }
     },
-    "/v6/member/cancel-join": {
+    "/v6/attachment/cancel-join": {
       "post": {
         "operationId": "v5_member_cancel_join",
         "description": "Cancel a pending join with the original signed request, including a lost successful response.",
@@ -871,7 +833,7 @@
         }
       }
     },
-    "/v6/member/rotate": {
+    "/v6/attachment/rotate": {
       "post": {
         "operationId": "v5_member_rotate",
         "description": "Rotate current member client credentials and signed service certificate without changing established session lifetime.",
@@ -914,7 +876,7 @@
         }
       }
     },
-    "/v6/member/leave": {
+    "/v6/attachment/leave": {
       "post": {
         "operationId": "v5_member_leave",
         "description": "Leave as the current authenticated member. Removal remains idempotent for the same version.",
@@ -957,50 +919,7 @@
         }
       }
     },
-    "/v6/member/cloud": {
-      "post": {
-        "operationId": "v5_member_cloud",
-        "description": "Observe the optional Cloud publication context of the sole authenticated member.",
-        "security": [
-          {
-            "MemberTLS": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Success. Responses use Cache-Control: no-store.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemberCloudContext"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Authentication, protocol, policy, version conflict, resource limit or delivery failure.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v6/member/connect": {
+    "/v6/attachment/connect": {
       "post": {
         "operationId": "v5_member_connect",
         "description": "Obtain a one-use ticket for the Runtime-initiated persistent membership connection.",
@@ -1046,7 +965,7 @@
     "/gateway/v6/clients/access-codes": {
       "post": {
         "operationId": "clients_access_codes",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Issues a ten-minute, one-use client access code. Only its digest is persisted; it never grants Gateway or Runtime administration.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Issues a ten-minute, one-use client access code. Only its digest is persisted; it never grants Gateway or Runtime administration. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -1096,7 +1015,19 @@
             }
           }
         },
-        "summary": "Host administrator: clients/access-codes"
+        "summary": "Host administrator: clients/access-codes",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
     "/gateway/v6/clients/list": {
@@ -1158,7 +1089,7 @@
     "/gateway/v6/clients/revoke": {
       "post": {
         "operationId": "clients_revoke",
-        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Persists revocation and closes only this client's Gateway access, including pending tickets and connecting sessions; Runtime memberships and Cloud bindings remain intact.",
+        "description": "Requires current verified host management proof. URL client credentials, connection-type fields and cached capabilities cannot authorize this operation. Persists revocation and closes only this client's Gateway access, including pending tickets and connecting sessions; Runtime attachments and Cloud bindings remain intact. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -1209,10 +1140,22 @@
             }
           }
         },
-        "summary": "Host administrator: clients/revoke"
+        "summary": "Host administrator: clients/revoke",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
       }
     },
-    "/v6/member/invitation-exchange": {
+    "/v6/attachment/invitation-exchange": {
       "get": {
         "operationId": "member_invitation_exchange",
         "description": "Fixed WSS enrollment route. The invitation code is exchanged only over the authenticated enrollment channel.",
@@ -1223,7 +1166,7 @@
         }
       }
     },
-    "/v6/member/update-endpoints": {
+    "/v6/attachment/update-endpoints": {
       "post": {
         "operationId": "member_update_endpoints",
         "security": [
@@ -1258,7 +1201,7 @@
     "/gateway/v6/network-settings": {
       "post": {
         "operationId": "gateway_v5_network_settings",
-        "description": "Atomically save confirmed Runtime endpoints, next-start listener bindings and immediate Host restrictions. Requires current verified host management proof. Does not restart Gateway or change member identity.",
+        "description": "Atomically save confirmed Runtime endpoints, next-start listener bindings and immediate Host restrictions. Requires current verified host management proof. Does not restart Gateway or change member identity. Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses.",
         "security": [
           {
             "HostAdministrator": []
@@ -1317,7 +1260,45 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{16,128}$"
+            },
+            "description": "Stable host operation identity. Query the original result after uncertain delivery; never replay an unknown effect with a new ID."
+          }
+        ]
+      }
+    },
+    "/gateway/v6/operations/query": {
+      "post": {
+        "summary": "Query a private host operation result",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Redeven-Operation-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original completed operation envelope"
+          },
+          "409": {
+            "description": "Outcome unknown; reconcile current state without replay"
+          }
+        },
+        "description": " Completed receipts include X-Redeven-Operation-State: completed, including completed failure responses."
       }
     }
   },
@@ -1341,7 +1322,7 @@
       }
     },
     "schemas": {
-      "CloudPermission": {
+      "EgressPermission": {
         "type": "string",
         "enum": [
           "inherit",
@@ -1359,9 +1340,9 @@
       "HookAction": {
         "type": "string",
         "enum": [
-          "member.admit",
+          "attachment.admit",
           "access.open",
-          "cloud.publish"
+          "egress.open"
         ]
       },
       "HookStatus": {
@@ -1435,17 +1416,17 @@
           "access": {
             "type": "boolean"
           },
-          "manage_members": {
+          "manage_attachments": {
             "type": "boolean"
           },
-          "configure_cloud": {
+          "manage_network": {
             "type": "boolean"
           }
         },
         "required": [
           "access",
-          "manage_members",
-          "configure_cloud"
+          "manage_attachments",
+          "manage_network"
         ],
         "readOnly": true
       },
@@ -1572,13 +1553,13 @@
               "format": "int64"
             }
           },
-          "member_endpoints": {
+          "endpoints": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/GatewayEndpoint"
             }
           },
-          "member_tls_root_pem": {
+          "tls_root_pem": {
             "type": "string"
           },
           "permissions": {
@@ -1608,8 +1589,8 @@
           "listener_addresses",
           "listener_running",
           "endpoint_last_used_at",
-          "member_endpoints",
-          "member_tls_root_pem",
+          "endpoints",
+          "tls_root_pem",
           "permissions",
           "active_listener_addresses",
           "allowed_hosts",
@@ -1640,10 +1621,10 @@
           "gateway": {
             "$ref": "#/components/schemas/GatewayMetadata"
           },
-          "members": {
+          "attachments": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Member"
+              "$ref": "#/components/schemas/RuntimeAttachment"
             }
           },
           "policy": {
@@ -1663,7 +1644,7 @@
         "required": [
           "protocol_version",
           "gateway",
-          "members",
+          "attachments",
           "policy",
           "revision",
           "hook_status"
@@ -1677,13 +1658,13 @@
             "type": "string",
             "const": "redeven-gateway-v6"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           }
         },
         "required": [
           "protocol_version",
-          "member_id"
+          "attachment_id"
         ]
       },
       "MemberServiceRequest": {
@@ -1694,18 +1675,18 @@
             "type": "string",
             "const": "redeven-gateway-v6"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "expected_member_version": {
+          "expected_attachment_version": {
             "type": "integer",
             "format": "int64"
           }
         },
         "required": [
           "protocol_version",
-          "member_id",
-          "expected_member_version"
+          "attachment_id",
+          "expected_attachment_version"
         ]
       },
       "MemberServiceResponse": {
@@ -1716,10 +1697,10 @@
             "type": "string",
             "const": "redeven-gateway-v6"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -1732,8 +1713,8 @@
         },
         "required": [
           "protocol_version",
-          "member_id",
-          "member_version",
+          "attachment_id",
+          "attachment_version",
           "service",
           "delegation"
         ]
@@ -1759,18 +1740,18 @@
             "type": "string",
             "const": "redeven-gateway-v6"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "expected_member_version": {
+          "expected_attachment_version": {
             "type": "integer",
             "format": "int64"
           }
         },
         "required": [
           "protocol_version",
-          "member_id",
-          "expected_member_version"
+          "attachment_id",
+          "expected_attachment_version"
         ]
       },
       "UpdatePolicyRequest": {
@@ -2105,10 +2086,10 @@
           "token": {
             "type": "string"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -2124,8 +2105,8 @@
           "gateway_id",
           "invitation_id",
           "token",
-          "member_id",
-          "member_version",
+          "attachment_id",
+          "attachment_version",
           "delivery_id",
           "signature"
         ]
@@ -2141,10 +2122,10 @@
           "gateway_id": {
             "type": "string"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -2155,8 +2136,8 @@
         "required": [
           "protocol_version",
           "gateway_id",
-          "member_id",
-          "member_version",
+          "attachment_id",
+          "attachment_version",
           "delivery_id"
         ]
       },
@@ -2171,7 +2152,7 @@
           "gateway_id": {
             "type": "string"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
           "runtime_public_id": {
@@ -2190,9 +2171,6 @@
           "manage_access": {
             "type": "boolean"
           },
-          "manage_cloud_publication": {
-            "type": "boolean"
-          },
           "signature": {
             "type": "string"
           }
@@ -2200,13 +2178,12 @@
         "required": [
           "protocol_version",
           "gateway_id",
-          "member_id",
+          "attachment_id",
           "runtime_public_id",
           "public_key_b64u",
           "invitation_id",
           "consented_at_unix_ms",
           "manage_access",
-          "manage_cloud_publication",
           "signature"
         ]
       },
@@ -2324,10 +2301,10 @@
           "gateway_id": {
             "type": "string"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -2345,8 +2322,8 @@
         "required": [
           "protocol_version",
           "gateway_id",
-          "member_id",
-          "member_version",
+          "attachment_id",
+          "attachment_version",
           "delivery_id",
           "client_certificate_pem",
           "client_expires_at_unix_ms"
@@ -2363,10 +2340,10 @@
           "gateway_id": {
             "type": "string"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -2386,8 +2363,8 @@
         "required": [
           "protocol_version",
           "gateway_id",
-          "member_id",
-          "member_version",
+          "attachment_id",
+          "attachment_version",
           "delivery_id",
           "client_csr_pem",
           "service",
@@ -2402,10 +2379,10 @@
             "type": "string",
             "const": "redeven-gateway-v6"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -2422,24 +2399,24 @@
         },
         "required": [
           "protocol_version",
-          "member_id",
-          "member_version",
+          "attachment_id",
+          "attachment_version",
           "delivery_id",
           "client_certificate_pem",
           "client_expires_at_unix_ms"
         ]
       },
-      "Member": {
+      "RuntimeAttachment": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
           "runtime_public_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -2456,10 +2433,10 @@
             "type": "integer",
             "format": "int64"
           },
-          "cloud_permission": {
-            "$ref": "#/components/schemas/CloudPermission"
+          "egress_permission": {
+            "$ref": "#/components/schemas/EgressPermission"
           },
-          "effective_cloud_allowed": {
+          "effective_egress_allowed": {
             "type": "boolean"
           },
           "metadata": {
@@ -2467,15 +2444,15 @@
           }
         },
         "required": [
-          "member_id",
+          "attachment_id",
           "runtime_public_id",
-          "member_version",
+          "attachment_version",
           "display_name",
           "state",
           "connected",
           "last_seen_at_unix_ms",
-          "cloud_permission",
-          "effective_cloud_allowed",
+          "egress_permission",
+          "effective_egress_allowed",
           "metadata"
         ]
       },
@@ -2487,56 +2464,60 @@
             "type": "integer",
             "format": "int64"
           },
-          "default_cloud_allowed": {
+          "default_egress_allowed": {
             "type": "boolean"
           },
-          "publication_mode": {
-            "$ref": "#/components/schemas/PublicationMode"
+          "destinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64
           }
         },
         "required": [
           "revision",
-          "default_cloud_allowed",
-          "publication_mode"
+          "default_egress_allowed",
+          "destinations"
         ]
       },
       "MemberPolicyUpdate": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "expected_member_version": {
+          "expected_attachment_version": {
             "type": "integer",
             "format": "int64"
           },
-          "cloud_permission": {
-            "$ref": "#/components/schemas/CloudPermission"
+          "egress_permission": {
+            "$ref": "#/components/schemas/EgressPermission"
           }
         },
         "required": [
-          "member_id",
-          "expected_member_version",
-          "cloud_permission"
+          "attachment_id",
+          "expected_attachment_version",
+          "egress_permission"
         ]
       },
       "MemberOperationResult": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
           "member": {
-            "$ref": "#/components/schemas/Member"
+            "$ref": "#/components/schemas/RuntimeAttachment"
           },
           "error_code": {
             "type": "string"
           }
         },
         "required": [
-          "member_id"
+          "attachment_id"
         ]
       },
       "HookInput": {
@@ -2553,16 +2534,13 @@
           "gateway_id": {
             "type": "string"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
           "runtime_public_id": {
             "type": "string"
           },
           "desktop_key_id": {
-            "type": "string"
-          },
-          "namespace_public_id": {
             "type": "string"
           },
           "policy_revision": {
@@ -2574,7 +2552,7 @@
           "version",
           "action",
           "gateway_id",
-          "member_id",
+          "attachment_id",
           "runtime_public_id",
           "policy_revision"
         ]
@@ -2600,58 +2578,7 @@
           "reason_code"
         ]
       },
-      "MemberCloudContext": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "protocol_version": {
-            "type": "string",
-            "const": "redeven-gateway-v6"
-          },
-          "gateway_id": {
-            "type": "string"
-          },
-          "member_id": {
-            "type": "string"
-          },
-          "member_version": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "cloud_origin": {
-            "type": "string"
-          },
-          "region_origin": {
-            "type": "string"
-          },
-          "namespace_public_id": {
-            "type": "string"
-          },
-          "gateway_public_id": {
-            "type": "string"
-          },
-          "policy_revision": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "allowed": {
-            "type": "boolean"
-          },
-          "state": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "protocol_version",
-          "gateway_id",
-          "member_id",
-          "member_version",
-          "policy_revision",
-          "allowed",
-          "state"
-        ]
-      },
-      "ConfigureCloudRequest": {
+      "ManageNetworkRequest": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -2683,10 +2610,10 @@
           "channel_id": {
             "type": "string"
           },
-          "member_id": {
+          "attachment_id": {
             "type": "string"
           },
-          "member_version": {
+          "attachment_version": {
             "type": "integer",
             "format": "int64"
           },
@@ -2712,8 +2639,8 @@
         "required": [
           "protocol_version",
           "channel_id",
-          "member_id",
-          "member_version",
+          "attachment_id",
+          "attachment_version",
           "generation",
           "artifact",
           "service",
@@ -2998,7 +2925,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Exact request hostnames or IPs, without scheme or port. Empty permits all. Cloud CONNECT destinations retain separate egress policy."
+            "description": "Exact request hostnames or IPs, without scheme or port. Empty permits all. CONNECT destinations retain separate local egress policy."
           },
           "endpoints": {
             "type": "array",
@@ -3041,6 +2968,33 @@
           },
           "restart_required": {
             "type": "boolean"
+          }
+        }
+      },
+      "Envelope": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {},
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
           }
         }
       }

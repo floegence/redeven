@@ -1,6 +1,5 @@
-import {normalizeRuntimeCloudStatus, type RuntimeCloudStatus} from './runtimeCloud';
-import type { GatewayMembershipPhase } from './gatewayJoin';
-import { normalizeRuntimeGatewayPublication, type RuntimeGatewayPublication } from './runtimeGatewayPublication';
+import {normalizeCloudRouteSelection, type CloudRouteSelection, normalizeRuntimeCloudStatus, type RuntimeCloudStatus} from './runtimeCloud';
+import type { GatewayAttachmentPhase } from './gatewayJoin';
 
 export type RuntimeServiceCompatibility =
   | 'compatible'
@@ -110,6 +109,8 @@ export type RuntimeServiceProviderConnectionState =
 
 export type RuntimeServiceCloudLinkBinding = Readonly<{
   cloud?: RuntimeCloudStatus;
+  route?: CloudRouteSelection;
+  route_revision?: number;
   state: RuntimeServiceCloudLinkState;
   connection_state?: RuntimeServiceProviderConnectionState;
   cloud_origin?: string;
@@ -125,14 +126,14 @@ export type RuntimeServiceCloudLinkBinding = Readonly<{
   last_error_message?: string;
 }>;
 
-export type RuntimeGatewayMembership = Readonly<{
- gateway_id: string; gateway_name: string; identity_fingerprint: string; member_id: string;
- runtime_public_id: string; phase: GatewayMembershipPhase; endpoints: readonly Readonly<{address: string}>[];
+export type RuntimeGatewayAttachment = Readonly<{
+ gateway_id: string; gateway_name: string; identity_fingerprint: string; attachment_id: string;
+ runtime_public_id: string; phase: GatewayAttachmentPhase; endpoints: readonly Readonly<{address: string}>[];
 }>;
-function normalizeGatewayMemberships(value: unknown): readonly RuntimeGatewayMembership[] {
+function normalizeGatewayAttachments(value: unknown): readonly RuntimeGatewayAttachment[] {
  if (!Array.isArray(value) || value.length > 16) return [];
- return value.filter((item): item is RuntimeGatewayMembership => !!item && typeof item === 'object'
-   && ['gateway_id','member_id','runtime_public_id','identity_fingerprint','phase'].every(key => typeof item[key] === 'string' && item[key].length > 0 && item[key].length <= 256)
+ return value.filter((item): item is RuntimeGatewayAttachment => !!item && typeof item === 'object'
+   && ['gateway_id','attachment_id','runtime_public_id','identity_fingerprint','phase'].every(key => typeof item[key] === 'string' && item[key].length > 0 && item[key].length <= 256)
    && ['joining','joined','gateway_offline','reauthorization_required','removal_pending'].includes(item.phase)
    && /^SHA256:[A-Za-z0-9_-]{43}$/u.test(item.identity_fingerprint)
    && typeof item.gateway_name === 'string'
@@ -142,8 +143,7 @@ function normalizeGatewayMemberships(value: unknown): readonly RuntimeGatewayMem
    }));
 }
 export type RuntimeServiceSnapshot = Readonly<{
-  gateway_memberships?: readonly RuntimeGatewayMembership[];
-  gateway_publication?: RuntimeGatewayPublication;
+  gateway_memberships?: readonly RuntimeGatewayAttachment[];
   runtime_version?: string;
   runtime_commit?: string;
   runtime_build_time?: string;
@@ -361,6 +361,8 @@ function normalizeCloudLinkBinding(
   return {
     state,
     cloud: normalizeRuntimeCloudStatus(record.cloud),
+    route: normalizeCloudRouteSelection(record.route) ?? undefined,
+    route_revision: normalizeCount(record.route_revision) || undefined,
     connection_state: normalizeProviderConnectionState(record.connection_state),
     cloud_origin: compact(record.cloud_origin) || undefined,
     cloud_id: compact(record.cloud_id) || undefined,
@@ -404,10 +406,8 @@ export function normalizeRuntimeServiceSnapshot(
   const compatibilityEpochMismatch = observedCompatibilityEpoch === undefined
     || compatibility !== declaredCompatibility;
   const aiReadiness = normalizeAIReadiness(record.ai_readiness);
-  const gatewayCloud = normalizeRuntimeGatewayPublication(record.gateway_publication);
   return {
-    ...(gatewayCloud ? { gateway_publication: gatewayCloud } : {}),
-    gateway_memberships: normalizeGatewayMemberships(record.gateway_memberships),
+    gateway_memberships: normalizeGatewayAttachments(record.gateway_memberships),
     runtime_version: compact(record.runtime_version) || undefined,
     runtime_commit: compact(record.runtime_commit) || undefined,
     runtime_build_time: compact(record.runtime_build_time) || undefined,

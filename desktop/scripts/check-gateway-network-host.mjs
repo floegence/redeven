@@ -23,13 +23,13 @@ const options={ssh_transport_manager:ssh,secret_store:secretStore,runtime_releas
  asset_cache_root:path.join(state,'cache'),temp_root:path.join(state,'temp'),lifecycle_coordinator:new RuntimeLifecycleCoordinator()};
 await mkdir(options.temp_root);
 const lifecycle=new GatewayLifecycleManager(options);
-let record={schema_version:4,gateway_id:marker,display_name:'Network qualification',local_enabled:true,connection:{kind:'local_host',runtime_root:state},created_at_ms:1,updated_at_ms:1};
+let record={schema_version:5,connection_id:marker,display_name:'Network qualification',local_enabled:true,connection:{kind:'local_host',runtime_root:state},created_at_ms:1,updated_at_ms:1};
 const stateRoot=path.join(state,'gateways',marker,'state'),seedBinary=path.join(state,'seed-gateway');
 const report={status:'running',marker,commit,state,stateRoot,cases:[]};
 try {
  execFileSync(path.join(root,'scripts/build_runtime_binary.sh'),['--goos',process.platform,'--goarch',process.arch==='x64'?'amd64':process.arch,'--output',seedBinary,'--command','./cmd/redeven-gateway','--version',options.runtime_release_tag,'--commit',commit,'--build-time',new Date().toISOString()],{cwd:root,stdio:'inherit',timeout:600000,env:{...process.env,GOWORK:'off'}});
- const seed=JSON.parse(execFileSync(seedBinary,['service-start','--state-root',stateRoot,'--member-listen','127.0.0.1:0'],{encoding:'utf8'}));
- report.seed={pid:seed.pid,listen:seed.listen,memberListen:seed.member_listen};
+ const seed=JSON.parse(execFileSync(seedBinary,['service-start','--state-root',stateRoot,'--public-listen','127.0.0.1:0'],{encoding:'utf8'}));
+ report.seed={pid:seed.pid,listen:seed.listen,memberListen:seed.public_listen};
  execFileSync(seedBinary,['service-stop','--state-root',stateRoot],{stdio:'ignore'});
  const session=await lifecycle.startGateway(record),material=trust.createGatewayPairingMaterial(record);
  const challenge=await session.client.pairingChallenge(record,trust.pairingChallengeRequest(material));
@@ -51,7 +51,7 @@ try {
  report.cases.push('Desktop host bridge saves all network settings without interrupting the active listener or changing identity');
  const invitation=await session.client.invite(record);
  assert.deepEqual(invitation.share_addresses,[endpoint.address]);
- assert.equal(staged.members.length,0);
+ assert.equal(staged.attachments.length,0);
  report.cases.push('Only the explicitly confirmed connection address is delivered; saving and invitation issuance do not enroll a Runtime');
  await lifecycle.restartGateway(record);
  const restored=await lifecycle.catalog(record);
@@ -59,7 +59,7 @@ try {
  assert.equal(restored.gateway.active_listener_addresses.length,2);
  assert.deepEqual(restored.gateway.listener_addresses,settings.listen_addresses);
  assert.deepEqual(restored.gateway.allowed_hosts,settings.allowed_hosts);
- assert.deepEqual(restored.gateway.member_endpoints,settings.endpoints);
+ assert.deepEqual(restored.gateway.endpoints,settings.endpoints);
  assert.equal(restored.gateway.gateway_id,before.gateway.gateway_id);
  assert.deepEqual(restored.gateway.permissions,before.gateway.permissions);
  report.cases.push('Explicit restart applies stored bindings and preserves confirmed endpoints, Host restriction, identity and host permissions');

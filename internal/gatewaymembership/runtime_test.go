@@ -55,7 +55,7 @@ func TestRuntimeEnrollmentAndRotationRecoverLostPersistence(t *testing.T) {
 	if err := runtime.Enroll(ctx, persist); err != nil {
 		t.Fatal(err)
 	}
-	if durable.PendingJoin != nil || durable.MemberVersion != 1 {
+	if durable.PendingJoin != nil || durable.AttachmentVersion != 1 {
 		t.Fatal("enrollment did not commit")
 	}
 	oldPair, err := tls.X509KeyPair([]byte(runtime.ClientCertificatePEM), []byte(runtime.ClientPrivateKeyPEM))
@@ -89,7 +89,7 @@ func TestRuntimeEnrollmentAndRotationRecoverLostPersistence(t *testing.T) {
 	if restarted.PendingRotation != nil || restarted.ClientCertificatePEM == certPEM(oldLeaf.Raw) {
 		t.Fatal("rotation was not completed")
 	}
-	if err := store.Remove(restarted.MemberID, restarted.MemberVersion); err != nil {
+	if err := store.Remove(restarted.AttachmentID, restarted.AttachmentVersion); err != nil {
 		t.Fatal(err)
 	}
 	if err := restarted.Rotate(ctx, persist); err == nil {

@@ -38,17 +38,17 @@ func (c *Connections) Apply(records []MemberRecord, policy gp.GatewayPolicy) {
 	defer c.mu.Unlock()
 	next := make(map[string]MemberRecord, len(records))
 	for _, record := range records {
-		next[record.Member.MemberID] = record
+		next[record.Member.AttachmentID] = record
 	}
 	for id, previous := range c.members {
 		record, exists := next[id]
-		if !exists || record.Member.State != "active" || record.Member.MemberVersion != previous.Member.MemberVersion {
+		if !exists || record.Member.State != "active" || record.Member.AttachmentVersion != previous.Member.AttachmentVersion {
 			if connected := c.connected[id]; connected != nil {
 				connected.cancel()
 			}
-			c.budget.Cancel(id, uint64(previous.Member.MemberVersion), "")
-		} else if !EffectiveCloudAllowed(record, policy) {
-			c.budget.Cancel(id, uint64(record.Member.MemberVersion), gatewayflow.Cloud)
+			c.budget.Cancel(id, uint64(previous.Member.AttachmentVersion), "")
+		} else if !EffectiveEgressAllowed(record, policy) {
+			c.budget.Cancel(id, uint64(record.Member.AttachmentVersion), gatewayflow.Egress)
 		}
 	}
 	c.members = next
@@ -60,23 +60,23 @@ func (c *Connections) ServeMember(ctx context.Context, admission Admission, sess
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	current := &memberConnection{session: session, version: admission.MemberVersion, generation: admission.Generation, cancel: cancel}
+	current := &memberConnection{session: session, version: admission.AttachmentVersion, generation: admission.Generation, cancel: cancel}
 	c.mu.Lock()
-	member, ok := c.members[admission.MemberID]
-	if c.closed || !ok || member.Member.State != "active" || member.Member.MemberVersion != admission.MemberVersion || member.ConnectionGeneration != admission.Generation {
+	member, ok := c.members[admission.AttachmentID]
+	if c.closed || !ok || member.Member.State != "active" || member.Member.AttachmentVersion != admission.AttachmentVersion || member.ConnectionGeneration != admission.Generation {
 		c.mu.Unlock()
 		return ErrDenied
 	}
-	previous := c.connected[admission.MemberID]
-	c.connected[admission.MemberID] = current
+	previous := c.connected[admission.AttachmentID]
+	c.connected[admission.AttachmentID] = current
 	c.mu.Unlock()
 	if previous != nil {
 		previous.cancel()
 	}
 	defer func() {
 		c.mu.Lock()
-		if c.connected[admission.MemberID] == current {
-			delete(c.connected, admission.MemberID)
+		if c.connected[admission.AttachmentID] == current {
+			delete(c.connected, admission.AttachmentID)
 		}
 		c.mu.Unlock()
 	}()
@@ -93,7 +93,7 @@ func (c *Connections) OpenReverse(ctx context.Context, memberID string, version 
 	c.mu.Lock()
 	member, ok := c.members[memberID]
 	connection := c.connected[memberID]
-	if c.closed || !ok || member.Member.State != "active" || member.Member.MemberVersion != version || connection == nil || connection.version != version {
+	if c.closed || !ok || member.Member.State != "active" || member.Member.AttachmentVersion != version || connection == nil || connection.version != version {
 		c.mu.Unlock()
 		cancel()
 		return nil, nil, nil, ErrDenied
@@ -125,7 +125,7 @@ func (c *Connections) IsConnected(memberID string) bool {
 	defer c.mu.Unlock()
 	connection := c.connected[memberID]
 	member := c.members[memberID]
-	return !c.closed && connection != nil && member.Member.State == "active" && member.Member.MemberVersion == connection.version
+	return !c.closed && connection != nil && member.Member.State == "active" && member.Member.AttachmentVersion == connection.version
 }
 
 func (c *Connections) Close() {

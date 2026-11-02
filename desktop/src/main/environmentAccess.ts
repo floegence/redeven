@@ -29,7 +29,7 @@ export function normalizeEnvironmentAccessPreferences(value: unknown): Environme
 /** Excludes labels, health and transient listener ports; includes the configured owner. */
 export function environmentAccessBinding(entry: DesktopEnvironmentEntry): string {
   const config = entry.kind === 'gateway_environment'
-    ? [entry.gateway_id, entry.gateway_env_id, entry.gateway_identity_fingerprint, entry.gateway_member?.member_version, entry.gateway_member?.runtime_public_id]
+    ? [entry.gateway_id, entry.gateway_env_id, entry.gateway_identity_fingerprint, entry.gateway_member?.attachment_version, entry.gateway_member?.runtime_public_id]
     : entry.kind === 'external_local_ui' ? [entry.id, entry.local_ui_url]
     : [entry.id, entry.managed_runtime_host_access, entry.managed_runtime_placement, entry.local_environment_ui_bind];
   return createHash('sha256').update(JSON.stringify(config)).digest('hex');
@@ -64,7 +64,7 @@ export function decorateEnvironmentAccess(entries: readonly DesktopEnvironmentEn
   // Management proof groups routes; it does not fabricate a public health identity.
   const runtimeOwner = (entry: DesktopEnvironmentEntry) => entry.kind !== 'gateway_environment' ? entry
     : entries.find(runtime => ['local_environment','ssh_environment','wsl_environment'].includes(runtime.kind)
-      && runtime.runtime_service?.gateway_memberships?.some(member => member.member_id === entry.gateway_env_id
+      && runtime.runtime_service?.gateway_memberships?.some(member => member.attachment_id === entry.gateway_env_id
         && member.runtime_public_id === entry.gateway_member?.runtime_public_id
         && member.identity_fingerprint === entry.gateway_identity_fingerprint));
   const identityFor = (entry: DesktopEnvironmentEntry) => {

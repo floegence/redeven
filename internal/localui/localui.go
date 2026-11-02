@@ -811,7 +811,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		return fmt.Errorf("start runtime management socket: %w", err)
 	}
 	s.startPublicAddressRefresh(ctx)
-	if err := s.a.StartGatewayMembership(ctx, s.gatewayMemberApplication); err != nil {
+	if err := s.a.StartGatewayAttachment(ctx, s.gatewayMemberApplication); err != nil {
 		_ = s.Close()
 		return err
 	}
@@ -956,7 +956,7 @@ func (s *Server) Close() error {
 	}
 	s.closeMu.Lock()
 	defer s.closeMu.Unlock()
-	s.a.CloseGatewayMembership()
+	s.a.CloseGatewayAttachment()
 	s.closeNativeRuntimeBridges()
 	s.stopPublicAddressRefresh()
 	s.closeNativeCodeAccess("")

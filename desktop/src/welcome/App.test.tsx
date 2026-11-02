@@ -367,7 +367,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal');
     expect(appSrc).toContain('const [gatewayQuery, setGatewayQuery] = createSignal');
     expect(appSrc).toContain('filterGatewayEnvironmentEntries(');
-    expect(appSrc).toContain('function openGatewayMembers(gateway: DesktopGatewaySource): void');
+    expect(appSrc).toContain('function openRuntimeAttachments(gateway: DesktopGatewaySource): void');
     expect(appSrc).toContain('<GatewaySourcesPanel');
     expect(appSrc).toContain("props.activeTab === 'gateways'");
     expect(appSrc).toContain('gatewaySourceFilterValue,');
@@ -485,7 +485,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('uses member invitations instead of Gateway target configuration', () => {
     const appSrc = readWelcomeSource();
-    expect(appSrc).toContain('<GatewayMembersPanel');
+    expect(appSrc).toContain('<RuntimeAttachmentsPanel');
     expect(appSrc).not.toContain('GatewayURLProfileConnectionDialogState');
     expect(appSrc).not.toContain('GatewayProfileSourcePicker');
   });

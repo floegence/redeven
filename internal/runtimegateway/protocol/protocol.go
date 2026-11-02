@@ -7,9 +7,9 @@ import (
 
 const Version = "redeven-gateway-v6"
 
-// CompatibilityEpoch preserves the reviewed v6 host-authority contract.
+// CompatibilityEpoch identifies the independent device-attachment and private-host contract.
 // It is independent of Runtime Service releases and changes only with Gateway authority.
-const CompatibilityEpoch = 69
+const CompatibilityEpoch = 70
 
 type IdentityRequest struct {
 	ProtocolVersion string `json:"protocol_version"`
@@ -28,9 +28,9 @@ type IdentityResponse struct {
 // Permissions are read-only request capabilities computed by the Gateway;
 // retired profile-write grants never become member or Cloud management grants.
 type GatewayPermissions struct {
-	Access         bool `json:"access"`
-	ManageMembers  bool `json:"manage_members"`
-	ConfigureCloud bool `json:"configure_cloud"`
+	Access            bool `json:"access"`
+	ManageAttachments bool `json:"manage_attachments"`
+	ManageNetwork     bool `json:"manage_network"`
 }
 
 type GatewayNetworkSettings struct {
@@ -59,8 +59,8 @@ type GatewayMetadata struct {
 	ListenerRestartRequired     bool               `json:"listener_restart_required"`
 	ListenerRunning             bool               `json:"listener_running"`
 	EndpointLastUsedAt          map[string]int64   `json:"endpoint_last_used_at"`
-	MemberEndpoints             []GatewayEndpoint  `json:"member_endpoints"`
-	MemberTLSRootPEM            string             `json:"member_tls_root_pem"`
+	Endpoints                   []GatewayEndpoint  `json:"endpoints"`
+	TLSRootPEM                  string             `json:"tls_root_pem"`
 	Permissions                 GatewayPermissions `json:"permissions"`
 }
 
@@ -70,7 +70,7 @@ type CatalogRequest struct {
 type CatalogResponse struct {
 	ProtocolVersion string                    `json:"protocol_version"`
 	Gateway         GatewayMetadata           `json:"gateway"`
-	Members         []Member                  `json:"members"`
+	Attachments     []RuntimeAttachment       `json:"attachments"`
 	Policy          GatewayPolicy             `json:"policy"`
 	Revision        int64                     `json:"revision"`
 	HookStatus      map[HookAction]HookStatus `json:"hook_status"`
@@ -78,22 +78,22 @@ type CatalogResponse struct {
 
 type OpenSessionRequest struct {
 	ProtocolVersion string `json:"protocol_version"`
-	MemberID        string `json:"member_id"`
+	AttachmentID    string `json:"attachment_id"`
 }
 
 // MemberServiceRequest refreshes signed TLS identity without issuing an access
 // ticket or changing the lifetime of established application streams.
 type MemberServiceRequest struct {
-	ProtocolVersion       string `json:"protocol_version"`
-	MemberID              string `json:"member_id"`
-	ExpectedMemberVersion int64  `json:"expected_member_version"`
+	ProtocolVersion           string `json:"protocol_version"`
+	AttachmentID              string `json:"attachment_id"`
+	ExpectedAttachmentVersion int64  `json:"expected_attachment_version"`
 }
 type MemberServiceResponse struct {
-	ProtocolVersion string           `json:"protocol_version"`
-	MemberID        string           `json:"member_id"`
-	MemberVersion   int64            `json:"member_version"`
-	Service         MemberService    `json:"service"`
-	Delegation      MemberDelegation `json:"delegation"`
+	ProtocolVersion   string           `json:"protocol_version"`
+	AttachmentID      string           `json:"attachment_id"`
+	AttachmentVersion int64            `json:"attachment_version"`
+	Service           MemberService    `json:"service"`
+	Delegation        MemberDelegation `json:"delegation"`
 }
 
 type InvitationRequest struct {
@@ -110,9 +110,9 @@ type EndpointUpdateResponse struct {
 	Endpoints       []GatewayEndpoint `json:"endpoints"`
 }
 type RemoveMemberRequest struct {
-	ProtocolVersion       string `json:"protocol_version"`
-	MemberID              string `json:"member_id"`
-	ExpectedMemberVersion int64  `json:"expected_member_version"`
+	ProtocolVersion           string `json:"protocol_version"`
+	AttachmentID              string `json:"attachment_id"`
+	ExpectedAttachmentVersion int64  `json:"expected_attachment_version"`
 }
 
 type UpdatePolicyRequest struct {

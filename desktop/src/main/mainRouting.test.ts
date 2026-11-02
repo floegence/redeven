@@ -56,7 +56,7 @@ describe('main routing', () => {
 
   it('keeps member administration separate from Gateway service lifecycle', () => {
     const source = readMainSource();
-    const profileActions = source.slice(source.indexOf('async function manageGatewayMemberFromLauncher('), source.indexOf('function gatewayActionFailure('));
+    const profileActions = source.slice(source.indexOf('async function manageRuntimeAttachmentFromLauncher('), source.indexOf('function gatewayActionFailure('));
     expect(profileActions).not.toContain('start_if_needed');
     expect(profileActions).not.toContain('startGateway(');
     expect(profileActions).toContain("startPolicy: 'require_ready'");
@@ -2069,7 +2069,7 @@ describe('main routing', () => {
     const pairSrc = mainSrc.slice(pairStart, deleteStart);
 
     expect(helperSrc).toContain("record.connection.kind === 'url'");
-    expect(helperSrc).toContain("pairingChallengeRequestWithCode(material, options.accessCode ?? '')");
+    expect(helperSrc).toContain("pairingChallengeRequestWithCode(material, access!.access_code)");
     expect(helperSrc).toContain('const challenge = await client.pairingChallenge(record, { ...challengeRequest, client_name: hostname().slice(0, 160) }, {');
     expect(helperSrc).toContain('assertGatewayPairingChallenge({');
     expect(pairSrc).not.toContain('confirmDesktopImpact({');
@@ -2091,7 +2091,7 @@ describe('main routing', () => {
       helperSrc.indexOf('completeGatewayPairing({'),
     );
     expect(helperSrc.indexOf('completeGatewayPairing({')).toBeLessThan(
-      helperSrc.indexOf('gatewayStore().updateTrustProfile(currentRecord.gateway_id, trustProfile);'),
+      helperSrc.indexOf('gatewayStore().updateTrustProfile(currentRecord.connection_id, { ...trustProfile,'),
     );
     expect(helperSrc.indexOf('await options.beforeStoreWrite?.()')).toBeLessThan(
       helperSrc.indexOf('completeGatewayPairing({'),
@@ -2150,7 +2150,7 @@ describe('main routing', () => {
     );
     expect(mainSrc).toContain('if (!syncRecord?.source) {');
     expect(mainSrc).toContain('if (!record.local_enabled) {');
-    expect(mainSrc).toMatch(/gatewaySyncTaskByID\.set\(record\.gateway_id,\s*\{\s*priority,\s*token: taskToken,\s*controller,\s*task,?\s*\}\);/u);
+    expect(mainSrc).toMatch(/gatewaySyncTaskByID\.set\(record\.connection_id,\s*\{\s*priority,\s*token: taskToken,\s*controller,\s*task,?\s*\}\);/u);
     expect(loadSrc).not.toContain('inspectRuntime(');
     expect(loadSrc).not.toContain('refreshCatalog(');
     expect(loadSrc).toContain('mergeGatewaySourceRecord(');
@@ -2184,13 +2184,13 @@ describe('main routing', () => {
     expect(scheduleSrc).toContain('broadcastDesktopWelcomeSnapshots();');
     expect(toggleSrc).toContain('gatewayStore().setLocalEnabled(request.gateway_id, request.enabled)');
     expect(toggleSrc).toContain('if (!request.enabled) {');
-    expect(toggleSrc).toContain('gatewaySyncStateByID.delete(record.gateway_id);');
-    expect(toggleSrc).toContain('supersedeGatewaySyncTask(record.gateway_id);');
+    expect(toggleSrc).toContain('gatewaySyncStateByID.delete(record.connection_id);');
+    expect(toggleSrc).toContain('supersedeGatewaySyncTask(record.connection_id);');
     expect(toggleSrc).toContain("return launcherActionSuccess('disabled_gateway');");
     expect(toggleSrc).toContain("return launcherActionSuccess('enabled_gateway');");
     expect(toggleSrc).not.toContain('syncGatewayIfNeeded(');
     expect(syncSrc).toContain("if (priority === 'background' || existingTaskRecord.priority === 'foreground') {");
-    expect(syncSrc).toContain('supersedeGatewaySyncTask(record.gateway_id);');
+    expect(syncSrc).toContain('supersedeGatewaySyncTask(record.connection_id);');
     expect(syncSrc).toContain('if (!latestRecord.local_enabled) {');
     expect(syncSrc).toContain(
       "throw new GatewaySyncCanceledError('Gateway sync was canceled because this Gateway is disabled on this Desktop.');",
@@ -2394,7 +2394,7 @@ describe('main routing', () => {
     expect(serviceSrc).toContain('manager.stopGateway');
     expect(serviceSrc).not.toContain('executeDirectManagedEnvironmentLifecycle');
     expect(serviceSrc).not.toContain('runtimeLifecycleSession');
-    expect(serviceSrc).toContain("session.target.gateway_id === record.gateway_id");
+    expect(serviceSrc).toContain("session.target.gateway_id === record.connection_id");
   });
 
   it('opens Gateway members through their reverse transport without Runtime lifecycle authority', () => {

@@ -2,9 +2,9 @@ package config
 
 import "github.com/floegence/redeven/internal/gatewaymembership"
 
-// GatewayMember resolves an explicit identity. An omitted identity is accepted
+// RuntimeAttachment resolves an explicit identity. An omitted identity is accepted
 // only when the collection has one member, never by selecting an arbitrary route.
-func (c *Config) GatewayMember(id string) *gatewaymembership.RuntimeConfig {
+func (c *Config) RuntimeAttachment(id string) *gatewaymembership.RuntimeConfig {
 	if c == nil {
 		return nil
 	}
@@ -35,8 +35,8 @@ func (c *Config) CloneGateways() []*gatewaymembership.RuntimeConfig {
 	return members
 }
 
-// SetGatewayMember copies the collection so a failed save leaves its owner intact.
-func (c *Config) SetGatewayMember(id string, member *gatewaymembership.RuntimeConfig) {
+// SetRuntimeAttachment copies the collection so a failed save leaves its owner intact.
+func (c *Config) SetRuntimeAttachment(id string, member *gatewaymembership.RuntimeConfig) {
 	members := make([]*gatewaymembership.RuntimeConfig, 0, len(c.Gateways)+1)
 	found := false
 	for _, current := range c.Gateways {

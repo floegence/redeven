@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway network settings
 tags: [gateway, network, security, desktop, migration]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -23,10 +23,10 @@ A runtime-selected ephemeral port is reported as an active address rather than r
 ## Request Host restriction
 The default empty list accepts all request Host names. Forwarded headers cannot expand the list.
 
-The separate native host administration listener retains its request-bound host proof and browser Origin rejection.
+The private Unix host administration socket requires its host credential and rejects browser Origin. The unified public TLS listener mounts no management route.
 
 ## Durable upgrade and recovery
-Member state v4 appends `allowed_hosts` to the existing endpoint state. Future versions and invalid network shapes fail read-only. Atomic state replacement owns the save boundary; a write failure cannot install partial network settings in memory.
+Attachment state schema 6 owns allowed_hosts, endpoints and local egress policy. Other versions and invalid network shapes fail read-only. Atomic state replacement owns the save boundary; a write failure cannot install partial network settings in memory.
 
 # Evidence
 

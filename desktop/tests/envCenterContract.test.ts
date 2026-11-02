@@ -116,8 +116,8 @@ describe('generated public wire contracts', () => {
 
 describe('production host adapters', () => {
   it('projects equivalent verified routes and delegates the same target', async () => {
-    const route = { id:'env-a',label:'Production',source_id:'gateway-a',member_id:'member-a',runtime_id:'runtime-a' } as Route;
-    const member = { member_id:'member-a',runtime_public_id:'runtime-a',connected:true,metadata:{hostname:'host'} } as Member;
+    const route = { id:'env-a',label:'Production',source_id:'gateway-a',attachment_id:'member-a',runtime_id:'runtime-a' } as Route;
+    const member = { attachment_id:'member-a',runtime_public_id:'runtime-a',connected:true,metadata:{hostname:'host'} } as Member;
     const web = webCenterEntry(route, member, '');
     const desktop = { ...entry, gateway_member:{connected:true,metadata:{hostname:'host'}} };
     expect(projectEnvironment(web)).toEqual(projectEnvironment(desktop));

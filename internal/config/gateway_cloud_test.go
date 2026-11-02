@@ -20,7 +20,7 @@ func TestGatewayManagementCanRestartWithoutCloudAuthorization(t *testing.T) {
 	}
 	cfg.CloudAssociation = testCloudAssociation()
 	cfg.CloudAssociation.ApprovalState = rc.ApprovalRevoked
-	cfg.CloudRoute = &CloudRoute{Kind: CloudRouteGateway, MemberID: member.MemberID, Revision: 1}
+	cfg.CloudRoute = &CloudRoute{Kind: CloudRouteGateway, AttachmentID: member.AttachmentID, Revision: 1}
 	if err := cfg.ValidateRemoteStrict(); err != nil {
 		t.Fatal("revoked intent must be able to run the sole recovery controller", err)
 	}

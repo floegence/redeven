@@ -1,6 +1,8 @@
 package gatewayservice
 
 import (
+	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -56,11 +58,15 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 		req.Header.Set("X-Redeven-Gateway-Transport", "desktop_bridge")
 		req.Header.Set("X-Redeven-Gateway-Managed-Bridge-Token", "forged")
 		if host {
+			if strings.HasPrefix(remote, "127.0.0.1:") {
+				req = req.WithContext(context.WithValue(req.Context(), hostSocketKey{}, server))
+			}
 			req.Header.Set(HostAdminHeader, token)
+			req.Header.Set(OperationIDHeader, rand.Text())
 		}
 		return req
 	}
-	for _, route := range []string{"/gateway/v6/clients/access-codes", "/gateway/v6/clients/list", "/gateway/v6/clients/revoke", "/gateway/v6/invitation-codes", "/gateway/v6/endpoints", "/gateway/v6/members/remove", "/gateway/v6/policy", "/gateway/v6/cloud/configure", "/gateway/v6/cloud/status"} {
+	for _, route := range []string{"/gateway/v6/clients/access-codes", "/gateway/v6/clients/list", "/gateway/v6/clients/revoke", "/gateway/v6/invitation-codes", "/gateway/v6/endpoints", "/gateway/v6/attachments/remove", "/gateway/v6/policy"} {
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, request(route, map[string]any{"protocol_version": gp.Version}, false, "127.0.0.1:1234"))
 		if response.Code != http.StatusForbidden {
@@ -68,7 +74,7 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 		}
 	}
 	forged := httptest.NewRecorder()
-	server.Handler().ServeHTTP(forged, request("/gateway/v6/catalog", map[string]any{"protocol_version": gp.Version, "permissions": gp.GatewayPermissions{Access: true, ManageMembers: true, ConfigureCloud: true}}, false, "127.0.0.1:1234"))
+	server.Handler().ServeHTTP(forged, request("/gateway/v6/catalog", map[string]any{"protocol_version": gp.Version, "permissions": gp.GatewayPermissions{Access: true, ManageAttachments: true, ManageNetwork: true}}, false, "127.0.0.1:1234"))
 	if forged.Code != http.StatusBadRequest {
 		t.Fatal("client supplied permissions accepted")
 	}
@@ -80,7 +86,7 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 	host := request("/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, true, "127.0.0.1:1234")
 	response := httptest.NewRecorder()
 	verified, ok := server.authenticated(response, host, &gp.CatalogRequest{})
-	if !ok || verified.ClientKeyID != id || !verified.Permissions.ManageMembers {
+	if !ok || verified.ClientKeyID != id || !verified.Permissions.ManageAttachments {
 		t.Fatal("signed host identity was replaced or not verified", response.Body.String())
 	}
 	host = request("/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, true, "127.0.0.1:1234")
@@ -103,7 +109,7 @@ func TestStaticPairingPermissionsAreRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, route := range []string{"challenge", "complete"} {
-		req := httptest.NewRequest(http.MethodPost, "http://gateway/gateway/v6/pairing/"+route, strings.NewReader(`{"protocol_version":"redeven-gateway-v6","pairing_code":"old","permissions":{"access":true,"manage_members":true}}`))
+		req := httptest.NewRequest(http.MethodPost, "http://gateway/gateway/v6/pairing/"+route, strings.NewReader(`{"protocol_version":"redeven-gateway-v6","pairing_code":"old","permissions":{"access":true,"manage_attachments":true}}`))
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, req)
 		if response.Code != http.StatusBadRequest {

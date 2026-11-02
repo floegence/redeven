@@ -32,9 +32,9 @@ const options = {
 };
 await mkdir(options.temp_root);
 const lifecycle = new GatewayLifecycleManager(options);
-let record = { schema_version: 4, gateway_id: marker, display_name: 'Local update qualification',
+let record = { schema_version: 5, connection_id: marker, display_name: 'Local update qualification',
   local_enabled: true, connection: { kind: 'local_host', runtime_root: state }, created_at_ms: 1, updated_at_ms: 1 };
-const stateRoot = path.join(state, 'gateways', record.gateway_id, 'state');
+const stateRoot = path.join(state, 'gateways', record.connection_id, 'state');
 const seedBinary = path.join(state, 'seed-gateway');
 const probe = () => probeManagedGatewayServiceDeep({
   hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: state },
@@ -49,8 +49,8 @@ try {
     '--output', seedBinary, '--command', './cmd/redeven-gateway', '--version', options.runtime_release_tag,
     '--commit', commit, '--build-time', new Date().toISOString(),
   ], { cwd: root, stdio: 'inherit', timeout: 600_000 });
-  const seed = JSON.parse(execFileSync(seedBinary, ['service-start', '--state-root', stateRoot, '--member-listen', '127.0.0.1:0'], { encoding: 'utf8' }));
-  report.seed = { pid: seed.pid, listen: seed.listen, memberListen: seed.member_listen };
+  const seed = JSON.parse(execFileSync(seedBinary, ['service-start', '--state-root', stateRoot, '--public-listen', '127.0.0.1:0'], { encoding: 'utf8' }));
+  report.seed = { pid: seed.pid, listen: seed.listen, memberListen: seed.public_listen };
   execFileSync(seedBinary, ['service-stop', '--state-root', stateRoot], { stdio: 'ignore' });
   assert.equal((await lifecycle.inspectService(record)).can_start, true);
   const session = await lifecycle.startGateway(record);
@@ -103,15 +103,15 @@ try {
   assert.equal(updated.commit, commit);
   let restored = await lifecycle.catalog(record);
   assert.equal(restored.gateway.gateway_id, catalog.gateway.gateway_id);
-  assert.deepEqual(restored.gateway.permissions, { access: true, manage_members: true, configure_cloud: true });
-  assert.deepEqual(restored.gateway.member_endpoints, endpoints);
+  assert.deepEqual(restored.gateway.permissions, { access: true, manage_attachments: true, manage_network: true });
+  assert.deepEqual(restored.gateway.endpoints, endpoints);
   report.cases.push({ updatePassed: true, identityAndPermissionsPreserved: true, pid: updated.service_pid, phases });
   const restartPhases = [];
   await lifecycle.restartGateway(record, { onProgress: event => restartPhases.push(event.phase) });
   assert.ok(!restartPhases.includes('preparing_gateway_package'), 'Matching package is not rebuilt for restart');
   restored = await lifecycle.catalog(record);
   assert.equal(restored.gateway.gateway_id, catalog.gateway.gateway_id);
-  assert.deepEqual(restored.gateway.member_endpoints, endpoints);
+  assert.deepEqual(restored.gateway.endpoints, endpoints);
   const invitation = await (await lifecycle.client(record)).invite(record);
   assert.equal(invitation.gateway_id, catalog.gateway.gateway_id);
     assert.deepEqual(invitation.share_addresses, endpoints.map(endpoint => endpoint.address));

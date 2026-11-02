@@ -71,11 +71,11 @@ afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document
 describe('Gateway product navigation', () => {
   it('opens a full management page with six sections and no duplicate Desktop connection area', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
+    await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: true, manage_network: true } });
     button('Gateways').click(); await settle();
     document.querySelector<HTMLButtonElement>('.redeven-gateway-card__name button')!.click(); await settle();
     expect(document.querySelector('[data-gateway-management-page]')).toBeTruthy();
-    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Redeven Cloud', 'Service maintenance']);
+    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Service maintenance']);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     button('All Gateways').click(); await settle();
     expect(document.querySelector('[data-gateway-management-page]')?.hasAttribute('hidden')).toBe(true);
@@ -84,7 +84,7 @@ describe('Gateway product navigation', () => {
 
   it('retains network drafts and list filters across management and Welcome navigation', async () => {
     const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_kind: 'local_host' as const,
-      permissions: { access: true, manage_members: true, configure_cloud: true } };
+      permissions: { access: true, manage_attachments: true, manage_network: true } };
     await mount(source);
     await openGatewayAccess('Network'); input('gateway-listen-addresses', '127.0.0.1:7555');
     button('All Gateways').click(); await settle();
@@ -102,13 +102,13 @@ describe('Gateway product navigation', () => {
     await openGatewayAccess('Overview');
     document.querySelector<HTMLElement>('[data-gateway-management-page] [aria-haspopup="menu"]')!.click(); await settle();
     button('Disable connection').click(); await settle();
-    expect(perform).toHaveBeenCalledWith({ kind: 'set_gateway_enabled', gateway_id: source.gateway_id, enabled: false });
+    expect(perform).toHaveBeenCalledWith({ kind: 'set_gateway_enabled', gateway_id: source.connection_id, enabled: false });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('never grants host management to a URL connection with stale host permissions', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, connection_kind: 'url', permissions: { access: true, manage_members: true, configure_cloud: true } });
+    const perform = await mount({ ...source, connection_kind: 'url', permissions: { access: true, manage_attachments: true, manage_network: true } });
     await openGatewayAccess('Clients');
     expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain('cannot change Gateway settings');
     expect(document.querySelector('.redeven-gateway-clients-panel')).toBeNull();
@@ -118,7 +118,7 @@ describe('Gateway product navigation', () => {
 
   it('exposes parallel enrollment actions and opens client preparation without issuing a code', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
+    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: true, manage_network: true } });
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     button('Gateways').click(); await settle();
     const actions = document.querySelector('.redeven-gateway-card__actions')!;
@@ -128,13 +128,12 @@ describe('Gateway product navigation', () => {
     expect(selectedSection('clients')).toBe('page');
     expect(document.querySelector('[data-gateway-client-enrollment]')).toBeTruthy();
     expect(perform.mock.calls.some(([request]) => request.kind === 'issue_gateway_access_code')).toBe(false);
-    expect(perform.mock.calls.some(([request]) => request.kind === 'inspect_gateway_cloud')).toBe(false);
   });
 
-  it('keeps Welcome navigation alongside six management sections', async () => {
+  it('keeps Welcome navigation alongside five management sections', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host' }); await openGatewayAccess('Overview');
-    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Redeven Cloud', 'Service maintenance']);
+    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Service maintenance']);
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
     button('Overview').click(); await settle();
     expect(document.querySelector('[data-gateway-add-environment]')).toBeTruthy();
@@ -144,7 +143,7 @@ describe('Gateway product navigation', () => {
 
   it('replaces management with the shared environment choice and restores its context', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } }); await openGatewayAccess('Overview');
+    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: true, manage_network: true } }); await openGatewayAccess('Overview');
     button('Overview').click(); await settle();
     const trigger = document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')!;
     trigger.focus(); trigger.click(); await settle();
@@ -161,7 +160,7 @@ describe('Gateway product navigation', () => {
 
   it('retains network drafts while enrollment replaces the manager', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
+    await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: true, manage_network: true } });
     await openGatewayAccess('Network'); input('gateway-listen-addresses', '127.0.0.1:7555');
     const page = document.querySelector('[data-desktop-page="environments"]')!;
     const content = [...page.children];
@@ -192,25 +191,22 @@ describe('Gateway product navigation', () => {
     expect(selectedSection('maintenance')).toBe('page');
   });
 
-  it('opens Cloud directly in its own section and initializes its content once', async () => {
+  it('keeps Cloud binding out of Gateway management', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
-    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
-    perform.mockResolvedValue({ ok: true, outcome: 'gateway_cloud_updated', gateway_cloud: { configured: false, state: 'unconfigured' } });
-    await openGatewayAccess('Redeven Cloud');
-    expect(selectedSection('cloud')).toBe('page');
-    expect(document.querySelector('.redeven-gateway-cloud-embedded')?.textContent).toContain('Cloud access is not configured.');
-    expect(perform.mock.calls.filter(([request]) => request.kind === 'inspect_gateway_cloud')).toHaveLength(1);
+    await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: true, manage_network: true } });
+    await openGatewayAccess('Network');
+    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).not.toContain('Redeven Cloud');
+    expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain('Local listener');
   });
 
   it('returns a newly saved Gateway to its exact overview and enrollment context', async () => {
-    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], gateway_id: 'newly-saved-gateway',
+    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_id: 'newly-saved-gateway',
       display_name: 'New local Gateway', connection_kind: 'local_host' as const };
     const perform = await mount(); await openSetup();
     input('gateway-name', source.display_name);
     perform.mockImplementationOnce(async () => {
       perform.publish({ ...perform.snapshot, gateway_sources: [source] });
-      return { ok: true, outcome: 'saved_gateway', gateway_id: source.gateway_id };
+      return { ok: true, outcome: 'saved_gateway', gateway_id: source.connection_id };
     });
     button('Save Gateway').click(); await settle();
     await vi.waitFor(() => expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0));
@@ -241,8 +237,8 @@ describe('Gateway setup and own-service actions', () => {
     const snapshot = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), gatewaySources: [gateway] });
     const startedAt = Date.now() - 60_000;
     const perform = await mount(gateway, { ...snapshot, action_progress: [{
-      action: 'update_gateway', subject_kind: 'gateway', subject_id: gateway.gateway_id, gateway_id: gateway.gateway_id,
-      operation_key: gateway.gateway_id + ':update_gateway', started_at_unix_ms: startedAt, updated_at_unix_ms: startedAt,
+      action: 'update_gateway', subject_kind: 'gateway', subject_id: gateway.connection_id, gateway_id: gateway.connection_id,
+      operation_key: gateway.connection_id + ':update_gateway', started_at_unix_ms: startedAt, updated_at_unix_ms: startedAt,
       status: 'running', active_progress_surface: 'gateway', phase: 'installing_gateway', title: 'Update Gateway', detail: '',
       step_progress: gatewayServiceStepProgress(undefined, 'installing_gateway', 'running', startedAt),
     }] });
@@ -279,8 +275,8 @@ describe('Gateway setup and own-service actions', () => {
     document.querySelector<HTMLButtonElement>('.redeven-gateway-action-panel__primary-action')!.click(); await settle();
     const startedAt = Date.now();
     const detail = 'Desktop is opening the Gateway protocol stream through the managed Gateway service. /tmp/private-build/state';
-    const progress = { action: 'update_gateway' as const, subject_kind: 'gateway' as const, subject_id: source.gateway_id,
-      gateway_id: source.gateway_id, operation_key: source.gateway_id + ':update_gateway', started_at_unix_ms: startedAt,
+    const progress = { action: 'update_gateway' as const, subject_kind: 'gateway' as const, subject_id: source.connection_id,
+      gateway_id: source.connection_id, operation_key: source.connection_id + ':update_gateway', started_at_unix_ms: startedAt,
       updated_at_unix_ms: startedAt, status: 'running' as const, active_progress_surface: 'gateway' as const,
       phase: 'installing_gateway', title: 'Update Gateway', detail,
       step_progress: gatewayServiceStepProgress(gatewayServiceStepProgress(undefined, 'preparing_gateway_package'), 'installing_gateway') };
@@ -335,7 +331,7 @@ describe('Gateway setup and own-service actions', () => {
 
   it.each([true, false])('keeps saved connection actions in a shared object menu, member management=%s', async manageMembers => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: manageMembers, configure_cloud: true } });
+    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_attachments: manageMembers, manage_network: true } });
     button('Gateways').click(); await settle();
     document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle();
     expect([...document.querySelectorAll('[role="menuitem"]')].map(controlText)).toEqual(['Edit connection', 'Disable connection', 'Remove from list']);
@@ -357,7 +353,7 @@ describe('Gateway setup and own-service actions', () => {
 
   it('offers explicit authorization for a read-only Gateway without granting it automatically', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, capabilities: ['member_access'], permissions: { access: true, manage_members: false, configure_cloud: false } });
+    const perform = await mount({ ...source, capabilities: ['member_access'], permissions: { access: true, manage_attachments: false, manage_network: false } });
     await openGatewayAccess();
     expect(document.getElementById('gateway-access-code')).toBeTruthy();
     expect(perform).not.toHaveBeenCalled();
@@ -365,7 +361,7 @@ describe('Gateway setup and own-service actions', () => {
 
   it('preserves existing the client credential when saving only a Gateway name', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const permissions = { access: true, manage_members: false, configure_cloud: true };
+    const permissions = { access: true, manage_attachments: false, manage_network: true };
     const perform = await mount({ ...source, permissions, gateway_url: 'https://gateway.example/' });
     await openGatewayAccess();
     const cloud = [...document.querySelectorAll<HTMLElement>('[role="checkbox"], input[type="checkbox"]')]
@@ -542,7 +538,7 @@ describe('Gateway setup and own-service actions', () => {
   });
 
   it('opens URL pairing settings instead of sending a pairing request without a code', async () => {
-    const perform = await mount({ gateway_id: 'gateway-fixture', display_name: 'Fixture Gateway', local_enabled: true,
+    const perform = await mount({ connection_id: 'gateway-fixture', display_name: 'Fixture Gateway', local_enabled: true,
       connection_kind: 'url', management_capability: 'access_only', capabilities: [], status: 'pairing_required',
       trust_state: 'unpaired', gateway_url: 'https://gateway.example', created_at_ms: 1, updated_at_ms: 1, environments: [] });
     button('Gateways').click(); await settle();
@@ -570,7 +566,7 @@ describe('Gateway setup and own-service actions', () => {
   });
 
   it('starts only the explicitly registered Gateway service', async () => {
-    const perform = await mount({ gateway_id: 'managed-fixture', display_name: 'Managed Fixture', local_enabled: true,
+    const perform = await mount({ connection_id: 'managed-fixture', display_name: 'Managed Fixture', local_enabled: true,
       connection_kind: 'ssh_host', management_capability: 'managed_ssh_host', capabilities: [], status: 'offline',
       trust_state: 'unpaired', created_at_ms: 1, updated_at_ms: 1, environments: [], service_state: {
         status: 'not_started', can_start: true, can_stop: false, can_restart: false, can_update: false, can_pair_after_start: true,

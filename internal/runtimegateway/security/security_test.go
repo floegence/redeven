@@ -4,15 +4,15 @@ import "testing"
 
 func TestCanonicalJSONMatchesNodeNestedPermissionObject(t *testing.T) {
 	type permissions struct {
-		Access         bool `json:"access"`
-		ManageMembers  bool `json:"manage_members"`
-		ConfigureCloud bool `json:"configure_cloud"`
+		Access            bool `json:"access"`
+		ManageAttachments bool `json:"manage_attachments"`
+		ManageNetwork     bool `json:"manage_network"`
 	}
 	actual, err := CanonicalJSON(map[string]any{"permissions": permissions{true, true, true}, "binding_audience": "https://gateway.example/?a=1&b=2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"binding_audience":"https://gateway.example/?a=1&b=2","permissions":{"access":true,"configure_cloud":true,"manage_members":true}}`
+	const want = `{"binding_audience":"https://gateway.example/?a=1&b=2","permissions":{"access":true,"manage_attachments":true,"manage_network":true}}`
 	if actual != want {
 		t.Fatalf("Node signature input mismatch: %s", actual)
 	}

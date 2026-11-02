@@ -1,11 +1,11 @@
-import type { GatewayEndpoint, GatewayMember, GatewayPermissions, GatewayPolicy, GatewayHookStatuses } from './gatewayMembership';
+import type { GatewayEndpoint, RuntimeAttachment, GatewayPermissions, GatewayPolicy, GatewayHookStatuses } from './gatewayMembership';
 import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type { DesktopContainerEngine } from './desktopRuntimePlacement';
 
 export type DesktopGatewayConnectionKind = 'url' | 'local_host' | 'local_container' | 'ssh_host' | 'ssh_container';
 export type DesktopGatewayManagementCapability = 'access_only' | 'managed_local_host' | 'managed_local_container' | 'managed_ssh_host' | 'managed_ssh_container';
 
-export type DesktopGatewayCapability = 'member_access' | 'member_manage' | 'cloud_configure';
+export type DesktopGatewayCapability = 'member_access' | 'member_manage' | 'network_configure';
 
 export type DesktopGatewayStatus =
   | 'unknown'
@@ -25,7 +25,7 @@ export type DesktopGatewayTrustState =
   | 'trust_changed'
   | 'revoked';
 
-export type DesktopGatewayEnvironment = GatewayMember & Readonly<{
+export type DesktopGatewayEnvironment = RuntimeAttachment & Readonly<{
   last_access_result?: DesktopGatewayAccessResult;
 }>;
 export type DesktopGatewayAccessResult = Readonly<{
@@ -137,7 +137,7 @@ export type DesktopGatewayDiagnosis = Readonly<{
 
 export type DesktopGatewaySource = Readonly<{
   identity_fingerprint?: string;
-  gateway_id: string;
+  connection_id: string;
   display_name: string;
   local_enabled: boolean;
   connection_kind: DesktopGatewayConnectionKind;
@@ -154,7 +154,7 @@ export type DesktopGatewaySource = Readonly<{
   listener_restart_required?: boolean;
   allowed_hosts?: readonly string[];
   endpoint_last_used_at?: Readonly<Record<string, number>>;
-  member_endpoints?: readonly GatewayEndpoint[];
+  endpoints?: readonly GatewayEndpoint[];
   runtime_root?: string;
   gateway_url?: string;
   allow_loopback_http?: boolean;

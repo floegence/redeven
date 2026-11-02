@@ -13,7 +13,7 @@ func TestRouteRotationPreservesIdentityAndRequiresNewOwnerConsent(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	route := Route{ID: "route", SourceID: "gateway", MemberID: "member", RuntimeID: "runtime", Origin: "https://env.example.test", Certificate: cert, PrivateKey: key, Revision: 1}
+	route := Route{ID: "route", SourceID: "gateway", AttachmentID: "member", RuntimeID: "runtime", Origin: "https://env.example.test", Certificate: cert, PrivateKey: key, Revision: 1}
 	c.state.Routes = []Route{route}
 	old, err := c.binding(login.Token, route.ID)
 	if err != nil {

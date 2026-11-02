@@ -36,7 +36,7 @@ type Options struct {
 	Service           gp.MemberService
 	Delegation        gp.MemberDelegation
 	GatewayID         string
-	MemberID          string
+	AttachmentID      string
 	RuntimeID         string
 	BrowserOrigin     string
 	DeviceReference   string
@@ -44,7 +44,7 @@ type Options struct {
 }
 
 func New(ctx context.Context, options Options) (*Transport, error) {
-	if ctx == nil || options.Session == nil || ctx.Err() != nil || webbinding.ValidateOrigin(options.BrowserOrigin) != nil || options.GatewayID == "" || options.MemberID == "" || options.RuntimeID == "" || options.Delegation.GatewayID != options.GatewayID || options.Delegation.MemberID != options.MemberID || options.Delegation.RuntimePublicID != options.RuntimeID || len(options.ClientCertificate.Certificate) != 1 || options.ClientCertificate.PrivateKey == nil {
+	if ctx == nil || options.Session == nil || ctx.Err() != nil || webbinding.ValidateOrigin(options.BrowserOrigin) != nil || options.GatewayID == "" || options.AttachmentID == "" || options.RuntimeID == "" || options.Delegation.GatewayID != options.GatewayID || options.Delegation.AttachmentID != options.AttachmentID || options.Delegation.RuntimePublicID != options.RuntimeID || len(options.ClientCertificate.Certificate) != 1 || options.ClientCertificate.PrivateKey == nil {
 		return nil, ErrDenied
 	}
 	if err := gatewaymembership.VerifyMemberService(options.Service, options.Delegation, time.Now()); err != nil {

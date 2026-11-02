@@ -49,7 +49,7 @@ func Enroll(t testing.TB, store *gatewaymembership.Store, runtimeID string) *gat
 	if err != nil {
 		t.Fatal(err)
 	}
-	member.MemberVersion, member.ClientCertificatePEM, member.ClientExpiresAtUnixMS = response.MemberVersion, response.ClientCertificatePEM, response.ClientExpiresAtUnixMS
+	member.AttachmentVersion, member.ClientCertificatePEM, member.ClientExpiresAtUnixMS = response.AttachmentVersion, response.ClientCertificatePEM, response.ClientExpiresAtUnixMS
 	member.PendingJoin = nil
 	if err := member.Validate(runtimeID); err != nil {
 		t.Fatal(err)

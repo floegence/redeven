@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/idna"
 )
 
-var ErrInvalidProof = errors.New("MEMBER_PROOF_INVALID")
+var ErrInvalidProof = errors.New("ATTACHMENT_PROOF_INVALID")
 
 func decodeKey(value string, size int) ([]byte, error) {
 	raw, err := base64.RawURLEncoding.Strict().DecodeString(value)
@@ -179,17 +179,17 @@ func SignDelegation(delegation *gp.MemberDelegation, private ed25519.PrivateKey)
 	return err
 }
 
-func MemberID(invitationID, publicKey string) string {
+func AttachmentID(invitationID, publicKey string) string {
 	sum := sha256.Sum256([]byte("redeven.gateway.member.v6\x00" + invitationID + "\x00" + publicKey))
 	return "member_" + hex.EncodeToString(sum[:24])
 }
 
 func VerifyDelegation(delegation gp.MemberDelegation) error {
-	domain, expectedMemberID := "redeven.gateway.delegation.v6", MemberID(delegation.InvitationID, delegation.PublicKeyB64u)
+	domain, expectedAttachmentID := "redeven.gateway.delegation.v6", AttachmentID(delegation.InvitationID, delegation.PublicKeyB64u)
 	if delegation.ProtocolVersion != gp.Version {
 		return ErrInvalidProof
 	}
-	if !validID(delegation.GatewayID) || delegation.MemberID != expectedMemberID || !validID(delegation.RuntimePublicID) || !validID(delegation.InvitationID) || delegation.ConsentedAtUnixMS <= 0 || !delegation.ManageAccess || !delegation.ManageCloudPublication {
+	if !validID(delegation.GatewayID) || delegation.AttachmentID != expectedAttachmentID || !validID(delegation.RuntimePublicID) || !validID(delegation.InvitationID) || delegation.ConsentedAtUnixMS <= 0 || !delegation.ManageAccess {
 		return ErrInvalidProof
 	}
 	signature := delegation.Signature
@@ -227,7 +227,7 @@ func ServiceOrigin(runtimeID string) string {
 }
 
 type serviceStatement struct {
-	MemberID        string           `json:"member_id"`
+	AttachmentID    string           `json:"attachment_id"`
 	RuntimePublicID string           `json:"runtime_public_id"`
 	Service         gp.MemberService `json:"service"`
 }
@@ -237,7 +237,7 @@ type serviceStatement struct {
 func SignService(service *gp.MemberService, delegation gp.MemberDelegation, key ed25519.PrivateKey) error {
 	service.Signature = ""
 	domain := "redeven.gateway.service.v6"
-	signature, err := signValue(domain, serviceStatement{delegation.MemberID, delegation.RuntimePublicID, *service}, key)
+	signature, err := signValue(domain, serviceStatement{delegation.AttachmentID, delegation.RuntimePublicID, *service}, key)
 	if err == nil {
 		service.Signature = signature
 	}
@@ -254,7 +254,7 @@ func VerifyMemberService(service gp.MemberService, delegation gp.MemberDelegatio
 	signature := service.Signature
 	service.Signature = ""
 	domain := "redeven.gateway.service.v6"
-	return verifyValue(domain, serviceStatement{delegation.MemberID, delegation.RuntimePublicID, service}, delegation.PublicKeyB64u, signature)
+	return verifyValue(domain, serviceStatement{delegation.AttachmentID, delegation.RuntimePublicID, service}, delegation.PublicKeyB64u, signature)
 }
 
 func VerifyService(service gp.MemberService, runtimeID string, now time.Time) error {

@@ -1,4 +1,4 @@
-package gatewaycloud
+package gatewayegress_test
 
 import (
 	"context"
@@ -158,25 +158,22 @@ func runIsolationGateway(t *testing.T, root string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	budget := gatewayflow.New(gp.MaxMemberConnections, gp.MaxGatewayConnections)
+	budget := gatewayflow.New(gp.MaxAttachmentConnections, gp.MaxGatewayConnections)
 	connections := gatewaymembership.NewConnections(budget)
-	proxy, err := gatewayegress.New(gatewayegress.Options{Budget: budget, AllowPrivateDestinations: true})
+	proxy, err := gatewayegress.NewControllerWithOptions(gatewayegress.Options{Budget: budget, AllowPrivateDestinations: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
+	_, policy, _ := members.Snapshot()
+	policy.DefaultEgressAllowed = true
+	policy.Destinations = []string{"cloud.gateway.test:8443"}
+	if err := members.UpdatePolicy(t.Context(), policy.Revision, policy); err != nil {
+		t.Fatal(err)
+	}
 	members.SetCommitHandler(func(records []gatewaymembership.MemberRecord, policy gp.GatewayPolicy) {
 		connections.Apply(records, policy)
-		policies := []gatewayegress.Member{}
-		for _, record := range records {
-			m := record.Member
-			if m.State == "active" {
-				policies = append(policies, gatewayegress.Member{ID: m.MemberID, MemberVersion: uint64(m.MemberVersion), Generation: 1, CertificateSHA256: record.ClientCertificateSHA256, Destinations: []string{"cloud.gateway.test:8443"}})
-			}
-		}
-		if err := proxy.ReplaceMembers(policies); err != nil {
-			t.Error(err)
-		}
+		proxy.Apply(records, policy)
 	})
 	memberListener, err := gatewaymembership.NewListener(members, connections, func(string) bool { return false })
 	if err != nil {
@@ -227,7 +224,7 @@ func runIsolationRuntime(t *testing.T, root string) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	runtimeConfig := &config.Config{LocalEnvironmentPublicID: cfg.RuntimePublicID, Gateways: []*gatewaymembership.RuntimeConfig{&cfg}, CloudRoute: &config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: cfg.MemberID, Revision: 1}}
+	runtimeConfig := &config.Config{LocalEnvironmentPublicID: cfg.RuntimePublicID, Gateways: []*gatewaymembership.RuntimeConfig{&cfg}, CloudRoute: &config.CloudRoute{Kind: config.CloudRouteGateway, AttachmentID: cfg.AttachmentID, Revision: 1}}
 	proxy, err := runtimeConfig.CloudProxy()
 	if err != nil {
 		t.Fatal(err)

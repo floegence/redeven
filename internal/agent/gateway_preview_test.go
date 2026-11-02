@@ -15,7 +15,6 @@ import (
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/config"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewaymembership"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
@@ -88,8 +87,8 @@ func TestGatewayEndpointConfirmationRecoversLostResponse(t *testing.T) {
 	if !reflect.DeepEqual(staged, a.remoteConfigSnapshot()) {
 		t.Fatal("repeated preview replaced the pending delivery")
 	}
-	current := a.GatewayMembership(member.GatewayID)
-	if err := current.Enroll(t.Context(), a.persistGatewayMember); err != nil {
+	current := a.GatewayAttachment(member.GatewayID)
+	if err := current.Enroll(t.Context(), a.persistRuntimeAttachment); err != nil {
 		t.Fatal(err)
 	}
 	delivered := a.remoteConfigSnapshot()
@@ -102,9 +101,9 @@ func TestGatewayEndpointConfirmationRecoversLostResponse(t *testing.T) {
 	if !reflect.DeepEqual(delivered, a.remoteConfigSnapshot()) {
 		t.Fatal("completed confirmation recovery changed membership")
 	}
-	leaving := a.GatewayMembership(member.GatewayID)
+	leaving := a.GatewayAttachment(member.GatewayID)
 	leaving.Leaving = true
-	if err := a.persistGatewayMember(leaving); err != nil {
+	if err := a.persistRuntimeAttachment(leaving); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.ConfirmGatewayPreview(preview.PreviewID, "update-endpoints", ""); !errors.Is(err, ErrGatewayPreviewChanged) {
@@ -112,7 +111,7 @@ func TestGatewayEndpointConfirmationRecoversLostResponse(t *testing.T) {
 	}
 }
 
-func previewGatewayServer(t *testing.T) (*gatewaymembership.Store, string, gc.InvitationCodeDelivery) {
+func previewGatewayServer(t *testing.T) (*gatewaymembership.Store, string, gp.InvitationCodeDelivery) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -178,11 +177,11 @@ func TestGatewayPreviewSelfSignedExchangeAndExplicitConsent(t *testing.T) {
 	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil {
 		t.Fatal(err)
 	}
-	saved := a.GatewayMembership()
+	saved := a.GatewayAttachment()
 	if saved == nil || saved.PendingJoin == nil || a.cfg.EnvironmentID != "existing" || control.Err() != nil {
 		t.Fatal("confirmation did not persist consent before selecting the Gateway path")
 	}
-	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil || !reflect.DeepEqual(saved, a.GatewayMembership()) {
+	if err := a.ConfirmGatewayPreview(preview.PreviewID, "join", ""); err != nil || !reflect.DeepEqual(saved, a.GatewayAttachment()) {
 		t.Fatalf("lost confirmation response could not be retried: %v", err)
 	}
 	if _, err := gatewaymembership.PreviewInvitation(t.Context(), address, delivery.Code); err != nil {
@@ -235,7 +234,7 @@ func TestGatewayPreviewRejectsChangedContextAndSaveFailure(t *testing.T) {
 			if err == nil || change != "save_failure" && !errors.Is(err, expected) {
 				t.Fatalf("context was accepted: %v", err)
 			}
-			if a.cfg != cfg || a.cfg.GatewayMember("") != nil || control.Err() != nil {
+			if a.cfg != cfg || a.cfg.RuntimeAttachment("") != nil || control.Err() != nil {
 				t.Fatal("rejected confirmation changed configuration or stopped the controller")
 			}
 		})

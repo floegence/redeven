@@ -84,7 +84,7 @@ func TestConnectionEndpointsPreferRecentSuccessThenPriority(t *testing.T) {
 
 func TestRuntimeSourceDoesNotMutateApprovedEndpoints(t *testing.T) {
 	config := &RuntimeConfig{
-		MemberID: "member_test", MemberVersion: 1,
+		AttachmentID: "member_test", AttachmentVersion: 1,
 		ClientExpiresAtUnixMS: time.Now().Add(90 * 24 * time.Hour).UnixMilli(),
 		Service:               gp.MemberService{ExpiresAtUnixMS: time.Now().Add(90 * 24 * time.Hour).UnixMilli()},
 		GatewayEndpoints: []gp.GatewayEndpoint{
@@ -95,7 +95,7 @@ func TestRuntimeSourceDoesNotMutateApprovedEndpoints(t *testing.T) {
 	}
 	original := config.Clone()
 	source := &runtimeSource{
-		current: func() *RuntimeConfig { return config }, memberID: config.MemberID,
+		current: func() *RuntimeConfig { return config }, memberID: config.AttachmentID,
 		persist:             func(next *RuntimeConfig) error { config = next; return nil },
 		attemptedEndpointID: "lan",
 	}

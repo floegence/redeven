@@ -24,8 +24,8 @@ try {
   const { createDesktopI18n } = await load('../src/shared/i18n/index.ts');
   const source = compactEnvironmentPreviewFixture().coverage;
   const gateway = { ...source.gateway_sources[0], display_name: 'Office Gateway', connection_kind: 'local_host', management_capability: 'managed_local_host',
-    status: 'online', trust_state: 'paired', sync_state: 'ready', local_enabled: true, policy: catalogFixture.policy, member_endpoints: catalogFixture.gateway.member_endpoints,
-    permissions: { access: true, manage_members: true, configure_cloud: true }, environments: [catalogFixture.members[0]],
+    status: 'online', trust_state: 'paired', sync_state: 'ready', local_enabled: true, policy: catalogFixture.policy, endpoints: catalogFixture.gateway.endpoints,
+    permissions: { access: true, manage_attachments: true, manage_network: true }, environments: [catalogFixture.attachments[0]],
     service_state: { status: 'ready', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } };
   const snapshot = { ...source, gateway_sources: [gateway], open_windows: [] };
   for (const locale of locales) {
@@ -51,7 +51,6 @@ try {
             if (request.kind === 'revoke_gateway_client') return { ok: true, gateway_clients: [{ client_key_id: 'studio', client_name: 'Studio Desktop', paired_at_unix_ms: Date.now(), last_verified_at_unix_ms: Date.now(), revoked_at_unix_ms: Date.now() }] };
             if (request.kind === 'issue_gateway_access_code') return { ok: true, outcome: 'gateway_access_code_created', gateway_access_code: { access_code: 'qa-explicit-access-code', expires_at_unix_ms: Date.now() + 600000 } };
             if (request.kind === 'invite_gateway_runtime') return { ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: { ...window.gatewayInvitationFixture, expires_at_unix_ms: Date.now() + 600000 } };
-            if (request.kind === 'inspect_gateway_cloud') return { ok: true, outcome: 'gateway_cloud_updated', gateway_cloud: { configured: false, state: 'unconfigured' } };
             return { ok: true, outcome: 'saved_gateway' };
           };
         }, dark);
@@ -66,7 +65,7 @@ try {
         const nav = workspace.locator('[data-gateway-management-nav]');
         await workspace.waitFor();
         assert.equal(await page.getByRole('dialog').count(), 0);
-        const keys = ['gatewayExperience.overview', 'gatewayExperience.clients', 'gatewayClients.runtimes', 'gatewayExperience.network', 'gatewayExperience.cloud', 'gatewayExperience.maintenance'];
+        const keys = ['gatewayExperience.overview', 'gatewayExperience.clients', 'gatewayClients.runtimes', 'gatewayExperience.network', 'gatewayExperience.maintenance'];
         assert.deepEqual(await nav.getByRole('button').allTextContents(), keys.map(key => i18n.t(key)));
         for (const [index, key] of keys.entries()) {
           await button(nav, key).click();
