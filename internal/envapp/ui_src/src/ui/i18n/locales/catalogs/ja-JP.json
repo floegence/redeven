@@ -5897,6 +5897,8 @@
       "contextIndicatorDistributionUnavailable": "次のリクエスト後に利用可能",
       "inspectAndContinue": "状態を確認して続行",
       "inspectAndContinuePrompt": "前のターンは操作結果を確認できず停止しました。まず読み取り専用ツールで現在の状態と既存の成果物を確認し、その証拠に基づいて残りの作業を続けてください。以前の操作を無条件に繰り返さないでください。",
+      "runErrorProviderHistoryPreparationFailed": "会話履歴のローカル検証に失敗したため、今回のリクエストはまだモデルに送信されていません。既存のメッセージは保持されています。詳細を開いて原因を確認してください。",
+      "runErrorProviderHistoryCommitFailed": "モデルから応答を受信しましたが、会話を続けるための履歴を保存できませんでした。既存のメッセージは保持されています。詳細を開いて原因を確認してください。",
       "runErrorProviderResponseValidationFailed": "回答は受信しましたが、最終検証に失敗しました。生成済みの内容は保持されています。詳細を開いて不整合を確認してください。",
       "runErrorProviderRequestFailed": "モデルへのリクエストを完了できませんでした。再試行し、問題が続く場合は現在のモデルの接続元を確認してください。",
       "contextIndicatorSystem": "システム指示",

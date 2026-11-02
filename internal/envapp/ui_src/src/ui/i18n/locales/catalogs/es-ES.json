@@ -5897,6 +5897,8 @@
       "contextIndicatorDistributionUnavailable": "Disponible tras la próxima solicitud",
       "inspectAndContinue": "Comprobar y continuar",
       "inspectAndContinuePrompt": "El turno anterior se detuvo porque los efectos no están confirmados. Primero comprueba el estado actual y los archivos existentes con herramientas de solo lectura y continúa el trabajo pendiente según las pruebas. No repitas acciones anteriores sin comprobarlas.",
+      "runErrorProviderHistoryPreparationFailed": "Falló la validación local del historial. Esta solicitud aún no se ha enviado al modelo. Los mensajes existentes se conservan. Abre los detalles para ver la causa.",
+      "runErrorProviderHistoryCommitFailed": "El modelo respondió, pero no se pudo guardar el historial necesario para continuar la conversación. Los mensajes existentes se conservan. Abre los detalles para ver la causa.",
       "runErrorProviderResponseValidationFailed": "Se recibió la respuesta, pero falló la verificación final. El contenido generado se conserva. Abre los detalles para ver el conflicto.",
       "runErrorProviderRequestFailed": "No se pudo completar la solicitud al modelo. Reinténtalo o revisa la fuente del modelo actual si el problema persiste.",
       "contextIndicatorSystem": "Instrucciones del sistema",

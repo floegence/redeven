@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.98\.0$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.98.0"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.99\.0$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.99.0"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
@@ -60,6 +60,11 @@ require_source internal/ai/run_tool_surface.go 'RefreshProviderSurface: true'
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
   'CREATE TABLE floret_|INSERT INTO floret_|UPDATE floret_|DELETE FROM floret_' internal cmd; then
   fail "Redeven must not access Floret-owned schema"
+fi
+
+require_source internal/ai/model_gateway_chatgpt.go 'history.CommitAssistant(completed.ID, result.Text, callItems, output)'
+if rg -n 'assistantFragments|fragmentStart' internal/ai/model_gateway.go; then
+  fail "Responses native history must not follow presentation fragment boundaries"
 fi
 
 echo "[INFO] checking typed ThreadService production path"

@@ -261,11 +261,17 @@ func historicalRunFailureCode(message string, fallback string) string {
 
 func projectRunFailure(raw string, fallbackCode string) (string, string) {
 	raw = strings.TrimSpace(raw)
+	// Structured provider evidence is authoritative. Legacy prose heuristics
+	// must not reinterpret safe detail codes or messages inside the envelope.
+	if diagnostic, ok := parseProviderFailure(raw); ok {
+		code := providerDiagnosticRunCode(diagnostic)
+		return code, userFacingRunError(code, "")
+	}
 	code := classifyRunFailureCode(errors.New(raw), fallbackCode)
 	if code == fallbackCode {
 		code = historicalRunFailureCode(raw, fallbackCode)
 	}
-	if _, ok := parseProviderFailure(raw); ok || strings.EqualFold(raw, "ChatGPT:") {
+	if strings.EqualFold(raw, "ChatGPT:") {
 		if code == fallbackCode {
 			code = runErrorCodeProviderRequestFailed
 		}

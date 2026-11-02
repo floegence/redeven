@@ -629,6 +629,8 @@
       "runErrorProviderStreamInterrupted": "O provedor de modelos selecionado interrompeu o fluxo de resposta inesperadamente. Tente novamente; se o problema continuar, verifique o endpoint do provedor.",
       "runErrorProviderModelUnavailable": "O modelo selecionado não está disponível neste provedor de modelos. Escolha outro modelo no perfil de IA local.",
       "runErrorProviderRequestInvalid": "O provedor de IA selecionado rejeitou o formato da solicitação do Flower. Atualize o Redeven e tente novamente.",
+      "runErrorProviderHistoryPreparationFailed": "A validação local do histórico falhou. Esta solicitação ainda não foi enviada ao modelo. As mensagens existentes foram preservadas. Abra os detalhes para ver a causa.",
+      "runErrorProviderHistoryCommitFailed": "O modelo respondeu, mas não foi possível salvar o histórico necessário para continuar a conversa. As mensagens existentes foram preservadas. Abra os detalhes para ver a causa.",
       "runErrorProviderResponseValidationFailed": "A resposta foi recebida, mas a verificação final falhou. O conteúdo gerado foi preservado. Abra os detalhes para ver o conflito.",
       "runErrorProviderRequestFailed": "Não foi possível concluir a solicitação ao modelo. Tente novamente ou verifique a fonte do modelo atual se o problema persistir.",
       "runErrorProviderRequestRejected": "O provedor de IA selecionado rejeitou a solicitação do Flower. Confira os detalhes do diagnóstico e tente novamente mais tarde.",

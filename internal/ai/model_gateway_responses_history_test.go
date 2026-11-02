@@ -99,13 +99,18 @@ func TestFlowerResponsesSearchSurvivesGoalReviewRestartAndFork(t *testing.T) {
 		var output []any
 		if step == 1 {
 			output = []any{
+				map[string]any{"type": "message", "id": "commentary", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Checking sources.\n\n"}}},
 				map[string]any{"type": "web_search_call", "id": "search", "status": "completed", "opaque_results": "durable-search-receipt", "action": map[string]any{"type": "search", "query": "product films"}},
+				map[string]any{"type": "message", "id": "after-search", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Now inspecting."}}},
 				map[string]any{"type": "function_call", "id": "review", "call_id": "review", "name": "goal", "arguments": `{"operation":"review","expected_version":1,"outcome":"completed","evidence":"Verified official product films."}`},
 			}
-			search := output[0].(map[string]any)
+			fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Checking sources.\\n\\n\"}\n\n")
+			first, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": output[0]})
+			fmt.Fprintf(w, "data: %s\n\n", first)
+			search := output[1].(map[string]any)
 			action := search["action"].(map[string]any)
 			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}}
-			event, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": search})
+			event, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 1, "item": search})
 			fmt.Fprintf(w, "data: %s\n\n", event)
 			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}, map[string]any{"type": "url", "url": "https://example.com/terminal-only"}}
 		} else {
@@ -452,15 +457,20 @@ func TestResponsesManualRetryRetainsCanonicalToolsAndResetsNativeState(t *testin
 		output := []any{map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "done"}}}}
 		if step == 1 {
 			output = []any{
+				map[string]any{"type": "message", "id": "commentary", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Checking sources.\n\n"}}},
 				map[string]any{"type": "web_search_call", "id": "search", "status": "completed", "opaque_results": "committed-search-receipt", "action": map[string]any{"type": "search", "query": "docs"}},
+				map[string]any{"type": "message", "id": "after-search", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Now inspecting."}}},
 				map[string]any{"type": "function_call", "id": "item", "call_id": "call", "name": "inspect", "arguments": "{}", "status": "completed"},
 			}
 		}
 		if step == 1 {
-			search := output[0].(map[string]any)
+			fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Checking sources.\\n\\n\"}\n\n")
+			first, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": output[0]})
+			fmt.Fprintf(w, "data: %s\n\n", first)
+			search := output[1].(map[string]any)
 			action := search["action"].(map[string]any)
 			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}}
-			event, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": search})
+			event, _ := json.Marshal(map[string]any{"type": "response.output_item.done", "output_index": 1, "item": search})
 			fmt.Fprintf(w, "data: %s\n\n", event)
 			action["sources"] = []any{map[string]any{"type": "url", "url": "https://example.com/done"}, map[string]any{"type": "url", "url": "https://example.com/extra"}}
 		}

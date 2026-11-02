@@ -629,6 +629,8 @@
       "runErrorProviderStreamInterrupted": "所选 AI 模型提供商意外中断了响应流。请重试；若问题持续出现，请检查模型提供商端点。",
       "runErrorProviderModelUnavailable": "该模型提供商无法提供所选模型。请在本地 AI 配置文件中选择另一个模型。",
       "runErrorProviderRequestInvalid": "所选模型提供商拒绝了 Flower 的请求格式。请更新 Redeven 后重试。",
+      "runErrorProviderHistoryPreparationFailed": "对话历史未通过本地校验，本次请求尚未发送给模型。已有消息仍然保留，可展开详情查看具体原因。",
+      "runErrorProviderHistoryCommitFailed": "模型已返回内容，但无法保存用于继续对话的历史。已有消息仍然保留，可展开详情查看具体原因。",
       "runErrorProviderResponseValidationFailed": "回答内容已收到，但最终校验失败。已生成的内容仍然保留，可展开详情查看具体冲突。",
       "runErrorProviderRequestFailed": "模型请求未能完成。请重试；如果问题持续，请检查当前模型来源。",
       "runErrorProviderRequestRejected": "所选模型提供商拒绝了 Flower 的请求。请查看诊断详情，稍后重试。",

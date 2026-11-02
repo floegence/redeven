@@ -5897,6 +5897,8 @@
       "contextIndicatorDistributionUnavailable": "Nach der nächsten Anfrage verfügbar",
       "inspectAndContinue": "Status prüfen und fortfahren",
       "inspectAndContinuePrompt": "Der vorherige Durchgang wurde wegen unbestätigter Auswirkungen angehalten. Prüfe zuerst mit schreibgeschützten Werkzeugen den aktuellen Zustand und vorhandene Ergebnisse. Setze die restliche Aufgabe anhand dieser Erkenntnisse fort. Wiederhole frühere Aktionen nicht ungeprüft.",
+      "runErrorProviderHistoryPreparationFailed": "Die lokale Prüfung des Gesprächsverlaufs ist fehlgeschlagen. Diese Anfrage wurde noch nicht an das Modell gesendet. Vorhandene Nachrichten bleiben erhalten. Die Details zeigen die Ursache.",
+      "runErrorProviderHistoryCommitFailed": "Das Modell hat geantwortet, aber der Verlauf konnte für die Fortsetzung nicht gespeichert werden. Vorhandene Nachrichten bleiben erhalten. Die Details zeigen die Ursache.",
       "runErrorProviderResponseValidationFailed": "Die Antwort wurde empfangen, aber die abschließende Prüfung ist fehlgeschlagen. Generierte Inhalte bleiben erhalten. Öffnen Sie die Details, um den Konflikt zu sehen.",
       "runErrorProviderRequestFailed": "Die Modellanfrage konnte nicht abgeschlossen werden. Versuchen Sie es erneut oder prüfen Sie bei anhaltenden Problemen die aktuelle Modellquelle.",
       "contextIndicatorSystem": "Systemanweisungen",

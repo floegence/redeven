@@ -5897,6 +5897,8 @@
       "contextIndicatorDistributionUnavailable": "Disponible après la prochaine requête",
       "inspectAndContinue": "Vérifier et continuer",
       "inspectAndContinuePrompt": "Le tour précédent s’est arrêté car les effets des actions ne sont pas confirmés. Vérifiez d’abord l’état actuel et les fichiers existants avec des outils en lecture seule, puis poursuivez le travail restant selon les preuves. Ne répétez pas aveuglément les actions précédentes.",
+      "runErrorProviderHistoryPreparationFailed": "La vérification locale de l’historique a échoué. Cette demande n’a pas encore été envoyée au modèle. Les messages existants sont conservés. Ouvrez les détails pour connaître la cause.",
+      "runErrorProviderHistoryCommitFailed": "Le modèle a répondu, mais l’historique nécessaire à la poursuite de la conversation n’a pas pu être enregistré. Les messages existants sont conservés. Ouvrez les détails pour connaître la cause.",
       "runErrorProviderResponseValidationFailed": "La réponse a été reçue, mais la vérification finale a échoué. Le contenu généré est conservé. Ouvrez les détails pour consulter le conflit.",
       "runErrorProviderRequestFailed": "La requête au modèle n’a pas pu aboutir. Réessayez ou vérifiez la source du modèle actuel si le problème persiste.",
       "contextIndicatorSystem": "Instructions système",

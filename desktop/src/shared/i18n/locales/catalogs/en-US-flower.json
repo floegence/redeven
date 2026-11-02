@@ -376,6 +376,8 @@
     "runErrorProviderStreamInterrupted": "The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.",
     "runErrorProviderModelUnavailable": "The selected model is not available from this provider. Choose another model in the Local AI Profile.",
     "runErrorProviderRequestInvalid": "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
+    "runErrorProviderHistoryPreparationFailed": "Conversation history failed local validation before this model request was sent. Existing messages are retained. Open the details to see the cause.",
+    "runErrorProviderHistoryCommitFailed": "The model responded, but its history could not be saved for continuation. Existing messages are retained. Open the details to see the cause.",
     "runErrorProviderResponseValidationFailed": "Response content was received, but final verification failed. Generated content is preserved. Open the details to see the conflict.",
     "runErrorProviderRequestFailed": "The model request could not be completed. Retry, or check the current model source if it keeps happening.",
     "runErrorProviderRequestRejected": "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",

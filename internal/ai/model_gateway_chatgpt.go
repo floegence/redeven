@@ -149,11 +149,8 @@ func responsesInput(items []json.RawMessage) oresponses.ResponseInputParam {
 
 const responsesNativeStateKind = "openai_responses_native_v1"
 
-func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, result ModelGatewayResult, completed oresponses.Response, aliases providerToolAliases, fragments []Message) (*ModelGatewayState, error) {
+func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, result ModelGatewayResult, completed oresponses.Response, aliases providerToolAliases) (*ModelGatewayState, error) {
 	parts := []ContentPart{}
-	if len(fragments) == 0 || len(fragments) == 1 && joinMessageText(fragments[0]) == "" {
-		fragments = []Message{{Role: "assistant", Content: []ContentPart{{Type: "text", Text: result.Text}}}}
-	}
 	for _, call := range result.ToolCalls {
 		raw, err := json.Marshal(call.Args)
 		if err != nil {
@@ -161,8 +158,7 @@ func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, re
 		}
 		parts = append(parts, ContentPart{Type: "tool_call", ToolCallID: call.ID, ToolName: call.Name, ArgsJSON: string(raw)})
 	}
-	fragments = append(fragments, Message{Role: "assistant", Content: parts})
-	visible, _, err := buildOpenAIInput(fragments, aliases)
+	calls, _, err := buildOpenAIInput([]Message{{Role: "assistant", Content: parts}}, aliases)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +166,7 @@ func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, re
 	if p.chatGPT {
 		namespace = chatGPTToolNamespace
 	}
-	visibleRaw, err := canonicalResponsesInput(visible, namespace)
+	callItems, err := canonicalResponsesInput(calls, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +181,7 @@ func (p *openAIProvider) responsesState(history *flprovider.ResponsesHistory, re
 	if len(output) == 0 {
 		return nil, &providerValidationError{code: responseOutputMissing}
 	}
-	state, err := history.Commit(completed.ID, visibleRaw, output)
+	state, err := history.CommitAssistant(completed.ID, result.Text, callItems, output)
 	if err != nil {
 		return nil, &providerValidationError{code: responseHistoryCommitFailed, cause: err}
 	}

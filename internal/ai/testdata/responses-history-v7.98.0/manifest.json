@@ -1,0 +1,12 @@
+{
+  "thread_id": "thread-dbd26133c508667e895b29affc89d3c8",
+  "turn_id": "turn-00f6e68c5acb07dac3b2c85825307c86",
+  "writer_version": "v7.98.0",
+  "writer_commit": "aa524f0ff6443bb60f22f2a5a4fed02f9b66a11d",
+  "redeven_commit": "8cace5273fa5355271f6cfed5fecf5cb868f91fa",
+  "synthetic": true,
+  "sha256": {
+    "history.sqlite.gz": "dd471139184d28aa79cd805c5943caa944f9902c41541a8b0fb49e21172d0eb2",
+    "producer_test.go.txt": "78d8ceb633f8be0c3eb6609da3ca6302ab4346862c6c005e3c1d140a46f22725"
+  }
+}

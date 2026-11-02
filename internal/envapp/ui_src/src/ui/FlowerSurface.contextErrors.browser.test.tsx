@@ -59,3 +59,36 @@ it.each([['zh-CN', 390, 'light'], ['en-US', 1100, 'dark']] as const)('keeps %s p
   for (const button of card.querySelectorAll('button')) expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(card.getBoundingClientRect().right + 1);
   await page.screenshot({ element: surface, path: `__screenshots__/redeven-provider-errors-${locale}.png` });
 });
+
+it.each([['zh-CN', 390, 'history_preparation'], ['en-US', 1100, 'history_commit']] as const)('keeps %s history details readable and copyable at %s px', async (locale, width, stage) => {
+  await page.viewport(width, 900);
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const detail = JSON.stringify({ provider: 'openai', stage, code: stage === 'history_preparation' ? 'response_history_preparation_failed' : 'response_history_commit_failed', history_detail: { reason: 'visible_mismatch', record_index: 0, canonical_index: 7, expected_items: 2, available_items: 1, fields: ['content'] } });
+  const failed = thread({ status: 'failed', error: { code: 'provider_request_failed', message: 'fallback', detail } });
+  const base = { ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) };
+  const surface = renderSurfaceWithAdapterProps(base, { copy, focusThreadRequest: { request_id: 'history-layout', thread_id: failed.thread_id } });
+  surface.style.cssText = 'width:' + width + 'px;height:850px;position:relative;';
+  await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+  const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+  expect(card.querySelector('.flower-error-message')?.textContent).toBe(stage === 'history_preparation' ? copy.chat.runErrors.providerHistoryPreparationFailed : copy.chat.runErrors.providerHistoryCommitFailed);
+  expect(card.querySelector('.flower-error-actions')?.textContent).toBe(copy.chat.retryReply);
+  const disclosure = card.querySelector<HTMLDetailsElement>('details')!;
+  disclosure.querySelector('summary')!.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(disclosure.open).toBe(true);
+  expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+  const writeText = vi.fn(async () => undefined);
+  const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  try {
+    await userEvent.click(disclosure.querySelector<HTMLButtonElement>('button')!);
+    await waitFor(() => writeText.mock.calls.length === 1);
+    expect(writeText).toHaveBeenCalledWith(detail);
+    expect(base.retryThread).not.toHaveBeenCalled();
+    await page.screenshot({ element: surface, path: '__screenshots__/redeven-history-errors-' + locale + '.png' });
+  } finally {
+    if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+  }
+});

@@ -367,23 +367,6 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	var completed oresponses.Response
 	gotCompleted := false
 	var reasoningBuf strings.Builder
-	var assistantFragments []Message
-	fragmentStart := 0
-	originalOnEvent := onEvent
-	if native.History != nil {
-		onEvent = func(event StreamEvent) {
-			if event.Type == StreamEventHostedTool {
-				text := textBuf.String()[fragmentStart:]
-				if text != "" {
-					assistantFragments = append(assistantFragments, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: text}}})
-				}
-				fragmentStart = textBuf.Len()
-			}
-			if originalOnEvent != nil {
-				originalOnEvent(event)
-			}
-		}
-	}
 	hosted := newResponsesHostedEvents(onEvent)
 	var nativeCompletedItems responsesCompletedItems
 
@@ -727,7 +710,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
 	if native.History != nil && (completed.Status == "completed" || completed.Status == "incomplete") && (native.Request.ReusePolicy == nil || native.Request.ReusePolicy.ProviderStateAllowed) {
 		var stateErr error
-		result.ProviderState, stateErr = p.responsesState(native.History, result, completed, aliases, append(assistantFragments, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: textBuf.String()[fragmentStart:]}}}))
+		result.ProviderState, stateErr = p.responsesState(native.History, result, completed, aliases)
 		if stateErr != nil {
 			return ModelGatewayResult{}, stateErr
 		}

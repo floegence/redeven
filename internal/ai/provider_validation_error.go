@@ -75,11 +75,14 @@ func (e *providerValidationError) diagnostic(providerType string) providerFailur
 	case responseUsageOverflow:
 		d.Stage, d.Message = "usage_validation", "The provider token usage total exceeds the supported integer range."
 	case responseHistoryPreparationFailed:
-		d.Stage, d.Message = "history_preparation", "Could not prepare native provider conversation history."
+		d.Stage, d.Message = "history_preparation", "Conversation history failed local validation before a model request could be sent. Existing messages are retained."
 	case responseHistoryCommitFailed:
-		d.Stage, d.Message = "history_commit", "Could not retain the provider response for conversation continuation."
+		d.Stage, d.Message = "history_commit", "The model responded, but its history could not be retained for continuation. Existing messages are retained."
 	default:
 		d.Code, d.Message = "response_validation_failed", "The provider response failed local validation."
+	}
+	if e.code == responseHistoryPreparationFailed || e.code == responseHistoryCommitFailed {
+		d.HistoryDetail = responsesHistoryFailureDetail(e.cause)
 	}
 	return d
 }

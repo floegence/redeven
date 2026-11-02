@@ -629,6 +629,8 @@
       "runErrorProviderStreamInterrupted": "選択中の AI プロバイダーが応答ストリームを予期せず終了しました。再試行し、問題が続く場合はプロバイダーのエンドポイントを確認してください。",
       "runErrorProviderModelUnavailable": "選択したモデルはこのプロバイダーでは利用できません。Local AI Profile で別のモデルを選択してください。",
       "runErrorProviderRequestInvalid": "選択した AI プロバイダーが Flower のリクエスト形式を拒否しました。Redeven を更新して再試行してください。",
+      "runErrorProviderHistoryPreparationFailed": "会話履歴のローカル検証に失敗したため、今回のリクエストはまだモデルに送信されていません。既存のメッセージは保持されています。詳細を開いて原因を確認してください。",
+      "runErrorProviderHistoryCommitFailed": "モデルから応答を受信しましたが、会話を続けるための履歴を保存できませんでした。既存のメッセージは保持されています。詳細を開いて原因を確認してください。",
       "runErrorProviderResponseValidationFailed": "回答は受信しましたが、最終検証に失敗しました。生成済みの内容は保持されています。詳細を開いて不整合を確認してください。",
       "runErrorProviderRequestFailed": "モデルへのリクエストを完了できませんでした。再試行し、問題が続く場合は現在のモデルの接続元を確認してください。",
       "runErrorProviderRequestRejected": "選択した AI プロバイダーが Flower のリクエストを拒否しました。診断の詳細を確認し、後でもう一度試してください。",

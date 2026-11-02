@@ -27,13 +27,14 @@ const providerFailurePrefix = "redeven_provider_failure_v1:"
 // message. Only structured error messages and reviewed diagnostic fields enter
 // it; raw bodies, metadata, endpoints and credentials stay private.
 type providerFailureDiagnostic struct {
-	MediaKind    string                     `json:"media_kind,omitempty"`
-	Actual       int64                      `json:"actual,omitempty"`
-	Limit        int64                      `json:"limit,omitempty"`
-	Stage        string                     `json:"stage,omitempty"`
-	OutputIndex  *int64                     `json:"output_index,omitempty"`
-	OutputDetail *responsesOutputDiagnostic `json:"output_detail,omitempty"`
-	OutputFields []string                   `json:"output_fields,omitempty"`
+	HistoryDetail *responsesHistoryDiagnostic `json:"history_detail,omitempty"`
+	MediaKind     string                      `json:"media_kind,omitempty"`
+	Actual        int64                       `json:"actual,omitempty"`
+	Limit         int64                       `json:"limit,omitempty"`
+	Stage         string                      `json:"stage,omitempty"`
+	OutputIndex   *int64                      `json:"output_index,omitempty"`
+	OutputDetail  *responsesOutputDiagnostic  `json:"output_detail,omitempty"`
+	OutputFields  []string                    `json:"output_fields,omitempty"`
 
 	ActualBytes int64                      `json:"actual_bytes,omitempty"`
 	LimitBytes  int64                      `json:"limit_bytes,omitempty"`
@@ -108,6 +109,12 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 	} else {
 		d.OutputFields = nil
 		d.OutputDetail = nil
+	}
+
+	if (d.Stage == "history_preparation" && d.Code == "response_history_preparation_failed") || (d.Stage == "history_commit" && d.Code == "response_history_commit_failed") {
+		d.HistoryDetail = d.HistoryDetail.sanitized()
+	} else {
+		d.HistoryDetail = nil
 	}
 
 	if d.Code != "request_bytes_exceeded" || d.ActualBytes <= d.LimitBytes || d.LimitBytes <= 0 {

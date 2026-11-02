@@ -53,6 +53,20 @@ Preparation estimates full native input. API-key OpenAI uses response-ID/suffix 
 
 Historical ID-only OpenAI states retain opt-in continuation; absent bytes cannot be recovered. New states store complete upstream envelopes. Reader removal needs a future-major domain migration, never within v7. Changed canonical prefixes discard stale suffixes/IDs; Floret isolates model/account/secrets. Manual Retry/Fork retain canonical facts/tool results but clear source state; transport retries preserve frozen requests. Acceptance covers provider modes, streamed-only output, suffixes, immutable retry, Goal review, truncation/restart.
 
+Floret v7.99.0 CommitAssistant binds complete emitted text once, followed by ordered
+canonical function calls. Hosted Activity boundaries only affect presentation.
+Published split assistant bindings remain readable at their exact saved prefix;
+native evidence proves any whitespace lost by earlier fragment trimming. Only
+proven coordinates are remapped, and only the next successful commit saves them.
+Native searches, reasoning and message phases remain unchanged; real content,
+role, tool, namespace or order changes fail without resetting history or replaying
+an effect. ResponsesHistoryError exposes safe reason codes, zero-based record
+and canonical positions, item counts and allowlisted field names. Redeven adds
+history_detail to the existing diagnostic envelope and retains it through Desktop
+RPC. Both hosts localize preparation-before-network versus commit-after-response
+failures, expose copyable details and explicit Retry, and omit irrelevant provider
+configuration actions. No validation failure initiates a retry automatically.
+
 Floret v7.37.0 owns append-only canonical history and lineages keyed by provider/model/reasoning/prompt/local-hosted tools/adapter/context policy/state compatibility. Flower reads persisted Activity or uses neutral presentation without unknown JSON/arguments.
 
 ## Provider rendering and estimation

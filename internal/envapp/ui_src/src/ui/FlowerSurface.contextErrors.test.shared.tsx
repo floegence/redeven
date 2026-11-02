@@ -194,3 +194,18 @@ describe('Flower upstream error messages', () => {
     expect(retryThread).not.toHaveBeenCalled();
   });
 });
+
+it.each(['en-US', 'zh-CN', 'zh-TW'] as const)('explains local history failures in %s without provider settings or automatic retry', async locale => {
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const detail = JSON.stringify({ provider: 'openai', stage: 'history_preparation', code: 'response_history_preparation_failed', message: 'Private fallback', history_detail: { reason: 'visible_mismatch', record_index: 0, canonical_index: 7, expected_items: 2, available_items: 1, fields: ['content'] } });
+  const failed = thread({ status: 'failed', error: { code: 'provider_request_failed', message: 'fallback', detail } });
+  const base = { ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) };
+  const surface = renderSurfaceWithAdapterProps(base, { copy, focusThreadRequest: { request_id: 'history-' + locale, thread_id: failed.thread_id } });
+  await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+  const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+  expect(card.querySelector('.flower-error-message')?.textContent).toBe(copy.chat.runErrors.providerHistoryPreparationFailed);
+  expect(card.querySelector('.flower-error-actions')?.textContent).toBe(copy.chat.retryReply);
+  expect(card.querySelector('pre')?.textContent).toBe(detail);
+  expect(base.retryThread).not.toHaveBeenCalled();
+});

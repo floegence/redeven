@@ -652,6 +652,8 @@ export type FlowerSurfaceCopy = Readonly<{
       providerModelUnavailable: string;
       providerRequestInvalid: string;
       providerRequestFailed: string;
+      providerHistoryPreparationFailed: string;
+      providerHistoryCommitFailed: string;
       providerResponseValidationFailed: string;
       providerRequestRejected: string;
       providerRequestTooLarge: string;
@@ -1172,6 +1174,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
       providerRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
+      providerHistoryPreparationFailed: "Conversation history failed local validation before this model request was sent. Existing messages are retained. Open the details to see the cause.",
+      providerHistoryCommitFailed: "The model responded, but its history could not be saved for continuation. Existing messages are retained. Open the details to see the cause.",
       providerResponseValidationFailed: 'Response content was received, but final verification failed. Generated content is preserved. Open the details to see the conflict.',
       providerRequestFailed: "The model request could not be completed. Retry, or check the current model source if it keeps happening.",
       providerRequestRejected: "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",

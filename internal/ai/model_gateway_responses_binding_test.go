@@ -1,0 +1,135 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	flconfig "github.com/floegence/floret/v7/config"
+	flprovider "github.com/floegence/floret/v7/provider"
+	flruntime "github.com/floegence/floret/v7/runtime"
+	flstorage "github.com/floegence/floret/v7/storage"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+)
+
+func TestResponsesAssistantBindingAcrossHostedSearch(t *testing.T) {
+	for _, withCommentary := range []bool{false, true} {
+		t.Run(fmt.Sprintf("commentary_%t", withCommentary), func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				n := calls.Add(1)
+				var request map[string]json.RawMessage
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Error(err)
+				}
+				if n > 1 {
+					for _, want := range []string{"search1", "search2", "synthetic-reasoning", "Verified answer."} {
+						if !strings.Contains(string(request["input"]), want) {
+							t.Errorf("request %d lost %s", n, want)
+						}
+					}
+					if withCommentary && !strings.Contains(string(request["input"]), "I will verify the sources.") {
+						t.Error("lost commentary")
+					}
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				emit := func(v any) { b, _ := json.Marshal(v); fmt.Fprintf(w, "data: %s\n\n", b) }
+				output := []any{}
+				message := func(id, text string) map[string]any {
+					return map[string]any{"id": id, "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}}}
+				}
+				if n == 1 {
+					if withCommentary {
+						m := message("commentary", "I will verify the sources.\n\n")
+						emit(map[string]any{"type": "response.output_text.delta", "delta": "I will verify the sources.\n\n"})
+						emit(map[string]any{"type": "response.output_item.done", "output_index": len(output), "item": m})
+						output = append(output, m)
+					}
+					s := map[string]any{"id": "search1", "type": "web_search_call", "status": "completed", "action": map[string]any{"type": "search", "query": "synthetic fixture", "sources": []any{map[string]any{"type": "url", "url": "https://example.invalid/fixture"}}}}
+					emit(map[string]any{"type": "response.output_item.done", "output_index": len(output), "item": s})
+					output = append(output, s)
+					s2 := map[string]any{"id": "search2", "type": "web_search_call", "status": "completed", "action": map[string]any{"type": "search", "query": "second synthetic fixture"}}
+					emit(map[string]any{"type": "response.output_item.done", "output_index": len(output), "item": s2})
+					output = append(output, s2)
+					reasoning := map[string]any{"id": "reasoning1", "type": "reasoning", "encrypted_content": "synthetic-reasoning", "summary": []any{}}
+					emit(map[string]any{"type": "response.output_item.done", "output_index": len(output), "item": reasoning})
+					output = append(output, reasoning)
+				}
+				m := message(fmt.Sprintf("answer%d", n), "Verified answer.")
+				emit(map[string]any{"type": "response.output_text.delta", "delta": "Verified answer."})
+				emit(map[string]any{"type": "response.output_item.done", "output_index": len(output), "item": m})
+				output = append(output, m)
+				emit(map[string]any{"type": "response.completed", "response": map[string]any{"id": fmt.Sprintf("resp%d", n), "status": "completed", "output": output}})
+			}))
+			defer server.Close()
+			base, err := newProviderAdapter("openai", server.URL, "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Exercise both the adapter and the public durable runtime boundary.
+			req := ModelGatewayRequest{Model: "fixture-model", Protocol: "openai-responses", WebSearchMode: providerWebSearchModeOpenAIResponsesBuiltin, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Find sources."}}}}}
+			first, err := base.StreamTurn(t.Context(), req, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.PreviousState = first.ProviderState
+			req.Messages = append(req.Messages, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: first.Text}}}, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Follow up."}}})
+			_, err = base.StreamTurn(t.Context(), req, nil)
+			if err != nil || calls.Load() != 2 {
+				t.Fatalf("adapter continuation failed: %v requests=%d", err, calls.Load())
+			}
+
+			calls.Store(0)
+			gateway := newFloretProviderAdapter(base, "openai", "fixture-model", ProviderControls{}, TurnBudgets{}, providerWebSearchModeOpenAIResponsesBuiltin)
+			gateway.identity, err = redevenFloretGatewayIdentity("openai", "openai", server.URL, "fixture-model", "responses", "api_key", "fixture")
+			if err != nil {
+				t.Fatal(err)
+			}
+			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "history-fixture", Name: "History fixture"}, SystemPrompt: "Answer the question.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000}}, gateway, flruntime.WithAgentHostedTools(flprovider.HostedToolDefinition{Name: "web_search", Type: "web_search"}), flruntime.WithAgentProviderRetryPolicy(flruntime.ProviderRetryPolicy{Disabled: true}))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			path := filepath.Join(t.TempDir(), "threads.sqlite")
+			open := func() (*flruntime.Host, flruntime.ThreadService) {
+				host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: flstorage.SQLite(path)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return host, service
+			}
+			host, service := open()
+			defer func() { _ = host.Shutdown(context.Background()) }()
+			created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "first", Input: flruntime.UserInput{Text: "Find sources."}}); err != nil {
+				t.Fatal(err)
+			}
+			v1 := waitDesktopContinuation(t, service, created.ThreadID)
+			if v1.Failure != nil || calls.Load() != 1 {
+				t.Fatalf("first turn failed: %+v requests=%d", v1.Failure, calls.Load())
+			}
+			if err = host.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			host, service = open()
+			if _, err = service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "followup", Input: flruntime.UserInput{Text: "Follow up."}}); err != nil {
+				t.Fatal(err)
+			}
+			v2 := waitDesktopContinuation(t, service, created.ThreadID)
+			if v2.Failure != nil || calls.Load() != 2 {
+				t.Fatalf("runtime continuation failed: %+v requests=%d", v2.Failure, calls.Load())
+			}
+		})
+	}
+}

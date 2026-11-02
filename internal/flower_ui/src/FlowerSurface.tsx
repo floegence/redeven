@@ -2796,11 +2796,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const warmupPhaseLabel = createMemo(() => trimString(warmupState()?.phaseLabel) || copy().chat.loadingSettings);
   const warmupModelLabel = createMemo(() => trimString(warmupState()?.modelLabel) || copy().chat.warmupModelLabel);
 
+  const historyFailureStage = (error: FlowerThreadSnapshot['error']): 'history_preparation' | 'history_commit' | undefined => {
+    if (!trimString(error?.code).startsWith('provider_')) return;
+    try {
+      const diagnostic = JSON.parse(trimString(error?.detail));
+      if (diagnostic.stage === 'history_preparation' && diagnostic.code === 'response_history_preparation_failed') return 'history_preparation';
+      if (diagnostic.stage === 'history_commit' && diagnostic.code === 'response_history_commit_failed') return 'history_commit';
+    } catch { /* Older failures may have no structured history diagnostic. */ }
+  };
+
   const presentRunError = (
     error: FlowerThreadSnapshot['error'],
     includeUnmappedMessage = true,
   ): string => {
     const code = trimString(error?.code);
+    const historyStage = historyFailureStage(error);
+    if (historyStage === 'history_preparation') return copy().chat.runErrors.providerHistoryPreparationFailed;
+    if (historyStage === 'history_commit') return copy().chat.runErrors.providerHistoryCommitFailed;
     if (code === 'provider_request_too_large') {
       try {
         const d = JSON.parse(trimString(error?.detail));
@@ -8552,7 +8564,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </>
     ) : providerFailure ? (
       <>
-        <Button size="sm" variant="ghost" disabled={configureBlocked()} onClick={() => void configureThreadProvider(targetThread())}>{copy().settings.dialog.catalog.searchConfigure}</Button>
+        <Show when={!historyFailureStage(error)}><Button size="sm" variant="ghost" disabled={configureBlocked()} onClick={() => void configureThreadProvider(targetThread())}>{copy().settings.dialog.catalog.searchConfigure}</Button></Show>
         <Show when={code !== 'provider_request_too_large' || capacitySettingsChanged()}>{retryAction()}</Show>
         <Show when={code === 'chatgpt_usage_unavailable'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a></Show>
       </>

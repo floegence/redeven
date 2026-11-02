@@ -5897,6 +5897,8 @@
       "contextIndicatorDistributionUnavailable": "下次請求後可用",
       "inspectAndContinue": "檢查狀態並繼續",
       "inspectAndContinuePrompt": "上一輪因操作結果未確認而停止。請先使用唯讀工具檢查目前狀態和既有產物，再依據證據繼續剩餘工作。請勿盲目重複先前的操作。",
+      "runErrorProviderHistoryPreparationFailed": "對話歷史未通過本機驗證，本次請求尚未傳送給模型。既有訊息仍會保留，請展開詳細資訊查看原因。",
+      "runErrorProviderHistoryCommitFailed": "模型已傳回內容，但無法儲存供後續對話使用的歷史。既有訊息仍會保留，請展開詳細資訊查看原因。",
       "runErrorProviderResponseValidationFailed": "已收到回覆內容，但最終驗證失敗。已產生的內容仍會保留，請展開詳細資訊查看具體衝突。",
       "runErrorProviderRequestFailed": "模型請求未能完成。請重試；如果問題持續，請檢查目前的模型來源。",
       "contextIndicatorSystem": "系統指令",
