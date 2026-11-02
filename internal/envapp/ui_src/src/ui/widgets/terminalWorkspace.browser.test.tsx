@@ -1,7 +1,7 @@
 import { batch, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it } from 'vitest';
-import { presetSplitWorkspace, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
+import { presetSplitWorkspace, dockSplitWorkspaceItem, measureSplitWorkspace, splitWorkspaceItems, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
 import { createTerminalWorkspace } from './terminalWorkspace';
 let dispose: (() => void) | undefined;
 afterEach(() => {
@@ -118,4 +118,47 @@ it('selects the owning view when browsing a member from another view', async () 
   expect(catalog.ownerOf('a')).toBeUndefined();
   expect(workspace.activeViewId()).toBeNull();
   expect(workspace.displayedPaneIds()).toEqual(['a']);
+});
+
+
+it.each([2, 3, 4, 5])('preserves every saved member and focus when arranging a view with %s sessions', async count => {
+  const { createTerminalViewCatalog } = await import('../services/terminalViewCatalog');
+  const ids = ['a', 'b', 'c', 'd', 'missing'].slice(0, count);
+  let layout: SplitWorkspaceLayout = { type: 'pane', id: ids[0] };
+  for (const id of ids.slice(1)) layout = dockSplitWorkspaceItem(layout, id, ids[0], 'right', 'split-' + id)!;
+  const views = [
+    { id: 'current', name: 'Current', layout, revision: 2, createdAtMs: 1, updatedAtMs: 1 },
+    { id: 'other', name: 'Other', layout: { type: 'pane' as const, id: 'outside' }, revision: 3, createdAtMs: 1, updatedAtMs: 1 },
+  ];
+  const [active, setActive] = createSignal<string | null>('b');
+  let workspace!: ReturnType<typeof createTerminalWorkspace>;
+  let catalog!: ReturnType<typeof createTerminalViewCatalog>;
+  dispose = render(() => {
+    catalog = createTerminalViewCatalog({ scope: () => 'env', connected: () => true, rpc: {
+      listViews: async () => ({ revision: 3, views }), updateViews: async () => ({ revision: 3, views }), onViewsChanged: () => () => undefined,
+    } });
+    workspace = createTerminalWorkspace({ catalog, storageKey: () => 'terminal-workspace-test', sessionIds: () => ['a', 'b', 'outside', 'solo'], hydrated: () => true, activeId: active, select: setActive });
+    return <div />;
+  }, document.body);
+  await expect.poll(catalog.ready).toBe(true);
+  const presets = workspace.availablePresets();
+  expect(presets).toEqual(count === 2 ? ['columns', 'rows'] : count === 3 ? ['three-columns', 'main-left'] : count === 4 ? ['grid'] : []);
+  const before = workspace.layout();
+  workspace.applyPreset('single');
+  expect(workspace.layout()).toBe(before);
+  for (const preset of presets) {
+    workspace.applyPreset(preset);
+    expect(splitWorkspaceItems(catalog.views().find(view => view.id === 'current')!.layout).sort()).toEqual(ids);
+    expect(catalog.views().find(view => view.id === 'other')).toEqual(views[1]);
+    expect(active()).toBe('b');
+    const positions = measureSplitWorkspace(workspace.layout()).panes;
+    workspace.applyPreset(preset);
+    expect(measureSplitWorkspace(workspace.layout()).panes).toEqual(positions);
+  }
+  batch(() => { workspace.browseSession('solo'); setActive('solo'); });
+  expect(workspace.availablePresets()).toEqual([]);
+  workspace.applyPreset('grid');
+  expect(workspace.activeViewId()).toBeNull();
+  expect(workspace.displayedPaneIds()).toEqual(['solo']);
+  expect(catalog.views()).toHaveLength(2);
 });

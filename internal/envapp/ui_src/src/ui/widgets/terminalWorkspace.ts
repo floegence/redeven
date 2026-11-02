@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, on, untrack, type Accessor } from 'solid-js';
-import { isSplitWorkspaceLayout, reconcileSplitWorkspace, removeSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
+import { isSplitWorkspaceLayout, measureSplitWorkspace, presetSplitWorkspace, reconcileSplitWorkspace, removeSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
 import type { TerminalViewCatalog } from '../services/terminalViewCatalog';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 
@@ -77,6 +77,26 @@ export function createTerminalWorkspace(options: {
       } else selectViewId(id);
     }
   });
+  // Published presets have fixed capacities. Layout selection may only rearrange
+  // the current saved view, including members temporarily absent from rendering.
+  const availablePresets = createMemo<SplitWorkspacePreset[]>(() => {
+    if (!catalog?.ready()) return [];
+    const view = catalog.views().find(item => item.id === activeViewId());
+    const count = splitWorkspaceItems(view?.layout ?? null).length;
+    return count === 2 ? ['columns', 'rows'] : count === 3 ? ['three-columns', 'main-left'] : count === 4 ? ['grid'] : [];
+  });
+  const applyPreset = (preset: SplitWorkspacePreset) => {
+    if (!availablePresets().includes(preset)) return;
+    const view = catalog?.views().find(item => item.id === activeViewId());
+    if (!view) return;
+    // Feed presets visual reading order so applying Grid again never swaps panes.
+    const members = [...measureSplitWorkspace(view.layout).panes.entries()]
+      .sort(([, a], [, b]) => a.y - b.y || a.x - b.x).map(([id]) => id);
+    const next = presetSplitWorkspace(preset, members, () => 'split-' + crypto.randomUUID());
+    const nextMembers = splitWorkspaceItems(next);
+    if (!next || nextMembers.length !== members.length || !members.every(id => nextMembers.includes(id))) return;
+    commit(next);
+  };
   const activateView = (id: string) => {
     const view = catalog?.views().find(view => view.id === id);
     if (!view) return;
@@ -155,5 +175,5 @@ export function createTerminalWorkspace(options: {
       if (options.activeId() === id && available.length) options.select(available[0]);
     });
   };
-  return { layout, displayedLayout, commit, paneIds, displayedPaneIds, closePane, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
+  return { layout, displayedLayout, commit, availablePresets, applyPreset, paneIds, displayedPaneIds, closePane, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
 }

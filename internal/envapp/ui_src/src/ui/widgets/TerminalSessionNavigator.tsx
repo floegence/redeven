@@ -1256,7 +1256,7 @@ ${navigationGroup().defaultWorkingDir}`}
                                   data-terminal-session-avatar={sessionId}
                                   aria-hidden="true"
                                 >
-                                  <TerminalSessionChromeIcon avatar={item().avatar} class="h-3.5 w-3.5" />
+                                  <TerminalSessionChromeIcon avatar={item().avatar} class="h-3 w-3" />
                                   <TerminalSessionTransitionBadge state={item().transitionIndicator} />
                                 </span>
                               )}

@@ -18,13 +18,13 @@ File preview defaults to the main surface. Chunked history remains one atomic sn
 
 Published SplitWorkspace owns splits, presets, docking, swaps and accessible resizing. Splitting creates a backend view; later placement edits update it. Users manage independent named views through thumbnails, rename/delete and creation above Directories.
 
-Each session has at most one owning view. Selecting a member activates its owner and focuses the pane, including from another view or standalone session. Unowned sessions display alone. Cross-view dragging moves membership atomically; the source collapses or disappears when empty. Removing a pane/deleting a view releases membership without closing sessions. New views create fresh sessions; presets use current members and create missing panes, never reuse sessions from other views. Explicit splitting uses the target group and verified local cwd or group startup directory. Group membership and cwd remain independent.
+Each session has at most one owning view. Selecting a member activates its owner and focuses the pane, including from another view or standalone session. Unowned sessions display alone. Cross-view dragging moves membership atomically; the source collapses or disappears when empty. Removing a pane/deleting a view releases membership without closing sessions. New views create fresh sessions. Layout selection only rearranges the current saved view: it preserves all members (including temporarily unavailable sessions), visual reading order and focus. Only published presets matching its member count are offered; standalone, single-pane and larger custom views disable that menu. Adding/removing sessions requires explicit splitting, dragging or removal. Explicit splitting uses the target group and verified local cwd or group startup directory. Group membership and cwd remain independent.
 
 Desktop starts at pane headers, with preference-controlled Workbench activity indicators. Its footer retains presets, search, clear, settings and creation. Groups retain scoped creation; overlays keep toolbar/drawer controls.
 
 Split creation/attachment never covers existing panes with global loading. Environment/view changes fence async placement. Mobile shows active-pane tabs without rewriting desktop trees. There is no pane-maximize mode; Alt+Shift+Left/Right cycles panes.
 
-Pane chrome follows terminal foreground/background, never ANSI blue; sidebar follows shell tokens. Rounded session tiles use contrasting border/fill mixes. Idle hover uses pointer; only active drags show grabbing.
+Pane chrome follows terminal foreground/background, never ANSI blue; sidebar follows shell tokens. Compact 18px session tiles use fine contrasting borders and subtle theme-neutral fills; pane headers are 28px high. Rename opens with the existing name focused and selected through Floe overlay autofocus. Idle hover uses pointer; only active drags show grabbing.
 
 ## View projection
 

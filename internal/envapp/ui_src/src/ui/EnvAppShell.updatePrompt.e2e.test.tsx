@@ -261,6 +261,8 @@ vi.mock('./protocol/redeven_v1', () => ({
       sendUserTurn: vi.fn(async () => undefined),
     },
     terminal: {
+      listViews: vi.fn(async () => ({ revision: 0, views: [] })),
+      onViewsChanged: vi.fn(() => () => undefined),
       listSessions: vi.fn(async () => ({ sessions: [] })),
       onSessionsChanged: vi.fn(() => () => undefined),
     },

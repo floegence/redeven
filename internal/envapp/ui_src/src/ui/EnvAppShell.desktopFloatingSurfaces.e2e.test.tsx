@@ -371,6 +371,12 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('./protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
+    terminal: {
+      listViews: vi.fn(async () => ({ revision: 0, views: [] })),
+      onViewsChanged: vi.fn(() => () => undefined),
+      listSessions: vi.fn(async () => ({ sessions: [] })),
+      onSessionsChanged: vi.fn(() => () => undefined),
+    },
     access: {
       status: vi.fn(async () => ({ passwordRequired: false, unlocked: true })),
       resume: vi.fn(async () => undefined),

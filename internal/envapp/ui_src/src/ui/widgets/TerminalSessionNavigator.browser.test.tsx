@@ -151,12 +151,12 @@ it.each(['light', 'dark'])('uses rounded session tiles and a clean selected row 
   const row = host.querySelector<HTMLElement>('[data-terminal-session-row="first"]')!;
   const avatar = row.querySelector<HTMLElement>('[data-terminal-session-avatar]')!;
   const style = getComputedStyle(avatar);
-  expect(parseFloat(style.borderRadius)).toBeGreaterThanOrEqual(6);
-  expect(avatar.getBoundingClientRect().width).toBe(24);
+  expect(parseFloat(style.borderRadius)).toBe(5);
+  expect(avatar.getBoundingClientRect().width).toBe(18);
   expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
   expect(row.querySelector('.absolute.left-0')).toBeNull();
   const agent = host.querySelector<HTMLElement>('[data-terminal-session-avatar="second"]')!;
-  expect(agent.getBoundingClientRect().width).toBe(24);
+  expect(agent.getBoundingClientRect().width).toBe(18);
   expect(getComputedStyle(agent).borderRadius).toBe(style.borderRadius);
   await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/sidebar-' + theme + '.png' });
 });

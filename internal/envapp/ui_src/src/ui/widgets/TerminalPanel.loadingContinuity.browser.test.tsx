@@ -254,14 +254,42 @@ describe('TerminalPanel loading continuity', () => {
     vi.restoreAllMocks();
   });
 
+  it('rearranges only current view members without adding or removing sessions', async () => {
+    rpcState.sessions = ['layout-a', 'layout-b', 'layout-c', 'outside'].map(id => ({ ...createdSession(id), isActive: id === 'layout-a' }));
+    const { presetSplitWorkspace, splitWorkspaceItems } = await import('@floegence/floe-webapp-core/layout');
+    rpcState.views = [{ id: 'current', name: 'Current', layout: presetSplitWorkspace('main-left', ['layout-a', 'layout-b', 'layout-c'], () => crypto.randomUUID()), revision: 2, createdAtMs: 1, updatedAtMs: 1 },
+      { id: 'other', name: 'Other', layout: { type: 'pane', id: 'outside' }, revision: 3, createdAtMs: 2, updatedAtMs: 2 }];
+    rpcState.viewRevision = 3;
+    const host = document.createElement('div'); Object.assign(host.style, { width: '1100px', height: '700px' }); document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
+    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
+    await expect.poll(() => visibleElements(document.body, '[role=menuitem]').map(item => item.textContent)).toEqual(['Three columns', 'Main left']);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Three columns', exact: true }));
+    await expect.poll(() => rpcState.viewRevision).toBeGreaterThan(3);
+    await expect.poll(() => splitWorkspaceItems(rpcState.views.find(view => view.id === 'current')!.layout)).toHaveLength(3);
+    expect(splitWorkspaceItems(rpcState.views.find(view => view.id === 'current')!.layout).sort()).toEqual(['layout-a', 'layout-b', 'layout-c']);
+    expect(rpcState.views.find(view => view.id === 'other')!.layout).toEqual({ type: 'pane', id: 'outside' });
+    expect(host.querySelectorAll('[data-terminal-session-id]')).toHaveLength(4);
+  });
+
   it('retains terminal instances while applying layouts, focusing panes and removing placement', async () => {
     let sequence = 0;
     const create = vi.fn(async () => ({ ...createdSession('split-session-' + ++sequence), name: 'Shell ' + sequence }));
     const host = renderCreateFlow(create);
     await vi.waitFor(() => expect(runtimeState.propsBySession.has('split-session-1')).toBe(true));
+    runtimeState.propsBySession.get('split-session-1').onInteractive?.('split-session-1');
     const original = host.querySelector('[data-terminal-runtime-session="split-session-1"]');
+    expect((host.querySelector('[data-testid="terminal-workspace-layout"]') as HTMLButtonElement).disabled).toBe(true);
+    for (let count = 2; count <= 4; count++) {
+      await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="split-session-1"] [aria-label="Split pane"]')!);
+      await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
+      await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(count);
+    }
     await userEvent.click(page.getByTestId('terminal-workspace-layout'));
+    await expect.poll(() => visibleElements(document.body, '[role=menuitem]').map(item => item.textContent)).toEqual(['Grid']);
     await userEvent.click(page.getByRole('menuitem', { name: 'Grid', exact: true }));
+    expect(create).toHaveBeenCalledTimes(4);
     await vi.waitFor(() => expect(runtimeState.propsBySession.size).toBe(4));
     for (const [id, props] of runtimeState.propsBySession) props.onInteractive?.(id);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(4);
@@ -531,9 +559,20 @@ describe('TerminalPanel loading continuity', () => {
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-b']);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for View 1"]')!);
     await userEvent.click(page.getByRole('menuitem', { name: 'Rename view', exact: true }));
-    await page.getByRole('textbox', { name: 'View name', exact: true }).fill('Services');
+    const renameInput = document.querySelector<HTMLInputElement>('[role=dialog] input')!;
+    await expect.poll(() => document.activeElement).toBe(renameInput);
+    expect(renameInput.selectionStart).toBe(0);
+    expect(renameInput.selectionEnd).toBe(renameInput.value.length);
+    await userEvent.keyboard('Services');
     await userEvent.click(page.getByRole('button', { name: 'Confirm', exact: true }));
     await expect.poll(() => rpcState.views.find(view => view.id === firstId)?.name).toBe('Services');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for Services"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Rename view', exact: true }));
+    const reopened = document.querySelector<HTMLInputElement>('[role=dialog] input')!;
+    await expect.poll(() => document.activeElement).toBe(reopened);
+    expect(reopened.selectionStart).toBe(0);
+    expect(reopened.selectionEnd).toBe('Services'.length);
+    await userEvent.keyboard('{Escape}');
     disposeRendered(); disposeRendered = mount();
     await expect.poll(() => host.querySelectorAll('[data-terminal-view-id]').length).toBe(2);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
@@ -554,8 +593,8 @@ describe('TerminalPanel loading continuity', () => {
     const host = renderCreateFlow(create);
     await expect.poll(() => runtimeState.propsBySession.has('new-view-1')).toBe(true);
     runtimeState.propsBySession.get('new-view-1').onInteractive?.('new-view-1');
-    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
-    await userEvent.click(page.getByRole('menuitem', { name: 'Two columns', exact: true }));
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="new-view-1"] [aria-label="Split pane"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
     await expect.poll(() => rpcState.views.length).toBe(1);
     const first = rpcState.views[0];
     await userEvent.click(page.getByRole('button', { name: 'New view', exact: true }));
@@ -563,8 +602,8 @@ describe('TerminalPanel loading continuity', () => {
     expect(create).toHaveBeenCalledTimes(3);
     expect(rpcState.views.find(view => view.id !== first.id)?.layout).toEqual({ type: 'pane', id: 'new-view-3' });
     expect(rpcState.views.find(view => view.id === first.id)?.layout).toEqual(first.layout);
-    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
-    await userEvent.click(page.getByRole('menuitem', { name: 'Two columns', exact: true }));
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="new-view-3"] [aria-label="Split pane"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
     await expect.poll(() => create.mock.calls.length).toBe(4);
     expect(visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['new-view-3', 'new-view-4']);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="new-view-2"]')!);
@@ -602,8 +641,9 @@ describe('TerminalPanel loading continuity', () => {
     let sequence = 0;
     const host = renderCreateFlow(vi.fn(async () => createdSession('palette-' + ++sequence)));
     await vi.waitFor(() => expect(runtimeState.propsBySession.has('palette-1')).toBe(true));
-    await userEvent.click(page.getByTestId('terminal-workspace-layout'));
-    await userEvent.click(page.getByRole('menuitem', { name: 'Two columns', exact: true }));
+    runtimeState.propsBySession.get('palette-1').onInteractive?.('palette-1');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="palette-1"] [aria-label="Split pane"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
     const preferences = useTerminalPreferences();
     const originalTheme = preferences.userTheme();
@@ -621,6 +661,7 @@ describe('TerminalPanel loading continuity', () => {
         expect(area.style.getPropertyValue('--floe-ink-soft')).toBe(area.style.getPropertyValue('--muted-foreground'));
         expect(area.style.getPropertyValue('--floe-state-hover')).toContain(colors.background);
         const inactiveHeader = host.querySelector<HTMLElement>('[data-floe-split-pane][data-active="false"] [data-floe-split-header]')!;
+        expect(inactiveHeader.getBoundingClientRect().height).toBe(28);
         expect(getComputedStyle(inactiveHeader).backgroundColor).toBe(getComputedStyle(area).backgroundColor);
         expect(getComputedStyle(inactiveHeader).borderBottomColor).toBe(getComputedStyle(host.querySelector('[data-floe-split-header]')!).borderBottomColor);
         await expect.poll(() => getComputedStyle(inactiveHeader.querySelector('button')!).color).toBe(getComputedStyle(inactiveHeader).color);

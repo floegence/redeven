@@ -27,6 +27,7 @@ export function TerminalViewList(props: {
   const i18n = useI18n();
   const [editing, setEditing] = createSignal<string | null>(null);
   const [name, setName] = createSignal('');
+  let selectNameOnFocus = false;
   const submit = () => { if (editing() && name().trim()) { props.onRename(editing()!, name().trim()); setEditing(null); } };
   const visible = () => props.catalog.views().filter(view => view.name.toLocaleLowerCase().includes(props.query.trim().toLocaleLowerCase()));
   return <section class="terminal-view-list" aria-label={i18n.t('terminalWorkspace.views')} data-terminal-view-list>
@@ -49,13 +50,13 @@ export function TerminalViewList(props: {
         <Dropdown align="end" disabled={!props.catalog.ready()} triggerAriaLabel={i18n.t('terminalWorkspace.viewActions', { name: view().name })}
           triggerClass="terminal-view-actions" trigger={<MoreHorizontal class="h-3.5 w-3.5" />}
           items={[{ id: 'rename', label: i18n.t('terminalWorkspace.renameView') }, { id: 'delete', label: i18n.t('terminalWorkspace.deleteView') }]}
-          onSelect={action => { if (action === 'rename') { setName(view().name); setEditing(id); } else if (action === 'delete') props.onDelete(id); }} />
+          onSelect={action => { if (action === 'rename') { selectNameOnFocus = true; setName(view().name); setEditing(id); } else if (action === 'delete') props.onDelete(id); }} />
       </div>; }}</For>
     </div>
     <Show when={props.catalog.saving()}><span class="sr-only" role="status">{i18n.t('terminalWorkspace.savingViews')}</span></Show>
     <Dialog open={editing() !== null} onOpenChange={open => { if (!open) setEditing(null); }} title={i18n.t('terminalWorkspace.renameView')}
       footer={<div class="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => setEditing(null)}>{i18n.t('common.actions.cancel')}</Button><Button size="sm" onClick={submit} disabled={!name().trim()}>{i18n.t('common.actions.confirm')}</Button></div>}>
-      <label class="block text-xs">{i18n.t('terminalWorkspace.viewLabel')}<input data-floe-control="input" class="mt-2 h-9 w-full rounded-md border border-border bg-background px-3" value={name()} maxlength={64} autofocus onInput={event => setName(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') submit(); }} /></label>
+      <label class="block text-xs">{i18n.t('terminalWorkspace.viewLabel')}<input data-floe-control="input" class="mt-2 h-9 w-full rounded-md border border-border bg-background px-3" value={name()} maxlength={64} data-floe-autofocus onFocus={event => { if (selectNameOnFocus) { selectNameOnFocus = false; event.currentTarget.select(); } }} onInput={event => setName(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') submit(); }} /></label>
     </Dialog>
   </section>;
 }

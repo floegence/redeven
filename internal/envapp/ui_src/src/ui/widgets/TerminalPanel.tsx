@@ -12,7 +12,7 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 import './adaptive-sidebar.css';
 import './terminal-workspace.css';
-import { SplitWorkspace, dockSplitWorkspaceItem, presetSplitWorkspace, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceEdge, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
+import { SplitWorkspace, dockSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceEdge, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
 import { createTerminalWorkspace } from './terminalWorkspace';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
@@ -1799,32 +1799,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       });
     } finally { setWorkspaceBusy(false); }
   };
-  const applyWorkspacePreset = async (preset: SplitWorkspacePreset) => {
-    if (workspaceBusy() || !connected() || (terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready())) return;
-    const target = activeSession();
-    if (!target) return;
-    const operationEnvironment = env.env_id();
-    const operationViewId = workspace.activeViewId();
-    const startupDir = terminalChromeBySession().get(target.id)?.canUseLocalPath
-      ? terminalChromeBySession().get(target.id)?.localWorkingDir
-      : terminalGroups().find(group => group.id === target.groupId)?.defaultWorkingDir;
-    if (!startupDir) return;
-    const count = preset === 'grid' ? 4 : preset === 'single' ? 1 : preset === 'columns' || preset === 'rows' ? 2 : 3;
-    const ids = [...new Set([target.id, ...workspace.displayedPaneIds()])].slice(0, count);
-    setWorkspaceBusy(true);
-    try {
-      while (ids.length < count) {
-        const id = await beginCreateSession(undefined, startupDir, target.groupId || 'default', false);
-        if (!id || env.env_id() !== operationEnvironment || workspace.activeViewId() !== operationViewId || (!operationViewId && activeSessionId() !== target.id)) return;
-        ids.push(id);
-      }
-      const available = ids.filter(id => sessions().some(session => session.id === id));
-      batch(() => {
-        workspace.commit(presetSplitWorkspace(preset, available, () => 'split-' + createClientId()));
-        available.forEach(markSessionMounted);
-        if (available.includes(target.id)) setActiveSessionId(target.id);
-      });
-    } finally { setWorkspaceBusy(false); }
+  const applyWorkspacePreset = (preset: SplitWorkspacePreset) => {
+    if (workspaceBusy() || !connected()) return;
+    workspace.applyPreset(preset);
   };
 
   type PendingTerminalFocusIntent = Readonly<{
@@ -5057,8 +5034,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         footerActions={<Show when={!navigationOverlay()}>
           <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => rootEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
           <Dropdown align="end"
-            trigger={<Button size="sm" variant="ghost" class="h-7 w-7 p-0" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!activeSessionId() || workspaceBusy() || (terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready())}><Grid class="h-3.5 w-3.5" /></Button>}
-            items={Object.entries(workspaceLabels()).map(([id, label]) => ({ id, label }))}
+            trigger={<Button size="sm" variant="ghost" class="h-7 w-7 p-0" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!workspace.availablePresets().length || workspaceBusy() || !connected()}><Grid class="h-3.5 w-3.5" /></Button>}
+            items={workspace.availablePresets().map(id => ({ id, label: workspaceLabels()[id] }))}
             onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
           <Dropdown align="end"
             trigger={<Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminal.moreOptions')} title={i18n.t('terminal.moreOptions')}><MoreVerticalIcon class="h-3.5 w-3.5" /></Button>}
@@ -5288,8 +5265,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   )}
                 </Show>
                 <Dropdown align="end"
-                  trigger={<Button size="sm" variant="ghost" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!activeSessionId() || workspaceBusy() || (terminalCatalog?.viewCatalog && !terminalCatalog.viewCatalog.ready())}><Grid class="h-3.5 w-3.5" /><span class="terminal-workspace-layout-label">{i18n.t('terminalWorkspace.layout')}</span></Button>}
-                  items={Object.entries(workspaceLabels()).map(([id, label]) => ({ id, label }))}
+                  trigger={<Button size="sm" variant="ghost" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!workspace.availablePresets().length || workspaceBusy() || !connected()}><Grid class="h-3.5 w-3.5" /><span class="terminal-workspace-layout-label">{i18n.t('terminalWorkspace.layout')}</span></Button>}
+                  items={workspace.availablePresets().map(id => ({ id, label: workspaceLabels()[id] }))}
                   onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
                 <Button
                   aria-busy={clearingSessionId() !== null}
