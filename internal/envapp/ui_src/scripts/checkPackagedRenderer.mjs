@@ -1033,7 +1033,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     if (Math.abs(afterDrag.x - beforeDrag.x - 24) > 1 || Math.abs(afterDrag.y - beforeDrag.y - 12) > 1) {
       throw new Error('the shared context preview must remain draggable');
     }
-    const handle = await preview.locator('[data-floe-floating-window-resize-handle="se"]').boundingBox();
+    const handle = await previewRoot.locator('[data-floe-floating-window-resize-handle="se"]').boundingBox();
     await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
     await page.mouse.down();
     await page.mouse.move(handle.x + handle.width / 2 + 20, handle.y + handle.height / 2 + 16);
@@ -1050,7 +1050,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     if (await companion.getAttribute('data-companion-phase') !== 'expanded') {
       throw new Error('Escape must dismiss the page preview before collapsing Flower');
     }
-    await page.getByRole('button', { name: 'File Browser', exact: true }).click();
+    await page.locator('[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'File Browser', exact: true }).click();
     if (!(await pageReference.innerText()).includes('Monitoring')) {
       throw new Error('page navigation alone must not refresh the origin');
     }
@@ -1132,18 +1132,25 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     });
     const retainedEditor = await composer.evaluate(element => ({
       same: element === globalThis.__redevenBuiltFlowerIdentity.composer,
-      hidden: element.getClientRects().length === 0,
+      laidOut: element.getClientRects().length > 0,
+      ariaHidden: !!element.closest('[aria-hidden="true"]'),
       inert: !!element.closest('[inert]'),
       selection: [element.selectionStart, element.selectionEnd],
     }));
-    if (!retainedEditor.same || !retainedEditor.hidden || !retainedEditor.inert
+    if (!retainedEditor.same || !retainedEditor.laidOut || !retainedEditor.ariaHidden || !retainedEditor.inert
       || retainedEditor.selection.join(',') !== '2,8') {
       throw new Error(`built Flower settings must retain the inactive editor: ${JSON.stringify(retainedEditor)}`);
     }
-    // Expand a native form disclosure so this checks retained state as well as identity.
-    const settingsDisclosure = settingsPanel.locator('.flower-settings-provider-details').first();
-    await settingsDisclosure.locator('summary').click();
-    await page.getByRole('button', { name: 'File Browser', exact: true }).click();
+    // Expand the provider disclosure so this checks retained state as well as identity.
+    const settingsDisclosure = settingsPanel.locator('.flower-settings-provider-disclosure').first();
+    await settingsDisclosure.click();
+    if (await settingsDisclosure.getAttribute('aria-expanded') !== 'true') {
+      throw new Error('built Flower provider disclosure must expand before retention checks');
+    }
+    await page.getByRole('dialog', { name: 'Flower Settings', exact: true })
+      .getByRole('button', { name: 'Close', exact: true }).click();
+    await settingsPanel.waitFor({ state: 'hidden' });
+    await page.locator('[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'File Browser', exact: true }).click();
     await page.waitForFunction(() => (
       globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
       && globalThis.document.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-side-panel') === 'chat'
@@ -1161,7 +1168,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await settingsPanel.waitFor({ state: 'visible' });
     const settingsRetained = await settingsPanel.evaluate(element => ({
       same: element.querySelector('.flower-settings-surface') === globalThis.__redevenBuiltFlowerSettings,
-      disclosureOpen: element.querySelector('.flower-settings-provider-details')?.open,
+      disclosureOpen: element.querySelector('.flower-settings-provider-disclosure')?.getAttribute('aria-expanded') === 'true',
     }));
     if (!settingsRetained.same || !settingsRetained.disclosureOpen) {
       throw new Error(`built Flower must retain settings form state: ${JSON.stringify(settingsRetained)}`);

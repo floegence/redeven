@@ -3494,6 +3494,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     event.target instanceof Element && Boolean(
       event.target.closest(FLOWER_RELATED_SURFACE_SELECTOR)
       || event.target.closest('[data-floe-dialog-overlay-root]')?.querySelector(FLOWER_RELATED_SURFACE_SELECTOR)
+      || event.target.closest('[data-floe-geometry-surface="floating-window"]')
+        ?.querySelector(':scope > [data-floe-floating-window-surface]')?.matches(FLOWER_RELATED_SURFACE_SELECTOR)
     )
   );
   const dismissActivityFlowerCompanion = (reason: BottomBarCompanionDismissReason) => {

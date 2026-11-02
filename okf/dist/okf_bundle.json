@@ -25957,7 +25957,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Cross-surface placement contract spanning Activity, Workbench residency, contextual launch handoff, and viewer read acknowledgement; composer presentation has its own owner.",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "activity",
           "companion",
@@ -25969,15 +25969,15 @@
         "title": "Flower Activity companion",
         "type": "UI Contract"
       },
-      "body_length": 3238,
+      "body_length": 3423,
       "summary": "Env App retains one Flower product tree across its Activity page, desktop companion and available Workbench widget. Published Floe owns the companion shell; Redeven owns placement, focus and read acknowledgement; Floret owns conversation lifecycle. Changing placement or canvas selection never creates another Flower surface or workspace stream.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Companion ownership\nPublished `BottomBarCompanion` owns geometry, viewport/safe-area clamps, motion, outside dismissal, Escape and mount handling. Its Portal uses the explicit Activity overlay host, never `document.body`. The collapsed field is centered; bounded detail grows upward without changing body geometry. Running work cannot prevent collapse or destination interaction.\n\n## Activity Terminal footer\nDesktop Activity Terminal supplies a 24-pixel anchor in its 28-pixel footer, centered in the terminal column with a shrinkable 360-pixel maximum width. Workbench/mobile terminals supply none. Terminal supplies its reactive background/foreground alongside the anchor. Only the collapsed footer entry uses that palette: a restrained tinted surface, visible border and monochrome Flower icon. Expanded Flower keeps the shell theme; palette changes never replace its editor. Placement does not create another Flower instance, alter transport or route Flower input through the terminal.\n\n## Stable Flower placement\nAfter first access readiness, one retained `EnvAIPage`/`FlowerSurface` moves among explicit hosts. Visibility drives `hidden`, `aria-hidden` and `inert` together. Available unfiltered Workbench placement survives deselection; canvas selection governs input/focus only. [Settings](flower-setup-and-settings.md#retained-panels) own retained panels/forms.\n\n## Contextual Ask Flower\nNew companion conversations may capture the desktop Activity origin using its read-only page reader. [Turn launcher](flower-turn-launcher.md) owns sending/context actions.\n\n## Presence and summary\n[Presence](flower-companion-presence.md) owns collapsed priority, live tails, completion feedback, composer precedence and workspace observation.\n\n## Dismissal, focus, and reads\nOutside capture includes shell, anchor and classified Flower-owned Portals. Trusted cross-origin plugin bridge events join host pointer/focus dismissal without consuming the destination. Shared SSE summaries are activity-only; initial/reconnect read baselines and later read envelopes are scoped to the same `UserPublicID`.",
-          "char_count": 2099
+          "body": "## Companion ownership\nPublished `BottomBarCompanion` owns geometry, viewport/safe-area clamps, motion, outside dismissal, Escape and mount handling. Its Portal uses the explicit Activity overlay host, never `document.body`. The collapsed field is centered; bounded detail grows upward without changing body geometry. Running work cannot prevent collapse or destination interaction.\n\n## Activity Terminal footer\nDesktop Activity Terminal supplies a 24-pixel anchor in its 28-pixel footer, centered in the terminal column with a shrinkable 360-pixel maximum width. Workbench/mobile terminals supply none. Terminal supplies its reactive background/foreground alongside the anchor. Only the collapsed footer entry uses that palette: a restrained tinted surface, visible border and monochrome Flower icon. Expanded Flower keeps the shell theme; palette changes never replace its editor. Placement does not create another Flower instance, alter transport or route Flower input through the terminal.\n\n## Stable Flower placement\nAfter first access readiness, one retained `EnvAIPage`/`FlowerSurface` moves among explicit hosts. Visibility drives `hidden`, `aria-hidden` and `inert` together. Available unfiltered Workbench placement survives deselection; canvas selection governs input/focus only. [Settings](flower-setup-and-settings.md#retained-panels) own retained panels/forms.\n\n## Contextual Ask Flower\nNew companion conversations may capture the desktop Activity origin using its read-only page reader. [Turn launcher](flower-turn-launcher.md) owns sending/context actions.\n\n## Presence and summary\n[Presence](flower-companion-presence.md) owns collapsed priority, live tails, completion feedback, composer precedence and workspace observation.\n\n## Dismissal, focus, and reads\nOutside capture includes shell, anchor and classified Flower-owned Portals. Trusted cross-origin plugin bridge events join host pointer/focus dismissal without consuming the destination. Shared SSE summaries are activity-only; initial/reconnect read baselines and later read envelopes are scoped to the same `UserPublicID`.\n\nA floating window's geometry controls inherit ownership only from its direct published surface. Flower preview resize handles retain the companion; unrelated windows still dismiss it.",
+          "char_count": 2284
         },
         {
           "id": "boundaries",
@@ -31616,5 +31616,5 @@
       ]
     }
   ],
-  "source_sha256": "59d55e0409467aaada1273127a2dc4d57f1243851fd3604082d2d46aaaa88a32"
+  "source_sha256": "6a0f7633cb4c8eef66d2f62151ce82c1b3fc31515676f3edd30060105cdff4d5"
 }

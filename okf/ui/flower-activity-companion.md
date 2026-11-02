@@ -4,7 +4,7 @@ title: Flower Activity companion
 tags: [ui, flower, activity, companion, read-state, floret]
 quality_exception: Cross-surface placement contract spanning Activity, Workbench residency, contextual launch handoff, and viewer read acknowledgement; composer presentation has its own owner.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -29,6 +29,8 @@ New companion conversations may capture the desktop Activity origin using its re
 
 ## Dismissal, focus, and reads
 Outside capture includes shell, anchor and classified Flower-owned Portals. Trusted cross-origin plugin bridge events join host pointer/focus dismissal without consuming the destination. Shared SSE summaries are activity-only; initial/reconnect read baselines and later read envelopes are scoped to the same `UserPublicID`.
+
+A floating window's geometry controls inherit ownership only from its direct published surface. Flower preview resize handles retain the companion; unrelated windows still dismiss it.
 
 # Boundaries
 

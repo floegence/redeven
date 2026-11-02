@@ -8,7 +8,7 @@ import type { FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, ComponentRegistryProvider, useComponentRegistry, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
-import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { Dialog, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
 import { FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow } from '../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import type { DocumentAssetRecoveryReason } from '@floegence/floe-webapp-core/app';
@@ -1884,6 +1884,40 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(product?.hasAttribute('inert')).toBe(false);
     expect(document.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
     expect(envAIPageMountSequence).toBe(1);
+  });
+
+  it('keeps related window resize handles inside Flower while dismissing for unrelated windows', async () => {
+    testRealFlowerLauncher = true;
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    disposers.push(render(() => <>
+      <FloatingWindow open onOpenChange={() => undefined} title="Context preview"
+        class="flower-turn-launcher-related-surface owned-window-resize-test"
+        defaultPosition={{ x: 20, y: 20 }} defaultSize={{ width: 320, height: 240 }}>
+        <button type="button">Preview content</button>
+      </FloatingWindow>
+      <FloatingWindow open onOpenChange={() => undefined} title="Unrelated preview"
+        class="unrelated-window-resize-test"
+        defaultPosition={{ x: 420, y: 20 }} defaultSize={{ width: 320, height: 240 }}>
+        <button type="button">Unrelated content</button>
+      </FloatingWindow>
+    </>, fixture.host));
+    await flushAsync();
+    await userEvent.click(fixture.input);
+    await flushAsync();
+
+    const owned = document.querySelector('.owned-window-resize-test')!;
+    const unrelated = document.querySelector('.unrelated-window-resize-test')!;
+    const resizeHandle = (surface: Element) => surface.closest('[data-floe-geometry-surface="floating-window"]')!
+      .querySelector<HTMLElement>('[data-floe-floating-window-resize-handle="se"]')!;
+    expect(owned.contains(resizeHandle(owned))).toBe(false);
+    await userEvent.click(resizeHandle(owned));
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('expanded');
+
+    await userEvent.click(resizeHandle(unrelated));
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('collapsed');
   });
 
   it('moves focus out before hiding on outside pointer while preserving related layers and in-panel gestures', async () => {
