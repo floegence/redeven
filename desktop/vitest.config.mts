@@ -14,6 +14,7 @@ export default defineConfig({
   resolve: {
     conditions: ['node'],
     alias: [
+      { find: /^@floegence[/]floe-webapp-core[/](window-status|progress-shimmer)[.]css[?]raw$/, replacement: `${coreDist}$1.css?raw` },
       { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|html-preview|icons|layout|loading|markdown|ui)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },
       { find: /^lucide-solid$/, replacement: fileURLToPath(new URL('./node_modules/lucide-solid/dist/source/lucide-solid.jsx', import.meta.url)) },
@@ -35,6 +36,7 @@ export default defineConfig({
     }),
   ],
   test: {
+    server: { deps: { inline: [/@floegence[/]floe-webapp-core/] } },
     environment: 'node',
     exclude: ['**/node_modules/**', '**/*.client.test.{ts,tsx}', '../internal/flower_ui/src/**/*.client.test.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'tests/**/*.test.ts', '../internal/flower_ui/src/**/*.test.ts'],

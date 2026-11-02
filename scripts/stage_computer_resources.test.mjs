@@ -21,6 +21,9 @@ test('immutable helpers exclude Chromium and use an explicitly installed browser
     assert.ok(manifest.files.some(file => file.path === 'node_modules/playwright/package.json'));
     assert.ok(manifest.files.some(file => file.path === 'node_modules/@floegence/floebrowser/dist/THIRD_PARTY_LICENSES.txt'));
     assert.ok(!manifest.files.some(file => file.path.startsWith('chromium/') || file.path === 'browser.json'));
+    assert.ok(!manifest.files.some(file => file.path.endsWith('.map')));
+    const mediaFiles = manifest.files.filter(file => file.path.includes('/dist/bin/') && file.path.includes('floebrowser-media'));
+    assert.deepEqual(mediaFiles.map(file => file.path), [`node_modules/@floegence/floebrowser/dist/bin/${process.platform}-${process.arch}/floebrowser-media`]);
     const requireUI = createRequire(path.resolve('internal/envapp/ui_src/package.json'));
     const browser = requireUI('playwright').chromium.executablePath();
     child = spawn(path.join(resources, 'node'), [path.join(resources, 'redevenComputerHost.mjs'), '--profile', path.join(root, 'profile'), '--browser-executable', browser], {

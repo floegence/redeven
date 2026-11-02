@@ -1,3 +1,4 @@
+import { buildDesktopMain } from './build-main.mjs';
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
@@ -19,10 +20,11 @@ await session.run(async () => {
   await session.directory(compiled);
 
   execFileSync(path.join(repository, 'scripts/check_desktop_electron_test_runtime.sh'), [process.cwd()], { stdio: 'inherit' });
-  // Exercise the actual CommonJS compiler output, with its normal package resolution.
+  // Exercise the production main-process bundling path outside the source tree.
   execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json', '--outDir', compiled, '--noEmitOnError'], {
     stdio: 'inherit',
   });
+  await buildDesktopMain({ entryPoint: 'src/main/desktopResourceCache.ts', outfile: path.join(compiled, 'main/desktopResourceCache.js'), report: false });
   for (const [entry, name] of [
     ['scripts/fixtures/resource-cache-electron.ts', 'fixture.cjs'],
     ['src/preload/desktopResourceCache.ts', 'bridge.cjs'],

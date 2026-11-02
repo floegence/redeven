@@ -166,6 +166,7 @@ check_focused_changed_tests() {
   if printf '%s\n' "$changed" | grep -q '^desktop/'; then
     (
       cd "$ROOT_DIR/desktop"
+      node --test scripts/build-main.test.mjs scripts/package-size.test.mjs
       corepack pnpm exec vitest run \
         src/build/desktopPreloadRuntime.test.ts \
         src/main/mainRouting.test.ts \
@@ -219,6 +220,7 @@ run_step "testing development launch lifecycle" ./scripts/dev_desktop_signal_cle
 run_step "testing development build proxy settings" node --test scripts/dev_desktop_build_proxy.test.mjs
 run_step "testing Desktop bundle source identity" node --test scripts/desktop_bundle_build_contract.test.mjs scripts/verify_desktop_runtime_source.test.mjs scripts/desktop_signed_manifest.test.mjs scripts/security_scan_boundaries.test.mjs scripts/security_dependency_contract.test.mjs
 run_step "testing portable macOS package verification" node --test scripts/verify_macos_desktop_update_package.test.mjs
+run_step "testing offline package contents" node --test scripts/desktop_package_policy.test.mjs scripts/stage_computer_package.test.mjs
 run_step "testing official Node archive acquisition" node --test scripts/resolve_node_archive.test.mjs
 run_step "checking release artifact collector syntax" node --check scripts/collect_release_artifacts.mjs
 run_step "testing release artifact collector" node --test scripts/collect_release_artifacts.test.mjs scripts/package_center_release.test.mjs

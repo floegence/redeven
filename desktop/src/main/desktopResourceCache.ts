@@ -5,10 +5,7 @@ import { normalizeResourceCacheRequest } from '../shared/resourceCacheIPC';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
-// Preserve the published ESM entrypoint in the CommonJS Desktop build.
-const loadResourceCache = new Function(
-  'return import("@floegence/floe-webapp-core/resource-cache")',
-) as () => Promise<typeof import('@floegence/floe-webapp-core/resource-cache')>;
+import { enforceResourceCacheBudget } from '@floegence/floe-webapp-core/resource-cache';
 
 /** Asynchronous storage for disposable renderer snapshots, separate from preferences. */
 export class DesktopResourceCache {
@@ -42,7 +39,6 @@ export class DesktopResourceCache {
         await writeFile(temporary, JSON.stringify({ key, value }), { mode: 0o600 });
         await rename(temporary, file);
       } finally { await rm(temporary, { force: true }); }
-      const { enforceResourceCacheBudget } = await loadResourceCache();
       await enforceResourceCacheBudget({
         list: () => this.allEntries(),
         remove: key => rm(path.join(this.directory, key), { force: true }),

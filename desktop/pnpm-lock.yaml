@@ -44,9 +44,6 @@ importers:
       '@floegence/floe-webapp-boot':
         specifier: 0.86.74
         version: 0.86.74
-      '@floegence/floe-webapp-core':
-        specifier: 0.86.74
-        version: 0.86.74(solid-js@1.9.17)
       '@floegence/flowersec-core':
         specifier: 5.11.1
         version: 5.11.1
@@ -59,15 +56,6 @@ importers:
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
-      lucide-solid:
-        specifier: 1.17.0
-        version: 1.17.0(solid-js@1.9.17)
-      qrcode-generator:
-        specifier: ^2.0.4
-        version: 2.0.4
-      thinking-orbs:
-        specifier: 0.3.1
-        version: 0.3.1(react@19.2.8)
       ws:
         specifier: 8.21.3
         version: 8.21.3
@@ -75,6 +63,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.4
         version: 9.39.5
+      '@floegence/floe-webapp-core':
+        specifier: 0.86.74
+        version: 0.86.74(solid-js@1.9.17)
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
@@ -123,12 +114,18 @@ importers:
       jsdom:
         specifier: ^29.0.1
         version: 29.1.1(@noble/hashes@2.4.0)
+      lucide-solid:
+        specifier: 1.17.0
+        version: 1.17.0(solid-js@1.9.17)
       marked:
         specifier: ^17.0.6
         version: 17.0.6
       node-gyp:
         specifier: ^13.0.1
         version: 13.0.1
+      qrcode-generator:
+        specifier: ^2.0.4
+        version: 2.0.4
       solid-js:
         specifier: ^1.9.17
         version: 1.9.17
@@ -138,6 +135,9 @@ importers:
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
+      thinking-orbs:
+        specifier: 0.3.1
+        version: 0.3.1(react@19.2.8)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

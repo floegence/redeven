@@ -24,6 +24,15 @@ Official Node checksum/archive transfers each get three attempts, 1/2-second bac
 
 Development may reuse Cargo registry/target caches but freshly stage exact locked public crates and regenerate verified digest/execution/consumption evidence. Complete caches work offline; incomplete caches acquire explicitly. Corruption/compiler errors cannot switch paths. Release directories remain isolated. Source changes rebuild the whole product, without component/watch mode.
 
+## Offline release contents
+Desktop bundles its host Runtime, plugin runtime, standalone Computer Node, published SDKs and local UI assets. Packaging changes must not turn these into first-launch downloads. Chromium remains an optional separately confirmed installation under [the browser contract](../ai/computer-use-browser-installation.md); browser binaries are not included in offline delivery.
+
+Main-process builds bundle published pure JavaScript utilities and inline their CSS; native SDKs and updater packages retain their package boundaries. Frontend-only dependency trees are build dependencies. Electron Builder admits only the main entry, four preload entries and the complete renderer output, excluding tests, source maps and demos while retaining licenses, workers, fonts and Wasm. The final ASAR audit rejects unexpected entries and an application payload above 80 MiB (including unpacked modules); Runtime and Electron have separately reported sizes.
+
+Computer staging preserves the published package layout and licenses, omits source maps, verifies the selected media helper against the unchanged upstream manifest and copies only the target platform/architecture binary. Keep an exact manifest.upstream.json copy in the closed inventory. On macOS, verify the published helper before signing, then verify the new code signature and compare unsigned Mach-O bytes (normalizing only the signature-dependent __LINKEDIT virtual allocation). Derive only the selected runtime manifest record from signed bytes before updating inventories and sealing the app. Preserve upstream evidence, SDK implementation and runtime digest checks; reject unsigned changes, manifest tampering or changed executable content. Linux retains the published runtime manifest unchanged.
+
+Qualification exercises relocated main utilities with network connections blocked, Electron cache persistence, final archive contents, and relocated Computer helpers without source paths or global Node packages. Packaging reports component bytes and largest files. Compare identical source/dependencies and distinguish installed payload from compressed downloads.
+
 ## Scheduling and lifecycle
 Desktop compile overlaps Runtime preparation. Runtime assets/Go, plugins and Computer resources own separate outputs. Env App typecheck overlaps bundling under checkout lock. Development builds skip notice freshness; staged/main gates own admission. Sequential release builds check notices after asset tasks. Go waits for embeds; publication waits for complete outputs and unchanged inputs. Three dependency workers overlap probes with serial-equivalent digests/order. Supervisors preserve errors and stop owned descendants on cancellation/failure.
 
@@ -53,3 +62,9 @@ in-progress directories.
 - `redeven:scripts/build_assets.test.mjs` - Development/release notice boundaries and build failures.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.
 - `redeven:desktop/src/main/developmentSecretStorage.test.ts` - Restart, migration, failures, tags and permissions.
+
+- `redeven:desktop/scripts/build-main.test.mjs` - Relocated offline themes, CSS and cache.
+- `redeven:desktop/scripts/package-size.mjs` - Final ASAR inventory, size budget and component report.
+- `redeven:scripts/stage_computer_package.test.mjs` - Target media selection and upstream digest rejection.
+
+- `redeven:scripts/desktop_signed_manifest.test.mjs` - Signed media derivation, upstream evidence and rejection of modified code.

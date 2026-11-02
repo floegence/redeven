@@ -1,3 +1,4 @@
+import { writeDesktopSizeReport } from './scripts/package-size.mjs';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -178,6 +179,18 @@ export default {
         { stdio: 'inherit' },
       );
     }
+    writeDesktopSizeReport(resourcesDir, path.join(context.outDir, `size-${goos}-${goarch}.json`), {
+      platform: goos, architecture: goarch, version: context.packager.appInfo.version, phase: 'after-pack',
+    }, goos === 'darwin' ? path.dirname(path.dirname(resourcesDir)) : context.appOutDir);
+  },
+  afterSign: async (context) => {
+    const goos = resolveTargetGoos();
+    const resourcesDir = goos === 'darwin'
+      ? path.join(context.appOutDir, 'Redeven Desktop.app', 'Contents', 'Resources')
+      : path.join(context.appOutDir, 'resources');
+    writeDesktopSizeReport(resourcesDir, path.join(context.outDir, 'size-' + goos + '-' + resolveTargetGoarch() + '.json'), {
+      platform: goos, architecture: resolveTargetGoarch(), version: context.packager.appInfo.version, phase: 'after-sign',
+    }, goos === 'darwin' ? path.dirname(path.dirname(resourcesDir)) : context.appOutDir);
   },
   asar: true,
   npmRebuild: false,
@@ -186,7 +199,17 @@ export default {
     buildResources: buildResourcesDir,
   },
   files: [
-    'dist/**/*',
+    'dist/main/main.js',
+    'dist/preload/utility.js',
+    'dist/preload/session.js',
+    'dist/preload/web-service-browser.js',
+    'dist/preload/host-application-window.js',
+    'dist/welcome/**/*',
+    '!**/*.map',
+    '!**/*.test.*',
+    '!**/*.spec.*',
+    '!**/{testSupport,__tests__,demo,demos}{,/**/*}',
+    '!node_modules/@floegence/flowersec-core/dist/interop{,/**/*}',
     'package.json',
   ],
   extraResources: [

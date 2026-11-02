@@ -1,9 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { builtInShellThemePresets } from '../shared/floeThemeMetadata';
 import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
 
-const windowStatusCSS = readFileSync(require.resolve('@floegence/floe-webapp-core/window-status.css'), 'utf8');
-const progressCSS = readFileSync(require.resolve('@floegence/floe-webapp-core/progress-shimmer.css'), 'utf8');
+import windowStatusCSS from '@floegence/floe-webapp-core/window-status.css?raw';
+import progressCSS from '@floegence/floe-webapp-core/progress-shimmer.css?raw';
 
 /** Product-owned documents consume the published theme and layout without a renderer or network. */
 export function windowStatusDocumentStyleText(theme: DesktopThemeSnapshot): string {

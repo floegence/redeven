@@ -7318,7 +7318,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-11-01",
         "tags": [
           "ai",
           "browser",
@@ -7329,15 +7329,15 @@
         "title": "Optional built-in browser installation",
         "type": "Runtime and Product Contract"
       },
-      "body_length": 1502,
+      "body_length": 2085,
       "summary": "Runtime owns one optional Chromium install. Enabled by default, it downloads only after authenticated user confirmation, never discovery/settings/tools. Disable persists, cancels install, closes managed processes and blocks use/prompts while retaining bytes/site data. Floret owns waiting/continuation. Failed verification publishes no partial package; offer explicit retry/source choice.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## User contract\nThe shared Browser and desktop dialog opens Browser settings for this environment.\n\nUsers never choose a file   or follow an archive download link.\n\nNo agent installation tool, automatic re-enable, shell fallback or target substitution is introduced.\n\n## Distribution and state\nStandard Runtime release suites carry `computer.zip`: official Node, published Playwright, QuickJS, the published FloeBrowser SDK and its native media collector, and product helpers, with a closed SHA-256 file inventory.\n\nThe Runtime never accepts a client-supplied URL, executable path or checksum.\n\nNo installation automatically restarts following a Runtime restart.",
-          "char_count": 663
+          "body": "## User contract\nThe shared Browser and desktop dialog opens Browser settings for this environment.\n\nUsers never choose a file   or follow an archive download link.\n\nNo agent installation tool, automatic re-enable, shell fallback or target substitution is introduced.\n\n## Distribution and state\nStandard Runtime release suites carry `computer.zip`: official Node, published Playwright, QuickJS, the published FloeBrowser SDK and its native media collector, and product helpers, with a closed SHA-256 file inventory.\n\nOffline delivery retains this helper suite and does not include Chromium. Missing browser binaries remain an explicitly confirmed online installation; packaging optimization cannot initiate downloads or change browser selection. The media collector is selected for the suite target before the closed inventory is generated, preserving the upstream manifest as evidence and enforcing runtime digest checks. macOS signing derives the selected runtime digest only after verifying unchanged executable content; see [Desktop bundle contracts](../desktop/desktop-development-bundles.md).\n\nThe Runtime never accepts a client-supplied URL, executable path or checksum.\n\nNo installation automatically restarts following a Runtime restart.",
+          "char_count": 1246
         },
         {
           "id": "boundaries",
@@ -7360,7 +7360,21 @@
         }
       ],
       "snippet": "Runtime owns one optional Chromium install. Enabled by default, it downloads only after authenticated user confirmation, never discovery/settings/tools. Disable persists, cancels install, closes managed processes and blocks use/prompts whil",
+      "links": [
+        {
+          "label": "Desktop bundle contracts",
+          "path": "desktop/desktop-development-bundles.md",
+          "concept_id": "desktop.desktop-development-bundles",
+          "title": "Desktop development sessions and bundles"
+        }
+      ],
       "backlinks": [
+        {
+          "label": "Desktop development sessions and bundles",
+          "path": "desktop/desktop-development-bundles.md",
+          "concept_id": "desktop.desktop-development-bundles",
+          "title": "Desktop development sessions and bundles"
+        },
         {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
@@ -18215,15 +18229,15 @@
         "title": "Desktop development sessions and bundles",
         "type": "Development Contract"
       },
-      "body_length": 5409,
+      "body_length": 7983,
       "summary": "- Authority: launcher owns Desktop, local Runtime, saved Gateways and bundles.\n- Outcome: run current source, stop together, prune old bundles.\n- Invariants: preserve data, identities, unrelated services and recent/selected/live bundles.\n- Failure: preparation cleans up; incomplete inventory prevents pruning.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Source and build identity\nscripts/dev_desktop.sh captures HEAD and tracked/nonignored source; mutation fails. Generated OKF/ignored assets are outputs; authored OKF/builders/Go embeds are inputs. Reuse requires identical source, dependencies, tools, target/settings and verified Desktop/immutable Runtime bytes. Missing/corrupt/incomplete output rebuilds; failure never launches old bundles. Only pinned Rust installation may change tools. --rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests select pnpm/npm and their locks, not compatibility-lock installers.\n\n## Network and caches\nmacOS preparation reads enabled static HTTP/HTTPS system proxies once. Any explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (including lowercase/empty) or REDEVEN_DEV_SYSTEM_PROXY=0 disables discovery. Preserve explicit NO_PROXY, otherwise add loopback/compatible exclusions. PAC/SOCKS-only needs explicit policy. Never log credentials or weaken TLS/artifact checks. Remove only inferred variables before launching services.\n\nOfficial Node checksum/archive transfers each get three attempts, 1/2-second backoff for transport or HTTP 408/429/500/502/503/504; permanent HTTP/certificate errors stop. Separate CONNECT/origin status from bytes. Retry the same official URL/policy; resume only this build's partial archive, verify complete checksum, delete failed partials. Cached archives still need fresh official checksums.\n\nDevelopment may reuse Cargo registry/target caches but freshly stage exact locked public crates and regenerate verified digest/execution/consumption evidence. Complete caches work offline; incomplete caches acquire explicitly. Corruption/compiler errors cannot switch paths. Release directories remain isolated. Source changes rebuild the whole product, without component/watch mode.\n\n## Scheduling and lifecycle\nDesktop compile overlaps Runtime preparation. Runtime assets/Go, plugins and Computer resources own separate outputs. Env App typecheck overlaps bundling under checkout lock. Development builds skip notice freshness; staged/main gates own admission. Sequential release builds check notices after asset tasks. Go waits for embeds; publication waits for complete outputs and unchanged inputs. Three dependency workers overlap probes with serial-equivalent digests/order. Supervisors preserve errors and stop owned descendants on cancellation/failure.\n\nSaved local Gateways reuse intact compatible installs; source changes do not force upgrade. Service owner repairs missing/damaged packages; explicit Update selects current build. Archive cache keys include dirty source; changed inputs discard old cache generation, absent keys create a session cache. Package owner validates archives.\n\nDev gzip1/Brotli 4 retains identical decoded bytes; normal/release compression stays maximum. Profile is part of identity. Gateway source copies exclude other worktrees/native caches. Log dependency/verification/Desktop/Runtime/Gateway durations. Qualify rebuilt and reused launches with a saved local Gateway, exact Runtime commit and cleanup; empty-profile warm measurements alone are insufficient.\n\nExit/preparation failure/signals stop only owned services. Electron resolution outputs only its path, logs to stderr, propagates errors and rechecks executable after dependency builds.\n\n## Credentials and retention\nUnpackaged development uses AES-256-GCM with a random retained 0600 profile key: plaintext protection, not protection from the same user. Other launches use Electron system storage without constructor probes. Legacy Keychain offers explicit recovery; never read preferences/system secrets implicitly. Each file migrates atomically only after user action. Failure retains credentials/retry/quit; corrupt keys never reset accounts/Runtime/Keychain.\n\nPublish complete bundles under \u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e. Retain newest three, selected/reused and all live bundles. This bounds inactive verified count, not total bytes; active/unverified entries may grow.",
-          "char_count": 4056
+          "body": "## Source and build identity\nscripts/dev_desktop.sh captures HEAD and tracked/nonignored source; mutation fails. Generated OKF/ignored assets are outputs; authored OKF/builders/Go embeds are inputs. Reuse requires identical source, dependencies, tools, target/settings and verified Desktop/immutable Runtime bytes. Missing/corrupt/incomplete output rebuilds; failure never launches old bundles. Only pinned Rust installation may change tools. --rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests select pnpm/npm and their locks, not compatibility-lock installers.\n\n## Network and caches\nmacOS preparation reads enabled static HTTP/HTTPS system proxies once. Any explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (including lowercase/empty) or REDEVEN_DEV_SYSTEM_PROXY=0 disables discovery. Preserve explicit NO_PROXY, otherwise add loopback/compatible exclusions. PAC/SOCKS-only needs explicit policy. Never log credentials or weaken TLS/artifact checks. Remove only inferred variables before launching services.\n\nOfficial Node checksum/archive transfers each get three attempts, 1/2-second backoff for transport or HTTP 408/429/500/502/503/504; permanent HTTP/certificate errors stop. Separate CONNECT/origin status from bytes. Retry the same official URL/policy; resume only this build's partial archive, verify complete checksum, delete failed partials. Cached archives still need fresh official checksums.\n\nDevelopment may reuse Cargo registry/target caches but freshly stage exact locked public crates and regenerate verified digest/execution/consumption evidence. Complete caches work offline; incomplete caches acquire explicitly. Corruption/compiler errors cannot switch paths. Release directories remain isolated. Source changes rebuild the whole product, without component/watch mode.\n\n## Offline release contents\nDesktop bundles its host Runtime, plugin runtime, standalone Computer Node, published SDKs and local UI assets. Packaging changes must not turn these into first-launch downloads. Chromium remains an optional separately confirmed installation under [the browser contract](../ai/computer-use-browser-installation.md); browser binaries are not included in offline delivery.\n\nMain-process builds bundle published pure JavaScript utilities and inline their CSS; native SDKs and updater packages retain their package boundaries. Frontend-only dependency trees are build dependencies. Electron Builder admits only the main entry, four preload entries and the complete renderer output, excluding tests, source maps and demos while retaining licenses, workers, fonts and Wasm. The final ASAR audit rejects unexpected entries and an application payload above 80 MiB (including unpacked modules); Runtime and Electron have separately reported sizes.\n\nComputer staging preserves the published package layout and licenses, omits source maps, verifies the selected media helper against the unchanged upstream manifest and copies only the target platform/architecture binary. Keep an exact manifest.upstream.json copy in the closed inventory. On macOS, verify the published helper before signing, then verify the new code signature and compare unsigned Mach-O bytes (normalizing only the signature-dependent __LINKEDIT virtual allocation). Derive only the selected runtime manifest record from signed bytes before updating inventories and sealing the app. Preserve upstream evidence, SDK implementation and runtime digest checks; reject unsigned changes, manifest tampering or changed executable content. Linux retains the published runtime manifest unchanged.\n\nQualification exercises relocated main utilities with network connections blocked, Electron cache persistence, final archive contents, and relocated Computer helpers without source paths or global Node packages. Packaging reports component bytes and largest files. Compare identical source/dependencies and distinguish installed payload from compressed downloads.\n\n## Scheduling and lifecycle\nDesktop compile overlaps Runtime preparation. Runtime assets/Go, plugins and Computer resources own separate outputs. Env App typecheck overlaps bundling under checkout lock. Development builds skip notice freshness; staged/main gates own admission. Sequential release builds check notices after asset tasks. Go waits for embeds; publication waits for complete outputs and unchanged inputs. Three dependency workers overlap probes with serial-equivalent digests/order. Supervisors preserve errors and stop owned descendants on cancellation/failure.\n\nSaved local Gateways reuse intact compatible installs; source changes do not force upgrade. Service owner repairs missing/damaged packages; explicit Update selects current build. Archive cache keys include dirty source; changed inputs discard old cache generation, absent keys create a session cache. Package owner validates archives.\n\nDev gzip1/Brotli 4 retains identical decoded bytes; normal/release compression stays maximum. Profile is part of identity. Gateway source copies exclude other worktrees/native caches. Log dependency/verification/Desktop/Runtime/Gateway durations. Qualify rebuilt and reused launches with a saved local Gateway, exact Runtime commit and cleanup; empty-profile warm measurements alone are insufficient.\n\nExit/preparation failure/signals stop only owned services. Electron resolution outputs only its path, logs to stderr, propagates errors and rechecks executable after dependency builds.\n\n## Credentials and retention\nUnpackaged development uses AES-256-GCM with a random retained 0600 profile key: plaintext protection, not protection from the same user. Other launches use Electron system storage without constructor probes. Legacy Keychain offers explicit recovery; never read preferences/system secrets implicitly. Each file migrates atomically only after user action. Failure retains credentials/retry/quit; corrupt keys never reset accounts/Runtime/Keychain.\n\nPublish complete bundles under \u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e. Retain newest three, selected/reused and all live bundles. This bounds inactive verified count, not total bytes; active/unverified entries may grow.",
+          "char_count": 6196
         },
         {
           "id": "boundaries",
@@ -18268,10 +18282,44 @@
           "id": "redeven:desktop/src/main/developmentSecretStorage.test.ts:0:restart, migration, failures, tags and permissions.",
           "source": "redeven:desktop/src/main/developmentSecretStorage.test.ts",
           "description": "Restart, migration, failures, tags and permissions."
+        },
+        {
+          "id": "redeven:desktop/scripts/build-main.test.mjs:0:relocated offline themes, css and cache.",
+          "source": "redeven:desktop/scripts/build-main.test.mjs",
+          "description": "Relocated offline themes, CSS and cache."
+        },
+        {
+          "id": "redeven:desktop/scripts/package-size.mjs:0:final asar inventory, size budget and component report.",
+          "source": "redeven:desktop/scripts/package-size.mjs",
+          "description": "Final ASAR inventory, size budget and component report."
+        },
+        {
+          "id": "redeven:scripts/stage_computer_package.test.mjs:0:target media selection and upstream digest rejection.",
+          "source": "redeven:scripts/stage_computer_package.test.mjs",
+          "description": "Target media selection and upstream digest rejection."
+        },
+        {
+          "id": "redeven:scripts/desktop_signed_manifest.test.mjs:0:signed media derivation, upstream evidence and rejection of modified code.",
+          "source": "redeven:scripts/desktop_signed_manifest.test.mjs",
+          "description": "Signed media derivation, upstream evidence and rejection of modified code."
         }
       ],
       "snippet": "- Authority: launcher owns Desktop, local Runtime, saved Gateways and bundles. - Outcome: run current source, stop together, prune old bundles. - Invariants: preserve data, identities, unrelated services and recent/selected/live bundles.",
+      "links": [
+        {
+          "label": "the browser contract",
+          "path": "ai/computer-use-browser-installation.md",
+          "concept_id": "ai.computer-use-browser-installation",
+          "title": "Optional built-in browser installation"
+        }
+      ],
       "backlinks": [
+        {
+          "label": "Optional built-in browser installation",
+          "path": "ai/computer-use-browser-installation.md",
+          "concept_id": "ai.computer-use-browser-installation",
+          "title": "Optional built-in browser installation"
+        },
         {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
@@ -31552,5 +31600,5 @@
       ]
     }
   ],
-  "source_sha256": "69467875972e27db4f3280f86f88f898cda540850a59f909101e2cec1b11e46f"
+  "source_sha256": "cf7a62d273fac3d031cf778d4164fa643fd38533b07f2437286d87d3850f6ea7"
 }

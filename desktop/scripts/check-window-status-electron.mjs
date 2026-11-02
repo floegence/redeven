@@ -1,5 +1,5 @@
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
-import { build } from 'esbuild';
+import { buildDesktopMain } from './build-main.mjs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -20,14 +20,7 @@ await session.run(async () => {
   await rm(path.join(output, 'report.json'), { force: true });
 
   const runner = path.join(output, 'runner.cjs');
-  await build({
-    entryPoints: ['scripts/fixtures/window-status-electron.ts'],
-    outfile: runner,
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    external: ['electron', '@floegence/floe-webapp-core/*'],
-  });
+  await buildDesktopMain({ entryPoint: 'scripts/fixtures/window-status-electron.ts', outfile: runner, report: false });
   await session.evidence(path.join(output, 'report.json'));
   const child = await session.spawn(electron, [runner, `--user-data-dir=${directory}/profile`, `--redeven-smoke-run=${marker}`], {
     stdio: 'inherit',

@@ -1,5 +1,5 @@
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
-import { build } from 'esbuild';
+import { buildDesktopMain } from './build-main.mjs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
@@ -42,17 +42,13 @@ await session.run(async () => {
     await session.port(bridgeReady.editor_port);
   }
 
-  await build({
-    entryPoints: [
+  await buildDesktopMain({
+    entryPoint:
       bridgeReady || process.env.REDEVEN_NATIVE_EDITOR_FIXTURE
         ? 'scripts/fixtures/codespace-native-editor.ts'
         : 'scripts/fixtures/codespace-native-electron.ts',
-    ],
     outfile: path.join(directory, 'smoke.cjs'),
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    external: ['electron', '@floegence/floe-webapp-core/*'],
+    report: false,
     banner: {
       js: `var require = require('node:module').createRequire(${JSON.stringify(path.resolve('package.json'))});`,
     },

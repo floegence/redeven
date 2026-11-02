@@ -1,5 +1,5 @@
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
+import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,7 +9,7 @@ let DesktopResourceCache: typeof import('./desktopResourceCache').DesktopResourc
 let compiled: string;
 beforeAll(async () => {
   compiled = await mkdtemp(path.join(process.cwd(), '.resource-cache-unit-'));
-  execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json', '--outDir', compiled, '--noEmitOnError']);
+  await build({ entryPoints: ['src/main/desktopResourceCache.ts'], outfile: path.join(compiled, 'main/desktopResourceCache.js'), bundle: true, platform: 'node', format: 'cjs' });
   DesktopResourceCache = createRequire(path.join(process.cwd(), 'package.json'))(path.join(compiled, 'main/desktopResourceCache.js')).DesktopResourceCache;
 }, 30_000);
 afterAll(async () => { if (compiled) await rm(compiled, { recursive: true, force: true }); });

@@ -62,6 +62,7 @@ main() {
     ui_pkg_ensure_dependencies "$dir"
     npm run lint
     npm run typecheck
+    node --test scripts/build-main.test.mjs scripts/package-size.test.mjs
     npm run test:runtime-compatibility
     # IMPORTANT: ordinary commit, exact-main push and CI stay source-only.
     # Real Desktop/browser qualification requires explicit --full or its manual workflow.

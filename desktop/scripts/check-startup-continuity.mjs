@@ -1,3 +1,4 @@
+import { buildDesktopMain } from './build-main.mjs';
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
@@ -25,6 +26,7 @@ await session.run(async () => {
   execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json', '--outDir', compiled, '--noEmitOnError'], {
     stdio: 'inherit',
   });
+  await buildDesktopMain({ entryPoint: 'src/main/desktopResourceCache.ts', outfile: path.join(compiled, 'main/desktopResourceCache.js'), report: false });
   for (const entry of ['startup-continuity-electron', 'startup-continuity-preload'])
     await build({
       entryPoints: [`scripts/fixtures/${entry}.ts`],

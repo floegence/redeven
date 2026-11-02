@@ -1,3 +1,4 @@
+import { copyComputerPackage } from './stage_computer_package.mjs';
 import { stageBrowserExtension } from './stage_browser_extension.mjs';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -71,7 +72,9 @@ export function stageComputerResources(destination, platform = process.platform,
       return;
     }
     copiedPackages.set(name, metadata.version);
-    copy(path.dirname(packageFile), `node_modules/${name}`);
+    copyComputerPackage(path.dirname(packageFile), path.join(destination, 'node_modules', name), {
+      ...(name === '@floegence/floebrowser' ? { mediaTarget: { platform, arch } } : {}),
+    });
     for (const dependency of Object.keys(metadata.dependencies || {})) copyRuntimePackage(dependency, createRequire(realpathSync(packageFile)));
   }
   copyRuntimePackage('quickjs-emscripten', requireUI);
@@ -80,7 +83,7 @@ export function stageComputerResources(destination, platform = process.platform,
     const packageFile = name === 'playwright'
       ? requireUI.resolve(`${name}/package.json`)
       : createRequire(requireUI.resolve('playwright/package.json')).resolve(`${name}/package.json`);
-    copy(path.dirname(packageFile), `node_modules/${name}`);
+    copyComputerPackage(path.dirname(packageFile), path.join(destination, 'node_modules', name));
   }
   if (platform === 'darwin') {
     const nativePackage = path.join(repo, 'desktop/native/computer-host');

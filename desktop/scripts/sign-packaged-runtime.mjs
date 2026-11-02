@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { captureMediaSigningState, deriveSignedMediaManifest, mediaManifestPath } from './signed-media.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -19,13 +20,19 @@ export async function validatePackagedRuntime(root) {
 // Signing changes Mach-O bytes. Update only files visited by the signer, while
 // preserving the independently attested ReDevPlugin executable and evidence.
 // This runs immediately before the enclosing app's resource seal is signed.
-export function refreshSignedRuntimeManifests(root, signedPaths) {
+export function refreshSignedRuntimeManifests(root, signedPaths, mediaState) {
   const manifestPath = path.join(root, 'desktop-bundle-manifest.json');
   const computerPath = path.join(root, 'computer', 'manifest.json');
   const manifest = readJSON(manifestPath);
   const computer = readJSON(computerPath);
+  if (mediaState && path.resolve(mediaState.computer) !== path.join(path.resolve(root), 'computer')) throw new Error('Media signing target does not match the bundle');
+  const signedMedia = mediaState ? deriveSignedMediaManifest(mediaState, signedPaths) : undefined;
   function refresh(directory, files, permitted) {
     return files.map(file => {
+      if (signedMedia && directory === path.join(root, 'computer') && file.path === mediaManifestPath) {
+        if (file.sha256 !== digest(mediaState.manifestBytes) || file.size_bytes !== mediaState.manifestBytes.length) throw new Error('Media manifest is not bound to the pre-sign inventory');
+        return { ...file, sha256: digest(signedMedia), size_bytes: signedMedia.length };
+      }
       const absolute = path.resolve(directory, file.path);
       let descriptor;
       try { descriptor = fs.openSync(absolute, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW); }
@@ -59,6 +66,7 @@ export function refreshSignedRuntimeManifests(root, signedPaths) {
     })).sort((a, b) => a.name.localeCompare(b.name)),
   };
   manifest.runtime_files_sha256 = `sha256:${digest(JSON.stringify(identity))}`;
+  if (signedMedia) fs.writeFileSync(path.join(root, 'computer', mediaManifestPath), signedMedia);
   fs.writeFileSync(computerPath, computerBytes);
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
@@ -68,13 +76,14 @@ export async function signPackagedRuntime(options) {
   const { sign } = require('app-builder-lib/out/codeSign/macCodeSign.js');
   const root = path.join(options.app, 'Contents', 'Resources', 'bin');
   await validatePackagedRuntime(root);
+  const mediaState = captureMediaSigningState(path.join(root, 'computer'));
   const signedPaths = new Set();
   let sealed = false;
   await sign({
     ...options,
     optionsForFile(file) {
       if (path.resolve(file) === path.resolve(options.app)) {
-        refreshSignedRuntimeManifests(root, signedPaths);
+        refreshSignedRuntimeManifests(root, signedPaths, mediaState);
         sealed = true;
       } else {
         signedPaths.add(path.resolve(file));
