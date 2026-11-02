@@ -84,6 +84,8 @@ describe('Flower production companion appearance', () => {
       await waitFor(() => runtime.querySelector('.flower-companion-thread-trigger')?.textContent?.includes(selected.title) ?? false);
     }
     expectSingleOutline(runtime);
+    const icon = runtime.querySelector<HTMLElement>('.flower-companion-thread-trigger-icon, .flower-companion-collapsed-icon')!;
+    expect(icon.getBoundingClientRect().left - runtime.getBoundingClientRect().left).toBeLessThanOrEqual(14);
     const control = runtime.querySelector<HTMLElement>(selector)!;
     const frame = runtime.getBoundingClientRect();
     const bounds = control.getBoundingClientRect();
@@ -198,4 +200,71 @@ it('retains usable composer targets and editable text with coarse input', async 
   const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
   expect(Number.parseFloat(getComputedStyle(editor).fontSize)).toBeGreaterThanOrEqual(16);
   expect(runtime.scrollWidth).toBeLessThanOrEqual(runtime.clientWidth);
+});
+
+
+it.each([
+  { name: 'dark-terminal-light-shell', background: '#0d1117', foreground: '#c9d1d9', darkShell: false },
+  { name: 'light-terminal-dark-shell', background: '#ffffff', foreground: '#24292e', darkShell: true },
+  { name: 'solarized-terminal-light-shell', background: '#002b36', foreground: '#839496', darkShell: false },
+])('keeps the terminal entry legible and aligned in $name', async ({ name, background, foreground, darkShell }) => {
+  await page.viewport(1280, 800);
+  const previousClass = document.documentElement.className;
+  document.documentElement.classList.toggle('dark', darkShell);
+  onTestFinished(() => { document.documentElement.className = previousClass; });
+  const selected = thread({ title: 'Terminal workspace review', messages: [] });
+  const control = renderSurfaceWithCompanionController({ ...adapter(true),
+    listThreads: async () => [selected], loadThread: async () => liveBootstrap(selected),
+  }, false, companionCopy, () => control.setOpen(true));
+  const { runtime } = control;
+  mountFrame(runtime);
+  runtime.classList.add('flower-activity-companion-terminal');
+  runtime.style.setProperty('--redeven-terminal-background', background);
+  runtime.style.setProperty('--redeven-terminal-foreground', foreground);
+  runtime.style.height = '24px';
+  await waitFor(() => Boolean(runtime.querySelector('.flower-companion-thread-trigger-icon')));
+  const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+  const context = canvas.getContext('2d')!;
+  const channels = (color: string) => {
+    context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+    return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+  };
+  const luminance = (color: string) => {
+    const rgb = channels(color).map(channel => {
+      const value = channel / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+  };
+  const contrast = (a: string, b: string) => {
+    const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (high + 0.05) / (low + 0.05);
+  };
+  for (const width of [360, 220, 160]) {
+    runtime.style.width = width + 'px';
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const frame = getComputedStyle(runtime);
+    const icon = runtime.querySelector<HTMLElement>('.flower-companion-thread-trigger-icon')!;
+    expect(icon.getBoundingClientRect().left - runtime.getBoundingClientRect().left).toBeLessThanOrEqual(14);
+    expect(editor.getBoundingClientRect().width).toBeGreaterThan(80);
+    expect(editor.getBoundingClientRect().right).toBeLessThanOrEqual(runtime.getBoundingClientRect().right - 1);
+    expect(contrast(frame.backgroundColor, background)).toBeLessThan(1.4);
+    expect(contrast(getComputedStyle(editor).color, frame.backgroundColor)).toBeGreaterThan(4.5);
+    expect(contrast(getComputedStyle(icon.querySelector('path')!).stroke, frame.backgroundColor)).toBeGreaterThan(3);
+    expect(frame.boxShadow).toBe('none');
+    expect(channels(getComputedStyle(runtime.querySelector('.flower-chat-shell')!).backgroundColor)).toEqual(channels(frame.backgroundColor));
+    await page.screenshot({ element: runtime, path: '__screenshots__/terminal-flower-' + name + '-' + width + '.png' });
+  }
+  runtime.style.width = '544px'; runtime.style.height = '420px';
+  runtime.dataset.companionPhase = 'expanded';
+  control.setOpen(true);
+  await waitFor(() => !runtime.querySelector('.flower-surface-companion-collapsed'));
+  expect(getComputedStyle(runtime).getPropertyValue('--foreground').trim()).not.toBe(foreground);
+  expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
+  runtime.style.width = '360px'; runtime.style.height = '24px';
+  runtime.dataset.companionPhase = 'collapsed';
+  control.setOpen(false);
+  expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
+  expect(getComputedStyle(runtime).getPropertyValue('--foreground').trim()).toBe(foreground);
 });

@@ -1,3 +1,4 @@
+import type { ActivityFlowerAnchorRegistrar } from '../flower/activityFlowerAnchor';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { Show } from 'solid-js';
 import { AlertTriangle, RefreshIcon } from '@floegence/floe-webapp-core/icons';
@@ -12,7 +13,7 @@ import { TerminalPanel } from '../widgets/TerminalPanel';
 
 export function EnvTerminalPage(props: {
   registerPageContext?: FlowerPageContextRegistrar;
-  registerActivityFlowerAnchor?: (anchor: HTMLElement) => () => void;
+  registerActivityFlowerAnchor?: ActivityFlowerAnchorRegistrar;
 } = {}) {
   const env = useEnvContext();
   const i18n = useI18n();

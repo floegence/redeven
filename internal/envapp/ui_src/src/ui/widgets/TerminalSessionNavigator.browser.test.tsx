@@ -22,7 +22,7 @@ afterEach(() => {
   document.documentElement.classList.toggle('dark', initialDark);
 });
 
-function mountNavigator(mobile: boolean, scale = 1) {
+function mountNavigator(mobile: boolean, scale = 1, width = 258) {
   const host = document.createElement('div');
   Object.assign(host.style, {
     position: 'relative',
@@ -36,7 +36,7 @@ function mountNavigator(mobile: boolean, scale = 1) {
   const items: TerminalSessionNavigationItem[] = ['single', 'first', 'second'].map((id) => ({
     id,
     label: id,
-    title: id,
+    title: id === 'first' ? 'redeven-terminal-workspace' : id,
     avatarInitial: 'T',
     avatarTone: { background: '#ddd', border: '#999', foreground: '#333' },
     avatar: id === 'second' ? { kind: 'agent', identity: 'codex' } : { kind: 'initial' },
@@ -60,7 +60,7 @@ function mountNavigator(mobile: boolean, scale = 1) {
   }));
   const [groups, setGroups] = createSignal<TerminalSessionNavigationGroup[]>([
     { id: 'default', name: 'Default', itemIds: ['single'], isDefault: true },
-    { id: 'workspace', name: 'Workspace', itemIds: ['first', 'second'], isDefault: false },
+    { id: 'workspace', name: 'Workspace terminal development', itemIds: ['first', 'second'], isDefault: false },
     { id: 'empty', name: 'Empty', itemIds: [], isDefault: false },
   ].map((group) => ({
     ...group,
@@ -72,6 +72,7 @@ function mountNavigator(mobile: boolean, scale = 1) {
     <TerminalSessionNavigator
       accessibilityIdPrefix="terminal-tree-geometry"
       mobile={mobile}
+      width={width}
       drawerOpen={mobile}
       connected
       refreshing={false}
@@ -226,4 +227,23 @@ it('keeps icon tile edges and surfaces distinguishable across all published shel
     expect(contrast(tile.backgroundColor, background), theme.name + ' surface').toBeGreaterThan(1.1);
     for (const token of Object.keys(theme.semanticTokens ?? {})) host.style.removeProperty(token);
   }
+});
+
+
+it('preserves useful title width in the narrow sidebar without moving hover actions', async () => {
+  const host = mountNavigator(false, 1, 220);
+  await settleLayout();
+  const row = host.querySelector<HTMLElement>('[data-terminal-session-row="first"]')!;
+  const title = row.querySelector<HTMLElement>('[data-terminal-session-title]')!;
+  const close = row.querySelector<HTMLElement>('[data-terminal-session-close]')!;
+  const more = row.querySelector<HTMLElement>('.terminal-session-more')!;
+  expect(title.getBoundingClientRect().width).toBeGreaterThanOrEqual(96);
+  expect(row.querySelector('[data-terminal-output-slot]')).toBeNull();
+  const before = title.getBoundingClientRect().width;
+  await page.getByTestId('terminal-session-actions-first').hover();
+  expect(title.getBoundingClientRect().width).toBe(before);
+  expect(close.getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+  expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(close.getBoundingClientRect().right);
+  const groupTitle = host.querySelector('[data-terminal-group-drag-handle="workspace"] > span')!;
+  expect(groupTitle.getBoundingClientRect().width).toBeGreaterThanOrEqual(96);
 });

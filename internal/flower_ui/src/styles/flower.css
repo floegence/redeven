@@ -12485,7 +12485,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-chat-shell, .flower-subagent-detail-transcript { --flower-sequence-rail-width: 1.5rem; }
 .flower-chat-transcript, .flower-chat-bottom-dock,
 .flower-surface-companion .flower-chat-transcript,
-.flower-surface-companion .flower-chat-bottom-dock,
+.flower-surface-companion:not(.flower-surface-companion-collapsed) .flower-chat-bottom-dock,
 .flower-subagent-detail-timeline { padding-inline-start: max(2rem, calc(var(--flower-sequence-rail-width) + 0.5rem)); }
 .flower-tool-sequence-node:has(> .flower-tool-sequence-header) {
   min-height: var(--flower-sequence-row-height, 2rem);

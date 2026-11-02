@@ -867,6 +867,19 @@ describe('TerminalPanel loading continuity', () => {
     const anchor = host.querySelector<HTMLElement>('[data-terminal-flower-anchor]')!;
     expect(anchor.closest('[data-testid="terminal-status-bar"]')).not.toBeNull();
     expect(anchor.getBoundingClientRect().height).toBe(24);
+    const palette = (register.mock.calls[0] as unknown as [HTMLElement, () => { background: string; foreground: string }])[1];
+    const preferences = useTerminalPreferences();
+    const originalTheme = preferences.userTheme();
+    try {
+      for (const theme of ['light', 'dark', 'solarizedDark'] as const) {
+        preferences.setUserTheme(theme);
+        const area = host.querySelector<HTMLElement>('[data-terminal-work-area]')!;
+        expect(palette()).toEqual({
+          background: area.style.getPropertyValue('--background'),
+          foreground: area.style.getPropertyValue('--foreground'),
+        });
+      }
+    } finally { preferences.setUserTheme(originalTheme); }
     setEnabled(false);
     await vi.waitFor(() => expect(unregister).toHaveBeenCalledTimes(1));
     expect(host.querySelector('[data-terminal-flower-anchor]')).toBeNull();

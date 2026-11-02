@@ -1,3 +1,4 @@
+import type { ActivityFlowerAnchorRegistrar } from '../flower/activityFlowerAnchor';
 import { TerminalViewList } from './TerminalViewList';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
@@ -211,7 +212,7 @@ export function resolveSystemTerminalThemeColors(
 }
 
 export interface TerminalPanelProps {
-  registerActivityFlowerAnchor?: (anchor: HTMLElement) => () => void;
+  registerActivityFlowerAnchor?: ActivityFlowerAnchorRegistrar;
   registerPageContext?: FlowerPageContextRegistrar;
   variant?: TerminalPanelVariant;
   mobileSessionsOpen?: boolean;
@@ -2527,7 +2528,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const ActivityFlowerAnchor = () => {
     let anchor!: HTMLDivElement;
     let unregister: (() => void) | undefined;
-    onMount(() => { unregister = props.registerActivityFlowerAnchor?.(anchor); });
+    onMount(() => { unregister = props.registerActivityFlowerAnchor?.(anchor, () => ({ background: terminalThemeBackground(), foreground: terminalThemeForeground() })); });
     onCleanup(() => unregister?.());
     return <div ref={anchor} class="terminal-flower-anchor" data-terminal-flower-anchor aria-hidden="true" />;
   };

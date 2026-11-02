@@ -172,3 +172,44 @@
     transition: none;
   }
 }
+
+/* The terminal owns its palette; expanded Flower retains the shell theme. */
+.flower-activity-companion-terminal[data-companion-phase='collapsed'] {
+  --background: var(--redeven-terminal-background);
+  --foreground: var(--redeven-terminal-foreground);
+  --muted: color-mix(in srgb, var(--background) 97%, var(--foreground));
+  --muted-foreground: color-mix(in srgb, var(--foreground) 88%, var(--background));
+  --primary: var(--foreground);
+  --ring: var(--foreground);
+  --flower-companion-surface: var(--muted);
+  --flower-companion-border: color-mix(in srgb, var(--background) 76%, var(--foreground));
+  --flower-chat-surface: var(--flower-companion-surface);
+  --redeven-surface-main: var(--flower-companion-surface);
+  --floe-bottom-bar-companion-collapsed-radius: 0.375rem;
+  color: var(--foreground);
+  box-shadow: none;
+}
+
+.flower-activity-companion-terminal[data-companion-phase='collapsed']:hover {
+  border-color: color-mix(in srgb, var(--background) 58%, var(--foreground));
+}
+
+.flower-activity-companion-terminal[data-companion-phase='collapsed'] .redeven-flower-icon path {
+  fill: color-mix(in srgb, var(--foreground) 12%, var(--background));
+  stroke: var(--muted-foreground);
+  stroke-width: 1.4;
+  stroke-opacity: 1;
+  opacity: 1;
+}
+
+.flower-activity-companion-terminal[data-companion-phase='collapsed'] .redeven-flower-icon-center {
+  fill: var(--foreground);
+  stroke: none;
+}
+
+.flower-activity-companion-terminal[data-companion-phase='collapsed'] .redeven-flower-icon-core { display: none; }
+
+.flower-activity-companion-terminal[data-companion-phase='collapsed'] .flower-composer textarea::placeholder {
+  color: var(--foreground);
+  opacity: 1;
+}

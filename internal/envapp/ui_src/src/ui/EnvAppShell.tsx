@@ -1,3 +1,4 @@
+import type { ActivityFlowerAnchorPalette, ActivityFlowerAnchorRegistrar } from './flower/activityFlowerAnchor';
 import { installCenterEntryActivity } from './services/centerEntryActivity';
 import { prepareCenterPluginOrigin } from './services/pluginWebOrigin';
 import { createFlowerPageContextRegistry, flowerPageContextSnapshot, type FlowerPageContextRegistrar } from './flower/flowerPageContext';
@@ -1145,10 +1146,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const [flowerProductMountContainer, setFlowerProductMountContainer] = createSignal<HTMLDivElement | null>(null);
   const [flowerProductMountRequested, setFlowerProductMountRequested] = createSignal(false);
   const [activityFlowerViewportAnchor, setActivityFlowerViewportAnchor] = createSignal<HTMLElement | null>(null);
-  const [activityTerminalFlowerAnchor, setActivityTerminalFlowerAnchor] = createSignal<HTMLElement | null>(null);
-  const registerActivityFlowerAnchor = (anchor: HTMLElement) => {
-    setActivityTerminalFlowerAnchor(anchor);
-    return () => setActivityTerminalFlowerAnchor((current) => current === anchor ? null : current);
+  const [activityTerminalFlowerRegistration, setActivityTerminalFlowerRegistration] = createSignal<{
+    anchor: HTMLElement; palette: Accessor<ActivityFlowerAnchorPalette>;
+  } | null>(null);
+  const activityTerminalFlowerAnchor = () => activityTerminalFlowerRegistration()?.anchor ?? null;
+  const registerActivityFlowerAnchor: ActivityFlowerAnchorRegistrar = (anchor, palette) => {
+    const registration = { anchor, palette };
+    setActivityTerminalFlowerRegistration(registration);
+    return () => setActivityTerminalFlowerRegistration((current) => current === registration ? null : current);
   };
   const activityFlowerUsesTerminalFooter = createMemo(() => (
     viewMode() === 'activity' && !layout.isMobile()
@@ -4962,7 +4967,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       id="redeven-activity-flower-companion"
       label={i18n.t('shell.nav.flower')}
       expandedWidth={544}
-      class="flower-activity-companion"
+      class={activityFlowerUsesTerminalFooter() ? 'flower-activity-companion flower-activity-companion-terminal' : 'flower-activity-companion'}
       contentHostRef={setActivityFlowerCompanionContentHost}
       isOwnedInteraction={activityFlowerInteractionOwned}
       onDismiss={dismissActivityFlowerCompanion}
@@ -5344,7 +5349,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       <div
         ref={setActivityFlowerOverlayHost}
         class="flower-activity-overlay-host"
-        style={{ 'z-index': ENV_APP_FLOATING_LAYER.flowerCompanion }}
+        style={{
+          'z-index': ENV_APP_FLOATING_LAYER.flowerCompanion,
+          '--redeven-terminal-background': activityTerminalFlowerRegistration()?.palette().background,
+          '--redeven-terminal-foreground': activityTerminalFlowerRegistration()?.palette().foreground,
+        }}
         data-activity-flower-overlay-host
         inert={mobilePluginModalOpen()}
         aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}

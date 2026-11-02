@@ -472,6 +472,10 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('./protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
+    terminal: {
+      listViews: vi.fn(async () => ({ revision: 0, views: [] })),
+      onViewsChanged: vi.fn(() => () => undefined),
+    },
     access: {
       status: vi.fn(async () => ({ passwordRequired: false, unlocked: true })),
       resume: vi.fn(async () => undefined),
@@ -661,11 +665,12 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
   },
 }));
 let testTerminalFooter = false;
+const [terminalFooterPalette, setTerminalFooterPalette] = createSignal({ background: '#0d1117', foreground: '#c9d1d9' });
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: (props: any) => {
   const Anchor = () => {
     let anchor!: HTMLDivElement;
     let unregister: (() => void) | undefined;
-    onMount(() => { unregister = props.registerActivityFlowerAnchor?.(anchor); });
+    onMount(() => { unregister = props.registerActivityFlowerAnchor?.(anchor, terminalFooterPalette); });
     onCleanup(() => unregister?.());
     return <div ref={anchor} data-terminal-flower-anchor style={{ width: '360px', height: '24px' }} />;
   };
@@ -1158,6 +1163,7 @@ afterEach(async () => {
 
 beforeEach(() => {
   testTerminalFooter = false;
+  setTerminalFooterPalette({ background: '#0d1117', foreground: '#c9d1d9' });
   vi.clearAllMocks();
   testFilesMenu = false;
   testRealFlowerLauncher = false;
@@ -1520,6 +1526,11 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const footerHeight = footer.clientHeight;
     expect(footerHeight).toBe(28);
     expect(elementRect(fixture.companion).height).toBe(24);
+    expect(fixture.companion.classList.contains('flower-activity-companion-terminal')).toBe(true);
+    expect(getComputedStyle(fixture.companion).getPropertyValue('--foreground').trim()).toBe('#c9d1d9');
+    setTerminalFooterPalette({ background: '#fdf6e3', foreground: '#657b83' });
+    expect(getComputedStyle(fixture.companion).getPropertyValue('--background').trim()).toBe('#fdf6e3');
+    expect(getComputedStyle(fixture.companion).getPropertyValue('--foreground').trim()).toBe('#657b83');
     await userEvent.fill(fixture.input, 'Same terminal draft');
     await vi.waitFor(() => expect(fixture.product.dataset.presentation).toBe('expanded'));
     expect(footer.clientHeight).toBe(footerHeight);
@@ -1530,6 +1541,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await vi.waitFor(() => expect(elementRect(fixture.companion).bottom).toBeCloseTo(elementRect(floatingAnchor).bottom, 0));
     expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
     expect(fixture.input.value).toBe('Same terminal draft');
+    expect(fixture.companion.classList.contains('flower-activity-companion-terminal')).toBe(false);
     await userEvent.click(page.getByRole('button', { name: 'Terminal', exact: true }));
     await userEvent.click(page.getByTestId('activity-switch-workbench'));
     await vi.waitFor(() => expect(fixture.companion.getAttribute('aria-hidden')).toBe('true'));

@@ -977,7 +977,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </span>
                         </Show>
                         <div
-                          class={`relative flex ${props.mobile ? 'h-11' : 'h-8'} items-center gap-0.5 rounded-md px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]`}
+                          class={`relative flex ${props.mobile ? 'h-11' : 'h-8'} items-center gap-0.5 rounded-md px-1 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]`}
                           data-terminal-group-header={navigationGroup().id}
                           data-terminal-group-drop-target={dropIntent()?.groupId === navigationGroup().id ? dropIntent()?.position : undefined}
                           data-terminal-group-draggable={!navigationGroup().isDefault && !navigationGroup().pending ? 'true' : 'false'}
@@ -1037,7 +1037,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         >
                           <button
                             type="button"
-                            class="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-[7px] text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            class="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                             data-testid={`terminal-group-toggle-${navigationGroup().id}`}
                             data-terminal-group-drag-handle={navigationGroup().id}
                             aria-expanded={navigationGroup().expanded}
@@ -1052,7 +1052,7 @@ ${navigationGroup().defaultWorkingDir}`}
                           </button>
                           <button
                             type="button"
-                            class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed"
+                            class="terminal-group-action flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed"
                             title={i18n.t('terminal.newSessionInGroup', { group: navigationGroup().name })}
                             aria-label={i18n.t('terminal.newSessionInGroup', { group: navigationGroup().name })}
                             onClick={() => props.onCreateSessionInGroup?.(navigationGroup().id)}
@@ -1063,7 +1063,7 @@ ${navigationGroup().defaultWorkingDir}`}
                           <Show when={!navigationGroup().pending}>
                             <button
                               type="button"
-                              class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                              class="terminal-group-action flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                               aria-label={i18n.t('terminal.groupActions', { group: navigationGroup().name })}
                               aria-haspopup="menu"
                               data-testid={`terminal-group-actions-${navigationGroup().id}`}
@@ -1187,7 +1187,7 @@ ${navigationGroup().defaultWorkingDir}`}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
                           class={`group relative grid cursor-pointer items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 ${props.mobile
                             ? 'min-h-[64px] grid-cols-[36px_minmax(0,1fr)_44px_44px] gap-x-2 px-2.5 py-1'
-                            : 'h-8 grid-cols-[20px_minmax(0,1fr)_24px_24px] gap-x-1.5 pl-[27px] pr-1 py-0'} ${sidebarActive()
+                            : 'h-8 grid-cols-[24px_minmax(0,1fr)_24px_24px] gap-x-0.5 pl-4 pr-0.5 py-0'} ${sidebarActive()
                             ? 'bg-[var(--floe-state-selected)] text-sidebar-accent-foreground'
                             : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
@@ -1281,75 +1281,77 @@ ${navigationGroup().defaultWorkingDir}`}
                               >
                                 {item().title}
                               </span>
-                              <span class="pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center" data-terminal-output-slot={sessionId} data-terminal-attention-slot={sessionId}>
-                                <Show
-                                  when={item().outputState !== 'none'}
-                                  fallback={(
-                                    <Show
-                                      when={item().attentionState === 'waiting'}
-                                      fallback={(
-                                        <Show when={item().attentionState === 'unread'}>
-                                          <span
-                                            class="h-1.5 w-1.5 rounded-full bg-primary forced-colors:border forced-colors:border-current"
-                                            data-terminal-attention-state={item().attentionState}
-                                            data-terminal-tab-status={item().attentionState}
-                                          />
-                                        </Show>
-                                      )}
-                                    >
-                                      <Tooltip
-                                        content={i18n.t('terminalAgentActivity.userInputRequired')}
-                                        placement="top"
-                                        delay={0}
-                                        clickToToggle
-                                        disabled={draggedSessionId() !== null || draggedGroupId() !== null}
+                              <Show when={item().outputState !== 'none' || item().attentionState !== 'none'}>
+                                <span class="terminal-session-activity-slot pointer-events-auto flex h-6 w-6 shrink-0 items-center justify-center" data-terminal-output-slot={sessionId} data-terminal-attention-slot={sessionId}>
+                                  <Show
+                                    when={item().outputState !== 'none'}
+                                    fallback={(
+                                      <Show
+                                        when={item().attentionState === 'waiting'}
+                                        fallback={(
+                                          <Show when={item().attentionState === 'unread'}>
+                                            <span
+                                              class="h-1.5 w-1.5 rounded-full bg-primary forced-colors:border forced-colors:border-current"
+                                              data-terminal-attention-state={item().attentionState}
+                                              data-terminal-tab-status={item().attentionState}
+                                            />
+                                          </Show>
+                                        )}
                                       >
-                                        <button
-                                          type="button"
-                                          class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-warning transition-colors duration-75 hover:bg-warning/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring forced-colors:border forced-colors:border-current"
-                                          aria-label={i18n.t('terminalAgentActivity.userInputRequired')}
-                                          data-terminal-attention-trigger={sessionId}
+                                        <Tooltip
+                                          content={i18n.t('terminalAgentActivity.userInputRequired')}
+                                          placement="top"
+                                          delay={0}
+                                          clickToToggle
+                                          disabled={draggedSessionId() !== null || draggedGroupId() !== null}
                                         >
-                                          <span
-                                            class="h-2 w-2 rounded-full bg-current shadow-[0_0_0_3px_color-mix(in_srgb,var(--warning)_14%,transparent)]"
-                                            data-terminal-attention-state="waiting"
-                                            data-terminal-tab-status="waiting"
-                                            aria-hidden="true"
-                                          />
-                                        </button>
-                                      </Tooltip>
-                                    </Show>
-                                  )}
-                                >
-                                  <Tooltip
-                                    content={terminalActivityTooltip(
-                                      item().activitySource === 'semantic' ? 'semantic' : 'output',
-                                      item().attentionState === 'unread',
-                                      i18n.t,
+                                          <button
+                                            type="button"
+                                            class="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-warning transition-colors duration-75 hover:bg-warning/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring forced-colors:border forced-colors:border-current"
+                                            aria-label={i18n.t('terminalAgentActivity.userInputRequired')}
+                                            data-terminal-attention-trigger={sessionId}
+                                          >
+                                            <span
+                                              class="h-2 w-2 rounded-full bg-current shadow-[0_0_0_3px_color-mix(in_srgb,var(--warning)_14%,transparent)]"
+                                              data-terminal-attention-state="waiting"
+                                              data-terminal-tab-status="waiting"
+                                              aria-hidden="true"
+                                            />
+                                          </button>
+                                        </Tooltip>
+                                      </Show>
                                     )}
-                                    placement="top"
-                                    delay={0}
-                                    clickToToggle
-                                    disabled={draggedSessionId() !== null || draggedGroupId() !== null}
                                   >
-                                    <button
-                                      type="button"
-                                      class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-primary transition-colors duration-75 hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring forced-colors:border forced-colors:border-current"
-                                      aria-label={terminalActivityTooltip(
+                                    <Tooltip
+                                      content={terminalActivityTooltip(
                                         item().activitySource === 'semantic' ? 'semantic' : 'output',
                                         item().attentionState === 'unread',
                                         i18n.t,
                                       )}
-                                      data-terminal-activity-source={item().activitySource}
-                                      data-terminal-output-trigger={sessionId}
+                                      placement="top"
+                                      delay={0}
+                                      clickToToggle
+                                      disabled={draggedSessionId() !== null || draggedGroupId() !== null}
                                     >
-                                      <TerminalOutputStatusGlyph
-                                        state={item().outputState as Exclude<TerminalSessionOutputState, 'none'>}
-                                      />
-                                    </button>
-                                  </Tooltip>
-                                </Show>
-                              </span>
+                                      <button
+                                        type="button"
+                                        class="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary transition-colors duration-75 hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring forced-colors:border forced-colors:border-current"
+                                        aria-label={terminalActivityTooltip(
+                                          item().activitySource === 'semantic' ? 'semantic' : 'output',
+                                          item().attentionState === 'unread',
+                                          i18n.t,
+                                        )}
+                                        data-terminal-activity-source={item().activitySource}
+                                        data-terminal-output-trigger={sessionId}
+                                      >
+                                        <TerminalOutputStatusGlyph
+                                          state={item().outputState as Exclude<TerminalSessionOutputState, 'none'>}
+                                        />
+                                      </button>
+                                    </Tooltip>
+                                  </Show>
+                                </span>
+                              </Show>
                             </span>
                             <Show when={props.mobile && item().subtitle}>
                               <span class="flex h-3 min-w-0 max-w-full items-center">

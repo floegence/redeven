@@ -23,7 +23,7 @@ One Terminal Session Catalog Provider owns membership/display order. Lifecycle f
 
 Search matches group names/paths and session presentation, revealing folded matches temporarily. Views filter by name. Sidebar defaults to 258px, persists per environment/panel within 220–480px and reserves content space. Floe ResizeHandle owns pointer resizing; arrows/Home/End support keyboards. Overlays retain independent width.
 
-Search/refresh replaces Quick switch. Desktop rows are 32px; mobile targets are larger. Groups show Floe yellow folder icons, disclosure, creation and actions. Rounded session tiles use fill selection without rails. View/group rows have no quantity badges. Paths stay in tooltips; less frequent actions use accessible menus. Session close appears directly on row hover/focus and on touch.
+Search/refresh replaces Quick switch. Desktop rows are 32px; mobile targets are larger. Groups show Floe yellow folder icons, disclosure, creation and actions. Rounded session tiles use fill selection without rails. View/group rows have no quantity badges. Paths stay in tooltips; less frequent actions use accessible menus. Session close appears directly on row hover/focus and on touch. Desktop actions retain 24-pixel targets with compact gaps and indentation; empty activity slots consume no title width. Hover/focus reveals actions without shifting the title.
 
 Rows/icons drag independently of buttons. Session previews follow the pointer across scaled Workbench; group previews remain in the sidebar. Split drops change placement only; group targets own membership/order. Metadata must not remount runtimes.
 

@@ -20,7 +20,7 @@ The same ordinary editor moves between compact/detail presentations. Specialized
 Toolbar left stays empty; permission/model/reasoning remain in More during loading/errors. Recovery/guidance sit above the editor. Short input leaves no blank space beneath the toolbar; multiline growth moves it without replacing the editor. Dedicated pages retain complete starter suggestions.
 
 ## Motion and surface treatment
-One shell grows upward/outward in width and height, preserving bottom edge, border, background and clipping. Close dissolves detail before compact layout; reversal follows current phase. Exit keeps fixed coordinates and Activity height, without origin flashes. Published forced-color and focus indicators remain.
+One shell grows upward/outward in width and height, preserving bottom edge, border, background and clipping. Close dissolves detail before compact layout; reversal follows current phase. Exit keeps fixed coordinates and Activity height, without origin flashes. Published forced-color and focus indicators remain. Collapsed content uses only its compact composer inset; transcript/activity gutters apply to expanded content and cannot push the entry icon away from the left edge.
 
 # Boundaries
 

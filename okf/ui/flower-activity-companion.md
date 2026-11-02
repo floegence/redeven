@@ -16,7 +16,7 @@ Env App retains one Flower product tree across its Activity page, desktop compan
 Published `BottomBarCompanion` owns geometry, viewport/safe-area clamps, motion, outside dismissal, Escape and mount handling. Its Portal uses the explicit Activity overlay host, never `document.body`. The collapsed field is centered; bounded detail grows upward without changing body geometry. Running work cannot prevent collapse or destination interaction.
 
 ## Activity Terminal footer
-Desktop Activity Terminal supplies a 24-pixel anchor in its 28-pixel footer, centered in the terminal column with a shrinkable 360-pixel maximum width. Workbench/mobile terminals supply none. Placement does not create another Flower instance, alter transport or route Flower input through the terminal.
+Desktop Activity Terminal supplies a 24-pixel anchor in its 28-pixel footer, centered in the terminal column with a shrinkable 360-pixel maximum width. Workbench/mobile terminals supply none. Terminal supplies its reactive background/foreground alongside the anchor. Only the collapsed footer entry uses that palette: a restrained tinted surface, visible border and monochrome Flower icon. Expanded Flower keeps the shell theme; palette changes never replace its editor. Placement does not create another Flower instance, alter transport or route Flower input through the terminal.
 
 ## Stable Flower placement
 After first access readiness, one retained `EnvAIPage`/`FlowerSurface` moves among explicit hosts. Visibility drives `hidden`, `aria-hidden` and `inert` together. Available unfiltered Workbench placement survives deselection; canvas selection governs input/focus only. [Settings](flower-setup-and-settings.md#retained-panels) own retained panels/forms.

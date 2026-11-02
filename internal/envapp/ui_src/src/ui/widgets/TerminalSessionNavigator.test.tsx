@@ -226,7 +226,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).toContain('h-8 w-8');
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rgba(');
-    expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
+    expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-6 w-6');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
     expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('bg-[var(--floe-state-selected)]');
     const descriptionId = rowButton.getAttribute('aria-describedby');

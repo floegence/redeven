@@ -20,7 +20,7 @@
 .terminal-session-drawer-header { height: 48px; }
 .terminal-navigation-filter { margin-bottom: 0; }
 .terminal-navigation-filter input { height: 32px; }
-.terminal-navigation-content [data-testid='terminal-session-list'] { padding-inline: 8px; }
+.terminal-navigation-content [data-testid='terminal-session-list'] { padding-inline: 4px; }
 .terminal-navigation-group { padding-bottom: var(--floe-gap-group); }
 .terminal-navigation-content [data-terminal-session-avatar] {
   width: 14px; height: 14px; border-radius: 4px;
@@ -92,3 +92,11 @@
 .terminal-view-preview-pane[data-empty='true'] { background: transparent; border: 1px dashed currentColor; opacity: .6; }
 
 .terminal-work-area [data-floe-split-pane]:has([data-terminal-vacant-slot]) [data-floe-split-drop] { inset: 0 !important; }
+
+@media (pointer: coarse) {
+  [data-terminal-group-header] { min-height: 44px; }
+  .terminal-group-action { width: 44px; height: 44px; }
+}
+
+[data-terminal-mobile-drawer] .terminal-session-activity-slot,
+[data-terminal-mobile-drawer] .terminal-session-activity-slot button { width: 28px; height: 28px; }
