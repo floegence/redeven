@@ -26,6 +26,7 @@ test('only the long-thread host isolates native input before showing its visible
     assert.equal(options.focusable, isolated ? false : undefined);
     assert.equal(options.x, isolated ? 10 : undefined);
     assert.equal(options.y, isolated ? 24 : undefined);
+    assert.equal(options.webPreferences.backgroundThrottling, false, 'Match the production Desktop animation and timer policy');
     assert.deepEqual(calls, isolated ? [['ignoreMouse', true], ['showInactive'], ['load', 'http://127.0.0.1:12345']] : [['load', 'http://127.0.0.1:12345']]);
     assert.equal(listeners.has('before-mouse-event'), false, 'Do not filter injected pointer events or hide interruptions');
     let prevented = false;

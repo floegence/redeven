@@ -5,7 +5,8 @@ app.whenReady().then(async () => {
   const origin = isolatedInput ? screen.getPrimaryDisplay().workArea : undefined;
   const window = new BrowserWindow({ width: 1280, height: 900, show: !isolatedInput,
     ...(isolatedInput ? { focusable: false, x: origin.x, y: origin.y } : {}),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    // Match production Desktop: background windows retain live animations/timers.
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
   if (isolatedInput) {
     // Keep the real visible compositor and CDP input path without taking the
     // user's native keyboard focus. Use a deterministic primary-screen origin

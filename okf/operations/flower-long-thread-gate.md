@@ -12,7 +12,7 @@ Complete long-conversation content and responsive interaction are required produ
 # Contract
 
 ## Execution and evidence
-Run node scripts/check_flower_long_thread.mjs --fast for focused regressions; omit --fast for browser/sustained acceptance. Require frozen published Desktop/Env dependencies and visible composited Electron; unavailable prerequisites fail. Unified gate manifests exclude this explicit suite.
+Run node scripts/check_flower_long_thread.mjs --fast for focused regressions; omit --fast for browser/sustained acceptance. Require frozen published Desktop/Env dependencies and visible composited Electron; unavailable prerequisites fail. The qualification host mirrors production Desktop's disabled background throttling so an inactive native window retains the same animation/timer policy. Unified gate manifests exclude this explicit suite.
 
 Record exact source/tree/cleanliness, tools/dependencies, metrics and supervised cleanup. Changed product/dependencies invalidate performance evidence; policy-only changes may cite prior unchanged-product evidence separately, never relabel an unmeasured tip. Nonzero/interrupted runs, missing tests/metrics/tools or failed cleanup fail. Preserve negative 110 ms latency/21 commits-per-second regression and profile-exclusion test. No workload/threshold override or waived failure.
 
