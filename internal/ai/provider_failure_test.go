@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -84,7 +85,7 @@ func TestToolArgumentsStalledFailureClassification(t *testing.T) {
 			code, _ := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
 			detail := canonicalFailureDetail(failure)
 			var restored providerFailureDiagnostic
-			if code != tc.want || json.Unmarshal([]byte(detail), &restored) != nil || restored != d {
+			if code != tc.want || json.Unmarshal([]byte(detail), &restored) != nil || !reflect.DeepEqual(restored, d) {
 				t.Fatalf("code=%s detail=%s", code, detail)
 			}
 		})

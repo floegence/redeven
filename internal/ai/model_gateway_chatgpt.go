@@ -2,7 +2,7 @@ package ai
 
 import (
 	"encoding/json"
-	"reflect"
+	"errors"
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/chatgpt"
@@ -13,62 +13,40 @@ import (
 const chatGPTStateKind = "openai_chatgpt_native_v1"
 const chatGPTToolNamespace = "redeven"
 
-// Completed item events carry original native bytes even when the terminal
-// response omits its output snapshot. This collection belongs to one request.
+// Floret owns output reconciliation; this bridge preserves SDK native bytes and
+// maps typed structural failures into Redeven's durable diagnostic envelope.
 type responsesCompletedItems struct {
-	items map[int64]oresponses.ResponseOutputItemUnion
-	bytes int
+	output flprovider.ResponsesOutput
 }
 
 func (c *responsesCompletedItems) add(index int64, item oresponses.ResponseOutputItemUnion) error {
-	var value map[string]any
-	raw := item.RawJSON()
-	if len(raw) > 8<<20 {
-		return &providerValidationError{code: responseOutputLimit}
-	}
-	if index < 0 || json.Unmarshal([]byte(raw), &value) != nil || value == nil {
-		return &providerValidationError{code: responseOutputInvalid}
-	}
-	if previous, exists := c.items[index]; exists {
-		var old map[string]any
-		_ = json.Unmarshal([]byte(previous.RawJSON()), &old)
-		if !reflect.DeepEqual(old, value) {
-			return &providerValidationError{code: responseOutputConflict, outputIndex: &index}
-		}
-		return nil
-	}
-	if c.bytes+len(raw) > 8<<20 {
-		return &providerValidationError{code: responseOutputLimit}
-	}
-	if c.items == nil {
-		c.items = make(map[int64]oresponses.ResponseOutputItemUnion)
-	}
-	c.items[index] = item
-	c.bytes += len(raw)
-	return nil
+	return responsesOutputFailure(c.output.Add(index, json.RawMessage(item.RawJSON())))
 }
 
 func (c *responsesCompletedItems) complete(snapshot []oresponses.ResponseOutputItemUnion) ([]oresponses.ResponseOutputItemUnion, error) {
-	for index, item := range snapshot {
-		if err := c.add(int64(index), item); err != nil {
-			return nil, err
+	raw := make([]json.RawMessage, len(snapshot))
+	for i, item := range snapshot {
+		raw[i] = json.RawMessage(item.RawJSON())
+	}
+	output, err := c.output.Complete(raw)
+	if err != nil {
+		return nil, responsesOutputFailure(err)
+	}
+	result := make([]oresponses.ResponseOutputItemUnion, len(output))
+	for i, item := range output {
+		if err := json.Unmarshal(item, &result[i]); err != nil {
+			return nil, &providerValidationError{code: responseOutputInvalid, cause: err}
 		}
 	}
-	if len(c.items) == 0 {
-		return nil, &providerValidationError{code: responseOutputMissing}
+	return result, nil
+}
+
+func responsesOutputFailure(err error) error {
+	var failure *flprovider.ResponsesOutputError
+	if !errors.As(err, &failure) {
+		return err
 	}
-	if len(snapshot) > 0 && len(snapshot) != len(c.items) {
-		return nil, &providerValidationError{code: responseSnapshotIncomplete}
-	}
-	output := make([]oresponses.ResponseOutputItemUnion, len(c.items))
-	for index := range output {
-		item, exists := c.items[int64(index)]
-		if !exists {
-			return nil, &providerValidationError{code: responseOutputIndexMissing}
-		}
-		output[index] = item
-	}
-	return output, nil
+	return &providerValidationError{code: providerValidationCode(failure.Code), cause: err, outputIndex: failure.OutputIndex, outputFields: failure.Fields}
 }
 
 func chatGPTNamespaces(tools []oresponses.ToolUnionParam) ([]oresponses.ToolUnionParam, error) {

@@ -135,8 +135,8 @@ describe('Flower provider failure recovery', () => {
 
 describe('Flower upstream error messages', () => {
   it('shows local response validation and copies the complete attempt evidence', async () => {
-    const reason = 'Conflicting completed response output item.';
-    const diagnostic = JSON.stringify({ provider: 'openai', code: 'response_output_conflict', stage: 'response_validation', output_index: 0, message: reason, response_shape: 'local_validation',
+    const reason = 'Conflicting completed response output item. Conflicting fields: content.';
+    const diagnostic = JSON.stringify({ provider: 'openai', code: 'response_output_conflict', stage: 'response_validation', output_index: 0, output_fields: ['content'], message: reason, response_shape: 'local_validation',
       attempt: { transport: 'http_sse', phase: 'receiving', http_status: 200, request_id: 'req-fixture', response_id: 'resp_fixture', terminal_received: true, terminal_event: 'response.completed', attempt_id: 'send:attempt:1' } });
     const failed = thread({ status: 'failed', error: { code: 'provider_request_failed', message: 'controlled fallback', detail: diagnostic } });
     const base = { ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) };

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,11 +27,12 @@ const providerFailurePrefix = "redeven_provider_failure_v1:"
 // message. Only structured error messages and reviewed diagnostic fields enter
 // it; raw bodies, metadata, endpoints and credentials stay private.
 type providerFailureDiagnostic struct {
-	MediaKind   string `json:"media_kind,omitempty"`
-	Actual      int64  `json:"actual,omitempty"`
-	Limit       int64  `json:"limit,omitempty"`
-	Stage       string `json:"stage,omitempty"`
-	OutputIndex *int64 `json:"output_index,omitempty"`
+	MediaKind    string   `json:"media_kind,omitempty"`
+	Actual       int64    `json:"actual,omitempty"`
+	Limit        int64    `json:"limit,omitempty"`
+	Stage        string   `json:"stage,omitempty"`
+	OutputIndex  *int64   `json:"output_index,omitempty"`
+	OutputFields []string `json:"output_fields,omitempty"`
 
 	ActualBytes int64                      `json:"actual_bytes,omitempty"`
 	LimitBytes  int64                      `json:"limit_bytes,omitempty"`
@@ -99,6 +101,12 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 		}
 	}
 
+	if d.Code == "response_output_conflict" && d.Stage == "response_validation" {
+		d.OutputFields = safeOutputConflictFields(d.OutputFields)
+	} else {
+		d.OutputFields = nil
+	}
+
 	if d.Code != "request_bytes_exceeded" || d.ActualBytes <= d.LimitBytes || d.LimitBytes <= 0 {
 		d.ActualBytes = 0
 		d.LimitBytes = 0
@@ -131,6 +139,23 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 		d.Shape = "unknown"
 	}
 	return d
+}
+
+// Only fixed protocol field names enter user-visible conflict details.
+func safeOutputConflictFields(fields []string) []string {
+	seen := map[string]bool{}
+	for _, field := range fields {
+		switch field {
+		case "id", "type", "status", "role", "content", "summary", "encrypted_content", "call_id", "name", "namespace", "arguments", "action", "phase", "other":
+			seen[field] = true
+		}
+	}
+	result := make([]string, 0, len(seen))
+	for field := range seen {
+		result = append(result, field)
+	}
+	sort.Strings(result)
+	return result
 }
 
 var diagnosticSecretPattern = regexp.MustCompile(`(?i)\b(?:bearer\s+[^\s,;]+|sk-[a-z0-9_-]+|(?:api[_ -]?key|authorization)\s*[:=]\s*[^\s,;]+)`)

@@ -52,6 +52,9 @@ func testChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T, stalledAttem
 		if _, ok := body["previous_response_id"]; ok {
 			t.Error("ChatGPT relied on server continuation")
 		}
+		if n > 1 && strings.Contains(string(body["input"]), "first-cipher") {
+			t.Error("nonfinal reasoning ciphertext crossed the native history boundary")
+		}
 		if n == 2 && (!strings.Contains(string(body["input"]), "opaque-history") || !strings.Contains(string(body["input"]), "Observed once.")) {
 			t.Error("tool continuation lost native state or canonical result")
 		}
@@ -84,6 +87,9 @@ func testChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T, stalledAttem
 		output := `[{"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The target was inspected once. The conversation then continued with complete historical context.","annotations":[]}]}]`
 		if n == 1 {
 			output = `[{"type":"reasoning","id":"reasoning","summary":[],"encrypted_content":"opaque-history"},{"type":"function_call","id":"inspect-item","call_id":"inspect-call","name":"inspect","namespace":"redeven","arguments":"{\"hint\":null}","status":"completed"}]`
+			// Done and terminal ciphertext may differ while all native identity and content agree.
+			w.Header().Set("Content-Type", "text/event-stream")
+			writeOpenAISSEJSON(w, w.(http.Flusher), map[string]any{"type": "response.output_item.done", "output_index": 0, "item": map[string]any{"type": "reasoning", "id": "reasoning", "summary": []any{}, "encrypted_content": "first-cipher"}})
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"response-%d\",\"model\":\"gpt-6.1-sol\",\"status\":\"completed\",\"output\":%s}}\n\n", n, output)
@@ -225,7 +231,7 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 		status                                                  int
 		chatGPT                                                 bool
 	}{
-		{"local_output_conflict", "openai", "gpt-6.1-sol", "responses", conflictingCompletedResponseStream, runErrorCodeProviderRequestFailed, "Conflicting completed response output item.", 200, false},
+		{"local_output_conflict", "openai", "gpt-6.1-sol", "responses", conflictingCompletedResponseStream, runErrorCodeProviderRequestFailed, "Conflicting completed response output item. Conflicting fields: content.", 200, false},
 		{"local_usage_invalid", "openai", "gpt-6.1-sol", "responses", `data: {"type":"response.completed","response":{"id":"resp_fixture","status":"completed","usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":101},"output_tokens":2}}}` + "\n\n", runErrorCodeProviderRequestFailed, "Provider cached tokens exceed total input tokens.", 200, false},
 		{"local_history_invalid", "openai", "gpt-6.1-sol", "responses", `data: {"type":"response.completed","response":{"id":"resp_fixture","status":"completed","output":[{"type":"private-output-type","id":"item_fixture"}]}}` + "\n\n", runErrorCodeProviderRequestFailed, "Could not retain the provider response for conversation continuation.", 200, false},
 		{"tool_arguments_stalled", "openai", "gpt-6.1-sol", "responses", "data: " + toolArgumentsStalledFailure + "\n\n", runErrorCodeProviderStreamInterrupted, toolArgumentsStalledMessage, 200, false},
@@ -303,7 +309,7 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 			}
 			if tc.name == "local_output_conflict" {
 				d, ok := parseProviderFailure(first.Failure.Message)
-				if !ok || d.OutputIndex == nil || *d.OutputIndex != 0 || d.Stage != "response_validation" || d.Attempt == nil || d.Attempt.HTTPStatus != 200 || !d.Attempt.Terminal || d.Attempt.TerminalEvent != "response.completed" || d.Attempt.ResponseID != "resp_fixture" || d.Attempt.AttemptID == "" {
+				if !ok || d.OutputIndex == nil || *d.OutputIndex != 0 || d.Stage != "response_validation" || len(d.OutputFields) != 1 || d.OutputFields[0] != "content" || d.Attempt == nil || d.Attempt.HTTPStatus != 200 || !d.Attempt.Terminal || d.Attempt.TerminalEvent != "response.completed" || d.Attempt.ResponseID != "resp_fixture" || d.Attempt.AttemptID == "" {
 					t.Fatalf("local failure lost attempt evidence: %s", detail)
 				}
 			}

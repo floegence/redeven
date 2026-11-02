@@ -50,7 +50,7 @@ func TestProviderAttemptPreservesLocalValidationDetails(t *testing.T) {
 		result := ModelGatewayResult{}
 		failure := diag.finish(t.Context(), &http.Response{StatusCode: 200, Header: http.Header{"X-Request-Id": []string{"req-fixture"}}}, &result, err, "openai")
 		parsed, ok := parseProviderFailure(failure.Error())
-		if !ok || parsed.Code != "response_output_conflict" || parsed.Stage != "response_validation" || parsed.Message != "Conflicting completed response output item." || parsed.Shape != "local_validation" {
+		if !ok || parsed.Code != "response_output_conflict" || parsed.Stage != "response_validation" || parsed.Message != "Conflicting completed response output item. Conflicting fields: id." || parsed.Shape != "local_validation" {
 			t.Fatalf("local diagnostic lost: %v", failure)
 		}
 		if parsed.Attempt == nil || parsed.Attempt.HTTPStatus != 200 || parsed.Attempt.RequestID != "req-fixture" || !parsed.Attempt.Terminal || parsed.Attempt.Phase != flprovider.TransportReceiving {
@@ -65,6 +65,9 @@ func TestProviderAttemptPreservesLocalValidationDetails(t *testing.T) {
 		}
 		if got := flprovider.RetryAdviceForError(failure); got != wantAdvice {
 			t.Fatalf("retry policy changed: got=%+v want=%+v", got, wantAdvice)
+		}
+		if len(parsed.OutputFields) != 1 || parsed.OutputFields[0] != "id" {
+			t.Fatalf("conflict fields lost: %+v", parsed)
 		}
 		if strings.Contains(failure.Error(), "private prompt") {
 			t.Fatal("request content leaked")
@@ -126,6 +129,22 @@ func TestProviderAttemptKeepsCancellationAndContract(t *testing.T) {
 		if cause == contract && err != contract {
 			t.Fatal("contract was replaced by a provider failure")
 		}
+	}
+}
+
+func TestOutputConflictFieldsSurviveDesktopRPC(t *testing.T) {
+	index := int64(0)
+	advice := flprovider.RetryAdvice{}
+	cause := &providerValidationError{code: responseOutputConflict, outputIndex: &index, outputFields: []string{"content", "arguments"}}
+	d := cause.diagnostic("openai")
+	source, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+		return DesktopModelSourceRPCFrame{Type: "error", ID: frame.ID, Error: &DesktopModelSourceRPCError{Code: "TURN_STREAM_FAILED", Message: newProviderFailure(d, cause, advice).Error(), RetryAdvice: &advice}}
+	})
+	defer cleanup()
+	_, err := source.StreamTurn(t.Context(), ModelGatewayRequest{Model: "desktop:model_test"}, nil)
+	got, ok := parseProviderFailure(providerTransportFailure(err, DesktopModelSourceProviderType).Error())
+	if !ok || got.OutputIndex == nil || *got.OutputIndex != 0 || strings.Join(got.OutputFields, ",") != "arguments,content" || got.Message != d.Message {
+		t.Fatalf("RPC lost structural conflict evidence: %v", err)
 	}
 }
 

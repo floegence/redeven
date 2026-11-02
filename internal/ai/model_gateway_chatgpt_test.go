@@ -211,10 +211,6 @@ func TestChatGPTCompletedItemBoundaries(t *testing.T) {
 	if err != nil || len(output) != 2 || output[0].RawJSON() != one.RawJSON() {
 		t.Fatal("native bytes or output order changed")
 	}
-	c.bytes = 8 << 20
-	if err := c.add(2, one); err == nil {
-		t.Fatal("output limit exceeded")
-	}
 	if err := c.add(-1, one); err == nil {
 		t.Fatal("negative output index accepted")
 	}

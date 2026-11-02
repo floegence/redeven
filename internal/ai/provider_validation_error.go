@@ -1,6 +1,8 @@
 package ai
 
-// These codes describe checks owned by the adapter. Only reviewed, constant
+import "strings"
+
+// These codes describe adapter and upstream output checks. Only reviewed, safe
 // messages cross the diagnostic boundary; the private cause remains available
 // through Unwrap without changing its retry or cancellation classification.
 type providerValidationCode string
@@ -24,13 +26,14 @@ const (
 )
 
 type providerValidationError struct {
-	code        providerValidationCode
-	cause       error
-	outputIndex *int64
+	code         providerValidationCode
+	cause        error
+	outputIndex  *int64
+	outputFields []string
 }
 
 func (e *providerValidationError) diagnostic(providerType string) providerFailureDiagnostic {
-	d := providerFailureDiagnostic{Provider: providerType, Code: string(e.code), Stage: "response_validation", Shape: "local_validation", OutputIndex: e.outputIndex}
+	d := providerFailureDiagnostic{Provider: providerType, Code: string(e.code), Stage: "response_validation", Shape: "local_validation", OutputIndex: e.outputIndex, OutputFields: e.outputFields}
 	switch e.code {
 	case responseOutputLimit:
 		d.Message = "Response output exceeds the conversation context state limit."
@@ -38,6 +41,9 @@ func (e *providerValidationError) diagnostic(providerType string) providerFailur
 		d.Message = "Invalid completed response output item."
 	case responseOutputConflict:
 		d.Message = "Conflicting completed response output item."
+		if fields := safeOutputConflictFields(e.outputFields); len(fields) > 0 {
+			d.Message += " Conflicting fields: " + strings.Join(fields, ", ") + "."
+		}
 	case responseOutputMissing:
 		d.Message = "The provider response is missing native output."
 	case responseSnapshotIncomplete:

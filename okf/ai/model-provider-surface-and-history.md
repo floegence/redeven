@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model provider surface and history
 tags: [ai, models, providers, history]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -15,6 +15,16 @@ Floret owns the provider-visible history and render lineage for each Turn. Redev
 Responses hosted search requests include web_search_call.action.sources for canonical Activity URLs. Qwen keeps its tool shape.
 
 ## Provider surface and history
+
+Published Floret v7.96.0 ResponsesOutput owns done-event collection and terminal
+snapshot reconciliation. Repeated done items remain strict; matching reasoning
+items may change only nonempty encrypted_content at the terminal boundary.
+Exact terminal bytes enter native history. Identity, content, tool arguments,
+unknown fields, missing items and byte limits remain validated. Omitted terminal
+snapshots retain ordered completed events. Redeven only maps SDK bytes and typed
+errors, exposing allowlisted conflict fields without provider values. Failed
+validation never advances native history or changes retry policy. Coverage:
+model_gateway_responses_output_test.go and the Floret tool-history restart suite.
 Published Floret v7.92.2 PrepareResponsesHistory owns API-key OpenAI, compatible Responses, Qwen and ChatGPT native replay: search receipts, encrypted reasoning and function items survive local tools. Activity is no replay source. Disabling searches retains evidence; completed events supply output omitted from terminal snapshots. Confirmed incomplete Responses retain snapshots for length continuation; interrupted/failed streams install none. ChatGPT rejects incomplete responses; content filtering never advances history.
 
 Preparation estimates full native input. API-key OpenAI uses response-ID/suffix continuation only with explicit responses_continuation and Engine permission; others send full input. Freeze selection/request across retries. Rejected IDs never trigger evidence-dropping retries; explicit configuration can select full replay. ChatGPT retains namespace/OAuth/WebSocket/published state.
