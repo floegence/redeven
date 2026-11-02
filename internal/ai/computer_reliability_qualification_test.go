@@ -959,20 +959,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						t.Error("public page title/capture not independently confirmed")
 					}
 				case "visual_natural":
-					capturedBeforeInput, sawCapture := false, false
-					for _, fact := range confirmedToolFacts {
-						for _, action := range toAnySlice(fact["completed_actions"]) {
-							if action == "pointer_click" {
-								capturedBeforeInput = sawCapture
-							}
-						}
-						// A screenshot must have returned in an earlier tool call.
-						for _, action := range toAnySlice(fact["completed_actions"]) {
-							if action == "screenshot" {
-								sawCapture = true
-							}
-						}
-					}
+					capturedBeforeInput := qualificationCaptureBeforeInput(confirmedToolFacts)
 					report["capture_before_input"] = capturedBeforeInput
 					if !capturedBeforeInput || entered.Load() != 1 || pointerClicks.Load() != 1 || !strings.Contains(finalText, "Correct square") {
 						t.Errorf("visual task failed: captured=%v correct=%d clicks=%d", capturedBeforeInput, entered.Load(), pointerClicks.Load())
@@ -1798,4 +1785,42 @@ type qualificationDragEvent struct {
 	X       float64 `json:"x"`
 	Y       float64 `json:"y"`
 	Buttons int     `json:"buttons"`
+}
+
+// Capture evidence is a returned frame, regardless of whether snapshot or
+// screenshot requested it. A frame in the same call cannot inform an earlier click.
+func qualificationCaptureBeforeInput(facts []map[string]any) bool {
+	sawCapture := false
+	for _, fact := range facts {
+		for _, action := range toAnySlice(fact["completed_actions"]) {
+			if action == "pointer_click" {
+				return sawCapture
+			}
+		}
+		frame, _ := fact["frame_geometry"].(map[string]any)
+		if fact["observation_status"] == "current" && anyToString(frame["frame"]) != "" {
+			sawCapture = true
+		}
+	}
+	return false
+}
+
+func TestComputerQualificationCaptureBeforeInput(t *testing.T) {
+	frame := map[string]any{"frame": "computer://fixture/verified-image"}
+	for _, tc := range []struct {
+		name  string
+		facts []map[string]any
+		want  bool
+	}{
+		{"snapshot_image", []map[string]any{{"completed_actions": []any{"snapshot"}, "observation_status": "current", "frame_geometry": frame}, {"completed_actions": []any{"pointer_click"}}}, true},
+		{"same_call", []map[string]any{{"completed_actions": []any{"screenshot", "pointer_click"}, "observation_status": "current", "frame_geometry": frame}}, false},
+		{"stale_image", []map[string]any{{"observation_status": "not_observed", "frame_geometry": frame}, {"completed_actions": []any{"pointer_click"}}}, false},
+		{"action_name_only", []map[string]any{{"completed_actions": []any{"screenshot"}, "observation_status": "current"}, {"completed_actions": []any{"pointer_click"}}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := qualificationCaptureBeforeInput(tc.facts); got != tc.want {
+				t.Fatalf("capture before input=%v, want %v", got, tc.want)
+			}
+		})
+	}
 }

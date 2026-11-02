@@ -5,7 +5,7 @@ Concepts own contracts/evidence; Git retains history.
 ## 2026-11-02
 
 - [Turn presentation](ui/flower-turn-process-disclosure.md): show status from admission, reuse existing samples for isolated visible elapsed time, and retain terminal-only disclosure with stable geometry and no extra transport.
-- [Computer read contract](ai/computer-script-read-contract.md): bind complete observations through final publication; condition waits sample within one deadline, preserving ref identity and privacy without input replay; [qualification](ai/computer-use-qualification.md) records 34/40 final real-model tasks and separates model deviations from a network failure.
+- [Computer read contract](ai/computer-script-read-contract.md): bind complete observations through final publication; condition waits sample within one deadline, preserving ref identity and privacy without input replay; [qualification](ai/computer-use-qualification.md) records 34/40 final real-model tasks and separates model deviations, a network failure and an image-measurement defect.
 
 - [Computer scripts](ai/computer-use-scripts.md): preserve owner-confirmed pre-dispatch rejection through the existing result path, retain bounded carrier failure reasons, and align legacy role guidance; [qualification](ai/computer-use-qualification.md) retains the 26 original and 24 rebased real-provider outcomes and their declared scopes.
 - [Plugin surfaces](ui/plugin-surfaces.md): context-menu-only Launcher pinning, with explicit Plugin Center and Activity window actions; [Plugin Center](ui/plugin-center-interaction.md) composes released Floe cards, fields, tabs, tags and buttons across directory, details and install/update reviews.

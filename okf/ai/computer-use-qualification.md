@@ -74,15 +74,19 @@ script examples pass. Existing Runtime invalid-read tests verify the model-facin
 failure barrier; deterministic Chromium tests verify the actual lifecycle races.
 The final configured Flash 1017 matrix runs 20 categories twice with 291 actual
 deepseek-flash requests: 34/40 strict passes. Both explicit dynamic waits, both
-natural dynamic reports, SPA, shadow form and batched pagination pass. Five
-failures are model deviations (wrong optional locator, invalid wait signatures,
-unresolved promise before visual confirmation, splitting a required one-call
-ref test, forbidden terminal use); one Wikipedia attempt reaches Chromium's
-network-timeout page. Preserve all six as failures; no input replay or target
+natural dynamic reports, SPA, shadow form and batched pagination pass. The six
+recorded failures include four model deviations (wrong optional locator, invalid
+wait signatures, splitting a required one-call ref test, forbidden terminal use),
+one Wikipedia network-timeout page and one visual measurement defect: the model
+had received a valid snapshot image, but the assertion recognized only a named
+screenshot operation. The model also issued an unresolved Promise, reported
+explicitly without replay. Preserve all original outcomes; no input replay or target
 substitution is added. Public reads pass 4/6 strict tasks, with actual content
 observed on 5/6. Earlier 29/38 and 32/38 runs include a measurement defect that
 missed emit:false snapshots; the separate corrected public run passes 6/6 before
-the final cleanup fix. Keep all runs distinct. These data qualify the named
+the final cleanup fix. Corrected image-evidence assertions have four focused
+regressions and two separate real-model visual passes (11 requests); production
+code remains identical to the final matrix. Keep all runs distinct. These data qualify the named
 browser contracts and tasks, not universal website success or native applications.
 
 
