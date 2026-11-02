@@ -1,19 +1,12 @@
 import { For, Show, createSignal } from 'solid-js';
 import { Button, Dropdown } from '@floegence/floe-webapp-core/ui';
 import { MoreHorizontal, Plus, Refresh } from '@floegence/floe-webapp-core/icons';
-import { type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
+import { type SplitWorkspaceArrangement } from '@floegence/floe-webapp-core/layout';
 import type { TerminalViewCatalog } from '../services/terminalViewCatalog';
 import { useI18n } from '../i18n';
+import { TerminalLayoutPicker } from './TerminalLayoutPicker';
 import { Dialog } from '../primitives/EnvAppModal';
 
-function LayoutPreview(props: { layout: SplitWorkspaceLayout }) {
-  return <Show when={props.layout.type === 'split' ? props.layout : undefined} keyed fallback={<span class="terminal-view-preview-pane" data-empty={'empty' in props.layout && props.layout.empty ? 'true' : undefined} />}>
-    {node => <div class="terminal-view-preview-split" style={{ 'flex-direction': node.axis === 'y' ? 'column' : 'row' }}>
-      <div style={{ flex: node.ratio }}><LayoutPreview layout={node.first} /></div>
-      <div style={{ flex: 1 - node.ratio }}><LayoutPreview layout={node.second} /></div>
-    </div>}
-  </Show>;
-}
 export function TerminalViewList(props: {
   catalog: TerminalViewCatalog;
   activeId: string | null;
@@ -23,6 +16,8 @@ export function TerminalViewList(props: {
   onNew: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  arrangements: (id: string) => readonly SplitWorkspaceArrangement[];
+  onArrange: (arrangementId: string, viewId: string) => void;
 }) {
   const i18n = useI18n();
   const [editing, setEditing] = createSignal<string | null>(null);
@@ -43,8 +38,9 @@ export function TerminalViewList(props: {
     </Show>
     <div class="terminal-view-list-items">
       <For each={visible().map(view => view.id)}>{id => { const view = () => props.catalog.views().find(item => item.id === id)!; return <div class="terminal-view-row" classList={{ 'terminal-view-selected': props.activeId === id }} data-terminal-view-row={id}>
+        <TerminalLayoutPicker compact viewId={id} layout={view().layout} choices={props.arrangements(id)} disabled={props.disabled}
+          label={i18n.t('terminalWorkspace.adjustViewLayout', { name: view().name })} onSelect={choice => props.onArrange(choice, id)} />
         <button type="button" class="terminal-view-select" aria-pressed={props.activeId === id} onClick={() => props.onSelect(id)} title={view().name} data-terminal-view-id={id}>
-          <span class="terminal-view-preview" aria-hidden="true"><LayoutPreview layout={view().layout} /></span>
           <span class="truncate">{view().name}</span>
         </button>
         <Dropdown align="end" disabled={!props.catalog.ready()} triggerAriaLabel={i18n.t('terminalWorkspace.viewActions', { name: view().name })}

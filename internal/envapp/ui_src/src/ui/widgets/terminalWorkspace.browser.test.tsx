@@ -122,9 +122,9 @@ it('selects the owning view when browsing a member from another view', async () 
 });
 
 
-it.each([2, 3, 4, 5])('preserves every saved member and focus when arranging a view with %s sessions', async count => {
+it.each([2, 3, 4, 5, 8, 16, 32])('preserves every saved member and focus when arranging a view with %s sessions', async count => {
   const { createTerminalViewCatalog } = await import('../services/terminalViewCatalog');
-  const ids = ['a', 'b', 'c', 'd', 'missing'].slice(0, count);
+  const ids = ['a', 'b', ...Array.from({ length: count - 2 }, (_, index) => 'missing-' + index)];
   let layout: SplitWorkspaceLayout = { type: 'pane', id: ids[0] };
   for (const id of ids.slice(1)) layout = dockSplitWorkspaceItem(layout, id, ids[0], 'right', 'split-' + id)!;
   const views = [
@@ -142,23 +142,27 @@ it.each([2, 3, 4, 5])('preserves every saved member and focus when arranging a v
     return <div />;
   }, document.body);
   await expect.poll(catalog.ready).toBe(true);
-  const presets = workspace.availablePresets();
-  expect(presets).toEqual(count === 2 ? ['columns', 'rows'] : count === 3 ? ['three-columns', 'main-left'] : count === 4 ? ['grid'] : []);
+  const presets = workspace.availableArrangements();
+  expect(presets.length).toBeGreaterThanOrEqual(6);
   const before = workspace.layout();
-  workspace.applyPreset('single');
+  workspace.applyArrangement('single');
   expect(workspace.layout()).toBe(before);
   for (const preset of presets) {
-    workspace.applyPreset(preset);
-    expect(splitWorkspaceItems(catalog.views().find(view => view.id === 'current')!.layout).sort()).toEqual(ids);
+    workspace.applyArrangement(preset.id);
+    expect(splitWorkspaceItems(catalog.views().find(view => view.id === 'current')!.layout).sort()).toEqual([...ids].sort());
     expect(catalog.views().find(view => view.id === 'other')).toEqual(views[1]);
     expect(active()).toBe('b');
     const positions = measureSplitWorkspace(workspace.layout()).panes;
-    workspace.applyPreset(preset);
+    workspace.applyArrangement(preset.id);
     expect(measureSplitWorkspace(workspace.layout()).panes).toEqual(positions);
   }
+  const currentLayout = workspace.layout();
+  workspace.applyArrangement('rows-1', 'other');
+  expect(workspace.layout()).toBe(currentLayout);
+  expect(active()).toBe('b');
   batch(() => { workspace.browseSession('solo'); setActive('solo'); });
-  expect(workspace.availablePresets()).toEqual([]);
-  workspace.applyPreset('grid');
+  expect(workspace.availableArrangements()).toEqual([]);
+  workspace.applyArrangement('grid');
   expect(workspace.activeViewId()).toBeNull();
   expect(workspace.displayedPaneIds()).toEqual(['solo']);
   expect(catalog.views()).toHaveLength(2);
@@ -185,4 +189,36 @@ it('keeps saved pane geometry when sessions disappear, including the last sessio
   setIds([]); await tick();
   expect(measureSplitWorkspace(workspace.displayedLayout()).panes.size).toBe(2);
   expect(catalog.views()).toHaveLength(1);
+});
+
+it('arranges an inactive view without changing selection and preserves its vacant slots', async () => {
+  const { createTerminalViewCatalog } = await import('../services/terminalViewCatalog');
+  const { emptyViewSlots, viewSessionIds } = await import('../services/terminalViewLayout');
+  const initial = { type: 'split' as const, id: 'pair', axis: 'x' as const, ratio: .5,
+    first: { type: 'pane' as const, id: 'outside' }, second: { type: 'pane' as const, id: 'vacant', empty: true as const } };
+  const views = [
+    { id: 'current', name: 'Current', layout: { type: 'pane' as const, id: 'a' }, revision: 1, createdAtMs: 1, updatedAtMs: 1 },
+    { id: 'other', name: 'Other', layout: initial, revision: 1, createdAtMs: 1, updatedAtMs: 1 },
+  ];
+  const [active, setActive] = createSignal<string | null>('a');
+  let workspace!: ReturnType<typeof createTerminalWorkspace>;
+  let catalog!: ReturnType<typeof createTerminalViewCatalog>;
+  dispose = render(() => {
+    catalog = createTerminalViewCatalog({ scope: () => 'env', connected: () => true, rpc: {
+      listViews: async () => ({ revision: 1, views }), updateViews: async () => { throw new Error('not saved in test'); }, onViewsChanged: () => () => undefined,
+    } });
+    workspace = createTerminalWorkspace({ catalog, storageKey: () => 'terminal-workspace-test', sessionIds: () => ['a', 'outside'], hydrated: () => true, activeId: active, select: setActive });
+    return <div />;
+  }, document.body);
+  await expect.poll(catalog.ready).toBe(true);
+  const current = workspace.layout();
+  expect(workspace.availableArrangements('other').length).toBeGreaterThanOrEqual(6);
+  workspace.applyArrangement('rows-2', 'other');
+  const other = catalog.views().find(view => view.id === 'other')!;
+  expect(other.layout).toMatchObject({ axis: 'y' });
+  expect(viewSessionIds(other.layout)).toEqual(['outside']);
+  expect([...emptyViewSlots(other.layout)]).toEqual(['vacant']);
+  expect(workspace.layout()).toBe(current);
+  expect(workspace.activeViewId()).toBe('current');
+  expect(active()).toBe('a');
 });

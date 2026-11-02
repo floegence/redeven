@@ -11,9 +11,9 @@ const FLOE_WEBAPP_DEPENDENCIES = [
 ] as const;
 
 const FLOE_WEBAPP_RELEASE_SET = {
-  '@floegence/floe-webapp-boot': '0.86.73',
-  '@floegence/floe-webapp-core': '0.86.73',
-  '@floegence/floe-webapp-protocol': '0.86.73',
+  '@floegence/floe-webapp-boot': '0.86.74',
+  '@floegence/floe-webapp-core': '0.86.74',
+  '@floegence/floe-webapp-protocol': '0.86.74',
 } as const;
 
 const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
@@ -174,6 +174,11 @@ describe('published npm dependency policy', () => {
       .toMatch(/window\?: boolean/);
     expect(readInstalledFloetermDeclaration('dist/semantic/RendererSurface.d.ts'))
       .toMatch(/constructor\(canvas: HTMLCanvasElement, onError\?:[^\n]+onRender\?/);
+  });
+
+  it('consumes the published adaptive split arrangement contract', () => {
+    expect(readInstalledFloeWebappCoreDeclaration('dist/components/layout/splitWorkspaceModel.d.ts'))
+      .toMatch(/export declare function createSplitWorkspaceArrangements/);
   });
 
   it('consumes the published shared file-browser status bar contract', () => {

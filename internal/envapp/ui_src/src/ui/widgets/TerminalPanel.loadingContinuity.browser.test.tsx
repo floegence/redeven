@@ -258,18 +258,32 @@ describe('TerminalPanel loading continuity', () => {
     rpcState.sessions = ['layout-a', 'layout-b', 'layout-c', 'outside'].map(id => ({ ...createdSession(id), isActive: id === 'layout-a' }));
     const { presetSplitWorkspace, splitWorkspaceItems } = await import('@floegence/floe-webapp-core/layout');
     rpcState.views = [{ id: 'current', name: 'Current', layout: presetSplitWorkspace('main-left', ['layout-a', 'layout-b', 'layout-c'], () => crypto.randomUUID()), revision: 2, createdAtMs: 1, updatedAtMs: 1 },
-      { id: 'other', name: 'Other', layout: { type: 'pane', id: 'outside' }, revision: 3, createdAtMs: 2, updatedAtMs: 2 }];
+      { id: 'other', name: 'Other', layout: { type: 'split', id: 'other-split', axis: 'y', ratio: .5, first: { type: 'pane', id: 'outside' }, second: { type: 'pane', id: 'vacancy', empty: true } }, revision: 3, createdAtMs: 2, updatedAtMs: 2 }];
     rpcState.viewRevision = 3;
     const host = document.createElement('div'); Object.assign(host.style, { width: '1100px', height: '700px' }); document.body.append(host);
     disposeRendered = render(() => <TerminalSessionCatalogProvider accessReady><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(3);
     await userEvent.click(page.getByTestId('terminal-workspace-layout'));
-    await expect.poll(() => visibleElements(document.body, '[role=menuitem]').map(item => item.textContent)).toEqual(['Three columns', 'Main left']);
-    await userEvent.click(page.getByRole('menuitem', { name: 'Three columns', exact: true }));
+    await expect.poll(() => visibleElements(document.body, '[data-terminal-layout-option]').length).toBeGreaterThanOrEqual(6);
+    expect(visibleElements(document.body, '[data-terminal-layout-option]').every(item => item.textContent === '')).toBe(true);
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-terminal-layout-option="rows-1"]')!);
     await expect.poll(() => rpcState.viewRevision).toBeGreaterThan(3);
     await expect.poll(() => splitWorkspaceItems(rpcState.views.find(view => view.id === 'current')!.layout)).toHaveLength(3);
     expect(splitWorkspaceItems(rpcState.views.find(view => view.id === 'current')!.layout).sort()).toEqual(['layout-a', 'layout-b', 'layout-c']);
-    expect(rpcState.views.find(view => view.id === 'other')!.layout).toEqual({ type: 'pane', id: 'outside' });
+    const currentLayout = structuredClone(rpcState.views.find(view => view.id === 'current')!.layout);
+    const currentRuntimes = [...host.querySelectorAll('[data-terminal-runtime-session]')];
+    const selectedSession = host.querySelector('[data-terminal-session-id][aria-current="page"]');
+    const otherTrigger = host.querySelector<HTMLButtonElement>('[data-terminal-view-layout="other"]')!;
+    otherTrigger.focus();
+    await userEvent.click(otherTrigger);
+    await expect.poll(() => visibleElements(document.body, '[data-terminal-layout-option]').length).toBe(6);
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-terminal-layout-option="main-left"]')!);
+    await expect.poll(() => rpcState.views.find(view => view.id === 'other')!.layout.axis).toBe('x');
+    expect(rpcState.views.find(view => view.id === 'other')!.layout.second.empty).toBe(true);
+    expect(rpcState.views.find(view => view.id === 'current')!.layout).toEqual(currentLayout);
+    expect(host.querySelector('[data-terminal-view-id="current"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[data-terminal-session-id][aria-current="page"]')).toBe(selectedSession);
+    expect(currentRuntimes.every(node => node.isConnected)).toBe(true);
     expect(host.querySelectorAll('[data-terminal-session-id]')).toHaveLength(4);
   });
 
@@ -288,8 +302,8 @@ describe('TerminalPanel loading continuity', () => {
       await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(count);
     }
     await userEvent.click(page.getByTestId('terminal-workspace-layout'));
-    await expect.poll(() => visibleElements(document.body, '[role=menuitem]').map(item => item.textContent)).toEqual(['Grid']);
-    await userEvent.click(page.getByRole('menuitem', { name: 'Grid', exact: true }));
+    await expect.poll(() => visibleElements(document.body, '[data-terminal-layout-option]').length).toBeGreaterThanOrEqual(6);
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-terminal-layout-option="rows-2"]')!);
     expect(create).toHaveBeenCalledTimes(4);
     await vi.waitFor(() => expect(runtimeState.propsBySession.size).toBe(4));
     for (const [id, props] of runtimeState.propsBySession) props.onInteractive?.(id);

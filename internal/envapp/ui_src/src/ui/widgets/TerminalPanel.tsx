@@ -1,4 +1,5 @@
 import type { ActivityFlowerAnchorRegistrar } from '../flower/activityFlowerAnchor';
+import { TerminalLayoutPicker } from './TerminalLayoutPicker';
 import { TerminalViewList } from './TerminalViewList';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
@@ -13,11 +14,11 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 import './adaptive-sidebar.css';
 import './terminal-workspace.css';
-import { SplitWorkspace, dockSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceEdge, type SplitWorkspaceLayout, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
+import { SplitWorkspace, dockSplitWorkspaceItem, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceEdge, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
 import { createTerminalWorkspace } from './terminalWorkspace';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Grid, Link, Menu, Pencil, Plus, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Plus, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { FolderIcon } from '@floegence/floe-webapp-core/file-browser';
 
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -1735,10 +1736,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     activeId: activeSessionId,
     select: setActiveSessionId,
   });
-  const workspaceLabels = () => ({
-    single: i18n.t('terminalWorkspace.single'), columns: i18n.t('terminalWorkspace.columns'), rows: i18n.t('terminalWorkspace.rows'),
-    'three-columns': i18n.t('terminalWorkspace.threeColumns'), 'main-left': i18n.t('terminalWorkspace.mainLeft'), grid: i18n.t('terminalWorkspace.grid'),
-  });
   const selectWorkspacePane = (id: string) => {
     workspace.activatePane(id);
     if (workspace.vacantPaneIds().includes(id)) return;
@@ -1821,9 +1818,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       });
     } finally { setWorkspaceBusy(false); }
   };
-  const applyWorkspacePreset = (preset: SplitWorkspacePreset) => {
+  const applyWorkspaceArrangement = (arrangementId: string, viewId?: string) => {
     if (workspaceBusy() || !connected()) return;
-    workspace.applyPreset(preset);
+    workspace.applyArrangement(arrangementId, viewId);
   };
 
   type PendingTerminalFocusIntent = Readonly<{
@@ -5004,14 +5001,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         onRefresh={handleRefresh}
         onFilterQueryChange={setSessionFilterQuery}
         viewList={<Show when={terminalCatalog?.viewCatalog}>{catalog => <TerminalViewList catalog={catalog()} activeId={workspace.activeViewId()} query={sessionFilterQuery()} disabled={workspaceBusy() || !connected()}
-          onNew={() => void createWorkspaceView()} onSelect={id => { workspace.activateView(id); if (navigationOverlay()) setSessionDrawerOpen(false); }} onRename={workspace.renameView} onDelete={workspace.removeView} />}</Show>}
+          onNew={() => void createWorkspaceView()} onSelect={id => { workspace.activateView(id); if (navigationOverlay()) setSessionDrawerOpen(false); }} onRename={workspace.renameView} onDelete={workspace.removeView} arrangements={workspace.availableArrangements} onArrange={applyWorkspaceArrangement} />}</Show>}
         dragPreviewBoundary={navigationContainer}
         footerActions={<Show when={!navigationOverlay()}>
           <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => rootEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
-          <Dropdown align="end"
-            trigger={<Button size="sm" variant="ghost" class="h-7 w-7 p-0" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!workspace.availablePresets().length || workspaceBusy() || !connected()}><Grid class="h-3.5 w-3.5" /></Button>}
-            items={workspace.availablePresets().map(id => ({ id, label: workspaceLabels()[id] }))}
-            onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
+          <TerminalLayoutPicker layout={workspace.layout()} choices={workspace.availableArrangements()} disabled={workspaceBusy() || !connected()} onSelect={applyWorkspaceArrangement} />
           <Dropdown align="end"
             trigger={<Button size="sm" variant="ghost" class="h-7 w-7 p-0" aria-label={i18n.t('terminal.moreOptions')} title={i18n.t('terminal.moreOptions')}><MoreVerticalIcon class="h-3.5 w-3.5" /></Button>}
             items={[
@@ -5227,10 +5221,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   </span>
                 </Show>
 
-                <Dropdown align="end"
-                  trigger={<Button size="sm" variant="ghost" data-testid="terminal-workspace-layout" title={i18n.t('terminalWorkspace.layout')} aria-label={i18n.t('terminalWorkspace.layout')} disabled={!workspace.availablePresets().length || workspaceBusy() || !connected()}><Grid class="h-3.5 w-3.5" /><span class="terminal-workspace-layout-label">{i18n.t('terminalWorkspace.layout')}</span></Button>}
-                  items={workspace.availablePresets().map(id => ({ id, label: workspaceLabels()[id] }))}
-                  onSelect={id => void applyWorkspacePreset(id as SplitWorkspacePreset)} />
+                <TerminalLayoutPicker layout={workspace.layout()} choices={workspace.availableArrangements()} disabled={workspaceBusy() || !connected()} onSelect={applyWorkspaceArrangement} />
                 <Button
                   aria-busy={clearingSessionId() !== null}
                   data-terminal-clear-state={clearingSessionId() ? 'pending' : 'idle'}

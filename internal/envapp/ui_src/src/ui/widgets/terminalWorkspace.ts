@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, on, untrack, type Accessor } from 'solid-js';
-import { isSplitWorkspaceLayout, mapSplitWorkspace, measureSplitWorkspace, presetSplitWorkspace, reconcileSplitWorkspace, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout, type SplitWorkspacePreset } from '@floegence/floe-webapp-core/layout';
+import { isSplitWorkspaceLayout, mapSplitWorkspace, measureSplitWorkspace, createSplitWorkspaceArrangements, reconcileSplitWorkspace, splitWorkspaceItems, splitWorkspacePane, type SplitWorkspaceLayout } from '@floegence/floe-webapp-core/layout';
 import { emptyViewSlots, viewSessionIds, vacateViewSessions, type TerminalViewLayout } from '../services/terminalViewLayout';
 import type { TerminalViewCatalog } from '../services/terminalViewCatalog';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
@@ -81,27 +81,34 @@ export function createTerminalWorkspace(options: {
       } else selectViewId(id);
     }
   });
-  // Published presets have fixed capacities. Layout selection may only rearrange
-  // the current saved view, including members temporarily absent from rendering.
-  const availablePresets = createMemo<SplitWorkspacePreset[]>(() => {
+  const availableArrangements = (viewId: string | null = activeViewId()) => {
     if (!catalog?.ready()) return [];
-    const view = catalog.views().find(item => item.id === activeViewId());
-    const count = splitWorkspaceItems(view?.layout ?? null).length;
-    return count === 2 ? ['columns', 'rows'] : count === 3 ? ['three-columns', 'main-left'] : count === 4 ? ['grid'] : [];
-  });
-  const applyPreset = (preset: SplitWorkspacePreset) => {
-    if (!availablePresets().includes(preset)) return;
-    const view = catalog?.views().find(item => item.id === activeViewId());
-    if (!view) return;
-    // Feed presets visual reading order so applying Grid again never swaps panes.
+    const view = catalog.views().find(item => item.id === viewId);
+    if (!view) return [];
     const members = [...measureSplitWorkspace(view.layout).panes.entries()]
-      .sort(([, a], [, b]) => a.y - b.y || a.x - b.x).map(([id]) => id);
-    const next = presetSplitWorkspace(preset, members, () => 'split-' + crypto.randomUUID());
+      .sort(([, a], [, b]) => Math.round(a.y * 1e6) - Math.round(b.y * 1e6) || a.x - b.x).map(([id]) => id);
+    const empty = emptyViewSlots(view.layout);
+    let sequence = 0;
+    return createSplitWorkspaceArrangements(members, () => 'arrangement-' + ++sequence).map(choice => {
+      let layout: TerminalViewLayout = choice.layout;
+      for (const id of empty) layout = mapSplitWorkspace(layout, id, () => ({ type: 'pane', id, empty: true } as TerminalViewLayout));
+      return { ...choice, layout };
+    });
+  };
+  const applyArrangement = (arrangementId: string, viewId: string | null = activeViewId()) => {
+    const view = catalog?.views().find(item => item.id === viewId);
+    const choice = availableArrangements(viewId).find(item => item.id === arrangementId);
+    if (!view || !choice) return;
+    // Resolve against the current target view when committing, so open pickers
+    // cannot overwrite a newer membership snapshot or switch another view.
+    const identify = (node: TerminalViewLayout): TerminalViewLayout => node.type === 'pane' ? node : {
+      ...node, id: 'split-' + crypto.randomUUID(), first: identify(node.first), second: identify(node.second),
+    };
+    const next = identify(choice.layout);
+    const members = splitWorkspaceItems(view.layout);
     const nextMembers = splitWorkspaceItems(next);
-    if (!next || nextMembers.length !== members.length || !members.every(id => nextMembers.includes(id))) return;
-    let arranged: TerminalViewLayout = next;
-    for (const id of emptyViewSlots(view.layout)) arranged = mapSplitWorkspace(arranged, id, () => ({ type: 'pane', id, empty: true } as TerminalViewLayout));
-    commit(arranged);
+    if (members.length !== nextMembers.length || !members.every(id => nextMembers.includes(id))) return;
+    catalog?.put({ id: view.id, name: view.name, layout: next });
   };
   const activateView = (id: string) => {
     const view = catalog?.views().find(view => view.id === id);
@@ -193,5 +200,5 @@ export function createTerminalWorkspace(options: {
     const view = catalog?.ownerOf(id);
     if (view) catalog?.put({ ...view, layout: vacateViewSessions(view.layout, new Set([id])) });
   };
-  return { layout, displayedLayout, commit, availablePresets, applyPreset, paneIds, displayedPaneIds, vacantPaneIds, activePaneId, activatePane, fillVacancy, releaseSession, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
+  return { layout, displayedLayout, commit, availableArrangements, applyArrangement, paneIds, displayedPaneIds, vacantPaneIds, activePaneId, activatePane, fillVacancy, releaseSession, activeViewId, activateView, browseSession, removeView, renameView, newView, leaveView };
 }

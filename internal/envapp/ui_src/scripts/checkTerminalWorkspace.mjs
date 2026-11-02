@@ -113,8 +113,8 @@ try {
   const membersBeforeGrid = await panel.locator('[data-floe-split-pane]:visible').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-floe-split-pane')).sort());
   await panel.evaluate(root => { window.workspaceRuntimeNodes = [...root.querySelectorAll('[data-terminal-runtime-session]')]; });
   await panel.getByTestId('terminal-workspace-layout').click();
-  await expect(page.getByRole('menuitem')).toHaveText(['Grid']);
-  await page.getByRole('menuitem', { name: 'Grid', exact: true }).click();
+  await expect(page.locator('[data-terminal-layout-option]').first()).toBeVisible();
+  await page.locator('[data-terminal-layout-option="rows-2"]').click();
   assert.deepEqual(await panel.locator('[data-floe-split-pane]:visible').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-floe-split-pane')).sort()), membersBeforeGrid);
   assert.equal(await panel.evaluate(root => window.workspaceRuntimeNodes.every(node => [...root.querySelectorAll('[data-terminal-runtime-session]')].includes(node))), true);
   report.checks.push('Grid only rearranges existing view members and retains their runtime nodes');
@@ -141,7 +141,7 @@ try {
   report.checks.push('four real PTYs independently accept input and paint output');
   await panel.evaluate(root => { window.workspaceRuntimeNodes = [...root.querySelectorAll('[data-terminal-runtime-session]')]; });
   const divider = panel.getByRole('separator', { name: 'Resize panes' }).first();
-  await divider.focus(); await page.keyboard.press('ArrowRight');
+  await divider.focus(); await page.keyboard.press(await divider.getAttribute("aria-orientation") === "vertical" ? "ArrowRight" : "ArrowDown");
   assert.equal(await divider.getAttribute('aria-valuenow'), '55');
   await page.keyboard.press('Enter');
   assert.equal(await divider.getAttribute('aria-valuenow'), '50');
@@ -200,6 +200,18 @@ try {
   await expect(panel.locator('[data-floe-split-pane]:visible')).toHaveCount(1);
   await page.getByRole('navigation', { name: 'Terminal panes' }).getByRole('button').first().click();
   await page.screenshot({ path: path.join(evidence, 'mobile-real.png') });
+  await panel.getByTestId('terminal-workspace-layout').click();
+  const mobileGallery = page.locator('[data-terminal-layout-gallery]');
+  await expect(mobileGallery).toBeVisible();
+  await expect.poll(async () => {
+    const bounds = await mobileGallery.boundingBox();
+    return Boolean(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.y >= 0 && bounds.y + bounds.height <= 844);
+  }).toBe(true);
+  await expect(mobileGallery.locator('[data-terminal-layout-option]').first().locator('rect')).toHaveCount(4);
+  await page.screenshot({ path: path.join(evidence, 'mobile-layout-gallery.png'), animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await expect(panel.getByTestId('terminal-workspace-layout')).toBeFocused();
+
   await touchEmulation.send('Emulation.setTouchEmulationEnabled', { enabled: false });
   await page.setViewportSize({ width: 1440, height: 940 });
   await expect(panel.locator('[data-floe-split-pane]:visible')).toHaveCount(4);
@@ -243,8 +255,9 @@ try {
   const membersBeforeRows = await restored.locator('[data-floe-split-pane]:visible').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-floe-split-pane')).sort());
   const sessionCountBeforeRows = await restored.locator('[data-terminal-session-id]').count();
   await restored.getByTestId('terminal-workspace-layout').click();
-  await expect(page.getByRole('menuitem')).toHaveText(['Two columns', 'Two rows']);
-  await page.getByRole('menuitem', { name: 'Two rows', exact: true }).click();
+  await expect(page.locator('[data-terminal-layout-option]')).toHaveCount(6);
+  assert.equal(await page.locator('[data-terminal-layout-option]').evaluateAll(nodes => nodes.every(node => node.textContent === '')), true);
+  await page.locator('[data-terminal-layout-option="rows-2"]').click();
   await expect(restored.getByRole('status', { name: 'Saving views', exact: true })).toHaveCount(0);
   assert.deepEqual(await restored.locator('[data-floe-split-pane]:visible').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-floe-split-pane')).sort()), membersBeforeRows);
   await expect(restored.locator('[data-terminal-session-id]')).toHaveCount(sessionCountBeforeRows);
@@ -264,6 +277,17 @@ try {
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Rename view', exact: true })).toBeHidden();
   await expect(restored.locator('[data-terminal-view-id="' + secondViewId + '"]')).toHaveText(/Logs/);
+  const activeGeometryBeforeOtherLayout = await restored.locator('[data-floe-split-pane]:visible').evaluateAll(nodes => nodes.map(node => [node.style.left, node.style.top, node.style.width, node.style.height]));
+  const inactiveLayoutTrigger = restored.locator('[data-terminal-view-layout="' + savedViewId + '"]');
+  await inactiveLayoutTrigger.focus();
+  await inactiveLayoutTrigger.click();
+  assert.ok(await page.locator('[data-terminal-layout-option]').count() >= 6);
+  await page.screenshot({ path: path.join(evidence, 'view-layout-gallery.png'), animations: 'disabled' });
+  await page.locator('[data-terminal-layout-option="main-right"]').click();
+  await expect(restored.locator('[data-terminal-view-id="' + secondViewId + '"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(restored.locator('[data-floe-split-pane]:visible')).toHaveCount(2);
+  assert.deepEqual(await restored.locator('[data-floe-split-pane]:visible').evaluateAll(nodes => nodes.map(node => [node.style.left, node.style.top, node.style.width, node.style.height])), activeGeometryBeforeOtherLayout);
+  report.checks.push('view-row graphical picker adjusts only its target without activating it or changing the visible PTYs');
   await restored.locator('[data-terminal-view-id="' + savedViewId + '"]').click();
   await expect(restored.locator('[data-floe-split-pane]:visible')).toHaveCount(5);
   assert.deepEqual(await restored.locator('[data-floe-split-pane]:visible').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-floe-split-pane')).sort()), [...splitIds].sort());
