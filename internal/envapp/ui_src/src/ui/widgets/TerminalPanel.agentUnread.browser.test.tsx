@@ -59,6 +59,10 @@ vi.mock('../pages/EnvContext', () => ({
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     terminal: {
+      listViews: vi.fn(async () => ({ revision: 1, views: [] })),
+      putView: vi.fn(async req => ({ revision: 2, views: [{ id: req.id, name: req.name, layout: req.layout, revision: 2, createdAtMs: 1, updatedAtMs: 1 }] })),
+      deleteView: vi.fn(async () => ({ revision: 3, views: [] })),
+      onViewsChanged: vi.fn(() => () => undefined),
       listSessions: vi.fn(async () => ({ sessions: rpcState.sessions })),
       listGroups: vi.fn(async () => ({
         groups: [{
@@ -235,7 +239,8 @@ describe('TerminalPanel stock Agent unread integration', () => {
     const indicator = host.querySelector('.redeven-terminal-work-status')!;
     expect(indicator.getAttribute('aria-label')).toBeTruthy();
     expect(indicator.querySelector('.animate-spin')).toBeNull();
-    expect(host.querySelector('[data-testid="terminal-content"]')?.contains(indicator)).toBe(false);
+    expect(indicator.closest('[data-floe-split-header]')).not.toBeNull();
+    expect(indicator.closest('[data-terminal-runtime-session]')).toBeNull();
     expect(host.querySelector('.redeven-terminal-work-glow')).toBeNull();
     publish('idle', 2);
     await vi.waitFor(() => expect(host.querySelector('.redeven-terminal-work-status')).toBeNull());

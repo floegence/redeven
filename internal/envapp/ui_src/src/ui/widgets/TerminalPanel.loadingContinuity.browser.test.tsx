@@ -12,6 +12,8 @@ const protocolState = vi.hoisted(() => ({
 }));
 const rpcState = vi.hoisted(() => ({
   sessions: [] as any[],
+  views: [] as any[],
+  viewRevision: 1,
 }));
 const runtimeState = vi.hoisted(() => ({
   propsBySession: new Map<string, any>(),
@@ -58,6 +60,15 @@ vi.mock('../pages/EnvContext', () => ({
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     terminal: {
+      listViews: vi.fn(async () => ({ revision: rpcState.viewRevision, views: [...rpcState.views] })),
+      putView: vi.fn(async req => {
+        const previous = rpcState.views.find(view => view.id === req.id);
+        if ((previous?.revision ?? 0) !== req.baseRevision) throw new Error('conflict');
+        rpcState.views = [...rpcState.views.filter(view => view.id !== req.id), { id: req.id, name: req.name, layout: req.layout, revision: ++rpcState.viewRevision, createdAtMs: 1, updatedAtMs: 1 }];
+        return { revision: rpcState.viewRevision, views: [...rpcState.views] };
+      }),
+      deleteView: vi.fn(async req => { rpcState.views = rpcState.views.filter(view => view.id !== req.id); return { revision: ++rpcState.viewRevision, views: [...rpcState.views] }; }),
+      onViewsChanged: vi.fn(() => () => undefined),
       listSessions: vi.fn(async () => ({ sessions: rpcState.sessions })),
       listGroups: vi.fn(async () => ({
         groups: [{
@@ -219,6 +230,8 @@ describe('TerminalPanel loading continuity', () => {
     layoutState.mobile = false;
     layoutState.active = () => true;
     rpcState.sessions = [];
+    rpcState.views = []; rpcState.viewRevision = 1;
+    localStorage.removeItem("redeven_terminal_workspace:v1:env-1:terminal_page:active-view");
     runtimeState.propsBySession.clear();
     flowerLauncher.mockClear();
     sessionStorage.clear();
@@ -259,8 +272,8 @@ describe('TerminalPanel loading continuity', () => {
     expect(runtimeState.propsBySession.size).toBe(4);
     expect(host.querySelector('[data-terminal-session-id="split-session-2"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-runtime-session="split-session-1"]')).toBe(original);
-    const saved = JSON.parse(localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page')!);
-    expect(saved.type).toBe('split');
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    expect(rpcState.views[0].layout.type).toBe('split');
     const first = host.querySelector<HTMLElement>('[data-floe-split-pane="split-session-1"]')!;
     await userEvent.click(first.querySelector<HTMLButtonElement>('[aria-label="Split pane"]')!);
     await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
@@ -401,10 +414,12 @@ describe('TerminalPanel loading continuity', () => {
     await expect.poll(() => runtimeState.propsBySession.has('browse-c')).toBe(true);
     runtimeState.propsBySession.get('browse-c').onInteractive?.('browse-c');
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(pane => pane.getAttribute('data-floe-split-pane'))).toEqual(['browse-c']);
-    expect(localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page')).toBe(saved);
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    expect(rpcState.views[0].layout).toEqual(JSON.parse(saved!));
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id]')!);
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="browse-b"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
-    expect(runtimeState.propsBySession.get('browse-b').active()).toBe(true);
+    await expect.poll(() => runtimeState.propsBySession.get('browse-b').active()).toBe(true);
     const pane = host.querySelector('[data-floe-split-pane="browse-b"]')!;
     const maximize = pane.querySelector<HTMLButtonElement>('[aria-label="Maximize pane"]')!;
     const maximizeIcon = maximize.innerHTML;
@@ -414,8 +429,8 @@ describe('TerminalPanel loading continuity', () => {
     expect(restore.getAttribute('aria-pressed')).toBe('true');
     await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="browse-a"]')!);
     await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
-    expect(runtimeState.propsBySession.get('browse-a').active()).toBe(true);
-    expect(localStorage.getItem('redeven_terminal_workspace:v1:env-1:terminal_page')).toBe(saved);
+    await expect.poll(() => runtimeState.propsBySession.get('browse-a').active()).toBe(true);
+    expect(rpcState.views[0].layout).toEqual(JSON.parse(saved!));
     expect(host.querySelector('[data-terminal-runtime-session="browse-a"]')).toBe(original);
     expect(host.textContent).not.toContain('Quick switch');
   });
@@ -453,6 +468,70 @@ describe('TerminalPanel loading continuity', () => {
     expect(host.textContent).not.toContain('Quick switch');
   });
 
+  it('manages independent backend views, renames and deletes without closing sessions', async () => {
+    await page.viewport(1280, 800);
+    rpcState.sessions = ['views-a', 'views-b', 'views-c'].map(id => ({ ...createdSession(id), isActive: id === 'views-a' }));
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '1100px', height: '700px' }); document.body.append(host);
+    const mount = () => render(() => <TerminalSessionCatalogProvider><TerminalPanel variant="panel" /></TerminalSessionCatalogProvider>, host);
+    disposeRendered = mount();
+    await expect.poll(() => runtimeState.propsBySession.has('views-a')).toBe(true);
+    runtimeState.propsBySession.get('views-a').onInteractive?.('views-a');
+    const native = commands as unknown as { dragTerminalSessionToPane: (source: string, target: string, edge: string) => Promise<void> };
+    await native.dragTerminalSessionToPane('views-b', 'views-a', 'right');
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    const firstId = rpcState.views[0].id;
+    const firstLayout = rpcState.views[0].layout;
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-session-id="views-c"]')!);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
+    runtimeState.propsBySession.get('views-c').onInteractive?.('views-c');
+    await native.dragTerminalSessionToPane('views-a', 'views-c', 'bottom');
+    await expect.poll(() => rpcState.views.length).toBe(2);
+    const secondId = rpcState.views.find(view => view.id !== firstId)!.id;
+    expect(rpcState.views.find(view => view.id === firstId)!.layout).toEqual(firstLayout);
+    expect(host.querySelectorAll('[data-terminal-view-id]')).toHaveLength(2);
+    expect(host.querySelector('[data-terminal-view-count], .terminal-view-pane-count')).toBeNull();
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="' + firstId + '"]')!);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-a', 'views-b']);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for View 1"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Rename view', exact: true }));
+    await page.getByRole('textbox', { name: 'View name', exact: true }).fill('Services');
+    await userEvent.click(page.getByRole('button', { name: 'Confirm', exact: true }));
+    await expect.poll(() => rpcState.views.find(view => view.id === firstId)?.name).toBe('Services');
+    disposeRendered(); disposeRendered = mount();
+    await expect.poll(() => host.querySelectorAll('[data-terminal-view-id]').length).toBe(2);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-terminal-view-id="' + secondId + '"]')!);
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').map(node => node.getAttribute('data-floe-split-pane'))).toEqual(['views-a', 'views-c']);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="Actions for View 2"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Delete view', exact: true }));
+    await expect.poll(() => rpcState.views.length).toBe(1);
+    expect(host.querySelectorAll('[data-terminal-session-id]').length).toBe(3);
+    expect(rpcState.views[0].name).toBe('Services');
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(1);
+    await page.screenshot({ element: host, path: '../../../node_modules/.cache/terminal-workspace/views.png' });
+  });
+
+  it('keeps the existing pane active and visible while a split session is being created', async () => {
+    await page.viewport(1280, 800);
+    let resolveCreate!: (value: ReturnType<typeof createdSession>) => void;
+    const create = vi.fn().mockResolvedValueOnce(createdSession('steady-a')).mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve; }));
+    const host = renderCreateFlow(create);
+    await expect.poll(() => runtimeState.propsBySession.has('steady-a')).toBe(true);
+    runtimeState.propsBySession.get('steady-a').onInteractive?.('steady-a');
+    const original = host.querySelector('[data-terminal-runtime-session="steady-a"]');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-floe-split-pane="steady-a"] [aria-label="Split pane"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Split right', exact: true }));
+    await expect.poll(() => create.mock.calls.length).toBe(2);
+    expect(runtimeState.propsBySession.get('steady-a').active()).toBe(true);
+    expect(host.querySelector('[data-terminal-runtime-session="steady-a"]')).toBe(original);
+    expect(visibleElements(host, '[data-floe-split-pane]').map(p => p.getAttribute('data-floe-split-pane'))).toEqual(['steady-a']);
+    resolveCreate(createdSession('steady-b'));
+    await expect.poll(() => visibleElements(host, '[data-floe-split-pane]').length).toBe(2);
+    expect(visibleElements(host, '[data-terminal-creation-transition]')).toHaveLength(0);
+    expect(host.querySelector('[data-terminal-runtime-session="steady-a"]')).toBe(original);
+  });
+
   it('keeps headers, dividers and buttons within the selected terminal palette across shell themes', async () => {
     let sequence = 0;
     const host = renderCreateFlow(vi.fn(async () => createdSession('palette-' + ++sequence)));
@@ -471,6 +550,8 @@ describe('TerminalPanel loading continuity', () => {
         const colors = runtimeState.propsBySession.get('palette-1').themeColors();
         expect(area.style.getPropertyValue('--background')).toBe(colors.background);
         expect(area.style.getPropertyValue('--foreground')).toBe(colors.foreground);
+        expect(area.style.getPropertyValue('--primary')).toBe(colors.foreground);
+        expect(area.style.getPropertyValue('--ring')).toBe(colors.foreground);
         expect(area.style.getPropertyValue('--floe-ink-soft')).toBe(area.style.getPropertyValue('--muted-foreground'));
         expect(area.style.getPropertyValue('--floe-state-hover')).toContain(colors.background);
         const inactiveHeader = host.querySelector<HTMLElement>('[data-floe-split-pane][data-active="false"] [data-floe-split-header]')!;

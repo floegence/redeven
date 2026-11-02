@@ -30,6 +30,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 		"internal/notes/service.go":                 {},
 		"internal/portforward/registry/registry.go": {},
 		"internal/terminal/group_catalog.go":        {},
+		"internal/terminal/view_catalog.go":         {},
 		"internal/threadreadstate/store.go":         {},
 		"internal/workbenchlayout/service.go":       {},
 	}

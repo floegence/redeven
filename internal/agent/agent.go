@@ -411,6 +411,10 @@ func New(opts Options) (*Agent, error) {
 		terminalManager.Cleanup()
 		return nil, fmt.Errorf("open terminal group catalog: %w", err)
 	}
+	if err := terminalManager.EnablePersistentViews(filepath.Join(stateDir, "apps", "terminal", "views.sqlite")); err != nil {
+		terminalManager.Cleanup()
+		return nil, fmt.Errorf("open terminal view catalog: %w", err)
+	}
 	a := &Agent{
 		cfg:                     opts.Config,
 		log:                     logger,

@@ -2,6 +2,7 @@ import '../../index.css';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -191,4 +192,38 @@ it('opens mobile navigation without focusing an input and gives session actions 
   expect(action!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   expect(host.querySelector('[data-terminal-tree-rail]')?.getBoundingClientRect().width ?? 0).toBe(0);
   await page.screenshot({ element: host, path: '../../../node_modules/.cache/mobile-navigation/terminal-populated.png' });
+});
+
+it('uses normal pointer cursors before a session drag starts', async () => {
+  const host = mountNavigator(false);
+  await settleLayout();
+  for (const selector of ['[data-terminal-session-id="first"]', '[data-terminal-session-drag-handle="first"]', '[data-terminal-group-drag-handle]']) {
+    expect(getComputedStyle(host.querySelector(selector)!).cursor).not.toBe('grab');
+  }
+});
+
+it('keeps icon tile edges and surfaces distinguishable across all published shell palettes', async () => {
+  const host = mountNavigator(false);
+  const avatar = host.querySelector<HTMLElement>('[data-terminal-session-avatar]')!;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+  const context = canvas.getContext('2d')!;
+  const luminance = (color: string) => {
+    context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+    const values = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(channel => {
+      const value = channel / 255; return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+  };
+  const contrast = (a: string, b: string) => {
+    const values = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (values[0] + 0.05) / (values[1] + 0.05);
+  };
+  for (const theme of builtInShellThemePresets) {
+    for (const [token, value] of Object.entries(theme.semanticTokens ?? {})) if (value) host.style.setProperty(token, value);
+    host.style.backgroundColor = 'var(--sidebar)';
+    const tile = getComputedStyle(avatar); const background = getComputedStyle(host).backgroundColor;
+    expect(contrast(tile.borderTopColor, background), theme.name + ' edge').toBeGreaterThan(1.4);
+    expect(contrast(tile.backgroundColor, background), theme.name + ' surface').toBeGreaterThan(1.1);
+    for (const token of Object.keys(theme.semanticTokens ?? {})) host.style.removeProperty(token);
+  }
 });

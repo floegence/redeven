@@ -89,6 +89,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   /** Owning terminal panel; keeps session previews visible over workspace drop targets. */
   dragPreviewBoundary?: () => HTMLElement | undefined;
   footerActions?: JSX.Element;
+  viewList?: JSX.Element;
   onCloseDrawer: () => void;
   onDrawerPresenceChange?: (present: boolean) => void;
   onCreateSessionInGroup?: (groupId: string) => void;
@@ -914,6 +915,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 </Show>
               </div>
 
+            {props.viewList}
             <SidebarSection
               title={props.mobile ? undefined : i18n.t('terminalWorkspace.directories')}
               actions={(
@@ -984,7 +986,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           classList={{
                             'opacity-65': navigationGroup().pending,
                             '!bg-[color-mix(in_srgb,var(--primary)_15%,var(--sidebar))]': dropIntent()?.groupId === navigationGroup().id,
-                            'cursor-grab active:cursor-grabbing': !navigationGroup().isDefault && !navigationGroup().pending,
+                            'cursor-pointer': !navigationGroup().isDefault && !navigationGroup().pending,
                             '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null || draggedGroupId() !== null,
                           }}
                           onContextMenu={(event) => props.onOpenGroupContextMenu?.(event, navigationGroup().id)}
@@ -1047,7 +1049,6 @@ ${navigationGroup().defaultWorkingDir}`}
                             <ChevronRight class={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${navigationGroup().expanded ? 'rotate-90' : ''}`} />
                             <Show when={navigationGroup().expanded} fallback={<FolderIcon size={16} />}><FolderOpenIcon size={16} /></Show>
                             <span class="min-w-0 truncate text-[var(--floe-type-control)] font-semibold">{navigationGroup().name}</span>
-                            <span class="text-[var(--floe-type-caption)] tabular-nums text-muted-foreground">{navigationGroup().pending ? '…' : navigationGroup().totalSessionCount}</span>
                           </button>
                           <button
                             type="button"
@@ -1206,7 +1207,7 @@ ${navigationGroup().defaultWorkingDir}`}
                           >
                             <button
                               type="button"
-                              class="h-full w-full cursor-grab active:cursor-grabbing rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
+                              class="h-full w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
                               data-terminal-session-id={sessionId}
                               data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                               data-terminal-session-index={navigationIndex() + 1}
@@ -1238,7 +1239,7 @@ ${navigationGroup().defaultWorkingDir}`}
                             type="button"
                             tabIndex={-1}
                             draggable={item().transitionState === 'none'}
-                            class={`relative z-10 flex shrink-0 cursor-grab select-none items-center justify-center rounded transition-colors duration-150 hover:bg-sidebar-accent/60 focus:outline-none active:cursor-grabbing ${props.mobile ? 'h-9 w-9' : 'h-6 w-6'}`}
+                            class={`relative z-10 flex shrink-0 cursor-pointer select-none items-center justify-center rounded transition-colors duration-150 hover:bg-sidebar-accent/60 focus:outline-none ${props.mobile ? 'h-9 w-9' : 'h-6 w-6'}`}
                             classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
                             data-terminal-session-drag-handle={sessionId}
                             aria-label={`${item().label}: ${item().title}`}

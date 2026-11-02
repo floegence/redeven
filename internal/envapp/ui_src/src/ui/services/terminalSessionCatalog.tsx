@@ -1,3 +1,4 @@
+import { createTerminalViewCatalog, type TerminalViewCatalog } from './terminalViewCatalog';
 import { createContext, createEffect, createSignal, onCleanup, untrack, useContext, type Accessor, type ParentProps } from 'solid-js';
 import type {
   TerminalExecutionContextInfo,
@@ -28,6 +29,7 @@ import {
 } from './terminalTabActivity';
 
 export type TerminalSessionCatalogValue = Readonly<{
+  viewCatalog: TerminalViewCatalog;
   sessions: Accessor<readonly TerminalSessionInfo[]>;
   groups: Accessor<readonly TerminalGroup[]>;
   groupRevision: Accessor<number>;
@@ -108,6 +110,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const env = useEnvContext();
+  const viewCatalog = createTerminalViewCatalog({ scope: () => String(env.env_id() ?? ''), connected: () => protocol.status() === 'connected', enabled: () => canLaunchProcess(env.env()?.permissions), rpc: rpc.terminal });
   const [sessions, setSessions] = createSignal<readonly TerminalSessionInfo[]>([]);
   const [groups, setGroups] = createSignal<readonly TerminalGroup[]>([]);
   const [groupRevision, setGroupRevision] = createSignal(0);
@@ -1388,6 +1391,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   });
 
   const value: TerminalSessionCatalogValue = {
+    viewCatalog,
     sessions,
     groups,
     groupRevision,

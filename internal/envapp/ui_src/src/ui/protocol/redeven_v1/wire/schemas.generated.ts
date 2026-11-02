@@ -2,6 +2,52 @@
 import type { WireSchema } from './validate';
 
 export const redevenWireSchemas = {
+  "wire_terminal_view_snapshot_resp": {
+    "kind": "object",
+    "properties": {
+      "revision": {
+        "kind": "number"
+      },
+      "views": {
+        "kind": "array",
+        "item": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "string"
+            },
+            "name": {
+              "kind": "string"
+            },
+            "layout_json": {
+              "kind": "string"
+            },
+            "revision": {
+              "kind": "number"
+            },
+            "created_at_ms": {
+              "kind": "number"
+            },
+            "updated_at_ms": {
+              "kind": "number"
+            }
+          },
+          "required": [
+            "created_at_ms",
+            "id",
+            "layout_json",
+            "name",
+            "revision",
+            "updated_at_ms"
+          ]
+        }
+      }
+    },
+    "required": [
+      "revision",
+      "views"
+    ]
+  },
   "wire_ai_send_user_turn_resp": {
     "kind": "object",
     "properties": {
@@ -6024,6 +6070,7 @@ export const redevenWireSchemas = {
 export type RedevenWireSchemaName = keyof typeof redevenWireSchemas;
 
 export const redevenWireSchemaNames = {
+  "fromWireTerminalViewSnapshot": "wire_terminal_view_snapshot_resp",
   "fromWireAISendUserTurnResponse": "wire_ai_send_user_turn_resp",
   "fromWireAISubmitRequestUserInputResponseResponse": "wire_ai_submit_request_user_input_response_resp",
   "fromWireAIStopThreadResponse": "wire_ai_stop_thread_resp",

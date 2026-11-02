@@ -2,31 +2,35 @@
 type: Frontend Contract
 title: Env App terminal and surface composition
 tags: [architecture, env-app, terminal, ui]
-quality_exception: Cross-surface frontend composition contract spanning semantic terminal rendering, lazy boundaries, keep-alive navigation, recovery presentation, and renderer evidence.
+quality_exception: Cross-surface composition, placement, loading and renderer boundaries.
 lifecycle: contract
 reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Env App adapts published Floeterm/Floe. Views own projection and local interaction; Floeterm owns PTY facts, Floe owns shell, selection, KeepAlive, focus and layers. Loading/recovery preserve these boundaries and retain interactive surfaces where allowed.
+Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across view/layout changes. Visible panes paint independently; active session owns input/search/commands.
 
 # Contract
 
-File preview surfaces carry an internal `surface` contract that defaults to `main`.
-
-A history viewport is one atomic server snapshot with canonical width and height even when its compact payload crosses multiple transport chunks.
-
-Floe owns the CSS contract; Redeven marks custom compound controls without duplicating focus styling.
+File preview defaults to the main surface. Chunked history remains one atomic snapshot with canonical dimensions. Compound controls use Floe CSS.
 
 ## Terminal workspace placement
 
-Published Floe SplitWorkspace owns recursive splits, presets, edge docking, center swaps and pointer/keyboard resizing. Redeven owns localized controls and the environment/panel-scoped v1 layout record. Validate saved trees and reconcile only after catalog hydration. Selecting another split member focuses it and restores a maximized layout. Selecting an unplaced session shows it alone without rewriting the saved split; selecting a member restores that split. Closing a pane preserves its session. Explicit splitting creates a session in the target group using its verified local cwd or group startup directory; dragging places an existing session. Group, cwd and placement remain independent.
+Published SplitWorkspace owns splits, presets, docking, swaps and accessible resizing. Splitting creates a backend view; later placement edits update it. Users manage independent named views through thumbnails, rename/delete and creation above Directories.
 
-Desktop starts at pane headers. The sidebar footer retains presets, search, clear, settings and creation; groups retain scoped creation. Overlays keep their toolbar/drawer trigger. Maximize changes to restore; docking restores splits.
+Selecting a member focuses it and restores maximized panes. Selecting an outside session shows it alone and deselects the view; only explicit view selection restores saved splits. Closing panes/deleting views preserves sessions. Explicit splitting creates a session in the target group at its verified local cwd or group startup directory; dragging places an existing session. Placement, membership and cwd remain independent.
 
-Runtime nodes stay keyed by session ID across layout changes. Visible panes paint independently; active session alone owns keyboard input, search and toolbar commands. Mobile shows the active pane and pane tabs without changing the saved desktop tree. Maximize is transient. Alt+Shift+Left/Right cycles placed panes.
+Desktop starts at pane headers, with preference-controlled Workbench activity indicators. Its footer retains presets, search, clear, settings and creation. Groups retain scoped creation; overlays keep toolbar/drawer controls. Maximize changes to restore.
 
-Pane headers, dividers, overlay toolbar and status footer use the terminal theme; the sidebar uses the shell theme. Prehydrated catalog snapshots initialize placement before reconciliation, preventing reload from pruning saved splits against an empty list. Resize controls retain keyboard focus.
+Split creation/attachment never covers existing panes with global loading. Environment/view changes fence async placement. Mobile shows active-pane tabs without rewriting desktop trees. Maximize is transient; Alt+Shift+Left/Right cycles panes.
+
+Pane chrome follows terminal foreground/background, never ANSI blue; sidebar follows shell tokens. Rounded session tiles use contrasting border/fill mixes. Idle hover uses pointer; only active drags show grabbing.
+
+## View projection
+
+One environment-scoped provider serializes debounced saves with captured per-view base revisions. In-flight edits survive acknowledgment. Conflicts retain drafts with explicit reload/discard, never blind retries. Reconnect recovers loading; permission loss clears metadata. Layout edits wait for catalog readiness.
+
+Active view stays local per panel. Legacy v1 local splits import once and clear after backend acknowledgment. Missing sessions disappear from rendering, never stored layouts; empty views offer session creation. Views do not restart PTYs.
 
 # Boundaries
 
@@ -34,10 +38,6 @@ Redeven supplies placement, permissions, local-path capability and localized chr
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - Published terminal semantic/input/history/live adapter.
-
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts` - Opens only `terminal/live_v1` and delegates ordering to Floeterm.
-
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalCatalogTransport.ts` - Keeps catalog/history outside the initial live renderer graph.
-
-- `redeven:internal/envapp/ui_src/scripts/checkTerminalWorkspace.mjs` - Real PTY group moves, docking, retained runtime identity, mobile layout and reload.
+- redeven:internal/envapp/ui_src/src/ui/widgets/terminalWorkspace.ts - Placement/selection adapter.
+- redeven:internal/envapp/ui_src/src/ui/services/terminalViewCatalog.ts - Revisioned projection.
+- redeven:internal/envapp/ui_src/scripts/checkTerminalWorkspace.mjs - Real PTYs, retained nodes, cross-browser views, mobile and reload.

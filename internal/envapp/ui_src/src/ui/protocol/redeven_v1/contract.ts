@@ -1,3 +1,5 @@
+import type { TerminalViewSnapshot, TerminalViewPutRequest, TerminalViewDeleteRequest } from './sdk/terminalViews';
+import { fromWireTerminalViewSnapshot, toWireTerminalViewPutRequest, toWireTerminalViewDeleteRequest } from './codec/terminalViews';
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
 type RpcOperationOptions = NonNullable<Parameters<RpcHelpers['call']>[3]>;
 import type { JsonValue } from '@floegence/flowersec-core';
@@ -252,6 +254,10 @@ export type RedevenV1Rpc = {
     semanticHistory: (req: TerminalSemanticHistoryRequest) => Promise<TerminalSemanticHistoryResponse>;
     semanticClear: (req: TerminalSemanticClearRequest) => Promise<TerminalSemanticClearResponse>;
     deleteSession: (req: TerminalSessionDeleteRequest) => Promise<TerminalSessionDeleteResponse>;
+    listViews: () => Promise<TerminalViewSnapshot>;
+    putView: (req: TerminalViewPutRequest) => Promise<TerminalViewSnapshot>;
+    deleteView: (req: TerminalViewDeleteRequest) => Promise<TerminalViewSnapshot>;
+    onViewsChanged: (handler: (event: TerminalViewSnapshot) => void) => () => void;
     listGroups: () => Promise<TerminalGroupCatalogSnapshot>;
     createGroup: (req: TerminalGroupCreateRequest) => Promise<TerminalGroupMutationResponse>;
     updateGroup: (req: TerminalGroupUpdateRequest) => Promise<TerminalGroupMutationResponse>;
@@ -532,6 +538,10 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call(redevenV1TypeIds.terminal.sessionDelete, payload, decodeWire(redevenWireSchemaNames.fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionDeleteResponse));
         return resp;
       },
+      listViews: async () => call(redevenV1TypeIds.terminal.viewList, {}, decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot)),
+      putView: async req => call(redevenV1TypeIds.terminal.viewPut, toWireTerminalViewPutRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot)),
+      deleteView: async req => call(redevenV1TypeIds.terminal.viewDelete, toWireTerminalViewDeleteRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot)),
+      onViewsChanged: handler => helpers.onNotify(redevenV1TypeIds.terminal.viewsChanged, decodeWire(redevenWireSchemaNames.fromWireTerminalViewSnapshot, fromWireTerminalViewSnapshot), handler),
       listGroups: async () => call(redevenV1TypeIds.terminal.groupList, {}, decodeWire(redevenWireSchemaNames.fromWireTerminalGroupListResponse, fromWireTerminalGroupListResponse)),
       createGroup: async (req) => call(redevenV1TypeIds.terminal.groupCreate, toWireTerminalGroupCreateRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalGroupMutationResponse, fromWireTerminalGroupMutationResponse)),
       updateGroup: async (req) => call(redevenV1TypeIds.terminal.groupUpdate, toWireTerminalGroupUpdateRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalGroupMutationResponse, fromWireTerminalGroupMutationResponse)),

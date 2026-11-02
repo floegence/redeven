@@ -68,6 +68,7 @@ type Manager struct {
 	activateSessionFunc func(ctx context.Context, sessionID string, cols int, rows int) error
 	groupOperationMu    sync.Mutex
 	groupCatalog        *groupCatalog
+	viewCatalog         *viewCatalog
 
 	mu                            sync.Mutex
 	writers                       map[flowersec.RPCPeer]*controlSink
@@ -250,6 +251,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		containerExecReconnectTimeout: 30 * time.Second,
 	}
 	m.groupCatalog = newMemoryGroupCatalog(m.agentHomeAbs)
+	m.viewCatalog = newMemoryViewCatalog()
 
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, m.agentHomeAbs, log))
 	m.term.SetEventHandler(&eventHandler{m: m})
@@ -505,6 +507,7 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 	})
 
 	registerTerminalGroupRPCs(m, r, meta, gate)
+	registerTerminalViewRPCs(m, r, meta, gate)
 
 	return detachSink
 }
@@ -639,6 +642,7 @@ func (m *Manager) Cleanup() {
 	clear(m.sessionGroupIDs)
 	m.mu.Unlock()
 	_ = m.groupCatalog.Close()
+	_ = m.viewCatalog.Close()
 }
 
 func (m *Manager) ensureWriter(streamServer flowersec.RPCPeer, meta *session.Meta, gate *accessgate.Gate) (*controlSink, bool) {
