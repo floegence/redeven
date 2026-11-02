@@ -50,10 +50,10 @@ async function assertWizardTypography(dialog) {
  });
  assert.ok(typography.title.every(size=>Math.abs(size-1)<.01),JSON.stringify(typography));
  assert.ok(typography.heading.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
- assert.ok(typography.copy.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
+ assert.ok(typography.copy.every(size=>Math.abs(size-(typography.coarse ? .875 : .8125))<.01),JSON.stringify(typography));
  assert.ok(typography.labels.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
  assert.ok(typography.inputs.every(size=>Math.abs(size-(typography.coarse ? 1 : .8125))<.01),JSON.stringify(typography));
- assert.ok(typography.gatewayPicker.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
+ assert.ok(typography.gatewayPicker.every(size=>Math.abs(size-(typography.coarse ? .875 : .8125))<.01),JSON.stringify(typography));
  return typography;
 }
 async function holdAction(page) {
