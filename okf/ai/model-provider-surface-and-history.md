@@ -16,10 +16,11 @@ Responses hosted search requests include web_search_call.action.sources for cano
 
 ## Provider surface and history
 
-Published Floret v7.96.0 ResponsesOutput owns done-event collection and terminal
+Published Floret v7.96.1 ResponsesOutput owns done-event collection and terminal
 snapshot reconciliation. Repeated done items remain strict; matching reasoning
-items may change only nonempty encrypted_content at the terminal boundary.
-Exact terminal bytes enter native history. Identity, content, tool arguments,
+items may differ in encrypted_content at the terminal boundary. Completed-item
+ciphertext stays authoritative; only absent, null or empty ciphertext is filled
+from a matching terminal item. Native bytes are retained without rewriting. Identity, content, tool arguments,
 unknown fields, missing items and byte limits remain validated. Omitted terminal
 snapshots retain ordered completed events. Redeven only maps SDK bytes and typed
 errors, exposing allowlisted conflict fields without provider values. Failed

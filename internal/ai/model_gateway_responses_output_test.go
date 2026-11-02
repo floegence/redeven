@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestResponsesTerminalCiphertextSurvivesAdapterRestart(t *testing.T) {
+func TestResponsesCompletedCiphertextSurvivesAdapterRestart(t *testing.T) {
 	for _, typ := range []string{"openai", "openai_compatible", "qwen", "chatgpt"} {
 		t.Run(typ, func(t *testing.T) {
 			requests := 0
@@ -20,8 +20,8 @@ func TestResponsesTerminalCiphertextSurvivesAdapterRestart(t *testing.T) {
 					return
 				}
 				requests++
-				if requests == 2 && (!strings.Contains(string(body["input"]), "final-cipher") || strings.Contains(string(body["input"]), "first-cipher")) {
-					t.Error("restart did not replay final opaque state")
+				if requests == 2 && (!strings.Contains(string(body["input"]), "first-cipher") || strings.Contains(string(body["input"]), "final-cipher")) {
+					t.Error("restart did not replay completed opaque state")
 				}
 				w.Header().Set("Content-Type", "text/event-stream")
 				reasoning := map[string]any{"id": "reasoning", "type": "reasoning", "summary": []any{}, "encrypted_content": "first-cipher"}
@@ -64,7 +64,7 @@ func TestResponsesTerminalCiphertextSurvivesAdapterRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(string(raw), "final-cipher") || strings.Contains(string(raw), "first-cipher") {
+			if !strings.Contains(string(raw), "first-cipher") || strings.Contains(string(raw), "final-cipher") {
 				t.Fatal("wrong ciphertext persisted")
 			}
 			var state ModelGatewayState

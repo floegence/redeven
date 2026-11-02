@@ -52,8 +52,8 @@ func testChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T, stalledAttem
 		if _, ok := body["previous_response_id"]; ok {
 			t.Error("ChatGPT relied on server continuation")
 		}
-		if n > 1 && strings.Contains(string(body["input"]), "first-cipher") {
-			t.Error("nonfinal reasoning ciphertext crossed the native history boundary")
+		if n > 1 && strings.Contains(string(body["input"]), "terminal-cipher") {
+			t.Error("terminal reasoning ciphertext replaced completed state at the native history boundary")
 		}
 		if n == 2 && (!strings.Contains(string(body["input"]), "opaque-history") || !strings.Contains(string(body["input"]), "Observed once.")) {
 			t.Error("tool continuation lost native state or canonical result")
@@ -86,10 +86,10 @@ func testChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T, stalledAttem
 		}
 		output := `[{"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The target was inspected once. The conversation then continued with complete historical context.","annotations":[]}]}]`
 		if n == 1 {
-			output = `[{"type":"reasoning","id":"reasoning","summary":[],"encrypted_content":"opaque-history"},{"type":"function_call","id":"inspect-item","call_id":"inspect-call","name":"inspect","namespace":"redeven","arguments":"{\"hint\":null}","status":"completed"}]`
+			output = `[{"type":"reasoning","id":"reasoning","summary":[],"encrypted_content":"terminal-cipher"},{"type":"function_call","id":"inspect-item","call_id":"inspect-call","name":"inspect","namespace":"redeven","arguments":"{\"hint\":null}","status":"completed"}]`
 			// Done and terminal ciphertext may differ while all native identity and content agree.
 			w.Header().Set("Content-Type", "text/event-stream")
-			writeOpenAISSEJSON(w, w.(http.Flusher), map[string]any{"type": "response.output_item.done", "output_index": 0, "item": map[string]any{"type": "reasoning", "id": "reasoning", "summary": []any{}, "encrypted_content": "first-cipher"}})
+			writeOpenAISSEJSON(w, w.(http.Flusher), map[string]any{"type": "response.output_item.done", "output_index": 0, "item": map[string]any{"type": "reasoning", "id": "reasoning", "summary": []any{}, "encrypted_content": "opaque-history"}})
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"response-%d\",\"model\":\"gpt-6.1-sol\",\"status\":\"completed\",\"output\":%s}}\n\n", n, output)

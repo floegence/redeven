@@ -110,8 +110,8 @@ func TestResponsesLiveOutputReconciliation(t *testing.T) {
 		if !reflect.DeepEqual(previous, item) {
 			t.Fatal("live sample has an additional non-opaque conflict")
 		}
-		if !bytes.Contains(stateJSON, []byte(b)) || bytes.Contains(stateJSON, []byte(a)) {
-			t.Fatal("history did not retain only final ciphertext")
+		if !bytes.Contains(stateJSON, []byte(a)) || bytes.Contains(stateJSON, []byte(b)) {
+			t.Fatal("history did not retain only completed-item ciphertext")
 		}
 		conflicts++
 	}
@@ -131,5 +131,5 @@ func TestResponsesLiveOutputReconciliation(t *testing.T) {
 	if strings.TrimSpace(next.Text) != "CONTINUED" || len(bodies) != 2 {
 		t.Fatal("continuation or attempt count failed")
 	}
-	t.Logf("accepted %d ciphertext-only difference(s); displayed answer; retained final native state; recreated adapter continued successfully in two requests", conflicts)
+	t.Logf("accepted %d ciphertext-only difference(s); displayed answer; retained completed-item native state; recreated adapter continued successfully in two requests", conflicts)
 }
