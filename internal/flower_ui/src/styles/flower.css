@@ -11995,6 +11995,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-turn-summary-button { cursor: pointer; }
 .flower-turn-summary-label { padding-right: 1.25rem; }
 .flower-turn-header-label { display: flex; flex: 1; align-items: center; min-width: 0; overflow: hidden; }
+.flower-turn-header-text { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; }
 .flower-turn-header-status { flex-shrink: 0; }
 .flower-turn-header-time { font-variant-numeric: tabular-nums; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .flower-turn-header-details { flex-shrink: 1000; overflow: hidden; text-overflow: ellipsis; white-space: pre; }

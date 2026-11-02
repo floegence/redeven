@@ -516,6 +516,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     const Header = () => <Show when={state()?.summary?.turn}><FlowerTurnHeader
       group={state()!.summary!} copy={props.copy} tick={props.clock} visible={props.visible}
       connected={() => props.liveConfirmed?.() ?? true} viewport={props.scroll.viewport}
+      animate={liveArrival} reducedMotion={props.reducedMotion}
       status={props.thread?.current_execution?.turn_id === state()?.turnID ? props.thread?.status : undefined}
       sample={props.thread?.turn_clock} toggleable={summary()} expanded={turnExpanded()}
       controls={state()!.summary!.processKeys.map(contentID).join(' ')} onToggle={toggle} /></Show>;

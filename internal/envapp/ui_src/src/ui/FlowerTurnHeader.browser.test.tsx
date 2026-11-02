@@ -1,17 +1,126 @@
 import '../index.css';
 import './flower-feature.css';
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { FlowerTurnHeader } from '../../../../flower_ui/src/FlowerTurnHeader';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerTurnProcess } from '../../../../flower_ui/src/flowerTurnPresentation';
+import type { FlowerThreadStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { sampleFlowerTurnClock } from '../../../../flower_ui/src/flowerTurnClock';
 import { waitFor } from './FlowerSurface.navigation.testHarness';
 
 const disposers: (() => void)[] = [];
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); });
+
+function mountReveal(options: { historical?: boolean; reduced?: boolean; visible?: boolean; offscreen?: boolean } = {}) {
+  const root = document.createElement('div'); document.body.append(root);
+  root.style.width = '100%';
+  const started = Date.parse('2026-11-02T00:00:00Z');
+  const initial: FlowerTurnProcess = { turnID: 'turn', turn: { turn_id: 'turn', run_id: 'run', started_at: new Date(started).toISOString(),
+    elapsed_ms: 0, work_duration_ms: 0, waiting_ms: 0, final_item_ids: [], final_boundary_complete: false },
+    processKeys: [], processMembers: new Set(), parentEventCount: 0, interleavedInputs: false,
+    countsComplete: true, inputResponseCount: 0, toolCallCount: 0, failedCallCount: 0, disclosure: 'none' };
+  const completed = { ...initial, turn: { ...initial.turn!, outcome: 'completed' as const, ended_at: new Date(started + 90000).toISOString(),
+    elapsed_ms: 90000, work_duration_ms: 90000 } };
+  const [group, setGroup] = createSignal(options.historical ? completed : initial);
+  const [status, setStatus] = createSignal<FlowerThreadStatus>('running');
+  const [tick, setTick] = createSignal(0);
+  const [visible, setVisible] = createSignal(options.visible ?? true);
+  const [connected, setConnected] = createSignal(true);
+  const [reduced, setReduced] = createSignal(options.reduced ?? false);
+  const [toggle, setToggle] = createSignal(false);
+  const sample = sampleFlowerTurnClock('turn', started + 10000);
+  const dispose = render(() => <><ShowSpacer /><FlowerTurnHeader group={group()} status={status()} sample={sample}
+    tick={tick} visible={visible} connected={connected} viewport={() => undefined} animate={() => true} reducedMotion={reduced}
+    toggleable={toggle()} expanded={false} controls="process" copy={DEFAULT_FLOWER_SURFACE_COPY.chat.turnProcess} onToggle={() => {}} />
+    <div data-following>Following content</div></>, root);
+  function ShowSpacer() { return options.offscreen ? <div style={{ height: '2000px' }} /> : null; }
+  disposers.push(() => { dispose(); root.remove(); });
+  const header = root.querySelector<HTMLElement>('.flower-turn-summary')!;
+  const text = () => header.querySelector<HTMLElement>('.flower-turn-header-text')!;
+  return { root, header, text, setStatus, setTick, setVisible, setConnected, setReduced, dispose,
+    complete: () => batch(() => { setGroup(completed); setToggle(true); }),
+  };
+}
+
+it.each([320, 390, 1280])('reveals complete text without layout movement or tick replay at %i pixels', async width => {
+  await page.viewport(width, 900);
+  const fixture = mountReveal();
+  await waitFor(() => fixture.text().getAnimations().length === 1);
+  const animation = fixture.text().getAnimations()[0];
+  animation.pause();
+  const duration = Number(animation.effect!.getTiming().duration);
+  expect(duration).toBeLessThanOrEqual(360);
+  expect(animation.effect!.getTiming().easing).toMatch(/^steps\(/);
+  const geometry = () => [fixture.header.getBoundingClientRect().height, fixture.header.getBoundingClientRect().width,
+    fixture.root.querySelector('[data-following]')!.getBoundingClientRect().top];
+  const before = geometry();
+  animation.currentTime = duration / 2;
+  expect(getComputedStyle(fixture.text()).clipPath).not.toBe('none');
+  expect(fixture.text().textContent).toContain('In progress · Elapsed 10 seconds');
+  for (let i = 1; i <= 120; i++) fixture.setTick(i);
+  expect(fixture.text().getAnimations()).toEqual([animation]);
+  expect(geometry()).toEqual(before);
+  fixture.complete();
+  await waitFor(() => Boolean(fixture.header.querySelector('button')) && fixture.text().getAnimations().length === 1);
+  const settled = fixture.text().getAnimations()[0];
+  settled.pause();
+  settled.currentTime = Number(settled.effect!.getTiming().duration) / 2;
+  expect(settled).not.toBe(animation);
+  expect(animation.playState).toBe('idle');
+  expect(fixture.header.querySelector('button')!.getAttribute('aria-label')).toContain('Completed · Total 1 minute 30 seconds');
+  expect(geometry()).toEqual(before);
+  expect(fixture.header.scrollWidth).toBeLessThanOrEqual(fixture.header.clientWidth + 1);
+  settled.finish();
+  await waitFor(() => fixture.text().getAnimations().length === 0);
+  expect(getComputedStyle(fixture.text()).clipPath).toBe('none');
+});
+
+it('keeps history, hidden, offscreen and reduced-motion headers immediate', async () => {
+  await page.viewport(1280, 900);
+  for (const options of [{ historical: true }, { reduced: true }, { visible: false }, { offscreen: true }]) {
+    const fixture = mountReveal(options);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    expect(fixture.text().getAnimations()).toHaveLength(0);
+    fixture.setVisible(true); fixture.setReduced(false); fixture.setTick(1);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    expect(fixture.text().getAnimations()).toHaveLength(0);
+    fixture.dispose(); fixture.root.remove();
+  }
+});
+
+it('settles motion for urgent states, reconnect, direct interaction and preference changes', async () => {
+  const fixture = mountReveal();
+  await waitFor(() => fixture.text().getAnimations().length === 1);
+  fixture.text().getAnimations()[0].pause();
+  fixture.setStatus('waiting_user');
+  expect(fixture.text().getAnimations()).toHaveLength(0);
+  expect(fixture.header.textContent).toContain('Waiting for your reply');
+  fixture.setStatus('running');
+  await waitFor(() => fixture.text().getAnimations().length === 1);
+  fixture.setConnected(false);
+  expect(fixture.text().getAnimations()).toHaveLength(0);
+  fixture.setConnected(true);
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(fixture.text().getAnimations()).toHaveLength(0);
+  fixture.complete();
+  await waitFor(() => fixture.text().getAnimations().length === 1);
+  fixture.header.querySelector<HTMLButtonElement>('button')!.focus();
+  expect(fixture.text().getAnimations()).toHaveLength(0);
+  const next = mountReveal();
+  await waitFor(() => next.text().getAnimations().length === 1);
+  next.setReduced(true);
+  expect(next.text().getAnimations()).toHaveLength(0);
+  next.setReduced(false);
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(next.text().getAnimations()).toHaveLength(0);
+  const hidden = mountReveal();
+  await waitFor(() => hidden.text().getAnimations().length === 1);
+  hidden.setVisible(false);
+  expect(hidden.text().getAnimations()).toHaveLength(0);
+});
 
 it('bounds clock subscriptions to visible active headers and restores elapsed time after reconnect', async () => {
   const root = document.createElement('div'); document.body.append(root);
@@ -28,7 +137,7 @@ it('bounds clock subscriptions to visible active headers and restores elapsed ti
   const [connected, setConnected] = createSignal(true);
   const readTick = vi.fn(tick);
   const dispose = render(() => <><FlowerTurnHeader group={group()} status="running" sample={sample()}
-    tick={readTick} visible={visible} connected={connected} viewport={() => root}
+    tick={readTick} visible={visible} connected={connected} viewport={() => root} animate={() => false} reducedMotion={() => false}
     toggleable={false} expanded={true} controls="" copy={DEFAULT_FLOWER_SURFACE_COPY.chat.turnProcess} onToggle={() => {}} />
     <div style={{ height: '900px' }} /></>, root);
   disposers.push(() => { dispose(); root.remove(); });
@@ -79,7 +188,7 @@ it.each([320, 390, 1280])('keeps live and terminal header geometry stable at %i 
   const [sample, setSample] = createSignal(sampleFlowerTurnClock('turn', started + 59000));
   const [toggle, setToggle] = createSignal(false);
   const dispose = render(() => <FlowerTurnHeader group={group()} status="running" sample={sample()} tick={() => 0}
-    visible={() => true} connected={() => true} viewport={() => undefined} toggleable={toggle()}
+    visible={() => true} connected={() => true} viewport={() => undefined} animate={() => false} reducedMotion={() => false} toggleable={toggle()}
     expanded={false} controls="" copy={DEFAULT_FLOWER_SURFACE_COPY.chat.turnProcess} onToggle={() => {}} />, root);
   disposers.push(() => { dispose(); root.remove(); });
   const header = root.querySelector<HTMLElement>('.flower-turn-summary')!;

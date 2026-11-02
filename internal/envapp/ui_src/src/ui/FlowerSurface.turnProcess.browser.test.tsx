@@ -110,6 +110,47 @@ function expectEndedPresentation(notice: HTMLElement, label: string) {
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it('reveals fresh admission and completion while restored history stays static', async () => {
+    const initial = current(true);
+    const { root, live } = await mount(initial);
+    const historical = root.querySelector<HTMLElement>('.flower-turn-header-text')!;
+    expect(historical.getAnimations()).toHaveLength(0);
+    const next = continued(initial);
+    live.push(next);
+    await waitFor(() => Boolean(root.querySelector('[data-flower-turn-header="next"]')));
+    const header = root.querySelector<HTMLElement>('[data-flower-turn-header="next"]')!;
+    const text = header.querySelector<HTMLElement>('.flower-turn-header-text')!;
+    await waitFor(() => text.getAnimations().length === 1);
+    const admission = text.getAnimations()[0];
+    admission.pause();
+    const height = header.getBoundingClientRect().height;
+    live.push({ ...next, view_version: 4, activity: 'idle', last_outcome: 'completed', run_progress: undefined,
+      turns: [initial.turns![0], turn({ turn_id: 'next', run_id: 'next-run', ended_at: '2026-10-11T12:00:00.800Z', elapsed_ms: 800, work_duration_ms: 800, waiting_ms: 0,
+        intermediate_item_ids: [], final_item_ids: ['next-final'] })],
+      items: [...next.items!, { id: 'next-final', turn_id: 'next', run_id: 'next-run', ordinal: 8, kind: 'assistant', text: 'Hi! How can I help?' }],
+    });
+    await waitFor(() => Boolean(header.textContent?.includes('Completed · Total less than a second')));
+    await waitFor(() => text.getAnimations().length === 1 && text.getAnimations()[0] !== admission);
+    const completion = text.getAnimations()[0];
+    completion.pause();
+    expect(header.querySelector('.flower-turn-header-text')).toBe(text);
+    expect(header.querySelector('button')).toBeNull();
+    expect(header.getBoundingClientRect().height).toBe(height);
+    expect(message(root, 'next-final').textContent).toContain('Hi! How can I help?');
+    expect(historical.getAnimations()).toHaveLength(0);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') {
+      const duration = Number(completion.effect!.getTiming().duration);
+      for (const progress of [0, 0.5, 1]) {
+        completion.currentTime = duration * progress;
+        await page.screenshot({ element: header, path: '__screenshots__/flower-header-reveal-' + progress + '.png' });
+      }
+    }
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    await waitFor(() => text.getAnimations().length === 0);
+    await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    expect(text.getAnimations()).toHaveLength(0);
+  });
+
   it('shows an admitted turn before any provider output and retains its header when output arrives', async () => {
     const initial = current(false, { items: current().items!.slice(0, 1), run_progress: { phase: 'preparing' } });
     const { root, live } = await mount(initial);

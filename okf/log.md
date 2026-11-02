@@ -4,6 +4,8 @@ Concepts own contracts/evidence; Git retains history.
 
 ## 2026-11-02
 
+- [Turn presentation](ui/flower-turn-process-disclosure.md): add a short stepped text reveal for live admission and completion, preserving immediate accessible content, stable geometry and static history/timer updates.
+
 - [Turn presentation](ui/flower-turn-process-disclosure.md): show status from admission, reuse existing samples for isolated visible elapsed time, and retain terminal-only disclosure with stable geometry and no extra transport.
 - [Computer read contract](ai/computer-script-read-contract.md): bind complete observations through final publication; condition waits sample within one deadline, preserving ref identity and privacy without input replay; [qualification](ai/computer-use-qualification.md) records 34/40 final real-model tasks and separates model deviations, a network failure and an image-measurement defect.
 
