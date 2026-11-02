@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Flower browser source ownership
 tags: [architecture, browser, flower, privacy]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -13,7 +13,7 @@ ComputerUseRuntime authorizes targets; its source Host owns CDP/extension adapte
 
 Runtime discovers supported Chrome and Chromium installations by opaque installation ID. Source trace identifiers are bounded and consistently quoted so control characters cannot create records or terminal escapes with any log handler. Page contents and CDP payloads remain excluded.
 
-Existing files remain on disk unchanged.
+The Go Runtime is the managed Chromium process owner. Helpers attach to a profile endpoint and cannot launch a second production browser. [Managed lifecycle](../ai/computer-use-browser.md) defines passive discovery, target-gated Stop, idle release and identity-checked crash cleanup. Existing saved sign-ins and downloads remain on disk.
 
 # Boundaries
 

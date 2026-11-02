@@ -191,14 +191,22 @@ func (r *ComputerUseRuntime) rebuildBrowser(operation *browserRecovery) {
 	// terminate personal Chrome or clear its unresolved privacy reservations.
 	// Stop process owners together. This interrupts old
 	// source calls and bounds cleanup independently of the number of open tabs.
-	var processes sync.WaitGroup
+	var profiles []*managedBrowserProfile
 	for _, profile := range r.managedProfiles {
-		processes.Go(profile.close)
+		profiles = append(profiles, profile)
 	}
+	var processes sync.WaitGroup
+	processes.Go(func() { operation.err = closeManagedBrowserProfiles(profiles) })
 	if r.browserHost != nil {
 		processes.Go(func() { _ = r.browserHost.Close() })
 	}
 	processes.Wait()
+	if operation.err != nil {
+		r.mu.Lock()
+		r.browserService.State = "failed"
+		r.mu.Unlock()
+		return
+	}
 	clear(r.managedProfiles)
 	var consumers sync.WaitGroup
 	r.releaseScripts(func(key computerScriptKey) bool { return retired[key.target] })

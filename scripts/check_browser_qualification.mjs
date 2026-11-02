@@ -78,13 +78,13 @@ async function main() {
     console.log(`[browser] ${name}: ${count} tests passed, zero skipped`);
   }
   await run('runtime', 'go', ['test', './internal/ai', '-run', '^TestBrowser|^TestExtension|^TestChrome|^TestManagedBrowser|^TestComputer(BrowserInstallation|MissingBrowser|FullAccessManagedBrowser|AutonomousManaged|AutonomousProductionToolLoop|NavigationFailureContinuesProductionTurn)', '-count=1', '-json'], root, env,
-    body => verifyGoTests(body, ['TestExtensionExistingSourceStillValidatesExplicitFlowerSelection', 'TestBrowserRecoveryPreservesUnresolvedExternalPrivacy', 'TestManagedBrowserConfigurationLeavesRetiredProductDatabaseUntouched', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestComputerNavigationFailureContinuesProductionTurn', 'TestComputerBrowserInstallationUsesIndependentQuestionWithoutCertifyingSetup', 'TestChromeMissingResourcesHaveActionableDiagnostics', 'TestChromeDesktopPrerequisitesDoNotConfuseInstallationAndSession', 'TestChromeLaunchRetainsEarlyAndLateExitFailure']));
+    body => verifyGoTests(body, ['TestExtensionExistingSourceStillValidatesExplicitFlowerSelection', 'TestBrowserRecoveryPreservesUnresolvedExternalPrivacy', 'TestManagedBrowserConfigurationLeavesRetiredProductDatabaseUntouched', 'TestManagedBrowserSandboxIntegration', 'TestManagedBrowserRealRuntimeLifecycle', 'TestManagedBrowserRealProcessLifecycle', 'TestManagedBrowserRealRepeatedLifecycle', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestComputerNavigationFailureContinuesProductionTurn', 'TestComputerBrowserInstallationUsesIndependentQuestionWithoutCertifyingSetup', 'TestChromeMissingResourcesHaveActionableDiagnostics', 'TestChromeDesktopPrerequisitesDoNotConfuseInstallationAndSession', 'TestChromeLaunchRetainsEarlyAndLateExitFailure']));
   await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserbridge', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestRemoteBrowserRegistrationFollowsRuntimeReplacement', 'TestRemoteBrowserProfileRejectsWritablePlacement']));
   await run('remote-profile-ownership', 'go', ['test', './internal/hostapps', '-run', '^TestRemoteBrowser', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestRemoteBrowserCatalogRequiresItsPreparingOwner']));
   await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestFlowerBrowser|^TestRemovedBrowser', '-count=1', '-json'], root, env,
-    body => verifyGoTests(body, ['TestFlowerBrowserPreparationRejectsMissingAuthorityAndClientPaths', 'TestRemovedBrowserProductRoutesReturnNotFound']));
+    body => verifyGoTests(body, ['TestFlowerBrowserPreparationRejectsMissingAuthorityAndClientPaths', 'TestRemovedBrowserProductRoutesReturnNotFound', 'TestFlowerBrowserProfileLifecycleValidatesAuthorityAndInput']));
   const bridgeBinary = path.join(staging, 'redeven');
   const bridgeBuild = spawnSync('go', ['build', '-o', bridgeBinary, './cmd/redeven'], { cwd: root, env, encoding: 'utf8' });
   await writeFile(path.join(evidence, 'native-bridge-build.log'), bridgeBuild.stdout + bridgeBuild.stderr);

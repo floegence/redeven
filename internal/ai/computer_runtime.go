@@ -19,27 +19,31 @@ import (
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
-	browserService         BrowserServiceStatus // protected by mu
-	browserRecovery        *browserRecovery     // protected by connectMu
-	browserInstallation    *browserinstall.Manager
-	browserInstallationErr error
-	browserHost            *browserSourceHost // protected by connectMu
-	candidates             map[string]computerCandidate
-	managedProfiles        map[string]*managedBrowserProfile
-	extension              *computerExtensionHub
-	connectMu              browserConnectMutex
-	extensionAdmissions    map[string]*extensionAdmissionGate // protected by mu
-	closed                 bool
-	mu                     sync.RWMutex
-	registry               *TargetRegistry
-	bindings               ComputerTargetBindingStore
-	media                  toolMediaStore
-	executors              map[string]TargetToolExecutor
-	liveFrames             map[string]*computerLiveSampler
-	liveWG                 sync.WaitGroup
-	controls               map[string]*computerTargetControl
-	scripts                map[computerScriptKey]*computerScriptProcess
-	statusPublisher        func(FlowerComputerStatus)
+	browserService           BrowserServiceStatus // protected by mu
+	browserRecovery          *browserRecovery     // protected by connectMu
+	browserInstallation      *browserinstall.Manager
+	browserInstallationErr   error
+	browserHost              *browserSourceHost // protected by connectMu
+	candidates               map[string]computerCandidate
+	managedProfiles          map[string]*managedBrowserProfile
+	managedMaintenanceCancel context.CancelFunc
+	managedMaintenanceDone   chan struct{}
+	closeOnce                sync.Once
+	closeError               error
+	extension                *computerExtensionHub
+	connectMu                browserConnectMutex
+	extensionAdmissions      map[string]*extensionAdmissionGate // protected by mu
+	closed                   bool
+	mu                       sync.RWMutex
+	registry                 *TargetRegistry
+	bindings                 ComputerTargetBindingStore
+	media                    toolMediaStore
+	executors                map[string]TargetToolExecutor
+	liveFrames               map[string]*computerLiveSampler
+	liveWG                   sync.WaitGroup
+	controls                 map[string]*computerTargetControl
+	scripts                  map[computerScriptKey]*computerScriptProcess
+	statusPublisher          func(FlowerComputerStatus)
 }
 
 func (r *ComputerUseRuntime) setComputerStatusPublisher(publish func(FlowerComputerStatus)) {
@@ -577,12 +581,25 @@ func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, re
 	return r.media.read(ctx, ref)
 }
 func (r *ComputerUseRuntime) Close() error {
+	r.closeOnce.Do(func() { r.closeError = r.closeRuntime() })
+	return r.closeError
+}
+func (r *ComputerUseRuntime) closeRuntime() error {
 	var failures []error
+	r.mu.Lock()
+	if r.managedMaintenanceCancel != nil {
+		r.managedMaintenanceCancel()
+	}
+	maintenanceDone := r.managedMaintenanceDone
+	r.closed = true
+	r.mu.Unlock()
+	if maintenanceDone != nil {
+		<-maintenanceDone
+	}
 	if r.browserInstallation != nil {
 		r.browserInstallation.Close()
 	}
 	r.connectMu.Lock()
-	defer r.connectMu.Unlock()
 	r.mu.Lock()
 	r.closed = true
 	var browserLeases []*browserTargetLease
@@ -604,6 +621,14 @@ func (r *ComputerUseRuntime) Close() error {
 		r.extension.close()
 		r.connectMu.Lock()
 	}
+	profiles := make([]*managedBrowserProfile, 0, len(r.managedProfiles))
+	for _, profile := range r.managedProfiles {
+		profiles = append(profiles, profile)
+	}
+	r.connectMu.Unlock()
+	// Retire process owners before waiting for source consumers; a hung consumer
+	// must not prevent the actual browser from being shut down.
+	failures = append(failures, closeManagedBrowserProfiles(profiles))
 	r.liveWG.Wait()
 	r.releaseScripts(func(computerScriptKey) bool { return true })
 	r.mu.RLock()
@@ -625,9 +650,12 @@ func (r *ComputerUseRuntime) Close() error {
 	if r.browserHost != nil {
 		failures = append(failures, r.browserHost.Close())
 	}
-	for _, profile := range r.managedProfiles {
-		profile.close()
+	r.connectMu.Lock()
+	for id, profile := range r.managedProfiles {
+		if profile.closeResult() == nil {
+			delete(r.managedProfiles, id)
+		}
 	}
-	clear(r.managedProfiles)
+	r.connectMu.Unlock()
 	return errors.Join(failures...)
 }

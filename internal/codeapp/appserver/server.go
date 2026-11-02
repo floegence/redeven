@@ -3689,6 +3689,30 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: profiles})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/managed/lifecycle":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var input struct {
+			ProfileID string `json:"profile_id"`
+			Action    string `json:"action"`
+		}
+		if !decodeBrowserRequest(w, r, 1024, &input) {
+			return
+		}
+		profiles, err := aiSvc.ManageBrowserProfile(r.Context(), meta, input.ProfileID, input.Action)
+		if err != nil {
+			code := "managed_browser_unavailable"
+			if ai.IsManagedBrowserInUse(err) {
+				code = "managed_browser_in_use"
+			}
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: code})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: profiles})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/managed/tabs":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {

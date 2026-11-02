@@ -22,13 +22,15 @@ import (
 )
 
 type ComputerManagedProfile struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state,omitempty"`
 }
 
 // The Runtime owns one browser process per managed profile. Tab executors only
 // attach to an explicit page, so creating a tab never duplicates a profile lock.
 type managedBrowserReply struct {
+	Idle  *bool                `json:"idle,omitempty"`
 	ID    string               `json:"id"`
 	Error string               `json:"error"`
 	Tabs  []ComputerBrowserTab `json:"tabs"`
@@ -39,6 +41,9 @@ type managedBrowserPending struct {
 	timer  *time.Timer
 }
 type managedBrowserProfile struct {
+	browser   *managedBrowserProcess
+	closeErr  error
+	idleSince time.Time
 	cmd       *exec.Cmd
 	input     io.WriteCloser
 	reader    *bufio.Reader
@@ -114,10 +119,16 @@ func (p *managedBrowserProfile) close() {
 		case <-p.done:
 		case <-time.After(2 * time.Second):
 			_ = p.cmd.Process.Kill()
-			<-p.done
+			select {
+			case <-p.done:
+			case <-time.After(time.Second):
+				p.closeErr = errors.New("browser helper cleanup incomplete")
+			}
 		}
+		p.closeErr = errors.Join(p.closeErr, p.browser.close())
 	})
 }
+func (p *managedBrowserProfile) closeResult() error { p.close(); return p.closeErr }
 
 // One process-owned reader drains every response, including abandoned requests.
 // Only the process health deadline can retire an unresponsive helper.
@@ -190,9 +201,9 @@ func (p *managedBrowserProfile) receive(ctx context.Context, destination any) er
 		return context.DeadlineExceeded
 	}
 }
-func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]ComputerBrowserTab, error) {
+func (p *managedBrowserProfile) request(ctx context.Context, command string) (managedBrowserReply, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return managedBrowserReply{}, err
 	}
 	p.startReader()
 	p.writeMu.Lock()
@@ -200,7 +211,7 @@ func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]Com
 	if p.retired || len(p.pending) >= 32 {
 		p.mu.Unlock()
 		p.writeMu.Unlock()
-		return nil, errors.New("managed browser unavailable")
+		return managedBrowserReply{}, errors.New("managed browser unavailable")
 	}
 	p.sequence++
 	id := fmt.Sprint(p.sequence)
@@ -220,24 +231,31 @@ func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]Com
 	p.writeMu.Unlock()
 	if err != nil {
 		p.close()
-		return nil, err
+		return managedBrowserReply{}, err
 	}
 	var reply managedBrowserReply
 	select {
 	case reply = <-request.result:
 	case <-ctx.Done():
 		if command == "new_tab" {
-			return nil, errors.Join(errBrowserOutcomeUnknown, ctx.Err())
+			return managedBrowserReply{}, errors.Join(errBrowserOutcomeUnknown, ctx.Err())
 		}
-		return nil, ctx.Err()
+		return managedBrowserReply{}, ctx.Err()
 	case <-p.done:
 		if command == "new_tab" {
-			return nil, errBrowserOutcomeUnknown
+			return managedBrowserReply{}, errBrowserOutcomeUnknown
 		}
-		return nil, errors.New("managed browser disconnected")
+		return managedBrowserReply{}, errors.New("managed browser disconnected")
 	}
 	if reply.Error != "" {
-		return nil, errors.New("managed browser command failed")
+		return managedBrowserReply{}, errors.New("managed browser command failed")
+	}
+	return reply, nil
+}
+func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]ComputerBrowserTab, error) {
+	reply, err := p.request(ctx, command)
+	if err != nil {
+		return nil, err
 	}
 	if reply.Tab != nil {
 		return []ComputerBrowserTab{*reply.Tab}, nil
@@ -296,7 +314,7 @@ func (r *ComputerUseRuntime) managedProfilesLocked() ([]ComputerManagedProfile, 
 		var profile ComputerManagedProfile
 		decoder := json.NewDecoder(bytes.NewReader(body))
 		decoder.DisallowUnknownFields()
-		if readErr != nil || len(body) > 1024 || decoder.Decode(&profile) != nil || decoder.Decode(new(any)) != io.EOF || profile.ID != entry.Name() || strings.TrimSpace(profile.Name) != profile.Name || profile.Name == "" || len(profile.Name) > 120 {
+		if readErr != nil || len(body) > 1024 || decoder.Decode(&profile) != nil || decoder.Decode(new(any)) != io.EOF || profile.State != "" || profile.ID != entry.Name() || strings.TrimSpace(profile.Name) != profile.Name || profile.Name == "" || len(profile.Name) > 120 {
 			return nil, errors.New("invalid managed profile")
 		}
 		profiles = append(profiles, profile)
@@ -324,7 +342,7 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	}
 	if profile := r.managedProfiles[profileID]; profile != nil {
 		if profile.stopped() {
-			delete(r.managedProfiles, profileID)
+			return nil, errors.New("managed browser unavailable; stop or recover it before starting")
 		} else {
 			return profile, nil
 		}
@@ -340,7 +358,21 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	if info, err := os.Lstat(directory); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("invalid managed profile directory")
 	}
-	cmd := exec.Command(resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenManagedBrowser.mjs"), directory, executable)
+	browser, err := startManagedBrowserProcess(ctx, executable, directory)
+	if err != nil {
+		var startup *TargetStartupError
+		if errors.As(err, &startup) && startup.Reason == "browser_sandbox_unavailable" {
+			r.browserInstallation.RequireSystemPreparation()
+		}
+		return nil, err
+	}
+	started := false
+	defer func() {
+		if !started {
+			_ = browser.close()
+		}
+	}()
+	cmd := exec.Command(resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenManagedBrowser.mjs"), directory, browser.endpoint)
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -360,7 +392,7 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 		return nil, err
 	}
 	_ = writer.Close()
-	profile := &managedBrowserProfile{cmd: cmd, input: input, reader: bufio.NewReader(output), output: output, done: make(chan struct{})}
+	profile := &managedBrowserProfile{browser: browser, cmd: cmd, input: input, reader: bufio.NewReader(output), output: output, done: make(chan struct{})}
 	go func() { _ = cmd.Wait(); close(profile.done) }()
 	var ready struct {
 		Type     string `json:"type"`
@@ -400,11 +432,18 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 		profile.close()
 		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_launch_failed"}
 	}
+	if ready.Endpoint != browser.endpoint {
+		profile.close()
+		return nil, errors.New("managed browser endpoint identity mismatch")
+	}
 	profile.endpoint = ready.Endpoint
 	if r.managedProfiles == nil {
 		r.managedProfiles = make(map[string]*managedBrowserProfile)
 	}
 	r.managedProfiles[profileID] = profile
+	started = true
+	go func() { <-browser.done; profile.fault() }()
+	r.startManagedBrowserMaintenanceLocked()
 	return profile, nil
 }
 func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (TargetDescriptor, error) {
@@ -412,6 +451,7 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 	if err != nil {
 		return TargetDescriptor{}, err
 	}
+	profile.idleSince = time.Time{}
 	command := "inventory"
 	if connection.NewTab {
 		command = "new_tab"
@@ -500,6 +540,17 @@ func (host *ComputerUseRuntime) ManagedBrowserProfiles(ctx context.Context, meta
 	if err != nil {
 		return nil, err
 	}
+	for i := range profiles {
+		profiles[i].State = "stopped"
+		if p := host.managedProfiles[profiles[i].ID]; p != nil {
+			profiles[i].State = "running"
+			if p.stopped() {
+				profiles[i].State = "failed"
+			} else if !p.idleSince.IsZero() {
+				profiles[i].State = "idle"
+			}
+		}
+	}
 	if name == "" {
 		return profiles, nil
 	}
@@ -525,6 +576,7 @@ func (host *ComputerUseRuntime) ManagedBrowserProfiles(ctx context.Context, meta
 		_ = os.Remove(directory)
 		return nil, err
 	}
+	profile.State = "stopped"
 	return append(profiles, profile), nil
 }
 func (s *Service) ManagedBrowserTabs(ctx context.Context, meta *session.Meta, profileID string) ([]ComputerBrowserTab, error) {
@@ -544,9 +596,19 @@ func (host *ComputerUseRuntime) ManagedBrowserTabs(ctx context.Context, meta *se
 	}
 	host.connectMu.Lock()
 	defer host.connectMu.Unlock()
-	profile, err := host.managedProfileLocked(ctx, profileID)
+	profiles, err := host.managedProfilesLocked()
 	if err != nil {
 		return nil, err
+	}
+	if !slices.ContainsFunc(profiles, func(p ComputerManagedProfile) bool { return p.ID == profileID }) {
+		return nil, errors.New("select an available managed profile")
+	}
+	profile := host.managedProfiles[profileID]
+	if profile == nil {
+		return []ComputerBrowserTab{}, nil
+	}
+	if profile.stopped() {
+		return nil, errors.New("managed browser unavailable")
 	}
 	tabs, err := profile.call(ctx, "inventory")
 	if err != nil {

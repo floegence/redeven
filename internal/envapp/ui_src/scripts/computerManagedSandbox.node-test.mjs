@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
@@ -17,11 +18,14 @@ test('managed browser preserves sandbox isolation and initializes popups at the 
   const pkg = catalog.packages.find(pkg => pkg.platform === process.platform && pkg.architecture === ({ arm64: 'arm64', x64: 'amd64' })[process.arch]);
   assert(pkg, 'Native browser catalog package unavailable');
   assert.equal(await readFile(path.join(installation, '.redeven-browser'), 'utf8'), pkg.sha256);
+  assert(process.env.REDEVEN_BROWSER_TEST_ENDPOINT, 'Run TestManagedBrowserSandboxIntegration so the Runtime owns Chrome');
   const profile = await mkdtemp(path.join(os.tmpdir(), 'flower-sandbox-'));
-  const helper = spawn(process.execPath, [fileURLToPath(new URL('./redevenManagedBrowser.mjs', import.meta.url)), profile, path.join(installation, pkg.executable)], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const helper = spawn(process.execPath, [fileURLToPath(new URL('./redevenManagedBrowser.mjs', import.meta.url)), profile, process.env.REDEVEN_BROWSER_TEST_ENDPOINT], { stdio: ['pipe', 'pipe', 'pipe'] });
   const exited = once(helper, 'exit');
   const lines = createInterface({ input: helper.stdout });
   let browser, owner;
+  const site = createServer((_, response) => { response.setHeader('Content-Type', 'text/html'); response.end('<script>globalThis.initialViewport=[innerWidth,innerHeight]</script><title>Initialized popup</title>'); });
+  await new Promise(resolve => site.listen(0, '127.0.0.1', resolve));
   const deadline = setTimeout(() => helper.kill('SIGTERM'), 15000);
   try {
     const [line] = await once(lines, 'line'); const ready = JSON.parse(line);
@@ -32,25 +36,27 @@ test('managed browser preserves sandbox isolation and initializes popups at the 
     const pid = processInfo.find(value => value.type === 'browser')?.id;
     assert(Number.isSafeInteger(pid) && pid > 0);
     const args = execFileSync('/bin/ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
+    assert(args.includes('--password-store=basic') && args.includes('--use-mock-keychain'), 'managed Chrome must not access the real OS keychain');
     assert(!args.includes('--no-sandbox'), 'managed browsing must not disable the browser sandbox');
+    const context = browser.contexts()[0];
+    const created = context.waitForEvent('page');
     const response = once(lines, 'line');
     helper.stdin.write(JSON.stringify({ id: 'task', command: 'new_tab' }) + '\n');
     const result = JSON.parse((await response)[0]);
     assert.equal(result.id, 'task'); assert.equal(result.tab.url, 'about:blank'); assert(result.tab.id);
-    const context = browser.contexts()[0];
-    const page = context.pages().find(page => page.url() === 'about:blank');
+    const page = await created;
     assert(page);
     owner = await createComputerBrowserSource(page, 'owned', { windowViewport: true });
     await owner.source.setViewportSize({ width: 1536, height: 876 });
     await page.waitForFunction(() => globalThis.innerWidth === 1536 && globalThis.innerHeight === 876);
-    await context.route('https://managed-layout.test/**', route => route.fulfill({ contentType: 'text/html', body: '<script>globalThis.initialViewport=[innerWidth,innerHeight]</script><title>Initialized popup</title>' }));
     const opened = context.waitForEvent('page');
-    await page.evaluate(() => globalThis.open('https://managed-layout.test/popup'));
+    await page.evaluate(url => { globalThis.open(url); }, 'http://127.0.0.1:' + site.address().port + '/popup');
     const popup = await opened;
     await popup.waitForLoadState();
     assert.deepEqual(await popup.evaluate(() => globalThis.initialViewport), [1536, 876], 'The managed launcher and source host must agree on geometry before popup scripts run');
   } finally {
     await owner?.dispose(); await browser?.close(); helper.stdin.end(); await exited; clearTimeout(deadline); lines.close();
+    site.closeAllConnections(); await new Promise(resolve => site.close(resolve));
     await rm(profile, { recursive: true, force: true });
   }
 });

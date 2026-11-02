@@ -22,6 +22,7 @@ export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | '
     selectCandidate: (threadID, candidateRef) => request('POST', `${path}/select`, { thread_id: threadID, candidate_ref: candidateRef }),
     listManagedProfiles: () => request('GET', `${path}/managed/profiles`),
     createManagedProfile: name => request('POST', `${path}/managed/profiles`, { name }),
+    manageBrowserProfile: (profileID, action) => request('POST', path + '/managed/lifecycle', { profile_id: profileID, action }),
     openExtension: (action, installationID) => request('POST', `${path}/extension/open`, { action, installation_id: installationID }),
     setupExtension: installationID => request('POST', `${path}/extension/setup`, { installation_id: installationID }),
     loadExtensionStatus: () => request('GET', `${path}/extension/status`),

@@ -11,7 +11,7 @@ import deDE from './i18n/locales/catalogs/de-DE.json';
 import ruRU from './i18n/locales/catalogs/ru-RU.json';
 import zhTW from './i18n/locales/catalogs/zh-TW.json';
 import { computerUseEnUS as copy, type FlowerComputerCopy } from '../../../../flower_ui/src/computerUseCopy';
-import type { FlowerComputerAccess, FlowerComputerEnvironment } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerEnvironment } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 let dispose: (() => void) | undefined;
 afterEach(async () => { dispose?.(); dispose = undefined; document.documentElement.classList.remove('dark'); await page.viewport(1280, 720); });
@@ -38,7 +38,8 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
     discoverBrowser: vi.fn(),
     loadAccess: vi.fn<(thread: string) => Promise<FlowerComputerAccess>>().mockResolvedValue({ origins: [], apps: [], allow_foreground: false }), saveAccess: vi.fn(),
 
-    listManagedProfiles: vi.fn().mockResolvedValue([{ id: 'browser-main', name: 'Default' }]),
+    listManagedProfiles: vi.fn<() => Promise<FlowerManagedProfile[]>>().mockResolvedValue([{ id: 'browser-main', name: 'Default' }]),
+    manageBrowserProfile: vi.fn(),
     createManagedProfile: vi.fn().mockResolvedValue([{ id: 'browser-main', name: 'Default' }, { id: 'work', name: 'Work' }]),
     setupExtension: vi.fn(), openExtension: vi.fn(), loadExtensionStatus: vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [] }),
   };
@@ -276,7 +277,7 @@ it('explains the headless browser before offering optional account groups', asyn
   (details.querySelector('summary') as HTMLElement).click();
   await waitFor(() => management.listManagedProfiles.mock.calls.length === 1 && !document.querySelector('[aria-busy="true"]'));
   expect(details.textContent).toContain(copy.profileDefault);
-  expect(getComputedStyle(details.querySelector('.flower-computer-profile')!).fontSize).toBe('12px');
+  expect(getComputedStyle(details.querySelector('.flower-computer-profile-card')!).fontSize).toBe('12px');
   expect(details.textContent).toContain(copy.profileIsolationHint);
   expect(management.createManagedProfile).not.toHaveBeenCalled();
 });
@@ -531,4 +532,49 @@ it('rejects a website path or embedded credentials instead of silently widening 
   button(copy.save).click();
   await waitFor(() => management.saveAccess.mock.calls.length === 1);
   expect(management.saveAccess).toHaveBeenCalledWith('thread', { origins: ['https://example.test'], apps: [], allow_foreground: false });
+});
+
+for (const width of [390, 1280]) it(`manages browser profiles without selecting a task at ${width}px`, async () => {
+  await page.viewport(width, 850);
+  const { management } = mount();
+  management.listManagedProfiles.mockResolvedValue([{ id: 'browser-main', name: 'Default', state: 'stopped' }]);
+  management.manageBrowserProfile.mockResolvedValue([{ id: 'browser-main', name: 'Default', state: 'running' }]);
+  await ready(); button(copy.browserSettings).click();
+  await waitFor(() => !!document.querySelector('details'));
+  (document.querySelector('details summary') as HTMLElement).click();
+  await waitFor(() => !!button(copy.browserStart) && !button(copy.browserStart).disabled);
+  expect(management.manageBrowserProfile).not.toHaveBeenCalled();
+  button(copy.browserStart).click();
+  await waitFor(() => !!button(copy.browserStop) && !button(copy.browserStop).disabled);
+  expect(management.manageBrowserProfile).toHaveBeenCalledWith('browser-main', 'start');
+  button(copy.browserStop).click();
+  await waitFor(() => document.body.textContent!.includes(copy.browserStopHint));
+  expect(management.manageBrowserProfile).toHaveBeenCalledTimes(1);
+  button(copy.cancel).click();
+  expect(management.manageBrowserProfile).toHaveBeenCalledTimes(1);
+  button(copy.browserStop).click();
+  management.manageBrowserProfile.mockResolvedValue([{ id: 'browser-main', name: 'Default', state: 'stopped' }]);
+  const stops = [...document.querySelectorAll<HTMLButtonElement>('button')].filter(item => item.textContent?.trim() === copy.browserStop);
+  stops[stops.length - 1].click();
+  await waitFor(() => !!button(copy.browserStart));
+  expect(management.manageBrowserProfile).toHaveBeenLastCalledWith('browser-main', 'stop');
+  expect(management.selectCandidate).not.toHaveBeenCalled();
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/browser-lifecycle-${width}.png` });
+});
+it('retains the profile and explains an unsuccessful stop', async () => {
+  const { management } = mount();
+  management.listManagedProfiles.mockResolvedValue([{ id: 'browser-main', name: 'Default', state: 'running' }]);
+  management.manageBrowserProfile.mockRejectedValue(new Error('managed_browser_in_use'));
+  await ready(); button(copy.browserSettings).click();
+  await waitFor(() => !!document.querySelector('details'));
+  (document.querySelector('details summary') as HTMLElement).click();
+  await waitFor(() => !!button(copy.browserStop) && !button(copy.browserStop).disabled);
+  button(copy.browserStop).click();
+  const stops = [...document.querySelectorAll<HTMLButtonElement>('button')].filter(item => item.textContent?.trim() === copy.browserStop);
+  stops[stops.length - 1].click();
+  await waitFor(() => document.body.textContent!.includes(copy.browserLifecycleFailed));
+  expect(document.body.textContent).toContain(copy.browserRunning);
+  expect(management.selectCandidate).not.toHaveBeenCalled();
 });

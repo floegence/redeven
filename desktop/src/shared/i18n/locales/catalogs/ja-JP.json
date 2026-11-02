@@ -1443,6 +1443,14 @@
       "modelControlledHint": "このモデルは対応する思考設定を公開していないため、モデルの既定の動作を使用します。"
     },
     "computer": {
+      "browserProfiles": "ブラウザープロファイル",
+      "browserRunning": "実行中",
+      "browserIdle": "待機中",
+      "browserNeedsAttention": "確認が必要",
+      "browserStart": "起動",
+      "browserStop": "停止",
+      "browserStopHint": "このプロファイルのページを閉じます。保存済みのログイン情報とダウンロードしたファイルは保持されます。",
+      "browserLifecycleFailed": "ブラウザーの状態を変更できません。使用中のタスクを停止し、ブラウザーの操作権を返してから再試行してください。",
       "title": "ブラウザーとデスクトップ",
       "target": "ページとアプリ",
       "refresh": "更新",

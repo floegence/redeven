@@ -123,7 +123,7 @@ func TestManagedBrowserFastStartupFailureKeepsStructuredReasonAndService(t *test
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{".redeven-browser": pkg.SHA256, "chrome": "fixture"} {
+	for name, body := range map[string]string{".redeven-browser": pkg.SHA256, "chrome": "#!/bin/sh\necho 'error while loading shared libraries' >&2\nexit 1\n"} {
 		if err = os.WriteFile(filepath.Join(dir, name), []byte(body), 0700); err != nil {
 			t.Fatal(err)
 		}

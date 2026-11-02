@@ -1443,6 +1443,14 @@
       "modelControlledHint": "Dieses Modell gibt keine unterstützten Denkoptionen an. Es wird sein Standardverhalten verwendet."
     },
     "computer": {
+      "browserProfiles": "Browserprofile",
+      "browserRunning": "Aktiv",
+      "browserIdle": "Inaktiv",
+      "browserNeedsAttention": "Aktion erforderlich",
+      "browserStart": "Starten",
+      "browserStop": "Stoppen",
+      "browserStopHint": "Die Seiten dieses Profils werden geschlossen. Gespeicherte Anmeldungen und heruntergeladene Dateien bleiben erhalten.",
+      "browserLifecycleFailed": "Der Browserstatus konnte nicht geändert werden. Beenden Sie aktive Aufgaben und geben Sie die Browsersteuerung frei. Versuchen Sie es dann erneut.",
       "title": "Browser und Desktop",
       "target": "Seiten und Apps",
       "refresh": "Aktualisieren",

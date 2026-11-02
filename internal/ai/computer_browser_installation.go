@@ -81,10 +81,21 @@ func (r *ComputerUseRuntime) SetComputerBrowserEnabled(_ context.Context, meta *
 	}
 	if err == nil && !enabled {
 		host.connectMu.Lock()
+		profiles := make([]*managedBrowserProfile, 0, len(host.managedProfiles))
 		for _, profile := range host.managedProfiles {
-			profile.close()
+			profile.mu.Lock()
+			profile.retired = true
+			profile.mu.Unlock()
+			profiles = append(profiles, profile)
 		}
-		clear(host.managedProfiles)
+		host.connectMu.Unlock()
+		err = closeManagedBrowserProfiles(profiles)
+		host.connectMu.Lock()
+		for id, profile := range host.managedProfiles {
+			if profile.stopped() && profile.closeResult() == nil {
+				delete(host.managedProfiles, id)
+			}
+		}
 		host.connectMu.Unlock()
 	}
 	return status, err

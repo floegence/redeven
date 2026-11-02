@@ -223,6 +223,12 @@ func TestManagedBrowserLostTabAndProcessNeverSelectReplacement(t *testing.T) {
 			}
 			executor := runtime.executors[target.ID].(*PlaywrightTargetExecutor)
 			tabID := executor.TabID
+			// The managed owner deliberately creates no startup blank page. Create
+			// the independent sibling explicitly so this remains an isolation test.
+			siblings, err := runtime.managedProfiles["browser-main"].call(ctx, "new_tab")
+			if err != nil || len(siblings) != 1 {
+				t.Fatalf("sibling fixture: %v %v", siblings, err)
+			}
 			// The endpoint and process ID come only from this test's owned
 			// managed profile. No name-based process discovery or cleanup.
 			script := `import {chromium} from 'playwright';
@@ -255,7 +261,7 @@ if (process.argv[3] === 'closed_tab') {
 			if failure == "closed_tab" {
 				profile := runtime.managedProfiles["browser-main"]
 				tabs, err := profile.call(ctx, "inventory")
-				if err != nil || len(tabs) != 1 || tabs[0].ID == tabID {
+				if err != nil || len(tabs) != 1 || tabs[0].ID != siblings[0].ID {
 					t.Fatalf("closed tab was recreated or affected its sibling: %+v %v", tabs, err)
 				}
 			}

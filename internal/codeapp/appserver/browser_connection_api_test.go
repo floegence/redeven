@@ -1,7 +1,9 @@
 package appserver
 
 import (
+	"github.com/floegence/redeven/internal/config"
 	"net/http"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -72,5 +74,42 @@ func TestRemovedBrowserProductRoutesReturnNotFound(t *testing.T) {
 	response := serveAIReadinessTestRequest(srv, origin, http.MethodGet, "/_redeven_proxy/env/browser/?instance=old-browser-view", nil)
 	if response.Code != http.StatusNotFound {
 		t.Errorf("retired browser document returned %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestFlowerBrowserProfileLifecycleValidatesAuthorityAndInput(t *testing.T) {
+	root := t.TempDir()
+	computer := ai.NewComputerUseRuntime(ai.NewTargetRegistry(), map[string]ai.TargetToolExecutor{"browser-main": ai.NewPlaywrightTargetExecutor("/bin/sh", filepath.Join(root, "helper.mjs"), filepath.Join(root, "profiles"))}, root)
+	t.Cleanup(func() { _ = computer.Close() })
+	service, err := ai.NewService(ai.Options{StateDir: root, AgentHomeDir: root, Shell: "bash", TargetToolExecutor: computer,
+		Config:                &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	meta := session.Meta{ChannelID: "ch_ai_readiness", EndpointID: "env", UserPublicID: "user", CanRead: true, CanWrite: true, CanExecute: true}
+	server, origin := newAIReadinessTestServer(t, newStaticAIServiceProvider(service), meta)
+	route := "/_redeven_proxy/api/ai/computer/managed/lifecycle"
+	for _, body := range []string{
+		"{", "{}", `{"profile_id":"../other","action":"stop"}`, `{"profile_id":"browser-main","action":"restart"}`,
+		`{"profile_id":"browser-main","action":"stop","executable":"/bin/sh"}`, `{"profile_id":"browser-main","action":"stop"} {}`,
+	} {
+		response := serveAIReadinessTestRequest(server, origin, http.MethodPost, route, []byte(body))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("accepted invalid lifecycle request: %d %s", response.Code, response.Body.String())
+		}
+	}
+	body := []byte(`{"profile_id":"browser-main","action":"stop"}`)
+	response := serveAIReadinessTestRequest(server, origin, http.MethodPost, route, body)
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"state":"stopped"`) {
+		t.Fatalf("idempotent stop: %d %s", response.Code, response.Body.String())
+	}
+	meta.CanWrite = false
+	readonly, readOrigin := newAIReadinessTestServer(t, newStaticAIServiceProvider(service), meta)
+	response = serveAIReadinessTestRequest(readonly, readOrigin, http.MethodPost, route, body)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("read-only lifecycle: %d %s", response.Code, response.Body.String())
 	}
 }

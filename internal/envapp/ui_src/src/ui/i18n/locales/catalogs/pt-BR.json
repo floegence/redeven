@@ -6552,7 +6552,15 @@
       "chromeRemoteTitle": "Navegue sem desbloquear a área de trabalho",
       "chromeRemoteHint": "Use um perfil de navegador separado com suas próprias sessões salvas.",
       "chromeRemotePrepare": "Configurar navegador separado",
-      "chromeRemoteFailed": "Não foi possível preparar o navegador separado. Tente novamente."
+      "chromeRemoteFailed": "Não foi possível preparar o navegador separado. Tente novamente.",
+      "browserProfiles": "Perfis do navegador",
+      "browserRunning": "Em execução",
+      "browserIdle": "Ocioso",
+      "browserNeedsAttention": "Requer atenção",
+      "browserStart": "Iniciar",
+      "browserStop": "Parar",
+      "browserStopHint": "As páginas deste perfil serão fechadas. Os logins salvos e os arquivos baixados serão mantidos.",
+      "browserLifecycleFailed": "Não foi possível alterar o estado do navegador. Pare as tarefas que o utilizam e libere o controle do navegador antes de tentar novamente."
     },
     "taskFiles": {
       "title": "Arquivos da conversa",

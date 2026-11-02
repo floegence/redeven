@@ -1686,6 +1686,7 @@ export type FlowerBrowserInstallationSnapshot = FlowerBrowserInstallation & Read
   desktop_error?: 'package_mismatch' | 'desktop_download_failed' | 'desktop_upload_failed' | 'status_failed';
 }>;
 export type FlowerBrowserInstallRequest = Readonly<{ action: 'prepare_system' | 'start' | 'chunk' | 'complete' | 'cancel'; package_id?: string; source?: 'download' | 'upload'; operation_id?: string; offset?: number; data?: string }>;
+export type FlowerManagedProfile = Readonly<{ id: string; name: string; state?: 'running' | 'idle' | 'stopped' | 'failed' }>;
 export type FlowerComputerManagement = Readonly<{
   loadBrowserInstallation?: () => Promise<FlowerBrowserInstallationSnapshot>;
   saveBrowserEnabled?: (enabled: boolean) => Promise<FlowerBrowserInstallationSnapshot>;
@@ -1698,8 +1699,9 @@ export type FlowerComputerManagement = Readonly<{
   revealTarget?: (threadID: string, targetID: string) => Promise<void>;
   listCandidates: (threadID: string) => Promise<FlowerComputerInventory>;
   selectCandidate: (threadID: string, candidateRef: string) => Promise<FlowerTargetDescriptor>;
-  listManagedProfiles?: () => Promise<readonly Readonly<{ id: string; name: string }>[]>;
-  createManagedProfile?: (name: string) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
+  listManagedProfiles?: () => Promise<readonly FlowerManagedProfile[]>;
+  createManagedProfile?: (name: string) => Promise<readonly FlowerManagedProfile[]>;
+  manageBrowserProfile?: (profileID: string, action: 'start' | 'stop') => Promise<readonly FlowerManagedProfile[]>;
   openExtension?: (action: 'extensions' | 'folder' | 'connect', installationID: string) => Promise<void>;
   setupExtension?: (installationID: string) => Promise<FlowerComputerExtensionSetup>;
   prepareRemoteBrowser?: (installationID: string, signal: AbortSignal) => Promise<void>;

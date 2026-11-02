@@ -128,7 +128,17 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 	}
 	r.mu.RLock()
 	closed := r.closed
+	executor, managed := r.executors[call.TargetID].(*PlaywrightTargetExecutor)
 	r.mu.RUnlock()
+	if managed {
+		executor.mu.Lock()
+		retired := executor.closed
+		executor.mu.Unlock()
+		if retired {
+			unlock()
+			return nil, nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_tab_disconnected"}
+		}
+	}
 	if closed {
 		unlock()
 		return nil, nil, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}

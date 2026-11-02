@@ -6552,7 +6552,15 @@
       "chromeRemoteTitle": "Surfen ohne Entsperren des Desktops",
       "chromeRemoteHint": "Verwenden Sie ein separates Browserprofil mit eigenen gespeicherten Anmeldungen.",
       "chromeRemotePrepare": "Separaten Browser einrichten",
-      "chromeRemoteFailed": "Der separate Browser konnte nicht vorbereitet werden. Versuchen Sie es erneut."
+      "chromeRemoteFailed": "Der separate Browser konnte nicht vorbereitet werden. Versuchen Sie es erneut.",
+      "browserProfiles": "Browserprofile",
+      "browserRunning": "Aktiv",
+      "browserIdle": "Inaktiv",
+      "browserNeedsAttention": "Aktion erforderlich",
+      "browserStart": "Starten",
+      "browserStop": "Stoppen",
+      "browserStopHint": "Die Seiten dieses Profils werden geschlossen. Gespeicherte Anmeldungen und heruntergeladene Dateien bleiben erhalten.",
+      "browserLifecycleFailed": "Der Browserstatus konnte nicht geändert werden. Beenden Sie aktive Aufgaben und geben Sie die Browsersteuerung frei. Versuchen Sie es dann erneut."
     },
     "taskFiles": {
       "title": "Dateien im Gespräch",

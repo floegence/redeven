@@ -1443,6 +1443,14 @@
       "modelControlledHint": "此模型未声明支持的思考控制选项，将使用模型默认行为。"
     },
     "computer": {
+      "browserProfiles": "浏览器配置组",
+      "browserRunning": "运行中",
+      "browserIdle": "空闲",
+      "browserNeedsAttention": "需要处理",
+      "browserStart": "启动",
+      "browserStop": "停止",
+      "browserStopHint": "这会关闭此配置组中的页面。已保存的登录信息和下载文件会保留。",
+      "browserLifecycleFailed": "无法更改浏览器状态。请先停止使用它的任务并交还浏览器控制权，然后重试。",
       "title": "浏览器与桌面",
       "target": "页面与应用",
       "refresh": "刷新",

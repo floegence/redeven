@@ -1443,6 +1443,14 @@
       "modelControlledHint": "Este modelo não informa quais opções de raciocínio são aceitas. O comportamento padrão do modelo será usado."
     },
     "computer": {
+      "browserProfiles": "Perfis do navegador",
+      "browserRunning": "Em execução",
+      "browserIdle": "Ocioso",
+      "browserNeedsAttention": "Requer atenção",
+      "browserStart": "Iniciar",
+      "browserStop": "Parar",
+      "browserStopHint": "As páginas deste perfil serão fechadas. Os logins salvos e os arquivos baixados serão mantidos.",
+      "browserLifecycleFailed": "Não foi possível alterar o estado do navegador. Pare as tarefas que o utilizam e libere o controle do navegador antes de tentar novamente.",
       "title": "Navegador e área de trabalho",
       "target": "Páginas e aplicativos",
       "refresh": "Atualizar",

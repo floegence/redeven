@@ -1,4 +1,13 @@
 export const computerUseEnUS = {
+  browserProfiles: "Browser profiles",
+  browserRunning: "Running",
+  browserIdle: "Idle",
+  browserNeedsAttention: "Needs attention",
+  browserStart: "Start",
+  browserStop: "Stop",
+  browserStopHint: "This closes the pages in this profile. Saved sign-ins and downloaded files are kept.",
+  browserLifecycleFailed: "Unable to change the browser state. Stop any task using it, release browser control, then try again.",
+
   chromeRemoteTitle: "Browse without unlocking the desktop",
   chromeRemoteHint: "Use a separate browser profile with its own saved sign-ins.",
   chromeRemotePrepare: "Set up separate browser",

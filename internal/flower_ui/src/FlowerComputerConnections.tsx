@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Code, Globe, Info, MonitorPointer, Plus, Refresh, Search, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
-import type { FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
+import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import { FlowerManagedBrowser } from './FlowerManagedBrowser';
 import { FlowerChromeConnection } from './FlowerChromeConnection';
@@ -21,11 +21,12 @@ export function FlowerComputerConnections(props: {
   const [inventory, setInventory] = createSignal<FlowerComputerInventory>();
   const [environment, setEnvironment] = createSignal<FlowerComputerEnvironment>();
   const [access, setAccess] = createSignal<FlowerComputerAccess>();
-  const [profiles, setProfiles] = createSignal<readonly Readonly<{ id: string; name: string }>[]>([]);
+  const [profiles, setProfiles] = createSignal<readonly FlowerManagedProfile[]>([]);
   const [query, setQuery] = createSignal('');
   const [targetFilter, setTargetFilter] = createSignal<'all' | 'browser' | 'app'>('all');
   const [draft, setDraft] = createSignal('');
   const [origin, setOrigin] = createSignal('');
+  const [stopProfile, setStopProfile] = createSignal('');
   const [profileName, setProfileName] = createSignal('');
   const [endpoint, setEndpoint] = createSignal('');
   const [diagnostic, setDiagnostic] = createSignal<'managed' | 'desktop'>('managed');
@@ -98,7 +99,7 @@ export function FlowerComputerConnections(props: {
   };
   createEffect(on(() => [props.open, props.threadID, props.connectionOnly, props.installationOnly] as const, ([open]) => {
     generation++; setPage(props.installationOnly ? 'managed' : 'overview'); setInventory(undefined); setEnvironment(undefined); setAccess(undefined);
-    setProfiles([]); setError(''); setSaved(false); setDraft(''); setQuery(''); setTargetFilter('all'); setOrigin(''); setProfileName(''); setEndpoint(''); setBusy(false);
+    setProfiles([]); setStopProfile(''); setError(''); setSaved(false); setDraft(''); setQuery(''); setTargetFilter('all'); setOrigin(''); setProfileName(''); setEndpoint(''); setBusy(false);
     setInventoryFailed(false); setEnvironmentFailed(false);
     if (open && !props.connectionOnly) void load(); else setLoading(false);
   }));
@@ -116,6 +117,14 @@ export function FlowerComputerConnections(props: {
       if (epoch === generation) setProfiles(value);
     }, props.copy.profileFailed, true);
   };
+  const manageProfile = (id: string, action: 'start' | 'stop') => run(async epoch => {
+    try {
+      const value = await management()!.manageBrowserProfile!(id, action);
+      if (epoch === generation) { setProfiles(value); setStopProfile(''); }
+    } catch {
+      if (epoch === generation) setError(props.copy.browserLifecycleFailed);
+    }
+  }, props.copy.browserLifecycleFailed);
   const saveAccess = (value: FlowerComputerAccess) => run(async epoch => {
     await management()!.saveAccess(props.threadID, value);
     if (epoch === generation) { setAccess(value); setSaved(true); }
@@ -254,9 +263,15 @@ export function FlowerComputerConnections(props: {
         <Show when={page() === 'managed'}>
           <Show when={management()?.loadBrowserInstallation}><FlowerManagedBrowser continuationKey={props.continuationKey} management={management()!} copy={props.copy} canMutate={props.adapter.canMutate !== false} onChange={() => void load()} onContinue={props.installationOnly ? props.onContinue : undefined} /></Show>
           <p class="flower-computer-description">{props.copy.managedModeValue}</p>
-          <Show when={!props.installationOnly}><details class="flower-computer-detail-card" onToggle={event => { if (event.currentTarget.open) loadProfiles(); }}><summary class="cursor-pointer text-xs font-medium">{props.copy.createProfileHint}</summary>
+          <Show when={!props.installationOnly}><details class="flower-computer-detail-card" onToggle={event => { if (event.currentTarget.open) loadProfiles(); }}><summary class="cursor-pointer text-xs font-medium">{props.copy.browserProfiles}</summary>
             <p class="mt-3 flower-computer-description">{props.copy.profileHint} {props.copy.profileIsolationHint}</p>
-            <div class="mt-3 flower-computer-profile-list"><For each={profiles()}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.id === 'browser-main' ? props.copy.profileDefault : profile.name}</span></div>}</For></div>
+            <div class="mt-3 space-y-2"><For each={profiles()}>{profile => <section class="flower-computer-profile-card rounded-md border border-border p-3 text-xs" aria-label={profile.id === 'browser-main' ? props.copy.profileDefault : profile.name}>
+              <div class="flex flex-wrap items-center gap-2"><Globe class="size-4 shrink-0" aria-hidden="true" /><span class="min-w-0 flex-1 break-words text-xs">{profile.id === 'browser-main' ? props.copy.profileDefault : profile.name}</span>
+                <span class="text-xs text-muted-foreground">{({ running: props.copy.browserRunning, idle: props.copy.browserIdle, stopped: props.copy.stopped, failed: props.copy.browserNeedsAttention })[profile.state ?? 'stopped']}</span>
+                <Show when={management()?.manageBrowserProfile}><Button size="sm" variant="outline" disabled={!mutable()} onClick={() => { if (!profile.state || profile.state === 'stopped') void manageProfile(profile.id, 'start'); else setStopProfile(profile.id); }}>{!profile.state || profile.state === 'stopped' ? props.copy.browserStart : props.copy.browserStop}</Button></Show>
+              </div>
+              <Show when={stopProfile() === profile.id}><div class="mt-3 space-y-2"><p class="text-xs text-muted-foreground">{props.copy.browserStopHint}</p><div class="flex gap-2"><Button size="sm" variant="outline" disabled={!mutable()} onClick={() => void manageProfile(profile.id, 'stop')}>{props.copy.browserStop}</Button><Button size="sm" variant="ghost" disabled={!mutable()} onClick={() => setStopProfile('')}>{props.copy.cancel}</Button></div></div></Show>
+            </section>}</For></div>
             <form class="mt-3 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void run(async epoch => {
             const value = await management()!.createManagedProfile!(profileName().trim());
             if (epoch === generation) { setProfiles(value); setProfileName(''); }

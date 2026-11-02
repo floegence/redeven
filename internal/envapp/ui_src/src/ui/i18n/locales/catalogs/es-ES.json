@@ -6552,7 +6552,15 @@
       "chromeRemoteTitle": "Navega sin desbloquear el escritorio",
       "chromeRemoteHint": "Usa un perfil de navegador independiente con sus propias sesiones guardadas.",
       "chromeRemotePrepare": "Configurar navegador independiente",
-      "chromeRemoteFailed": "No se pudo preparar el navegador independiente. Inténtalo de nuevo."
+      "chromeRemoteFailed": "No se pudo preparar el navegador independiente. Inténtalo de nuevo.",
+      "browserProfiles": "Perfiles del navegador",
+      "browserRunning": "En ejecución",
+      "browserIdle": "Inactivo",
+      "browserNeedsAttention": "Requiere atención",
+      "browserStart": "Iniciar",
+      "browserStop": "Detener",
+      "browserStopHint": "Se cerrarán las páginas de este perfil. Se conservarán los inicios de sesión guardados y los archivos descargados.",
+      "browserLifecycleFailed": "No se pudo cambiar el estado del navegador. Detén las tareas que lo utilizan y libera su control antes de volver a intentarlo."
     },
     "taskFiles": {
       "title": "Archivos de la conversación",

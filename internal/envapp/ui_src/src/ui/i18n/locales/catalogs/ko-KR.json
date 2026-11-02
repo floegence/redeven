@@ -6552,7 +6552,15 @@
       "chromeRemoteTitle": "데스크톱 잠금 해제 없이 탐색",
       "chromeRemoteHint": "별도의 브라우저 프로필을 사용하여 로그인 상태를 따로 저장합니다.",
       "chromeRemotePrepare": "별도 브라우저 설정",
-      "chromeRemoteFailed": "별도 브라우저를 준비하지 못했습니다. 다시 시도해 주세요."
+      "chromeRemoteFailed": "별도 브라우저를 준비하지 못했습니다. 다시 시도해 주세요.",
+      "browserProfiles": "브라우저 프로필",
+      "browserRunning": "실행 중",
+      "browserIdle": "유휴",
+      "browserNeedsAttention": "확인 필요",
+      "browserStart": "시작",
+      "browserStop": "중지",
+      "browserStopHint": "이 프로필의 페이지를 닫습니다. 저장된 로그인 정보와 다운로드한 파일은 유지됩니다.",
+      "browserLifecycleFailed": "브라우저 상태를 변경할 수 없습니다. 사용 중인 작업을 중지하고 브라우저 제어권을 반환한 후 다시 시도하세요."
     },
     "taskFiles": {
       "title": "대화 파일",

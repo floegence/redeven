@@ -2,6 +2,10 @@
 
 Concepts own contracts/evidence; Git retains history.
 
+## 2026-11-02
+
+- [Managed browsers](ai/computer-use-browser.md): direct Runtime process ownership, bounded group cleanup, passive inventory, guarded Start/Stop, empty-profile idle release and profile-scoped crash receipts.
+
 ## 2026-11-01
 
 - [Terminal workspace](architecture/env-app-terminal-and-surface-composition.md): published splits, retained PTYs, docking, resize and mobile/reload state; [navigator](ui/terminal-session-groups.md) uses compact yellow-folder groups and themed chrome.

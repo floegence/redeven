@@ -6552,7 +6552,15 @@
       "chromeRemoteTitle": "デスクトップのロックを解除せずに閲覧",
       "chromeRemoteHint": "専用のブラウザープロファイルに、ログイン状態を個別に保存します。",
       "chromeRemotePrepare": "専用ブラウザーを設定",
-      "chromeRemoteFailed": "専用ブラウザーを準備できませんでした。もう一度お試しください。"
+      "chromeRemoteFailed": "専用ブラウザーを準備できませんでした。もう一度お試しください。",
+      "browserProfiles": "ブラウザープロファイル",
+      "browserRunning": "実行中",
+      "browserIdle": "待機中",
+      "browserNeedsAttention": "確認が必要",
+      "browserStart": "起動",
+      "browserStop": "停止",
+      "browserStopHint": "このプロファイルのページを閉じます。保存済みのログイン情報とダウンロードしたファイルは保持されます。",
+      "browserLifecycleFailed": "ブラウザーの状態を変更できません。使用中のタスクを停止し、ブラウザーの操作権を返してから再試行してください。"
     },
     "taskFiles": {
       "title": "会話のファイル",

@@ -1443,6 +1443,14 @@
       "modelControlledHint": "Ce modèle ne précise pas les réglages de raisonnement pris en charge. Son comportement par défaut est utilisé."
     },
     "computer": {
+      "browserProfiles": "Profils du navigateur",
+      "browserRunning": "En cours",
+      "browserIdle": "Inactif",
+      "browserNeedsAttention": "Action requise",
+      "browserStart": "Démarrer",
+      "browserStop": "Arrêter",
+      "browserStopHint": "Les pages de ce profil seront fermées. Les connexions enregistrées et les fichiers téléchargés seront conservés.",
+      "browserLifecycleFailed": "Impossible de modifier l’état du navigateur. Arrêtez les tâches qui l’utilisent et libérez le contrôle du navigateur, puis réessayez.",
       "title": "Navigateur et bureau",
       "target": "Pages et applications",
       "refresh": "Actualiser",

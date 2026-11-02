@@ -6552,7 +6552,15 @@
       "chromeRemoteTitle": "無須解鎖桌面也能瀏覽",
       "chromeRemoteHint": "使用獨立的瀏覽器設定檔，分別儲存網站登入狀態。",
       "chromeRemotePrepare": "設定獨立瀏覽器",
-      "chromeRemoteFailed": "無法準備獨立瀏覽器，請重試。"
+      "chromeRemoteFailed": "無法準備獨立瀏覽器，請重試。",
+      "browserProfiles": "瀏覽器設定群組",
+      "browserRunning": "執行中",
+      "browserIdle": "閒置",
+      "browserNeedsAttention": "需要處理",
+      "browserStart": "啟動",
+      "browserStop": "停止",
+      "browserStopHint": "這會關閉此設定群組中的頁面。已儲存的登入資訊及下載檔案會保留。",
+      "browserLifecycleFailed": "無法變更瀏覽器狀態。請先停止使用它的工作並交還瀏覽器控制權，然後重試。"
     },
     "taskFiles": {
       "title": "對話檔案",
