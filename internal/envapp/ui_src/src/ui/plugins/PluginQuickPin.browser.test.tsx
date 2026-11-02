@@ -53,21 +53,23 @@ function mountLauncher(placement: PluginPinPlacement, mobile = false) {
   return { onSetPin, onOpen, onDetails };
 }
 
-it.each(['activity', 'workbench'] as const)('keeps quick pins, pointer menus and keyboard menus synchronized in %s', async (placement) => {
+it.each(['activity', 'workbench'] as const)('pins exclusively through pointer and keyboard context menus in %s', async (placement) => {
   await page.viewport(1280, 800);
   const fixture = mountLauncher(placement);
   await page.elementLocator(document.querySelector('[data-test-launcher]')!).click();
   const target = placement === 'activity' ? 'Activity Bar' : 'Workbench Dock';
   const tile = () => document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile]')!;
-  const pin = () => document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-  await page.getByRole('button', { name: 'Weather: Pin to ' + target, exact: true }).click();
+  expect(document.querySelector('[data-plugin-quick-pin]')).toBeNull();
+  expect(tile().parentElement?.querySelectorAll('button')).toHaveLength(1);
+  await page.elementLocator(tile()).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Pin to ' + target, exact: true }).click();
   expect(fixture.onSetPin).toHaveBeenCalledWith(placement, item.inventoryKey, true);
-  await expect.poll(() => pin().getAttribute('aria-pressed')).toBe('true');
+  expect(fixture.onSetPin).toHaveBeenLastCalledWith(placement, item.inventoryKey, true);
   expect(fixture.onOpen).not.toHaveBeenCalled();
   expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   await page.elementLocator(tile()).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Unpin from ' + target, exact: true }).click();
-  await expect.poll(() => pin().getAttribute('aria-pressed')).toBe('false');
+  expect(fixture.onSetPin).toHaveBeenLastCalledWith(placement, item.inventoryKey, false);
   await expect.poll(() => document.activeElement).toBe(tile());
   await userEvent.keyboard('{Shift>}{F10}{/Shift}');
   await expect.element(page.getByRole('menuitem', { name: 'Pin to ' + target, exact: true })).toBeVisible();
@@ -79,8 +81,8 @@ it.each(['activity', 'workbench'] as const)('keeps quick pins, pointer menus and
   await userEvent.keyboard('{End}');
   await expect.poll(() => document.activeElement?.getAttribute('data-floating-menu-item-id')).toBe('plugin-pin-toggle');
   await userEvent.keyboard('{Enter}');
-  await expect.poll(() => pin().getAttribute('aria-pressed')).toBe('true');
-  await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-' + placement + '-quick-pin.png' });
+  expect(fixture.onSetPin).toHaveBeenLastCalledWith(placement, item.inventoryKey, true);
+  await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-' + placement + '-clean-launcher.png' });
   await page.elementLocator(tile()).click({ button: 'right' });
   await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-' + placement + '-context-menu.png' });
   await page.getByRole('menuitem', { name: 'Plugin information', exact: true }).click();
@@ -88,16 +90,19 @@ it.each(['activity', 'workbench'] as const)('keeps quick pins, pointer menus and
   expect(fixture.onOpen).not.toHaveBeenCalled();
 });
 
-it.each([320, 390, 768])('keeps the mobile pin target visible and separate at %ipx', async (width) => {
+it.each([320, 390, 768])('keeps the mobile launcher uncluttered and context menu accessible at %ipx', async (width) => {
   await page.viewport(width, 844);
   const fixture = mountLauncher('activity', true);
-  const pin = document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-  const box = pin.getBoundingClientRect();
-  expect(box.width).toBeGreaterThanOrEqual(44);
-  expect(box.height).toBeGreaterThanOrEqual(44);
-  expect(box.right).toBeLessThanOrEqual(width);
-  expect(pin.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))).toBe(true);
-  await page.elementLocator(pin).click();
+  const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile]')!;
+  expect(document.querySelector('[data-plugin-quick-pin]')).toBeNull();
+  expect(tile.parentElement?.querySelectorAll('button')).toHaveLength(1);
+  await page.elementLocator(tile).click({ button: 'right' });
+  const action = page.getByRole('menuitem', { name: 'Pin to Activity Bar', exact: true });
+  await expect.element(action).toBeVisible();
+  const menu = document.querySelector<HTMLElement>('[role="menu"]')!.getBoundingClientRect();
+  expect(menu.left).toBeGreaterThanOrEqual(0);
+  expect(menu.right).toBeLessThanOrEqual(width);
+  await action.click();
   expect(fixture.onSetPin).toHaveBeenCalledWith('activity', item.inventoryKey, true);
   expect(fixture.onOpen).not.toHaveBeenCalled();
   await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-mobile-' + width + '.png' });

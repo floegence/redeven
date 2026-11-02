@@ -1,4 +1,5 @@
 import { cn } from '@floegence/floe-webapp-core';
+import { Tag, type TagVariant } from '@floegence/floe-webapp-core/ui';
 import { Settings } from '@floegence/floe-webapp-core/icons';
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 
@@ -70,7 +71,8 @@ export function PluginIcon(props: {
   return (
     <span
       class={cn(
-        'relative flex shrink-0 items-center justify-center overflow-hidden border bg-muted text-foreground shadow-sm',
+        'relative flex shrink-0 items-center justify-center overflow-hidden bg-[var(--floe-well)] text-foreground',
+        (size() === 'launcher' || size() === 'dock') && 'border bg-muted shadow-sm',
         size() === 'launcher' && 'h-16 w-16 rounded-2xl',
         size() === 'dock' && 'h-[42px] w-[42px] rounded-xl',
         size() === 'detail' && 'h-12 w-12 rounded-xl',
@@ -119,33 +121,33 @@ export function PluginUpdateBadge(props: { item: PluginInventoryItem; class?: st
 
 export function PluginStatusBadge(props: { item: PluginInventoryItem; class?: string }): JSX.Element {
   const i18n = useI18n();
-  const tone = () => {
+  const tone = (): TagVariant => {
     if (props.item.lifecycleState === 'enabled') {
-      return 'bg-[var(--redeven-status-success-soft)] text-[var(--redeven-status-success-foreground)]';
+      return 'success';
     }
     if (props.item.lifecycleState === 'needs_attention') {
-      return 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]';
+      return 'warning';
     }
     if (props.item.lifecycleState === 'update_available') {
-      return 'bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)]';
+      return 'info';
     }
-    return 'bg-muted text-muted-foreground';
+    return 'neutral';
   };
   return (
-    <span class={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-[background-color,color,transform] duration-150 ease-out motion-reduce:transition-none', tone(), props.class)}>
+    <Tag variant={tone()} size="sm" class={props.class}>
       {pluginLifecycleLabel(props.item, i18n)}
-    </span>
+    </Tag>
   );
 }
 
 export function PluginProcessStatusBadge(props: { state: PluginProcessStatusState; class?: string }): JSX.Element {
   const i18n = useI18n();
-  const tone = () => {
-    if (props.state === 'running') return 'bg-[var(--redeven-status-success-soft)] text-[var(--redeven-status-success-foreground)]';
-    if (props.state === 'blocked' || props.state === 'crashed') return 'bg-destructive/10 text-destructive';
-    if (props.state === 'stream_gap') return 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]';
-    if (props.state === 'starting') return 'bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)]';
-    return 'bg-muted text-muted-foreground';
+  const tone = (): TagVariant => {
+    if (props.state === 'running') return 'success';
+    if (props.state === 'blocked' || props.state === 'crashed') return 'error';
+    if (props.state === 'stream_gap') return 'warning';
+    if (props.state === 'starting') return 'info';
+    return 'neutral';
   };
   const label = () => {
     switch (props.state) {
@@ -158,31 +160,31 @@ export function PluginProcessStatusBadge(props: { state: PluginProcessStatusStat
     }
   };
   return (
-    <span
+    <Tag
+      variant={tone()} size="sm" dot
       data-plugin-process-status={props.state}
-      class={cn('inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-[background-color,color] duration-150 motion-reduce:transition-none', tone(), props.class)}
+      class={props.class}
     >
-      <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full bg-current" />
       {label()}
-    </span>
+    </Tag>
   );
 }
 
 export function PluginTrustBadge(props: { item: PluginInventoryItem; class?: string }): JSX.Element {
   const i18n = useI18n();
-  const tone = () => {
+  const tone = (): TagVariant => {
     if (props.item.trustBadge === 'official' || props.item.trustBadge === 'verified') {
-      return 'bg-primary/10 text-primary';
+      return 'primary';
     }
     if (props.item.trustBadge === 'blocked' || props.item.trustBadge === 'revoked') {
-      return 'bg-destructive/10 text-destructive';
+      return 'error';
     }
-    return 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]';
+    return 'warning';
   };
   return (
-    <span class={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-[background-color,color,transform] duration-150 ease-out motion-reduce:transition-none', tone(), props.class)}>
+    <Tag variant={tone()} size="sm" class={props.class}>
       {pluginTrustLabel(props.item, i18n)}
-    </span>
+    </Tag>
   );
 }
 
@@ -208,7 +210,7 @@ export function PluginIdentityHeader(props: {
     <div class={cn('flex min-w-0 items-start gap-3', props.class)} data-plugin-identity>
       <PluginIcon item={props.item} size="detail" />
       <div class="min-w-0 flex-1">
-        <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <div class="flex min-w-0 flex-wrap items-center gap-1.5">
           <h2
             id={props.headingId}
             ref={props.headingRef}
@@ -216,7 +218,7 @@ export function PluginIdentityHeader(props: {
             data-plugin-center-detail-heading={props.headingRef ? '' : undefined}
             lang={presentation()?.resolved_locale}
             dir="auto"
-            class={cn('min-w-0 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', props.review ? 'break-words' : 'truncate')}
+            class={cn('w-full min-w-0 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', props.review ? 'break-words' : 'truncate')}
           >
             {displayName()}
           </h2>

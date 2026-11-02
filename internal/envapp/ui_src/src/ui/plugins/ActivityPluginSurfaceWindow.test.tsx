@@ -34,32 +34,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Refresh: () => <span aria-hidden="true" />,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: {
-    children?: JSX.Element;
-    disabled?: boolean;
-    loading?: boolean;
-    class?: string;
-    onClick?: () => void;
-    ref?: (element: HTMLButtonElement) => void;
-    variant?: string;
-    'data-plugin-surface-retry'?: boolean;
-    'data-plugin-surface-end-session'?: boolean;
-  }) => (
-    <button
-      ref={(element) => props.ref?.(element)}
-      type="button"
-      disabled={props.disabled}
-      class={props.class}
-      data-loading={String(Boolean(props.loading))}
-      data-variant={props.variant}
-      data-plugin-surface-retry={props['data-plugin-surface-retry'] ? '' : undefined}
-      data-plugin-surface-end-session={props['data-plugin-surface-end-session'] ? '' : undefined}
-      onClick={() => props.onClick?.()}
-    >
-      {props.children}
-    </button>
-  ),
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Dialog: (props: { open: boolean; footer?: JSX.Element }) => (
     <Show when={props.open}><div data-session-dialog>{props.footer}</div></Show>
   ),
@@ -445,8 +421,8 @@ describe('ActivityPluginSurfaceWindow', () => {
 
     const retryButton = mount.querySelector('[data-plugin-surface-retry]') as HTMLButtonElement;
     const endSessionButton = mount.querySelector('[data-plugin-surface-end-session]') as HTMLButtonElement;
-    expect(retryButton.getAttribute('data-variant')).toBe('default');
-    expect(endSessionButton.getAttribute('data-variant')).toBe('ghost-destructive');
+    expect(retryButton.className).toContain('bg-primary');
+    expect(endSessionButton.className).toContain('hover:text-error');
     expect(retryButton.className).toContain('min-h-[46px]');
     expect(endSessionButton.className).toContain('min-h-[46px]');
     expect(props.onEndPluginSession).not.toHaveBeenCalled();

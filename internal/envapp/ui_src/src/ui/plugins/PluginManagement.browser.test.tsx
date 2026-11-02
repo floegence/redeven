@@ -430,7 +430,7 @@ function mountExternalDialog(
   return host;
 }
 
-async function mountUpdateReviewDialog(inspection: ExternalPluginInspection = browserUpdateInspection()): Promise<HTMLElement> {
+async function mountUpdateReviewDialog(inspection: ExternalPluginInspection = browserUpdateInspection(), sourceOnly = false): Promise<HTMLElement> {
   const host = fixedHost();
   disposers.push(render(() => (
     <PluginUpdateReviewDialog
@@ -448,6 +448,7 @@ async function mountUpdateReviewDialog(inspection: ExternalPluginInspection = br
     />
   ), host));
   await expect.poll(() => document.querySelector('[data-plugin-update-source-url]')).not.toBeNull();
+  if (sourceOnly) return host;
   document.querySelector<HTMLInputElement>('[data-plugin-update-source-url]')!.value = 'https://plugins.example.com/package.redevplugin';
   document.querySelector<HTMLInputElement>('[data-plugin-update-source-url]')!.dispatchEvent(new Event('input', { bubbles: true }));
   document.querySelector<HTMLButtonElement>('[data-plugin-update-inspect]')!.click();
@@ -1203,9 +1204,9 @@ describe('plugin management browser geometry and interaction', () => {
     const detailControls = details.querySelector<HTMLElement>('[data-plugin-detail-controls]')!;
     const detailBody = details.querySelector<HTMLElement>('[data-plugin-detail-scroll-body]')!;
     const detailActions = details.querySelector<HTMLElement>('[data-plugin-action-row]')!;
-    const selectedRow = item.closest<HTMLElement>('article')!;
+    const selectedRow = item.closest<HTMLElement>('[data-plugin-directory-card]')!;
     expect(selectedRow.getAttribute('aria-current')).toBe('true');
-    expect(getComputedStyle(selectedRow).boxShadow).not.toBe('none');
+    expect(getComputedStyle(selectedRow).boxShadow).toBe('none');
     expect(host.querySelector<HTMLElement>('[data-plugin-center-list]')!.className).toContain('grid-cols-[repeat(auto-fill');
     expect(getComputedStyle(details).overflowY).toBe('hidden');
     expect(getComputedStyle(detailBody).overflowY).toBe('auto');
@@ -1374,7 +1375,7 @@ describe('plugin management browser geometry and interaction', () => {
     const host = mountPluginCenter();
     await settle();
 
-    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('[data-plugin-directory-card]')!;
     expect(getComputedStyle(card).minHeight).toBe('176px');
     expect(card.getBoundingClientRect().height).toBeGreaterThanOrEqual(176);
     host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:metrics"]')!.click();
@@ -1452,7 +1453,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expectTouchTarget(item);
     expectTouchTargets([
-      host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!,
+      host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!.closest<HTMLElement>('[role="button"]')!,
       host.querySelector<HTMLElement>('[data-plugin-center-search]')!,
       host.querySelector<HTMLElement>('[data-plugin-center-refresh]')!,
       ...Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')),
@@ -1526,7 +1527,7 @@ describe('plugin management browser geometry and interaction', () => {
       const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!;
       expect(item.querySelector(`[lang="${locale}"]`)).not.toBeNull();
       expectTouchTargets([
-        host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!,
+        host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!.closest<HTMLElement>('[role="button"]')!,
         host.querySelector<HTMLElement>('[data-plugin-center-search]')!,
         host.querySelector<HTMLElement>('[data-plugin-center-refresh]')!,
         ...Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')),
@@ -1583,6 +1584,31 @@ describe('plugin management browser geometry and interaction', () => {
     expect(document.activeElement).toBe(heading);
   });
 
+  it.each([320, 1440])('keeps update source tabs keyboard accessible at %i px', async (width) => {
+    await page.viewport(width, 800);
+    await mountUpdateReviewDialog(browserUpdateInspection(), true);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const tabs = Array.from(dialog.querySelectorAll<HTMLElement>('[role="tab"]'));
+    expect(tabs).toHaveLength(3);
+    expectTouchTargets(tabs);
+    expectNoHorizontalOverflow(dialog);
+    await expect.element(page.getByRole('tab', { name: 'Package URL', exact: true })).toBeVisible();
+    const source = dialog.querySelector<HTMLInputElement>('[data-plugin-update-source-url]')!;
+    expectSingleInputFocus(source);
+    tabs[0].focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect.element(page.getByRole('textbox', { name: 'GitHub repository URL', exact: true })).toBeVisible();
+    expect(document.activeElement).toBe(tabs[1]);
+    expect(dialog.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe(tabs[1].id);
+    await userEvent.keyboard('{End}');
+    await expect.poll(() => dialog.querySelector('[data-plugin-update-source-file]')).not.toBeNull();
+    expect(document.activeElement).toBe(tabs[2]);
+    await userEvent.keyboard('{Home}');
+    await expect.poll(() => dialog.querySelector('[data-plugin-update-source-url]')).not.toBeNull();
+    expect(document.activeElement).toBe(tabs[0]);
+    await page.screenshot({ path: '../../../.vitest-attachments/plugin-center-update-source-' + width + '.png' });
+  });
+
   it('uses one focus border in the external package source form', async () => {
     mountExternalDialog();
     await settle();
@@ -1603,20 +1629,20 @@ describe('plugin management browser geometry and interaction', () => {
     expectNoHorizontalOverflow(content);
 
     const sourceTabs = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-    const sourceLabels = Array.from(dialog.querySelectorAll<HTMLElement>('[data-external-plugin-source-label]'));
+    const sourceLabels = sourceTabs.map(tab => tab.querySelector<HTMLElement>('span:last-child')!);
     expect(sourceTabs).toHaveLength(3);
     expect(sourceLabels).toHaveLength(3);
-    sourceLabels.forEach((label, index) => {
-      expect(sourceTabs[index].getAttribute('aria-label')).toBe(label.textContent);
-      expect(sourceTabs[index].title).toBe(label.textContent);
+    for (const [index, label] of sourceLabels.entries()) {
+      await expect.element(page.elementLocator(sourceTabs[index])).toHaveAccessibleName(label.textContent!);
       expect(getComputedStyle(label).whiteSpace).toBe('nowrap');
       expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
       expect(getComputedStyle(label).overflow).toBe('hidden');
-    });
+    }
     for (let index = 1; index < sourceTabs.length; index += 1) {
       expect(sourceTabs[index - 1].getBoundingClientRect().right)
         .toBeLessThanOrEqual(sourceTabs[index].getBoundingClientRect().left + 1);
     }
+    await page.screenshot({ path: '../../../.vitest-attachments/plugin-center-install-source-' + viewport.width + '.png' });
     const progress = dialog.querySelector<HTMLElement>('[data-install-progress]')!;
     expect(progress.textContent).toContain('Step 1 of 4');
     expect(progress.getBoundingClientRect().height).toBeLessThanOrEqual(1);
@@ -1812,7 +1838,7 @@ describe('plugin management browser geometry and interaction', () => {
         const pinBounds = pin.getBoundingClientRect();
         expect(pinBounds.top).toBeGreaterThanOrEqual(titlebar.top);
         expect(pinBounds.bottom).toBeLessThanOrEqual(titlebar.bottom);
-        expect(pin.contains(document.elementFromPoint(pinBounds.x + 2, pinBounds.y + 2))).toBe(true);
+        expect(pin.contains(document.elementFromPoint(pinBounds.x + 8, pinBounds.y + 8))).toBe(true);
       }
       const bounds = activity.getBoundingClientRect();
       await page.elementLocator(pin).click();
@@ -1854,7 +1880,7 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
-    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('[data-plugin-directory-card]')!;
     expect(getComputedStyle(card).animationName).toBe('none');
     expect(getComputedStyle(card).transitionDuration).toBe('0s');
     host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
@@ -1867,38 +1893,34 @@ describe('plugin management browser geometry and interaction', () => {
     expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-master]')!).display).not.toBe('none');
   });
 
-  it('uses coordinated lift, depth, and icon motion for plugin directory transitions', async () => {
-    const host = mountPluginCenter();
-    await settle();
-
-    const root = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
-    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
-    const icon = card.querySelector<HTMLElement>('.redeven-plugin-directory-card-icon')!;
-    expect(getComputedStyle(root).animationName).toBe('animate-in');
-    expect(getComputedStyle(root).animationDuration).toBe('0.22s');
-    expect(getComputedStyle(card).getPropertyValue('--tw-enter-translate-y').trim()).toBe('0.25rem');
-    expect(getComputedStyle(card).transitionProperty).toContain('transform');
-    expect(getComputedStyle(card).transitionDuration).toBe('0.18s');
-    expect(getComputedStyle(card).transitionTimingFunction).toContain('cubic-bezier(0.22, 1, 0.36, 1)');
-
-    await page.elementLocator(card).hover();
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
-    const hoveredCardStyle = getComputedStyle(card);
-    const hoveredCardTransform = new DOMMatrixReadOnly(hoveredCardStyle.transform);
-    const hoveredIconTransform = new DOMMatrixReadOnly(getComputedStyle(icon).transform);
-    expect(hoveredCardTransform.m42).toBeCloseTo(-1, 1);
-    expect(hoveredCardStyle.boxShadow).not.toBe('none');
-    expect(hoveredIconTransform.m11).toBeGreaterThan(1);
-    expect(hoveredIconTransform.m11).toBeLessThan(1.03);
-    await expectScreenshotHasPixelVariance();
-
-    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
-    await Promise.resolve();
-    expect(card.getAttribute('aria-current')).toBe('true');
-    expect(getComputedStyle(card).boxShadow).not.toBe('none');
-    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
-    expect(getComputedStyle(details).animationName).toBe('animate-in');
-    expect(getComputedStyle(details).animationDuration).toBe('0.22s');
+  it.each(['light', 'dark'])('uses shared quiet card planes and controls in the %s theme', async (theme) => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    try {
+      await page.viewport(1440, 900);
+      const host = mountPluginCenter();
+      await settle();
+      const card = host.querySelector<HTMLElement>('[data-plugin-directory-card="instance:metrics"]')!;
+      const initialFill = getComputedStyle(card).backgroundColor;
+      expect(card.getAttribute('data-floe-card-variant')).toBe('default');
+      expect(getComputedStyle(card).boxShadow).toBe('none');
+      expect(getComputedStyle(card).borderTopColor).toBe('rgba(0, 0, 0, 0)');
+      expect(host.querySelector('[data-plugin-center-card-primary]')?.getAttribute('data-floe-control')).toBe('button');
+      expect(host.querySelector('[data-plugin-center-search]')?.getAttribute('data-floe-control')).toBe('input');
+      await page.elementLocator(card).hover();
+      await settle();
+      expect(getComputedStyle(card).boxShadow).toBe('none');
+      expect(getComputedStyle(card).backgroundColor).toBe(initialFill);
+      expect(new DOMMatrixReadOnly(getComputedStyle(card).transform).m42).toBe(0);
+      await page.screenshot({ path: '../../../.vitest-attachments/plugin-center-directory-' + theme + '.png' });
+      await page.elementLocator(card.querySelector('[data-plugin-center-item]')!).click();
+      await settle();
+      expect(card.getAttribute('aria-current')).toBe('true');
+      expect(getComputedStyle(card).backgroundColor).not.toBe(initialFill);
+      expect(getComputedStyle(card).boxShadow).toBe('none');
+      await page.screenshot({ path: '../../../.vitest-attachments/plugin-center-details-' + theme + '.png' });
+    } finally {
+      document.documentElement.classList.remove('dark');
+    }
   });
 
   it('keeps the external review report operable with reduced motion and forced colors', async () => {

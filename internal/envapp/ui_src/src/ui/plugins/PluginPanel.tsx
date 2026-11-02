@@ -19,7 +19,6 @@ import { PluginIcon, PluginUpdateBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel } from './pluginPresentation';
 import { PluginPinContextMenu } from './PluginPinContextMenu';
-import { PluginPinButton } from './PluginPinButton';
 import type { PluginPinPlacement } from './pluginDockPins';
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -410,15 +409,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                           {resolvedPluginPresentation(tile.item, i18n.locale())?.plugin_name ?? tile.item.displayName}
                         </span>
                       </button>
-                      <Show when={props.onSetPluginPin}>
-                        <PluginPinButton
-                          pluginName={resolvedPluginPresentation(tile.item, i18n.locale())?.plugin_name ?? tile.item.displayName}
-                          placement={props.placement}
-                          pinned={(props.pinnedInventoryKeys ?? []).includes(tile.item.inventoryKey)}
-                          class={cn('absolute right-0 top-0', props.mobile ? 'h-11 w-11 sm:h-11 sm:w-11' : 'h-6 w-6 sm:h-6 sm:w-6')}
-                          onSetPinned={(pinned) => props.onSetPluginPin?.(props.placement === 'workbench' ? 'workbench' : 'activity', tile.item.inventoryKey, pinned)}
-                        />
-                      </Show>
                       <span id={`plugin-launcher-tile-status-${index()}`} class="sr-only">
                         {statusLabel(tile.item, i18n)}
                       </span>

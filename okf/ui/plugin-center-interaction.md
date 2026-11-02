@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin Center interaction
 tags: [ui, plugins, plugin-center, workbench, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -21,6 +21,14 @@ Local filters combine source (official catalog or external), trust, and lifecycl
 
 External installation source tabs retain three columns with the same complete accessible names when their visible selection labels need ellipsis.
 
+## Shared design language
+
+The directory, detail actions, package-install source form and update review compose released Floe controls. Cards use the shared default plane, without visible resting contours, decorative lift, icon magnification or custom shadow stacks. Selected cards use the shared selection fill. Shared Tags carry trust/lifecycle semantics without changing Host authority.
+
+Floe owns Input focus, Button pending/disabled treatment and Tabs keyboard/selection behavior. Search, source/trust/lifecycle filters, retained selection and scroll remain product state. Menu triggers are single focusable boundaries with centered content, neutral hover and visible keyboard focus; nested trigger boxes are avoided. Details keep primary actions outside their scroll body, with secondary evidence in quiet disclosures.
+
+Source tabs retain complete accessible names and three equal columns on compact dialogs. Mobile actions remain at least 44px; install progress replaces the primary action without changing card/sibling geometry. Reduced-motion, localized long copy and light/dark themes use the same shared controls.
+
 ## Restore saved data
 
 Installed plugin details expose Restore saved data in the existing action menu. Discovery is read-only, including for enabled plugins. The user selects a retained record by date and instance suffix; Disable and continue is explicit when needed, and the Host then produces the exact review. A short confirmation states that current data is also retained. No permanent card, technical hash wall or automatic re-enable is added.
@@ -32,6 +40,8 @@ The dialog binds requests to the current session owner, target instance and read
 Management presentation never creates a second lifecycle or permission authority. Global placement applies only to this product modal and its confirmations, not to ordinary Workbench widget dialogs or menus.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Shared card/control surfaces, light/dark screenshots, localized compact layouts, installation geometry, source focus and update reviews.
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterDrawer.tsx:1` - Retained global placement using released bottom-drawer Dialog.
 

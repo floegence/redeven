@@ -1,3 +1,4 @@
+import { Button, Input, Tabs } from '@floegence/floe-webapp-core/ui';
 import type { PluginReleaseRef } from '@floegence/redevplugin-ui';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -6,7 +7,7 @@ import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
 import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
-import { PLUGIN_PACKAGE_DIALOG_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
+import { PLUGIN_PACKAGE_DIALOG_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import { OfficialPluginAccessReview } from './OfficialPluginAccessReview';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import {
@@ -304,44 +305,44 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
           </Show>
           <div class="flex flex-wrap justify-end gap-2">
             <Show when={!closeBlocked()}>
-              <button data-floe-control="button" data-plugin-update-cancel type="button" class={secondaryButtonClass} onClick={close}>
+              <Button data-plugin-update-cancel type="button" variant="secondary" class={actionButtonClass} onClick={close}>
                 {stage() === 'complete' ? i18n.t('uiCopy.plugin.updateReview.done') : i18n.t('common.actions.cancel')}
-              </button>
+              </Button>
             </Show>
             <Show when={stage() === 'source_required'}>
-              <button data-floe-control="button" data-plugin-update-inspect type="button" class={primaryButtonClass} onClick={() => void inspectSource()}>
+              <Button data-plugin-update-inspect type="button" variant="primary" class={actionButtonClass} onClick={() => void inspectSource()}>
                 {i18n.t('uiCopy.plugin.updateReview.reviewPackage')}
-              </button>
+              </Button>
             </Show>
             <Show when={stage() === 'review' && !candidate() && sourcePreset()}>
-              <button data-floe-control="button" data-plugin-update-retry type="button" class={primaryButtonClass} onClick={() => {
+              <Button data-plugin-update-retry type="button" variant="primary" class={actionButtonClass} onClick={() => {
                 const item = props.item;
                 if (item) void prepareOfficialReview(item.inventoryKey);
               }}>
                 {i18n.t('common.actions.retry')}
-              </button>
+              </Button>
             </Show>
             <Show keyed when={stage() === 'review' && candidate()?.kind !== 'noop' && candidate()?.kind !== 'blocked' ? candidate() : undefined}>
               {(current) => (
-                <button data-floe-control="button" data-plugin-update-submit type="button" class={primaryButtonClass} disabled={!canSubmit()} onClick={() => void submit()}>
+                <Button data-plugin-update-submit type="button" variant="primary" class={actionButtonClass} disabled={!canSubmit()} onClick={() => void submit()}>
                   {submitLabel(current, i18n.t)}
-                </button>
+                </Button>
               )}
             </Show>
             <Show when={stage() === 'reconciling' && error()}>
-              <button data-floe-control="button" data-plugin-update-reconcile type="button" class={primaryButtonClass} onClick={() => void reconcile()}>
+              <Button data-plugin-update-reconcile type="button" variant="primary" class={actionButtonClass} onClick={() => void reconcile()}>
                 {i18n.t('uiCopy.plugin.updateReview.continueReconciliation')}
-              </button>
+              </Button>
             </Show>
             <Show when={stage() === 'complete' && completedLaunchTarget()}>
-              <button data-floe-control="button" data-plugin-update-open type="button" class={primaryButtonClass} onClick={props.onOpenSurface}>
+              <Button data-plugin-update-open type="button" variant="primary" class={actionButtonClass} onClick={props.onOpenSurface}>
                 {i18n.t('common.actions.open')}
-              </button>
+              </Button>
             </Show>
             <Show when={stage() === 'complete' && completedInventoryItem() && !completedLaunchTarget()}>
-              <button data-floe-control="button" data-plugin-update-view-permissions type="button" class={primaryButtonClass} onClick={props.onViewPermissions}>
+              <Button data-plugin-update-view-permissions type="button" variant="primary" class={actionButtonClass} onClick={props.onViewPermissions}>
                 {i18n.t('uiCopy.plugin.updateReview.viewPermissions')}
-              </button>
+              </Button>
             </Show>
           </div>
         </div>
@@ -394,7 +395,7 @@ function UpdateReview(props: { candidate: PluginUpdateCandidate; item: PluginInv
     <section class="pb-1"><div class="flex items-start gap-3"><Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /><div><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.impactTitle')}</h3><Show when={securityChanges().length === 0}><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.noAccessChange')}</p></Show><Show when={securityChanges().length > 0}><p class="mt-1 text-xs leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.securityChanges', { count: securityChanges().length })}</p></Show><Show when={dataUpgrade()}><p data-plugin-update-data-upgrade class="mt-2 text-[length:var(--floe-type-body)] leading-6">{i18n.t('uiCopy.plugin.external.dataUpgradeNotice')}</p></Show><Show when={securityChanges().length > 0}><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.grantsRetained')}</p></Show></div></div></section>
     </Show>
     <Show when={props.candidate.kind === 'noop'}><p class="rounded-md border px-3 py-2 text-[length:var(--floe-type-body)]">{i18n.t('uiCopy.plugin.updateReview.noUpdate')}</p></Show><Show when={props.candidate.kind === 'blocked'}><p class="rounded-md border border-destructive px-3 py-2 text-[length:var(--floe-type-body)] text-destructive">{i18n.t('uiCopy.plugin.updateReview.downgradeBlocked')}</p></Show>
-    <details class="group rounded-md border"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" /></summary><Show when={!officialPreview()}><p class="border-t px-3 pt-3 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.externalEvidence')}</p></Show><dl class="grid gap-3 px-3 py-3 text-xs sm:grid-cols-2"><HashFact label={i18n.t('uiCopy.plugin.updateReview.packageHash')} value={props.candidate.target.packageHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.manifestHash')} value={props.candidate.target.manifestHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.entriesHash')} value={props.candidate.target.entriesHash} /><Show when={dataUpgrade()}><div class="min-w-0 sm:col-span-2" data-plugin-update-data-upgrade-details><dt class="text-muted-foreground">{i18n.t('uiCopy.plugin.external.dataUpgrade')}</dt><dd class="mt-1 space-y-1 break-all font-mono"><For each={dataUpgradeFacts(dataUpgrade()!)}>{(fact) => <div>{fact}</div>}</For></dd></div></Show></dl></details>
+    <details class="group rounded-control bg-[var(--floe-well)]"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" /></summary><Show when={!officialPreview()}><p class="border-t px-3 pt-3 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.externalEvidence')}</p></Show><dl class="grid gap-3 px-3 py-3 text-xs sm:grid-cols-2"><HashFact label={i18n.t('uiCopy.plugin.updateReview.packageHash')} value={props.candidate.target.packageHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.manifestHash')} value={props.candidate.target.manifestHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.entriesHash')} value={props.candidate.target.entriesHash} /><Show when={dataUpgrade()}><div class="min-w-0 sm:col-span-2" data-plugin-update-data-upgrade-details><dt class="text-muted-foreground">{i18n.t('uiCopy.plugin.external.dataUpgrade')}</dt><dd class="mt-1 space-y-1 break-all font-mono"><For each={dataUpgradeFacts(dataUpgrade()!)}>{(fact) => <div>{fact}</div>}</For></dd></div></Show></dl></details>
   </div>;
 }
 
@@ -402,11 +403,45 @@ function HashFact(props: { label: string; value: string }): JSX.Element { return
 
 function UpdateSourceForm(props: { kind: ExternalPluginSourceKind; url: string; tag: string; onKind: (kind: ExternalPluginSourceKind) => void; onURL: (value: string) => void; onTag: (value: string) => void; onFile: (file: File | undefined) => void }): JSX.Element {
   const i18n = useI18n();
-  return <section class="space-y-4"><div><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.sourceTitle')}</h3><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.sourceDescription')}</p></div><div class="grid grid-cols-3 gap-1 rounded-md border bg-muted/30 p-1">{(['package_url','github_repository','package_upload'] as const).map((kind) => <button data-floe-control="button" type="button" class={cn('min-h-11 rounded px-2 text-xs font-medium', props.kind === kind ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground')} onClick={() => props.onKind(kind)}>{kind === 'package_url' ? i18n.t('uiCopy.plugin.external.packageURL') : kind === 'github_repository' ? i18n.t('uiCopy.plugin.external.githubRepository') : i18n.t('uiCopy.plugin.external.packageFile')}</button>)}</div><Show when={props.kind === 'package_upload'} fallback={<div class="space-y-3"><input data-floe-control="input" data-plugin-update-source-url type="url" class="h-11 w-full rounded-md border bg-background px-3 text-[length:var(--floe-type-control)]" value={props.url} placeholder={props.kind === 'github_repository' ? i18n.t('uiCopy.plugin.external.repositoryURLPlaceholder') : i18n.t('uiCopy.plugin.external.packageURLPlaceholder')} onInput={(event) => props.onURL(event.currentTarget.value)} /><Show when={props.kind === 'github_repository'}><input data-floe-control="input" type="text" class="h-11 w-full rounded-md border bg-background px-3 text-[length:var(--floe-type-control)]" value={props.tag} placeholder={i18n.t('uiCopy.plugin.external.releaseTag')} onInput={(event) => props.onTag(event.currentTarget.value)} /></Show></div>}><input data-plugin-update-source-file type="file" class="block min-h-11 w-full text-[length:var(--floe-type-control)]" accept=".redevplugin,application/octet-stream" onChange={(event) => props.onFile(event.currentTarget.files?.[0])} /></Show></section>;
+  const choices = () => [
+    { id: 'package_url', label: i18n.t('uiCopy.plugin.external.packageURL') },
+    { id: 'github_repository', label: i18n.t('uiCopy.plugin.external.githubRepository') },
+    { id: 'package_upload', label: i18n.t('uiCopy.plugin.external.packageFile') },
+  ];
+  return (
+    <section class="space-y-4">
+      <div>
+        <h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.sourceTitle')}</h3>
+        <p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.sourceDescription')}</p>
+      </div>
+      <Tabs ariaLabel={i18n.t('uiCopy.plugin.external.source')}
+        items={choices().map(choice => ({ ...choice, domId: 'plugin-update-source-' + choice.id, panelId: 'plugin-update-source-panel' }))}
+        activeId={props.kind} onChange={kind => props.onKind(kind as ExternalPluginSourceKind)}
+        features={{ containerBorder: false, scrollButtons: 'never' }}
+        slotClassNames={{ scrollContainer: 'grid grid-cols-3 w-full', tab: 'min-h-[46px] min-w-0 justify-center px-1 [&>span]:min-w-0 [&>span]:truncate' }} />
+      <div id="plugin-update-source-panel" role="tabpanel" aria-labelledby={'plugin-update-source-' + props.kind}>
+        <Show when={props.kind === 'package_upload'} fallback={(
+          <div class="space-y-3">
+            <Input data-plugin-update-source-url type="url" class="h-11" value={props.url}
+              aria-label={props.kind === 'github_repository' ? i18n.t('uiCopy.plugin.external.repositoryURL') : i18n.t('uiCopy.plugin.external.packageURL')}
+              placeholder={props.kind === 'github_repository' ? i18n.t('uiCopy.plugin.external.repositoryURLPlaceholder') : i18n.t('uiCopy.plugin.external.packageURLPlaceholder')}
+              onInput={event => props.onURL(event.currentTarget.value)} />
+            <Show when={props.kind === 'github_repository'}>
+              <Input type="text" class="h-11" value={props.tag} aria-label={i18n.t('uiCopy.plugin.external.releaseTag')}
+                placeholder={i18n.t('uiCopy.plugin.external.releaseTag')} onInput={event => props.onTag(event.currentTarget.value)} />
+            </Show>
+          </div>
+        )}>
+          <input data-plugin-update-source-file type="file" class="block min-h-11 w-full text-[length:var(--floe-type-control)]"
+            aria-label={i18n.t('uiCopy.plugin.external.packageFile')} accept=".redevplugin,application/octet-stream"
+            onChange={event => props.onFile(event.currentTarget.files?.[0])} />
+        </Show>
+      </div>
+    </section>
+  );
 }
 
-const primaryButtonClass = cn('inline-flex min-h-[44px] flex-none cursor-pointer items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50', PLUGIN_PRESS_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'sm:min-h-9');
-const secondaryButtonClass = cn('inline-flex min-h-[44px] flex-none cursor-pointer items-center justify-center whitespace-nowrap rounded-md border bg-background px-4 text-[length:var(--floe-type-control)] font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'sm:min-h-9');
+const actionButtonClass = cn('min-h-11 flex-none', PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'sm:min-h-9');
 
 function submitLabel(candidate: PluginUpdateCandidate, t: ReturnType<typeof useI18n>['t']): string {
   if (candidate.kind === 'replace') return t('uiCopy.plugin.updateReview.replaceBuild');

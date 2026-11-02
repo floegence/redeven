@@ -4111,7 +4111,7 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   }, 10000);
 
-  it('persists quick pins from the real launcher and synchronizes Plugin Center and Activity navigation', async () => {
+  it('persists context-menu pins from the real launcher and synchronizes Plugin Center and Activity navigation', async () => {
     pluginPanelState.renderActual = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -4128,11 +4128,12 @@ describe('EnvAppShell environment entry affordances', () => {
         && pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
       await flushAsync();
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
-      await flushUntil(() => Boolean(document.querySelector('[data-plugin-quick-pin]')));
-      const pin = document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-      pin.click();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-panel-tile]')));
+      expect(document.querySelector('[data-plugin-quick-pin]')).toBeNull();
+      document.querySelector('[data-plugin-panel-tile]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }));
+      await flushUntil(() => Boolean(document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]')));
+      document.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-pin-toggle"]')!.click();
       await flushUntil(() => findActivityButton(host, activityID) !== null);
-      expect(pin.getAttribute('aria-pressed')).toBe('true');
       expect(pluginPanelState.lastProps.open).toBe(true);
       expect(host.querySelector('[data-activity-plugin-surface-page]')).toBeNull();
       expect(JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}'))
@@ -4143,8 +4144,11 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => findActivityButton(host, activityID) === null);
       expect(JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}').activityInventoryKeys).toEqual([]);
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
-      await flushUntil(() => Boolean(document.querySelector('[data-plugin-quick-pin]')));
-      expect(document.querySelector('[data-plugin-quick-pin]')?.getAttribute('aria-pressed')).toBe('false');
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-panel-tile]')));
+      document.querySelector('[data-plugin-panel-tile]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }));
+      await flushUntil(() => Boolean(document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]')));
+      expect(document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]')?.textContent).toContain('Pin to Activity Bar');
+      expect(document.querySelector('[data-plugin-quick-pin]')).toBeNull();
     } finally { dispose(); }
   }, 10000);
 

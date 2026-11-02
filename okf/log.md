@@ -5,7 +5,7 @@ Concepts own contracts/evidence; Git retains history.
 ## 2026-11-02
 
 - [Computer scripts](ai/computer-use-scripts.md): preserve owner-confirmed pre-dispatch rejection through the existing result path, retain bounded carrier failure reasons, and align legacy role guidance; [qualification](ai/computer-use-qualification.md) retains the 26 original and 24 rebased real-provider outcomes and their declared scopes.
-- [Plugin surfaces](ui/plugin-surfaces.md): visible quick pins in the Launcher, Plugin Center and Activity windows; shared placement preferences, context menus, keyboard focus and responsive touch targets.
+- [Plugin surfaces](ui/plugin-surfaces.md): context-menu-only Launcher pinning, with explicit Plugin Center and Activity window actions; [Plugin Center](ui/plugin-center-interaction.md) composes released Floe cards, fields, tabs, tags and buttons across directory, details and install/update reviews.
 
 - [Computer read contract](ai/computer-script-read-contract.md): unify controlled browser evaluation success checks, retain closed execution diagnostics and publish observer readiness only after success; role selection follows observations.
 

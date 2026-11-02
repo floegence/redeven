@@ -5,7 +5,7 @@ import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { NotificationProvider } from '@floegence/floe-webapp-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
 import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
@@ -278,7 +278,7 @@ describe('PluginCenterView', () => {
     const install = mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement;
     expect(details).not.toBeNull();
     expect(controlText(install)).toContain('Install');
-    expect(install.closest('article')?.querySelector('.h-10.w-10')).not.toBeNull();
+    expect(install.closest('[data-plugin-directory-card]')?.querySelector('.h-10.w-10')).not.toBeNull();
     install.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
@@ -668,8 +668,8 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:metrics"]')).not.toBeNull());
     const update = mount.querySelector('[data-plugin-center-update="catalog:metrics"]') as HTMLButtonElement;
     expect(controlText(update)).toContain('Review update');
-    expect(update.closest('article')?.className).not.toContain('border-t-[var(--redeven-status-info-foreground)]');
-    expect(update.className).toContain('h-9');
+    expect(update.closest('[data-plugin-directory-card]')?.className).not.toContain('border-t-[var(--redeven-status-info-foreground)]');
+    expect(update.getAttribute('data-floe-control')).toBe('button');
     expect(mount.querySelector('[data-plugin-center-list]')?.className).toContain('grid');
   });
 
@@ -922,7 +922,7 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const search = mount.querySelector('[data-plugin-center-search]') as HTMLInputElement;
-    const searchField = search.parentElement as HTMLElement;
+    const searchField = search.closest('label') as HTMLElement;
     const actions = searchField.parentElement as HTMLElement;
     // Toolbar wraps on narrow viewports: actions container has flex-wrap and w-full
     expect(actions.classList).toContain('flex-wrap');
@@ -1246,7 +1246,7 @@ describe('PluginCenterView', () => {
     discover.click();
     await Promise.resolve();
     await Promise.resolve();
-    expect(master.classList).toContain('flex');
+    await vi.waitFor(() => expect(master.classList).toContain('flex'));
     expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(document.activeElement).toBe(discover);
     expect(discover.getAttribute('aria-selected')).toBe('true');
@@ -3356,4 +3356,9 @@ it('gives retained Activity and Workbench instances independent tab and heading 
     const details = root.querySelector('[data-plugin-center-details]')!;
     expect(details.contains(document.getElementById(details.getAttribute('aria-labelledby')!))).toBe(true);
   }
+});
+
+// jsdom does not implement browser scrolling used by the shared Tabs.
+beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
 });

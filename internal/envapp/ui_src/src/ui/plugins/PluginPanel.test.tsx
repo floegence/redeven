@@ -271,31 +271,13 @@ describe('PluginPanel', () => {
     expect(onOpenCenter).toHaveBeenCalledTimes(1);
   });
 
-  it('pins from a visible tile control without opening the plugin or dismissing the launcher', async () => {
-    const onOpenPluginSurface = vi.fn();
-    const onClose = vi.fn();
-    const onSetPluginPin = vi.fn();
-    mountPanel({ placement: 'activity', onOpenPluginSurface, onClose, onSetPluginPin });
-    const pin = document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-    expect(pin).not.toBeNull();
-    expect(pin.getAttribute('aria-label')).toBe('Metrics: Pin to Activity Bar');
-    expect(pin.getAttribute('aria-pressed')).toBe('false');
-    pin.click();
-    await Promise.resolve();
-    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_metrics', true);
-    expect(onOpenPluginSurface).not.toHaveBeenCalled();
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it('shows pinned state and toggles the selected placement only', async () => {
-    const onSetPluginPin = vi.fn();
-    mountPanel({ trigger: createWorkbenchTrigger().trigger, placement: 'workbench', pinnedInventoryKeys: ['instance:plugininst_metrics'], onSetPluginPin });
-    const pin = document.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-    expect(pin.getAttribute('aria-pressed')).toBe('true');
-    expect(pin.title).toBe('Unpin from Workbench Dock');
-    pin.click();
-    await Promise.resolve();
-    expect(onSetPluginPin).toHaveBeenCalledWith('workbench', 'instance:plugininst_metrics', false);
+  it.each(['activity', 'workbench'] as const)('keeps %s launcher tiles free of pin overlays', (placement) => {
+    mountPanel({ placement, trigger: placement === 'workbench' ? createWorkbenchTrigger().trigger : undefined,
+      pinnedInventoryKeys: ['instance:plugininst_metrics'], onSetPluginPin: vi.fn() });
+    expect(document.querySelector('[data-plugin-quick-pin]')).toBeNull();
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile]')!;
+    expect(tile.getAttribute('aria-haspopup')).toBe('menu');
+    expect(tile.parentElement?.querySelectorAll('button')).toHaveLength(1);
   });
 
   it('opens the mode-specific Activity pin action without closing the panel', async () => {

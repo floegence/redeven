@@ -1,6 +1,5 @@
 import { backgroundScheduleLabel } from './PluginBackgroundStatus';
-import { StableText } from '@floegence/floe-webapp-core/ui';
-import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
+import { StableText, Button, Input, Tabs } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
@@ -265,14 +264,14 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           </Show>
           <div class="flex shrink-0 flex-wrap justify-end gap-2">
             <Show when={stage() === 'review' && !commitNeedsReconciliation()}>
-              <button data-floe-control="button" type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] font-medium transition-[background-color,border-color,color] duration-120 hover:bg-muted active:bg-muted/80 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={returnToSource}>
+              <Button type="button" variant="secondary" class="min-h-[46px] sm:min-h-9" disabled={pending()} onClick={returnToSource}>
                 {i18n.t('uiCopy.plugin.external.back')}
-              </button>
+              </Button>
             </Show>
             <Show when={stage() !== 'committing' && !commitNeedsReconciliation()}>
-              <button data-floe-control="button" type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] font-medium transition-[background-color,border-color,color] duration-120 ease-out hover:bg-muted active:bg-muted/80 sm:min-h-9 motion-reduce:transition-none" onClick={close}>
+              <Button type="button" variant="secondary" class="min-h-[46px] sm:min-h-9" onClick={close}>
                 {stage() === 'complete' ? i18n.t('common.actions.close') : i18n.t('common.actions.cancel')}
-              </button>
+              </Button>
             </Show>
             <Show when={stage() === 'complete' && committed()}>
               {(result) => (
@@ -280,29 +279,29 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
                   when={refreshFailed()}
                   fallback={null}
                 >
-                  <button data-floe-control="button"
+                  <Button
                     type="button"
                     data-external-plugin-refresh-inventory
-                    class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
+                    variant="primary" class="min-h-[46px] sm:min-h-9"
                     disabled={refreshPending()}
                     onClick={() => void refreshCommitted(result())}
                   >
                     {i18n.t('uiCopy.plugin.refreshOfficial')}
-                  </button>
+                  </Button>
                 </Show>
               )}
             </Show>
             <Show when={stage() === 'source'}>
-              <button data-floe-control="button" data-external-plugin-inspect type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!canInspect()} onClick={() => void inspect()}>
+              <Button data-external-plugin-inspect type="button" variant="primary" class="min-h-[46px] sm:min-h-9" disabled={!canInspect()} onClick={() => void inspect()}>
                 <StableText reserve={[i18n.t('uiCopy.plugin.external.inspecting'), i18n.t('uiCopy.plugin.external.inspect')]}>{pending() ? i18n.t('uiCopy.plugin.external.inspecting') : i18n.t('uiCopy.plugin.external.inspect')}</StableText>
-              </button>
+              </Button>
             </Show>
             <Show when={stage() === 'review' && !reviewBlocked()}>
-              <button data-floe-control="button" type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!confirmed() || pending()} onClick={() => void commit()}>
+              <Button type="button" variant="primary" class="min-h-[46px] sm:min-h-9" disabled={!confirmed() || pending()} onClick={() => void commit()}>
                 {commitNeedsReconciliation()
                   ? i18n.t('common.actions.retry')
                   : reviewOperationActionLabel(reviewOperation(), i18n)}
-              </button>
+              </Button>
             </Show>
           </div>
         </div>
@@ -364,7 +363,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
         </Show>
         <Show when={stage() === 'complete' && committed()}>
           {(result) => (
-            <div role="status" class="space-y-4 rounded-md border bg-background p-5 animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
+            <div role="status" class="space-y-4 rounded-card bg-[var(--floe-well)] p-5 animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
               <div class="flex items-start gap-3">
                 <CheckCircle class="mt-0.5 h-5 w-5 shrink-0 text-[var(--redeven-status-success-foreground)]" />
                 <div>
@@ -517,54 +516,20 @@ function SourceForm(props: {
     { kind: 'package_upload', label: i18n.t('uiCopy.plugin.external.packageFile'), icon: Upload },
   ];
   const sourceTabID = (kind: ExternalPluginSourceKind) => `external-plugin-source-tab-${kind}`;
-  const selectSource = (kind: ExternalPluginSourceKind, focus = false) => {
-    props.onSourceKind(kind);
-    setValidationVisible(false);
-    if (focus) queueMicrotask(() => document.getElementById(sourceTabID(kind))?.focus());
-  };
-  const selectAdjacentSource = (event: KeyboardEvent, kind: ExternalPluginSourceKind) => {
-    const index = choices.findIndex((choice) => choice.kind === kind);
-    const next = event.key === 'Home'
-      ? choices[0]
-      : event.key === 'End'
-        ? choices[choices.length - 1]
-        : event.key === 'ArrowLeft'
-          ? choices[(index + choices.length - 1) % choices.length]
-          : event.key === 'ArrowRight'
-            ? choices[(index + 1) % choices.length]
-            : undefined;
-    if (!next) return;
-    event.preventDefault();
-    selectSource(next.kind, true);
-  };
   return (
     <>
-      <div class="grid grid-cols-3 gap-1 rounded-md bg-muted p-1" role="tablist" aria-label={i18n.t('uiCopy.plugin.external.source')}>
-        <For each={choices}>
-          {(choice) => (
-            <button data-floe-control="button"
-              type="button"
-              id={sourceTabID(choice.kind)}
-              role="tab"
-              aria-label={choice.label}
-              title={choice.label}
-              aria-selected={props.sourceKind === choice.kind}
-              aria-controls="external-plugin-source-panel"
-              tabIndex={props.sourceKind === choice.kind ? 0 : -1}
-              class={cn(
-                'flex min-h-[44px] min-w-0 cursor-pointer flex-col items-center justify-center gap-1 rounded px-1 py-2 text-xs font-medium transition-[background-color,color,box-shadow] duration-150 sm:min-h-9 sm:flex-row sm:gap-1.5 sm:px-2 sm:py-0 motion-reduce:transition-none',
-                props.sourceKind === choice.kind ? redevenSegmentedItemClass(true) : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
-              )}
-              disabled={props.pending}
-              onClick={() => selectSource(choice.kind)}
-              onKeyDown={(event) => selectAdjacentSource(event, choice.kind)}
-            >
-              <choice.icon class="h-3.5 w-3.5 shrink-0" />
-              <span data-external-plugin-source-label class="min-w-0 max-w-full truncate text-center leading-4">{choice.label}</span>
-            </button>
-          )}
-        </For>
-      </div>
+      <Tabs
+        ariaLabel={i18n.t('uiCopy.plugin.external.source')}
+        items={choices.map(choice => ({
+          id: choice.kind, label: choice.label, domId: sourceTabID(choice.kind),
+          panelId: 'external-plugin-source-panel', disabled: props.pending,
+          icon: <choice.icon class="h-3.5 w-3.5" />,
+        }))}
+        activeId={props.sourceKind}
+        onChange={kind => { props.onSourceKind(kind as ExternalPluginSourceKind); setValidationVisible(false); }}
+        features={{ containerBorder: false, scrollButtons: 'never' }}
+        slotClassNames={{ scrollContainer: 'grid grid-cols-3 w-full', tab: 'min-h-[46px] min-w-0 justify-center px-1 [&>span]:min-w-0 [&>span]:truncate' }}
+      />
       <div
         id="external-plugin-source-panel"
         role="tabpanel"
@@ -574,7 +539,7 @@ function SourceForm(props: {
       <Show when={props.sourceKind !== 'package_upload'}>
         <label class="redeven-plugin-enter-up block space-y-1.5 text-[length:var(--floe-type-control)] font-medium animate-in fade-in duration-200 motion-reduce:animate-none">
           <span>{props.sourceKind === 'github_repository' ? i18n.t('uiCopy.plugin.external.repositoryURL') : i18n.t('uiCopy.plugin.external.packageURL')}</span>
-          <input data-floe-control="input"
+          <Input
             data-external-plugin-source-input
             type="url"
             value={props.url}
@@ -585,7 +550,7 @@ function SourceForm(props: {
             aria-invalid={validationVisible() && !validation().valid ? 'true' : undefined}
             aria-describedby={validationVisible() && !validation().valid ? 'external-plugin-source-error' : undefined}
             class={cn(
-              'h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none',
+              'h-[46px] min-w-0 sm:h-10',
               validationVisible() && !validation().valid && 'border-destructive',
             )}
             onInput={(event) => props.onURL(event.currentTarget.value)}
@@ -601,12 +566,12 @@ function SourceForm(props: {
       <Show when={props.sourceKind === 'github_repository'}>
         <label class="redeven-plugin-enter-up block space-y-1.5 text-[length:var(--floe-type-control)] font-medium animate-in fade-in duration-200 motion-reduce:animate-none">
           <span>{i18n.t('uiCopy.plugin.external.releaseTag')}</span>
-          <input data-floe-control="input"
+          <Input
             type="text"
             value={props.tag}
             disabled={props.pending}
             placeholder={i18n.t('uiCopy.plugin.external.latestRelease')}
-            class="h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none"
+            class="h-[46px] sm:h-10"
             onInput={(event) => props.onTag(event.currentTarget.value)}
           />
         </label>
@@ -639,9 +604,9 @@ function SourceForm(props: {
                   <div class="truncate text-[length:var(--floe-type-body)] font-medium">{selectedFile().name}</div>
                   <div class="text-xs text-muted-foreground">{formatFileSize(selectedFile().size)}</div>
                 </div>
-                <button data-floe-control="button"
+                <Button variant="ghost" size="icon"
                   type="button"
-                  class="flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
+                  class="h-11 w-11 shrink-0 sm:h-8 sm:w-8"
                   aria-label={i18n.t('common.actions.delete')}
                   title={i18n.t('common.actions.delete')}
                   onClick={() => {
@@ -650,7 +615,7 @@ function SourceForm(props: {
                   }}
                 >
                   <X class="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             )}
           </Show>
@@ -1158,7 +1123,7 @@ function PostInstallFacts(props: {
 function CommitProgress(props: { operation: ExternalReviewOperation }): JSX.Element {
   const i18n = useI18n();
   return (
-    <div role="status" class="space-y-4 rounded-md border bg-background p-5 animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
+    <div role="status" class="space-y-4 rounded-card bg-[var(--floe-well)] p-5 animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
       <div class="flex items-center gap-3">
         <Loader2 class="h-5 w-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
         <div>

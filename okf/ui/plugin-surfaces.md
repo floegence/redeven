@@ -16,7 +16,7 @@ Redeven owns plugin discovery, navigation and placement; released ReDevPlugin ow
 Activity Bar Plugins opens a Shell-root Launcher without changing the normal surface. Search intersects category with NFKC/locale-case-folded display names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay the grid without reflow and restore originating-row focus.
 
 ## Quick pinning
-The Launcher exposes a visible pin toggle on each plugin tile; its destination follows the current mode (Activity Bar or Workbench Dock). Right-click, ContextMenu and Shift+F10 expose plugin information and the same pin/unpin action. Pinning leaves the Launcher open, and menu dismissal restores tile focus. Touch controls retain a 44px target, including tablets.
+Launcher tiles contain one launch action with no pin overlay or persistent pin indicator. Right-click, ContextMenu and Shift+F10 expose plugin information and pin/unpin for the current mode (Activity Bar or Workbench Dock). Pinning leaves the Launcher open, and menu dismissal restores tile focus. Plugin Center provides explicit pin controls for touch access, with 44px targets on compact layouts.
 
 Plugin Center cards/details and Activity window headers also expose Activity Bar pinning. Every entry reads and updates the Shell's existing environment-scoped placement preferences; Activity and Workbench pins remain independent. Selected state and accessible action labels update together. Pinning does not launch, enable or authorize a plugin. Unpinning an Activity page completes its exact existing surface retirement first; a failed close retains the pin and reports the failure. Floating windows and sibling surfaces retain their own lifetimes.
 
@@ -52,7 +52,7 @@ It does not verify packages or releases, mint tokens, serve assets, grant permis
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginQuickPin.browser.test.tsx` - Visible pin, pointer/keyboard menus, focus restoration and responsive hit targets; Plugin Center actions remain synchronized.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginQuickPin.browser.test.tsx` - Overlay-free Launcher tiles, pointer/keyboard pin menus, focus restoration and responsive geometry; Plugin Center actions remain synchronized.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinButton.test.tsx` - Pending operations reject duplicate clicks; failed updates preserve authoritative selection and remain retryable.
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Inventory refresh and sibling removal retain the registered page component while presentation metadata updates.

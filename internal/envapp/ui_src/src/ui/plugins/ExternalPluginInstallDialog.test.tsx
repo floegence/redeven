@@ -4,7 +4,7 @@ import { controlText } from '../../testSupport/controlText';
 import { render } from 'solid-js/web';
 import type { JSX } from 'solid-js';
 import { PluginPlatformRequestError, PluginTransportError } from '@floegence/redevplugin-ui';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { ExternalPackageInspectionTerminalError } from './pluginApi';
@@ -396,7 +396,7 @@ describe('ExternalPluginInstallDialog', () => {
     await Promise.resolve();
     expect(tabs[1].getAttribute('aria-selected')).toBe('true');
     expect(tabs[1].tabIndex).toBe(0);
-    expect(panel.getAttribute('aria-labelledby')).toBe(tabs[1].id);
+    await vi.waitFor(() => expect(panel.getAttribute('aria-labelledby')).toBe(tabs[1].id));
     expect(document.activeElement).toBe(tabs[1]);
 
     tabs[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
@@ -421,7 +421,7 @@ describe('ExternalPluginInstallDialog', () => {
     }, expect.any(AbortSignal));
   });
 
-  it('requires a credential-free HTTPS package URL and a canonical GitHub repository URL', () => {
+  it('requires a credential-free HTTPS package URL and a canonical GitHub repository URL', async () => {
     renderDialog();
     const packageURL = inputWithPlaceholder('https://example.com/plugin.redevplugin');
     typeInto(packageURL, 'http://plugins.example.com/toolbox.redevplugin');
@@ -430,7 +430,8 @@ describe('ExternalPluginInstallDialog', () => {
     expect(button('Review package').disabled).toBe(true);
     expect(controlText(document.body)).toContain('Enter a valid HTTPS package URL');
 
-    button('GitHub').click();
+    document.querySelector<HTMLElement>('#external-plugin-source-tab-github_repository')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('external-plugin-source-tab-github_repository'));
     const githubURL = inputWithPlaceholder('https://github.com/owner/repository');
     typeInto(githubURL, 'https://github.com/example/toolbox/releases');
     githubURL.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
@@ -440,7 +441,8 @@ describe('ExternalPluginInstallDialog', () => {
 
   it('inspects a GitHub repository with an optional exact release tag', async () => {
     const props = renderDialog();
-    button('GitHub').click();
+    document.querySelector<HTMLElement>('#external-plugin-source-tab-github_repository')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('external-plugin-source-tab-github_repository'));
     typeInto(inputWithPlaceholder('https://github.com/owner/repository'), 'https://github.com/example/toolbox');
     typeInto(inputWithPlaceholder('Latest eligible release'), ' v1.2.3 ');
 
@@ -492,7 +494,8 @@ describe('ExternalPluginInstallDialog', () => {
 
   it('requires a selected local package and sends the exact File for inspection', async () => {
     const props = renderDialog();
-    button('Plugin package').click();
+    document.querySelector<HTMLElement>('#external-plugin-source-tab-package_upload')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('external-plugin-source-tab-package_upload'));
     expect(button('Review package').disabled).toBe(true);
 
     const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -1320,4 +1323,9 @@ describe('ExternalPluginInstallDialog', () => {
     expect(button('Review package').disabled).toBe(true);
     expect(controlText(document.body)).not.toContain('version=1.2.4');
   });
+});
+
+// jsdom does not implement browser scrolling used by the shared Tabs.
+beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
 });
