@@ -3,7 +3,7 @@ type: UI Contract
 title: Web Services interface
 tags: [architecture, ui, desktop, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -12,21 +12,13 @@ Activity/Workbench share service list/drawer: identity, state, action, facts. Re
 # Contract
 
 ## Collection
-Header, launcher, toolbar, and collection share a centered axis.
-
-Rows have a 64px minimum, never a fixed height.
-
-The bounded status cell isolates asynchronous progress and explanatory feedback from neighboring rows under the [layout stability contract](../ui/asynchronous-layout-stability.md).
+Centered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/asynchronous-layout-stability.md); narrow/localized text wraps.
 
 ## Opening restrictions
-When Open is unavailable and the backend selects an executable Start action, Start uses the primary button style within existing management permissions.
-
-Long explanations wrap inside the visible boundary in either theme.
+Unavailable Open retains its ordinary icon and native disabled state. Focusable wrapper exposes reason on keyboard/touch/hover; active work names action/stage. When backend offers executable Start, it is primary within existing permissions.
 
 ## Review and focus
-One overlay drawer contains a concise service conclusion, compact resource facts, and recommended actions. A newer known inventory check may replace older inspection facts; unknown checks preserve the last known facts.
-
-Older or unknown targets retain the stop-first flow and require a second explicit update after stopping; an initially stopped service remains stopped after update.
+One drawer shows conclusion, compact resources and recommended actions. New known inventory may replace old inspection; unknown preserves facts. Older/unknown targets retain stop-first then explicit update. Originally stopped services remain stopped after update.
 
 # Boundaries
 
@@ -38,5 +30,5 @@ The shell retains only collection and loading-presentation styles; management an
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Source.
-- `redeven:internal/envapp/ui_src/src/ui/pages/web-services.css` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Product presentation.
+- `redeven:internal/envapp/ui_src/src/ui/pages/WebServiceCollection.browser.test.tsx` - Disabled Open tooltip keyboard/touch behavior.

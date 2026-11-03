@@ -14813,7 +14813,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "architecture",
           "managed-services",
@@ -14825,15 +14825,15 @@
         "title": "Managed Service operation progress",
         "type": "Runtime Contract"
       },
-      "body_length": 1857,
+      "body_length": 2150,
       "summary": "Manager Reporter owns live output; Registry owns history. One operation ID retains disclosure/completion through refresh. Redact command templates before storage; output grants no identity. Capture/storage/transport failures must not expose secrets, queries, private paths or control bytes.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Reporter and persisted detail\n`ManagedOperationProgressDetail` schema v2 is the sole progress document. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.\n\nFailed uninstall retains current records and output; the [management review](service-management-recovery.md) presents completed and pending resources before a new confirmed continuation.\n\n## Service-row interaction\nThe owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state.\n\nRows retain a compact operation status; explicit status activation opens detail without automatic row growth. Failed/interrupted operations remain visibly labelled. Service notices remain visible across operation arrival, settlement and dismissal; only operation details follow disclosure. Reduced-motion preference removes the animation without shortening the readable hold.",
-          "char_count": 1116
+          "body": "## Reporter and persisted detail\nManagedOperationProgressDetail schema v2 alone owns detail. Duplicate command IDs get deterministic suffixes. Failed uninstall retains records/output for [reviewed recovery](service-management-recovery.md).\n\n## Service-row interaction\nPage state keys disclosure by operation_id, never component/service-object identity. Rejected submissions retain local safe failure without backend operation or observed-state change. Compact status opens explicitly; failure labels/notices survive settlement and dismissal. Reduced motion removes animation, not readable completion hold.\n\n## Execution panel\nPublished Floe planes, ink, LinearProgress, StableText and presence compose a connected rail and fixed-height panel. Narrow rail reveals its current step without scrolling the page. Open details show commands/output immediately in one scrolling transcript; no secondary disclosure. Logs/transfer/stage changes preserve neighboring geometry and existing output nodes. Preserve canonical interleaved output order; follow only while already at the end.\n\nRestrained transitions retain progress identity. Reduced motion is static. Open is natively disabled during operations with its ordinary icon and keyboard/touch/hover action-stage tooltip.",
+          "char_count": 1265
         },
         {
           "id": "boundaries",
@@ -14845,20 +14845,20 @@
       ],
       "evidence": [
         {
-          "id": "redeven:internal/managedwebservice/operation_progress.go:0:source.",
+          "id": "redeven:internal/managedwebservice/operation_progress.go:0:redacted detail owner.",
           "source": "redeven:internal/managedwebservice/operation_progress.go",
-          "description": "Source."
+          "description": "Redacted detail owner."
         },
         {
-          "id": "redeven:internal/managedwebservice/custom_host.go:0:source.",
-          "source": "redeven:internal/managedwebservice/custom_host.go",
-          "description": "Source."
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx:0:bounded transcript, retained reading, disabled open, current step, themes/locales and reduced motion.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx",
+          "description": "Bounded transcript, retained reading, disabled Open, current step, themes/locales and reduced motion."
         }
       ],
       "snippet": "Manager Reporter owns live output; Registry owns history. One operation ID retains disclosure/completion through refresh. Redact command templates before storage; output grants no identity. Capture/storage/transport failures must not expose",
       "links": [
         {
-          "label": "management review",
+          "label": "reviewed recovery",
           "path": "architecture/service-management-recovery.md",
           "concept_id": "architecture.service-management-recovery",
           "title": "Web Service management recovery"
@@ -15260,7 +15260,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "architecture",
           "containers",
@@ -15271,15 +15271,15 @@
         "title": "Managed Web Services",
         "type": "Runtime Contract"
       },
-      "body_length": 1932,
+      "body_length": 2259,
       "summary": "Redeven owns instances/resources/bindings/operations/forwards; verified templates define behavior. One engine serves Host/Container/Compose lifecycle. Registry and exact resource identity authorize actions; invalid provenance, ownership, permission or health never adopts unknown resources.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Load the released `redeven-service-templates` catalog before Registry/Manager startup. Default installation uses its recommendation unless an explicit compatible candidate is selected; later template changes cannot replace installed release identity. Failed creation removes only the verified new container, preserving data/workspace for reviewed recovery.\n- RuntimeBinding v2 and SHA-256 identify Host install/data/log paths, Container name or Compose project/config root. [Managed opening](managed-web-service-opening.md) owns launch authentication and separates opening failure from health.\n- Backend `ServiceView.actions`, status and primary action drive presentation; historical errors never disable healthy instances. [Management recovery](service-management-recovery.md) owns explicit actions.\n- `portforward_registry_v2` schema 6 preserves the v1 lineage. Persist template ID, configuration, exact release/binding/digest, workspace/resource ownership, desired/observed state, protected Forward, artifact and failures—not template snapshots/revisions or duplicated deployments. Schema 2 added ordinary-forward paths; managed opening uses `open-session` ([browser sessions](web-service-browser-sessions.md)).",
-          "char_count": 1216
+          "body": "- Load published redeven-service-templates before Registry/Manager. Recommendations default new installs; explicit compatible releases override and later catalogs never change installed identity. Failed creation removes only verified new containers, preserving data/workspace for review.\n- RuntimeBinding v2/SHA-256 binds Host paths, Container name or Compose project/root. [Opening](managed-web-service-opening.md) separates entrance failure from health.\n- ServiceView actions/status/primary action own presentation; old errors cannot disable healthy instances. [Recovery](service-management-recovery.md) owns explicit actions.\n- portforward_registry_v2 schema 6 preserves v1 lineage: template/configuration/release/binding/digest, workspace/resources, desired/observed state, protected Forward/artifact/failures; no template snapshots/revisions/duplicate deployment. Schema 2 added ordinary-forward paths; managed open-session follows [session policy](web-service-browser-sessions.md).\n\n## Host release application\nUpdate installs/verifies, resolves final installed metadata into one digest, replaces the process and health-checks before commit. Launch/journal/registry share the final digest; enriched trust creates no false pending changes. Originally stopped services return to stopped after verification. Failure retains rollback/recovery.",
+          "char_count": 1345
         },
         {
           "id": "boundaries",
@@ -15291,32 +15291,32 @@
       ],
       "evidence": [
         {
-          "id": "redeven:internal/managedwebservice/builtin_templates.go:0:source.",
-          "source": "redeven:internal/managedwebservice/builtin_templates.go",
-          "description": "Source."
+          "id": "redeven:internal/managedwebservice/host_update_identity_test.go:0:reproduces stale digest; verifies running/stopped intent.",
+          "source": "redeven:internal/managedwebservice/host_update_identity_test.go",
+          "description": "Reproduces stale digest; verifies running/stopped intent."
         },
         {
-          "id": "redeven:internal/managedwebservice/runtime_binding.go:0:source.",
-          "source": "redeven:internal/managedwebservice/runtime_binding.go",
-          "description": "Source."
+          "id": "redeven:internal/managedwebservice/host_update_native_test.go:0:real process replacement, health, persisted identity, ready open and cleanup. install boundary is deterministic; no live npm qualification.",
+          "source": "redeven:internal/managedwebservice/host_update_native_test.go",
+          "description": "Real process replacement, health, persisted identity, ready Open and cleanup. Install boundary is deterministic; no live npm qualification."
         }
       ],
       "snippet": "Redeven owns instances/resources/bindings/operations/forwards; verified templates define behavior. One engine serves Host/Container/Compose lifecycle. Registry and exact resource identity authorize actions; invalid provenance, ownership, pe",
       "links": [
         {
-          "label": "Managed opening",
+          "label": "Opening",
           "path": "architecture/managed-web-service-opening.md",
           "concept_id": "architecture.managed-web-service-opening",
           "title": "Managed Web Service opening"
         },
         {
-          "label": "Management recovery",
+          "label": "Recovery",
           "path": "architecture/service-management-recovery.md",
           "concept_id": "architecture.service-management-recovery",
           "title": "Web Service management recovery"
         },
         {
-          "label": "browser sessions",
+          "label": "session policy",
           "path": "architecture/web-service-browser-sessions.md",
           "concept_id": "architecture.web-service-browser-sessions",
           "title": "Web Service browser sessions"
@@ -18084,7 +18084,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "accessibility",
           "architecture",
@@ -18094,15 +18094,15 @@
         "title": "Web Services interface",
         "type": "UI Contract"
       },
-      "body_length": 1816,
+      "body_length": 1708,
       "summary": "Activity/Workbench share service list/drawer: identity, state, action, facts. Retain narrow/localized/large-text usability. Historical failure never replaces current state; failed checks preserve facts and authorized recovery. Resource cache grants no lifecycle or route authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Collection\nHeader, launcher, toolbar, and collection share a centered axis.\n\nRows have a 64px minimum, never a fixed height.\n\nThe bounded status cell isolates asynchronous progress and explanatory feedback from neighboring rows under the [layout stability contract](../ui/asynchronous-layout-stability.md).\n\n## Opening restrictions\nWhen Open is unavailable and the backend selects an executable Start action, Start uses the primary button style within existing management permissions.\n\nLong explanations wrap inside the visible boundary in either theme.\n\n## Review and focus\nOne overlay drawer contains a concise service conclusion, compact resource facts, and recommended actions. A newer known inventory check may replace older inspection facts; unknown checks preserve the last known facts.\n\nOlder or unknown targets retain the stop-first flow and require a second explicit update after stopping; an initially stopped service remains stopped after update.",
-          "char_count": 961
+          "body": "## Collection\nCentered header/launcher/toolbar/list. Rows have 64px minimum, not fixed height. Bounded status isolates async feedback under [layout stability](../ui/asynchronous-layout-stability.md); narrow/localized text wraps.\n\n## Opening restrictions\nUnavailable Open retains its ordinary icon and native disabled state. Focusable wrapper exposes reason on keyboard/touch/hover; active work names action/stage. When backend offers executable Start, it is primary within existing permissions.\n\n## Review and focus\nOne drawer shows conclusion, compact resources and recommended actions. New known inventory may replace old inspection; unknown preserves facts. Older/unknown targets retain stop-first then explicit update. Originally stopped services remain stopped after update.",
+          "char_count": 779
         },
         {
           "id": "boundaries",
@@ -18114,20 +18114,20 @@
       ],
       "evidence": [
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:source.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:product presentation.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx",
-          "description": "Source."
+          "description": "Product presentation."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/web-services.css:0:source.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/pages/web-services.css",
-          "description": "Source."
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/WebServiceCollection.browser.test.tsx:0:disabled open tooltip keyboard/touch behavior.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/WebServiceCollection.browser.test.tsx",
+          "description": "Disabled Open tooltip keyboard/touch behavior."
         }
       ],
       "snippet": "Activity/Workbench share service list/drawer: identity, state, action, facts. Retain narrow/localized/large-text usability. Historical failure never replaces current state; failed checks preserve facts and authorized recovery. Resource cach",
       "links": [
         {
-          "label": "layout stability contract",
+          "label": "layout stability",
           "path": "ui/asynchronous-layout-stability.md",
           "concept_id": "ui.asynchronous-layout-stability",
           "title": "Asynchronous layout stability"
@@ -31883,5 +31883,5 @@
       ]
     }
   ],
-  "source_sha256": "bb5ada00aee247f6e7b3ed8bcd33cfc796bbf531911fe16cfed5eb9436af3f8b"
+  "source_sha256": "d5c2a039501cc3351ed2edac2a5d4521e3162b0e0c8708566dc2f833c2bc049f"
 }

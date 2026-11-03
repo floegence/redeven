@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Services
 tags: [architecture, web-services, runtime, containers, security]
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -11,10 +11,13 @@ Redeven owns instances/resources/bindings/operations/forwards; verified template
 
 # Contract
 
-- Load the released `redeven-service-templates` catalog before Registry/Manager startup. Default installation uses its recommendation unless an explicit compatible candidate is selected; later template changes cannot replace installed release identity. Failed creation removes only the verified new container, preserving data/workspace for reviewed recovery.
-- RuntimeBinding v2 and SHA-256 identify Host install/data/log paths, Container name or Compose project/config root. [Managed opening](managed-web-service-opening.md) owns launch authentication and separates opening failure from health.
-- Backend `ServiceView.actions`, status and primary action drive presentation; historical errors never disable healthy instances. [Management recovery](service-management-recovery.md) owns explicit actions.
-- `portforward_registry_v2` schema 6 preserves the v1 lineage. Persist template ID, configuration, exact release/binding/digest, workspace/resource ownership, desired/observed state, protected Forward, artifact and failures—not template snapshots/revisions or duplicated deployments. Schema 2 added ordinary-forward paths; managed opening uses `open-session` ([browser sessions](web-service-browser-sessions.md)).
+- Load published redeven-service-templates before Registry/Manager. Recommendations default new installs; explicit compatible releases override and later catalogs never change installed identity. Failed creation removes only verified new containers, preserving data/workspace for review.
+- RuntimeBinding v2/SHA-256 binds Host paths, Container name or Compose project/root. [Opening](managed-web-service-opening.md) separates entrance failure from health.
+- ServiceView actions/status/primary action own presentation; old errors cannot disable healthy instances. [Recovery](service-management-recovery.md) owns explicit actions.
+- portforward_registry_v2 schema 6 preserves v1 lineage: template/configuration/release/binding/digest, workspace/resources, desired/observed state, protected Forward/artifact/failures; no template snapshots/revisions/duplicate deployment. Schema 2 added ordinary-forward paths; managed open-session follows [session policy](web-service-browser-sessions.md).
+
+## Host release application
+Update installs/verifies, resolves final installed metadata into one digest, replaces the process and health-checks before commit. Launch/journal/registry share the final digest; enriched trust creates no false pending changes. Originally stopped services return to stopped after verification. Failure retains rollback/recovery.
 
 # Boundaries
 
@@ -22,5 +25,5 @@ No built-in service identities, copy, assets, commands or application-specific a
 
 # Evidence
 
-- `redeven:internal/managedwebservice/builtin_templates.go` - Source.
-- `redeven:internal/managedwebservice/runtime_binding.go` - Source.
+- `redeven:internal/managedwebservice/host_update_identity_test.go` - Reproduces stale digest; verifies running/stopped intent.
+- `redeven:internal/managedwebservice/host_update_native_test.go` - Real process replacement, health, persisted identity, ready Open and cleanup. Install boundary is deterministic; no live npm qualification.

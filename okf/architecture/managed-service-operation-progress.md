@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Service operation progress
 tags: [architecture, managed-services, operations, observability, security, ui]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -12,14 +12,15 @@ Manager Reporter owns live output; Registry owns history. One operation ID retai
 # Contract
 
 ## Reporter and persisted detail
-`ManagedOperationProgressDetail` schema v2 is the sole progress document. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.
-
-Failed uninstall retains current records and output; the [management review](service-management-recovery.md) presents completed and pending resources before a new confirmed continuation.
+ManagedOperationProgressDetail schema v2 alone owns detail. Duplicate command IDs get deterministic suffixes. Failed uninstall retains records/output for [reviewed recovery](service-management-recovery.md).
 
 ## Service-row interaction
-The owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state.
+Page state keys disclosure by operation_id, never component/service-object identity. Rejected submissions retain local safe failure without backend operation or observed-state change. Compact status opens explicitly; failure labels/notices survive settlement and dismissal. Reduced motion removes animation, not readable completion hold.
 
-Rows retain a compact operation status; explicit status activation opens detail without automatic row growth. Failed/interrupted operations remain visibly labelled. Service notices remain visible across operation arrival, settlement and dismissal; only operation details follow disclosure. Reduced-motion preference removes the animation without shortening the readable hold.
+## Execution panel
+Published Floe planes, ink, LinearProgress, StableText and presence compose a connected rail and fixed-height panel. Narrow rail reveals its current step without scrolling the page. Open details show commands/output immediately in one scrolling transcript; no secondary disclosure. Logs/transfer/stage changes preserve neighboring geometry and existing output nodes. Preserve canonical interleaved output order; follow only while already at the end.
+
+Restrained transitions retain progress identity. Reduced motion is static. Open is natively disabled during operations with its ordinary icon and keyboard/touch/hover action-stage tooltip.
 
 # Boundaries
 
@@ -27,5 +28,5 @@ Operation output is observability data, not a terminal, shell, downloadable tran
 
 # Evidence
 
-- `redeven:internal/managedwebservice/operation_progress.go` - Source.
-- `redeven:internal/managedwebservice/custom_host.go` - Source.
+- `redeven:internal/managedwebservice/operation_progress.go` - Redacted detail owner.
+- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceOperation.browser.test.tsx` - Bounded transcript, retained reading, disabled Open, current step, themes/locales and reduced motion.
