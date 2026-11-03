@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script execution and semantic observations
 tags: [ai, computer-use, scripts, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -25,7 +25,42 @@ Closed diagnostics carry phase, known method/field, expected form, safe example 
 
 Limits: canonical snapshot 256 KiB; complete response 512 KiB; explicit UTF-8 logs 64 KiB. Stream logs before later operations. Retain earlier explicit output after read/navigation failure/timeout/uncertainty separately from current observations. Failed reads discard their data/pixels and stop later calls/logs; private pause discards invocation content. One bounded prefix buffer, no ledger/replay.
 
-Only snapshot/observe/locator.snapshot accept emit; collections require log, screenshots/help always emit. emit:false preserves identity/budget. Default automatic snapshot is 32 KiB with opaque refs/parents; omissions are unknown/truncated. Full/node detail retains 2,000-code-point fields/flags; detail-mode change resets diff baseline. Failure uses the same bounded projection.
+Only snapshot/observe/locator.snapshot accept emit; collections require log,
+screenshots/help always emit. emit:false preserves identity/budget. Guest snapshots
+remain structured. Automatic canonical snapshot output uses tree_text with no
+parallel nodes array, bounded to 32 KiB including JSON escaping and metadata.
+Title/URL prefixes have separate 4 KiB encoded bounds and explicit field loss flags;
+document identity stays exact. Activity decodes display fields from this bounded
+projection, preserving page/control details and blank-page recognition.
+Legacy observe and explicit full:true/node reads retain structured detail.
+
+Each line carries a JSON-quoted ref, role and name, then key=JSON facts. Indentation
+encodes ancestry; explicit parent_ref wins for sparse diffs or depths beyond eight.
+Frames inherit only within an emitted full tree; frame_absent marks absence.
+Quotes, newlines and bidi controls cannot forge records. Values remain untrusted.
+False, mixed, empty values and field/children truncation flags survive rendering.
+source_truncated reports bounded source loss; output_truncated reports presentation
+loss; truncated covers either. Coverage is not a claim of full screen completeness.
+
+The single product output owner selects a parent-first depth-first prefix, keeping
+siblings ordered and complete branches adjacent. Linear charging of final encoded
+lines reserves omission markers and repeated-read advice; no tokenizer guesses or
+new provider-budget API. Released Floret owns request-wide token accounting; browser
+and native packages retain collection/input ownership. No upstream change or copied
+upstream implementation is needed for this product-specific projection.
+
+Diff requires equal document/scope/detail and complete source/output. Each line is
+a full replacement record; absent fields are removed, unlisted descendants remain.
+New/reordered/reparented nodes require full output. Compare actual encoded sizes;
+return full when smaller. Detail-mode changes reset the baseline. Failure uses the
+same projection; target, privacy, effect and uncertain-input rules remain unchanged.
+Full/node detail retains 2,000-code-point fields and explicit loss flags.
+
+Choose controls through trees/subtrees, prose/code through explicit HTML text,
+and loaded data through rows/query. Preserve surrounding headings, units, period
+and scope with selected rows; loaded counts never imply site-wide completeness.
+Visual-only content needs screenshots. These choices stay with the model; no
+website- or industry-specific rules select targets or authorize actions.
 
 ## Input
 ui.type inserts, fill replaces. Native doubleClick/scroll keep parity; scroll centers the window and scrollAt selects coordinates without clicking. Semantic selector scroll is separate. Browser waits accept text|value, equals:string and optional timeout, read visible textContent/value without new input; native rejects these conditions. Completed waits survive later guest failure.
@@ -49,7 +84,9 @@ No second history/recovery ledger. Paused/uncertain operations retain sanitized 
 
 - `redeven:internal/ai/computer_script.go` - namespace ownership, limits and partial results.
 
-- `redeven:internal/ai/computer_observation.go` - bounded output diffs and document/scope resets.
+- `redeven:internal/ai/computer_observation.go` and `redeven:internal/ai/computer_observation_text.go` - bounded output, diffs and scope resets.
+
+- `redeven:internal/ai/computer_observation_text_test.go` - grammar roundtrip, byte budgets, guest/provider/Activity boundaries and native coverage.
 
 - `redeven:internal/envapp/ui_src/scripts/redevenComputerScript.mjs` - restricted QuickJS API and process protocol.
 

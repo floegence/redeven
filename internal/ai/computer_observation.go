@@ -26,15 +26,18 @@ func (o *computerObservationOutput) render(value any, scope string, full bool) a
 		return value
 	}
 	if !full && current["semantic_schema_version"] == nil {
+		if _, valid := computerObservationNodes(current); !valid {
+			*o = computerObservationOutput{}
+			return value
+		}
 		current = compactComputerObservation(current)
-		body, _ = json.Marshal(current)
 	}
 	nodes, valid := computerObservationNodes(current)
 	previous, previousValid := computerObservationNodes(o.snapshot)
 	document, _ := current["document_id"].(string)
 	output := cloneAnyMap(current)
 	output["format"] = "full"
-	if !full && valid && previousValid && document != "" && document == o.snapshot["document_id"] && scope == o.scope && current["detail"] == o.snapshot["detail"] && current["truncated"] == false && o.snapshot["truncated"] == false {
+	if !full && valid && previousValid && document != "" && document == o.snapshot["document_id"] && scope == o.scope && current["detail"] == o.snapshot["detail"] && current["truncated"] == false && o.snapshot["truncated"] == false && computerObservationDiffOrder(o.snapshot, current) {
 		changed, removed := []any{}, []string{}
 		for _, node := range current["nodes"].([]any) {
 			ref := node.(map[string]any)["ref"].(string)
@@ -51,8 +54,9 @@ func (o *computerObservationOutput) render(value any, scope string, full bool) a
 		output["format"], output["nodes"], output["removed_refs"] = "diff", changed, removed
 		output["unchanged"] = len(nodes) - len(changed)
 		// A large change is clearer and cheaper as a complete snapshot.
-		encoded, _ := json.Marshal(output)
-		if len(encoded) >= len(body)+len(`,"format":"full"`) {
+		complete := cloneAnyMap(current)
+		complete["format"] = "full"
+		if computerObservationEncodedSize(output) >= computerObservationEncodedSize(complete) {
 			output = cloneAnyMap(current)
 			output["format"] = "full"
 		}
@@ -60,13 +64,13 @@ func (o *computerObservationOutput) render(value any, scope string, full bool) a
 	if valid && previousValid && document != "" && scope == o.scope && reflect.DeepEqual(current, o.snapshot) {
 		o.unchangedReads++
 		if o.unchangedReads >= 2 {
-			output["advisory"] = "Repeated observation has no new information. Inspect a narrower scope or another representation only if needed; do not repeat an uncertain input."
+			output["advisory"] = computerObservationAdvisory
 		}
 	} else {
 		o.unchangedReads = 0
 	}
 	o.scope, o.snapshot = scope, current
-	return output
+	return computerObservationPresentation(output)
 }
 
 func computerObservationNodes(snapshot map[string]any) (map[string]any, bool) {
@@ -90,77 +94,4 @@ func computerObservationNodes(snapshot map[string]any) (map[string]any, bool) {
 		result[ref] = node
 	}
 	return result, true
-}
-
-// Only automatic snapshot output is compacted. Guest code receives the full
-// validated tree; node() and snapshot({full:true}) expose its details.
-func compactComputerObservation(current map[string]any) map[string]any {
-	const budget = 32000
-	original := toAnySlice(current["nodes"])
-	project := func(count int) map[string]any {
-		out := map[string]any{"detail": "compact", "scope": "loaded_accessibility_tree"}
-		for _, key := range []string{"document_id", "url", "title", "truncated", "total", "execution_mode", "source", "coverage"} {
-			if value, exists := current[key]; exists {
-				out[key] = value
-			}
-		}
-		kept := map[string]bool{}
-		for _, raw := range original[:count] {
-			if node, ok := raw.(map[string]any); ok {
-				kept[anyToString(node["ref"])] = true
-			}
-		}
-		nodes := []any{}
-		for _, raw := range original[:count] {
-			node, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			item := map[string]any{}
-			for _, key := range []string{"ref", "parent_ref", "role", "name", "value", "description", "name_truncated", "value_truncated", "description_truncated", "children_truncated"} {
-				if value, exists := node[key]; exists {
-					item[key] = value
-				}
-			}
-			if parent := anyToString(item["parent_ref"]); parent != "" && !kept[parent] {
-				delete(item, "parent_ref")
-			}
-			for _, child := range toAnySlice(node["child_refs"]) {
-				if !kept[anyToString(child)] {
-					item["children_truncated"] = true
-				}
-			}
-			if states, ok := node["states"].(map[string]any); ok && len(states) > 0 {
-				item["states"] = states
-			}
-			nodes = append(nodes, item)
-		}
-		out["nodes"] = nodes
-		if focus := anyToString(current["focus_ref"]); focus != "" && kept[focus] {
-			out["focus_ref"] = focus
-		}
-		if count < len(original) {
-			out["truncated"], out["output_truncated"] = true, true
-			out["recovery"] = "Read a narrower root_ref or use locator.rows/query; full:true requests detailed output."
-		}
-		return out
-	}
-	out := project(len(original))
-	body, _ := json.Marshal(out)
-	if len(body) <= budget {
-		return out
-	}
-	// Find the largest complete prefix, accounting for truncation metadata and
-	// omitted children. Validated identity metadata fits without nodes.
-	low, high := 0, len(original)-1
-	for low < high {
-		mid := (low + high + 1) / 2
-		body, _ = json.Marshal(project(mid))
-		if len(body) <= budget {
-			low = mid
-		} else {
-			high = mid - 1
-		}
-	}
-	return project(low)
 }

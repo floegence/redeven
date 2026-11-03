@@ -4,6 +4,8 @@ Concepts own contracts/evidence; Git retains history.
 
 ## 2026-11-02
 
+- [Computer scripts](ai/computer-use-scripts.md): bounded tree-text model observations retain structured guest reads, explicit coverage and frame identity; actual encoded-size diffs reset on ordering changes. Existing upstream request accounting and browser/native ownership remain unchanged.
+
 - [Turn presentation](ui/flower-turn-process-disclosure.md): replace restarting clipped typing with a restrained readable opacity transition, retain the text node through disclosure changes, and absorb rapid state changes without a blank frame.
 
 - [Turn presentation](ui/flower-turn-process-disclosure.md): add a short stepped text reveal for live admission and completion, preserving immediate accessible content, stable geometry and static history/timer updates.

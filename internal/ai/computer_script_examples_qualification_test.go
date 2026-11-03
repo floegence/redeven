@@ -74,6 +74,20 @@ func TestComputerScriptExamplesQualification(t *testing.T) {
 	}
 	quoted, _ := json.Marshal(site.URL)
 	execute("await browser.navigate(" + string(quoted) + " + '/');")
+	// The guest keeps structured identities; only the automatic model surface
+	// uses tree text. Verify the final published Floret result, not just a helper.
+	observed := execute("const tree=await ui.snapshot(); ui.assert(Array.isArray(tree.nodes)); globalThis.exportRef=tree.nodes.find(n=>n.role==='link'&&n.name==='Export domains').ref;")
+	payload := observed.Result.(map[string]any)
+	textObservation := payload["observation"].(map[string]any)
+	if textObservation["encoding"] != "tree_text" || textObservation["nodes"] != nil || !strings.Contains(textObservation["tree"].(string), "Export domains") {
+		t.Fatalf("real-browser model observation: %+v", textObservation)
+	}
+	published, publishErr := floretToolResultFromFlower(nil, ToolResult{ToolID: "qualified-observation", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: payload})
+	if publishErr != nil || !strings.Contains(published.Text, "tree_text") {
+		t.Fatalf("final provider boundary: %v", publishErr)
+	}
+	execute("const detail=await ui.ref(exportRef).node(); ui.assert(detail.role==='link'); await ui.snapshot({full:true});")
+
 	// A document root is not a rendered element. Rejecting its text read
 	// must produce an accurate capability rejection and leave the page usable.
 	for i := 0; i < 3; i++ {

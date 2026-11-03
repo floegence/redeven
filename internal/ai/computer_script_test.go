@@ -474,10 +474,12 @@ func TestComputerScriptCompactSnapshotAndNativeCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := result.Result.(map[string]any)["observation"].(map[string]any)["nodes"].([]any)[0].(map[string]any)
-	if node["role"] != "button" || node["canonical_role"] != nil || node["platform_role"] != nil {
-		t.Fatalf("noncompact node: %+v", node)
+	observation := result.Result.(map[string]any)["observation"].(map[string]any)
+	text, _ := observation["tree"].(string)
+	if !strings.Contains(text, "] \"button\" \"Apply\"") || strings.Contains(text, "canonical_role") || strings.Contains(text, "platform_role") || observation["nodes"] != nil {
+		t.Fatalf("noncompact tree: %+v", observation)
 	}
+
 	// The locked execution path must also reject browser-only operations.
 	raw, _ := json.Marshal(map[string]any{"action": "table", "selector": map[string]any{"ref": "r"}})
 	call.ToolName = "computer.action"
@@ -519,10 +521,10 @@ func TestComputerCompactObservationBoundsAndDetailedReads(t *testing.T) {
 	var output computerObservationOutput
 	compact := output.render(tree, "all", false).(map[string]any)
 	body, _ := json.Marshal(compact)
-	if len(body) > 32768 || compact["detail"] != "compact" || strings.Contains(string(body), "internal-frame") {
+	if len(body) > 32768 || compact["detail"] != "compact" || !strings.Contains(string(body), "internal-frame") {
 		t.Fatalf("invalid compact output: %d bytes", len(body))
 	}
-	if len(compact["nodes"].([]any)) < 450 && compact["output_truncated"] != true {
+	if strings.Count(compact["tree"].(string), "\n")+1 < 450 && compact["output_truncated"] != true {
 		t.Fatal("undisclosed omitted nodes")
 	}
 	full := output.render(tree, "all", true).(map[string]any)
@@ -564,14 +566,15 @@ func TestComputerCompactObservationTruncationAndModeBoundary(t *testing.T) {
 	var output computerObservationOutput
 	compact := output.render(tree, "all", false).(map[string]any)
 	body, _ := json.Marshal(compact)
-	if len(body) > 32768 || compact["output_truncated"] != true || compact["focus_ref"] != nil || compact["nodes"].([]any)[0].(map[string]any)["children_truncated"] != true {
+	if len(body) > 32768 || compact["output_truncated"] != true || compact["focus_ref"] != nil || !strings.Contains(compact["tree"].(string), "children_truncated=true") {
 		t.Fatalf("invalid truncated projection: %d bytes", len(body))
 	}
-	for _, raw := range compact["nodes"].([]any)[1:] {
-		if raw.(map[string]any)["parent_ref"] != "root" {
-			t.Fatal("lost parent")
+	for _, line := range strings.Split(compact["tree"].(string), "\n")[1:] {
+		if !strings.HasPrefix(line, "  [") {
+			t.Fatal("lost parent indentation")
 		}
 	}
+
 	small := map[string]any{"document_id": "fixture:1", "nodes": nodes[:1], "truncated": false}
 	output.render(small, "all", true)
 	if next := output.render(small, "all", false).(map[string]any); next["format"] != "full" {

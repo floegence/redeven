@@ -91,7 +91,8 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 		title := firstNonEmptyString(anyToString(observation["title"]), anyToString(payload["title"]))
 		address := computerActivityURL(firstNonEmptyString(anyToString(observation["url"]), anyToString(payload["url"])))
 		text, controls := []string{}, []fltools.StructuredActivityRow{}
-		for _, item := range toAnySlice(observation["nodes"]) {
+		nodes, _ := computerActivityObservationNodes(observation)
+		for _, item := range nodes {
 			node, _ := item.(map[string]any)
 			role := anyToString(node["canonical_role"])
 			if role == "" {
@@ -191,11 +192,11 @@ func computerActivityBlankPage(payload map[string]any) bool {
 	if address != "about:blank" || observation["format"] == "diff" || readBoolField(observation, "truncated") {
 		return false
 	}
-	nodes, ok := observation["nodes"]
+	nodes, ok := computerActivityObservationNodes(observation)
 	if !ok {
 		return false
 	}
-	for _, value := range toAnySlice(nodes) {
+	for _, value := range nodes {
 		node, _ := value.(map[string]any)
 		role := firstNonEmptyString(anyToString(node["canonical_role"]), anyToString(node["role"]))
 		if _, canonical := computerRoleAliases[role]; !canonical {
@@ -269,4 +270,54 @@ func computerActivityFailurePhase(payload map[string]any) string {
 		return "validation"
 	}
 	return ""
+}
+
+// Decode display fields from our bounded presentation, never execution authority.
+// Historical structured observations keep the same Activity path.
+func computerActivityObservationNodes(observation map[string]any) ([]any, bool) {
+	if observation["encoding"] != "tree_text" {
+		nodes, ok := observation["nodes"].([]any)
+		return nodes, ok
+	}
+	text, ok := observation["tree"].(string)
+	if !ok || len(text) > computerObservationTextBudget {
+		return nil, false
+	}
+	nodes := []any{}
+	for _, line := range strings.Split(text, "\n") {
+		if line == "" {
+			continue
+		}
+		rest := strings.TrimSpace(line)
+		take := func(value any) bool {
+			d := json.NewDecoder(strings.NewReader(rest))
+			d.UseNumber()
+			if d.Decode(value) != nil {
+				return false
+			}
+			rest = strings.TrimSpace(rest[d.InputOffset():])
+			return true
+		}
+		var refs []string
+		var role string
+		var name any
+		if !take(&refs) || len(refs) != 1 || refs[0] == "" || !take(&role) || !take(&name) {
+			return nil, false
+		}
+		node := map[string]any{"ref": refs[0], "role": role, "name": name}
+		for rest != "" {
+			key, tail, ok := strings.Cut(rest, "=")
+			if !ok || key == "" {
+				return nil, false
+			}
+			rest = tail
+			var value any
+			if !take(&value) {
+				return nil, false
+			}
+			node[key] = value
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, true
 }
