@@ -46,6 +46,12 @@ describe('Flower composer reference browser interaction', () => {
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
+    const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const surface = runtime.querySelector<HTMLElement>('#redeven-flower-surface')!;
+    // The shared scroll owner publishes measured gutter on its layout frame.
+    // Capture focus geometry only after that initial horizontal alignment.
+    await waitFor(() => surface.style.getPropertyValue('--flower-transcript-gutter')
+      === (viewport.offsetWidth - viewport.clientWidth) + 'px');
     const unfocusedRect = composer.getBoundingClientRect();
     const unfocusedStyle = getComputedStyle(composer);
     const unfocusedGeometry = {
