@@ -6,12 +6,13 @@ import { createDesktopTestSession } from './desktop_test_session.mjs';
 
 const root = process.cwd();
 const argument = name => process.argv.find(value => value.startsWith('--' + name + '='))?.slice(name.length + 3);
-const fixture = argument('fixture'), output = argument('output');
+const fixtureArgument = argument('fixture'), outputArgument = argument('output');
+assert.ok(fixtureArgument && outputArgument, 'Provide --fixture and --output. The backend must use an isolated consistent copy.');
+const fixture = path.resolve(fixtureArgument), output = path.resolve(outputArgument);
 const maximumInteractiveMs = argument('max-interactive-ms');
 const historyScrollSteps = Number(argument('history-scroll-steps') ?? 0);
 assert.ok(Number.isInteger(historyScrollSteps) && historyScrollSteps >= 0 && historyScrollSteps <= 500, 'Use 0–500 --history-scroll-steps.');
 if (maximumInteractiveMs !== undefined) assert.ok(Number.isFinite(Number(maximumInteractiveMs)) && Number(maximumInteractiveMs) > 0, 'Provide a positive --max-interactive-ms.');
-assert.ok(fixture && output, 'Provide --fixture and --output. The backend must use an isolated consistent copy.');
 const info = JSON.parse(await readFile(fixture, 'utf8'));
 const require = createRequire(path.join(root, 'internal/envapp/ui_src/package.json'));
 const desktop = createRequire(path.join(root, 'desktop/package.json'));
@@ -180,7 +181,15 @@ try {
       // Completed work is intentionally collapsed. Exercise the actual nesting
       // before requiring a tool body, rather than silently skipping this check.
       let selectedTurn;
-      for (const process of (await page.locator('.flower-turn-summary-button').all()).reverse()) {
+      const visibleProcesses = await viewport.locator('.flower-turn-summary-button').evaluateAll(nodes => nodes.filter(node => {
+        const bounds = node.closest('.flower-chat-transcript')?.getBoundingClientRect();
+        const box = node.getBoundingClientRect();
+        return bounds && box.height > 0 && box.bottom > bounds.top && box.top < bounds.bottom
+          && node.checkVisibility({ contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true });
+      }).map(node => node.getAttribute('aria-controls')).filter(Boolean));
+      assert.ok(visibleProcesses.length, 'Historical reading must expose a visible work-process control.');
+      for (const controls of visibleProcesses.reverse()) {
+        const process = viewport.locator('.flower-turn-summary-button[aria-controls=' + JSON.stringify(controls) + ']');
         if (await process.getAttribute('aria-expanded') === 'false') await process.click();
         const turnID = await process.evaluate(node => node.closest('[data-flower-turn-id]')?.getAttribute('data-flower-turn-id'));
         const turn = page.locator('[data-flower-turn-id=' + JSON.stringify(turnID) + ']');
@@ -214,7 +223,7 @@ try {
         for (const value of activityValues.filter(value => value.item_id === messageID)) {
           for (const key of ['command', 'output']) {
             const text = value.value?.[key];
-            if (typeof text === 'string' && text.trim().length > 20 && normalize(detailText).includes(normalize(text)))
+            if (typeof text === 'string' && text.trim().length > 0 && normalize(detailText).includes(normalize(text)))
               matching.push({ path: value.path + '/' + key, offset: 0, text });
           }
         }
@@ -323,7 +332,15 @@ try {
       }
       await Promise.all(pending);
       const reads = evidence.requests.slice(responses).filter(read => read.op === 'history');
-      assert.ok(reads.some(read => read.status === 200 && Buffer.byteLength(read.input ?? '') > 8192), 'Exercise an actual reading selection above 8 KiB.');
+      const selections = reads.filter(read => read.status === 200).map(read => ({
+        bytes: Buffer.byteLength(read.input ?? ''), items: JSON.parse(read.input ?? '{}').item_ids?.length ?? 0,
+      })).filter(read => read.items > 0);
+      evidence.historySelections = selections;
+      // The same complete window can be below 8 KiB with short canonical IDs.
+      // Require the real 150-item reading window here; the product HTTP test
+      // TestServerFlowerHistoryAcceptsCompleteReadingSelection independently
+      // exercises long released-writer identities above the 8 KiB boundary.
+      assert.ok(selections.some(read => read.items === 150), 'Exercise a complete 150-item reading selection.');
       assert.ok(new Set(evidence.historyScroll.map(step => step.ordinal)).size > 2, 'Historical windows must advance.');
       await page.screenshot({ path: output + '.history.png' });
     }
