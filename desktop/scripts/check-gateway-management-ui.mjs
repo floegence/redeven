@@ -218,7 +218,7 @@ try {
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-clients-empty.png' });
         await button(nav, 'gatewayExperience.network').click();
         assert.equal(await workspace.locator('[data-gateway-panel=connection] .redeven-gateway-setting-row').count(), 2);
-        assert.equal(await workspace.locator('[data-gateway-panel=connection] .redeven-gateway-help-trigger').count(), 2, 'Help is available on demand');
+        assert.equal(await workspace.locator('[data-gateway-panel=connection] .redeven-gateway-help-trigger').count(), 3, 'Address, listener and host help are available on demand');
         await settleVisuals(page);
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-network-empty.png' });
 

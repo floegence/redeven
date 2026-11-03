@@ -167,7 +167,8 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     const observer = typeof ResizeObserver === 'undefined' || !anchorEl || !nextOverlayRef
       ? null
       : new ResizeObserver(() => {
-        updatePosition();
+        // Updating measured geometry inside delivery can trigger another resize.
+        schedulePositionUpdate();
       });
     if (observer && anchorEl && nextOverlayRef) {
       observer.observe(anchorEl);

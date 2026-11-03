@@ -24,6 +24,20 @@ function mount(perform: ReturnType<typeof vi.fn>, currentClientKeyID?: string) {
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Gateway client enrollment', () => {
+  it('keeps exact authorization timestamps while showing readable date and time lines', async () => {
+    const paired = 0;
+    const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [
+      { client_key_id: 'studio', client_name: 'Studio', paired_at_unix_ms: paired, last_verified_at_unix_ms: 0, revoked_at_unix_ms: 0 },
+    ] });
+    mount(perform); await settle();
+    const timestamp = document.querySelector('time')!;
+    expect(timestamp.getAttribute('datetime')).toBe(new Date(paired).toISOString());
+    expect(timestamp.getAttribute('title')).toBe(new Date(paired).toLocaleString(i18n.locale));
+    expect(timestamp.querySelectorAll('span')).toHaveLength(2);
+    expect(timestamp.children[0].textContent).toBe(new Date(paired).toLocaleDateString(i18n.locale, { year: 'numeric', month: 'short', day: 'numeric' }));
+    expect(document.querySelector('.redeven-gateway-client-metadata > div:last-child dd')?.textContent).toBe('—');
+  });
+
   it('clears availability feedback after access returns without restoring issued credentials', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [] });
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
