@@ -658,3 +658,23 @@ it('does not add a bottom snap to a native downward wheel near the tail', () => 
   expect(controller.followingLatest()).toBe(true);
   controller.dispose();
 });
+
+it('reacquires the same table row after Markdown completion replaces its DOM', () => {
+  const { controller, raf } = createController();
+  const metrics = createViewport(2000); metrics.setScrollTop(400);
+  let documentTop = 420;
+  let connected = true;
+  let rows: HTMLElement[] = [];
+  const message = { dataset: { flowerMessageId: 'table-message' }, querySelectorAll: () => rows } as unknown as HTMLElement;
+  const createRow = () => ({ tagName: 'TR', get isConnected() { return connected; },
+    closest: (selector: string) => selector === '[data-flower-message-id]' ? message : null,
+    getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 30 }) }) as unknown as HTMLElement;
+  const original = createRow(); rows = [original];
+  Object.assign(metrics.viewport, { contains: () => true, querySelectorAll: () => [message] });
+  controller.bind(metrics.viewport); controller.stopFollowing(); controller.preserveLayoutAnchor(original);
+  connected = false; rows = [createRow()]; documentTop += 75;
+  controller.flushLayout();
+  expect(metrics.scrollTop()).toBe(475);
+  expect(rows[0].getBoundingClientRect().top).toBe(20);
+  raf.flushAll(); controller.dispose();
+});

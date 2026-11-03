@@ -6,6 +6,75 @@ import type { FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerRuntimeCurre
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { adapter, deferred, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
+it.each([{ offset: 40, chunked: false }, { offset: -28, chunked: false }, { offset: 40, chunked: true }, { offset: -28, chunked: true }])('keeps the visible table row fixed when a clipped preview completes (%j)', async ({ offset, chunked }) => {
+  await page.viewport(1440, 1000);
+  const seed = thread({ thread_id: 'visible-table-reader', messages: [] });
+  const heading = '## Historical weather\n\n| City | Weather | Detail |\n| --- | --- | --- |\n';
+  const rows = Array.from({ length: 36 }, (_, i) => '| City ' + i + ' | Clear | Recorded observation ' + i + ' |');
+  const preview = heading + rows.slice(0, 12).join('\n');
+  const text = heading + rows.join('\n') + '\n\nThe full table is available.';
+  const held = deferred<void>();
+  const old: FlowerRuntimeCurrentItem = { id: 'visible-table', kind: 'assistant', ordinal: 2, canonical_ordinal: 2,
+    turn_id: 'table-turn', run_id: 'table-run', text: preview,
+    body: { field: 'content', source_id: 'visible-table', bytes: text.length, preview_bytes: preview.length } };
+  const items: FlowerRuntimeCurrentItem[] = [
+    { id: 'table-user', kind: 'user', ordinal: 1, canonical_ordinal: 1, turn_id: 'table-turn', run_id: 'table-run', text: 'Read the historical table.' }, old,
+    { id: 'following-user', kind: 'user', ordinal: 3, canonical_ordinal: 3, turn_id: 'following-turn', run_id: 'following-run', text: 'Next request.' },
+    { id: 'following-answer', kind: 'assistant', ordinal: 4, canonical_ordinal: 4, turn_id: 'following-turn', run_id: 'following-run', text: 'Later answer.\n\n'.repeat(16) },
+  ];
+  const history = async (_id: string, request: FlowerHistoryRequest) => {
+    const selected = request.anchor_id || request.item_ids ? items : items.slice(2);
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, view_version: 1, activity: 'idle', last_outcome: 'completed', items: selected,
+      window: { first_item_id: selected[0].id, last_item_id: selected.at(-1)!.id, has_before: selected[0].id !== 'table-user', has_after: false } };
+    return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
+  };
+  const body = vi.fn(async () => { await held.promise; return { ...old, body: undefined, text }; });
+  const chunks = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => {
+    await held.promise;
+    return { ...input, thread_id: seed.thread_id, bytes: text.length, text: text.slice(input.offset_bytes) };
+  });
+  const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed],
+    loadHistory: history, loadHistoryItem: body, ...(chunked ? { loadHistoryBody: chunks } : {}),
+    async *connectLiveStream({ signal }) {
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'visible-table-reader', summaries: [seed] };
+      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+    },
+  }, { focusThreadRequest: { request_id: 'open-visible-table', thread_id: seed.thread_id } });
+  root.style.height = '880px';
+  await waitFor(() => Boolean(root.querySelector('[data-flower-message-id=following-answer]')) && !root.querySelector('[data-flower-tail-preparing=true]'));
+  const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+  viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -80, bubbles: true }));
+  viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+  await waitFor(() => Boolean(root.querySelector('[data-flower-message-id=visible-table] tbody tr')));
+  const row = () => root.querySelectorAll<HTMLElement>('[data-flower-message-id=visible-table] tbody tr')[8];
+  const targetTop = viewport.getBoundingClientRect().top + offset;
+  viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -80, bubbles: true }));
+  viewport.scrollTop += row().getBoundingClientRect().top - targetTop;
+  viewport.dispatchEvent(new Event('scroll'));
+  await waitFor(() => chunked ? chunks.mock.calls.length > 0 : body.mock.calls.length > 0);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const wheel = commands as unknown as { wheelScrollRegion: (input: { regionSelector: string; deltaY: number; preserveScroll: boolean }) => Promise<unknown> };
+  await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', deltaY: -20, preserveScroll: true });
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const top = row().getBoundingClientRect().top;
+  expect(top).toBeGreaterThan(viewport.getBoundingClientRect().top - 20);
+  expect(top).toBeLessThan(viewport.getBoundingClientRect().top + 100);
+  const frames: number[] = []; let sampling = true;
+  const sample = () => { if (!sampling) return; frames.push(row().getBoundingClientRect().top); requestAnimationFrame(sample); };
+  requestAnimationFrame(sample);
+  try {
+    held.resolve();
+    await waitFor(() => root.textContent?.includes('The full table is available.') === true);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(frames.length).toBeGreaterThan(5);
+    expect(Math.max(...frames.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(2);
+    expect(root.querySelector('.flower-history-text-loading')).toBeNull();
+    expect(root.querySelectorAll('[data-flower-message-id=visible-table] tbody tr')).toHaveLength(36);
+    if (chunked) { expect(chunks).toHaveBeenCalledOnce(); expect(body).not.toHaveBeenCalled(); }
+    else expect(body).toHaveBeenCalledOnce();
+  } finally { sampling = false; held.resolve(); }
+});
+
 it.each([
   { moving: false, chunked: false, reduced: false, native: false },
   { moving: true, chunked: false, reduced: false, native: false },

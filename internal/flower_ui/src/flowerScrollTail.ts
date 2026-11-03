@@ -84,7 +84,7 @@ export function createFlowerScrollTailController(
   let smoothScroll: { startedAt: number; startTop: number } | undefined;
   const [followingLatest, setFollowingLatest] = createSignal(true);
   let userInterruptionRevision = 0;
-  let anchor: { title: HTMLElement; top: number; activated: boolean; finished?: boolean; reading?: boolean; fallbacks?: { title: HTMLElement; top: number }[]; turnHeaderID?: string } | undefined;
+  let anchor: { title: HTMLElement; top: number; activated: boolean; finished?: boolean; reading?: boolean; fallbacks?: { title: HTMLElement; top: number }[]; turnHeaderID?: string; bodyTarget?: { messageID: string; tag: string; index: number } } | undefined;
   type Gesture = {
     target: Element;
     pointerID?: number;
@@ -114,7 +114,7 @@ export function createFlowerScrollTailController(
   const outerReadingTarget = (target: HTMLElement) => {
     let result = target;
     for (let parent = target.parentElement; parent && parent !== node; parent = parent.parentElement) {
-      if (/(auto|scroll)/.test(window.getComputedStyle(parent).overflowY)) result = parent;
+      if (/(auto|scroll)/.test(window.getComputedStyle(parent).overflowY) && parent.scrollHeight > parent.clientHeight + 1) result = parent;
     }
     return result;
   };
@@ -122,26 +122,32 @@ export function createFlowerScrollTailController(
   const visibleReadingTarget = () => {
     if (!node?.ownerDocument) return;
     const bounds = node.getBoundingClientRect();
+    const nextVisibleMessage = () => [...node!.querySelectorAll<HTMLElement>('[data-flower-message-id], [data-parent-event]')].find(row => {
+      const rect = row.getBoundingClientRect();
+      return rect.height > 0 && rect.top >= bounds.top && rect.top < bounds.bottom;
+    });
+    const resolveTarget = (target: HTMLElement) => {
+      const message = target.closest<HTMLElement>('[data-flower-message-id]');
+      const rect = target.getBoundingClientRect();
+      // A trailing fragment above the reading band belongs to the preceding
+      // message. Otherwise keep the paragraph/row the reader is looking at.
+      const clippedFragment = !target.matches('tr') && rect.top < bounds.top && rect.bottom < bounds.top + 40;
+      if ((!target.matches('p, pre, li, tr') || clippedFragment) && message?.querySelector('[data-flower-history-body-pending]')
+        && message.getBoundingClientRect().top < bounds.top) return outerReadingTarget(nextVisibleMessage() ?? target);
+      return outerReadingTarget(target);
+    };
     for (const y of [bounds.top + 12, bounds.top + 40, bounds.top + bounds.height / 2]) {
+      let shell: HTMLElement | undefined;
       for (const x of [bounds.left + bounds.width / 2, bounds.left + 96, bounds.left + bounds.width / 3]) {
         const hit = node.ownerDocument.elementFromPoint(x, y);
         const target = hit?.closest<HTMLElement>(
-          '.flower-activity-inline-button, .flower-tool-sequence-toggle, .flower-turn-summary-button, [data-flower-message-id] p, [data-flower-message-id] pre, [data-flower-message-id] li, [data-parent-event], [data-flower-message-id]');
+          '.flower-activity-inline-button, .flower-tool-sequence-toggle, .flower-turn-summary-button, [data-flower-message-id] p, [data-flower-message-id] pre, [data-flower-message-id] li, [data-flower-message-id] tr, [data-parent-event], [data-flower-message-id]');
         if (target && node.contains(target) && target.getBoundingClientRect().height > 0) {
-          // A clipped incomplete preview is not a stable body anchor.
-          // Anchor the next visible row so completing that body can grow
-          // above the reader without pushing the following messages away.
-          const message = target.closest<HTMLElement>('[data-flower-message-id]');
-          if (message?.querySelector('[data-flower-history-body-pending]') && message.getBoundingClientRect().top < bounds.top) {
-            const following = [...node.querySelectorAll<HTMLElement>('[data-flower-message-id], [data-parent-event]')].find(row => {
-              const rect = row.getBoundingClientRect();
-              return rect.height > 0 && rect.top >= bounds.top && rect.top < bounds.bottom;
-            });
-            if (following) return outerReadingTarget(following);
-          }
-          return outerReadingTarget(target);
+          if (target.matches('[data-flower-message-id]')) { shell ??= target; continue; }
+          return resolveTarget(target);
         }
       }
+      if (shell) return resolveTarget(shell);
     }
   };
   const readingAnchor = (title: HTMLElement) => {
@@ -163,7 +169,13 @@ export function createFlowerScrollTailController(
       }
     }
     const turnHeaderID = title.closest<HTMLElement>('[data-flower-turn-header]')?.dataset.flowerTurnHeader;
-    return { title, top: title.getBoundingClientRect().top, activated: true, reading: true, fallbacks, turnHeaderID };
+    const message = title.closest<HTMLElement>('[data-flower-message-id]');
+    const tag = title.tagName?.toLowerCase();
+    // Markdown completion may replace its DOM while extending the same source
+    // prefix. Keep the position of this body element within its message.
+    const bodyTarget = message?.dataset.flowerMessageId && tag && /^(p|pre|li|tr)$/.test(tag)
+      ? { messageID: message.dataset.flowerMessageId, tag, index: [...message.querySelectorAll(tag)].indexOf(title) } : undefined;
+    return { title, top: title.getBoundingClientRect().top, activated: true, reading: true, fallbacks, turnHeaderID, bodyTarget };
   };
   const restoreConnectedAnchor = () => {
     if (!anchor || !node) return false;
@@ -174,6 +186,13 @@ export function createFlowerScrollTailController(
       const header = [...node.querySelectorAll<HTMLElement>('[data-flower-turn-header]')]
         .find(element => element.dataset.flowerTurnHeader === anchor!.turnHeaderID);
       const title = header?.querySelector<HTMLElement>('.flower-turn-summary-button') ?? header;
+      if (title && title.getBoundingClientRect().height > 0) { anchor.title = title; return true; }
+    }
+    if (anchor.bodyTarget) {
+      const { messageID, tag, index } = anchor.bodyTarget;
+      const message = [...node.querySelectorAll<HTMLElement>('[data-flower-message-id]')]
+        .find(element => element.dataset.flowerMessageId === messageID);
+      const title = message?.querySelectorAll<HTMLElement>(tag)[index];
       if (title && title.getBoundingClientRect().height > 0) { anchor.title = title; return true; }
     }
     const fallback = anchor.fallbacks?.find(value => value.title.isConnected && node!.contains(value.title) && value.title.getBoundingClientRect().height > 0);
