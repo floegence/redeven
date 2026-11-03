@@ -44,7 +44,32 @@ final class NativeForegroundInput {
     func resetProgress() { inputProgress = [:] }
     func markActionStarted() { inputProgress["stage"] = "action" }
 
-    func post(_ sequence: NativeInputSequence, window: NativeWindow, allowed: Bool, privateInput: Bool, activate: Bool = true, started: () -> Void, prepare: () throws -> Void, didPost: () -> Void) throws {
+    func postDirected(_ sequence: NativeInputSequence, window: NativeWindow, started: () -> Void, prepare: () throws -> Void, didPost: () -> Void) throws {
+        let delivery = NativeInputDelivery(pid: window.app.processIdentifier, window: window.windowID, directed: true)
+        guard delivery.available else {throw HostFailure(code:"TARGET_CAPABILITY_UNAVAILABLE",message:"Directed input observation is unavailable for this application.")}
+        inputProgress=["posted":0,"observed":0,"expected":sequence.events.count,"stage":"preparation"]
+        var owned=NativePendingInput()
+        var lastPoint=sequence.events.first?.location ?? .zero
+        defer {
+            let progress=delivery.progress
+            inputProgress["posted"]=progress.posted;inputProgress["observed"]=progress.observed
+            for release in owned.takeReleases(at:lastPoint,flags:[]) {
+                try? delivery.postAuxiliary(release)
+            }
+        }
+        let check = {
+            try execution.check();try window.validate()
+            guard !window.isPaused else {throw HostFailure(code:"TAKEOVER_REQUIRED",message:"Automation is paused.")}
+        }
+        try check();started();try prepare()
+        try sequence.deliver(check:check,post:{event in
+            self.inputProgress["stage"]="input_delivery"
+            try delivery.post(event,check:check,didPost:{lastPoint=event.location;owned.posted(event);didPost()})
+        })
+        inputProgress["stage"]="input_observed"
+    }
+
+    func post(_ sequence: NativeInputSequence, window: NativeWindow, allowed: Bool, privateInput: Bool, activate: Bool = true, started: () -> Void, prepare: () throws -> Void, didPost: () -> Void, settle: () throws -> Void = {}) throws {
         inputProgress = ["posted": 0, "observed": 0, "expected": sequence.events.count, "stage": "preparation"]
         let initialProgress = delivery.progress
         defer {
@@ -79,7 +104,15 @@ final class NativeForegroundInput {
                 if !axString(element, kAXRoleAttribute).isEmpty {
                     original.activate(options: [])
                     AXUIElementPerformAction(element, kAXRaiseAction as CFString)
-                    if let point = originalPointer, let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) {
+                    // Activation is asynchronous. Settle the restoration before
+                    // another request can race it; never override human input.
+                    let restoreDeadline = ProcessInfo.processInfo.systemUptime + 1
+                    while inputCount == initialInputCount && !original.isTerminated &&
+                          NSWorkspace.shared.frontmostApplication?.processIdentifier != original.processIdentifier &&
+                          ProcessInfo.processInfo.systemUptime < restoreDeadline {
+                        CFRunLoopRunInMode(.defaultMode, 0.01, true)
+                    }
+                    if inputCount == initialInputCount, let point = originalPointer, let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) {
                         if (try? NativeInputDelivery.markAuxiliary(move)) != nil { move.post(tap: .cghidEventTap) }
                     }
                 }
@@ -128,6 +161,9 @@ final class NativeForegroundInput {
             })
         })
         inputProgress["stage"] = "input_observed"
+        // Event-tap receipt precedes the application's editor. Observe requested
+        // editing effects before restoring focus; never dispatch another input.
+        try settle()
         CFRunLoopRunInMode(.defaultMode, 0, true)
     }
 }

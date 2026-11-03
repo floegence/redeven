@@ -151,6 +151,32 @@ func handle(_ line: String) {
         var input = NativeInputSequence(events: [])
         var focusElement: AXUIElement?
         var mode = "background"
+        var directedInput = false
+        var clipboardBefore: Int?
+        var editingAction: String?
+        var editingValueBefore: String?
+        func mouseButton() throws -> CGMouseButton {
+            switch args["button"] as? String ?? "left" {
+            case "left":return .left
+            case "right":return .right
+            case "middle":return .center
+            default:throw NativeInput.invalid("Unsupported mouse button.")
+            }
+        }
+        func modifiers() throws -> CGEventFlags {
+            var flags:CGEventFlags=[]
+            for name in args["modifiers"] as? [String] ?? [] {
+                switch name {case "Alt":flags.insert(.maskAlternate);case "Control":flags.insert(.maskControl);case "Meta":flags.insert(.maskCommand);case "Shift":flags.insert(.maskShift);default:throw NativeInput.invalid("Unsupported modifier.")}
+            }
+            return flags
+        }
+        func targetPoint() throws -> CGPoint {
+            if let selector=args["selector"] as? [String:Any] {
+                guard let rect=axRect(try selected.resolve(selector)) else {throw NativeInput.unavailable()}
+                return CGPoint(x:rect.midX,y:rect.midY)
+            }
+            return try point("x","y")
+        }
         let beforeInput = foreground.inputCount
         let beforeApplication = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let beforePointer = CGEvent(source: nil)?.location
@@ -163,11 +189,11 @@ func handle(_ line: String) {
             payload["observation"] = try selected.observe(args)
         case "computer.action":
             let action = args["action"] as? String ?? ""
-            if ["read", "wait"].contains(action) {
+            if ["read", "wait", "source", "selection", "capabilities"].contains(action) {
                 observing = true; observationStage = "semantic_read"
                 payload = try selected.action(args)
             }
-            else if ["fill", "click"].contains(action) {
+            else if ["fill", "click", "select_text", "select_range", "select_all", "replace_selection", "set_value", "perform_action"].contains(action) && !(action == "click" && (args["button"] != nil || args["modifiers"] != nil || args["click_count"] != nil || args["duration_ms"] != nil)) {
                 // AX permission does not promise that an application will stay
                 // in the background. Announce and authorize that possibility
                 // before dispatch; do not activate the app merely to use AX.
@@ -178,8 +204,49 @@ func handle(_ line: String) {
                     if beforeApplication != NSWorkspace.shared.frontmostApplication?.processIdentifier || beforePointer != CGEvent(source: nil)?.location { mode = "foreground" }
                 }, didPost: {})
             }
-            else if action == "pointer_click" { input = NativeInputSequence(events: try NativeInput.click(at: point("x", "y"), count: 1)) }
-            else if action == "drag" { input = try NativeInput.dragSequence(from: point("from_x", "from_y"), to: point("to_x", "to_y"), durationMilliseconds: nativeDragDuration(number("duration_ms", default: 0))) }
+            else if action == "clipboard" {
+                guard fullAccess else {throw HostFailure(code:"TARGET_PERMISSION_REQUIRED",message:"System clipboard access requires full access.")}
+                let operation=args["operation"] as? String ?? ""
+                if operation=="types" {payload=["types":NSPasteboard.general.pasteboardItems?.map{$0.types.map{$0.rawValue}} ?? [],"scope":"system_clipboard"]}
+                else if operation=="read" {payload=["items":try NativeClipboard.read(maximumBytes:65536).items.map{$0.mapValues{$0.base64EncodedString()}},"scope":"system_clipboard"]}
+                else if operation=="write" {
+                    guard let encoded=args["items"] as? [[String:String]] else {throw NativeInput.invalid("Clipboard items are required.")}
+                    let items=try encoded.map{try $0.mapValues{guard let data=Data(base64Encoded:$0) else {throw NativeInput.invalid("Invalid clipboard data.")};return data}}
+                    effectStarted=true;let version=try NativeClipboard.write(items,maximumBytes:65536);payload=["written":true,"change_count":version,"scope":"system_clipboard"]
+                }else {throw NativeInput.invalid("Unsupported clipboard operation.")}
+            }
+            else if ["copy","cut","paste"].contains(action) {
+                guard allowForeground else {throw HostFailure(code:"FOREGROUND_PERMISSION_REQUIRED",message:"Native editing commands require temporary foreground access.")}
+                if action=="paste" && !fullAccess {throw HostFailure(code:"TARGET_PERMISSION_REQUIRED",message:"System clipboard paste requires full access.")}
+                if let selector=args["selector"] as? [String:Any] {focusElement=try selected.resolve(selector)}
+                if action=="paste", args["text"] != nil || args["html"] != nil {
+                    var item:[String:Data]=[:]
+                    if let text=args["text"] as? String {item[NSPasteboard.PasteboardType.string.rawValue]=Data(text.utf8)}
+                    if let html=args["html"] as? String {item[NSPasteboard.PasteboardType.html.rawValue]=Data(html.utf8)}
+                    effectStarted=true;let version=try NativeClipboard.write([item],maximumBytes:65536)
+                    payload["clipboard_change_count"]=version;payload["clipboard_restored"]=false;payload["clipboard_restore_reason"]="paste_consumption_unverified"
+                }
+                editingAction=action
+                if let node=focusElement { editingValueBefore=axValue(node,kAXValueAttribute) as? String }
+                if action=="copy" || action=="cut" {clipboardBefore=NSPasteboard.general.changeCount}
+                input=NativeInputSequence(events:try NativeInput.key(action=="copy" ? "Meta+c":action=="cut" ? "Meta+x":"Meta+v"))
+                // AppKit editing shortcuts require the target's active responder chain.
+                // Choose the authorized foreground route before posting anything;
+                // a delivered background chord is never retried as foreground input.
+                payload["mechanism"]="foreground_keyboard";payload["effect_verified"]=false
+            }
+            else if action == "input_sequence" {
+                guard let records=args["events"] as? [[String:Any]], let rect=axRect(selected.element) else {throw NativeInput.invalid("Input events and target bounds are required.")}
+                input=try nativeExplicitInput(records,bounds:rect,fullAccess:fullAccess)
+                directedInput=true
+                payload["mechanism"]="directed_input_sequence"
+            }
+            else if action == "hover" {input=NativeInputSequence(events:[try NativeInput.pointer(at:targetPoint())]);directedInput=true}
+            else if action == "pointer_click" || action == "click" {
+                input=try NativeInput.clickSequence(at:targetPoint(),button:mouseButton(),count:args["click_count"] as? Int ?? 1,modifiers:modifiers(),holdMilliseconds:nativeDragDuration(number("duration_ms",default:0)))
+                directedInput=true
+            }
+            else if action == "drag" { input = try NativeInput.dragSequence(from: point("from_x", "from_y"), to: point("to_x", "to_y"), durationMilliseconds: nativeDragDuration(number("duration_ms", default: 0)), button:mouseButton(),modifiers:modifiers()); directedInput=true }
             else if action == "key" {
                 if let selector = args["selector"] as? [String: Any] {
                     focusElement = try selected.resolve(selector)
@@ -206,14 +273,37 @@ func handle(_ line: String) {
         }
         if !input.events.isEmpty {
             selected.modelImage = nil
-            mode = "foreground"
-            try foreground.post(input, window: selected, allowed: allowForeground, privateInput: privateInput, started: {
-                emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground", "reason": "native_input_required"])
-            }, prepare: {
+            let prepare = {
                 if let node = focusElement {
-                    guard AXUIElementSetAttributeValue(node, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else { throw NativeInput.unavailable() }
+                    guard AXUIElementSetAttributeValue(node,kAXFocusedAttribute as CFString,kCFBooleanTrue) == .success else {throw NativeInput.unavailable()}
                 }
-            }, didPost: { effectStarted = true })
+            }
+            if directedInput && !privateInput {
+                try foreground.postDirected(input,window:selected,started:{
+                    emit(["type":"started","request_id":id,"target_id":target,"execution_mode":"background"])
+                },prepare:prepare,didPost:{effectStarted=true})
+            }else {
+                mode="foreground"
+                try foreground.post(input,window:selected,allowed:allowForeground,privateInput:privateInput,started:{
+                    emit(["type":"started","request_id":id,"target_id":target,"execution_mode":"foreground","reason":"native_input_required"])
+                },prepare:prepare,didPost:{effectStarted=true},settle:{
+                    guard let action=editingAction else {return}
+                    let until=ProcessInfo.processInfo.systemUptime+0.5
+                    repeat {
+                        try execution.check();try selected.validate()
+                        let clipboardChanged=clipboardBefore.map { NSPasteboard.general.changeCount != $0 } ?? true
+                        let valueChanged=editingValueBefore.flatMap { before in focusElement.map { axString($0,kAXValueAttribute) != before } } ?? false
+                        if action=="copy" && clipboardChanged || action=="cut" && clipboardChanged && valueChanged || action=="paste" && valueChanged {break}
+                        CFRunLoopRunInMode(.defaultMode,0.01,false)
+                    } while ProcessInfo.processInfo.systemUptime<until
+                    if let before=editingValueBefore,let node=focusElement {payload["value_changed"]=axString(node,kAXValueAttribute) != before}
+                })
+            }
+        }
+
+        if let version=clipboardBefore {
+            payload["clipboard_changed"]=NSPasteboard.general.changeCount != version
+            payload["clipboard_change_count"]=NSPasteboard.general.changeCount
         }
         if effectStarted { selected.modelImage = nil }
         inputConfirmed = true

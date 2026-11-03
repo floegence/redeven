@@ -125,7 +125,7 @@ test('documentation is discoverable and snapshots have one canonical role', asyn
   const script=await createComputerScript();
   try {
     const r=await script.execute("await ui.help('core'); const s=await ui.snapshot({emit:false}); log(s.nodes[0]);",async op=>op.action==='help'?{documentation:'core signatures'}:{url:'https://example.test',observation:{document_id:'d',nodes:[{ref:'r',role:'AXTextField',platform_role:'AXTextField',canonical_role:'textbox',name:'Search'}],truncated:false}});
-    assert.deepEqual(r.logs,[['core signatures'],[{ref:'r',role:'textbox',name:'Search'}]]);
+    assert.deepEqual(r.logs,[['core signatures'],[{ref:'r',role:'textbox',name:'Search',platform_role:'AXTextField'}]]);
   }finally{script.dispose();}
 });
 
@@ -244,7 +244,7 @@ test('read helpers preserve legacy shapes and never treat redacted href as an ac
    if(op.action==='query')return {total:9,items:[]};if(op.action==='attribute')return {attribute:op.attribute,value:op.attribute==='href'?'https://example.test/path':'Title'};
    return {rows:[],total:0,truncated:false};
   });
-  assert.deepEqual(result.logs[0],[{ref:'r',role:'button'},{node:{ref:'r',role:'AXButton',canonical_role:'button',platform_role:'AXButton'}},9,'Title',{url:'https://example.test/path',redacted:true},{rows:[],total:0,truncated:false}]);
+  assert.deepEqual(result.logs[0],[{ref:'r',role:'button',platform_role:'AXButton'},{node:{ref:'r',role:'AXButton',canonical_role:'button',platform_role:'AXButton'}},9,'Title',{url:'https://example.test/path',redacted:true},{rows:[],total:0,truncated:false}]);
   await assert.rejects(script.execute("await ui.ref('r').attribute('href');",async()=>assert.fail('unsafe dispatch')));
  }finally{script.dispose();}
 });

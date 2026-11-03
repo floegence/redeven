@@ -46,7 +46,7 @@ func (e *encodingComputerExecutor) ExecuteTargetTool(_ context.Context, call Tar
 	return result, nil
 }
 
-func encodingIntegrationOptions(t *testing.T, provider string, executor *encodingComputerExecutor) Options {
+func encodingIntegrationOptions(t *testing.T, provider string, executor TargetToolExecutor) Options {
 	t.Helper()
 	registry := NewTargetRegistry()
 	if err := registry.Register(TargetDescriptor{ID: "browser-main", Kind: "browser.managed", DisplayName: "Fixture", Ready: true, State: "ready", Capabilities: []string{"observe", "interaction"}}); err != nil {

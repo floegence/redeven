@@ -58,6 +58,7 @@ final class NativeWindow {
     var observer: AXObserver?
     var revision = 0
     var references: [String: Reference] = [:]
+    private var referenceOrder:[String]=[]
     private(set) var pauseReasons: Set<String> = []
     var isPaused: Bool { !pauseReasons.isEmpty }
     func pause(_ reasons: Set<String>) { pauseReasons.formUnion(reasons); invalidate() }
@@ -104,7 +105,7 @@ final class NativeWindow {
                 }
             }
         }
-        references.removeAll()
+        references.removeAll();referenceOrder.removeAll()
     }
     func invalidate() { modelImage = nil; revision += 1; clearReferences(); changed = true }
 
@@ -171,7 +172,12 @@ final class NativeWindow {
         let ref: String
         if let existing = references.first(where: { CFEqual($0.value.element, node) && $0.value.role == role && $0.value.nameIdentity == identity }) { ref = existing.key }
         else {
-            if references.count >= 2000 { clearReferences() }
+            if references.count>=2000,let oldest=referenceOrder.first {
+                referenceOrder.removeFirst()
+                if let old=references.removeValue(forKey:oldest),let observer,!CFEqual(old.element,element),!CFEqual(old.element,application) {
+                    for notification in [kAXUIElementDestroyedNotification,kAXValueChangedNotification,kAXTitleChangedNotification] {AXObserverRemoveNotification(observer,old.element,notification as CFString)}
+                }
+            }
             ref = "\(id):\(revision):\(UUID().uuidString)"; references[ref] = Reference(element: node, role: role, nameIdentity: identity)
             if let observer, !CFEqual(node, element), !CFEqual(node, application) {
                 for notification in [kAXUIElementDestroyedNotification, kAXValueChangedNotification, kAXTitleChangedNotification] {
@@ -179,6 +185,7 @@ final class NativeWindow {
                 }
             }
         }
+        referenceOrder.removeAll{$0==ref};referenceOrder.append(ref)
         var actions: CFArray?
         AXUIElementCopyActionNames(node, &actions)
         let supported = (actions as? [String]) ?? []
@@ -293,6 +300,8 @@ final class NativeWindow {
         guard !isPaused else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Return control before continuing.") }
         let selector = args["selector"] as? [String: Any] ?? [:]
         let action = args["action"] as? String ?? ""
+        if action == "capabilities" { return ["source":"macos_accessibility","reads":["ax","selection"],"actions":["click","hover","select_text","select_range","select_all","replace_selection","copy","cut","paste","set_value","perform_action","key","drag","scroll","input_sequence","clipboard"],"background":"source_and_directed_input","conditions":["copy_cut_paste_key":"foreground_consent","selection_direction":"none_only","clipboard":"full_access","controls":"application_support"],"clipboard_scope":"system"] }
+        if action == "source" { return try source(args) }
         if action == "wait" { return try wait(selector, args) }
         let node = try resolve(selector)
         switch action {
@@ -302,6 +311,21 @@ final class NativeWindow {
                 throw HostFailure(code: "TARGET_OBSERVATION_UNAVAILABLE", message: "The selected node could not be read.")
             }
             return ["semantic_schema_version": 2, "node": first]
+        case "selection": return try selection(node)
+        case "select_text", "select_range", "select_all": return try select(node,args:args,willMutate:willMutate)
+        case "perform_action":
+            var names:CFArray?; AXUIElementCopyActionNames(node,&names)
+            guard let action=args["name"] as? String,(names as? [String] ?? []).contains(action) else {throw HostFailure(code:"TARGET_CAPABILITY_UNAVAILABLE",message:"Use an observed AX action name.")}
+            try willMutate()
+            guard AXUIElementPerformAction(node,action as CFString) == .success else {throw HostFailure(code:"EFFECT_OUTCOME_UNKNOWN",message:"AX action was not confirmed.")}
+        case "replace_selection", "set_value":
+            let attribute=action=="replace_selection" ? kAXSelectedTextAttribute:kAXValueAttribute
+            let value=args[action=="replace_selection" ? "text":"value"]
+            guard let value,value is String || value is NSNumber else {throw NativeInput.invalid("A string or scalar value is required.")}
+            var writable=DarwinBoolean(false)
+            guard AXUIElementIsAttributeSettable(node,attribute as CFString,&writable) == .success,writable.boolValue else {throw HostFailure(code:"TARGET_CAPABILITY_UNAVAILABLE",message:"Attribute is not writable.")}
+            try willMutate()
+            guard AXUIElementSetAttributeValue(node,attribute as CFString,value as CFTypeRef) == .success else {throw HostFailure(code:"EFFECT_OUTCOME_UNKNOWN",message:"Value change was not confirmed.")}
         case "click":
             var actions: CFArray?
             AXUIElementCopyActionNames(node, &actions)

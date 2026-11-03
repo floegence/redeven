@@ -10,6 +10,7 @@ trap 'rm -rf -- "$temporary"' EXIT
 # They never attach to a daily browser or inject input into the host desktop.
 GOWORK=off go build -o "$temporary/redeven" ./cmd/redeven
 REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test --test-concurrency=1 \
+  internal/envapp/ui_src/scripts/computerCompleteInteraction.node-test.mjs \
   internal/envapp/ui_src/scripts/computerContracts.node-test.mjs \
   internal/envapp/ui_src/scripts/computerGeometry.node-test.mjs \
   internal/envapp/ui_src/scripts/computerModelImage.node-test.mjs \

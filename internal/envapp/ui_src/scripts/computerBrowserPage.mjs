@@ -1,3 +1,5 @@
+/* global HTMLSelectElement, HTMLInputElement, DataTransfer */
+import { browserSource, browserSelection, browserEditCommand, browserClipboard, browserPaste, withDOM } from './computerBrowserDetails.mjs';
 import { createHash } from 'node:crypto';
 import { validateBrowserAction } from './computerBrowserArguments.mjs';
 import { documentHitPoint } from './computerBrowserFrame.mjs';
@@ -472,6 +474,15 @@ export class BrowserComputerPage {
     return entry;
   }
 
+  rememberDOMNode(frame,node) {
+    const document=this.observedFrames.get(frame.frame.id);
+    if(!document||!node.backendNodeId)throw new Error('STALE_REFERENCE');
+    const ref='d'+createHash('sha256').update(JSON.stringify([this.prefix,document.revision,frame.frame.id,node.backendNodeId,node.nodeType,node.nodeName])).digest('base64url').slice(0,16);
+    const entry={ref,frame,document,backendNodeId:node.backendNodeId,nodeType:node.nodeType,nodeName:node.nodeName,role:'other',sourceDOM:true};
+    if(this.references.size>=2000&&!this.references.has(ref))this.references.delete(this.references.keys().next().value);
+    this.references.set(ref,entry);return entry;
+  }
+
   async resolve(selector, collect = false, sample = false) {
     if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
     let entry, root;
@@ -527,6 +538,13 @@ export class BrowserComputerPage {
   }
 
   async validateIdentity(entry, transient = false) {
+    if(entry.sourceDOM){
+      const {node}=await entry.frame.session.send('DOM.describeNode',{backendNodeId:entry.backendNodeId});
+      if(!node||node.backendNodeId!==entry.backendNodeId||node.nodeName!==entry.nodeName||entry.document!==this.observedFrames.get(entry.frame.frame.id))throw new Error('STALE_REFERENCE');
+      const connected=await withDOM(this,entry,function(){return this.isConnected;});
+      if(!connected)throw new Error('STALE_REFERENCE');
+      return entry;
+    }
     let node, nodes, current;
     try {
       ({ node } = await entry.frame.session.send('DOM.describeNode', { backendNodeId: entry.backendNodeId }));
@@ -846,7 +864,7 @@ export class BrowserComputerPage {
   async input(session, method, parameters, releasing = false) {
     if (!releasing && (this.stopped || this.operationCancelled) && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
     const heldKey = method === 'Input.dispatchKeyEvent' ? `key:${parameters.key}` : `mouse:${parameters.button}`;
-    const down = ['keyDown', 'mousePressed'].includes(parameters.type);
+    const down = ['keyDown', 'rawKeyDown', 'mousePressed'].includes(parameters.type);
     const up = ['keyUp', 'mouseReleased'].includes(parameters.type);
     if (down) this.heldInput.set(heldKey, { session, method, parameters });
     if (releasing) await session.send(method, parameters);
@@ -863,7 +881,7 @@ export class BrowserComputerPage {
     const failures = [];
     for (const [key, held] of this.heldInput) {
       const parameters = { ...held.parameters, type: held.method === 'Input.dispatchKeyEvent' ? 'keyUp' : 'mouseReleased' };
-      delete parameters.text;
+      delete parameters.text; delete parameters.commands; parameters.modifiers=0; parameters.buttons=0; delete parameters.autoRepeat;
       try { await this.input(held.session, held.method, parameters, true); }
       catch (error) { failures.push(error); }
       finally { this.heldInput.delete(key); }
@@ -991,11 +1009,66 @@ export class BrowserComputerPage {
     } finally { clearTimeout(timer); this.listeners.delete(changed); }
   }
 
+  async setControlValue(element,value){
+    return withDOM(this,element,function(value,dryRun=false){
+      if(this.disabled||this.readOnly)return {unsupported:true};
+      if(this instanceof HTMLSelectElement){
+        const values=Array.isArray(value)?value:[value];
+        if(!values.every(v=>typeof v==='string')||(!this.multiple&&values.length!==1)||values.some(v=>![...this.options].some(o=>o.value===v)))return {invalid:true};
+        if(dryRun)return {validated:true};
+        for(const option of this.options)option.selected=values.includes(option.value);
+      }else if(this instanceof HTMLInputElement&&['checkbox','radio'].includes(this.type)){
+        if(typeof value!=='boolean')return {invalid:true};if(dryRun)return {validated:true};this.checked=value;
+      }else if(this instanceof HTMLInputElement&&['range','number'].includes(this.type)){
+        if(typeof value!=='number'||!Number.isFinite(value))return {invalid:true};if(dryRun)return {validated:true};this.value=String(value);
+      }else return {unsupported:true};
+      this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));
+      return {action_executed:true,mechanism:'dom_property_and_synthetic_events',value:this instanceof HTMLSelectElement?[...this.selectedOptions].map(o=>o.value):['checkbox','radio'].includes(this.type)?this.checked:this.value};
+    },[value],true);
+  }
+
+  async inputSequence(args){
+    await this.preparePage();
+    const held=new Set(), bits={Alt:1,Control:2,Meta:4,Shift:8};
+    for(const event of args.events){
+      if(event.type==='wait'){await this.delay(event.duration_ms,this.revision);continue;}
+      if(event.type==='keyDown'||event.type==='keyUp'){
+        let key=validateBrowserAction({action:'key',key:event.key},this.privateInput).key;
+        if(bits[key.key]){if(event.type==='keyDown')held.add(key.key);else held.delete(key.key);}
+        const names=[...new Set([...held,...event.modifiers??[]])];
+        key=validateBrowserAction({action:'key',key:[...names,event.key].join('+')},this.privateInput).key;
+        if(event.type==='keyUp')delete key.text;
+        await this.input(this.transport,'Input.dispatchKeyEvent',{...key,type:event.type,autoRepeat:event.repeat??false});
+      }else{
+        await this.input(this.transport,'Input.dispatchMouseEvent',{type:event.type,x:event.x,y:event.y,button:event.button??'left',buttons:event.buttons??0,clickCount:event.click_count??1,modifiers:[...new Set([...held,...event.modifiers??[]])].reduce((mask,name)=>mask|bits[name],0)});
+      }
+    }
+    return {action_executed:true,mechanism:'browser_input',completed_events:args.events.length,execution_mode:'background'};
+  }
+
   async action(args) {
     if (this.invalid) throw new Error('TARGET_CONNECTION_REQUIRED');
     const validated = validateBrowserAction(args, this.privateInput);
+    if (args.action === 'capabilities') return {source:'browser',reads:['ax','dom','selection','query','table','text','attribute'],actions:['hover','click','select_text','select_range','select_all','replace_selection','copy','cut','paste','fill','key','drag','scroll','set_value','set_files','input_sequence','clipboard'],background:true,conditions:{clipboard:'full_access_and_browser_permission',set_value:'supported_html_controls',perform_action:'unsupported',clipboard_scope:'system',source:'authorized_frames_only'}};
+    if(args.action==='clipboard')return browserClipboard(this,args);
+    if(args.action==='input_sequence')return this.inputSequence(args);
     if (args.action === 'query') return this.query(args.selector,args);
     const element = args.selector ? await this.resolve(args.selector) : undefined;
+    if(args.action==='source')return browserSource(this,element,args);
+    if(['selection','select_text','select_range','select_all','replace_selection'].includes(args.action))return browserSelection(this,element,args);
+    if(args.action==='paste')return browserPaste(this,element,args);
+    if(['copy','cut'].includes(args.action))return browserEditCommand(this,element,args);
+    if(args.action==='set_files')return withDOM(this,element,function(files,dryRun=false){
+      if(!(this instanceof HTMLInputElement)||this.type!=='file'||this.disabled)return {unsupported:true};
+      if(!this.multiple&&files.length!==1)return {invalid:true};
+      if(dryRun)return {validated:true};
+      const transfer=new DataTransfer();
+      for(const file of files)transfer.items.add(new File([Uint8Array.from(atob(file.base64),c=>c.charCodeAt(0))],file.name,{type:file.mime_type}));
+      this.files=transfer.files;this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));
+      return {action_executed:true,mechanism:'dom_file_selection_and_synthetic_events',files:[...this.files].map(f=>({name:f.name,mime_type:f.type,size_bytes:f.size})),scope:'supplied_bytes_only'};
+    },[args.files],true);
+    if(args.action==='set_value')return this.setControlValue(element,args.value);
+    if(args.action==='perform_action')throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
     if (args.action === 'table') return this.table(element,args);
     if (args.action === 'attribute') return this.attribute(element,args.attribute);
     if (args.action === 'text') return this.text(element);
@@ -1010,7 +1083,7 @@ export class BrowserComputerPage {
       if (typeof args.text !== 'string' || args.text.length > 20000 || !['textbox', 'searchbox', 'combobox'].includes(element.role)) throw new Error('INVALID_REQUEST');
       await this.actionable(element);
       await this.editText(element, args.text, true);
-    } else if (args.action === 'click' || args.action === 'pointer_click' || args.action === 'double_click') {
+    } else if (args.action === 'click' || args.action === 'pointer_click' || args.action === 'double_click' || args.action === 'hover') {
       let x = args.x, y = args.y;
       let target = this.transport;
       if (element) {
@@ -1023,9 +1096,13 @@ export class BrowserComputerPage {
         if (!await this.receivesPoint(element, x, y)) throw new Error('ELEMENT_NOT_ACTIONABLE');
       }
       if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) throw new Error('INVALID_REQUEST');
-      for (let clickCount = 1; clickCount <= (args.action === 'double_click' ? 2 : 1); clickCount++) {
-        await this.input(target, 'Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount, x, y });
-        await this.input(target, 'Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount, x, y });
+      const button=args.button??'left',modifiers=(args.modifiers??[]).reduce((mask,key)=>mask|({Alt:1,Control:2,Meta:4,Shift:8}[key]),0);
+      await this.input(target,'Input.dispatchMouseEvent',{type:'mouseMoved',x,y,modifiers});
+      if(args.action==='hover')return {action_executed:true,mechanism:'browser_input',execution_mode:'background'};
+      for (let clickCount = 1; clickCount <= (args.click_count??(args.action === 'double_click' ? 2 : 1)); clickCount++) {
+        await this.input(target, 'Input.dispatchMouseEvent', { type: 'mousePressed', button, modifiers, clickCount, x, y });
+        if(args.duration_ms)await this.delay(args.duration_ms,this.revision);
+        await this.input(target, 'Input.dispatchMouseEvent', { type: 'mouseReleased', button, modifiers, clickCount, x, y });
       }
     } else if (args.action === 'type') {
       if (typeof args.text !== 'string' || args.text.length > 20000) throw new Error('INVALID_REQUEST');
@@ -1054,18 +1131,18 @@ export class BrowserComputerPage {
     } else if (args.action === 'drag') {
       for (const key of ['from_x', 'from_y', 'to_x', 'to_y']) if (!Number.isFinite(args[key]) || args[key] < 0) throw new Error('INVALID_REQUEST');
       const revision = this.revision, duration = args.duration_ms ?? 0;
-      await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, x: args.from_x, y: args.from_y });
+      await this.input(this.transport, 'Input.dispatchMouseEvent', { modifiers:(args.modifiers??[]).reduce((m,k)=>m|({Alt:1,Control:2,Meta:4,Shift:8}[k]),0), type: 'mousePressed', button: args.button??'left', clickCount: 1, x: args.from_x, y: args.from_y });
       // Schedule against one monotonic start; transport latency must not add
       // another full delay to every step. Cancellation wakes the same wait.
       const started = performance.now(), steps = Math.max(1, Math.min(120, Math.ceil(duration / 16)));
       for (let step = 1; step <= steps; step++) {
         if (duration > 0) await this.delay(Math.max(0, started + duration * step / steps - performance.now()), revision);
         if (revision !== this.revision) throw new Error('STALE_REFERENCE');
-        await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mouseMoved', button: 'left', buttons: 1,
+        await this.input(this.transport, 'Input.dispatchMouseEvent', { modifiers:(args.modifiers??[]).reduce((m,k)=>m|({Alt:1,Control:2,Meta:4,Shift:8}[k]),0), type: 'mouseMoved', button: args.button??'left', buttons: ({left:1,right:2,middle:4}[args.button??'left']),
           x: args.from_x + (args.to_x - args.from_x) * step / steps, y: args.from_y + (args.to_y - args.from_y) * step / steps });
       }
       if (revision !== this.revision) throw new Error('STALE_REFERENCE');
-      await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, x: args.to_x, y: args.to_y });
+      await this.input(this.transport, 'Input.dispatchMouseEvent', { modifiers:(args.modifiers??[]).reduce((m,k)=>m|({Alt:1,Control:2,Meta:4,Shift:8}[k]),0), type: 'mouseReleased', button: args.button??'left', clickCount: 1, x: args.to_x, y: args.to_y });
     } else throw new Error('INVALID_REQUEST');
     return { action_executed: true, execution_mode: 'background' };
   }

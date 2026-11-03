@@ -52,6 +52,30 @@ final class InputTests: XCTestCase {
         XCTAssertTrue(pending.takeReleases(at: .zero).isEmpty)
     }
 
+    func testExplicitInputModifiersRepeatAndCancellation() throws {
+        let bounds = CGRect(x:10,y:20,width:300,height:300)
+        let sequence = try nativeExplicitInput([
+            ["type":"keyDown","key":"Shift"],
+            ["type":"keyDown","key":"a","repeat":true],
+            ["type":"mousePressed","x":30.0,"y":40.0,"button":"right"],
+        ],bounds:bounds,fullAccess:true)
+        XCTAssertEqual(sequence.events[0].type,.flagsChanged)
+        XCTAssertTrue(sequence.events[1].flags.contains(.maskShift))
+        XCTAssertEqual(sequence.events[1].getIntegerValueField(.keyboardEventAutorepeat),1)
+        XCTAssertTrue(sequence.events[2].flags.contains(.maskShift))
+        var pending = NativePendingInput()
+        sequence.events.forEach { pending.posted($0) }
+        let released = pending.takeReleases(at:CGPoint(x:80,y:90))
+        XCTAssertEqual(released.count,3)
+        XCTAssertEqual(released.last?.type,.flagsChanged)
+        XCTAssertTrue(released.allSatisfy { $0.flags.isEmpty })
+        XCTAssertEqual(released.first { $0.type == .rightMouseUp }?.location,CGPoint(x:80,y:90))
+        XCTAssertTrue(pending.takeReleases(at:.zero).isEmpty)
+        XCTAssertThrowsError(try nativeExplicitInput([["type":"keyDown","key":"Meta"],["type":"keyDown","key":"v"]],bounds:bounds,fullAccess:false))
+        XCTAssertThrowsError(try nativeExplicitInput([["type":"mousePressed","x":400.0,"y":1.0]],bounds:bounds,fullAccess:true))
+        XCTAssertThrowsError(try nativeExplicitInput([["type":"keyDown","key":"a","unknown":true]],bounds:bounds,fullAccess:true))
+    }
+
     func testCancellationIsScopedToAdmittedRequest() throws {
         let execution = NativeExecution()
         XCTAssertTrue(execution.begin("one"))

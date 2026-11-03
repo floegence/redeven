@@ -16,6 +16,9 @@ final class FixtureState {
     var actions: [[String: Any]] = []
     var initialFrontmostPID: pid_t = 0
     var initialPointer = CGPoint.zero
+    var inputOrigins:[String:Int]=[:]
+    var inputTap:CFMachPort?
+    var inputSource:CFRunLoopSource?
     var initialFocusedWindow: CFTypeRef?
     var onChange: (() -> Void)?
     init(_ path: String) { resultPath = path }
@@ -38,6 +41,7 @@ final class FixtureState {
         return ["clicks": clicks, "doubleClicked": doubleClicked,
             "entered": entered, "scrolled": scrolled, "scrollOffset": scrollOffset,
             "wheelEvents": wheelEvents, "wheelDelta": wheelDelta, "complete": complete, "geometry": geometry, "actions": actions,
+            "input_origins":inputOrigins,"fixture_active":NSApp.isActive,"fixture_key_window":NSApp.keyWindow?.windowNumber ?? -1,
             "initial_frontmost_pid": initialFrontmostPID, "frontmost_pid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0,
             "original_window_available": initialFocusedWindow != nil,
             "original_window_focused": initialFocusedWindow != nil && focusedWindow != nil && CFEqual(initialFocusedWindow!, focusedWindow!),
@@ -85,6 +89,20 @@ final class Delegate: NSObject, NSApplicationDelegate {
         return view
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let menu=NSMenu(), edit=NSMenuItem(title:"Edit",action:nil,keyEquivalent:"")
+        let submenu=NSMenu(title:"Edit")
+        for (title,action,key) in [("Copy","copy:","c"),("Cut","cut:","x"),("Paste","paste:","v"),("Select All","selectAll:","a")] {
+            submenu.addItem(NSMenuItem(title:title,action:NSSelectorFromString(action),keyEquivalent:key))
+        }
+        menu.addItem(NSMenuItem(title:"Fixture",action:nil,keyEquivalent:""))
+        edit.submenu=submenu;menu.addItem(edit);NSApp.mainMenu=menu
+        let inputMask=[CGEventType.keyDown,.keyUp,.leftMouseDown,.rightMouseDown,.mouseMoved,.leftMouseDragged].reduce(CGEventMask(0)){$0 | (1 << $1.rawValue)}
+        state.inputTap=CGEvent.tapCreate(tap:.cgSessionEventTap,place:.headInsertEventTap,options:.listenOnly,eventsOfInterest:inputMask,callback:{_,_,event,pointer in
+            let owner=Unmanaged<FixtureState>.fromOpaque(pointer!).takeUnretainedValue()
+            let source=String(event.getIntegerValueField(.eventSourceUnixProcessID));owner.inputOrigins[source,default:0]+=1
+            return Unmanaged.passUnretained(event)
+        },userInfo:Unmanaged.passUnretained(state).toOpaque())
+        if let tap=state.inputTap {state.inputSource=CFMachPortCreateRunLoopSource(nil,tap,0);CFRunLoopAddSource(CFRunLoopGetMain(),state.inputSource,.commonModes);CGEvent.tapEnable(tap:tap,enable:true)}
         state.initialFrontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         state.initialPointer = CGEvent(source: nil)?.location ?? .zero
         AXUIElementCopyAttributeValue(AXUIElementCreateApplication(state.initialFrontmostPID), kAXFocusedWindowAttribute as CFString, &state.initialFocusedWindow)

@@ -193,7 +193,7 @@ export class BrowserComputerController {
         // Every semantic read uses the same error/observation boundary.
         // Invalid inputs remain rejections; read failures never retire a source.
         if (mapped.action === 'wait') return await this.waitForCondition(request, mapped);
-        if (['read', 'text', 'query', 'table', 'attribute'].includes(mapped.action)) read = () => page.action(mapped);
+        if (['read','text','query','table','attribute','source','selection','capabilities'].includes(mapped.action) || mapped.action==='clipboard'&&mapped.operation!=='write') read = () => page.action(mapped);
         else result = await page.action(mapped);
       }
       if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };

@@ -192,6 +192,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var pause *InteractionSafetyDecision
 	var targetChange map[string]any
 	var lastObservation any
+	var emittedObservations []any
+	var outputOrder []any
+	var emittedImages []TargetToolAttachment
+	emittedBytes := 0
 	var observationScope string
 	var argumentDiagnostic map[string]any
 	var failedInputProgress map[string]any
@@ -230,8 +234,17 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			// Sensitive takeover remains an invocation-wide content boundary.
 			if pause == nil {
 				payload["logs"] = prefixLogs
+				payload["output_order"] = outputOrder
+				output.Attachments = emittedImages
+				if len(emittedObservations) > 0 {
+					payload["observations"] = emittedObservations
+				}
 			} else {
 				delete(payload, "logs")
+				delete(payload, "observations")
+				delete(payload, "output_order")
+				delete(payload, "observation")
+				output.Attachments = nil
 			}
 			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations)}
 			if failureStage != "" {
@@ -301,6 +314,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				continue
 			}
 			logBytes += len(msg.Values)
+			outputOrder = append(outputOrder, map[string]any{"kind": "log", "index": len(prefixLogs), "operation_index": operations - 1})
 			prefixLogs = append(prefixLogs, values)
 		case "operation":
 			operations++
@@ -309,6 +323,17 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				return result, errors.New("computer script exceeded its operation boundary")
 			}
 
+			// Stop before a clearly exhausted read; check exact encoded size below.
+			if (msg.Operation["action"] == "snapshot" || msg.Operation["action"] == "observe") && msg.Operation["emit"] != false {
+				reserve := 40 * 1024
+				if msg.Operation["full"] == true || msg.Operation["action"] == "observe" {
+					reserve = 4 * 1024
+				}
+				if emittedBytes+reserve > 384*1024 {
+					result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_OUTPUT_LIMIT", "output_limit": map[string]any{"stage": "before_observation", "delivered_observations": len(emittedObservations), "recovery": "Continue remaining reads in another computer.exec; this observation was not dispatched."}}
+					return result, &computerScriptExecutionError{code: "SCRIPT_OUTPUT_LIMIT"}
+				}
+			}
 			inner, err := computerScriptOperation(call, msg.Operation)
 			var observed TargetToolResult
 			if msg.Operation["action"] == "help" {
@@ -437,7 +462,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 									node = cloneAnyMap(node)
 									node["role"] = node["canonical_role"]
 									delete(node, "canonical_role")
-									delete(node, "platform_role")
+									// Keep the source role available in the returned node.
 									compact = append(compact, node)
 								}
 								tree["nodes"] = compact
@@ -449,6 +474,25 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 						lastObservation = observation
 						scope, _ := json.Marshal([]any{msg.Operation["root_ref"], msg.Operation["limit"]})
 						observationScope, fullObservation = string(scope), msg.Operation["full"] == true
+						if err == nil && (observed.Safety == nil || observed.Safety.SafeToSendToModel) {
+							nextObservations := p.observations
+							projection := nextObservations.render(observation, observationScope, fullObservation)
+							emission := map[string]any{"operation_index": operations - 1, "target_id": call.TargetID, "observation": projection}
+							encoded, encodeErr := json.Marshal(emission)
+							if encodeErr != nil {
+								return result, encodeErr
+							}
+							if emittedBytes+len(encoded) > 384*1024 {
+								result.Result = map[string]any{"completed": false, "script_error": "SCRIPT_OUTPUT_LIMIT", "output_limit": map[string]any{"stage": "after_observation", "delivered_observations": len(emittedObservations), "recovery": "Read a smaller subtree or use source() chunks; this observation was not emitted."}}
+								return result, &computerScriptExecutionError{code: "SCRIPT_OUTPUT_LIMIT"}
+							}
+							p.observations = nextObservations
+							emittedBytes += len(encoded)
+							outputOrder = append(outputOrder, map[string]any{"kind": "observation", "index": len(emittedObservations), "operation_index": operations - 1})
+							emittedObservations = append(emittedObservations, emission)
+							lastObservation = projection
+						}
+
 					}
 					observationInvalidated = false
 				}
@@ -461,6 +505,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if stopped == nil {
 				completed = append(completed, anyToString(msg.Operation["action"]))
+				for _, image := range observed.Attachments {
+					outputOrder = append(outputOrder, map[string]any{"kind": "image", "index": len(emittedImages), "operation_index": operations - 1, "resource_ref": image.ResourceRef})
+					emittedImages = append(emittedImages, image)
+				}
 				result.Attachments = append(result.Attachments, observed.Attachments...)
 				result.ExecutionLocation = observed.ExecutionLocation
 			}
@@ -516,7 +564,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				return result, navigationFailure
 			}
 			if lastObservation != nil && observationFailureStage == "" {
-				result.Result.(map[string]any)["observation"] = p.observations.render(lastObservation, observationScope, fullObservation)
+				result.Result.(map[string]any)["observation"] = lastObservation
 			}
 			if stopped != nil || msg.Type == "error" {
 				code := "SCRIPT_STOPPED"
@@ -553,8 +601,11 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 }
 
 func computerOperationMutates(op map[string]any) bool {
+	if op["action"] == "clipboard" {
+		return op["operation"] == "write"
+	}
 	switch anyToString(op["action"]) {
-	case "observe", "snapshot", "read", "text", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor", "read_download":
+	case "capabilities", "source", "selection", "observe", "snapshot", "read", "text", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor", "read_download":
 		return false
 	default:
 		return true
@@ -595,7 +646,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 			call.ToolName = "computer.scroll"
 			delete(args, "action")
 		}
-	case "read", "text", "query", "table", "attribute", "click", "fill", "key", "wait", "pointer_click", "drag":
+	case "capabilities", "source", "selection", "hover", "select_text", "select_range", "select_all", "replace_selection", "copy", "cut", "paste", "set_files", "set_value", "perform_action", "clipboard", "input_sequence", "read", "text", "query", "table", "attribute", "click", "fill", "key", "wait", "pointer_click", "drag":
 	default:
 		return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
 	}

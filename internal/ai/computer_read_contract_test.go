@@ -9,6 +9,9 @@ import (
 func TestComputerRequiredReadResult(t *testing.T) {
 	cases := []struct{ name, code string }{
 		{"snapshot", "const x=await ui.snapshot({emit:false}); log(x.nodes.length);"},
+		{"source", "await ui.ref('fixture').source();"},
+		{"selection", "await ui.ref('fixture').selection();"},
+		{"capabilities", "await ui.capabilities();"},
 		{"node", "await ui.ref('fixture').node();"},
 		{"text", "await ui.ref('fixture').text();"},
 		{"query", "await ui.ref('fixture').query();"},
@@ -109,5 +112,30 @@ func TestComputerActionInvalidationAllowsExplicitFreshRead(t *testing.T) {
 	result, err := executeTestScript(t.Context(), rt, call, "await ui.click(1,2); await ui.snapshot({emit:false});")
 	if err != nil || inputs != 1 || result.Result.(map[string]any)["completed"] != true || result.Result.(map[string]any)["needs_observation"] != false {
 		t.Fatalf("legitimate action/read composition rejected: %v %+v", err, result)
+	}
+}
+
+func TestComputerSourceReadRejectsIncompletePageContracts(t *testing.T) {
+	args, _ := json.Marshal(map[string]any{"action": "source"})
+	call := TargetToolCall{ToolName: "computer.action", Arguments: args}
+	base := map[string]any{"source": "browser_dom", "document_id": "doc", "ref": "r", "field": "textContent", "available": true, "value": "🌻", "encoding": "text", "offset": 0, "total": 2, "unit": "unicode_code_points", "truncated": true, "next_cursor": "next"}
+	if !computerReadResultValid(call, TargetToolResult{Result: base}) {
+		t.Fatal("valid Unicode page rejected")
+	}
+	for _, key := range []string{"document_id", "ref", "field", "available", "offset", "total", "unit", "encoding", "next_cursor"} {
+		broken := cloneAnyMap(base)
+		delete(broken, key)
+		if computerReadResultValid(call, TargetToolResult{Result: broken}) {
+			t.Errorf("missing %s accepted", key)
+		}
+	}
+	for _, patch := range []map[string]any{{"offset": -1}, {"total": 0}, {"offset": 0.5}, {"truncated": false}, {"value": ""}} {
+		broken := cloneAnyMap(base)
+		for k, v := range patch {
+			broken[k] = v
+		}
+		if computerReadResultValid(call, TargetToolResult{Result: broken}) {
+			t.Errorf("invalid page accepted: %v", patch)
+		}
 	}
 }

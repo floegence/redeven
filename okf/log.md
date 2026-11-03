@@ -29,3 +29,5 @@ Concepts own contracts/evidence; Git retains history.
 - Condense OKF below 900,000 characters under the user's primary-agent-only review; preserve active contracts and evidence.
 
 - 2026-11-02: describe terminal completion/recovery, execution configuration and explicit DeepSeek Fetch opt-in.
+
+- 2026-11-03: Document ordered computer observations, complete source continuation, explicit editing/clipboard operations and published native window-directed input; retain target and permission ownership.

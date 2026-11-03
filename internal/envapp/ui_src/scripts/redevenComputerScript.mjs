@@ -5,10 +5,10 @@ import { getQuickJS } from 'quickjs-emscripten';
 // objects. This process is disposable; the Runtime owns its lifetime and IPC.
 // Explicit arity includes optional/default parameters; function.length cannot.
 export const computerScriptMethods = Object.freeze({
-  ui: {budget:[0,0],observe:[0,1],snapshot:[0,1],screenshot:[0,0],help:[0,1],type:[1,1],doubleClick:[2,2],scroll:[1,2],scrollAt:[3,4],getByRole:[1,2],ref:[1,1],click:[2,3],drag:[4,6],key:[1,1],assert:[1,2]},
-  locator: {node:[0,0],snapshot:[0,1],read:[0,0],text:[0,0],query:[0,1],count:[0,0],rows:[0,1],attribute:[1,1],linkSummary:[0,0],getAttribute:[1,1],click:[0,0],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
+  ui: {capabilities:[0,0],hover:[2,3],input:[1,1],clipboard:[1,2],budget:[0,0],observe:[0,1],snapshot:[0,1],screenshot:[0,0],help:[0,1],type:[1,1],doubleClick:[2,2],scroll:[1,2],scrollAt:[3,4],getByRole:[1,2],ref:[1,1],click:[2,3],drag:[4,6],key:[1,1],assert:[1,2]},
+  locator: {setFiles:[1,1],source:[0,1],hover:[0,0],selection:[0,0],selectText:[1,2],selectRange:[2,3],selectAll:[0,0],replaceSelection:[1,1],copy:[0,0],cut:[0,0],paste:[0,1],setValue:[1,1],performAction:[1,1],node:[0,0],snapshot:[0,1],read:[0,0],text:[0,0],query:[0,1],count:[0,0],rows:[0,1],attribute:[1,1],linkSummary:[0,0],getAttribute:[1,1],click:[0,1],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
   browser: {navigate:[1,1],back:[0,0],reload:[0,0],saveDownload:[1,1],readDownload:[1,2],downloadCursor:[0,0],waitForDownload:[0,1]},
-  image: {click:[2,2],doubleClick:[2,2],drag:[4,5],scroll:[3,4]},
+  image: {hover:[2,2],click:[2,3],doubleClick:[2,2],drag:[4,5],scroll:[3,4]},
   downloadCursor: {wait:[0,1]},
 });
 
@@ -136,7 +136,7 @@ export async function createComputerScript({ browser = true } = {}) {
       const call = async (operation) => JSON.parse(await invoke(JSON.stringify(operation)));
       const imageOptions = (value) => { options(value, ['coordinate_space','frame','document_id']); if (!['image_pixels','model_pixels'].includes(value.coordinate_space) || typeof value.frame !== 'string' || typeof value.document_id !== 'string') invalid(); return value; };
       const canonicalNode = (value) => {
-        const {canonical_role, platform_role, ...node} = value;
+        const {canonical_role, ...node} = value;
         return {...node, role: canonical_role || node.role};
       };
       const snapshot = async (value = {}) => {
@@ -155,19 +155,46 @@ export async function createComputerScript({ browser = true } = {}) {
         if(!['title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount',...(href?['href']:[])].includes(name)) invalid();
         return (await call({action:'attribute',selector,attribute:name})).value;
       };
+      const clickOptions = (value={}) => {
+        options(value,['button','modifiers','click_count','duration_ms']);
+        if(value.button!==undefined&&!['left','right','middle'].includes(value.button))invalid();
+        if(value.modifiers!==undefined&&(!Array.isArray(value.modifiers)||value.modifiers.some(v=>!['Alt','Control','Meta','Shift'].includes(v))))invalid();
+        for(const [key,min,max] of [['click_count',1,3],['duration_ms',0,5000]])if(value[key]!==undefined&&(!Number.isInteger(value[key])||value[key]<min||value[key]>max))invalid();
+        return value;
+      };
+      const sourceOptions = (value={}) => {
+        options(value,['source','field','limit','cursor','parameter']);
+        if(value.source!==undefined&&!['ax','dom'].includes(value.source))invalid();
+        for(const key of ['field','cursor'])if(value[key]!==undefined)string(value[key],key);
+        if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>12000))invalid();
+        return value;
+      };
       const screenshot = async () => {
         const result = await call({action:'screenshot'});
         if (!result.frame_geometry) return result;
         // Capture scalar identities so guest mutation cannot retarget an image.
         const identity = {coordinate_space:result.frame_geometry?.model_image?'model_pixels':'image_pixels',frame:result.frame_geometry?.frame,document_id:result.frame_geometry?.document_id};
         return Object.freeze({...result, ...expose('image',{
-          click:(x,y)=>call({action:'pointer_click',x:number(x),y:number(y),...imageOptions(identity)}),
+          hover:(x,y)=>call({action:'hover',x:number(x),y:number(y),...imageOptions(identity)}),
+          click:(x,y,value={})=>call({action:'pointer_click',x:number(x),y:number(y),...clickOptions(value),...imageOptions(identity)}),
           doubleClick:(x,y)=>call({action:'double_click',x:number(x),y:number(y),...imageOptions(identity)}),
           drag:(from_x,from_y,to_x,to_y,duration_ms=0)=>call({action:'drag',from_x:number(from_x),from_y:number(from_y),to_x:number(to_x),to_y:number(to_y),duration_ms:number(duration_ms),...imageOptions(identity)}),
           scroll:(x,y,delta_y,delta_x=0)=>call({action:'scroll',x:number(x),y:number(y),delta_y:number(delta_y),delta_x:number(delta_x),...imageOptions(identity)}),
         })});
       };
       const locator = (selector) => expose('locator',{
+        source:(value={})=>call({action:'source',selector,...sourceOptions(value)}),
+        hover:()=>call({action:'hover',selector}),
+        selection:()=>call({action:'selection',selector}),
+        selectText:(text,value={})=>{options(value,['prefix','suffix','selection_type']);for(const key of ['prefix','suffix'])if(value[key]!==undefined)string(value[key]);if(value.selection_type!==undefined&&!['text','cursor_before','cursor_after'].includes(value.selection_type))invalid();return call({action:'select_text',selector,text:string(text),...value});},
+        selectRange:(start,end,value={})=>{options(value,['direction']);if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start)invalid();return call({action:'select_range',selector,start,end,...value});},
+        selectAll:()=>call({action:'select_all',selector}),
+        replaceSelection:(text)=>call({action:'replace_selection',selector,text:string(text)}),
+        copy:()=>call({action:'copy',selector}),
+        cut:()=>call({action:'cut',selector}),
+        paste:(value={})=>{options(value,['text','html']);for(const key of Object.keys(value))string(value[key]);return call({action:'paste',selector,...value});},
+        setValue:(value)=>call({action:'set_value',selector,value}),
+        performAction:(name)=>call({action:'perform_action',selector,name:string(name)}),
         node: async () => canonicalNode((await call({action:'read',selector})).node),
         snapshot: async (value={}) => {
           options(value,['limit','emit']); observeOptions(value);
@@ -176,6 +203,7 @@ export async function createComputerScript({ browser = true } = {}) {
         },
         read: () => call({action: 'read', selector}),
         ...(${browser ? 'true' : 'false'} ? {
+          setFiles:(files)=>{if(!Array.isArray(files)||!files.length||files.length>16)invalid();return call({action:'set_files',selector,files});},
           text: () => call({action:'text',selector}),
           query: (value={}) => call({action:'query',selector,...pageOptions(value)}),
           count: async () => (await call({action:'query',selector,limit:1})).total,
@@ -184,7 +212,7 @@ export async function createComputerScript({ browser = true } = {}) {
           linkSummary: async () => ({url:await attribute(selector,'href',true),redacted:true}),
           getAttribute: (attribute) => { string(attribute,'attribute'); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute}); },
         } : {}),
-        click: () => call({action: 'click', selector}),
+        click: (value={}) => call({action: 'click', selector,...clickOptions(value)}),
         fill: (text) => call({action: 'fill', selector, text: string(text)}),
         press: (key) => call({action: 'key', selector, key: string(key,'key')}),
         scroll: (delta_y, delta_x = 0) => call({action: 'scroll', selector, delta_y: number(delta_y), delta_x: number(delta_x)}),
@@ -197,6 +225,10 @@ export async function createComputerScript({ browser = true } = {}) {
       });
       Object.defineProperties(globalThis, {
         ui: {value: expose('ui',{
+          capabilities:()=>call({action:'capabilities'}),
+          hover:(x,y,image)=>call({action:'hover',x:number(x),y:number(y),...(image===undefined?{}:imageOptions(image))}),
+          clipboard:(operation,value={})=>{options(value,['items']);if(!['read','write','types'].includes(operation))invalid();return call({action:'clipboard',operation,...value});},
+          input:(events)=>{if(!Array.isArray(events)||!events.length||events.length>100)invalid();return call({action:'input_sequence',events});},
           budget: () => JSON.parse(budget()),
           observe: (value = {}) => call({action: 'observe', ...observeOptions(value)}),
           snapshot,
@@ -208,8 +240,8 @@ export async function createComputerScript({ browser = true } = {}) {
           scrollAt: (x,y,delta_y,delta_x=0) => call({action:'scroll',x:number(x),y:number(y),delta_y:number(delta_y),delta_x:number(delta_x)}),
           getByRole: (role, value = {}) => locator(selector(role, value)),
           ref: (ref) => locator({ref: string(ref,'selector')}),
-          click: (x, y, image) => call({action: 'pointer_click', x: number(x), y: number(y), ...(image === undefined ? {} : imageOptions(image))}),
-          drag: (from_x, from_y, to_x, to_y, duration_ms = 0, image) => call({action: 'drag', from_x: number(from_x), from_y: number(from_y), to_x: number(to_x), to_y: number(to_y), duration_ms: number(duration_ms), ...(image === undefined ? {} : imageOptions(image))}),
+          click: (x, y, value={}) => call({action: 'pointer_click', x: number(x), y: number(y), ...(value.frame!==undefined||value.coordinate_space!==undefined?imageOptions(value):clickOptions(value))}),
+          drag: (from_x, from_y, to_x, to_y, duration_ms = 0, value={}) => call({action: 'drag', from_x: number(from_x), from_y: number(from_y), to_x: number(to_x), to_y: number(to_y), duration_ms: number(duration_ms), ...(value.frame!==undefined||value.coordinate_space!==undefined?imageOptions(value):clickOptions(value))}),
           key: (key) => call({action: 'key', key: string(key,'key')}),
           assert: (condition, message = 'Result check failed') => { if (!condition) throw new Error(message); },
         })},

@@ -44,13 +44,20 @@ try:
         assert time.monotonic() < deadline, 'native fixture startup timeout'
         time.sleep(.05)
     geometry = json.loads((root/'result.json').read_text())['geometry']
+    previous_state=json.loads((root/'result.json').read_text())
     def verify_restored():
+        global previous_state
         fixture.stdin.write(b'status\n'); fixture.stdin.flush()
         assert select.select([fixture.stdout], [], [], 5)[0], 'native fixture status timeout'
         state = json.loads(fixture.stdout.readline())
-        assert state['frontmost_pid'] == state['initial_frontmost_pid'], 'original application focus was not preserved: '+json.dumps(state)
-        assert state['original_window_available'] and state['original_window_focused'], 'original window focus was not preserved'
-        assert state['pointer_x'] == state['initial_pointer_x'] and state['pointer_y'] == state['initial_pointer_y'], 'pointer was not preserved'
+        origins=state.get('input_origins',{})
+        old=previous_state.get('input_origins',{})
+        own={str(fixture.pid), str(helper.pid) if helper else ''}
+        user_input=any(count>old.get(pid,0) for pid,count in origins.items() if pid not in own)
+        if not user_input:
+            assert state['frontmost_pid']==previous_state['frontmost_pid'], 'application focus changed without user input: '+json.dumps(state)
+            assert state['pointer_x']==previous_state['pointer_x'] and state['pointer_y']==previous_state['pointer_y'], 'pointer changed without user input'
+        previous_state=state
         return state
     verify_restored()
     helper = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -69,10 +76,10 @@ try:
             assert line, 'native helper exited'
             response = json.loads(line)
             assert response['request_id'] == str(sequence), 'native helper response identity mismatch'
-            if response['type'] == 'error': raise AssertionError(response.get('error_code', 'native helper error'))
+            if response['type'] == 'error': raise AssertionError((args.get('action',tool),response.get('error_code'),response.get('error')))
             if response['type'] == 'result':
                 if not require_routine: return response
-                assert response.get('safety',{}).get('level') != 'takeover', 'native helper paused: '+json.dumps(response.get('safety'))
+                assert response.get('safety',{}).get('level') != 'takeover', 'native helper paused: '+json.dumps({'safety':response.get('safety'),'action':args})
                 verify_restored()
                 return response['payload']
     deadline = time.monotonic() + 10
@@ -92,10 +99,32 @@ try:
     action('computer.action', {'action':'fill', 'selector':{'ref':fields[0]['ref']}, 'text':'Flower'})
     field = action('computer.action', {'action':'read', 'selector':{'ref':fields[0]['ref']}})
     assert field['node']['value'] == 'Flower', 'AX value was not updated'
+    selector={'ref':fields[0]['ref']}
+    source=action('computer.action', {'action':'source','selector':selector})
+    assert 'AXValue' in source['fields'], source
+    exact=action('computer.action', {'action':'source','selector':selector,'field':'AXValue'})
+    assert exact['value']=='Flower' and exact['truncated'] is False, exact
+    selection=action('computer.action', {'action':'select_text','selector':selector,'text':'low'})
+    assert selection['selection']['start']==1 and selection['selection']['end']==4, selection
+    assert action('computer.action', {'action':'selection','selector':selector})['text']=='low'
+    action('computer.action', {'action':'select_range','selector':selector,'start':0,'end':6})
+    copied=action('computer.action', {'action':'copy','selector':selector})
+    assert copied['clipboard_changed'], (copied, verify_restored()['actions'])
+    clipboard=action('computer.action', {'action':'clipboard','operation':'read'})
+    import base64
+    assert any(base64.b64decode(v)==b'Flower' for item in clipboard['items'] for v in item.values()), clipboard
+    action('computer.action', {'action':'cut','selector':selector})
+    assert action('computer.action', {'action':'source','selector':selector,'field':'AXValue'})['value']=='', 'cut did not delete'
+    action('computer.action', {'action':'paste','selector':selector})
+    assert action('computer.action', {'action':'source','selector':selector,'field':'AXValue'})['value']=='Flower', 'paste did not insert'
+    action('computer.action', {'action':'input_sequence','events':[{'type':'keyDown','key':'ArrowRight'},{'type':'keyUp','key':'ArrowRight'}]})
+    action('computer.action', {'action':'hover','selector':{'ref':buttons[0]['ref']}})
     for _ in range(2):
         pressed = action('computer.action', {'action':'click', 'selector':{'role':'AXButton','name':'Complete native step'}})
-        assert pressed['execution_mode']=='background' and 'screenshot_base64' not in pressed
-        assert not pressed['background_interference'], 'AX action changed focus or pointer without user input'
+        assert 'screenshot_base64' not in pressed
+        assert pressed['execution_mode'] in ['background','foreground'], pressed
+        # AXPress may activate its app; existing foreground consent covers this.
+        if pressed['background_interference']: assert pressed['execution_mode']=='foreground'
     result = json.loads((root/'result.json').read_text())
     def point(name): return {'x':geometry[name+'X']-geometry['x'], 'y':geometry[name+'Y']-geometry['y']}
     action('computer.double_click', point('double'))

@@ -83,6 +83,41 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			content := strings.Join(nonemptyComputerText(anyToString(candidate["profile_name"]), computerActivityURL(anyToString(candidate["url"]))), "\n")
 			add(name, meta, content, fltools.StructuredActivityRowFormatText)
 		}
+	} else if order := toAnySlice(payload["output_order"]); len(order) > 0 {
+		observations, logs := toAnySlice(payload["observations"]), toAnySlice(payload["logs"])
+		for _, raw := range order {
+			item, _ := raw.(map[string]any)
+			indexValue := toolDetailValue(item["index"])
+			index, err := strconv.Atoi(indexValue)
+			if err != nil || index < 0 {
+				continue
+			}
+			part := map[string]any{}
+			switch item["kind"] {
+			case "observation":
+				if index >= len(observations) {
+					continue
+				}
+				emission, _ := observations[index].(map[string]any)
+				part["observation"] = emission["observation"]
+			case "log":
+				if index >= len(logs) {
+					continue
+				}
+				part["logs"] = []any{logs[index]}
+			default:
+				continue // Images already use the canonical attachment surface.
+			}
+			for _, row := range computerActivityResultRows(tool, part) {
+				add(row.Title, row.Meta, row.Content, row.Format)
+				if row.Truncated {
+					omitted = true
+				}
+			}
+		}
+		if payload["completed"] == false {
+			add("", "completed_actions", strings.Join(extractStringSlice(payload["completed_actions"]), "\n"), fltools.StructuredActivityRowFormatCode)
+		}
 	} else {
 		observation := payload
 		if nested, ok := payload["observation"].(map[string]any); ok {

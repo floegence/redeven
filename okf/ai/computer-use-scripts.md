@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script execution and semantic observations
 tags: [ai, computer-use, scripts, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -21,9 +21,9 @@ Require target, code, readable description. Bound each call to 30 s/50 operation
 
 SCRIPT_NO_PROGRESS means unresolved script without pending supported work; STALE_REFERENCE means invalid observed identity. Neither implies interference or permits replay/retargeting. Any failed host operation seals the call even if caught, retires namespace/dormant Promises and returns context_reset with confirmed effects. Unique missing/ambiguous lookup fails; optional query/count returns zero and waitFor timeout is data.
 
-Closed diagnostics carry phase, known method/field, expected form, safe example and available source position/symbol. Keep raw interpreter text private; echo only known unsupported option names. Shared guide/help(read/visual/downloads/legacy) owns signatures: string names, numeric deltas, supported waits, validation before dispatch. CDP preserves actual correlated method and supplied signed code. The source owner returns missing/closed/busy/identity rejections through the ordinary tool result before controller dispatch, with action_executed:false. Carrier failures retain helper_exchange plus response_unavailable, invalid_response or helper_rejected; they remain unknown effects regardless of error text. Exact request/target identity and validated result facts are required to confirm non-execution. Diagnostics authorize no retry. Core and legacy help use observed roles, never business-purpose guesses.
+Closed diagnostics carry phase, known method/field, expected form, safe example and available source position/symbol. Keep raw interpreter text private; echo only known unsupported option names. Shared guide/help(read/source/interaction/visual/downloads/legacy) owns signatures: string names, numeric deltas, supported waits, validation before dispatch. CDP preserves actual correlated method and supplied signed code. The source owner returns missing/closed/busy/identity rejections through the ordinary tool result before controller dispatch, with action_executed:false. Carrier failures retain helper_exchange plus response_unavailable, invalid_response or helper_rejected; they remain unknown effects regardless of error text. Exact request/target identity and validated result facts are required to confirm non-execution. Diagnostics authorize no retry. Core and legacy help use observed roles, never business-purpose guesses.
 
-Limits: canonical snapshot 256 KiB; complete response 512 KiB; explicit UTF-8 logs 64 KiB. Stream logs before later operations. Retain earlier explicit output after read/navigation failure/timeout/uncertainty separately from current observations. Failed reads discard their data/pixels and stop later calls/logs; private pause discards invocation content. One bounded prefix buffer, no ledger/replay.
+Limits: canonical snapshot 256 KiB; helper response 512 KiB; final model envelope 1 MiB; explicit UTF-8 logs 64 KiB. Explicit observations share a 384 KiB encoded prefix budget; exact-size admission rejects excess with SCRIPT_OUTPUT_LIMIT and continuation instructions. No repeated action or silently dropped middle observation. Stream logs before later operations. Retain earlier explicit output after read/navigation failure/timeout/uncertainty separately from current observations. Failed reads discard their data/pixels and stop later calls/logs; private pause discards invocation content. One bounded prefix buffer, no ledger/replay. observations retains every emitted tree with operation_index/target_id; output_order indexes observations, logs and image attachments. observation remains the current compatibility view. Historical image output survives later failed reads, but never authorizes stale coordinates. Model encoding and Flower Activity preserve ordered facts; existing UI row limits disclose preview truncation.
 
 Only snapshot/observe/locator.snapshot accept emit; collections require log,
 screenshots/help always emit. emit:false preserves identity/budget. Guest snapshots
@@ -46,8 +46,7 @@ The single product output owner selects a parent-first depth-first prefix, keepi
 siblings ordered and complete branches adjacent. Linear charging of final encoded
 lines reserves omission markers and repeated-read advice; no tokenizer guesses or
 new provider-budget API. Released Floret owns request-wide token accounting; browser
-and native packages retain collection/input ownership. No upstream change or copied
-upstream implementation is needed for this product-specific projection.
+and native packages retain collection/input ownership. The text projection is product-owned; reusable native input comes from the published floe-native-apps package.
 
 Diff requires equal document/scope/detail and complete source/output. Each line is
 a full replacement record; absent fields are removed, unlisted descendants remain.

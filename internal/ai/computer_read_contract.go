@@ -19,7 +19,7 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 		operation = "screenshot"
 	case "computer.action":
 		switch action, _ := args["action"].(string); action {
-		case "read", "text", "query", "table", "attribute", "wait":
+		case "capabilities", "source", "selection", "read", "text", "query", "table", "attribute", "wait":
 			operation = action
 		}
 	}
@@ -51,6 +51,59 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 	}
 	boolField := func(p map[string]any, key string) bool { _, ok := p[key].(bool); return ok }
 	switch operation {
+	case "capabilities":
+		return stringField(p, "source", true) && computerStringArray(p["reads"]) && computerStringArray(p["actions"])
+	case "selection":
+		if !stringField(p, "text", false) || !stringField(p, "ref", true) || p["unit"] != "utf16_code_units" {
+			return false
+		}
+		start, hasStart := p["start"]
+		end, hasEnd := p["end"]
+		if !hasStart || !hasEnd {
+			return false
+		}
+		if start == nil || end == nil {
+			return start == nil && end == nil && p["text"] == ""
+		}
+		first, validFirst := computerNonnegativeInteger(start)
+		last, validLast := computerNonnegativeInteger(end)
+		return validFirst && validLast && last >= first
+	case "source":
+		if !stringField(p, "source", true) || !stringField(p, "document_id", true) || !stringField(p, "ref", true) || !boolField(p, "truncated") {
+			return false
+		}
+		if fields, exists := p["fields"]; exists {
+			return computerStringArray(fields) && p["truncated"] == false
+		}
+		if !stringField(p, "field", true) {
+			return false
+		}
+		if p["available"] == false {
+			return p["truncated"] == false
+		}
+		if p["available"] != true {
+			return false
+		}
+		offset, validOffset := computerNonnegativeInteger(p["offset"])
+		total, validTotal := computerNonnegativeInteger(p["total"])
+		if !validOffset || !validTotal || offset > total {
+			return false
+		}
+		var count int
+		if items, ok := p["items"].([]any); ok {
+			if p["unit"] != "items" || !computerStringArray(items) && p["source"] != "macos_accessibility" {
+				return false
+			}
+			count = len(items)
+		} else {
+			text, ok := p["value"].(string)
+			if !ok || p["unit"] != "unicode_code_points" || p["encoding"] != "text" && p["encoding"] != "json" {
+				return false
+			}
+			count = utf8.RuneCountInString(text)
+		}
+		end := offset + float64(count)
+		return end <= total && (p["truncated"] == true && count > 0 && end < total && stringField(p, "next_cursor", true) || p["truncated"] == false && end == total)
 	case "observe":
 		observation, ok := p["observation"].(map[string]any)
 		if !ok {
@@ -122,4 +175,22 @@ func computerReadResultValid(call TargetToolCall, result TargetToolResult) bool 
 		return true
 	}
 	return false
+}
+
+func computerStringArray(value any) bool {
+	items, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, raw := range items {
+		if text, ok := raw.(string); !ok || text == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func computerNonnegativeInteger(value any) (float64, bool) {
+	n, ok := value.(float64)
+	return n, ok && !math.IsNaN(n) && !math.IsInf(n, 0) && n >= 0 && n <= 9007199254740991 && n == math.Trunc(n)
 }

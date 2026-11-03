@@ -7,7 +7,7 @@ import (
 )
 
 const computerObservationTextBudget = 32 << 10
-const computerObservationRecovery = "Read a narrower root_ref; browser rows/query/text read selected content. full:true requests structured details."
+const computerObservationRecovery = "Read a narrower root_ref; source() enumerates complete AX/DOM fields and paged child refs; rows/query/text read selected content. full:true requests structured details."
 const computerObservationAdvisory = "Repeated observation has no new information. Inspect a narrower scope or another representation only if needed; do not repeat an uncertain input."
 
 // Product presentation never replaces validated semantic authority or guest reads.

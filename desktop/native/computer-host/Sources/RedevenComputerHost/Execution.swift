@@ -43,6 +43,13 @@ struct NativePendingInput {
             let code = event.getIntegerValueField(.keyboardEventKeycode)
             key = "key:\(code)"
             release = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code), keyDown: false)
+        case .flagsChanged:
+            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            let flags: [Int64:CGEventFlags] = [55:.maskCommand,54:.maskCommand,56:.maskShift,60:.maskShift,58:.maskAlternate,61:.maskAlternate,59:.maskControl,62:.maskControl]
+            if let flag = flags[code] {
+                if event.flags.contains(flag) { key = "modifier:\(code)"; release = event.copy(); release?.flags = [] }
+                else { releases.removeValue(forKey:"modifier:\(code)") }
+            }
         case .keyUp: releases.removeValue(forKey: "key:\(event.getIntegerValueField(.keyboardEventKeycode))")
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
@@ -57,11 +64,11 @@ struct NativePendingInput {
     }
 
     mutating func takeReleases(at pointer: CGPoint, flags: CGEventFlags = []) -> [CGEvent] {
-        let events = Array(releases.values)
+        let events = releases.values.sorted { $0.type != .flagsChanged && $1.type == .flagsChanged }
         releases.removeAll()
         for event in events {
             event.flags = flags
-            if event.type != .keyUp { event.location = pointer }
+            if event.type != .keyUp && event.type != .flagsChanged { event.location = pointer }
         }
         return events
     }

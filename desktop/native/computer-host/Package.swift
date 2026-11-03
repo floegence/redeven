@@ -5,7 +5,7 @@ let package = Package(
     name: "RedevenComputerHost",
     platforms: [.macOS(.v13)],
     products: [.executable(name: "redeven-computer-host", targets: ["RedevenComputerHost"])],
-    dependencies: [.package(url: "https://github.com/floegence/floe-native-apps.git", exact: "0.25.1")],
+    dependencies: [.package(url: "https://github.com/floegence/floe-native-apps.git", exact: "0.26.0")],
     targets: [
         .executableTarget(name: "RedevenComputerHost", dependencies: [.product(name: "FloeNativeDesktop", package: "floe-native-apps")]),
         .testTarget(name: "RedevenComputerHostTests", dependencies: ["RedevenComputerHost"]),

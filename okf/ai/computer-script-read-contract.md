@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script read and validation boundaries
 tags: [ai, computer-use, scripts, validation]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -124,6 +124,23 @@ target, adds a planner, or persists a second lifecycle.
 Single-node detail does not enumerate a subtree. child_refs describes only
 returned relationships; check children_truncated, use snapshot for a subtree
 and browser rows/query/count for loaded collections.
+
+
+## Explicit source details
+locator.source() enumerates fields. Browser distinguishes AX and DOM; native
+exposes AX attributes, actions and parameterized range reads. Long scalar values
+return text/json chunks with Unicode-code-point offset/total, truncation and a
+content-bound cursor. Child-reference collections return items/offset/total pages
+(up to 200) from the existing ref owner. Changed source invalidates continuation;
+empty, unavailable and unsupported values remain distinct. Source roles survive
+the canonical guest projection. DOM reads explicitly include hidden/offscreen
+facts and preserve URL query/fragment while removing credentials. Password/OTP
+subtrees, including closed shadow roots, retain the privacy boundary. Source data
+never grants iframe, filesystem, clipboard or application authority.
+
+No separate source store is introduced. Ref retention is bounded; read returned
+refs before requesting distant pages. Source changes, detached DOM nodes and
+replaced windows reject stale refs. A missing source fact is never synthesized.
 
 # Boundaries
 
