@@ -454,3 +454,10 @@ describe('consecutive tool presentation', () => {
     expect([...result.continuingEntries]).toEqual(['a', 'b', 'live-empty-1', 'c', 'live-empty-2']);
   });
 });
+
+it('does not count observation interruptions as failed calls in a tool group', () => {
+  const interrupted = tool('read', {tool_name:'computer.exec',status:'error',severity:'error',needs_attention:true,
+    chips:[{kind:'computer_observation',label:'observation',value:'unavailable'}]});
+  const result = projectFlowerToolSequences([interrupted,tool('next')], 'thread');
+  expect([...result.groups.values()][0]).toMatchObject({toolCount:2,failedCount:0});
+});

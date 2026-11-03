@@ -1,3 +1,4 @@
+import { isPresentedToolFailure } from './computerActivityOutcome';
 import { untrack } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
 import type { FlowerRuntimeTurn, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
@@ -132,7 +133,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
         for (const item of activity.items) {
           if (item.kind !== 'tool' && item.kind !== 'hosted_tool') continue;
           toolCallCount += 1;
-          if (item.status === 'error') failedCallCount += 1;
+          if (isPresentedToolFailure(item)) failedCallCount += 1;
         }
       }
     }

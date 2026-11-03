@@ -51,6 +51,17 @@ Confirmed inputs are retained separately and never enter a read retry.
 A rejected read cannot become a malformed transport response that disconnects
 the target. A later explicitly requested read can recover on the same page.
 
+## Navigation receipts
+Script navigate/back/reload return a closed acknowledged load or download receipt,
+with needs_observation and observation_invalidated. They do not perform an
+optional post-navigation page read, export title/content/images, or assert page
+safety. The next explicit read owns its privacy and document-lifetime checks.
+Preflight permission, redirect barriers, target changes, cancellation, cleanup
+and uncertain effects still apply through final publication. Navigation errors
+and load timeouts retain their distinct outcomes. Legacy image-returning calls
+keep their existing observation contract. No automatic action or read replay is
+introduced; the model chooses the next observation.
+
 ## Controlled browser evaluation
 One result checker owns Runtime.evaluate and Runtime.callFunctionOn responses.
 A transport acknowledgement is not successful script execution: exceptionDetails,
@@ -69,7 +80,7 @@ exception or invalid_result through the helper, Runtime and canonical tool resul
 DOMSnapshot validates the fields it consumes and accepts protocol-empty values;
 optional missing scroll offsets omit geometry rather than fabricate coordinates.
 Invalid structures retain phase adapter, actual method and invalid_result.
-Unclassified adapter failures retain the known stage and internal_error.
+Rejected read transports retain the known protocol method even without a numeric code; typed document invalidation is not erased by safety wrapping. Unclassified adapter failures retain the known stage and internal_error.
 Canonical results, Activity and correlated runtime logs retain these bounded facts.
 These are distinct from protocol rejection codes and authorize no retry. Raw exception text, stacks and
 page values do not enter diagnostics. Confirmed output survives later read failure;

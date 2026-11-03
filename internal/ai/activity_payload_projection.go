@@ -82,6 +82,9 @@ func activityPayloadMap(payload fltools.ActivityPayload) map[string]any {
 func activityPayloadActivityErrorMap(value fltools.ActivityError) map[string]any {
 	out := make(map[string]any)
 	out["message"] = value.Message
+	if value.Code != "" {
+		out["code"] = value.Code
+	}
 	return out
 }
 

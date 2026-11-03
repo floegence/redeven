@@ -20,7 +20,7 @@ export function evaluationValue(response, method, accepts = value => value !== u
 }
 
 export async function evaluate(session, method, parameters, accepts) {
-  return evaluationValue(await session.send(method, parameters), method, accepts);
+  return evaluationValue(await protocolRead(session, method, parameters, () => true), method, accepts);
 }
 
 // Validate consumed CDP facts at their adapter boundary. Raw values and error

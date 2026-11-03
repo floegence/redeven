@@ -12794,3 +12794,13 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-task-preview-html { display: block; width: 100%; height: 100%; min-height: 0; border: 0; }
 
 @media (max-width: 639px) { .flower-task-file-preview-dialog { height: calc(100dvh - 2rem); } }
+
+.flower-activity-observation-diagnostic {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.flower-activity-observation-diagnostic > summary { cursor: pointer; }
+.flower-activity-observation-diagnostic > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.flower-activity-observation-message { margin-top: 0.5rem; white-space: pre-wrap; }

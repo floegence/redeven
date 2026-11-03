@@ -5483,7 +5483,10 @@
         "effectUncertain": "結果未確認",
         "computerInputRejected": "引数が無効です。入力は送信されていません",
         "computerPreparedOnly": "準備は完了しました。入力は送信されていません",
-        "computerEffectConfirmed": "操作が完了しています。続行前に確認してください"
+        "computerEffectConfirmed": "操作が完了しています。続行前に確認してください",
+        "computerObservationUnavailable": "ページを読み取れませんでした",
+        "computerActionObservedUnavailable": "操作は実行されました。ページを読み取れませんでした",
+        "computerObservationDetails": "技術的な詳細"
       },
       "toolActivityDetailsPending": "ツールの詳細を待っています",
       "toolActivityNoAdditionalDetails": "追加の詳細はありません",

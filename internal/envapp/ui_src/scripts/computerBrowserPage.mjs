@@ -281,7 +281,7 @@ export class BrowserComputerPage {
       if (previous?.session === frame.session && previous.frame.loaderId === frame.frame.loaderId) continue;
       if (previous) this.invalidate([frame.frame.id]);
       const revision = this.revision;
-      const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
+      const { executionContextId } = await protocolRead(frame.session, 'Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' }, value => Number.isInteger(value?.executionContextId));
       await evaluate(frame.session, 'Runtime.evaluate', { contextId: executionContextId, expression: privacyObserverSource }, value => value === undefined);
       if (revision !== this.revision) throw new BrowserObservationInvalidated();
       this.observedFrames.set(frame.frame.id, {...frame, revision});
@@ -290,7 +290,7 @@ export class BrowserComputerPage {
   }
 
   async inFrame(frame, expression, accepts) {
-    const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
+    const { executionContextId } = await protocolRead(frame.session, 'Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' }, value => Number.isInteger(value?.executionContextId));
     return evaluate(frame.session, 'Runtime.evaluate', { contextId: executionContextId, expression, returnByValue: true }, accepts);
   }
 
@@ -360,6 +360,7 @@ export class BrowserComputerPage {
     if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (this.requiredOrigin) { reasons.add('site_permission'); requiredOrigin = this.requiredOrigin; }
     if (this.stopped) reasons.add('user_control');
+    if (!reasons.size && scanFailure instanceof BrowserObservationInvalidated) throw scanFailure;
     if (!reasons.size && scanFailure) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), {protocolDiagnostic:scanFailure.protocolDiagnostic});
     if (!reasons.size && revision !== this.revision) throw new BrowserObservationInvalidated();
     return { level: reasons.size ? 'takeover' : 'routine', reason_codes: [...reasons], safe_to_capture: !reasons.size, safe_to_send_to_model: !reasons.size, ...(requiredOrigin ? { required_origin: requiredOrigin } : {}) };
@@ -901,7 +902,7 @@ export class BrowserComputerPage {
       }
       if (!frame) throw new Error('ELEMENT_NOT_FOUND');
     }
-    const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
+    const { executionContextId } = await protocolRead(frame.session, 'Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' }, value => Number.isInteger(value?.executionContextId));
     const node = element ? (await frame.session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId })).object : undefined;
     try {
       if ((this.stopped || this.operationCancelled) && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
@@ -953,6 +954,7 @@ export class BrowserComputerPage {
       }
       await Promise.race([loaded, cancelled, new Promise((_, reject) => { timer = setTimeout(() => reject(new BrowserNavigationError('load')), 20000); })]);
       if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
+      return { navigation_stage: 'load' };
     } finally {
       clearTimeout(timer);
       this.transport.off('Page.loadEventFired', listener);

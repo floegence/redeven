@@ -81,6 +81,14 @@ export class BrowserComputerController {
       await this.page.releasePage();
       return this.unknownEffect();
     }
+    if (request.script_operation === true && ['browser.navigate', 'browser.back', 'browser.reload'].includes(request.tool_name)
+      && !response.error && response.result?.observation_invalidated) {
+      // Receipt-only publication still respects control changes during cleanup.
+      // It carries no current-page content and needs no additional page scan.
+      if (this.page.invalid || this.page.guardFailure || this.page.requiredURL || this.page.requiredOrigin || this.page.stopped || this.page.operationCancelled)
+        response = await this.operationFailure(new Error('TARGET_CONNECTION_REQUIRED'), request, beforeEffects);
+      else if (this.page.openedPages.length) response = await this.targetChange(this.page.effectCount > beforeEffects);
+    }
     if (response[observationRevision] !== undefined) {
       // Cleanup may yield to navigation, cancellation or privacy changes. The
       // complete observation remains bound to its original document until this
@@ -182,6 +190,15 @@ export class BrowserComputerController {
         if (!privateInput && !page.allowsURL(parsed.href)) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: false, required_navigation_url: redactedNavigationURL(parsed.href) } };
         const command = tool === 'browser.back' ? 'Page.navigateToHistoryEntry' : tool === 'browser.reload' ? 'Page.reload' : 'Page.navigate';
         result = await page.navigate(command, entryId !== undefined ? { entryId } : tool === 'browser.reload' ? {} : { url }) || {};
+        if (request.script_operation === true) {
+          // Navigation has its own acknowledged effect and load boundary. A
+          // receipt contains no page content: the next explicit read owns its
+          // privacy scan, document lifetime and any observation failure.
+          if (page.invalid || page.guardFailure || page.requiredURL || page.requiredOrigin || page.stopped || page.operationCancelled) throw new Error('TARGET_CONNECTION_REQUIRED');
+          if (page.openedPages.length) return await this.targetChange(dispatched());
+          return { result: { ...result, action_executed: dispatched(), needs_observation: true, observation_invalidated: true, execution_mode: 'background' },
+            safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
+        }
       } else {
         const operation = tool === 'computer.action' ? args : {
           ...args, action: { 'computer.click': 'pointer_click', 'computer.double_click': 'double_click', 'computer.type': 'type', 'computer.key': 'key', 'computer.scroll': 'scroll', 'computer.drag': 'drag' }[tool],

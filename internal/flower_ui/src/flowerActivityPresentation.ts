@@ -1,3 +1,4 @@
+import { computerObservationInterruption } from './computerActivityOutcome';
 import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import type {
   FlowerApprovalAction,
@@ -173,6 +174,7 @@ export type FlowerActivityQuestionAnswer = Readonly<{
 }>;
 
 export type FlowerActivityErrorDetail = Readonly<{
+  observation_interruption?: boolean;
   message: string;
   code?: string;
   target_kind?: string;
@@ -562,6 +564,7 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   const repairAction = trimString(String(validationDetails?.repair_action ?? meta?.repair_action ?? ''));
   const detail: {
     message: string;
+    observation_interruption?: boolean;
     code?: string;
     target_kind?: string;
     target_state?: string;
@@ -572,9 +575,8 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   if (targetState) detail.target_state = targetState;
   if (repairAction) detail.repair_action = repairAction;
   if (suggestedTargets.length > 0) detail.suggested_targets = suggestedTargets;
-  // Keep legacy error projections stable; expose the machine code alongside
-  // the new target recovery metadata where it is actionable to the user.
-  if (code && (targetKind || targetState || repairAction || suggestedTargets.length > 0)) detail.code = code;
+  if (computerObservationInterruption(item)) detail.observation_interruption = true;
+  if (code && (detail.observation_interruption || targetKind || targetState || repairAction || suggestedTargets.length > 0)) detail.code = code;
   return {
     kind: 'error',
     error: detail,
@@ -1580,6 +1582,8 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     const phaseCopy: Record<string, string> = {validation: words.computerInputRejected, prepared: words.computerPreparedOnly, effect_confirmed: words.computerEffectConfirmed, unknown: words.effectUncertain};
     if (phase) meta = phaseCopy[phase] ?? meta;
   }
+  const interruption = computerObservationInterruption(item);
+  if (interruption) meta = interruption === 'effect_confirmed' ? words.computerActionObservedUnavailable : words.computerObservationUnavailable;
   if (uncertain) meta = words.effectUncertain;
   const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
     'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');

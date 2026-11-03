@@ -127,3 +127,87 @@ test('explicit Stop during the navigation load wait keeps the takeover boundary'
   assert.equal(response.result.action_executed, true);
   assert.equal(response.safety.safe_to_send_to_model, false);
 });
+
+test('script navigation publishes only its receipt without a post-navigation page read', async () => {
+  const { transport, controller, execute } = navigationFixture();
+  let navigations = 0, safetyReads = 0;
+  controller.page.safety = async () => {
+    safetyReads++;
+    if (navigations) throw new Error('new document context unavailable');
+    return { level: 'routine', safe_to_capture: true, safe_to_send_to_model: true };
+  };
+  transport.send = async method => {
+    assert.equal(method, 'Page.navigate'); navigations++;
+    queueMicrotask(() => transport.emit('Page.lifecycleEvent', { name: 'load', loaderId: 'new' }));
+    return { loaderId: 'new' };
+  };
+  const response = await execute();
+  assert.equal(response.error, undefined, JSON.stringify(response));
+  assert.deepEqual(response.result, { navigation_stage: 'load', action_executed: true, needs_observation: true, observation_invalidated: true, execution_mode: 'background' });
+  assert.equal(response.safety.safe_to_send_to_model, false);
+  assert.equal(response.screenshot, undefined);
+  assert.equal(safetyReads, 1);
+  assert.equal(navigations, 1);
+  const read = await controller.execute({ tool_name: 'computer.observe', script_operation: true, full_access: true });
+  assert.equal(read.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+  assert.equal(read.result.action_executed, false);
+  assert.equal(navigations, 1, 'a failed explicit read never replays navigation');
+});
+
+for (const boundary of ['permission', 'stop', 'connection', 'cancel']) test('navigation receipts respect cleanup boundary: ' + boundary, async () => {
+  const { transport, controller, execute } = navigationFixture();
+  transport.send = async () => {
+    queueMicrotask(() => transport.emit('Page.lifecycleEvent', { name: 'load', loaderId: 'new' }));
+    return { loaderId: 'new' };
+  };
+  controller.page.releaseInput = async () => {
+    if (boundary === 'permission') controller.page.requiredOrigin = 'https://private.test';
+    if (boundary === 'stop') controller.page.stopped = true;
+    if (boundary === 'connection') controller.page.invalid = true;
+    if (boundary === 'cancel') controller.page.operationCancelled = true;
+  };
+  const response = await execute();
+  assert.equal(response.result.action_executed, true);
+  assert.equal(response.screenshot, undefined);
+  if (boundary === 'permission' || boundary === 'stop') assert.equal(response.safety.level, 'takeover');
+  else assert.equal(response.error, boundary === 'connection' ? 'TARGET_CONNECTION_REQUIRED' : 'TARGET_OBSERVATION_UNAVAILABLE');
+});
+
+test('real navigation receipts survive delayed documents, redirects and frame replacement without post-action reads', async () => {
+  const server = http.createServer((request, response) => {
+    if (request.url === '/redirect') { response.writeHead(302, { Location: '/loaded' }); response.end(); return; }
+    const finish = () => { response.setHeader('content-type','text/html'); response.end('<title>Loaded</title><h1>Current page</h1>' + (request.url === '/frames' ? '<iframe src="/loaded"></iframe>' : '')); };
+    if (request.url === '/delayed') setTimeout(finish, 80); else finish();
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const origin = 'http://127.0.0.1:' + server.address().port;
+  const browser = await chromium.launch({headless:true});
+  try {
+    for (const path of ['/delayed','/redirect','/frames']) {
+      const context = await browser.newContext(); const page = await context.newPage(); await page.goto(origin);
+      const transport = await context.newCDPSession(page); const controller = new BrowserComputerController(transport); await controller.initialize();
+      const send = transport.send.bind(transport); let navigations = 0, rejectReads = false;
+      transport.send = async (method, parameters) => {
+        if (rejectReads && method === 'DOMSnapshot.captureSnapshot') throw new Error('transient context unavailable');
+        const response = await send(method, parameters);
+        if (method === 'Page.navigate') { navigations++; rejectReads = true; }
+        return response;
+      };
+      const execute = (tool_name, args = {}) => controller.execute({tool_name,args,allowed_origins:[origin],script_operation:true});
+      const receipt = await execute('browser.navigate', {url:origin+path});
+      assert.equal(receipt.error, undefined, JSON.stringify(receipt));
+      assert.equal(receipt.result.navigation_stage, 'load');
+      assert.equal(receipt.result.observation, undefined);
+      assert.equal(receipt.result.title, undefined);
+      const unavailable = await execute('computer.observe');
+      assert.equal(unavailable.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+      assert.deepEqual(unavailable.result.diagnostic, {phase:'protocol',method:'DOMSnapshot.captureSnapshot'});
+      assert.equal(unavailable.result.action_executed, false);
+      rejectReads = false;
+      const fresh = await execute('computer.observe');
+      assert.ok(fresh.result.observation.nodes.some(node => node.name === 'Current page'), JSON.stringify(fresh));
+      assert.equal(navigations, 1);
+      await controller.page.releasePage(); controller.close(); await context.close();
+    }
+  } finally { await browser.close(); server.closeAllConnections(); server.close(); }
+});

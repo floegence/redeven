@@ -5483,7 +5483,10 @@
         "effectUncertain": "结果未确认",
         "computerInputRejected": "参数无效，未发送输入",
         "computerPreparedOnly": "已完成准备，未发送输入",
-        "computerEffectConfirmed": "已有操作完成，请先检查再继续"
+        "computerEffectConfirmed": "已有操作完成，请先检查再继续",
+        "computerObservationUnavailable": "暂时无法读取页面",
+        "computerActionObservedUnavailable": "操作已执行，页面暂未读取",
+        "computerObservationDetails": "技术详情"
       },
       "toolActivityDetailsPending": "正在等待工具详情",
       "toolActivityNoAdditionalDetails": "没有更多详情",

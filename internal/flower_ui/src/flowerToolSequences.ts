@@ -1,3 +1,4 @@
+import { isPresentedToolFailure } from './computerActivityOutcome';
 import { createMemo, mapArray, type Accessor } from 'solid-js';
 import { readPresentationValue } from './presentationIdentity';
 import type { FlowerContextCompaction, FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
@@ -108,6 +109,7 @@ function messageSequenceTokens(entry: MessageEntry,
       const activity = readPresentationValue(block.block);
       for (const item of activity.items) {
         const failed = item.status === 'error';
+        const presentedFailure = isPresentedToolFailure(item);
         const uncertain = Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
         const attentionReasons = item.attention_reasons ?? [];
         const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
@@ -132,7 +134,7 @@ function messageSequenceTokens(entry: MessageEntry,
             itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
           entryKey: entry.key, scope, turnID: message.turn_id, kind: 'tool', label: item.label || item.tool_name,
           active: item.status === 'pending' || item.status === 'running' || subagentWait,
-          failed,
+          failed: presentedFailure,
           uncertain,
         } : null);
       }

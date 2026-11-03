@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 tags: [ai, flower, activity, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -32,6 +32,18 @@ Compact shared rows provide glyphs for registered tools, hosted search, sources,
 ## Intent, inputs and results
 
 Collapsed titles describe invocation intent, not outcomes; presentation cannot supply execution input/authority. BrowserUse/ComputerUse omit absent-observation filler but preserve typed failures, uncertain effects, blank pages and unavailable targets.
+
+## Observation interruptions
+Computer/browser TARGET_OBSERVATION_UNAVAILABLE retains its canonical error and
+completed-action facts, while the row and accessible label describe an unavailable
+page read. A confirmed effect gets distinct wording; unknown effects and actual
+user decisions retain attention. Original message/code remain in a keyboard-accessible
+technical-details disclosure. Structured ActivityError.Code comes from published
+Floret; the computer_observation=unavailable chip keeps the same category in
+bounded history summaries without reading hidden bodies. Group and turn failed-call
+counts exclude these observation interruptions. Other errors remain failures.
+Old records without structured evidence are not guessed from English messages,
+rewritten, marked recovered by unrelated later successes, or automatically retried.
 
 ## Viewport and gesture ownership
 

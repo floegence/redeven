@@ -351,6 +351,9 @@ it.each(['close', 'switch', 'expire'] as const)('discards private decoding when 
   f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')!.click();
   await waitFor(() => Boolean(f.setComputerViewer.mock.calls.at(-1)?.[0].interaction_id));
   f.disconnect(); await waitFor(() => f.connections() === 2);
+  // Opening the connection precedes the verified baseline. Exercise control
+  // only after the user-visible button is enabled by that baseline.
+  await waitFor(() => f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')?.disabled === false);
   f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')!.click();
   await waitFor(() => f.setComputerViewer.mock.calls.filter(([v]) => v.interaction_id).length === 2);
   const viewer = f.setComputerViewer.mock.calls.at(-1)![0];
@@ -597,4 +600,55 @@ it('aborts an inline screenshot read when switching conversations without readin
   await waitFor(() => Boolean(request.signal?.aborted));
   expect(f.loadComputerFrame).toHaveBeenCalledTimes(1);
   expect(f.surface.querySelector('.chat-media-image')).toBeNull();
+});
+
+it.each([false, true])('shows a neutral observation interruption with accessible diagnostics (confirmed=%s)', async confirmed => {
+  const view = (status: 'running' | 'error'): FlowerRuntimeCurrentView => ({...current(status === 'error' ? 'completed' : undefined), view_version: status === 'error' ? 2 : 1,
+    items:[{id:'read-interrupted',kind:'tool',ordinal:1,turn_id:'computer-turn',run_id:'computer-run',activity:{
+      item_id:'read-interrupted',tool_id:'read-interrupted',tool_name:'computer.exec',status,
+      presentation:{label:'Inspect the current page',renderer:'structured',chips:status === 'error' ? [
+        {kind:'computer_observation',label:'observation',value:'unavailable'},
+        ...(confirmed ? [{kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'}] : []),
+      ] : [],payload:status === 'error' ? {rows_provided:true,error:{code:'TARGET_OBSERVATION_UNAVAILABLE',message:'Computer script stopped before completion (TARGET_OBSERVATION_UNAVAILABLE)'}} : {}},
+    }}],
+  });
+  const f = fixture(view('running'));
+  const selector = '[data-flower-activity-item-id="read-interrupted"]';
+  await waitFor(() => Boolean(f.surface.querySelector(selector)));
+  const row = f.surface.querySelector<HTMLElement>(selector)!;
+  f.update(view('error'));
+  await waitFor(() => row.dataset.flowerActivityPresentation === 'observation_interrupted');
+  expect(row.dataset.flowerActivityStatus).toBe('error');
+  expect(row.classList.contains('flower-activity-inline-row-error')).toBe(false);
+  expect(row.textContent).toContain(confirmed ? 'Action performed; page could not be read' : 'Page could not be read');
+  expect(row.getAttribute('aria-label')).not.toContain('Failed');
+  const trigger = row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+  trigger.focus(); await userEvent.keyboard('{Enter}');
+  await waitFor(() => Boolean(row.querySelector('.flower-activity-observation-diagnostic')));
+  expect(row.querySelector('.flower-activity-error-panel')).toBeNull();
+  const details = row.querySelector<HTMLDetailsElement>('.flower-activity-observation-diagnostic')!;
+  expect(details.open).toBe(false);
+  details.querySelector('summary')!.focus(); await userEvent.keyboard('{Enter}');
+  expect(details.open).toBe(true);
+  expect(details.textContent).toContain('TARGET_OBSERVATION_UNAVAILABLE');
+  f.restart(view('error'));
+  await waitFor(() => f.connections() > 1);
+  expect(f.surface.querySelector(selector)?.getAttribute('data-flower-activity-presentation')).toBe('observation_interrupted');
+  expect(f.inputComputerControl).not.toHaveBeenCalled();
+});
+
+it('classifies a bounded canonical observation summary without fetching hidden details', async () => {
+  const f = fixture({...current('completed'),items:[{id:'saved-read',kind:'tool',ordinal:1,turn_id:'computer-turn',run_id:'computer-run',
+    activity:{item_id:'saved-read',tool_id:'saved-read',tool_name:'computer.exec',status:'error'},
+    activity_summary:{version:'saved-v1',label:'Inspect the page',renderer:'structured',has_error:true,
+      values:{'/chips':[{kind:'computer_observation',label:'observation',value:'unavailable'},{kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'}]},
+      fields:[{path:'/payload/error',kind:'object'},{path:'/chips',kind:'array',count:2}]},
+  }]});
+  await waitFor(() => Boolean(f.surface.querySelector('[data-flower-activity-item-id="saved-read"]')));
+  const row = f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="saved-read"]')!;
+  expect(row.dataset.flowerActivityStatus).toBe('error');
+  expect(row.dataset.flowerActivityPresentation).toBe('observation_interrupted');
+  expect(row.textContent).toContain('Action performed; page could not be read');
+  expect(row.querySelector('[aria-expanded="true"]')).toBeNull();
+  expect(f.inputComputerControl).not.toHaveBeenCalled();
 });

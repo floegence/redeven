@@ -4,7 +4,7 @@ title: Computer use qualification evidence
 tags: [ai, computer-use, testing, evidence]
 lifecycle: retained_history
 retention_reason: "Retains platform qualification failures and scope boundaries that prevent unsupported claims about current Computer Use behavior."
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -27,6 +27,24 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 # Evidence
 
 All live-model lanes use configured deepseek-flash (local V4.1 Flash 1017), which does not prove remote weights. Source credentials/configuration and personal threads remain unchanged. Exact raw reports/source/tool identities are retained outside Git; full historical tables remain in this file's Git history. Task success is not zero model errors or cross-platform reliability.
+
+## November 3: observation presentation
+macOS arm64, published Floret v7.102.0: regression fixtures separate script
+navigation receipts from explicit observation errors. Real Chromium covers
+delayed load, redirect, child-frame replacement, cancellation, permission changes
+and cleanup, with one navigation and no automatic input replay. The controller
+suite passes 385 checks (two environment-specific skips); managed browser sandbox
+and complete Flower fake-provider navigation flows pass separately using the
+catalog installation. The initial unconfigured sandbox run and parallel host
+timeout were not counted; configured isolated execution and bounded concurrency
+pass. Twenty-eight UI lifecycle checks cover live failure, reconnect, bounded
+history summaries, keyboard disclosure and retained canonical error status.
+The pre-existing private-control fixture now waits for its verified baseline
+before clicking the enabled control. Localized copy, typecheck, lint, production
+build and OKF checks pass. Upstream code preservation includes canonical restart,
+API compatibility and blank-module candidate/published adoption.
+These tests do not establish the exact cause of every earlier account-page
+failure or relabel records that lack structured diagnostic evidence.
 
 ## November 2
 Semantic condition waits revalidate temporary query candidates without changing

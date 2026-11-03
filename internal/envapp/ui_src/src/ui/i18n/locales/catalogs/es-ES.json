@@ -5483,7 +5483,10 @@
         "effectUncertain": "Resultado sin confirmar",
         "computerInputRejected": "Argumentos no válidos; no se envió ninguna entrada",
         "computerPreparedOnly": "Preparación completada; no se envió ninguna entrada",
-        "computerEffectConfirmed": "Se completó una acción; compruebe antes de continuar"
+        "computerEffectConfirmed": "Se completó una acción; compruebe antes de continuar",
+        "computerObservationUnavailable": "No se pudo leer la página",
+        "computerActionObservedUnavailable": "Acción realizada; no se pudo leer la página",
+        "computerObservationDetails": "Detalles técnicos"
       },
       "toolActivityDetailsPending": "Esperando los detalles de la herramienta",
       "toolActivityNoAdditionalDetails": "No hay más detalles",

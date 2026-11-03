@@ -1,3 +1,4 @@
+import { computerObservationInterruption } from './computerActivityOutcome';
 import { historyItemNeedsObservation } from './historyWindowRetention';
 import { createHistorySequenceCompletion } from './historySequenceCompletion';
 import { createFlowerHistoryGapSubscriptions, createFlowerFinalItemSubscriptions, createFlowerTurnEndSubscriptions, createFlowerThreadSubscription } from './flowerPresentationSubscriptions';
@@ -10584,7 +10585,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           terminateCommand: copy().chat.toolActivityTerminateCommand,
         },
       }).label,
-      copy().chat.toolStatuses[item.status],
+      computerObservationInterruption(item) ? (computerObservationInterruption(item) === 'effect_confirmed' ? copy().chat.toolActivity.computerActionObservedUnavailable : copy().chat.toolActivity.computerObservationUnavailable) : copy().chat.toolStatuses[item.status],
     ].filter(Boolean).join('. ')
   );
 
@@ -11378,6 +11379,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const errorDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'error' }>>) => (
+    <Show when={block().error.observation_interruption} fallback={errorDiagnosticBlock(block)}>
+      <details class="flower-activity-observation-diagnostic">
+        <summary>{copy().chat.toolActivity.computerObservationDetails}</summary>
+        <div class="flower-activity-observation-message">{block().error.message}</div>
+        <Show when={block().error.code}><code>{block().error.code}</code></Show>
+      </details>
+    </Show>
+  );
+
+  const errorDiagnosticBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'error' }>>) => (
     <section class="flower-activity-error-panel" aria-label={copy().chat.toolStatuses.error}>
       <div class="flower-activity-error-message">{block().error.message}</div>
       <Show when={block().error.code || block().error.target_state || block().error.repair_action}>
@@ -11800,11 +11811,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (
       <div
         ref={activityNode}
-        class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', (inlineSubagent() || inlineSubagentField()) && 'flower-activity-inline-row-single-subagent')}
+        class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${computerObservationInterruption(item()) ? 'interrupted' : displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', (inlineSubagent() || inlineSubagentField()) && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
         title={subagentReadHint()}
         aria-description={subagentReadHint()}
         data-flower-activity-status={displayStatus()}
+        data-flower-activity-presentation={computerObservationInterruption(item()) ? 'observation_interrupted' : undefined}
         data-flower-activity-active={progressShimmer() ? 'true' : undefined}
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}

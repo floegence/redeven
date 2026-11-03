@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower consecutive tool sequences
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -15,6 +15,8 @@ Desktop/Env App group consecutive tools with adjacent thinking. Active groups op
 Group >=2 same-thread/turn/run nodes including a tool; thinking qualifies. Preserve call/error/preview/output order and canonical row identity. New singleton may settle prior work without overriding inspection. Thinking moves in place; first canonical node owns DOM while the loaded anchor retains disclosure through paging/navigation.
 
 Prose/users/interactions/compaction/approvals/non-tool errors/Goal updates break groups; Goal/Web Search calls remain tools. Canonically scoped SubAgent calls/report/completion and running attention/waits join, unknown parent ownership/other waits break. Exact uncertain tool errors remain grouped with complete-coverage unconfirmed counts; invalid success-with-uncertainty or uncertain parent lifecycle breaks. Empty assistant placeholders are transparent, unknown text cannot prove continuity. Answered input splits settled work, including newest groups.
+
+[Typed observation interruptions](flower-activity-interaction.md#observation-interruptions) remain grouped with their canonical execution status, but do not increment user-visible failure counts in groups or turns. Unknown effects keep unconfirmed counts.
 
 Counts require exact boundaries/item/event coverage, possible even in partial windows. Otherwise show only localized Consecutive tool calls and its accessible name, without partial totals/latest tool/loading. Preserve known failure details. Statistics never acquire history/bodies. Paging fills coverage without losing disclosure/focus/selection.
 

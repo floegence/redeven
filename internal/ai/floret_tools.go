@@ -1377,7 +1377,11 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_failure_phase", Label: "phase", Value: phase})
 			}
 		}
-		if rawPayload["observation_status"] == "not_observed" {
+		if status == toolResultStatusError && result.Error != nil && result.Error.Code == aitools.ErrorCodeTargetObservationUnavailable {
+			// Keep the category in bounded history summaries as well as detail.
+			// This is presentation evidence, never retry or success authority.
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_observation", Label: "observation", Value: "unavailable"})
+		} else if rawPayload["observation_status"] == "not_observed" {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_observation", Label: "observation", Value: "not_observed"})
 		}
 		if status != toolResultStatusSuccess && len(toAnySlice(rawPayload["completed_actions"])) > 0 {
@@ -1700,7 +1704,7 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 		if message == "" {
 			return nil
 		}
-		return &fltools.ActivityError{Message: message}
+		return &fltools.ActivityError{Message: message, Code: strings.TrimSpace(anyToString(record["code"]))}
 	}
 	switch renderer {
 	case fltools.ActivityRendererTerminal:

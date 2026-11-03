@@ -1988,3 +1988,14 @@ describe('computer observation presentation', () => {
     expect(result.meta).toBe(toolActivityEnUS[key]);
   });
 });
+
+it.each([false, true])('presents an explicit observation interruption without changing the tool outcome (action=%s)', confirmed => {
+  const source = item({tool_name:'computer.exec', renderer:'structured', status:'error', chips:[
+    {kind:'computer_observation',label:'observation',value:'unavailable'},
+    ...(confirmed ? [{kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'}] : []),
+  ], payload:{error:{code:'TARGET_OBSERVATION_UNAVAILABLE',message:'Computer script stopped before completion (TARGET_OBSERVATION_UNAVAILABLE)'}}});
+  const result = presentFlowerActivityItem(source);
+  expect(result.meta).toBe(confirmed ? 'Action performed; page could not be read' : 'Page could not be read');
+  expect(result.detailBlocks.find(block => block.kind === 'error')).toMatchObject({error:{code:'TARGET_OBSERVATION_UNAVAILABLE',observation_interruption:true}});
+  expect(source.status).toBe('error');
+});

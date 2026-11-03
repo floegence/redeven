@@ -331,3 +331,12 @@ describe('history layout sections', () => {
     expect(sections.map(section => section.entries.map(entry => entry.key))).toEqual([['row-0', 'row-1', 'row-2', 'row-3'], ['row-4', 'row-5', 'row-6']]);
   });
 });
+
+it('excludes structured observation interruptions from turn failure totals', () => {
+  const observed = toolEntry('read', 'error');
+  const block = observed.blocks[0];
+  if (block.type !== 'activity') throw new Error('activity fixture required');
+  const interrupted = {...observed, blocks:[{...block,block:{...block.block,items:block.block.items.map(item => ({...item,tool_name:'computer.exec',chips:[{kind:'computer_observation',label:'observation',value:'unavailable'}]}))}}]};
+  const result = projectFlowerTurnProcess([entry('user','user'),interrupted,toolEntry('failure','error')], [turn({intermediate_item_ids:['read','failure'],final_item_ids:[]})]);
+  expect(result.groups.get('turn')).toMatchObject({toolCallCount:2,failedCallCount:1});
+});
