@@ -378,6 +378,8 @@
       "titleFallback": "询问 Flower",
       "ready": "就绪",
       "setupNeeded": "设置 Flower",
+      "setupDesktopSettings": "桌面端设置",
+      "setupEnvironmentSettings": "当前环境设置",
       "settingsLabel": "Flower 设置",
       "needsProviderNotice": "选择模型提供商、模型和 API 密钥一次。Flower 使用欢迎页和本地环境中相同的本地 AI 配置文件。",
       "openSettings": "打开设置",

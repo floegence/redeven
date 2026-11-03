@@ -378,6 +378,8 @@
       "titleFallback": "Demander à Flower",
       "ready": "Prêt",
       "setupNeeded": "Configurer Flower",
+      "setupDesktopSettings": "Réglages de Desktop",
+      "setupEnvironmentSettings": "Réglages de l’environnement",
       "settingsLabel": "Paramètres Flower",
       "needsProviderNotice": "Choisissez une fois un fournisseur de modèles, un modèle d’IA et une clé API. Flower utilise le même profil d’IA local dans l’accueil et l’environnement local.",
       "openSettings": "Ouvrir les paramètres",

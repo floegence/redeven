@@ -131,6 +131,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       titleFallback: t(i18n, k('chat.titleFallback')),
       ready: t(i18n, k('chat.ready')),
       setupNeeded: t(i18n, k('chat.setupNeeded')),
+      setupDesktopSettings: t(i18n, k('chat.setupDesktopSettings')),
+      setupEnvironmentSettings: t(i18n, k('chat.setupEnvironmentSettings')),
       settingsLabel: t(i18n, k('chat.settingsLabel')),
       needsProviderNotice: t(i18n, k('chat.needsProviderNotice')),
       openSettings: t(i18n, k('chat.openSettings')),

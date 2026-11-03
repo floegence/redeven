@@ -378,6 +378,8 @@
       "titleFallback": "Perguntar ao Flower",
       "ready": "Pronto",
       "setupNeeded": "Configurar Flower",
+      "setupDesktopSettings": "Configurações do Desktop",
+      "setupEnvironmentSettings": "Configurações do ambiente",
       "settingsLabel": "Configurações do Flower",
       "needsProviderNotice": "Escolha uma vez um provedor de modelos, um modelo de IA e uma chave de API. Flower usa o mesmo perfil de IA local nas boas-vindas e no ambiente local.",
       "openSettings": "Abrir configurações",

@@ -11195,85 +11195,59 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-chat-main[data-setup-welcome='true'] .flower-chat-bottom-dock { display: none; }
 .flower-chat-main[data-setup-welcome='true'] .flower-transcript-stack { min-height: 100%; }
 
+/* Setup belongs to the canvas: one open composition, no card or icon tile.
+   Published Floe controls retain keyboard, pointer and theme behavior. */
 .flower-setup-welcome {
   display: flex;
-  width: min(100%, 34rem);
+  width: 100%;
   min-height: 100%;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   margin: auto;
-  padding: 2.5rem 1.5rem;
-  text-align: center;
+  padding: 2rem 1.5rem 4rem;
+  container-type: inline-size;
+}
+
+.flower-setup-content {
+  display: grid;
+  width: 100%;
+  max-width: 26rem;
+  min-width: 0;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
 }
 
 .flower-setup-brand {
-  display: grid;
-  width: 4.5rem;
-  height: 4.5rem;
-  place-items: center;
-  margin-bottom: 1.5rem;
-  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-  border-radius: 1.375rem;
-  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+  padding-top: 0.125rem;
+  color: var(--floe-ink-soft);
 }
-
-.flower-setup-brand > svg { width: 2.75rem; height: 2.75rem; }
-.flower-setup-welcome > h2 { margin: 0; font-size: 1.75rem; line-height: 1.25; font-weight: 600; letter-spacing: -0.035em; }
-.flower-setup-description { margin: 0.75rem 0 0; color: var(--muted-foreground); font-size: var(--floe-type-body); line-height: 1.7; text-wrap: balance; }
-.flower-setup-actions { display: grid; width: 100%; gap: 0.75rem; margin-top: 1.75rem; }
+.flower-setup-brand > svg { display: block; width: 3rem; height: 3rem; }
+.flower-setup-copy { min-width: 0; text-align: start; }
+.flower-setup-copy > h2 { margin: 0; color: var(--floe-ink); font-size: 1.125rem; line-height: 1.5; font-weight: 450; letter-spacing: -0.02em; text-wrap: balance; }
+.flower-setup-description { margin: 0.5rem 0 0; color: var(--floe-ink-soft); font-size: var(--floe-type-body); line-height: 1.7; text-wrap: pretty; }
+.flower-setup-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; margin-top: 1.25rem; }
 
 .flower-setup-action {
-  display: flex;
+  max-width: 100%;
   min-width: 0;
-  min-height: 3.5rem;
-  align-items: center;
-  gap: 0.875rem;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  border-radius: 0.875rem;
-  background: var(--card);
-  padding: 0.875rem 1rem;
-  color: var(--foreground);
-  text-align: left;
-  font-size: var(--floe-type-body);
-  font-weight: 550;
-  line-height: 1.5;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  min-height: 2.75rem;
+  justify-content: flex-start;
+  gap: 0.625rem;
+  margin-inline-start: -0.5rem;
+  padding-inline: 0.5rem;
+  color: var(--floe-ink);
+  font-weight: 450;
 }
+.flower-setup-action-label { min-width: 0; white-space: nowrap; text-decoration: underline; text-decoration-color: var(--floe-line-strong); text-underline-offset: 0.375rem; text-decoration-thickness: 1px; }
+.flower-setup-action-arrow { width: 0.875rem; height: 0.875rem; flex: none; color: var(--floe-ink-soft); }
 
-.flower-setup-action:only-child { width: fit-content; max-width: 100%; justify-self: center; }
-.flower-setup-action-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flower-setup-action-icon { width: 1.125rem; height: 1.125rem; flex: none; color: var(--muted-foreground); }
-.flower-setup-action-arrow { width: 1rem; height: 1rem; flex: none; color: var(--muted-foreground); }
-.flower-setup-action:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 6%, var(--card)); }
-
-.flower-setup-refresh {
-  display: inline-flex;
-  min-height: 2.25rem;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  border-radius: 0.5rem;
-  padding: 0.375rem 0.75rem;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  font-size: 0.75rem;
+@container (max-width: 360px) {
+  .flower-setup-content { grid-template-columns: minmax(0, 1fr); max-width: 18rem; gap: 1.5rem; }
+  .flower-setup-brand > svg { width: 2.5rem; height: 2.5rem; }
 }
-.flower-setup-refresh:hover { background: var(--muted); color: var(--foreground); }
-.flower-setup-refresh:disabled { cursor: wait; opacity: 0.6; }
-.flower-setup-refresh[aria-busy='true'] svg { animation: flower-model-source-refresh-spin 850ms linear infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .flower-setup-refresh[aria-busy='true'] svg { animation: none; }
-}
-
-.flower-setup-preview { display: flex; max-width: 26rem; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.25rem; margin-top: 1.75rem; color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1.6; }
-.flower-surface-companion .flower-setup-welcome { padding-block: 1.25rem; }
-.flower-surface-companion .flower-setup-brand { width: 3rem; height: 3rem; margin-bottom: 0.875rem; border-radius: 1rem; }
-.flower-surface-companion .flower-setup-brand > svg { width: 2rem; height: 2rem; }
-.flower-surface-companion .flower-setup-welcome > h2 { font-size: 1.375rem; }
-.flower-surface-companion .flower-setup-actions { margin-top: 1.25rem; }
-.flower-surface-companion .flower-setup-preview { display: none; }
+.flower-surface-companion .flower-setup-welcome { padding: 1.5rem; }
+.flower-surface-companion .flower-setup-content { gap: 1.25rem; }
 
 .flower-empty-state {
   display: flex;

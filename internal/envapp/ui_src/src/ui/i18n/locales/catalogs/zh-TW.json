@@ -5320,6 +5320,8 @@
       "titleFallback": "詢問 Flower",
       "ready": "就緒",
       "setupNeeded": "設定 Flower",
+      "setupDesktopSettings": "桌面版設定",
+      "setupEnvironmentSettings": "目前環境設定",
       "settingsLabel": "Flower 設定",
       "needsProviderNotice": "選擇一次模型供應商、模型和 API 金鑰。Flower 使用歡迎頁與本機環境中相同的本機 AI 設定檔。",
       "openSettings": "開啟設定",

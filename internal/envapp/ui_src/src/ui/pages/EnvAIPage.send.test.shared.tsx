@@ -290,7 +290,8 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => ({
   Button: (props: any) => {
     const Icon = props.icon;
     return (
-      <button type="button" class={props.class} aria-label={props['aria-label']} disabled={props.disabled} onClick={props.onClick}>
+      <button type="button" class={props.class} aria-label={props['aria-label']} title={props.title}
+        data-model-source-action={props['data-model-source-action']} disabled={props.disabled} onClick={props.onClick}>
         {Icon ? <Icon /> : null}
         {props.children}
       </button>
@@ -683,7 +684,8 @@ export function registerEnvAIPageSendTests() {
           .map(action => action.getAttribute('data-model-source-action'))).toEqual(actions);
         if (route === 'remote_desktop') {
           const desktopAction = welcome.querySelector<HTMLButtonElement>('[data-model-source-action="local_settings"]')!;
-          expect(desktopAction.textContent).toContain('Configure in Desktop Flower settings');
+          expect(desktopAction.textContent).toContain('Desktop settings');
+          expect(desktopAction.title).toBe('Configure in Desktop Flower settings');
           desktopAction.click();
           await vi.waitFor(() => expect(openDesktopSettings).toHaveBeenCalledOnce());
           welcome.querySelector<HTMLButtonElement>('[data-model-source-action="remote_settings"]')!.click();

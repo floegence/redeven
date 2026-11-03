@@ -7,6 +7,7 @@ import {
   adapter,
   liveBootstrap,
   renderSurfaceWithAdapterProps,
+  settingsSnapshot,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -43,6 +44,20 @@ function emptyThreadAdapter() {
 }
 
 describe('Flower empty-state presentation', () => {
+  it('keeps first-time setup focused on configuration without sync or task previews', async () => {
+    const runtime = renderSurfaceWithAdapterProps({
+      ...adapter(), listThreads: async () => [], modelSourceRecovery: undefined,
+      loadSettings: async () => ({ ...settingsSnapshot(), model_profile: null }),
+    }, { presentation: 'full' });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-welcome')));
+    const welcome = runtime.querySelector('.flower-setup-welcome')!;
+    expect(welcome.querySelector('.flower-setup-refresh')).toBeNull();
+    expect(welcome.querySelector('.flower-setup-preview')).toBeNull();
+    expect(welcome.querySelectorAll('button')).toHaveLength(1);
+    expect(welcome.textContent).not.toContain('Explore this folder');
+    expect(welcome.textContent).not.toContain('Sync model list');
+  });
+
   it('uses an icon-only conversation switcher when the companion has no selected thread', async () => {
     let openRequests = 0;
     const runtime = renderSurfaceWithAdapterProps(adapter(true), {

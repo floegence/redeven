@@ -5320,6 +5320,8 @@
       "titleFallback": "Flower fragen",
       "ready": "Bereit",
       "setupNeeded": "Flower einrichten",
+      "setupDesktopSettings": "Desktop-Einstellungen",
+      "setupEnvironmentSettings": "Umgebungseinstellungen",
       "settingsLabel": "Flower-Einstellungen",
       "needsProviderNotice": "Wähle einmal einen Modellanbieter, ein KI-Modell und einen API-Schlüssel aus. Flower verwendet dasselbe lokale KI-Profil in der Willkommensansicht und der lokalen Umgebung.",
       "openSettings": "Einstellungen öffnen",

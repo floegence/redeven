@@ -5421,6 +5421,8 @@
       "titleFallback": "Спросить Flower",
       "ready": "Готово",
       "setupNeeded": "Настроить Flower",
+      "setupDesktopSettings": "Настройки Desktop",
+      "setupEnvironmentSettings": "Настройки окружения",
       "settingsLabel": "Настройки Flower",
       "needsProviderNotice": "Один раз выберите поставщика моделей, модель и API-ключ. Flower использует тот же локальный профиль ИИ в приветствии и локальной среде.",
       "openSettings": "Открыть настройки",

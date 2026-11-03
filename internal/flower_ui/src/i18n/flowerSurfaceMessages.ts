@@ -85,6 +85,8 @@ export const flowerSurfaceEnUS = {
     titleFallback: 'Ask Flower',
     ready: 'Ready',
     setupNeeded: 'Set up Flower',
+    setupDesktopSettings: 'Desktop settings',
+    setupEnvironmentSettings: 'Environment settings',
     settingsLabel: 'Flower settings',
     needsProviderNotice: 'Choose a provider, model, and API key once. Flower uses the same Local AI Profile from Welcome and Local Environment.',
     openSettings: 'Open Settings',

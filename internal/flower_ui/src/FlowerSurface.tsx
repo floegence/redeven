@@ -13261,7 +13261,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (props.embeddedConversation?.emptyContent && !needsSetup() && !surfaceWarmupActive()) return props.embeddedConversation.emptyContent;
     if (showSetupWelcome()) return (
       <FlowerSetupWelcome copy={copy()} actions={noModelProfileSetupActions()} onOpenSettings={openSettings}
-        refreshing={modelSourceRefreshing()} onRefresh={() => void refreshModelSource()}
         onAction={(action) => void action.run().catch((error) => notifyComposerError(getErrorMessage(error)))} />
     );
     return warmupCanReplaceTranscript()

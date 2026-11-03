@@ -378,6 +378,8 @@
       "titleFallback": "Flower に聞く",
       "ready": "準備完了",
       "setupNeeded": "Flower の設定が必要",
+      "setupDesktopSettings": "デスクトップの設定",
+      "setupEnvironmentSettings": "環境の設定",
       "settingsLabel": "Flower 設定",
       "needsProviderNotice": "プロバイダー、モデル、API キーを一度設定してください。Flower は Welcome とローカル環境で同じ Local AI Profile を使用します。",
       "openSettings": "設定を開く",

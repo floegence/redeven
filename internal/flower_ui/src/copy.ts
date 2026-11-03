@@ -475,6 +475,8 @@ export type FlowerSurfaceCopy = Readonly<{
     titleFallback: string;
     ready: string;
     setupNeeded: string;
+    setupDesktopSettings: string;
+    setupEnvironmentSettings: string;
     settingsLabel: string;
     needsProviderNotice: string;
     openSettings: string;
@@ -975,6 +977,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     titleFallback: 'Ask Flower',
     ready: 'Ready',
     setupNeeded: 'Set up Flower',
+    setupDesktopSettings: 'Desktop settings',
+    setupEnvironmentSettings: 'Environment settings',
     settingsLabel: 'Flower settings',
     needsProviderNotice: 'Choose a provider, model, and API key once. Flower uses the same Local AI Profile from Welcome and Local Environment.',
     openSettings: 'Open Settings',

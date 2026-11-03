@@ -2,6 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { page } from 'vitest/browser';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -54,7 +55,7 @@ describe('Flower setup browser presentation', () => {
     }
   });
 
-  it.each(['light', 'dark'])('keeps the local settings entry in the original card style in %s theme', async (theme) => {
+  it.each(['light', 'dark'])('uses the same quiet Floe action for local setup routes in %s theme', async (theme) => {
     await page.viewport(1440, 900);
     document.documentElement.classList.toggle('dark', theme === 'dark');
     const surfaceAdapter = { ...adapter(), modelSourceRecovery: undefined, listThreads: async () => [],
@@ -91,15 +92,16 @@ describe('Flower setup browser presentation', () => {
     expect(document.querySelector('.flower-provider-dialog')?.textContent).toContain('Provider type');
   });
 
-  it('returns to the existing composer draft when model refresh completes setup', async () => {
+  it('returns to the existing composer draft when saved settings complete setup', async () => {
     let snapshot = { ...settingsSnapshot(), model_profile: null } as ReturnType<typeof settingsSnapshot>;
-    const runtime = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [], loadSettings: async () => snapshot });
+    const [revision, setRevision] = createSignal(0);
+    const runtime = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [], loadSettings: async () => snapshot }, { settingsRevision: revision });
     await waitFor(() => Boolean(runtime.querySelector('.flower-setup-welcome')));
     const editor = runtime.querySelector<HTMLTextAreaElement>('textarea')!;
     editor.value = 'Keep my workspace review draft';
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
     snapshot = settingsSnapshot();
-    runtime.querySelector<HTMLButtonElement>('.flower-setup-refresh')!.click();
+    setRevision(1);
     await waitFor(() => !runtime.querySelector('.flower-setup-welcome'));
     expect(runtime.querySelector('textarea')).toBe(editor);
     expect(editor.value).toBe('Keep my workspace review draft');
