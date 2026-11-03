@@ -11,6 +11,24 @@ import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWi
 
 afterEach(() => document.documentElement.classList.remove('dark'));
 
+it.each(['en-US', 'zh-CN', 'zh-TW'] as const)('keeps canonical unknown outcomes readable in %s', async locale => {
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const seed = thread({ thread_id: 'unknown-tool-outcome', messages: [{ id: 'unknown', turn_id: 'turn-unknown', run_id: 'run-unknown',
+    role: 'assistant', status: 'complete', content: '', created_at_ms: 1, blocks: [activityTimeline({
+      thread_id: 'unknown-tool-outcome', turn_id: 'turn-unknown', run_id: 'run-unknown', status: 'unknown',
+      items: [activityItem({ item_id: 'unknown', tool_id: 'unknown', status: 'unknown', severity: 'warning', needs_attention: true })],
+    })] }] });
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed) },
+    { copy, focusThreadRequest: { request_id: 'unknown', thread_id: seed.thread_id } });
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-activity-status="unknown"]')));
+  const row = surface.querySelector('[data-flower-activity-status="unknown"]')!;
+  expect(row.textContent).toContain(copy.chat.toolStatuses.unknown);
+  expect(row.getAttribute('aria-label')).toContain(copy.chat.toolStatuses.unknown);
+  expect(row.getAttribute('data-flower-activity-active')).toBeNull();
+  expect(surface.querySelector('.flower-history-navigation[role="alert"]')).toBeNull();
+});
+
 it.each([['en-US', 1200, 'light'], ['zh-CN', 390, 'dark']] as const)(
   'keeps %s tool failures after useful content at %s px in %s mode', async (locale, width, theme) => {
     await page.viewport(width, 1000);

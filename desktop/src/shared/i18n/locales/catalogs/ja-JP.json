@@ -797,6 +797,7 @@
       "toolStatusSuccess": "完了",
       "toolStatusError": "失敗",
       "toolStatusCanceled": "キャンセル済み",
+      "toolStatusUnknown": "結果不明",
       "toolStatusDeclined": "拒否済み",
       "toolCallCanceled": "コマンドはキャンセルされました",
       "toolApprovalRejectedDetail": "ツールの実行を拒否しました",

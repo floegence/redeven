@@ -249,6 +249,19 @@ describe('mapFlowerThread title contract', () => {
   });
 });
 
+describe('canonical activity outcomes', () => {
+  it('preserves an unknown outcome without rejecting its historical page', () => {
+    const item = { item_id: 'uncertain-tool', tool_id: 'uncertain-tool', kind: 'tool', status: 'unknown',
+      severity: 'warning', needs_attention: true, requires_approval: false };
+    expect(mapFlowerActivityItem(item)).toMatchObject(item);
+    const message = mapFlowerMessage({ id: 'history', thread_id: 'thread', turn_id: 'turn', run_id: 'run', role: 'assistant', status: 'complete', timestamp: 1,
+      blocks: [{ type: 'activity-timeline', schema_version: 1, thread_id: 'thread', turn_id: 'turn', run_id: 'run',
+        summary: { status: 'unknown', counts: { unknown: 1 }, total_items: 1 }, items: [item] }] });
+    expect(message.blocks?.[0]).toMatchObject({ summary: { status: 'unknown', counts: { unknown: 1 } }, items: [item] });
+    expect(() => mapFlowerActivityItem({ ...item, status: 'unrecognized' })).toThrow('activity item status is unsupported');
+  });
+});
+
 describe('mapFlowerActivityItem structured rows contract', () => {
   it('preserves legal whitespace around structured text and Markdown', () => {
     for (const format of ['text', 'markdown']) {

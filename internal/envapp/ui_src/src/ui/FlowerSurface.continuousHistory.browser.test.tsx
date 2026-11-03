@@ -923,6 +923,52 @@ describe('continuous history navigation', () => {
     expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
   });
 
+  it.each([2, 5])('satisfies one upward gesture through %i folded failed retry turns', async count => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'failed-retries', messages: [] });
+    const items: FlowerRuntimeCurrentItem[] = [{ id: 'original-request', kind: 'user', text: 'Read the original conversation',
+      turn_id: 'work-0', run_id: 'run-0', ordinal: 1, canonical_ordinal: 1 }];
+    const turns = Array.from({ length: count }, (_, index) => {
+      for (let i = 0; i < 120; i++) {
+        const id = 'work-' + index + '-tool-' + i;
+        items.push({ id, kind: 'tool', turn_id: 'work-' + index, run_id: 'run-' + index, ordinal: items.length + 1, canonical_ordinal: items.length + 1,
+          activity: { item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal.exec', status: 'success',
+            severity: 'quiet', needs_attention: false, requires_approval: false } });
+      }
+      return { turn_id: 'work-' + index, run_id: 'run-' + index, started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:01:00Z',
+        outcome: 'failed' as const, elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000, final_item_ids: [], final_boundary_complete: false };
+    });
+    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
+      const selected = request.anchor_id || request.item_ids ? selectPage(items, request) : items.slice(-50);
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', last_outcome: 'failed', view_version: 1,
+        items: selected, turns, window: { ...pageBounds(items, selected, request), leaf_id: 'folded-leaf' } };
+      return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
+    });
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadHistory: history,
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'failed-reader', summaries: [seed] };
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'failed-retries', thread_id: seed.thread_id } });
+    root.style.height = '780px';
+    await waitFor(() => Boolean(root.querySelector('.flower-turn-summary-button')) && root.querySelector<HTMLElement>('.flower-chat-transcript')?.dataset.flowerTailPreparing !== 'true');
+    const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+    expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+    expect(history).toHaveBeenCalledOnce();
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="original-request"]')), 2500);
+    expect(root.querySelector('[data-flower-message-id="original-request"]')?.getBoundingClientRect().height).toBeGreaterThan(0);
+    const original = root.querySelector('[data-flower-message-id="original-request"]')!.getBoundingClientRect();
+    expect(original.bottom).toBeGreaterThan(viewport.getBoundingClientRect().top);
+    expect(original.top).toBeLessThan(viewport.getBoundingClientRect().bottom);
+    expect([...root.querySelectorAll('.flower-turn-summary-button')].every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
+    expect(root.querySelector('.flower-history-navigation[role="alert"]')).toBeNull();
+    const calls = history.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(history.mock.calls.length).toBe(calls);
+    expect(calls).toBeLessThanOrEqual(count + 1);
+  });
+
   it('bounds collapsed history reads to scroll demand, including input at an immovable edge', async () => {
     const { root, history, viewport, scroll } = await mountContinuous(600, false, true);
     scroll(0, -100);

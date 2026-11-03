@@ -161,6 +161,7 @@ import type {
   FlowerQueuedTurnAttachment,
   FlowerContextUsage,
   FlowerActivityStatus,
+  FlowerHistoryWindow,
   FlowerForkThreadInput,
   FlowerThreadView,
   FlowerLiveStreamEnvelope,
@@ -4282,6 +4283,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return rect.bottom > bounds.top && rect.top < bounds.bottom && rect.height > 0;
     });
   };
+  const readableHistoryItems = (viewport: HTMLElement) => new Set(
+    [...viewport.querySelectorAll<HTMLElement>('[data-flower-message-id]')]
+      .filter(node => node.getBoundingClientRect().height > 0).map(node => node.dataset.flowerMessageId!));
+  // One reading gesture may cross several closed turns. Keep servicing that
+  // demand while canonical bounds advance without revealing readable content.
+  // Each request remains bounded; disclosure, new intent, and failed reads stop it.
+  const foldedHistoryDemandPending = (viewport: HTMLElement, before: FlowerHistoryWindow, after: FlowerHistoryWindow | undefined,
+    direction: 'before' | 'after' | 'around' | undefined, readable: ReadonlySet<string>) => {
+    if (!after || direction !== 'before' && direction !== 'after') return false;
+    const advanced = direction === 'before' ? after.has_before && after.first_item_id !== before.first_item_id
+      : after.has_after && after.last_item_id !== before.last_item_id;
+    if (!advanced || [...readableHistoryItems(viewport)].some(id => !readable.has(id))) return false;
+    return direction === 'before' ? viewport.scrollTop < 2 : viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 2;
+  };
   const protectedHistoryItems = (scroll: FlowerScrollTailController) => {
     const viewport = scroll.viewport();
     if (!viewport) return [];
@@ -4307,8 +4322,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const window = selectedThread()?.history_window;
     const viewport = transcriptScroll.viewport();
     if (!historyReadingPending || !tid || !window || !viewport || !props.adapter.loadHistory || historyBusy() || selectedThreadTailPreparing()) return;
-    // Consume one coalesced user demand. Layout/HTTP completion may service a
-    // newer demand, but cannot recursively walk collapsed history by itself.
+    // Consume one coalesced demand; a folded-only page does not satisfy it.
     historyReadingPending = false;
     const input = explicitHistoryRead ?? historyGapRequest(viewport, historyScrollDirection) ?? historyReadingRequest(window,
       { top: viewport.scrollTop, height: viewport.scrollHeight, viewport: viewport.clientHeight },
@@ -4318,6 +4332,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const key = historyReadingKey(tid, window, input, protectedHistoryItems(transcriptScroll));
     if (historyEdgeKey === key) return;
     historyEdgeKey = key;
+    const readable = readableHistoryItems(viewport);
     historyEdgeRecoverable = false;
     const signal = navigationReadController.signal;
     const epoch = liveTransport.connectionEpoch();
@@ -4372,6 +4387,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (current && current.scrollHeight - current.scrollTop - current.clientHeight <= 2) transcriptScroll.startFollowing();
         }
         if (currentAnchor?.isConnected) transcriptScroll.finishDisclosure(currentAnchor);
+        if (!handoff?.moved && historyEdgeKey === key && tid === selectedThreadID()
+          && epoch === liveTransport.connectionEpoch() && foldedHistoryDemandPending(viewport, window, selectedThread()?.history_window, input.direction, readable)) {
+          historyReadingPending = true;
+          scheduleHistoryReading();
+        }
       });
     } catch (error) {
       if (!signal.aborted && tid === selectedThreadID()) {
@@ -6179,6 +6199,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const key = historyReadingKey(active.childThreadID, window, input, protectedHistoryItems(subagentDetailScroll));
     if (key === subagentHistoryEdgeKey) return;
     subagentHistoryEdgeKey = key;
+    const readable = readableHistoryItems(viewport);
     subagentEdgeRecoverable = false;
     subagentHistoryRecoveryUsed = false;
     let interest = historyFoldedNavigation(viewport, input, [...new Set([...threadCache().readingItemIDs(active.childThreadID), ...protectedHistoryItems(subagentDetailScroll)])].flatMap(id => { const item = threadCache().runtimePreviewItem(active.childThreadID, id); return item ? [item] : []; }), protectedHistoryItems(subagentDetailScroll)) ?? input;
@@ -6210,6 +6231,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const accepted = await refreshActiveSubagentDetail(false, interest, true);
     if (!accepted || activeSubagentID() !== active.childThreadID) return;
     requestTranscriptAnimationFrame(() => {
+      if (subagentHistoryEdgeKey === key && activeSubagentID() === active.childThreadID
+        && foldedHistoryDemandPending(viewport, window, subagentDetailThread()?.history_window, input.direction, readable)) subagentReadingPending = true;
       scheduleSubagentHistoryReading();
     });
   };
@@ -11686,6 +11709,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           {renderFieldCollections(true)}
           <Show when={!subagentOperation() && presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
+          </Show>
+          <Show when={displayStatus() === 'unknown'}>
+            <span class="flower-activity-inline-detail">{copy().chat.toolStatuses.unknown}</span>
           </Show>
           {changeStats(() => item().argument_preview ?? presentation().changeStats, () => item().argument_preview !== undefined)}
         </div>

@@ -491,6 +491,7 @@ export const flowerSurfaceEnUS = {
     toolStatusError: 'Failed',
     toolStatusDeclined: 'Declined',
     toolStatusCanceled: 'Canceled',
+    toolStatusUnknown: 'Outcome unknown',
     toolCallCanceled: 'Tool call was canceled',
     toolApprovalRejectedDetail: 'User declined tool execution',
     toolApprovalRequired: 'Approval required',

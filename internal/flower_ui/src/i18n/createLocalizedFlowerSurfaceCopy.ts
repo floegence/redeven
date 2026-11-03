@@ -612,6 +612,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         error: t(i18n, k('chat.toolStatusError')),
         declined: t(i18n, k('chat.toolStatusDeclined')),
         canceled: t(i18n, k('chat.toolStatusCanceled')),
+        unknown: t(i18n, k('chat.toolStatusUnknown')),
       },
       toolCallCanceled: t(i18n, k('chat.toolCallCanceled')),
       toolApprovalRejectedDetail: t(i18n, k('chat.toolApprovalRejectedDetail')),

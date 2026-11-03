@@ -804,6 +804,7 @@
       "toolStatusSuccess": "Готово",
       "toolStatusError": "Ошибка",
       "toolStatusCanceled": "Отменено",
+      "toolStatusUnknown": "Результат неизвестен",
       "toolStatusDeclined": "Отклонено",
       "toolCallCanceled": "Команда отменена",
       "toolApprovalRejectedDetail": "Вы отклонили выполнение инструмента",

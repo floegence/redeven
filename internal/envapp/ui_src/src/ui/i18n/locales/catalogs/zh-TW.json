@@ -5739,6 +5739,7 @@
       "toolStatusSuccess": "已完成",
       "toolStatusError": "失敗",
       "toolStatusCanceled": "已取消",
+      "toolStatusUnknown": "結果未知",
       "toolStatusDeclined": "已拒絕",
       "toolCallCanceled": "命令已取消",
       "toolApprovalRejectedDetail": "你已拒絕執行此工具",

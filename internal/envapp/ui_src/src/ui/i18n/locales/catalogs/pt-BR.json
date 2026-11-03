@@ -5739,6 +5739,7 @@
       "toolStatusSuccess": "Concluído",
       "toolStatusError": "Falhou",
       "toolStatusCanceled": "Cancelado",
+      "toolStatusUnknown": "Resultado desconhecido",
       "toolStatusDeclined": "Recusado",
       "toolCallCanceled": "O comando foi cancelado",
       "toolApprovalRejectedDetail": "Você recusou a execução da ferramenta",
