@@ -3,7 +3,7 @@ import { Dynamic } from 'solid-js/web';
 import { flowerToolGlyphs } from './flowerToolGlyphs';
 import { flowerToolMotion, type FlowerToolMotionRecipe } from './flowerToolMotion';
 
-const AnimatedGlyph: Component<{ recipe: FlowerToolMotionRecipe; running: boolean }> = (props) => {
+const AnimatedGlyph: Component<{ recipe: FlowerToolMotionRecipe; running: boolean; reducedMotion?: boolean }> = (props) => {
   let host!: HTMLSpanElement;
   const [mounted, setMounted] = createSignal(false);
   const [reduced, setReduced] = createSignal(false);
@@ -41,7 +41,7 @@ const AnimatedGlyph: Component<{ recipe: FlowerToolMotionRecipe; running: boolea
   });
   createEffect(() => {
     stop();
-    if (!mounted() || !props.running || reduced()) return;
+    if (!mounted() || !props.running || reduced() || props.reducedMotion) return;
     for (const { node, track } of groups) {
       Object.assign(node.style, track.base ?? {});
       const animation = node.animate(track.keyframes, {
@@ -66,12 +66,12 @@ const webOperationMotion: Readonly<Record<string, FlowerToolMotionRecipe>> = {
   find_in_page: {icon:'text-search', cycle:2400, tracks:[{parts:'all', keyframes:[{opacity:0.5}, {opacity:1}, {opacity:0.5}]}]},
 };
 
-export const FlowerToolIcon: Component<{ toolName?: string; source?: string; webOperation?: string; running: boolean }> = (props) => {
+export const FlowerToolIcon: Component<{ toolName?: string; source?: string; webOperation?: string; running: boolean; reducedMotion?: boolean }> = (props) => {
   const runningCommand = () => props.running && (props.toolName === 'terminal.exec' || props.toolName === 'terminal.read');
   const recipe = createMemo(() => (props.webOperation ? webOperationMotion[props.webOperation] ?? flowerToolMotion.web_search : undefined) ?? flowerToolMotion[props.toolName ?? '']
     ?? flowerToolMotion[props.source === 'mcp' || props.toolName?.startsWith('mcp_') ? 'mcp' : 'unknown']);
   return <Show when={runningCommand()} fallback={
-    <Show when={recipe()} keyed>{value => <AnimatedGlyph recipe={value} running={props.running} />}</Show>
+    <Show when={recipe()} keyed>{value => <AnimatedGlyph recipe={value} running={props.running} reducedMotion={props.reducedMotion} />}</Show>
   }>
     <span class="flower-activity-inline-loader" aria-hidden="true">
       <span class="flower-activity-inline-loader-square" />

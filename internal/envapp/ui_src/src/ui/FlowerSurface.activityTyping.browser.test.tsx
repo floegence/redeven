@@ -2,6 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page } from 'vitest/browser';
+import { startHotInteraction } from '@floegence/floe-webapp-core';
 import type { FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerToolCallPreview, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { adapter, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
@@ -97,6 +98,69 @@ const title = (root: HTMLElement, id: string) => row(root, id)?.querySelector<HT
 const reveals = (node: HTMLElement) => node.getAnimations().filter(animation =>
   (animation.effect as KeyframeEffect).getKeyframes().some(frame => 'clipPath' in frame));
 afterEach(async () => { await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); });
+
+it.each([false, true])('settles title and icon motion during shared manipulation without replaying old arrivals (child=%s)', async child => {
+  const initial = tool('history', 'success');
+  const { root, push } = await mount([initial], child);
+  push([initial, tool('first')]);
+  await waitFor(() => Boolean(title(root, 'first')));
+  const first = title(root, 'first')!;
+  const animation = reveals(first)[0];
+  expect(animation).toBeDefined();
+  animation.pause();
+  const releaseDrag = startHotInteraction({ kind: 'drag', cursor: 'grabbing', lockDocumentStyles: false });
+  const releaseResize = startHotInteraction({ kind: 'resize', cursor: 'ew-resize', lockDocumentStyles: false });
+  try {
+    await waitFor(() => animation.playState === 'idle');
+    push([initial, tool('first'), tool('during')]);
+    await waitFor(() => Boolean(title(root, 'during')));
+    expect(reveals(title(root, 'during')!)).toHaveLength(0);
+    expect(row(root, 'first').querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
+    expect(title(root, 'during')!.textContent).toContain(titleText);
+    releaseDrag();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    expect(reveals(first)).toHaveLength(0);
+    expect(row(root, 'first').querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
+  } finally { releaseDrag(); releaseResize(); }
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(reveals(first)).toHaveLength(0);
+  expect(reveals(title(root, 'during')!)).toHaveLength(0);
+  push([initial, tool('first'), tool('during'), tool('after')]);
+  await waitFor(() => Boolean(title(root, 'after')));
+  expect(reveals(title(root, 'after')!)).toHaveLength(1);
+});
+
+it('settles expanded reasoning on drag while preserving manual reading through live growth', async () => {
+  const history = tool('history', 'success');
+  const thinking: FlowerRuntimeCurrentItem = { id: 'reading', kind: 'thinking', text: 'Reasoning line.\n'.repeat(100),
+    turn_id: 'turn', run_id: 'run', ordinal: 2, live: true };
+  const { root, push } = await mount([history, thinking]);
+  const toggle = root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!;
+  toggle.click();
+  const viewport = root.querySelector<HTMLElement>('.flower-thinking-viewport')!;
+  await waitFor(() => viewport.getAnimations().some(animation => animation.playState === 'running'));
+  const opening = viewport.getAnimations()[0];
+  opening.pause();
+  const release = startHotInteraction({ kind: 'drag', cursor: 'grabbing', lockDocumentStyles: false });
+  try {
+    await waitFor(() => viewport.dataset.state === 'open');
+    expect(opening.playState).toBe('idle');
+    const content = root.querySelector<HTMLElement>('.flower-thinking-content')!;
+    content.scrollTop = 40;
+    content.dispatchEvent(new Event('scroll'));
+    const top = content.scrollTop;
+    push([history, { ...thinking, text: thinking.text + 'More reasoning.\n'.repeat(20) }]);
+    await waitFor(() => content.textContent?.includes('More reasoning.') === true);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(content.scrollTop).toBe(top);
+    expect(viewport.getAnimations()).toHaveLength(0);
+  } finally { release(); }
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(viewport.getAnimations()).toHaveLength(0);
+  toggle.click();
+  await waitFor(() => viewport.getAnimations().some(animation => animation.playState === 'running'));
+  await waitFor(() => viewport.dataset.state === 'closed');
+});
 
 it.each([false, true])('keeps fresh title motion through admitted live-body chunks (child=%s)', async child => {
   let release!: () => void;

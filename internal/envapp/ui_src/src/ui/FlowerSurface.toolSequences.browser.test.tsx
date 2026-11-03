@@ -1005,6 +1005,10 @@ describe('consecutive tools in the shared Flower surface', () => {
     const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
     await expect.poll(() => content.closest('.flower-thinking-viewport')!.getAttribute('data-state')).toBe('open');
     expect(content.scrollHeight).toBeGreaterThan(content.clientHeight * 2);
+    // Opening pins the title; expose its reading body before testing native
+    // nested input, so hover cannot fight that anchor or hit the composer.
+    root.querySelector<HTMLButtonElement>('[data-flower-scroll-to-latest]')?.click();
+    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
     const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number; preserveScroll?: boolean }) => Promise<{ before: number; after: number }> };
     const input = async (direction: number, preserveScroll = false) => {
       if (source === 'keyboard') { content.focus({ preventScroll: true }); await userEvent.keyboard(direction < 0 ? preserveScroll ? '{PageUp}' : '{ArrowUp}' : '{PageDown}'); }
@@ -1065,6 +1069,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
     const sequence = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
     expect(content.scrollHeight).toBeGreaterThan(content.clientHeight * 2);
+    root.querySelector<HTMLButtonElement>('[data-flower-scroll-to-latest]')?.click();
+    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
     const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number; preserveScroll?: boolean }) => Promise<{ before: number; after: number }> };
     sequence.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true }));
     content.scrollTop = 100; sequence.scrollTop = 0; sequence.dispatchEvent(new Event('scroll'));

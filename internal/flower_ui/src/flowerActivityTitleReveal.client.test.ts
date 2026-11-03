@@ -6,6 +6,55 @@ import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 
 afterEach(() => vi.unstubAllGlobals());
 
+it('settles existing reveals when motion is reduced and never replays arrivals after release', async () => {
+  const animations: { cancel: ReturnType<typeof vi.fn>; play: ReturnType<typeof vi.fn> }[] = [];
+  vi.stubGlobal('document', { hidden: false, addEventListener() {}, removeEventListener() {} });
+  vi.stubGlobal('window', { matchMedia: () => undefined });
+  const node = { closest: () => null, isConnected: true, remove() {} } as unknown as HTMLElement;
+  node.getClientRects = () => [{ width: 100, height: 20 }] as unknown as DOMRectList;
+  node.getBoundingClientRect = () => ({ width: 100, height: 20 }) as DOMRect;
+  node.animate = (() => {
+    const value = { cancel: vi.fn(), play: vi.fn(), pause: vi.fn(), effect: { updateTiming: vi.fn() }, finished: new Promise(() => {}) };
+    animations.push(value);
+    return value;
+  }) as unknown as typeof node.animate;
+  let dispose!: () => void;
+  let setReduced!: (value: boolean) => void;
+  let append!: (key: string) => void;
+  let reveal!: ReturnType<typeof createFlowerActivityTitleReveal>;
+  createRoot(cleanup => {
+    dispose = cleanup;
+    const [entries, setEntries] = createSignal<readonly FlowerTimelineEntry[]>([]);
+    const [reduced, updateReduced] = createSignal(false);
+    setReduced = updateReduced;
+    append = key => setEntries(previous => [...previous, { type: 'message', key,
+      message: { id: key, thread_id: 'thread', turn_id: 'turn', run_id: 'run', role: 'assistant', content: '', status: 'streaming', created_at_ms: 1 },
+      blocks: [{ type: 'content', key, block_index: 0, block_type: 'thinking', content: 'Working' }],
+    }]);
+    reveal = createFlowerActivityTitleReveal({ entries,
+      thread: () => ({ thread_id: 'thread', status: 'running', current_execution: { turn_id: 'turn', run_id: 'run', status: 'running' } }) as FlowerThreadSnapshot,
+      liveConfirmed: () => true, reducedMotion: reduced, restoration: () => 0, isVisible: () => true, prepareArrival: () => 0,
+    });
+  });
+  try {
+    const report = vi.fn();
+    append('first'); reveal.reveal('first', node, report);
+    await Promise.resolve();
+    expect(animations).toHaveLength(2);
+    expect(reveal.revealingEntries().size).toBe(1);
+    setReduced(true);
+    expect(animations.every(animation => animation.cancel.mock.calls.length === 1)).toBe(true);
+    expect(report).toHaveBeenLastCalledWith(false);
+    expect(reveal.revealingEntries().size).toBe(0);
+    append('during'); reveal.reveal('during', node, report);
+    expect(animations).toHaveLength(2);
+    setReduced(false); reveal.reveal('during', node, report);
+    expect(animations).toHaveLength(2);
+    append('after'); reveal.reveal('after', node, report);
+    expect(animations).toHaveLength(4);
+  } finally { dispose(); node.remove(); }
+});
+
 it('classifies mounted titles once without subscribing arrivals to whole-sequence disclosure changes', () => {
   vi.stubGlobal('document', { hidden: false, addEventListener() {}, removeEventListener() {} });
   vi.stubGlobal('window', { matchMedia: () => undefined });

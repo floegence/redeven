@@ -2,6 +2,8 @@
 
 Concepts own current contracts and original qualification outcomes; Git retains change history.
 
+- 2026-11-03: Document shared drag/resize motion priority and root/child arrival, lifecycle, draft and selection regressions in the Flower long-thread gate.
+
 ## 2026-11-03
 
 - [Tool sequence summaries](ui/flower-tool-sequences.md) omit thinking counts and use concise failure counts in every locale; expanded thinking remains available.

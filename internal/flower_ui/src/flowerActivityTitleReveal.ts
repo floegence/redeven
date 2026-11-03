@@ -37,6 +37,7 @@ export function createFlowerActivityTitleReveal(options: {
     animations.clear();
     for (const arrival of known.values()) arrival.deadline = 0;
   };
+  createEffect(() => { if (options.reducedMotion()) finishAll(); });
   // Entries own immutable title identities. Classify each mounted entry once;
   // growth and disclosure changes must not revisit every completed activity.
   const titleEntries = mapArray(options.entries, entry => {

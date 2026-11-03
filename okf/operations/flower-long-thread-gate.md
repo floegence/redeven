@@ -40,7 +40,7 @@ Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies 
 
 Optimize stable inputs/keyed subscriptions/linear membership/bounded offscreen layout with reading-focus-selection pins. Retain DOM/disclosure even growing active turns: containment,not virtualization. Visit entries once/structural change,not suffix per section; keep partition keys through prepend/growth/completion and preserve full order/history/drafts/choices. No throttling,suppressed output,new lifecycle or shorter fixtures.
 
-Floe owns floating mechanics; Redeven projection. Published shimmer pauses only decoration during shared drag/resize,retaining phase/identity. Text/tokens/content/terminal remain live. Browser checks release/cancel/blur and preview drafts/selection; budgets unchanged.
+Floe owns shared floating mechanics; Redeven owns projection. Published shimmer pauses decorative paint only during shared drag/resize, retaining identity/phase. Flower observes that same DOM gesture owner once per surface: active title/disclosure motion settles, incoming titles remain fully readable, semantic tool icons become static, and CSS activity indicators stop animating. Automatic tail following continues without its optional easing during manipulation; reading anchors and native wheel handling remain owned by the existing scroll controller. Release, cancellation and blur restore the accessibility preference; old arrivals never replay and only subsequent arrivals animate. Expanded reasoning uses the same preference. Normal reading retains its smooth motion. Text/tokens/content/terminal state stay live. Browser checks cover release/cancellation/blur and preserved preview drafts/selection. Workload and budgets remain unchanged.
 
 # Evidence
 

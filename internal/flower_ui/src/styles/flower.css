@@ -1,5 +1,26 @@
 @import './computer-connections.css';
 
+/* Direct manipulation owns presentation deadlines. Keep live content and
+   status legible while settling only Flower's decorative motion. */
+:root:is([data-floe-hot-interaction~='drag'], [data-floe-hot-interaction~='resize'])
+  :is(.flower-thinking-ink, .flower-thinking-center-ink, .flower-model-status-flower,
+    .flower-model-status-dots, .flower-thread-wave-bar, .flower-activity-inline-loader-square,
+    .flower-activity-waiting-clock,
+    .flower-chat-md-streaming-fade-in) {
+  animation: none !important;
+}
+:root:is([data-floe-hot-interaction~='drag'], [data-floe-hot-interaction~='resize'])
+  :is(.flower-activity-waiting-clock, .flower-compaction-divider-running-clock)::before,
+:root:is([data-floe-hot-interaction~='drag'], [data-floe-hot-interaction~='resize'])
+  :is(.flower-activity-waiting-clock, .flower-compaction-divider-running-clock)::after {
+  animation: none !important;
+}
+:root:is([data-floe-hot-interaction~='drag'], [data-floe-hot-interaction~='resize'])
+  :is(.flower-history-message[data-flower-sequence-arrival], .flower-activity-inline-chevron,
+    .flower-tool-sequence-chevron, .flower-tool-sequence-summary, .flower-tool-sequence-rail) {
+  transition: none !important;
+}
+
 .flower-body-copy {
   font-size: var(--floe-type-body);
   line-height: var(--floe-line-body);

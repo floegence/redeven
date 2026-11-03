@@ -24,6 +24,7 @@ export type FlowerThinkingDisclosureProps = Readonly<{
   manualExpanded?: Accessor<boolean | undefined>;
   onManualExpanded?: (expanded: boolean) => void;
   scroll?: FlowerScrollTailController;
+  reducedMotion?: Accessor<boolean>;
 }>;
 
 function safeContentID(value: string): string {
@@ -41,11 +42,12 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   let followFrame = 0;
   let restoreFrame = 0;
   let followStart: { top: number; at: number } | undefined;
+  const reducedMotion = () => props.reducedMotion?.() ?? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const cancelFollow = () => { cancelAnimationFrame(followFrame); followFrame = 0; followStart = undefined; };
   const writeTop = (top: number) => { if (viewport) { viewport.scrollTop = top; writtenTop = viewport.scrollTop; } };
   const follow = () => {
     if (!viewport || followStart) return;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { writeTop(viewport.scrollHeight); return; }
+    if (reducedMotion()) { writeTop(viewport.scrollHeight); return; }
     followStart = { top: viewport.scrollTop, at: performance.now() };
     const advance = (now: number) => {
       if (!viewport || !followStart) return;
@@ -70,10 +72,17 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   };
   const motion = createFlowerActivityDisclosureMotion(() => view() === 'expanded', {
     initialOpen: props.manualExpanded?.() === true,
+    reducedMotion,
     onLayoutFrame: () => props.scroll?.measureAfterLayout(),
     onMotionEnd: () => { if (toggleButton) props.scroll?.finishDisclosure(toggleButton); },
   });
   onCleanup(() => { if (toggleButton) props.scroll?.releaseDisclosure(toggleButton); });
+  createEffect(() => {
+    if (reducedMotion() && followStart) {
+      cancelFollow();
+      if (viewport && following) writeTop(viewport.scrollHeight);
+    }
+  });
 
   // Completion, reconnect and source hydration cannot change a user's choice.
   // Each new segment starts collapsed; only its own disclosure changes it.

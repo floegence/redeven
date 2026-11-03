@@ -5,7 +5,7 @@ export const workload = Object.freeze({ historyTurns: 500, hz: 80, toolEvery: 60
 export const fastTests = Object.freeze([
   'runtimeThreadRecord.test.ts', 'runtimeThreadRecord.client.test.ts', 'runtimeCurrentView.stability.test.ts', 'flowerTimelineProjection.test.ts', 'flowerLiveFrameQueue.test.ts', 'threadCache.test.ts',
   'historySequenceCompletion.test.ts', 'historyBodyLoader.test.ts', 'historyBodyLayout.client.test.ts', 'historyWindowRetention.test.ts', 'historyReadingWindow.test.ts', 'flowerTurnDisclosure.test.ts',
-  'flowerTurnPresentation.test.ts', 'flowerToolSequences.test.ts', 'flowerToolSequences.client.test.ts', 'flowerPresentationSubscriptions.client.test.ts', 'flowerActivityTitleReveal.client.test.ts', 'flowerSequenceDisclosure.client.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
+  'flowerTurnPresentation.test.ts', 'flowerToolSequences.test.ts', 'flowerToolSequences.client.test.ts', 'flowerPresentationSubscriptions.client.test.ts', 'flowerActivityTitleReveal.client.test.ts', 'flowerMotionPreference.client.test.ts', 'flowerSequenceDisclosure.client.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
 ]);
 export const browserTests = Object.freeze([
   'FlowerSurface.continuousHistory.browser.test.tsx', 'FlowerSurface.coldHistory.browser.test.tsx',
@@ -15,7 +15,7 @@ export const browserTests = Object.freeze([
   'FlowerSurface.decisionSurface.browser.test.tsx', 'FlowerSurface.terminalActivity.browser.test.tsx',
   'FlowerSurface.history.browser.test.tsx', 'FlowerSurface.threadPresentation.browser.test.tsx',
   'FlowerSurface.turnProcess.browser.test.tsx', 'FlowerSurface.toolSequences.browser.test.tsx',
-  'FlowerSurface.toolOutputInteraction.browser.test.tsx',
+  'FlowerSurface.toolOutputInteraction.browser.test.tsx', 'FlowerSurface.floatingInteraction.browser.test.tsx',
   'FlowerSurface.parentEvents.browser.test.tsx', 'FlowerSurface.activityTyping.browser.test.tsx',
 ]);
 export function longThreadAffected(file) {

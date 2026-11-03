@@ -21342,7 +21342,7 @@
         "title": "Flower explicit long-thread qualification",
         "type": "Validation Contract"
       },
-      "body_length": 5510,
+      "body_length": 6189,
       "summary": "Complete conversations and responsive interaction are required. Run fixed-budget long-thread checks explicitly for acceptance/investigation, outside commit/integration/CI gates. Preserve failures and exact source/cleanup evidence; neither a reduced workload nor prior-tip timing qualifies changed product code.",
       "sections": [
         {
@@ -21356,8 +21356,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Keep metrics/traces outside Git with source/locks/host. Go fixture exports private exclusive-create config/canonical evidence through owner-selected directory handle. Only finite nonnegative safe-integer HTTP counters; response bodies/unknown fields never become evidence files. Dirty samples certify no commit. Seed complete canonical results once,not each prefix,without reducing coverage.\n\nOptimize stable inputs/keyed subscriptions/linear membership/bounded offscreen layout with reading-focus-selection pins. Retain DOM/disclosure even growing active turns: containment,not virtualization. Visit entries once/structural change,not suffix per section; keep partition keys through prepend/growth/completion and preserve full order/history/drafts/choices. No throttling,suppressed output,new lifecycle or shorter fixtures.\n\nFloe owns floating mechanics; Redeven projection. Published shimmer pauses only decoration during shared drag/resize,retaining phase/identity. Text/tokens/content/terminal remain live. Browser checks release/cancel/blur and preview drafts/selection; budgets unchanged.",
-          "char_count": 1183
+          "body": "Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Keep metrics/traces outside Git with source/locks/host. Go fixture exports private exclusive-create config/canonical evidence through owner-selected directory handle. Only finite nonnegative safe-integer HTTP counters; response bodies/unknown fields never become evidence files. Dirty samples certify no commit. Seed complete canonical results once,not each prefix,without reducing coverage.\n\nOptimize stable inputs/keyed subscriptions/linear membership/bounded offscreen layout with reading-focus-selection pins. Retain DOM/disclosure even growing active turns: containment,not virtualization. Visit entries once/structural change,not suffix per section; keep partition keys through prepend/growth/completion and preserve full order/history/drafts/choices. No throttling,suppressed output,new lifecycle or shorter fixtures.\n\nFloe owns shared floating mechanics; Redeven owns projection. Published shimmer pauses decorative paint only during shared drag/resize, retaining identity/phase. Flower observes that same DOM gesture owner once per surface: active title/disclosure motion settles, incoming titles remain fully readable, semantic tool icons become static, and CSS activity indicators stop animating. Automatic tail following continues without its optional easing during manipulation; reading anchors and native wheel handling remain owned by the existing scroll controller. Release, cancellation and blur restore the accessibility preference; old arrivals never replay and only subsequent arrivals animate. Expanded reasoning uses the same preference. Normal reading retains its smooth motion. Text/tokens/content/terminal state stay live. Browser checks cover release/cancellation/blur and preserved preview drafts/selection. Workload and budgets remain unchanged.",
+          "char_count": 1862
         }
       ],
       "snippet": "Complete conversations and responsive interaction are required. Run fixed-budget long-thread checks explicitly for acceptance/investigation, outside commit/integration/CI gates. Preserve failures and exact source/cleanup evidence; neither a",
@@ -32069,5 +32069,5 @@
       ]
     }
   ],
-  "source_sha256": "d5f932cb37f9ffc0beb38532de47b8b52fb0c8bcce379680cf264b90026d2873"
+  "source_sha256": "57c10d226e19633654fe0e908b710d332d015c0c17a4fc567ac91d465c9eee48"
 }

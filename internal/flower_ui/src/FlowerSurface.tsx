@@ -56,6 +56,7 @@ import { FLOE_HOT_INTERACTION_ATTR, secureRandomUUID, useOverlayMask } from '@fl
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { FlowerApprovalRow, FlowerApprovalDecisionActions } from './FlowerApprovalRow';
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
+import { createFlowerMotionPreference } from './flowerMotionPreference';
 import { readPresentationValue, retainEqualValue, retainKeyedItems } from './presentationIdentity';
 import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
@@ -1322,11 +1323,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let presentedSelectionFrame = 0;
   let presentedSelectionTimer: number | undefined;
 
-  const reducedMotionPreferred = (): boolean => (
-    typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
+  const reducedMotionPreferred = createFlowerMotionPreference();
 
   onMount(() => {
     activityClockTimer = window.setInterval(() => setActivityClockNow(Date.now()), 1000);
@@ -11488,7 +11485,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <div class="flower-activity-inline-row flower-activity-inline-row-generating" data-flower-tool-call-id={block().call.call_id} data-flower-argument-generation="true" data-flower-activity-active={livePresentationConfirmed() ? 'true' : undefined}>
         <div class="flower-activity-inline-line">
           <div class="flower-activity-inline-button flower-activity-inline-button-static">
-            <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} /></span>
+            <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} reducedMotion={reducedMotionPreferred()} /></span>
             <span class="flower-activity-inline-copy">
               <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && !revealTitle.revealing() ? 'text' : undefined}>
                 <span class="flower-activity-inline-title-verb">{block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}</span>
@@ -11695,7 +11692,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const activityRowContent = (
       <>
         <span class="flower-activity-inline-icon">
-          <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} webOperation={webOperation()} running={livePresentationConfirmed() && displayStatus() === 'running'} />
+          <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} webOperation={webOperation()} running={livePresentationConfirmed() && displayStatus() === 'running'} reducedMotion={reducedMotionPreferred()} />
         </span>
         <div class="flower-activity-inline-copy">
           <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={progressShimmer() && !revealTitle.revealing() ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
@@ -12040,6 +12037,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <FlowerThinkingDisclosure
             bindElement={bindThinkingElement}
             scroll={viewportScope}
+            reducedMotion={reducedMotionPreferred}
             contentID={block().key}
             manualExpanded={() => expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key)]}
             onManualExpanded={expanded => setExpandedDetails(detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key), expanded)}

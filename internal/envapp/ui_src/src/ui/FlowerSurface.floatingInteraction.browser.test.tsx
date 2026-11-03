@@ -46,6 +46,18 @@ it.each((['release', 'cancel', 'blur'] as const).flatMap(ending =>
   const editor = document.querySelector<HTMLTextAreaElement>('[aria-label="Preview draft"]')!;
   editor.value = 'User edit stays intact'; editor.setSelectionRange(2, 8);
   const tail = runtime.querySelector('[data-flower-message-id="streaming-tail"]')!;
+  const icon = source === 'tool-preview' ? runtime.querySelector<HTMLElement>('[data-flower-argument-generation] .flower-tool-icon') : undefined;
+  if (icon) await waitFor(() => icon.getAnimations({ subtree: true }).some(animation => animation.playState === 'running'));
+  const motionSamples: number[] = [];
+  let motionFrame = 0;
+  const sampleMotion = () => {
+    if (icon && document.documentElement.getAttribute('data-floe-hot-interaction') === 'drag') {
+      motionSamples.push(icon.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running').length);
+    }
+    motionFrame = requestAnimationFrame(sampleMotion);
+  };
+  motionFrame = requestAnimationFrame(sampleMotion);
+  onTestFinished(() => cancelAnimationFrame(motionFrame));
   const painted = new Set<string>();
   const observer = new MutationObserver(() => painted.add(tail.textContent ?? ''));
   observer.observe(tail, { childList: true, characterData: true, subtree: true });
@@ -53,7 +65,7 @@ it.each((['release', 'cancel', 'blur'] as const).flatMap(ending =>
   const timer = setInterval(() => { fixture.append(` chunk-${++inputs}`); }, 8);
   onTestFinished(() => { clearInterval(timer); observer.disconnect(); });
   const result = await (commands as unknown as { dragStreamingPreview(ending: string): Promise<{ activeDuring: string; activeBeforeRelease: string | null; activeAfter: string | null; positions: number[] }> }).dragStreamingPreview(ending);
-  clearInterval(timer); observer.disconnect();
+  clearInterval(timer); observer.disconnect(); cancelAnimationFrame(motionFrame);
   expect(result.activeDuring).toBe('drag');
   expect(result.activeBeforeRelease).toBe(ending === 'release' ? 'drag' : null);
   expect(result.activeAfter).toBeNull();
@@ -64,6 +76,10 @@ it.each((['release', 'cancel', 'blur'] as const).flatMap(ending =>
   await waitFor(() => tail.textContent?.includes('Final release text.') === true);
   expect(tail.textContent).toContain(`chunk-${inputs}`);
   if (source === 'tool-preview') {
+    expect(motionSamples.length).toBeGreaterThan(10);
+    expect(motionSamples.every(count => count === 0)).toBe(true);
+    await waitFor(() => icon!.getAnimations({ subtree: true }).some(animation => animation.playState === 'running'));
+    expect(runtime.querySelector('[data-flower-argument-generation] .flower-tool-icon')).toBe(icon);
     expect(runtime.querySelector('[data-flower-argument-generation]')?.textContent).toContain(`+${fixture.current().tool_call_previews![0]!.preview!.additions}`);
   }
   expect(document.querySelector('[aria-label="Preview draft"]')).toBe(editor);
