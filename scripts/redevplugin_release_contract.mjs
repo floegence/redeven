@@ -20,7 +20,7 @@ export const runtimeSBOMName = 'REDEVPLUGIN_RUNTIME.spdx.json';
 export const runtimeProvenanceName = 'redevplugin-runtime.provenance.json';
 export const runtimeSignatureName = 'redevplugin-runtime.sig';
 export const runtimeCertificateName = 'redevplugin-runtime.pem';
-export const rustToolchain = '1.88.0';
+export const rustToolchain = '1.98.0';
 
 const semverPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const commitPattern = /^[0-9a-f]{40}$/u;

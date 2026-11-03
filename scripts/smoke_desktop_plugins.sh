@@ -100,25 +100,27 @@ prepare_linux_target() {
   FIXTURE_HTTP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_HTTP_PORT:-$default_fixture_http_port}
   FIXTURE_TCP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_TCP_PORT:-$default_fixture_tcp_port}
   FIXTURE_UDP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_UDP_PORT:-$default_fixture_udp_port}
-  local image="debian:bookworm-slim" runtime_tag runtime_version runtime_cache published_module_dir
+  local image="debian:bookworm-slim" runtime_tag runtime_version runtime_cache published_module_dir go_version
+  go_version=$(awk '$1 == "go" { print $2; exit }' "$ROOT_DIR/go.mod")
+  [[ "$go_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid go.mod toolchain version" >&2; return 1; }
   runtime_tag=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Version}}' github.com/floegence/redevplugin/v3)
   [[ "$runtime_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid ReDevPlugin module version: $runtime_tag" >&2; return 1; }
   runtime_version=${runtime_tag#v}
   published_module_dir=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Dir}}' "github.com/floegence/redevplugin/v3@${runtime_tag}")
-  runtime_cache="${XDG_CACHE_HOME:-$HOME/.cache}/redeven/docker-runtime-e2e/redevplugin-runtime-${runtime_version}-rust-1.88.0-linux-arm64-$(git -C "$ROOT_DIR" rev-parse HEAD)-evidence-v1"
+  runtime_cache="${XDG_CACHE_HOME:-$HOME/.cache}/redeven/docker-runtime-e2e/redevplugin-runtime-${runtime_version}-rust-1.98.0-linux-arm64-$(git -C "$ROOT_DIR" rev-parse HEAD)-evidence-v1"
   if [[ ! -x "$runtime_cache/redevplugin-runtime" || ! -f "$runtime_cache/.redevplugin-release-artifacts-verified.json" ]]; then
     "$ROOT_DIR/scripts/check_docker_runtime_e2e.sh" >/dev/null
   fi
   [[ -x "$runtime_cache/redevplugin-runtime" && -f "$runtime_cache/.redevplugin-release-artifacts-verified.json" ]] || { echo "published Linux runtime evidence was not produced" >&2; return 1; }
   "$ROOT_DIR/scripts/build_assets.sh" >/dev/null
-  docker run --rm --platform linux/arm64 -v "$ROOT_DIR:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src golang:1.27.2-bookworm bash -ceu 'CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/redeven ./cmd/redeven; CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/io-server ./scripts/fixtures/redevplugin_io_smoke_server'
+  docker run --rm --platform linux/arm64 -v "$ROOT_DIR:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src "golang:${go_version}-bookworm" bash -ceu 'CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/redeven ./cmd/redeven; CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/io-server ./scripts/fixtures/redevplugin_io_smoke_server'
   REDEVPLUGIN_IO_SMOKE_HTTP_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_WS_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_TCP_PORT="$FIXTURE_TCP_PORT" \
   REDEVPLUGIN_IO_SMOKE_UDP_PORT="$FIXTURE_UDP_PORT" \
     pnpm --dir "$ROOT_DIR/internal/envapp/ui_src" exec vite build --config "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/vite.config.mjs" >/dev/null
   cp "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/ui/index.html" "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/dist/ui/index.html"
-  docker run --rm --platform linux/arm64 -v "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src/worker rust:1.88.0-bookworm bash -ceu 'rustup target add wasm32-unknown-unknown >/dev/null; cargo build --release --target wasm32-unknown-unknown; install -m 0644 target/wasm32-unknown-unknown/release/redevplugin_io_smoke_worker.wasm /out/io.wasm'
+  docker run --rm --platform linux/arm64 -v "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src/worker rust:1.98.0-bookworm bash -ceu 'rustup target add wasm32-unknown-unknown >/dev/null; cargo build --release --locked --target wasm32-unknown-unknown; install -m 0644 target/wasm32-unknown-unknown/release/redevplugin_io_smoke_worker.wasm /out/io.wasm'
   install -m 0755 "$runtime_cache/redevplugin-runtime" "$LINUX_TARGET_ROOT/redevplugin-runtime"
   install -m 0644 "$runtime_cache/.redevplugin-release-artifacts-verified.json" "$LINUX_TARGET_ROOT/.redevplugin-release-artifacts-verified.json"
   install -m 0644 "$runtime_cache/redevplugin-runtime.provenance.json" "$LINUX_TARGET_ROOT/redevplugin-runtime.provenance.json"

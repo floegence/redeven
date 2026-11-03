@@ -17,7 +17,7 @@ function createFakeRustup(root, behavior) {
   mkdirSync(path.join(toolchain, 'bin'), { recursive: true });
   for (const name of ['cargo', 'rustc']) {
     const file = path.join(toolchain, 'bin', name);
-    writeFileSync(file, `#!/bin/sh\nprintf '%s\\n' '${name} 1.88.0 (fixture)'\n`);
+    writeFileSync(file, `#!/bin/sh\nprintf '%s\\n' '${name} 1.98.0 (fixture)'\n`);
     chmodSync(file, 0o700);
   }
   mkdirSync(bin, { recursive: true });
@@ -30,7 +30,7 @@ ${behavior}
   return { bin, state, log, toolchain };
 }
 
-function runHelper(fake, extraEnv = {}, args = ['--toolchain', '1.88.0', '--target', 'aarch64-apple-darwin']) {
+function runHelper(fake, extraEnv = {}, args = ['--toolchain', '1.98.0', '--target', 'aarch64-apple-darwin']) {
   return spawnSync(helper, args, {
     encoding: 'utf8',
     timeout: 15_000,
@@ -218,7 +218,7 @@ esac
       assert.doesNotMatch(calls, /toolchain install/u);
       assert.equal((calls.match(/^target add /gmu) ?? []).length, addCount);
       if (!addSucceeds) assert.match(result.stderr, /still unavailable/u);
-      if (env.REDEVEN_RUSTUP_OFFLINE) assert.match(result.stderr, /rustup target add --toolchain 1.88.0 aarch64-apple-darwin/u);
+      if (env.REDEVEN_RUSTUP_OFFLINE) assert.match(result.stderr, /rustup target add --toolchain 1.98.0 aarch64-apple-darwin/u);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

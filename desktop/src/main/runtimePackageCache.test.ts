@@ -418,7 +418,7 @@ describe('runtimePackageCache', () => {
       )) as Record<string, string>;
       expect(metadata.source_commit).toBe('unknown');
       expect(metadata.redevplugin_release_tag).toBe('v3.0.31');
-      expect(metadata.rust_toolchain).toBe('1.88.0');
+      expect(metadata.rust_toolchain).toBe('1.98.0');
       expect(metadata.archive_sha256).toMatch(/^[a-f0-9]{64}$/u);
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
       expect(buildLog).toMatch(/^assets:/u);

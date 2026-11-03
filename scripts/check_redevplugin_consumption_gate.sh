@@ -106,7 +106,11 @@ verify_runtime_directory() {
     --require-release "$require_flag"; then
     return 1
   fi
-  verify_signature "$root"
+  verify_signature "$root" || return 1
+  if [[ "$target" == darwin/* && "$(uname -s)" == Darwin ]]; then
+    require_command codesign
+    python3 "$SCRIPT_DIR/verify_redevplugin_macos_signature.py" "$root/redevplugin-runtime"
+  fi
 }
 
 scan_root() {

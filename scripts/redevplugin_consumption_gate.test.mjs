@@ -33,7 +33,7 @@ const manifest = {
   ],
 };
 
-function createFixture(root, target = 'linux/amd64') {
+function createFixture(root, target = 'linux/amd64', invalidSignature = false) {
   mkdirSync(root, { recursive: true });
   const manifestPath = path.join(root, 'platform-release-manifest.json');
   writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
@@ -59,20 +59,20 @@ function createFixture(root, target = 'linux/amd64') {
   writeFileSync(provenance, '{}\n');
   writeFileSync(notices, 'notices\n');
   const keys = generateKeyPairSync('ed25519');
-  writeFileSync(signature, sign(null, executable, keys.privateKey));
+  writeFileSync(signature, invalidSignature ? Buffer.alloc(64) : sign(null, executable, keys.privateKey));
   writeFileSync(certificate, keys.publicKey.export({ type: 'spki', format: 'pem' }));
   const marker = createRuntimeEvidence({
     profile: 'development', target, releaseVerification: verification,
     runtimePath: runtime, sbomPath: sbom, provenancePath: provenance, noticesPath: notices,
     signaturePath: signature, certificatePath: certificate,
     product: { repository: 'floegence/redeven', workflow_path: '.github/workflows/release.yml', ref: 'refs/heads/fixture', source_commit: '2'.repeat(40) },
-    cargoVersion: 'cargo 1.88.0 (fixture)', rustcVersion: 'rustc 1.88.0 (fixture)',
+    cargoVersion: 'cargo 1.98.0 (fixture)', rustcVersion: 'rustc 1.98.0 (fixture)',
   });
   writeFileSync(path.join(root, runtimeMarkerName), `${JSON.stringify(marker, null, 2)}\n`);
 }
 
-function run(args, expectedStatus = 0) {
-  const result = spawnSync(script, args, { encoding: 'utf8' });
+function run(args, expectedStatus = 0, env = process.env) {
+  const result = spawnSync(script, args, { encoding: 'utf8', env });
   assert.equal(result.status, expectedStatus, `${result.stdout}\n${result.stderr}`);
 }
 
@@ -89,12 +89,51 @@ test('accepts a signed development runtime and rejects tampered evidence', () =>
   }
 });
 
-test('accepts a signed Darwin development runtime with exact Mach-O identity', () => {
+test('Darwin consumption verifies the exact Mach-O identity and hardened signature', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-consumption-darwin-'));
   try {
     createFixture(root, 'darwin/arm64');
-    run(['--scan-root', root, '--runtime-target', 'darwin/arm64']);
-    run(['--scan-root', root, '--runtime-target', 'darwin/amd64'], 1);
+    const bin = path.join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(path.join(bin, 'uname'), '#!/bin/sh\nprintf Darwin\n', { mode: 0o755 });
+    writeFileSync(path.join(bin, 'codesign'), [
+      '#!/bin/sh', 'set -eu',
+      'if [ "$1" = --verify ]; then exit "$FIXTURE_CODESIGN_STATUS"; fi',
+      'if [ "$2" = --verbose=4 ]; then printf "CodeDirectory v=20500 flags=%s\\n" "$FIXTURE_FLAGS" >&2; exit 0; fi',
+      'cat "$FIXTURE_ENTITLEMENTS"', '',
+    ].join('\n'), { mode: 0o755 });
+    const env = { ...process.env, PATH: bin + path.delimiter + process.env.PATH,
+      FIXTURE_CODESIGN_STATUS: '0', FIXTURE_FLAGS: '0x10002(adhoc,runtime)',
+      FIXTURE_ENTITLEMENTS: new URL('./redevplugin-runtime-entitlements.plist', import.meta.url).pathname };
+    run(['--scan-root', root, '--runtime-target', 'darwin/arm64'], 0, env);
+    run(['--scan-root', root, '--runtime-target', 'darwin/amd64'], 1, env);
+    run(['--scan-root', root, '--runtime-target', 'darwin/arm64'], 1, { ...env, FIXTURE_CODESIGN_STATUS: '1' });
+    run(['--scan-root', root, '--runtime-target', 'darwin/arm64'], 1, { ...env, FIXTURE_FLAGS: '0x2(adhoc)' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('archive consumption cannot swallow a failed cryptographic signature inside a shell conditional', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-consumption-archive-'));
+  try {
+    const payload = path.join(root, 'payload');
+    const archives = path.join(root, 'archives');
+    mkdirSync(archives);
+    const archive = path.join(archives, 'redeven_linux_amd64.tar.gz');
+    for (const invalidSignature of [false, true]) {
+      createFixture(payload, 'linux/amd64', invalidSignature);
+      for (const name of ['redeven', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) writeFileSync(path.join(payload, name), name);
+      const packed = spawnSync('python3', ['-c', [
+        'import sys, tarfile', 'from pathlib import Path',
+        'root = Path(sys.argv[1])',
+        'with tarfile.open(sys.argv[2], "w:gz", format=tarfile.USTAR_FORMAT) as archive:',
+        '    for item in sorted(root.iterdir()):',
+        '        if item.name != "platform-release-manifest.json": archive.add(item, arcname=item.name)',
+      ].join('\n'), payload, archive], { encoding: 'utf8' });
+      assert.equal(packed.status, 0, packed.stderr);
+      run(['--scan-root', archives], invalidSignature ? 1 : 0);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

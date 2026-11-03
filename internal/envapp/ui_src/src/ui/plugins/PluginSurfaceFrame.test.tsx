@@ -92,6 +92,165 @@ async function flushAsync(): Promise<void> {
 }
 
 describe('PluginSurfaceBody', () => {
+  it('defers an unopened placement until both document and placement are visible', async () => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    const [visible, setVisible] = createSignal(false);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible={visible()} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    expect(coordinator.open).not.toHaveBeenCalled();
+    expect(mount.querySelector('[data-plugin-surface-opening]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-surface-host]')?.getAttribute('aria-busy')).toBe('false');
+    setVisible(true);
+    await flushAsync();
+    expect(coordinator.open).not.toHaveBeenCalled();
+    setVisible(false);
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushAsync();
+    expect(coordinator.open).not.toHaveBeenCalled();
+    setVisible(true);
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(coordinator.setVisible).toHaveBeenLastCalledWith(expect.anything(), true);
+  });
+
+  it('keeps the same opening slot through rapid visibility changes and hidden completion', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    let resolveOpen!: (value: PluginSurfaceHost) => void;
+    vi.mocked(coordinator.open).mockImplementation(() => new Promise(resolve => { resolveOpen = resolve; }));
+    const [visible, setVisible] = createSignal(false);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible={visible()} onRetirementError={vi.fn()} />, mount);
+    setVisible(true);
+    await flushAsync();
+    for (let index = 0; index < 5; index += 1) { setVisible(false); setVisible(true); }
+    setVisible(false);
+    resolveOpen(host);
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(coordinator.release).not.toHaveBeenCalled();
+    expect(coordinator.fail).not.toHaveBeenCalled();
+    expect(coordinator.setVisible).toHaveBeenLastCalledWith(expect.anything(), false);
+    expect(mount.querySelector('[data-plugin-surface-host]')?.getAttribute('data-surface-instance-id')).toBe(host.surfaceInstanceId);
+    setVisible(true);
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(coordinator.setVisible).toHaveBeenLastCalledWith(expect.anything(), true);
+  });
+
+  it('closes an unopened placement without creating authority when it later becomes visible', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    const [visible, setVisible] = createSignal(false);
+    const closeRegistration: { current: (() => Promise<boolean>) | null } = { current: null };
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible={visible()} registerClose={close => { closeRegistration.current = close; }} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    await expect(closeRegistration.current!()).resolves.toBe(true);
+    setVisible(true);
+    await flushAsync();
+    expect(coordinator.open).not.toHaveBeenCalled();
+    expect(coordinator.release).not.toHaveBeenCalled();
+    dispose(); dispose = undefined;
+    expect(closeRegistration.current).toBeNull();
+    expect(coordinator.release).not.toHaveBeenCalled();
+  });
+
+  it('disposes an unopened placement without allocating a slot or reacting to later visibility', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    const [visible, setVisible] = createSignal(false);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible={visible()} onRetirementError={vi.fn()} />, mount);
+    dispose(); dispose = undefined;
+    setVisible(true);
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushAsync();
+    expect(coordinator.open).not.toHaveBeenCalled();
+    expect(coordinator.release).not.toHaveBeenCalled();
+  });
+
+  it('captures the current context when deferred opening begins and only publishes newer revisions', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    const [visible, setVisible] = createSignal(false);
+    let resolveOpen!: (value: PluginSurfaceHost) => void;
+    vi.mocked(coordinator.open).mockImplementation(() => new Promise(resolve => { resolveOpen = resolve; }));
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible={visible()} onRetirementError={vi.fn()} />, mount);
+    document.documentElement.classList.add('dark');
+    await flushAsync();
+    setVisible(true);
+    await flushAsync();
+    const initial = vi.mocked(coordinator.open).mock.calls[0]![2]!.surfaceContext!;
+    expect(initial.appearance.color_scheme).toBe('dark');
+    expect(initial.revision).toBeGreaterThan(1);
+    resolveOpen(host);
+    await flushAsync();
+    expect(host.updateContext).not.toHaveBeenCalled();
+    document.documentElement.classList.remove('dark');
+    await flushAsync();
+    expect(host.updateContext).toHaveBeenCalledOnce();
+    expect(host.updateContext).toHaveBeenCalledWith(expect.objectContaining({ revision: initial.revision + 1 }));
+  });
+
+  it('publishes context changes made during a deferred first opening once on readiness', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    const [visible, setVisible] = createSignal(false);
+    let resolveOpen!: (value: PluginSurfaceHost) => void;
+    vi.mocked(coordinator.open).mockImplementation(() => new Promise(resolve => { resolveOpen = resolve; }));
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible={visible()} onRetirementError={vi.fn()} />, mount);
+    setVisible(true);
+    await flushAsync();
+    const initial = vi.mocked(coordinator.open).mock.calls[0]![2]!.surfaceContext!;
+    document.documentElement.classList.add('dark');
+    await flushAsync();
+    expect(host.updateContext).not.toHaveBeenCalled();
+    resolveOpen(host);
+    await flushAsync();
+    expect(host.updateContext).toHaveBeenCalledOnce();
+    expect(host.updateContext).toHaveBeenCalledWith(expect.objectContaining({ revision: initial.revision + 1, appearance: expect.objectContaining({ color_scheme: 'dark' }) }));
+  });
+
+  it('captures a fresh initial context for an explicit retry after authoritative inventory', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const first = createHost(), replacement = createHost();
+    const coordinator = createCoordinator(first);
+    vi.mocked(coordinator.open).mockResolvedValueOnce(first).mockResolvedValueOnce(replacement);
+    const refreshInventory = vi.fn(async () => true);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible refreshInventory={refreshInventory} onRetirementError={vi.fn()} />, mount);
+    await flushAsync();
+    vi.mocked(coordinator.open).mock.calls[0]![2]!.onError!(
+      Object.assign(new Error('surface invalidated'), { errorCode: 'PLUGIN_BRIDGE_DISPOSED' }) as PluginBridgeError,
+    );
+    document.documentElement.classList.add('dark');
+    await flushAsync();
+    (mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement).click();
+    await flushAsync();
+    const retried = vi.mocked(coordinator.open).mock.calls[1]![2]!.surfaceContext!;
+    expect(retried.appearance.color_scheme).toBe('dark');
+    expect(retried.revision).toBeGreaterThan(1);
+    expect(replacement.updateContext).not.toHaveBeenCalled();
+    expect(refreshInventory).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['visibility', 'context'] as const)('contains %s delivery errors within the affected surface', async (delivery) => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -290,7 +449,7 @@ describe('PluginSurfaceBody', () => {
     expect(host.updateContext).toHaveBeenCalledTimes(1);
   });
 
-  it('publishes an explicit initial hidden state and follows placement visibility', async () => {
+  it('defers initial hidden work and follows placement visibility after first opening', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const host = createHost();
@@ -309,7 +468,8 @@ describe('PluginSurfaceBody', () => {
     ), mount);
     await flushAsync();
 
-    expect(coordinator.setVisible).toHaveBeenCalledWith(expect.anything(), false);
+    expect(coordinator.open).not.toHaveBeenCalled();
+    expect(coordinator.setVisible).not.toHaveBeenCalled();
     setVisible(true);
     await flushAsync();
     expect(coordinator.setVisible).toHaveBeenLastCalledWith(expect.anything(), true);

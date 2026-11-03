@@ -190,17 +190,19 @@ test('Desktop smoke does not expose bridge credentials in observations', async (
   assert.doesNotMatch(source, /plugin_session_credential.*observation/u);
 });
 
-test('v9 I/O smoke surface runs as an opaque worker and drives hold through rendered UI', async () => {
+test('v9 I/O Web Surface drives Worker calls through the bridge and hold button', async () => {
   const fs = await import('node:fs/promises');
   const [workerSource, browserSource] = await Promise.all([
     fs.readFile(new URL('./fixtures/redevplugin_io_smoke/ui/app.js', import.meta.url), 'utf8'),
     fs.readFile(new URL('./smoke_desktop_plugins.mjs', import.meta.url), 'utf8'),
   ]);
 
-  assert.doesNotMatch(workerSource, /\b(?:document|window|location)\b/u);
-  assert.match(workerSource, /bridge\.render\(/u);
+  assert.match(workerSource, /new PluginBridgeClient/u);
+  assert.match(workerSource, /bridge\.call\(method, \{ server \}\)/u);
+  assert.match(workerSource, /statusElement\.textContent = status/u);
+  assert.doesNotMatch(workerSource, /bridge\.render|bridge\.onAction/u);
   assert.match(workerSource, /data-redevplugin-action[^\n]*hold-smoke/u);
-  assert.match(workerSource, /bridge\.onAction\(['"]hold-smoke['"]/u);
+  assert.match(workerSource, /querySelector\('\[data-redevplugin-action=hold-smoke\]'\)\.addEventListener\('click'/u);
   assert.match(browserSource, /data-redevplugin-action="hold-smoke"/u);
   assert.doesNotMatch(browserSource, /window\.__ioSmokeHold/u);
 });
@@ -383,12 +385,13 @@ test('the Activity Plugin Panel is an eagerly mounted core control', async () =>
   assert.match(shellSource, /type PluginPanelState = Readonly<\{[\s\S]*?open: boolean;[\s\S]*?placement: 'activity' \| 'workbench';[\s\S]*?trigger: HTMLButtonElement \| null;/u);
   assert.match(shellSource, /createSignal<PluginPanelState>/u);
   assert.match(shellSource, /const renderPluginPanel = \(\) => \(\s*<PluginPanel[\s\S]*?open=\{pluginsPanelOpen\(\)\}/u);
-  assert.match(shellSource, /<EnvContext\.Provider[\s\S]*?>\s*\{renderPluginPanel\(\)\}[\s\S]*?<TerminalSessionCatalogProvider>/u);
+  assert.match(shellSource, /<EnvContext\.Provider[\s\S]*?<Show when=\{!standaloneTessiven\}>\s*\{renderPluginPanel\(\)\}\s*<\/Show>[\s\S]*?<TerminalSessionCatalogProvider/u);
   assert.doesNotMatch(shellSource, /requestPluginPanelState|activePluginPanelManager|activePluginsActivityBinding/u);
   assert.doesNotMatch(shellSource, /data-plugin-inventory-debug/u);
   assert.match(panelSource, /import \{ Portal \} from 'solid-js\/web'/u);
   assert.match(panelSource, /const visible = \(\) => props\.open \|\| mounted\(\)/u);
-  assert.match(panelSource, /<Portal>[\s\S]*?data-plugin-launcher-backdrop=\{visible\(\) \? '' : undefined\}[\s\S]*?hidden=\{!visible\(\)\}/u);
+  assert.match(panelSource, /<Show when=\{visible\(\) && !isWorkbenchPopup\(\) && !props\.mobile\}>[\s\S]*?<SurfaceAnchoredLayer/u);
+  assert.match(panelSource, /inert=\{!props\.open\}[\s\S]*?aria-hidden=\{props\.open \? undefined : 'true'\}/u);
   assert.doesNotMatch(panelSource, /openCommands|registerController|PLUGIN_PANEL_CONTROL_EVENT/u);
 });
 

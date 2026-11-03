@@ -14,6 +14,11 @@ assert.ok(start >= 0 && end > start);
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-cargo-cache-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  const scripts = path.join(root, 'scripts');
+  mkdirSync(scripts);
+  for (const name of ['stage_redevplugin_release_artifacts.sh', 'link_redevplugin_runtime_static_pie.sh', 'redevplugin-runtime-entitlements.plist', 'verify_redevplugin_macos_signature.py']) {
+    writeFileSync(path.join(scripts, name), readFileSync(new URL(name, import.meta.url)));
+  }
   mkdirSync(path.join(root, 'toolchain/bin'), { recursive: true });
   const cargo = path.join(root, 'toolchain/bin/cargo');
   writeFileSync(cargo, '#!/bin/sh\nset -eu\nprintf "%s|%s|%s|%s\\n" "$CARGO_HOME" "$CARGO_TARGET_DIR" "$*" "${CARGO_NET_OFFLINE:-}" >> "$FIXTURE_CALLS"\nif [ "$1" = metadata ] && [ "${FIXTURE_MISSING:-}" = 1 ]; then echo "missing cached dependency" >&2; exit 42; fi\n', { mode: 0o755 });
@@ -23,8 +28,8 @@ function fixture(t) {
     writeFileSync(script, 'set -euo pipefail\ndie() { echo "$*" >&2; exit 1; }\n' + source.slice(start, end));
     const result = spawnSync('bash', [script], { encoding: 'utf8', env: {
       ...process.env, profile, tmpdir: staging, REDEVEN_REDEVPLUGIN_BUILD_CACHE: path.join(root, 'persistent'),
-      RUST_TOOLCHAIN: '1.88.0', rust_target: 'aarch64-apple-darwin', goos: 'darwin', version: '3.0.36',
-      SCRIPT_DIR: import.meta.dirname, expected_runtime_crate_sha: createHash('sha256').update('published crate').digest('hex'), cargo_version: 'cargo 1.88.0', rustc_version: 'rustc 1.88.0',
+      RUST_TOOLCHAIN: '1.98.0', rust_target: 'aarch64-apple-darwin', goos: 'darwin', version: '3.0.36',
+      SCRIPT_DIR: scripts, expected_runtime_crate_sha: createHash('sha256').update('published crate').digest('hex'), cargo_version: 'cargo 1.98.0', rustc_version: 'rustc 1.98.0',
       toolchain_root: path.join(root, 'toolchain'), toolchain_cargo: cargo, FIXTURE_CALLS: path.join(root, 'calls'),
       CARGO_TARGET_DIR: path.join(root, 'unrelated'),
       CARGO_NET_OFFLINE: '', FIXTURE_MISSING: options.missing ? '1' : '',
@@ -33,7 +38,7 @@ function fixture(t) {
     assert.equal(result.status, 0, result.stderr);
     return readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').at(-1).split('|');
   }
-  return { root, run };
+  return { root, scripts, run };
 }
 
 function seedCache(cargoHome) {
@@ -66,11 +71,24 @@ test('partial caches preserve normal acquisition and corrupt crates fail before 
 test('development reuses Cargo directories and always installs the exact locked crate afresh', t => {
   const f = fixture(t), first = f.run('development', 1), second = f.run('development', 2);
   assert.equal(first[0], second[0]); assert.equal(first[1], second[1]);
-  assert.match(first[0], /persistent\/1\.88\.0\/aarch64-apple-darwin\/[a-f0-9]{64}\/cargo-home$/);
+  assert.match(first[0], /persistent\/1\.98\.0\/aarch64-apple-darwin\/[a-f0-9]{64}\/cargo-home$/);
   assert.match(second[2], /install --locked --root .*stage-2\/runtime-install --target aarch64-apple-darwin --version =3\.0\.36 redevplugin-runtime/);
 });
 test('release staging isolates Cargo despite inherited development caches', t => {
   const f = fixture(t), first = f.run('release', 1), second = f.run('release', 2);
   assert.notEqual(first[0], second[0]); assert.notEqual(first[1], second[1]);
   assert.match(second[0], /stage-2\/cargo-home$/); assert.match(second[1], /stage-2\/cargo-target$/);
+});
+
+test('changing runtime entitlements or signed-output verification invalidates the development build cache', t => {
+  const f = fixture(t);
+  const original = f.run('development', 1);
+  const entitlements = path.join(f.scripts, 'redevplugin-runtime-entitlements.plist');
+  writeFileSync(entitlements, readFileSync(entitlements, 'utf8') + '\n<!-- changed signing profile -->\n');
+  const changedProfile = f.run('development', 2);
+  assert.notEqual(changedProfile[0], original[0]);
+  const verifier = path.join(f.scripts, 'verify_redevplugin_macos_signature.py');
+  writeFileSync(verifier, readFileSync(verifier, 'utf8') + '\n# changed signed-output validation\n');
+  const changedVerifier = f.run('development', 3);
+  assert.notEqual(changedVerifier[0], changedProfile[0]);
 });

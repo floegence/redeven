@@ -320,8 +320,9 @@ test("each release job that consumes signed runtime artifacts installs cosign fi
 test("release workflow signs and preserves exact Darwin ReDevPlugin runtime bytes", () => {
   assert.match(releaseWorkflow, /apple-actions\/import-codesign-certs@[a-f0-9]{40} # v7/u);
   assert.match(releaseWorkflow, /REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY: \$\{\{ secrets\.REDEVEN_DESKTOP_MAC_IDENTITY \}\}/u);
-  assert.match(redevpluginRuntimeStage, /codesign --force --options runtime --timestamp --sign "\$codesign_identity" "\$runtime"/u);
+  assert.match(redevpluginRuntimeStage, /codesign --force --options runtime --entitlements "\$SCRIPT_DIR\/redevplugin-runtime-entitlements\.plist" --timestamp --sign "\$codesign_identity" "\$runtime"/u);
   assert.match(redevpluginRuntimeStage, /verify-runtime-executable "\$runtime" "\$target"/u);
+  assert.match(redevpluginRuntimeStage, /python3 "\$SCRIPT_DIR\/verify_redevplugin_macos_signature\.py" "\$runtime"/u);
   const signIgnoreSource = desktopBuilderConfig.match(/signIgnore:\s*\['([^']+)'\]/u)?.[1];
   assert.ok(signIgnoreSource, 'macOS signing must preserve the already signed runtime');
   const signIgnore = new RegExp(signIgnoreSource);

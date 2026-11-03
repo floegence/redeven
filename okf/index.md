@@ -120,6 +120,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Whole-window status surfaces](ui/window-status-surfaces.md)
 - [Env App page asset recovery](ui/page-asset-recovery.md)
 - [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md)
+- [ReDevPlugin performance qualification](operations/redevplugin-performance-qualification.md)
 - [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md)
 - [Plugin platform integration](architecture/plugin-platform-integration.md)
 - [Plugin process sessions](architecture/plugin-process-sessions.md)

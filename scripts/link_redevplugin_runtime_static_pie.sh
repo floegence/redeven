@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Rust 1.88 downgrades static PIE to StaticNoPicExe for built-in Linux GNU
-# targets. The compiler driver and direct LLD interfaces require different
-# argument shapes, so select the interface once before converting arguments.
+# Rust target specifications can select StaticNoPicExe for static Linux
+# targets; explicitly require dependency-free static PIE. The compiler driver
+# and direct LLD interfaces require different argument shapes, so select the
+# interface once before converting arguments.
 direct_lld=false
 if [[ "$(uname -s)" == "Darwin" && -z "${REDEVPLUGIN_STATIC_PIE_CC:-}" ]]; then
   direct_lld=true

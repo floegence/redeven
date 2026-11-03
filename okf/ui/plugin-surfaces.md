@@ -24,7 +24,7 @@ Authenticated session-ready calls idempotent Host recoverEnabled without timers.
 Plugin Center joins inventory/grants/Host requirements/policy. Method effects cannot rename capabilities. Failure reloads authority and requires new confirmation.
 
 ## Activity pages/windows
-Each window opens a fresh PluginSurfaceSlot via openSurfaceInSlot. Opening/bridge failures replace iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page, never third-party content.
+Each placement allocates its fresh PluginSurfaceSlot only when both the placement and document are visible. Unopened hidden placements retain layout without an iframe or application authority; closing them succeeds without an open/revoke round trip. Once opening starts, hiding preserves the independent slot, draft, selection, undo and pending operations. All simultaneously visible placements may open concurrently. Each actual open captures the current context revision; later changes are delivered once. Each window opens through openSurfaceInSlot. Opening/bridge failures replace iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page, never third-party content.
 
 Equivalent metadata preserves an existing page's container/iframe/state. Visibility uses slot lifecycle; instance/surface/management-revision/runtime-generation changes retire its lease. Authority cannot survive merely for continuity. Cold open immediately shows one themed accessible waiting surface without rotating bootstrap labels; ready replaces it, failure retains recovery/details.
 

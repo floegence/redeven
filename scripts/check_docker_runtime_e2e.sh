@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
-RUST_TOOLCHAIN="1.88.0"
+RUST_TOOLCHAIN="1.98.0"
 RUST_IMAGE="rust:${RUST_TOOLCHAIN}-bookworm"
 
 module_copy_root=$(mktemp -d "${TMPDIR:-/tmp}/redeven-docker-runtime-mod.XXXXXX")

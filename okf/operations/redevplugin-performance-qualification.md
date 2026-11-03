@@ -1,0 +1,115 @@
+---
+type: Validation Report
+title: ReDevPlugin 3.15 performance qualification
+tags: [plugins, performance, runtime, validation]
+lifecycle: active_evidence
+reviewed_at: "2026-11-03"
+---
+# Summary
+
+ReDevPlugin 3.15.0 improves measured warm execution and Redeven restores only
+initially visible plugin placements. Opened surfaces retain their independent
+slots, drafts, selection and pending work when hidden. This is conditional lazy
+opening, not a concurrency cap or iframe reuse. Platform mechanisms and release
+ownership remain in [the host boundary](../architecture/redevplugin-boundary.md).
+
+# Contract
+
+Consume the coordinated published Go/npm/Rust release, without local overrides.
+Rust 1.98.0 builds the Wasmtime 50 runtime. The macOS helper keeps hardened
+runtime with exactly the executable-memory exception required by upstream;
+staging, cache identity and consumption verify the actual signed entitlement.
+The executable is product-built; source-package provenance is not product
+signing evidence. Release signing still requires the product identity.
+
+Each first open captures current context/revision. Unopened close succeeds and
+prevents later opening. Visibility never cancels an already started invocation,
+replays an uncertain write or reuses revoked authority. Ordinary Worker errors
+remain application-owned; they do not destroy a Surface. See
+[recovery](../architecture/redevplugin-surface-recovery.md).
+
+# Measurement
+
+November 3, 2026, macOS/arm64, Node 26.7.0, Go 1.27.3 and Rust 1.98.0. Redeven
+baseline is 2433435341c55aa34013de78c1ab023277d96639. Both UI variants use published
+ReDevPlugin 3.15.0/Floe 0.87.2 and the same production Integration HTTP server,
+including durable Host state. The old component alone is substituted in the
+test build. Fifteen alternating fresh-browser pairs per scenario produce 60
+trials; paired ratios use 10,000 deterministic bootstrap resamples.
+
+| Scenario | Baseline median | Candidate median | Interpretation |
+| --- | ---: | ---: | --- |
+| One visible placement, active ready | 132.4 ms | 57.5 ms | Paired 2.315x, 95% interval 2.167–2.371 |
+| One visible, incremental process-tree RSS | 867.59 MiB | 105.86 MiB | 87.8% less; ten frames versus one |
+| First deferred activation | 0.1 ms | 49.1 ms | Candidate P95 53.99 ms; explicit first-use cost |
+| Ten visible, all ready | 134.3 ms | 133.8 ms | No material regression; ten independent frames |
+| Fresh Worker process/state, total | 335.68 ms | 504.05 ms | +168.37 ms; below predeclared 1 s echo budget |
+| First Worker call | 6.05 ms | 4.39 ms | Excludes setup |
+| 64 KV writes, individual versus batch | 225.5 ms | 4.55 ms | Paired 50.34x; exact values and rollback |
+| Six schema statements, individual versus transaction | 48.15 ms | 8.15 ms | Paired 5.63x; trigger behavior retained |
+
+Cold results use fifteen alternating pairs with identical historical 3.14 echo
+guest bytes, fresh Integration/process/plugin state and warm OS file cache.
+Candidate install/grant/prewarm is 186.86 ms versus 78.49 ms. Current 3.15 author
+output also passes a separate live hardened-runtime smoke. These are not heavy
+editor startup or network SLAs. Batch figures compare existing transports under
+3.15, not a claim that every plugin becomes 50x faster. The six-statement case
+does not measure complete Memos Worker bootstrap.
+
+The product resource path preserves 1/32 MiB content; observed read chunks are
+at most 2 MiB. Upload source Blobs are resident, so no bounded upload-memory
+claim is made. Process-tree RSS includes shared pages and is not a leak proof.
+
+Upstream paired production calls (ten rounds) reduce C4/C8 P95 from
+7.721/15.530 ms to 4.165/7.662 ms; throughput increases from 765/735 to
+1,751/1,662 requests/s. Mix/sort full-call paired speedups are 3.98x/8.49x.
+Implementation attribution is b314dc13590bacb756579fc509334dd69ef1520b;
+8b9b9fc12e273f86091a9d1029d7adb1ecdd43cf adds hardened-runtime qualification.
+Both feature and main 13-stage gates, Quick CI and v3.15.0 public completion
+passed. Release manifest SHA256 is
+335563f292c5302b21a8cb93cf151b2882bc408f28792285d4c88c1deb572d5c.
+
+# Acceptance boundaries
+
+Plugin component tests cover first reveal, document visibility, hide while
+opening, unopened close/disposal, context/retry, unknown outcomes and sibling
+retirement. Production resource and UI fixtures verify inputs, native undo,
+selection, close veto, focus, fresh origins and zero final frames. Runtime
+qualification uses finite fuel/deadlines, memory bounds, cancellation and
+revocation. Linux sealed static PIE/clone3/seccomp and macOS hardened workloads
+pass upstream. Product Docker lifecycle, published source consumption and live
+author execution pass. An isolated native Desktop build also starts its local
+environment and Plugin Center. Its exact bundled hardened runtime executes the
+current published author Worker successfully through production Integration;
+this does not certify the separate full Desktop I/O workflow.
+
+The broad browser suite has a pre-existing Monokai hover-contrast failure:
+4.3187 versus 4.5 in unchanged Floe 0.87.2 Button styles. The threshold remains
+unchanged; the same 27/28 result is reproduced with published ReDevPlugin 3.14
+and the same Floe 0.87.2. Full legacy Desktop I/O smoke is not certified: its old SDK fixture
+fails compilation, and a current-SDK experiment reaches explicit loopback
+connector denial. Redeven has no private-network approval adapter; 3.14 has the
+same restriction. The Linux trusted-bridge readiness probe also receives 401.
+Do not add permissive networking or claim these runs passed. Any private-network
+feature requires a separate product-policy/UI design on the released upstream
+connection contract.
+
+No Store pool, persistent native cache, wider SQLite pool or four-surface cap is
+introduced: measurements do not justify their complexity. Production phase
+tracing is not shipped as a new public contract. This qualification does not
+claim arbitrary native-library, shell, WASI or browser-sandbox escape support.
+
+# Evidence
+
+- ReDevPlugin source 8b9b9fc1; Actions Quick CI 41724816794 and release
+  41724964932 attempt 2. The first attempt's temporary npm provenance 404 is
+  retained; unchanged release artifacts passed the retry.
+- External task evidence directory: redevplugin-implementation, November 3
+  2026, task 01a1a274-ecbc-7370-8ebf-e111bf8adee9. It retains raw trials,
+  harnesses, source identities, failures and the acceptance ledger; it is not a
+  dependency or production configuration.
+- product-paired-summary-315.json, product-runtime-cold-summary.json,
+  product-resources-candidate315-summary.json, accepted-paired-summary.json and
+  accepted-throughput-summary.json record the measured aggregates.
+- Redeven integration is local only for this task. Its push gate and push are
+  explicitly excluded by the owner; prior unpublished main commits are kept.

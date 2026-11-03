@@ -6,7 +6,7 @@ import {
 } from '@floegence/redevplugin-ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Copy, Loader2, Refresh } from '@floegence/floe-webapp-core/icons';
-import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
 import { ConfirmDialog } from '../primitives/EnvAppModal';
@@ -28,7 +28,7 @@ export type PluginSurfaceBodyProps = {
   onRetirementError: (error: unknown) => void;
 };
 
-type SurfaceLoadState = 'opening' | 'ready' | 'closing' | 'error';
+type SurfaceLoadState = 'deferred' | 'opening' | 'ready' | 'closing' | 'error';
 
 export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const i18n = useI18n();
@@ -41,10 +41,10 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   let surfaceContextRevision = 1;
   let currentSurfaceContext = createRedevenPluginSurfaceContext(surfaceContextRevision, i18n.locale());
   let currentSurfaceContextFingerprint = pluginSurfaceContextFingerprint(currentSurfaceContext);
-  const initialSurfaceContextRevision = currentSurfaceContext.revision;
+  const [mountReady, setMountReady] = createSignal(false);
   const [host, setHost] = createSignal<PluginSurfaceHost>();
   const [pageVisible, setPageVisible] = createSignal(!document.hidden);
-  const [loadState, setLoadState] = createSignal<SurfaceLoadState>('opening');
+  const [loadState, setLoadState] = createSignal<SurfaceLoadState>('deferred');
   const [errorMessage, setErrorMessage] = createSignal('');
   const [retrying, setRetrying] = createSignal(false);
   const [openingFailure, setOpeningFailure] = createSignal<SurfaceOpeningFeedback>();
@@ -116,6 +116,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   };
 
   const openFreshSurface = () => {
+    const initialSurfaceContextRevision = currentSurfaceContext.revision;
     setLoadState('opening');
     setErrorMessage('');
     setErrorCode('');
@@ -173,7 +174,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
         attributeFilter: ['class', 'dir', 'lang', 'style', 'data-theme', 'data-floe-shell-theme'],
       });
     }
-    openFreshSurface();
+    setMountReady(true);
 
     onCleanup(() => {
       mounted = false;
@@ -185,6 +186,15 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       const ownedSlot = slot;
       if (ownedSlot) void props.coordinator.release(ownedSlot).catch(props.onRetirementError);
     });
+  });
+
+  // Restored hidden placements have no application authority until first use.
+  // Once opening starts, visibility only changes presentation; drafts and
+  // pending operations keep their existing independent slot.
+  createEffect(() => {
+    if (mountReady() && loadState() === 'deferred' && props.visible && pageVisible()) {
+      untrack(openFreshSurface);
+    }
   });
 
   createEffect(() => {
@@ -221,7 +231,10 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   });
 
   const closeSurface = async () => {
-    if (!slot) return false;
+    if (!slot) {
+      setLoadState('closing');
+      return true;
+    }
     if (closePromise) return closePromise;
     const ownedSlot = slot;
     const openedHost = host();

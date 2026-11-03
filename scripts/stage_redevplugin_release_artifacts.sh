@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 REPOSITORY="floegence/redevplugin"
-RUST_TOOLCHAIN="1.88.0"
+RUST_TOOLCHAIN="1.98.0"
 RELEASE_MANIFEST_ASSET="platform-release-manifest.json"
 RELEASE_VERIFICATION="redevplugin-release-verification-v1.json"
 RUNTIME_MARKER=".redevplugin-release-artifacts-verified.json"
@@ -24,7 +24,7 @@ Usage:
   ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
 Downloads and verifies the released ReDevPlugin platform manifest, builds the
-runtime from the exact published Rust source crate with Rust 1.88.0, and emits
+runtime from the exact published Rust source crate with Rust 1.98.0, and emits
 Redeven-owned SBOM, provenance, notices, signature, and verification evidence.
 The closed runtime target set is linux/amd64, linux/arm64, darwin/amd64, and
 darwin/arm64. Manifest downloads retry TLS/network failures up to three times,
@@ -75,7 +75,8 @@ if [[ "$self_test" -eq 1 ]]; then
   exec node --test \
     "$SCRIPT_DIR/redevplugin_release_contract.test.mjs" \
     "$SCRIPT_DIR/redevplugin_manifest_download.test.mjs" \
-    "$SCRIPT_DIR/redevplugin_rust_toolchain.test.mjs"
+    "$SCRIPT_DIR/redevplugin_rust_toolchain.test.mjs" \
+    "$SCRIPT_DIR/redevplugin_macos_signature.test.mjs"
 fi
 
 [[ -n "$dest_dir" && -n "$runtime_out" && -n "$goos" && -n "$goarch" ]] || { usage >&2; exit 2; }
@@ -106,7 +107,7 @@ case "$target" in
 esac
 
 for command in cargo go node rustc rustup; do require_command "$command"; done
-if [[ "$goos" == "darwin" ]]; then require_command codesign; fi
+if [[ "$goos" == "darwin" ]]; then require_command codesign; require_command python3; fi
 if [[ -z "$manifest_file" || "$profile" == "release" ]]; then
   require_command curl
   require_command jq
@@ -211,10 +212,11 @@ if [[ "$profile" == development && -n "${REDEVEN_REDEVPLUGIN_BUILD_CACHE:-}" ]];
   cache_key=$(node -e '
     const fs=require("node:fs"), crypto=require("node:crypto");
     const h=crypto.createHash("sha256");
-    for(const file of process.argv.slice(1,3)) h.update(fs.readFileSync(file));
-    h.update(JSON.stringify(process.argv.slice(3)));
+    for(const file of process.argv.slice(1,5)) h.update(fs.readFileSync(file));
+    h.update(JSON.stringify(process.argv.slice(5)));
     process.stdout.write(h.digest("hex"));
   ' "$SCRIPT_DIR/stage_redevplugin_release_artifacts.sh" "$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
+    "$SCRIPT_DIR/redevplugin-runtime-entitlements.plist" "$SCRIPT_DIR/verify_redevplugin_macos_signature.py" \
     "$expected_runtime_crate_sha" "$cargo_version" "$rustc_version")
   cache_root="$REDEVEN_REDEVPLUGIN_BUILD_CACHE/$RUST_TOOLCHAIN/$rust_target/$cache_key"
   mkdir -p "$cache_root/cargo-home" "$cache_root/target"
@@ -309,11 +311,11 @@ if [[ "$goos" == "darwin" ]]; then
   if [[ "$profile" == "release" ]]; then
     codesign_identity="${REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY:-}"
     [[ -n "$codesign_identity" ]] || die "release Darwin runtime build requires REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY"
-    codesign --force --options runtime --timestamp --sign "$codesign_identity" "$runtime"
+    codesign --force --options runtime --entitlements "$SCRIPT_DIR/redevplugin-runtime-entitlements.plist" --timestamp --sign "$codesign_identity" "$runtime"
   else
-    codesign --force --options runtime --sign - "$runtime"
+    codesign --force --options runtime --entitlements "$SCRIPT_DIR/redevplugin-runtime-entitlements.plist" --sign - "$runtime"
   fi
-  codesign --verify --strict --verbose=2 "$runtime"
+  python3 "$SCRIPT_DIR/verify_redevplugin_macos_signature.py" "$runtime"
 fi
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-runtime-executable "$runtime" "$target"
 

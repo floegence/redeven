@@ -1123,7 +1123,7 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 		f.t.Fatalf("parse runtime-control URL %q: %v", status.RuntimeControl.BaseURL, err)
 	}
 	controlRequest := fmt.Sprintf(
-		"GET /v2/provider-link HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nConnection: close\r\n\r\n",
+		"GET /v2/cloud-link HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nConnection: close\r\n\r\n",
 		controlURL.Host,
 		hello.RuntimeControl.Token,
 	)
@@ -1152,6 +1152,7 @@ func bridgeHTTP2Request(method, authority, path string, body io.ReadCloser) *htt
 
 func bridgeHTTPRequest(t *testing.T, client *http2.ClientConn, surface desktopbridge.StreamSurface, request string) []byte {
 	t.Helper()
+	t.Logf("bridge HTTP %s: %s", surface.Authority(), strings.SplitN(request, "\r\n", 2)[0])
 	requestReader, requestWriter := io.Pipe()
 	response, err := client.RoundTrip(bridgeHTTP2Request(http.MethodConnect, surface.Authority(), "", requestReader))
 	if err != nil {

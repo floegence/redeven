@@ -28,6 +28,9 @@ Host startup observations bind instance ID, active fingerprint, installation tim
 
 Explicit retry loading/results/rejections bind captured installation/authenticated session. Late replies cannot replace new installation state. Localize released reason codes; catalog instance IDs/raw unknown codes are not failure copy. Inventory action_state alone authorizes launch.
 
+## Worker execution failures
+Ordinary Worker budget, memory or deadline failures return to the application through released typed execution errors. They do not invalidate Surface authority, discard drafts or trigger replay. Authors own call-error presentation; host recovery handles terminal Surface failures only.
+
 ## Close and revocation
 On narrow Plugin Center uninstall, return focus after modal exit to surviving detail heading, not hidden card. User close uses released request-close; unsaved work gets one localized Floe confirmation, preserving slot on cancel. Forced invalidation bypasses consent. Record successful request-close to prevent duplicate close on disposal.
 

@@ -268,7 +268,7 @@ test('runtime evidence binds the release manifest and every product file', () =>
       profile: 'development', target: 'linux/amd64', releaseVerification: verification,
       runtimePath: runtime, sbomPath: sbom, provenancePath: provenance, noticesPath: notices,
       signaturePath: signature, certificatePath: certificate, product,
-      cargoVersion: 'cargo 1.88.0 (fixture)', rustcVersion: 'rustc 1.88.0 (fixture)',
+      cargoVersion: 'cargo 1.98.0 (fixture)', rustcVersion: 'rustc 1.98.0 (fixture)',
     });
     assert.equal(validateRuntimeEvidence(marker, root, { target: 'linux/amd64' }).runtime.target, 'linux/amd64');
     assert.throws(() => validateRuntimeEvidence(marker, root, { target: 'linux/arm64' }), /target mismatch/u);

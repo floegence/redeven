@@ -119,7 +119,7 @@ function releaseAssetInFlightKey(sourceCacheKey: string, releaseTag: string, pla
 }
 
 const REDEVPLUGIN_RUNTIME_MANIFEST = 'platform-release-manifest.json';
-const REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN = '1.88.0';
+const REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN = '1.98.0';
 const SOURCE_RUNTIME_CACHE_DIR = 'source-build-cache';
 const REDEVPLUGIN_MANIFEST_CACHE_DIR = 'redevplugin-manifests';
 
