@@ -4,7 +4,6 @@ import { ipcRenderer } from 'electron';
 
 import {
   DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL,
-  DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL,
   normalizeDesktopWebServiceBrowserActionResponse,
@@ -146,11 +145,6 @@ function bootstrap(): void {
   reload.addEventListener('click', () => void perform({ action: state.loading ? 'stop' : 'reload' }));
   developerTools.addEventListener('click', () => void perform({ action: 'toggle_devtools' }));
   openExternal.addEventListener('click', () => void perform({ action: 'open_external' }));
-
-  ipcRenderer.on(DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL, () => {
-    address.focus();
-    address.select();
-  });
 
   ipcRenderer.on(DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL, (_event, value) => {
     render(normalizeDesktopWebServiceBrowserState(value));

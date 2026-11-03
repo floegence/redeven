@@ -7,7 +7,7 @@ import { desktopRendererThemeSnapshot, DESKTOP_THEME_GET_SNAPSHOT_CHANNEL, DESKT
 import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
 import { DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL, DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL } from '../shared/windowChromeIPC';
 import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
-import { DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL, DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL } from '../shared/desktopWebServiceBrowserIPC';
+import { DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL } from '../shared/desktopWebServiceBrowserIPC';
 
 const { listeners, invoke, sendSync, expose } = vi.hoisted(() => ({
   listeners: new Map<string, (event: unknown, payload: unknown) => void>(),
@@ -37,16 +37,6 @@ async function bootstrap() {
 }
 
 describe('Web Service toolbar theme continuity', () => {
-  it('focuses and selects the existing address draft on a host edit request', async () => {
-    await bootstrap();
-    const input = document.getElementById('browser-address') as HTMLInputElement;
-    input.focus(); input.value = '/draft'; input.blur();
-    listeners.get(DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL)?.({}, undefined);
-    expect(document.activeElement).toBe(input);
-    expect(input.value).toBe('/draft');
-    expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
-    expect(expose).not.toHaveBeenCalled();
-  });
   beforeEach(() => {
     vi.resetModules();
     listeners.clear(); invoke.mockReset(); sendSync.mockReset(); expose.mockReset();

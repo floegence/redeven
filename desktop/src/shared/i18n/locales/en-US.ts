@@ -675,7 +675,6 @@ export const enUS = {
     reservedPathTitle: "This page is not supported",
     viewDetails: "View details",
     reservedPathSummary: "This address uses a path reserved by Redeven. To access Redeven, open the corresponding Environment.",
-    editAddress: "Edit address",
     copyAddress: "Copy address",
     addressCopied: "Copied",
     authenticationTitle: "The service entrance needs authentication",

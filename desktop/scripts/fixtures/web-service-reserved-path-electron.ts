@@ -12,7 +12,7 @@ import { createDesktopI18n, type RedevenLocale } from '../../src/shared/i18n';
 import { DESKTOP_THEME_GET_SNAPSHOT_CHANNEL, desktopRendererThemeSnapshot } from '../../src/shared/desktopThemeIPC';
 import { DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL } from '../../src/shared/windowChromeIPC';
 import { resolveDesktopWindowChromeSnapshot } from '../../src/shared/windowChromePlatform';
-import { DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL, DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL } from '../../src/shared/desktopWebServiceBrowserIPC';
+import { DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL } from '../../src/shared/desktopWebServiceBrowserIPC';
 import { webServiceBrowserContentBounds } from '../../src/shared/webServiceBrowserLayout';
 import type { DesktopThemeSnapshot } from '../../src/shared/desktopTheme';
 
@@ -24,7 +24,6 @@ void app.whenReady().then(async () => {
   let theme: DesktopThemeSnapshot;
   let documentURL = '';
   let copied = '';
-  let editRequests = 0;
   let copyFeedback: Promise<string> | undefined;
   const cases: unknown[] = [];
   const window = new BrowserWindow({ width: 1100, height: 800, show: false, webPreferences: { preload: process.env.REDEVEN_RESERVED_PATH_PRELOAD, sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
@@ -37,10 +36,9 @@ void app.whenReady().then(async () => {
   ipcMain.on(DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL, event => { event.returnValue = resolveDesktopWindowChromeSnapshot(); });
   ipcMain.handle(DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL, () => ({ address, open_external_available: false }));
   view.webContents.on('will-navigate', (event, url) => {
-    if (performWebServiceReservedPathIntent(url, view.webContents.getURL(), documentURL, {
-      editAddress: () => { editRequests++; window.webContents.focus(); window.webContents.send(DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL); },
+    if (performWebServiceReservedPathIntent(url, view.webContents.getURL(), documentURL, () => {
       // Capture the clipboard sink without changing the user's system clipboard.
-      copyAddress: () => { copied = address; copyFeedback = view.webContents.insertCSS(webServiceAddressCopiedCSS); },
+      copied = address; copyFeedback = view.webContents.insertCSS(webServiceAddressCopiedCSS);
     })) event.preventDefault();
   });
   const server = createServer((request, response) => {
@@ -66,7 +64,7 @@ void app.whenReady().then(async () => {
     view.webContents.debugger.detach();
     await paint();
   };
-  const disclosure = async () => view.webContents.executeJavaScript('(() => { const details = document.querySelector("details"), main = document.querySelector("main"); return { open: details.open, summary: details.querySelector("summary").textContent, reasonVisible: details.querySelector("p").checkVisibility(), addressVisible: details.querySelector("code").checkVisibility(), copyVisible: document.getElementById("copy-address").checkVisibility(), editVisible: document.getElementById("edit-address").checkVisibility(), overflow: main.scrollWidth > main.clientWidth }; })()');
+  const disclosure = async () => view.webContents.executeJavaScript('(() => { const details = document.querySelector("details"), main = document.querySelector("main"); return { open: details.open, summary: details.querySelector("summary").textContent, reasonVisible: details.querySelector("p").checkVisibility(), addressVisible: details.querySelector("code").checkVisibility(), copyVisible: document.getElementById("copy-address").checkVisibility(), editActionPresent: !!document.getElementById("edit-address"), visibleActions: [...document.querySelectorAll("a")].filter(a => a.checkVisibility()).length, overflow: main.scrollWidth > main.clientWidth }; })()');
   const toggleWithKeyboard = async () => {
     view.webContents.debugger.attach('1.3');
     await view.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
@@ -85,16 +83,16 @@ void app.whenReady().then(async () => {
           window.setContentSize(width, 780); layout();
           documentURL = buildWebServiceReservedPathDocumentURL(locale, address, theme);
           await view.webContents.loadURL(documentURL); await paint();
-          const state = await view.webContents.executeJavaScript('(() => { const main = document.querySelector("main"), h = document.querySelector("h1"); return { overflow: main.scrollWidth > main.clientWidth, title: h.textContent, top: h.getBoundingClientRect().top, scripts: document.scripts.length, actions: document.querySelectorAll("a").length, address: document.querySelector("code").textContent, retry: !!document.getElementById("retry"), bridges: Object.keys(window).filter(k => k.startsWith("redevenDesktop")), buttonHeight: document.querySelector("a").getBoundingClientRect().height }; })()');
+          const state = await view.webContents.executeJavaScript('(() => { const main = document.querySelector("main"), h = document.querySelector("h1"); return { overflow: main.scrollWidth > main.clientWidth, title: h.textContent, top: h.getBoundingClientRect().top, scripts: document.scripts.length, actions: document.querySelectorAll("a").length, address: document.querySelector("code").textContent, retry: !!document.getElementById("retry"), bridges: Object.keys(window).filter(k => k.startsWith("redevenDesktop")) }; })()');
           assert.equal(state.overflow, false); assert.ok(state.top >= 0); assert.equal(state.title, i18n.t('webServiceBrowser.reservedPathTitle'));
-          assert.equal(state.address, address); assert.equal(state.scripts, 0); assert.equal(state.actions, 2); assert.equal(state.retry, false); assert.deepEqual(state.bridges, []); assert.ok(state.buttonHeight >= 40);
+          assert.equal(state.address, address); assert.equal(state.scripts, 0); assert.equal(state.actions, 1); assert.equal(state.retry, false); assert.deepEqual(state.bridges, []);
           const collapsed = await disclosure();
-          assert.equal(collapsed.open, false); assert.equal(collapsed.reasonVisible, false); assert.equal(collapsed.addressVisible, false); assert.equal(collapsed.copyVisible, false); assert.equal(collapsed.editVisible, true);
+          assert.equal(collapsed.open, false); assert.equal(collapsed.reasonVisible, false); assert.equal(collapsed.addressVisible, false); assert.equal(collapsed.copyVisible, false); assert.equal(collapsed.editActionPresent, false); assert.equal(collapsed.visibleActions, 0);
           assert.equal(collapsed.summary, i18n.t('webServiceBrowser.viewDetails'));
           if (locale === 'zh-CN' && ['classic-light', 'classic-dark'].includes(name)) await writeFile(path.join(output, name + '-' + width + '.png'), (await view.webContents.capturePage()).toPNG());
           await click('view-details');
           const expanded = await disclosure();
-          assert.equal(expanded.open, true); assert.equal(expanded.reasonVisible, true); assert.equal(expanded.addressVisible, true); assert.equal(expanded.copyVisible, true); assert.equal(expanded.editVisible, true); assert.equal(expanded.overflow, false);
+          assert.equal(expanded.open, true); assert.equal(expanded.reasonVisible, true); assert.equal(expanded.addressVisible, true); assert.equal(expanded.copyVisible, true); assert.equal(expanded.editActionPresent, false); assert.equal(expanded.visibleActions, 1); assert.equal(expanded.overflow, false);
           if (cases.length === 0) {
             assert.equal(await view.webContents.executeJavaScript('document.activeElement.id'), 'view-details');
             await toggleWithKeyboard();
@@ -113,10 +111,6 @@ void app.whenReady().then(async () => {
     assert.notEqual(await view.webContents.executeJavaScript('getComputedStyle(document.querySelector(".copied-label")).display'), 'none');
     await click('view-details');
     assert.equal((await disclosure()).copyVisible, false);
-    await click('edit-address');
-    await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
-    const focus = await window.webContents.executeJavaScript('(() => { const input = document.getElementById("browser-address"); return { focus: document.activeElement === input, value: input.value, start: input.selectionStart, end: input.selectionEnd }; })()');
-    assert.equal(editRequests, 1); assert.equal(focus.focus, true); assert.equal(focus.value, address); assert.equal(focus.start, 0); assert.equal(focus.end, address.length);
     await view.webContents.loadURL(origin + '/missing');
     assert.equal(await view.webContents.executeJavaScript('document.querySelector("h1").textContent'), 'Application 404'); assert.equal(rejected, 0);
     const ready = new Promise<void>((resolve, reject) => {

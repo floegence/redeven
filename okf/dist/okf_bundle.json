@@ -20342,15 +20342,15 @@
         "title": "Desktop Web Service browser window",
         "type": "Runtime Contract"
       },
-      "body_length": 3805,
+      "body_length": 3803,
       "summary": "Desktop owns protected target views, toolbar, navigation and cleanup over Runtime-authorized Web Service routes. Reopen reuses the same live forward; content gets no Desktop bridge. Invalid navigation rejects, while marked upstream failure offers local retry without reauthorizing or restarting the app.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "When the trusted Desktop Shell bridge is present, Env App requests a semantic Web Service window instead of creating a renderer popup. The address field always projects the protected route back onto the user's original service origin and current application path; it must not expose Runtime listener ports, private hostnames, `/pf/\u003cid\u003e` prefixes, forward identities, boot routes, entry tickets, or other transport details.\n\n[Managed opening](../architecture/managed-web-service-opening.md) owns the response and first-navigation boundary.\n\nA Runtime-rejected reserved path keeps HTTP 404 and carries\n`X-Redeven-Proxy-Error: port-forward-reserved-path`. The browser presentation\nreplaces only a marked main-document response with a localized, scriptless\nexplanation using published Floe window-status assets. The initial view shows a\nshort title and Edit address. A native, initially collapsed View details disclosure\nreveals the reason, original service address with its current path, query and\nfragment, and Copy address. It does not suggest retries or direct access. Edit focuses\nand selects the existing toolbar draft; Copy uses the host-projected address\nand acknowledges completion in place. Only the exact current host document can\nrequest these actions. Theme/language refresh retains the explanation; navigating\nto another address restores ordinary browsing. System-browser opening is disabled\non this page because the same protected route would reject it again.\n\nRuntime strips its proxy-error header from application responses. Unmarked\napplication 404s and marked subresource responses never replace the document.\nEnv UI/API isolation and the saved access mode remain unchanged. This does not\nadd nested Env access or an automatic loopback fallback.\n\nThe semantic forward-window request optionally selects `presentation: application`. The same forward admission, isolated partition, request routing, window reuse, and teardown remain authoritative.\n\nThe [application titlebar contract](host-application-titlebar.md) owns control layout, backend command routing and recovery presentation.\n\nElectron qualification checks that the compound address boundary has no visible\noutline by asserting `outline-style: none`, alongside stable border width and\nfocus contrast across every published theme. Chromium may report a nonzero\ncomputed outline width even when that outline is disabled.",
-          "char_count": 2391
+          "body": "When the trusted Desktop Shell bridge is present, Env App requests a semantic Web Service window instead of creating a renderer popup. The address field always projects the protected route back onto the user's original service origin and current application path; it must not expose Runtime listener ports, private hostnames, `/pf/\u003cid\u003e` prefixes, forward identities, boot routes, entry tickets, or other transport details.\n\n[Managed opening](../architecture/managed-web-service-opening.md) owns the response and first-navigation boundary.\n\nA Runtime-rejected reserved path keeps HTTP 404 and carries\n`X-Redeven-Proxy-Error: port-forward-reserved-path`. The browser presentation\nreplaces only a marked main-document response with a localized, scriptless\nexplanation using published Floe window-status assets. The initial view shows a\nshort title without a primary action. A native, initially collapsed View details disclosure\nreveals the reason, original service address with its current path, query and\nfragment, and Copy address. It does not suggest retries or direct access. The toolbar\nremains the sole address editor. Copy uses the host-projected address and acknowledges\ncompletion in place. Only the exact current host document can request this action.\nTheme/language refresh retains the explanation; navigating\nto another address restores ordinary browsing. System-browser opening is disabled\non this page because the same protected route would reject it again.\n\nRuntime strips its proxy-error header from application responses. Unmarked\napplication 404s and marked subresource responses never replace the document.\nEnv UI/API isolation and the saved access mode remain unchanged. This does not\nadd nested Env access or an automatic loopback fallback.\n\nThe semantic forward-window request optionally selects `presentation: application`. The same forward admission, isolated partition, request routing, window reuse, and teardown remain authoritative.\n\nThe [application titlebar contract](host-application-titlebar.md) owns control layout, backend command routing and recovery presentation.\n\nElectron qualification checks that the compound address boundary has no visible\noutline by asserting `outline-style: none`, alongside stable border width and\nfocus contrast across every published theme. Chromium may report a nonzero\ncomputed outline width even when that outline is disabled.",
+          "char_count": 2389
         },
         {
           "id": "boundaries",
@@ -20373,9 +20373,9 @@
           "description": "Protected Forward redirects stay in the same route identity."
         },
         {
-          "id": "redeven:desktop/scripts/check-web-service-reserved-path.mjs:0:collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address actions, redirect handling and ordinary application 404 preservation.",
+          "id": "redeven:desktop/scripts/check-web-service-reserved-path.mjs:0:collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address copying, redirect handling and ordinary application 404 preservation.",
           "source": "redeven:desktop/scripts/check-web-service-reserved-path.mjs",
-          "description": "Collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address actions, redirect handling and ordinary application 404 preservation."
+          "description": "Collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address copying, redirect handling and ordinary application 404 preservation."
         }
       ],
       "snippet": "Desktop owns protected target views, toolbar, navigation and cleanup over Runtime-authorized Web Service routes. Reopen reuses the same live forward; content gets no Desktop bridge. Invalid navigation rejects, while marked upstream failure ",
@@ -31782,5 +31782,5 @@
       ]
     }
   ],
-  "source_sha256": "a590bf6fab0801f83fc38f2fbe259b777c1a20efdc49255dc1bf24a805b58ac4"
+  "source_sha256": "e26b5b19be1b6da4d89e681feb7995892afcccd55eb133c7509ae5f20a4f3cbe"
 }

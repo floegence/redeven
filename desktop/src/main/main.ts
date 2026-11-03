@@ -643,7 +643,6 @@ import { LOCAL_UI_ENV_APP_ENTRY_PATH } from './localUIURL';
 import {
   DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL,
-  DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL,
   normalizeDesktopWebServiceBrowserAction,
   type DesktopWebServiceBrowserAction,
@@ -8900,15 +8899,9 @@ function createWebServiceBrowserController(
     });
   };
   contentView.webContents.on('will-navigate', (event, targetURL) => {
-    if (failureReason === 'reserved_path' && performWebServiceReservedPathIntent(targetURL, contentView.webContents.getURL(), unavailablePageURL, {
-      editAddress: () => {
-        win.webContents.focus();
-        win.webContents.send(DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL);
-      },
-      copyAddress: () => {
-        clipboard.writeText(snapshot().address);
-        void contentView.webContents.insertCSS(webServiceAddressCopiedCSS);
-      },
+    if (failureReason === 'reserved_path' && performWebServiceReservedPathIntent(targetURL, contentView.webContents.getURL(), unavailablePageURL, () => {
+      clipboard.writeText(snapshot().address);
+      void contentView.webContents.insertCSS(webServiceAddressCopiedCSS);
     })) {
       event.preventDefault();
       return;

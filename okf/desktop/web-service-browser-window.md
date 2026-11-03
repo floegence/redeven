@@ -19,12 +19,12 @@ A Runtime-rejected reserved path keeps HTTP 404 and carries
 `X-Redeven-Proxy-Error: port-forward-reserved-path`. The browser presentation
 replaces only a marked main-document response with a localized, scriptless
 explanation using published Floe window-status assets. The initial view shows a
-short title and Edit address. A native, initially collapsed View details disclosure
+short title without a primary action. A native, initially collapsed View details disclosure
 reveals the reason, original service address with its current path, query and
-fragment, and Copy address. It does not suggest retries or direct access. Edit focuses
-and selects the existing toolbar draft; Copy uses the host-projected address
-and acknowledges completion in place. Only the exact current host document can
-request these actions. Theme/language refresh retains the explanation; navigating
+fragment, and Copy address. It does not suggest retries or direct access. The toolbar
+remains the sole address editor. Copy uses the host-projected address and acknowledges
+completion in place. Only the exact current host document can request this action.
+Theme/language refresh retains the explanation; navigating
 to another address restores ordinary browsing. System-browser opening is disabled
 on this page because the same protected route would reject it again.
 
@@ -54,4 +54,4 @@ System-browser authorization and the persisted access-mode decision remain owned
 
 - `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - Protected Forward redirects stay in the same route identity.
 
-- `redeven:desktop/scripts/check-web-service-reserved-path.mjs` - Collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address actions, redirect handling and ordinary application 404 preservation.
+- `redeven:desktop/scripts/check-web-service-reserved-path.mjs` - Collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address copying, redirect handling and ordinary application 404 preservation.

@@ -15,7 +15,7 @@ describe('reserved-path explanation', () => {
     const html = decodeURIComponent(url.slice(url.indexOf(',') + 1));
     const i18n = createDesktopI18n(locale);
     expect(html).toContain(i18n.t('webServiceBrowser.reservedPathTitle'));
-    expect(html).toContain('id="edit-address"');
+    expect(html).not.toContain('edit-address');
     expect(html).toContain('id="copy-address"');
     expect(html).toContain('&lt;script&gt;&amp;x=1#section');
     expect(html).toContain("script-src 'none'");
@@ -29,23 +29,21 @@ describe('reserved-path explanation', () => {
     expect(details).toContain(i18n.t('webServiceBrowser.reservedPathSummary'));
     expect(details).toContain('<code>http://localhost:23999/');
     expect(details).toContain('id="copy-address"');
-    expect(details).not.toContain('id="edit-address"');
+    expect(html.replace(details!, '')).not.toContain('class="floe-window-status__actions"');
     expect(details).not.toContain('<h1');
   });
 
-  it('accepts only exact actions from the current host document', () => {
+  it('accepts only the copy action from the current host document', () => {
     const documentURL = buildWebServiceReservedPathDocumentURL('en-US', 'http://localhost:23999/', theme);
-    const actions = { editAddress: vi.fn(), copyAddress: vi.fn() };
-    for (const intent of ['edit-address', 'copy-address']) {
-      const target = `https://redeven.invalid/window-status/${intent}`;
-      expect(performWebServiceReservedPathIntent(target, documentURL, documentURL, actions)).toBe(true);
-      for (const current of ['', 'http://localhost:23999/', documentURL + '#stale']) {
-        expect(performWebServiceReservedPathIntent(target, current, documentURL, actions)).toBe(false);
-      }
-      expect(performWebServiceReservedPathIntent(target + '?address=other', documentURL, documentURL, actions)).toBe(false);
-      expect(performWebServiceReservedPathIntent(target, '', '', actions)).toBe(false);
+    const copyAddress = vi.fn();
+    const target = 'https://redeven.invalid/window-status/copy-address';
+    expect(performWebServiceReservedPathIntent(target, documentURL, documentURL, copyAddress)).toBe(true);
+    for (const current of ['', 'http://localhost:23999/', documentURL + '#stale']) {
+      expect(performWebServiceReservedPathIntent(target, current, documentURL, copyAddress)).toBe(false);
     }
-    expect(actions.editAddress).toHaveBeenCalledOnce();
-    expect(actions.copyAddress).toHaveBeenCalledOnce();
+    expect(performWebServiceReservedPathIntent(target + '?address=other', documentURL, documentURL, copyAddress)).toBe(false);
+    expect(performWebServiceReservedPathIntent(target, '', '', copyAddress)).toBe(false);
+    expect(performWebServiceReservedPathIntent('https://redeven.invalid/window-status/edit-address', documentURL, documentURL, copyAddress)).toBe(false);
+    expect(copyAddress).toHaveBeenCalledOnce();
   });
 });

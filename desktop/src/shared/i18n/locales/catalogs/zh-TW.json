@@ -1890,7 +1890,6 @@
     "reservedPathTitle": "暫不支援此頁面",
     "viewDetails": "查看詳情",
     "reservedPathSummary": "此位址使用了 Redeven 的保留路徑。如需存取 Redeven 管理介面，請從對應的環境入口進入。",
-    "editAddress": "修改位址",
     "copyAddress": "複製位址",
     "addressCopied": "已複製",
     "title": "Web Service",
