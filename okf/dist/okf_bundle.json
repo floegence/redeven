@@ -20620,7 +20620,7 @@
         "title": "Independent Gateway qualification",
         "type": "Gateway Contract"
       },
-      "body_length": 6931,
+      "body_length": 7217,
       "summary": "Affected-feature acceptance must exercise fresh independent device admission, real application authentication and exact revocation scope. It verifies production handlers, host placements and multilingual management flows. These checks are separate from the aggregate main push gate and release packaging.",
       "sections": [
         {
@@ -31794,5 +31794,5 @@
       ]
     }
   ],
-  "source_sha256": "ed23c3ca55e9a7c9874db0143e3553cab486d680657cfaad66bd3c3e50bcf3d4"
+  "source_sha256": "e5499f555439be4672cfa966058bf0f18fb1ac3504e26d9637880b9fbd77a7be"
 }
