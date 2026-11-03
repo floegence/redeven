@@ -1710,25 +1710,24 @@
 
 .flower-queued-turn-dock {
   display: grid;
-  max-height: min(12rem, 30dvh);
-  margin-bottom: 0.5rem;
+  max-height: min(10rem, 30dvh);
+  align-content: start;
+  gap: 0.125rem;
+  margin-bottom: 0.25rem;
   overflow-y: auto;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, transparent);
-  padding: 0.1875rem;
-  box-shadow: 0 8px 22px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
+  overscroll-behavior-y: contain;
 }
 
 .flower-queued-turn-item {
   display: grid;
   min-width: 0;
-  height: 2.375rem;
+  height: 2rem;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.375rem;
   border-radius: 0.375rem;
-  padding: 0.25rem 0.375rem;
+  padding: 0.1875rem 0.375rem;
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
   color: var(--foreground);
   user-select: none;
 }
@@ -1748,8 +1747,9 @@
   cursor: grabbing;
 }
 
-.flower-queued-turn-item:hover {
-  background: color-mix(in srgb, var(--primary) 7%, transparent);
+.flower-queued-turn-item:hover,
+.flower-queued-turn-item:focus-within {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 .flower-queued-turn-item[data-flower-queued-turn-dragging='true'] {
@@ -1780,7 +1780,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--floe-type-body);
+  font-size: 0.8125rem;
   line-height: 1.25rem;
 }
 

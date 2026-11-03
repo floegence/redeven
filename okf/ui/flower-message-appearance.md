@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower message appearance
 tags: [flower, themes, accessibility, selection]
 lifecycle: contract
-reviewed_at: "2026-10-29"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -24,6 +24,11 @@ Answered receipts retain every complete question followed by its answer in canon
 
 Text, placeholders and actions share the right edge; the full-row history wrapper makes the 78% desktop bubble limit relative to the transcript. Short text fits intrinsically; narrow views retain the full-column limit. Error/code insets use readable foreground and selection roles over their own backgrounds.
 
+## Queued input beside the composer
+The shared Flower component owns queue presentation in both hosts, using published Floe theme roles. A queue is a borderless, shadowless list of 32px single-line rows with a quiet neutral fill, 2px between rows and 4px above the composer. Long labels retain their complete text through truncation and the native tooltip. The list scrolls at the smaller of 10rem or 30% of viewport height. Host styles must not duplicate the retired queue-panel layout.
+
+Drag, edit, send-now, delete and attachment/reference previews retain their existing authority and behavior. Action hit areas remain at least 24px, reserve their width and reveal on hover or keyboard focus; touch controls remain visible. Focus, pending feedback and stream updates must not move neighboring controls.
+
 ## User media and resources
 Order is image thumbnails, wrapping resource cards, text bubble, then timestamp/copy. Resource/image-only messages omit empty bubbles. Canonical previews use exact thread/turn/reference identity; queued actions retain their separate authority/click guard.
 
@@ -35,6 +40,8 @@ Filled text, including transparent table headers, reverses capsule ink and fill 
 Forced colors map sent bubbles to `Highlight` / `HighlightText`, pending input and insets to native reading surfaces, and selection to contrasting system roles. Palette and material ownership remain with [Desktop shell theme state](../desktop/desktop-shell-theme-state.md) and [shared surface material](surface-material.md).
 
 # Evidence
+
+- [Compact queue geometry, themes, keyboard access and short-window scrolling](../../internal/envapp/ui_src/src/ui/FlowerSurface.queueLayout.browser.test.tsx)
 
 - [Theme/material contrast, native selection and forced colors](../../internal/envapp/ui_src/src/styles/flowerMessageContrast.browser.test.tsx)
 - [Full-context receipts, ordered copy, hidden answers and narrow-screen theme changes](../../internal/envapp/ui_src/src/ui/FlowerSurface.inputResponse.browser.test.tsx)

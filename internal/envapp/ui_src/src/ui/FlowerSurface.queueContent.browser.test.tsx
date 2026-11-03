@@ -147,7 +147,7 @@ describe('Flower queued content', () => {
   expect(row.querySelector('[data-flower-queued-attachment="new-new.png"]')).not.toBeNull();
   expect(row.querySelector('.animate-spin')).toBeNull();
   await page.viewport(320, 800);
-  expect(row.getBoundingClientRect().height).toBe(38);
+  expect(row.getBoundingClientRect().height).toBe(32);
   expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
   expect((surface.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('');
   setText(surface, 'Independent next draft');

@@ -391,7 +391,7 @@ it('recovers text and references from lost attachment capability without automat
   await waitFor(() => s.rows().length === 2);
   const recovered = s.rows()[0];
   expect(recovered.getAttribute('aria-description')).toContain('Attachments are unavailable after restart');
-  expect(recovered.getBoundingClientRect().height).toBe(38);
+  expect(recovered.getBoundingClientRect().height).toBe(32);
   expect(recovered.textContent).toContain('Confirmation needed');
   expect(recovered.textContent).not.toContain('Send failed');
   expect(recovered.querySelector('[aria-label="Retry send"]')).toBeNull();
@@ -528,7 +528,7 @@ it('shows captured preparation after restart as explicit recovery without replay
   const s = await setup();
   await waitFor(() => s.rows().length === 1);
   expect(s.rows()[0].getAttribute('aria-description')).toContain('This message was not sent before restart');
-  expect(s.rows()[0].getBoundingClientRect().height).toBe(38);
+  expect(s.rows()[0].getBoundingClientRect().height).toBe(32);
   expect(s.rows()[0].querySelector('[aria-label="Retry send"]')).toBeNull();
   expect(s.launch).not.toHaveBeenCalled();
   s.type('New draft');

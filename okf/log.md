@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-03: [Message appearance](ui/flower-message-appearance.md) uses compact, borderless queue rows above the composer; shared Flower owns layout and the retired host queue styles are removed.
+
 - 2026-11-03: Preserve complete original provider errors with published Floret
   v7.101.0 across Desktop RPC, canonical persistence, restart and Flower copy;
   keep banner/log summaries separate. See [model recovery](ai/model-request-recovery.md).
