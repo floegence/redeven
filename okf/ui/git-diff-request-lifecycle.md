@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-One shared Git panel owns preview/full-context reads by target, refresh revision, transport and mode. Stale responses cannot replace current content. Unchanged Workbench placement retains requests, content, expansion and scroll; target changes/refresh invalidate them. Missing transport waits for Shell recovery; empty/errors settle explicitly without automatic retries.
+One Git panel binds preview/full reads to target/revision/transport/mode. Stale replies cannot replace current content; unchanged placement retains request/content/scroll/expansion. Missing transport waits for Shell, while empty/error states settle explicitly without automatic retry.
 
 # Contract
 
@@ -26,6 +26,6 @@ Layout persistence does not report Git content freshness. Workbench may stabiliz
 
 # Evidence
 
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx - Verifies deferred connection loading, transport replacement, late-result isolation, terminal errors, snapshot ownership, and same-path refresh.
+- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx
 
-- redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchGitDiffWidget.tsx - Distinguishes unchanged placement snapshots from changed Git targets before supplying the shared diff panel.
+- redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchGitDiffWidget.tsx

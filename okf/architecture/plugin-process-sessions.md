@@ -7,7 +7,7 @@ reviewed_at: "2026-10-27"
 ---
 # Summary
 
-ReDevPlugin Process Broker alone owns plugin processes; Redeven supplies authenticated scope, permissions, minimal environment, secrets, state and diagnostics/audit. Opaque handles expose bounded binary stdio, never a second protocol. Overflow may lose output; Host close, disable, uninstall, revocation and owner teardown stop owned processes.
+ReDevPlugin Process Broker owns processes; Redeven supplies authenticated scope/permission/minimal environment/secrets/state/audit. Opaque handles expose bounded binary stdio, no second protocol. Overflow may lose output; close/disable/uninstall/revoke/owner teardown stops owned work.
 
 # Contract
 

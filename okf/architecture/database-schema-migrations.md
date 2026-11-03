@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Each repository migrates its own stores: Redeven product data, Floret and ReDevPlugin internals. Open validates the complete SQLite/WAL view before service admission. Contiguous atomic migrations preserve data; future, drifted, wrong-kind or unsupported inputs remain untouched. Failure stops the affected service, never patches upstream data or replaces a database.
+Each repository migrates its own opaque stores. Validate full SQLite/WAL before readiness; contiguous atomic edges preserve records. Future, drifted, wrong-kind or unsupported state remains untouched. Failure blocks only its service without upstream repair or database replacement.
 
 # Contract
 
@@ -29,6 +29,5 @@ Automatic migration is not permission to accept arbitrary historical shapes. A r
 
 # Evidence
 
-- `redeven:internal/persistence/sqliteutil/engine.go` - WAL-aware read-only preflight, sidecars and atomic verified migrations.
-
-- `redeven:internal/persistence/sqliteutil/engine_test.go` - Initialization/kind/version/metadata, rollback and concurrency.
+- `redeven:internal/persistence/sqliteutil/engine.go` - Source.
+- `redeven:internal/persistence/sqliteutil/engine_test.go` - Tests.

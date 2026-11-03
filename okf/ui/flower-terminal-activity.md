@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Flower renders canonical Floret v7 Activity facts. Host-authored labels and descriptions explain the task; every terminal operation has safe expandable details, including writes and empty reads. Disclosure and output scrolling are local presentation state. They never create process lifecycle facts or expose stdin, private working paths, or effect internals. Actionable approval controls belong to the composer.
+Flower renders canonical Floret Activity with host task labels and safe details for every terminal operation, including writes/empty reads. Disclosure/scroll are ephemeral; no stdin/private paths/effect internals or invented lifecycle. Approval controls remain composer-owned.
 
 # Contract
 
@@ -54,6 +54,5 @@ Presentation never changes Floret status, ordering, persistence, read acknowledg
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - Authorized terminal-output mapping, without process lifecycle ownership.
-
-- `redeven:internal/ai/terminal_activity_test.go` - Typed terminal outcomes survive Activity sanitization.
+- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - Source.
+- `redeven:internal/ai/terminal_activity_test.go` - Tests.

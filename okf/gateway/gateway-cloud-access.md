@@ -35,8 +35,10 @@ Cloud owns users, roles and resource bindings. Runtime owns Cloud enrollment and
 
 # Evidence
 
-- redeven:internal/gatewayegress/controller.go — Local policy and certificate admission with fenced expiration.
+- redeven:internal/gatewayegress/controller.go
+
 - redeven:internal/gatewayegress/controller_test.go — Egress-only revocation and stale-timer isolation.
 - redeven:internal/gatewayegress/isolation_test.go — Isolated Runtime reaches a fixture only through authenticated Gateway proxy.
-- redeven:internal/agent/cloud_route_test.go — Route confirmation before Cloud enrollment and version fencing.
-- redeven:internal/agent/runtime_cloud.go — Runtime-owned Cloud recovery.
+- redeven:internal/agent/cloud_route_test.go
+
+- redeven:internal/agent/runtime_cloud.go

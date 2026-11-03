@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime projects current DSL into frozen data-only redeven.io/tessiven-presentation/v1; clients use bundled renderers. DSL releases do not change display format or require client updates. Preserve historical YAML, digest/revision and write authority. Unsupported source remains viewable/exportable without invented topology; integrity failure has no export. Never return executable code.
+Runtime projects DSL into frozen data-only presentation/v1 for bundled renderers. DSL releases require no display-format/client changes. Preserve YAML/digest/revision/write authority; unsupported source remains viewable/exportable without guessed topology, but integrity failure cannot export.
 
 # Contract
 
@@ -31,6 +31,6 @@ Removing a supported display format requires an explicit client compatibility-wi
 
 - `spec/tessiven-presentation/v1.schema.json` - Frozen data-only display shape.
 
-- `internal/tessiven/presentation.go` - Explicit projection and atomic source read.
+- `internal/tessiven/presentation.go` - Source.
 
-- `internal/tessiven/dsl_version_test.go` - Historical identity and frozen-schema checks.
+- `internal/tessiven/dsl_version_test.go` - Tests.

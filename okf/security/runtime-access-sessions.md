@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime accessgate alone owns ordinary validity/revocation. Valid browser sessions survive refresh/tabs/disconnect; cookie names isolate HTTP/HTTPS/ports without extending authority. Expiry/logout/security changes/restart require reauthentication. Invalid authority/incompatible Desktop fails closed; two-factor contract owns credentials and host recovery.
+Runtime accessgate alone owns validity/revocation. Valid sessions survive tabs/refresh/disconnect; cookie names isolate protocols/ports without extra authority. Expiry/logout/security/restart needs login. Invalid/incompatible clients fail closed; MFA owns credential recovery.
 
 # Contract
 
@@ -40,6 +40,7 @@ Native transport never acquires trusted Desktop management identity.
 
 # Evidence
 
-- `redeven:internal/localui/access_cookie.go` - Owns name derivation, attributes and exact-scope deletion.
-
+- `redeven:internal/localui/access_cookie.go` - Source.
 - `redeven:internal/localui/access_cookie_test.go` - Default/IPv6 authority admission; forwarded/foreign/retired names reject.
+
+- `redeven:internal/localui/access_cookie_test.go` - Tests.

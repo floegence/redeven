@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns file actions/drafts; published Floe supplies titlebar slots and window lifecycle. Desktop Activity and Workbench place compact actions beside the filename before window controls. Actions preserve permissions, text selection, download mapping and discard confirmation. Close fences pending work immediately while retaining visible content through retirement.
+Redeven owns file actions/drafts; Floe titlebar/window lifecycle. Compact actions precede window controls in Activity/Workbench, preserving permission/selection/download/discard policy. Close immediately fences pending work but keeps content visible through retirement.
 
 # Contract
 
@@ -21,7 +21,7 @@ Workbench exposes the full path through tooltip/Copy and begins content beneath 
 `FilePreviewActions` owns availability/feedback. Header actions preserve reading selection; the product download builder keeps current file/draft mapping.
 
 ## PDF drafts and persistence
-Writable PDFs expose Edit file. PDF.js saves full Unicode values; unsupported original fonts use `NeedAppearances` instead of embedded replacement fonts. Downloads always use the product manager, including conversation-file child previews; [conversation file ownership](../ai/flower-task-files.md#download-ownership) defines background lifetime and toolbar history.
+Writable PDFs expose Edit file. PDF.js saves full Unicode values; unsupported original fonts use `NeedAppearances` instead of embedded replacement fonts. Downloads always use the product manager, including conversation-file child previews; [conversation file ownership](../ai/flower-task-files.md#downloads) defines background lifetime and toolbar history.
 
 ## Unavailable targets and recovery
 Navigation opens current filesystem objects; historical tool/diff/image snapshots retain original content. Failed targets offer Retry/Open parent. [Dismissal](file-preview-dismissal.md) owns resource lifetime and close semantics.
@@ -34,6 +34,5 @@ Preview scale, content bounds, and asynchronous renderer ownership follow the [v
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Desktop titlebar versus mobile inline actions.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewPanel.tsx` - Retains the body and unsaved-change confirmation boundary.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewPanel.tsx` - Source.

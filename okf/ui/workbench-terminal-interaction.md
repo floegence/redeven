@@ -2,54 +2,42 @@
 type: UI Contract
 title: Workbench terminal interaction
 tags: [ui, terminal, workbench, activity, semantic]
-quality_exception: Cross-runtime terminal interaction contract spanning actor authority, semantic rendering, multi-view control, browser input, history, accessibility, and performance.
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Floeterm terminal-go owns PTY, native VT, geometry, controller epoch, semantic history and atomic Presentation. Released terminal-web renders one canvas per view and collects local input. Authority/renderer violations fail closed; auxiliary history or search errors stay local and retryable without disconnecting live output.
+Floeterm terminal-go owns PTY, VT, geometry, controller epoch, semantic history and atomic Presentation. terminal-web renders one canvas/view and collects local input. Authority/renderer faults fail closed; history/search faults stay local and retryable without disconnecting output.
 
 # Contract
 
-## One terminal owner and one view renderer
-One `SessionActor` owns each session; sequence and geometry generation only advance. Every view receives the same authoritative Presentation with canonical dimensions. Paint complete backgrounds before cells, graphics, selection and cursor to avoid stale edges during resize, activation or theme changes.
+## Ownership
+One SessionActor owns each session; sequence/geometry generation only advance. All views receive the same canonical-dimension Presentation. Paint complete background before cells/graphics/selection/cursor to prevent stale resize/activation/theme edges. Floeterm owns attachment/geometry arbitration; browser views never parse bytes, own history or hide extra renderers.
 
-## Multi-view geometry and controller ownership
-Published Floeterm owns attachment arbitration and geometry. Browser views never parse output bytes, own history or create hidden renderers.
+[Activity companion](flower-activity-companion.md#activity-terminal-footer) owns its measured footer; Workbench supplies none. Layout grants no attachment/control/input authority. TerminalInputBridge sends confirmed Unicode once, structured keys to native encoder and bounded paste. Reject script/malformed URLs, stale capabilities and remote paths.
 
-## Product footer placement
-[Activity companion](flower-activity-companion.md#activity-terminal-footer) owns the Activity-only measured footer entry. Workbench supplies none. Layout cannot attach a view, request control or intercept terminal input.
+Clear is actor semantic reset, never canvas erasure/Ctrl-L/recreation/detach. Stale generations do nothing. Close/delete removes catalog/attachments/capabilities; late events cannot resurrect sessions.
 
-## Input, links, selection, and mobile interaction
-`TerminalInputBridge` sends confirmed Unicode once, structured key intents to the native encoder and clipboard paste through its bounded interaction. Script/malformed URLs, stale capabilities and remote paths fail closed.
+## History
+Published HistoryScrollbar owns capture, frame-coalesced navigation, minimum thumb, cursors, track paging and Arrow/Page/Home/End. Redeven adds a 16 CSS-pixel rail, localized name/focus style and input focus restoration. History controller alone owns offset; cancel/capture-loss/blur/disposal release dragging.
 
-## Clear, history, refresh, and lifecycle
-Clear is the actor's semantic reset, never canvas erasure, Ctrl-L, recreation or detach; stale generations have no effect. Close/delete removes catalog, attachments and capabilities; stale notifications cannot resurrect sessions.
+Accepted text/paste/pressed or repeated keys return live through Floeterm input-follow by default; release-only, preedit, selection/copy, modifiers/background output do not. Persisted terminal:follow_input can disable it across Activity/Workbench/container surfaces. Return clears search/errors/stale retry/trace; old replies cannot restore browsing.
 
-## History navigation and retention controls
-Floeterm's published `HistoryScrollbar` owns drag capture, frame-coalesced pointer navigation, minimum thumb size, cursors, track paging and Arrow/Page/Home/End keyboard behavior. Redeven supplies a 16 CSS-pixel rail, localized accessible name, focus styling and input-focus restoration after pointer navigation. The history controller remains the sole offset owner. Pointer cancellation, capture loss, blur and disposal release drag state.
+Settings separate new-session Runtime defaults from explicit current-session apply. Blank uses native defaults; zero grants no history budget. Rows and bytes (MiB display) jointly constrain page-granular storage, excluding live screen; neither means character count/screen dimensions. Only admins save defaults. Current-session apply needs interaction permission and confirmation for irreversible pruning; process/live screen/canonical geometry remain.
 
-Accepted text, paste and pressed/repeated key intents return to live by default through Floeterm's input-follow method. Release-only intents, composition preedit, selection/copy, modifiers and background output do not. The persisted local `terminal:follow_input` preference can disable this behavior. Returning to live clears product search, errors and stale retry/trace state; old history responses cannot restore browsing. Activity, Workbench and container terminal surfaces consume the same preference.
+Fence reads/confirmation to selected session. Late defaults save refreshes visible defaults after selection changes. Unknown mutation blocks changes until explicit read-only reload, never replay. Old runtimes show unavailable; all shipped locales cover labels/feedback/confirmation.
 
-Settings distinguish Runtime defaults for new sessions from explicit application to the attached current session. Blank fields select native defaults; zero retains no historical budget. Rows and memory bytes (displayed as MiB) constrain native storage together, exclude the live screen and are page-granular. These are not character counts or fixed screen dimensions. Only administrators save Runtime defaults. Current-session changes require terminal interaction permission and explicit confirmation because pruning is irreversible. The process, live screen and canonical geometry remain intact.
-
-The dialog fences reads and confirmation to the selected session; a defaults save that settles after switching sessions refreshes the visible defaults. Unknown mutation outcomes disable further changes until an explicit read-only reload; it never replays an uncertain mutation. Old runtimes expose an unavailable state. All labels, feedback and confirmations have complete shipped-locale translations.
-
-## Product lifecycle and performance
-Dormant sessions remain metadata-only and the catalog renderer-free. Ask Flower captures selection or bounded visible semantic text; working directory requires current local-path capability.
+## Product state
+Dormant sessions are metadata-only; catalog has no renderer. Ask Flower reads selection or bounded visible semantic text; cwd requires current local-path capability. Canonical active/running/idle state and saved activity indicators remain authoritative. Opaque bodies/neutral static shadows stay unchanged during activation/drag/resize.
 
 # Boundaries
 
-Redeven may adapt Flowersec streams, product permissions, local-path capability, responsive placement, notifications, and Desktop URL/file actions. It must not recreate terminal parsing, key encoding, history ownership, attachment arbitration, canonical geometry, semantic frame encoding, cursor state, graphics state, or renderer internals. Local sibling dependencies, raw-byte fallbacks, hidden renderers, automatic reattach on ordinary resize, error swallowing, and sequence rollback are prohibited.
-
-## Activity presentation
-The existing canonical active/running/idle state and the persisted activity indicator preference remain authoritative. Opaque widget bodies and neutral static shadows do not change during activation, dragging, or resizing.
+Redeven adapts Flowersec transport, permissions, local paths, responsive placement, notifications and Desktop URL/file actions. Never duplicate parsing/key encoding/history/arbitration/geometry/frame/cursor/graphics/rendering. No sibling links, raw-byte fallbacks, hidden renderers, resize reattach, swallowed errors or sequence rollback.
 
 # Evidence
 
-- `redeven:internal/terminal/manager.go` - Published terminal live/history/clear/catalog/lifecycle RPC.
+- `redeven:internal/terminal/manager.go` - Source.
+- `redeven:internal/terminal/live_stream_test.go` - Tests.
+- `redeven:internal/envapp/ui_src/scripts/checkTerminalHistoryCarrier.mjs`: real Runtime/Electron navigation/settings, 320px/200% layout, Docker Exec/restart persistence and supervised process/port cleanup.
 
-- `redeven:internal/terminal/live_stream_test.go` - Permission and generation-bound actor clear.
-
-- `redeven:internal/envapp/ui_src/scripts/checkTerminalHistoryCarrier.mjs` - Real Runtime and Electron navigation, settings, 320px/200% layout, Docker Exec, restart persistence and supervised process/port cleanup.
+- `redeven:internal/envapp/ui_src/scripts/checkTerminalHistoryCarrier.mjs` - Tests.

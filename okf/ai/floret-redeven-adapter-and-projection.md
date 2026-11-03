@@ -8,7 +8,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven's adapter is a thin typed boundary over published Floret. It authorizes endpoint and thread ownership, resolves resources, sanitizes Activity, maps typed views, native updates and failures, and projects live summaries. Floret remains the only lifecycle, persistence, migration, cancellation, and provider-state owner; Redeven never waits on provider work or mirrors a receipt, authority barrier, transcript, or execution projection.
+Redeven authorizes ownership/resources and maps typed Floret views, updates, failures and safe Activity. Floret alone owns lifecycle, persistence, migration, cancellation and provider state. The adapter neither waits on provider work nor mirrors execution or receipts.
 
 # Contract
 
@@ -38,6 +38,5 @@ The obsolete logged max_tool_calls declaration is removed because it never enfor
 
 - [Output-source integration fixture](../../internal/ai/flower_output_sources_integration_test.go) checks every intermediate HTTP-provider publication and canonical reopen; shared mapper and isolated browser tests consume its sanitized checkpoints.
 
-- `redeven:internal/ai/floret_runtime.go` - Composes the published typed runtime.
-
-- `redeven:internal/ai/threads.go` - Endpoint/thread authorization and summary-only inventory.
+- `redeven:internal/ai/floret_runtime.go` - Source.
+- `redeven:internal/ai/threads.go` - Source.

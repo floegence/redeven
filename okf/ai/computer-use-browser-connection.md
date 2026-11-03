@@ -21,6 +21,5 @@ Installation and connection never grant website access or authorize a tab. Uncer
 
 # Evidence
 
-- `redeven:internal/ai/computer_extension_onboarding.go` - fixed native destinations and stable package staging.
-
-- `redeven:internal/ai/computer_extension_onboarding_test.go` - Browser destination/sandbox/replacement rejection.
+- `redeven:internal/ai/computer_extension_onboarding.go` - Source.
+- `redeven:internal/ai/computer_extension_onboarding_test.go` - Tests.

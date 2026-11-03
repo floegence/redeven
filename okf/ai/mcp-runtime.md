@@ -7,7 +7,7 @@ reviewed_at: "2026-10-29"
 ---
 # Summary
 
-Redeven configures MCP and adapts the released official Go SDK, which owns stdio/Streamable HTTP sessions. Floret owns invocation, approval, one-shot effects, history/recovery. Add no second execution queue/lifecycle/retry authority. Unknown call outcomes are terminal and never replayed; invalid persisted config fails without changing bytes.
+Redeven configures MCP over official Go SDK stdio/Streamable HTTP sessions; Floret owns invocation/approval/effects/history/recovery. Add no competing execution or retry owner. Unknown outcomes are terminal without replay; invalid saved configuration remains unchanged.
 
 # Contract
 
@@ -28,7 +28,7 @@ Typing or opening a form does not probe connections. Failed discovery/persistenc
 ## Presentation icons
 Save and explicit Check read `serverInfo.icons` from the existing SDK initialize result. Connection-preserving disabled edits retain icons; changed connection settings clear stale discovery.
 
-Rejected sources receive the generated identity described in [the shared UI contract](../ui/flower-extensions.md#entry-icons).
+Rejected sources receive the generated identity described in [the shared UI contract](../ui/flower-extensions.md#navigation).
 
 ## Execution and dependencies
 Enabled, previously discovered tools join the dynamic tool surface before the existing permission filter. Their identity binds the exact server configuration and tool schema, so a changed or disabled configuration cannot execute through an old invocation name.
@@ -57,8 +57,8 @@ Server tool errors and known connection failures remain distinct from an unknown
 
 # Evidence
 
-- `internal/ai/mcp_manager.go` owns configuration, SDK adaptation, and discovery.
+- `internal/ai/mcp_manager.go`
 
-- `internal/codeapp/appserver/server_ai_mcp.go` owns bounded management DTOs.
+- `internal/codeapp/appserver/server_ai_mcp.go`
 
 - `internal/ai/run_tool_surface.go`, `internal/ai/floret_tools.go`, and   `internal/ai/run.go` join MCP to existing authorization and effect execution.

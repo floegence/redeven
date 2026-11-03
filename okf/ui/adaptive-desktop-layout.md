@@ -36,6 +36,5 @@ Narrow layouts may ellipsize selection titles; explanations remain normal prose 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Native/browser facts mapped to Floe layout.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Mobile/sidebar geometry, dismissal and retained drawer navigation.
+- `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Tests.

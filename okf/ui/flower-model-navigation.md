@@ -39,6 +39,5 @@ The header switcher is only a product-specific compact presentation; it does not
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Mobile permission controls, retained drafts and keyboard/error recovery.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - model_io.updated projects model status.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Tests.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Source.

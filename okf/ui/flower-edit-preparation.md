@@ -7,11 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower shows candidate filenames while file-editing arguments are being prepared.
-The existing Floret argument preview is display-only; actual tool results remain
-the authority for completed changes. Progressive names keep long preparations
-understandable while one stable activity row continues through approval and
-execution.
+Flower exposes candidate filenames during file-edit argument generation through existing display-only Floret previews. One stable row survives approval/execution; actual results alone prove completed edits. Progressive names explain long preparation without creating effect facts.
 
 # Contract
 
@@ -30,8 +26,7 @@ Candidate names never create file actions, authorize paths, admit tool execution
 
 # Evidence
 
-- `redeven:internal/ai/flower_argument_preview.go` - Incremental bounded patch filename extraction.
-
-- `redeven:internal/ai/flower_argument_preview_test.go` - Incremental patch paths, rename/delete/Unicode/body isolation and bounds.
+- `redeven:internal/ai/flower_argument_preview.go` - Source.
+- `redeven:internal/ai/flower_argument_preview_test.go` - Tests.
 
 - [Browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.toolFailures.browser.test.tsx) - No-edit validation and confirmed destination diffs remain readable with one error notice at desktop English/light and narrow Chinese/dark sizes.

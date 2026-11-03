@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Installation manager owns readiness; a short Runtime command performs the approved system transaction. Ubuntu namespace restrictions get explicit preparation, then version reuse. Preserve Chromium sandbox/global AppArmor; admit only catalog bytes at a fixed root-owned path, without API credentials. Dependencies, sandbox and unknown launch failures stay distinct; failed/cancelled publication preserves data.
+Installation manager owns readiness; short approved Runtime transactions prepare Linux namespaces/dependencies. Preserve sandbox/global AppArmor and admit only catalog bytes at fixed root-owned paths. Separate dependency, sandbox and unknown launch failures; failed publication preserves data.
 
 # Contract
 
@@ -27,6 +27,5 @@ The operation retains personal browser processes, browser profiles, login state,
 
 # Evidence
 
-- `redeven:internal/browserinstall/system_readiness.go` - Single readiness state and structured action.
-
-- `redeven:internal/browserinstall/system_linux.go` - Privileged fixed publication, trusted paths/AppArmor.
+- `redeven:internal/browserinstall/system_readiness.go` - Source.
+- `redeven:internal/browserinstall/system_linux.go` - Source.

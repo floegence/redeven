@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The plugin integration gate proves that the released ReDevPlugin Host and market contracts remain aligned with Redeven's authorization, placement, renderer, and Desktop lifecycle adapters. It uses the published package and isolated smoke profiles; copied platform paths, implicit grants, second bridges, and stale lifecycle projections fail closed.
+Plugin gate checks released ReDevPlugin Host/market against Redeven authority, placement, renderer and Desktop lifecycle. Use published packages/isolated profiles; copied platform paths, implicit grants, second bridges and stale projections fail instead of fabricating integration.
 
 # Contract
 
@@ -23,4 +23,4 @@ The main CI and release gate owns validation ordering and exact-main provenance.
 
 # Evidence
 
-- `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.
+- `redeven:scripts/check_plugin_integration.sh:1` - Tests.

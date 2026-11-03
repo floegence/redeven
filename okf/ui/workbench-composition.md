@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe owns composition rendering, direct editing, materials and anchored tools; Redeven owns localization, defaults and layout persistence. Native caret, selection and IME remain intact, with optional empty region names. Save/reopen preserves content, color, geometry and material; failed upgrades retain the prior supported layout.
+Floe owns composition rendering/editing/materials/anchored tools; Redeven locales/defaults/layout storage. Preserve native caret/selection/IME and optional empty region names. Save/reopen retains content/color/geometry/material; failed upgrade keeps prior supported layout.
 
 # Contract
 
@@ -35,6 +35,5 @@ Migration atomicity, incompatible-schema rejection, and startup failure behavior
 
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx` - Published 35%/100% canvas colors, themes, localization/accessibility.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts` - First-run English, nonoverlap and full-scene laptop framing.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Published surface adapter/localized composition.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Source.

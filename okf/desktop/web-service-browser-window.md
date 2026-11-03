@@ -50,8 +50,6 @@ System-browser authorization and the persisted access-mode decision remain owned
 
 # Evidence
 
-- `redeven:desktop/src/shared/desktopShellWebServiceWindowIPC.ts:1` - Semantic IPC validates HTTP(S) and DNS-safe forward IDs.
-
-- `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - Protected Forward redirects stay in the same route identity.
-
+- `redeven:desktop/src/shared/desktopShellWebServiceWindowIPC.ts:1` - Source.
+- `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - Source.
 - `redeven:desktop/scripts/check-web-service-reserved-path.mjs` - Collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address copying, redirect handling and ordinary application 404 preservation.

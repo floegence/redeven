@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns bytes/metadata, authenticated owner, quotas and retention; Floret owns turn membership. Upload once, send opaque attachment_id, display attachment://v1 locators and revalidate provider resources. Never expose paths or substitute product claims for canonical membership. Owner/quota/membership/metadata/digest/byte failures reject only the affected reference.
+Redeven owns authenticated bytes/metadata/quotas/retention; Floret turn membership. Upload once, submit opaque attachment_id, render attachment://v1 and revalidate provider resources. Paths remain private; invalid identity/claims/digest/bytes reject only the affected reference.
 
 # Contract
 
@@ -38,7 +38,7 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 
 - `redeven:internal/ai/threadstore/schema.go` - Product v1 attachment ownership, attempts, claims and neutral staging.
 
-- `redeven:internal/ai/threadstore/uploads.go` - Atomic attachment idempotency, quotas, claims and last-reference deletion.
+- `redeven:internal/ai/threadstore/uploads.go` - Source.
 
 - [Materialization and integrity tests](../../internal/ai/attachment_materialize_test.go).
 - [No-native/no-tools provider preparation and historical manifest tests](../../internal/ai/attachment_manifest_test.go).

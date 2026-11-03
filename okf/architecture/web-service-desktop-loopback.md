@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop-only `desktop_loopback` gives one Environment session/forward a random `http://127.0.0.1:<port>` origin while every request follows its protected Runtime route. It never connects directly, changes interfaces, modifies applications or falls back to unified proxy. Closing the owning window/Environment removes the gateway and authority.
+Desktop loopback allocates random HTTP127.0.0.1 origin per Environment/forward; all traffic still uses protected Runtime route. Never dial directly, change interfaces/apps or fall back to unified proxy. Closing owner window/Environment removes gateway and authority.
 
 # Contract
 
@@ -21,6 +21,5 @@ Compatibility origin is not direct access, RBI, public listening, Local UI login
 
 # Evidence
 
-- `redeven:internal/portforward/registry/schema.go` - Registry baseline pins constrained access mode and route identity.
-
-- `redeven:desktop/src/main/navigation.ts:256` - Exact HTTP target/loopback mapping to the assigned gateway origin.
+- `redeven:internal/portforward/registry/schema.go` - Source.
+- `redeven:desktop/src/main/navigation.ts:256` - Source.

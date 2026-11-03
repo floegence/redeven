@@ -22,8 +22,6 @@ Desktop readiness must come from the machine presentation and startup-report con
 
 # Evidence
 
-- `redeven:cmd/redeven/main.go:222` - Local default and explicit remote/hybrid/local/desktop modes.
-
-- `redeven:cmd/redeven/desktop_startup_coordination.go:20` - Reports only for machine desktop startup with explicit report path.
-
-- `redeven:internal/runtimepresentation/events.go:1` - runtimepresentation owns startup phases/events.
+- `redeven:cmd/redeven/main.go:222` - Source.
+- `redeven:cmd/redeven/desktop_startup_coordination.go:20` - Source.
+- `redeven:internal/runtimepresentation/events.go:1` - Source.

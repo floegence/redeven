@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns authorized reference discovery and unadmitted connection-local drafts; Floret owns ordered references after admission. Composer chips show files/directories, frozen conversation references and page context. Stale discovery preserves the editor; captured submission failures retain outbox recovery without overwriting newer edits; labels never supply canonical identity or authorization.
+Redeven owns authorized discovery and connection-local drafts; Floret owns admitted ordered references. Chips show files, directories, frozen threads/page context. Stale discovery retains editor; failed capture retains outbox without overwriting edits. Labels grant no identity or authority.
 
 # Contract
 
@@ -40,6 +40,5 @@ After Send, only the browser transport outbox may retain the original ordinary l
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Removable chips retain input/focus boundary.
-
-- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Removal/Send, frozen retry refs, selection previews and snapshots.
+- `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Source.
+- `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Tests.

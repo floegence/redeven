@@ -40,6 +40,5 @@ The [qualification contract](computer-use-qualification.md) owns acceptance and 
 
 # Evidence
 
-- `redeven:internal/ai/computer_runtime.go` - target resources and readiness owner.
-
-- `redeven:internal/ai/run.go` - canonical tool boundary and partial error results.
+- `redeven:internal/ai/computer_runtime.go` - Source.
+- `redeven:internal/ai/run.go` - Source.

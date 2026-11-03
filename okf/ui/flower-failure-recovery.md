@@ -7,13 +7,13 @@ reviewed_at: "2026-10-26"
 ---
 # Summary
 
-Floret owns outcomes, retry checkpoints and automatic historical migrations. Flower keeps accepted content readable with one failure/recovery surface; drafts, queue editing, Stop and navigation remain available. Transport uncertainty never proves success or permits replay. Readiness timeouts offer status refresh; deterministic migration failures remain explicit administrative diagnostics.
+Floret owns outcomes/checkpoints/migration. Flower retains readable content and one recovery surface while drafts, queue edits, Stop/navigation remain usable. Transport uncertainty permits no replay. Readiness timeout offers refresh; deterministic migration failure remains administrative.
 
 # Contract
 
-Stream recovery displays only canonical progress attempts/deadlines. [Live delivery](flower-live-timeline.md#recovery-and-interaction) owns local read failure, revision fencing, one bounded window refresh and connection recovery; reader failure cannot restart the workspace stream.
+Stream recovery displays only canonical progress attempts/deadlines. [Live delivery](flower-live-timeline.md#recovery) owns local read failure, revision fencing, one bounded window refresh and connection recovery; reader failure cannot restart the workspace stream.
 
-Before accepted detail, show one floating error/Retry above the transcript without consuming its height or duplicating workspace/composer notices. The shared [notice stack](flower-live-timeline.md#recovery-and-interaction) preserves error explanations and recovery controls while keeping loaded messages and the composer stationary. Unconfirmed Stop remains separate. Loaded conversations retain live-sync recovery; embedded views omit global navigation. Leaving a read fences its completion and preserves Shell drafts without replay.
+Before accepted detail, show one floating error/Retry above the transcript without consuming its height or duplicating workspace/composer notices. The shared [notice stack](flower-live-timeline.md#recovery) preserves error explanations and recovery controls while keeping loaded messages and the composer stationary. Unconfirmed Stop remains separate. Loaded conversations retain live-sync recovery; embedded views omit global navigation. Leaving a read fences its completion and preserves Shell drafts without replay.
 
 Full child reports bypass ordinary preview limits but retain provider budget; canonical Retry reuses confirmed complete reports without tool dispatch. [Historical compatibility](../ai/flower-upgrade-compatibility.md) owns supported migration evidence rather than a UI-pinned schema version.
 
@@ -23,6 +23,5 @@ Floret validates retry checkpoints and confirmed tool results. The host never pa
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Shared failure, Stop and manual recovery actions.
-
-- `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - One timeline failure owner.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
+- `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - Source.

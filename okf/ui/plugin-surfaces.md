@@ -2,63 +2,52 @@
 type: UI Contract
 title: Plugin surfaces
 tags: [ui, plugins, activity, workbench, plugin-center]
-quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Redeven owns plugin discovery, navigation and placement; released ReDevPlugin owns admission, surface authority, bridge sessions, confirmation and revocation. Activity and Workbench use independent SDK slots. Management preserves search/selection, exposes actionable failures and reconciles unknown outcomes against authoritative state.
+Redeven owns plugin discovery, navigation and placement; ReDevPlugin owns admission, surface authority, bridge sessions, confirmation and revocation. Activity/Workbench use independent SDK slots. Management retains search/selection and reconciles unknown outcomes against authoritative state.
 
 # Contract
 
-## Discovery and exact inventory
-Activity Bar Plugins opens a Shell-root Launcher without changing the normal surface. Search intersects category with NFKC/locale-case-folded display names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay the grid without reflow and restore originating-row focus.
+## Discovery and pinning
+Activity Bar Plugins opens a Shell-root Launcher without changing surface. Search intersects category with NFKC/locale-folded names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay without grid reflow and restore row focus.
 
-## Quick pinning
-Launcher tiles contain one launch action with no pin overlay or persistent pin indicator. Right-click, ContextMenu and Shift+F10 expose plugin information and pin/unpin for the current mode (Activity Bar or Workbench Dock). Pinning leaves the Launcher open, and menu dismissal restores tile focus. Plugin Center provides explicit pin controls for touch access, with 44px targets on compact layouts.
+Tiles have one launch action, no pin overlay/indicator. Right-click/ContextMenu/Shift+F10 exposes information and current-mode Activity Bar/Workbench Dock pinning. Pinning keeps Launcher open; dismiss restores tile focus. Plugin Center provides explicit touch pins with 44px compact targets; cards/details and Activity headers also expose Activity pinning.
 
-Plugin Center cards/details and Activity window headers also expose Activity Bar pinning. Every entry reads and updates the Shell's existing environment-scoped placement preferences; Activity and Workbench pins remain independent. Selected state and accessible action labels update together. Pinning does not launch, enable or authorize a plugin. Unpinning an Activity page completes its exact existing surface retirement first; a failed close retains the pin and reports the failure. Floating windows and sibling surfaces retain their own lifetimes.
+All entries use existing environment-scoped Shell placement preferences. Activity/Workbench pins are independent; selected state/accessibility update together. Pins never launch/enable/authorize. Unpinning an Activity page first completes its exact retirement; failed close retains pin/error. Windows/siblings retain their lifetimes.
 
-## Session recovery
-An authenticated session-ready transition invokes idempotent Host `recoverEnabled` without a stability timer. All placements consume Host `action_state`; trust, grants, policy or recovery flags cannot derive `can_open`.
+## Recovery, installation and policy
+Authenticated session-ready calls idempotent Host recoverEnabled without timers. All placements consume action_state; trust/grants/policy/recovery flags cannot derive can_open. [Installation](plugin-installation-progress.md) owns durable Execution/approved setup; [package review](plugin-package-review.md) owns external packages. Failure preserves placement.
 
-## Installation and package review
-[Installation progress](plugin-installation-progress.md) owns durable Execution observation and approved setup; [package review](plugin-package-review.md) owns external packages. Failures preserve placement rather than delete components.
+Plugin Center joins inventory/grants/Host requirements/policy. Method effects cannot rename capabilities. Failure reloads authority and requires new confirmation.
 
-## Permissions and policy
-Plugin Center joins inventory, grants, Host requirements and policy. Method effects cannot rename granted capabilities. Failure reloads authority and requires a new confirmation.
+## Activity pages/windows
+Each window opens a fresh PluginSurfaceSlot via openSurfaceInSlot. Opening/bridge failures replace iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page, never third-party content.
 
-## Activity windows and pinned pages
-Each window creates one fresh `PluginSurfaceSlot` through `openSurfaceInSlot`. Opening/bridge failures replace the iframe with local recovery; timeouts explain delay and offer Retry. Restart restores shortcuts but starts on a built-in page, never automatically opens third-party content.
+Equivalent metadata preserves an existing page's container/iframe/state. Visibility uses slot lifecycle; instance/surface/management-revision/runtime-generation changes retire its lease. Authority cannot survive merely for continuity. Cold open immediately shows one themed accessible waiting surface without rotating bootstrap labels; ready replaces it, failure retains recovery/details.
 
-Reopening an existing Activity page with equivalent inventory metadata preserves its container, iframe and application state. Visibility changes use the existing slot lifecycle. A changed instance, surface, management revision or runtime generation still retires the old lease; revoked authority never survives for visual continuity. Cold opening immediately shows one host-themed accessible waiting surface, without rotating internal bootstrap-stage labels. Ready content replaces it; failures keep actionable recovery and diagnostic details.
+Each pinned page owns a stable component function. Inventory/pins may update names/icons/order without remounting siblings or discarding edits. Published Floe retained views own sibling isolation/stable DOM order: moving an identical iframe can reload its document. Acceptance checks inner document/draft as well as container; never copy another keep-alive stack.
 
-Each pinned page runtime owns a stable registered component function. Inventory or pin updates may refresh names, icons and ordering without replacing other live page components. Removing or revoking one plugin must not recreate a sibling's iframe or discard its editing state.
+## Workbench and teardown
+[Layout continuity](plugin-layout-continuity.md) owns bindings/atomic placement/exact removal/recovery. Status overlays cannot forward input, guess focus or create bridges. Workbench unpin removes only shortcut.
 
-The released Floe retained-view container owns sibling collection isolation and stable DOM order. Moving a retained iframe can reload its document even when the element identity survives, so acceptance checks the inner document and draft as well as the container. Redeven consumes the published implementation rather than copying a second keep-alive stack.
-
-## Workbench widgets and placement
-[Layout continuity](plugin-layout-continuity.md) owns saved bindings, atomic placement, exact removal and recovery. Status overlays cannot forward input, guess focus or create a second bridge. Unpin removes only the shortcut.
-
-## Confirmation and teardown
-One abort-aware FIFO dialog decides requests independently with initial Cancel focus. Hidden, retired or revoked surfaces cannot approve queued work. Retired surfaces cannot download; Shell neither uploads nor retains exported bytes.
+One abort-aware FIFO dialog handles confirmations independently with initial Cancel focus. Hidden/retired/revoked surfaces cannot approve queued work. Retired surfaces cannot download; Shell never uploads/retains export bytes.
 
 # Boundaries
 
-Manifest surface kinds remain `view|command|background` with semantic roles. Activity, Workbench, window, widget, inventory, navigation, settings, and layout are Redeven placement concepts and never manifest fields.
-
-It does not verify packages or releases, mint tokens, serve assets, grant permissions implicitly, or call business adapters directly.
+Manifest kinds stay view|command|background with semantic roles. Activity/Workbench/window/widget/inventory/navigation/settings/layout are product placement, not manifest fields. Redeven never verifies packages/releases, mints tokens, serves assets, grants implicit permissions or directly calls business adapters.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginQuickPin.browser.test.tsx` - Overlay-free Launcher tiles, pointer/keyboard pin menus, focus restoration and responsive geometry; Plugin Center actions remain synchronized.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinButton.test.tsx` - Pending operations reject duplicate clicks; failed updates preserve authoritative selection and remain retryable.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginQuickPin.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinButton.test.tsx`: reject duplicate pending clicks; failed updates preserve authoritative selection/Retry.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx`: actual published SDK WebGL1/2 pixels, visibility and close/reopen.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Source.
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Inventory refresh and sibling removal retain the registered page component while presentation metadata updates.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceContinuity.test.tsx` - Equivalent target updates retain the live document; authority changes retire it.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx` - Immediate, stable opening feedback and terminal recovery behavior.
-
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx` - Published SDK/product placement: actual WebGL1/2 pixels, visibility, close/reopen.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Inventory/client/commands and cross-placement lifecycle serialization.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinButton.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx` - Tests.

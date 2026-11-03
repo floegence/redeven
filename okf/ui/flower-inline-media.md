@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Assistant images, screenshots, video, audio and self-contained HTML render in shared Flower through released Floe media/HTML isolation. Redeven authorizes resource routing; canonical Floret messages remain the display source. Unavailable, forbidden, oversized or mismatched resources show local retryable errors without interrupting the conversation.
+Shared Flower renders canonical images/video/audio/screenshots/self-contained HTML through released Floe media/isolation. Redeven authorizes resources. Forbidden, missing, oversized or mismatched media yields local retryable errors without interrupting conversation.
 
 # Contract
 

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Windows 11 x64 runs Electron only: no native Local, Windows or local-container Runtime. Register initialized Linux x64 WSL2 distributions independently; manage only exact distribution/user Runtime. Windows owns WSL installation/lifecycle/removal. Missing/WSL1/uninitialized distributions, commands, damaged packages or lost Bridge fail visibly with explicit recovery.
+Windows11x64 runs Electron, not native Local/container Runtime. Register initialized Linux x64 WSL2 targets; manage only exact distro/user Runtime. Windows owns distro lifecycle. Missing/old/uninitialized targets or broken commands/packages/Bridge need visible explicit recovery.
 
 # Contract
 
@@ -39,6 +39,5 @@ Windows and WSL 2 remain separate authorities. No boundary may be hidden by a na
 
 # Evidence
 
-- `redeven:desktop/src/shared/desktopPlatformCapabilities.ts:1` - Main-owned Windows capability contract.
-
-- `redeven:desktop/src/main/runtimeHostAccess.ts:1` - Exact argv WSL execution and streams.
+- `redeven:desktop/src/shared/desktopPlatformCapabilities.ts:1` - Source.
+- `redeven:desktop/src/main/runtimeHostAccess.ts:1` - Source.

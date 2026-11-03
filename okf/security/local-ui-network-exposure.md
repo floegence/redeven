@@ -53,8 +53,6 @@ Installing trust in each HTTPS client is an explicit user action outside Runtime
 
 # Evidence
 
-- `redeven:internal/localui/public_address_refresh.go` - Single address/certificate snapshot and canceled refresh.
-
-- `redeven:internal/localui/public_address_refresh_test.go` - Network changes/recovery, fixed binds, reports, certificates and authenticated WSS.
-
-- `redeven:internal/config/catalog_test.go` - Saved addresses/password/HTTPS preserved; absent protocol defaults HTTP without writes.
+- `redeven:internal/localui/public_address_refresh.go` - Source.
+- `redeven:internal/localui/public_address_refresh_test.go` - Tests.
+- `redeven:internal/config/catalog_test.go` - Tests.

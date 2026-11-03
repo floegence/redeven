@@ -7,11 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The shared Runtime builder owns native terminal linkage for Runtime and Gateway.
-Linux artifacts run on glibc and musl systems without a host dynamic loader;
-Darwin artifacts require a matching Apple builder. Missing native tools fail
-preflight. Linux releases must include matching source and relink materials for
-the statically linked LGPL library, and publication fails when that kit is absent.
+Shared builder owns Runtime/Gateway terminal linkage: Linux runs on glibc/musl without host loader; Darwin requires matching Apple build. Missing tools fail preflight. Static LGPL Linux releases must include matching source/relink materials or publication fails.
 
 # Contract
 

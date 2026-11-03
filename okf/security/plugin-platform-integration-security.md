@@ -2,93 +2,51 @@
 type: Security Contract
 title: Plugin platform integration security
 tags: [security, plugins, permissions, local-ui]
-quality_exception: Cross-domain plugin security contract spanning authenticated identity, package provenance, execution, updates, routes, runtime isolation, and capability authority.
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-ReDevPlugin receives authenticated host identity/source policy, never browser-claimed ownership/trust. HTTP checks auth, origin, CSRF and closed-action policy; direct calls check owner/action/resource. Package provenance, signature, execution approval, update eligibility and permission are independent. Integrity, runtime identity or scope mismatch fails closed.
+ReDevPlugin accepts authenticated host identity and source policy, never browser-claimed trust. HTTP checks auth/origin/CSRF/action; direct calls check owner/action/resource. Provenance, signatures, execution approval, update eligibility and permissions remain independent and fail closed on identity or scope mismatch.
 
 # Contract
 
-## Local process boundary
-The `process.local` permission is an explicit high-risk grant and method-level Process Broker access is checked again for every Worker invocation. The Host does not inherit the complete Redeven environment and never injects session cookies, plugin tokens, or Host credentials.
+## Sessions and permissions
+process.local is an explicit high-risk grant, rechecked by method on every Worker Process Broker call. Hosts inherit neither the complete Redeven environment nor session cookies/plugin tokens/credentials. [Process sessions](../architecture/plugin-process-sessions.md) owns lifecycle.
 
-See [Plugin process sessions](../architecture/plugin-process-sessions.md) for the lifecycle contract.
+Resolve only stored channel metadata with exact nonempty channel/user/environment identities. Cache by owner-session hash; all four hashes must match. No guessed owner sweeps or local teardown registries.
 
-## Authenticated session boundary
-The session resolver accepts only a Redeven channel id whose stored metadata has exact non-empty channel, user, and environment identities.
+Canonical HTTP route: /_redevplugin/api/plugins. Resolve method effects before local policy clamps; shared runtime management stays admin-only. Plugin Center reads grants and explicit policies via released APIs, never registry writes/default catalog grants. Catalog identity is not permission; only verified catalog trust receives Official, without changing actual trust badges.
 
-The bounded session cache is keyed by owner-session hash and accepts a hit only when all four hashes match.
+## Package and network admission
+Install/update requires exact source policy, revocation evidence, publisher/plugin/version, signed release metadata, package hashes and Host requirement. Reject browser trust, arbitrary bytes, rollback, unknown publishers, invalid/revoked signatures and fabricated provenance. Retain existing official release-ref verification; add no authorization workflow.
 
-Guessed owner sweeps and local teardown registries are prohibited.
+VPN/proxy/enterprise DNS is routing, not evidence of malice. Package downloads retain source/redirect/integrity checks through normal host routing. Authorized HTTPS connectors use released transport after grants; routing grants no extra destinations/methods, private-prefix bypass or ambient credentials. Proxy discovery/timeouts/TLS failures reject only their operation. Construction performs no discovery; plugin readiness cannot gate core Runtime. Keep TLS validation; proxy credentials stay on that hop. Never retry writes with unknown outcomes.
 
-## HTTP and direct authorization
-The canonical route is `/_redevplugin/api/plugins`.
+## Confirmation and runtime trust
+Validate capability preflight against the Host-known response schema before confirmation. Reserved redevplugin.capability.risk_plan.* values must satisfy strict v1: reject unknown/malformed reserved versions without generic fallback. Replacement/replay needs new confirmation.
 
-Method effect is resolved before local policy clamps it, while shared runtime management remains admin-only.
+Descriptors bind version/target/IPC/WASM ABI/artifact hash. Darwin Developer ID signing precedes product digest/Sigstore evidence; Desktop signing preserves those nested bytes. Startup cannot trust a digest computed from its own field binary.
 
-## Permission management projection
-Plugin Center reads active grants and explicit plugin security policies through released ReDevPlugin APIs. It never writes registry tables, invents a default grant for a catalog plugin, or treats catalog identity as permission.
+Business adapters run only after platform lifecycle/permission/confirmation/lease/quota/revocation/audit resolution. Never expose raw errors, tokens/secrets/cookies/query strings/absolute paths/full URLs in public or durable diagnostics.
 
-Its actual trust badge remains unchanged; only verified catalog trust may receive the `Official` trust badge.
+## Web isolation
+Plugin documents use distinct product origins and the published surface handler. Local UI/AppServer strip parent auth before delegation. Desktop binds private bridge credentials to actual frame origin. Frame-less workers instead require Electron's initiator origin in the owning Runtime partition, matching the exact private origin; missing/opaque origins fail. Present frames remain authoritative. Workers inherit no frame-only host-access/Tessiven claims. Center binds child routes to authenticated parents and cancels preparation on revocation; Gateway checks expected namespace/target.
 
-## Package admission and trust
-The retained release install/update path accepts only the exact source policy, revocation evidence, publisher, plugin, version, signed release metadata, package hashes, and Host requirement. Browser-supplied trust state, arbitrary package bytes, rollback, unknown publishers, invalid or revoked signatures, and invented fetch provenance are denied.
+Plugin DOM/rendering freedom grants no product-session/filesystem/process/credential/management authority. Released platform owns asset sessions/bridge/permissions/revocation.
 
-Redeven does not add a new authorization workflow; the existing official release-ref verification remains unchanged.
-
-## Network routing and authorization
-
-A VPN, configured proxy or enterprise DNS answer is routing policy, not evidence
-that a user request is malicious. Host package downloads use normal host routing
-while retaining upstream source, redirect and integrity validation. Authorized
-HTTPS hostname connectors use the released host transport contract after grant
-checks. This does not grant undeclared destinations or methods, bypass private
-prefix bindings, or expose ambient host/session credentials.
-
-Proxy discovery failures, timeouts and TLS failures reject only the affected
-operation. Construction performs no network discovery, and plugin readiness does
-not gate core Runtime readiness. Certificate validation stays enabled. Proxy
-credentials apply only to the proxy hop; application writes with unknown outcomes
-are not retried automatically.
-
-## Capability confirmation plans
-ReDevPlugin validates a capability preflight result against the Host-known capability response schema before it becomes a confirmation plan. Values in the reserved `redevplugin.capability.risk_plan.*` namespace must match the strict v1 risk-plan contract; an unknown or malformed reserved version fails closed instead of falling back to a generic object.
-
-Replacing or replaying any of those values requires a new confirmation.
-
-## Runtime trust
-Runtime descriptors bind version, target, IPC, WASM ABI, and artifact hash. Darwin release bytes receive their Developer ID signature before the product digest and Sigstore evidence, and later Desktop signing must preserve that exact nested executable. Startup must not hash the field binary and accept that value as its own trust anchor.
-
-## Business adapter and observability boundary
-Plugin business adapters are invoked only after ReDevPlugin resolves lifecycle, permission, confirmation, lease, quota, revocation, and audit context. Product code cannot bypass that chain.
-
-Raw adapter errors, tokens, secrets, cookies, query strings, absolute paths, and complete URLs are not copied into public or durable diagnostic detail.
-
-## Plugin Web isolation
-
-Plugin documents use a distinct product-allocated origin and the published Web surface handler. Local UI and AppServer strip parent authentication before delegating child traffic. Desktop verifies the actual requesting frame origin before attaching private bridge credentials. For frame-less worker requests, it verifies Electron's browser-reported initiator origin within the owning Runtime partition against the same exact private origin. Missing or opaque origins fail closed; a present frame remains authoritative, and worker requests never receive frame-only host-access or Tessiven source claims. Center binds child routes to an authenticated parent and cancels derived preparation on revocation; Gateway accepts only the expected child namespace and target.
-
-The application owns its DOM and browser rendering. These freedoms do not grant product session, filesystem, process, credential or management authority. The released platform remains responsible for asset sessions, bridge binding, permissions and revocation.
-
-Main-process `session.fetch` requests also pass through Electron's request hook. A contextless `other` request may retain authorization only when it already carries exactly one matching private bridge token from the owning Runtime session and has no frame, WebContents owner or initiator origin. Missing provenance alone grants nothing. Destination checks still bind the exact private origin; renderer and worker provenance remains authoritative, and frame-only claims are never inherited.
+Main-process session.fetch also enters Electron's hook. Contextless other requests retain authorization only with exactly one already-present matching private bridge token from the owning Runtime session and no frame/WebContents/initiator. Missing provenance grants nothing; destination must still be the exact private origin. Renderer/worker provenance remains authoritative; never inherit frame-only claims.
 
 # Boundaries
 
-Desktop runtime-control tokens, direct-session artifacts, Gateway credentials, RCPP credentials, and Flower grants are not plugin ambient authority.
-
-Redeven security adapters may narrow authority; they may not mint platform tokens, weaken route policy, edit opaque state, or replace released brokers.
+Desktop control tokens, direct sessions, Gateway/RCPP credentials and Flower grants are not ambient plugin authority. Redeven adapters may narrow authority, never mint platform tokens, weaken routes, edit opaque state or replace released brokers.
 
 # Evidence
 
-- `redeven:internal/redevpluginintegration/session_adapter.go:1` - Derives exact owner hashes and bounded permission cache entries.
+- `redeven:internal/redevpluginintegration/session_adapter.go:1` - Source.
+- `redeven:internal/redevpluginintegration/adapters_test.go:1` - Tests.
+- `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Tests.
+- `redeven:desktop/scripts/check-tessiven-workers.mjs` - Tests.
+- `redeven:desktop/scripts/fixtures/codespace-bridge-session.ts`: real Electron main fetch/native routes use production policy; native qualification checks allowed and denied requests.
 
-- `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
-
-- `redeven:desktop/src/main/desktopSessionTransport.test.ts` - Exact worker/frame origin authority and plugin/unknown denial.
-
-- `redeven:desktop/scripts/check-tessiven-workers.mjs` - Electron nested ELK auth failure reproduced; protected cold render/zoom/reload verified.
-
-- `redeven:desktop/scripts/fixtures/codespace-bridge-session.ts` - Real Electron main fetch and native route use the production request policy; native qualification checks authenticated and denied requests.
+- `redeven:desktop/scripts/fixtures/codespace-bridge-session.ts` - Source.

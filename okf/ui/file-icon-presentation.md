@@ -23,6 +23,5 @@ The upstream design studies are regression fixtures, not public demo pages or pr
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/package.json` - Published Floe release consumed by Env App.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSidebarTree.tsx` - Compact directory artwork with preserved navigation.
+- `redeven:internal/envapp/ui_src/package.json` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSidebarTree.tsx` - Source.

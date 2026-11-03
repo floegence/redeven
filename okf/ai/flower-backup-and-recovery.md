@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Readiness drains generations; storage owners snapshot/migrate their data and Floret ends old execution. Recover history/settings/read-state/uploads without stopping other surfaces. Freeze Flower writes during capture/replacement, verify complete collections and retain snapshots. Space, malformed data, migration or interruption blocks Flower while preserving recovery; no effect replay or binary rollback.
+Readiness drains generations while storage owners snapshot/migrate and Floret ends execution. Freeze Flower writes, verify collections and retain backups; restore history/settings/read-state/uploads without stopping other surfaces. Failures preserve recovery, never replay effects or roll back binaries.
 
 # Contract
 
@@ -29,6 +29,5 @@ Only conversation-owned databases and uploaded resources participate in a restor
 
 # Evidence
 
-- `redeven:internal/ai/storage_snapshot.go` - Explicit capture, metadata and preserved snapshot inventory.
-
-- `redeven:internal/ai/storage_files.go` - Directory durability, staging and replacement checks.
+- `redeven:internal/ai/storage_snapshot.go` - Source.
+- `redeven:internal/ai/storage_files.go` - Source.

@@ -7,12 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven request codecs own product JSON construction; published Flowersec owns
-transport validation and dispatch. File creation accepts empty content and
-omitted encoding. Absent optional fields must be omitted, while explicit false
-and empty content retain their meanings. Invalid request objects fail before
-dispatch and require a codec correction, not transport retries or relaxed
-validation.
+Redeven codecs construct JSON; Flowersec validates/dispatches. File creation preserves empty content and omitted encoding; absent options stay omitted, explicit false/empty retain meaning. Invalid input fails before dispatch and needs codec repair, not retries or weaker validation.
 
 # Contract
 
@@ -27,8 +22,6 @@ The request object itself must contain only JSON values before entering the publ
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.ts` - Filesystem RPC includes only provided optional fields.
-
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.test.ts` - Optional/false/undefined fields checked before encoding.
-
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts` - Empty-file request and success response through production RPC.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/codec/fs.test.ts` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts` - Tests.

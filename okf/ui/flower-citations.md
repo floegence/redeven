@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Floret owns durable assistant sources with end-exclusive Unicode code-point ranges in exact message text. Flower renders provider markers as titled links and strips them on Copy. Only credential-free, whitespace/control-free HTTP(S) URLs are links; marker IDs cannot establish URLs. Missing historical facts remain explicit, while authored bibliographies stay ordinary content.
+Floret stores assistant sources with end-exclusive Unicode code-point ranges. Flower renders titled links and removes provider markers on Copy. Only safe credential-free HTTP(S) URLs link; marker IDs imply no URL. Historical gaps stay explicit and authored bibliographies remain content.
 
 # Contract
 

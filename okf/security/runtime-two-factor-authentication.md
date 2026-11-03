@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime accessgate owns authentication independently of Cloud. MFA requires password then TOTP/single-use recovery for browser/direct/Cloud sessions; password challenge grants no application access. Native/SSH management has separate authority, never inferred from loopback, Cloud admin or headers. Missing/corrupt state fails closed; recovery blocks access until new credentials commit.
+Runtime accessgate independently requires password then TOTP/recovery for browser/direct/Cloud sessions. Password challenges grant no app access. Native/SSH management has separate authority; missing/corrupt state fails closed and recovery blocks access until new credentials commit.
 
 # Contract
 
@@ -30,4 +30,4 @@ Password-only challenges grant no ordinary product data access. Loopback address
 
 # Evidence
 
-- `redeven:internal/accessgate/authentication_test.go` - Real TOTP/replay/restart/recovery/throttle/collision/revocation/scope tests.
+- `redeven:internal/accessgate/authentication_test.go` - Tests.

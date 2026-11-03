@@ -21,6 +21,5 @@ The viewer cannot authorize actions or own execution lifecycle. Published Floe r
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerStage.window.browser.test.tsx` - Real Floe viewer/launcher geometry, retention, status and authority.
-
-- `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - decoded Blob URL viewing.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerStage.window.browser.test.tsx` - Tests.
+- `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - Source.

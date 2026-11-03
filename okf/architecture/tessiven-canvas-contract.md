@@ -7,11 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Tessiven is the Runtime-owned library of immutable service canvases. Each
-canvas stores a complete `redeven.io/tessiven/v1.1.0` YAML document and every save
-creates a new version. The Runtime is the single owner of canvas data; the
-Desktop Welcome surface and the local Env App render that same library. A
-failed validation or version conflict leaves the last saved document intact.
+Runtime owns immutable Tessiven service canvases: each save creates a version containing complete v1.1.0 YAML. Desktop Welcome and local Env App render the same library. Validation/version conflict preserves the last saved document; clients hold no separate canonical library.
 
 # Contract
 
@@ -31,4 +27,4 @@ The local Runtime owns the SQLite canvas library and immutable version documents
 
 - `internal/tessiven/document.go`
 
-- `internal/tessiven/document_test.go` - Shared-node membership validation and YAML round-trip.
+- `internal/tessiven/document_test.go` - Tests.

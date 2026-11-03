@@ -7,11 +7,7 @@ reviewed_at: "2026-10-27"
 ---
 # Summary
 
-The Computer Use Runtime owns discovery and selection over Redeven product
-settings. Users describe work; Flower finds the browser page or application
-window. The current selection is a working position, not a requirement to bind
-resources in settings. Candidates never grant access. Stale, disconnected or
-occupied resources fail explicitly without changing the previous selection.
+ComputerUseRuntime owns discovery/selection over product settings. Users describe work; Flower locates page/window without mandatory settings binding. Selection is working position, not authority. Stale/disconnected/occupied targets fail explicitly while retaining previous selection.
 
 # Contract
 
@@ -62,6 +58,5 @@ Persisted preference or grants alone cannot prove readiness, foreground safety o
 
 # Evidence
 
-- `redeven:internal/ai/computer_runtime.go` - read-only resolution and store binding.
-
-- `redeven:internal/ai/target_registry.go` - deterministic identity resolution.
+- `redeven:internal/ai/computer_runtime.go` - Source.
+- `redeven:internal/ai/target_registry.go` - Source.

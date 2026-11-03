@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published native components own capture, encoding and playback; Redeven consumes them. [Session authority](remote-desktop.md) owns authorization/generations. Media work is bounded and cursors follow painted pixels. Input admission does not prove host delivery. Capture/input failure retires authority; delayed work cannot overwrite or authorize a successor.
+Published native packages own capture/encode/playback; session contract owns authority/generations. Bound media work and align cursors to painted pixels. Input admission proves no delivery; capture/input failures retire authority and late work cannot replace successors.
 
 # Contract
 

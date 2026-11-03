@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns management UI and authenticated actions; OS owns liveness and apps own saving/cancelled quit. Manage running apps without sharing. Quit validates original process generations; never force-kill, retarget or infer exit from acceptance. Stale/unavailable targets retain sharing and actionable errors. Native sessions own capture, input and viewer closure.
+Redeven manages authorized app actions; OS owns liveness, apps saving/quit cancellation. Quit binds original process generation without force/retarget/assumed exit. Stale/unavailable targets retain sharing/errors; native sessions own capture/input/viewer closure independently.
 
 # Contract
 

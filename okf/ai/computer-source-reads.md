@@ -9,7 +9,7 @@ reviewed_at: "2026-11-03"
 
 Source reads make original AX/DOM fields and descendants reachable beyond the
 bounded default tree. [Read validation](computer-script-read-contract.md) owns
-permissions, privacy and final publication; source detail does not bypass it.
+permissions, privacy and final publication; source detail does not bypass it or grant new target authority.
 
 # Contract
 

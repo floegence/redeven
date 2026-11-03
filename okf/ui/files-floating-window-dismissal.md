@@ -27,6 +27,5 @@ The controller remains the owner of active request state and return focus. The h
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/createFileBrowserSurfaceController.ts` - Close clears request and restores opener.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSurfaceHost.browser.test.tsx` - Framewise inert close, cleanup, motion/themes and rapid reopen.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createFileBrowserSurfaceController.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSurfaceHost.browser.test.tsx` - Tests.

@@ -2,42 +2,39 @@
 type: Frontend Contract
 title: Env App terminal and surface composition
 tags: [architecture, env-app, terminal, ui]
-quality_exception: Cross-surface composition, placement, loading and renderer boundaries.
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Env App adapts Floeterm PTY facts and Floe shell/focus/selection/KeepAlive. Redeven owns product views and localized controls. Runtime nodes stay keyed by session ID across views. Visible panes paint independently; active session owns input/search/commands.
+Env App adapts Floeterm PTY facts and Floe shell, focus, selection and KeepAlive. Redeven owns views/localized controls. Session-keyed Runtime nodes survive view changes; visible panes paint independently while the active session owns input, search and commands.
 
 # Contract
 
-File preview defaults to the main surface. Chunked history remains one atomic snapshot with canonical dimensions. Compound controls use Floe CSS.
+File preview defaults to main surface. Chunked history remains an atomic canonical-dimension snapshot; compound controls use Floe CSS.
 
-## Terminal workspace placement
+## Placement
+Published SplitWorkspace owns splits/adaptive layouts/docking/swaps/accessible resize. Split creates backend view; subsequent placement edits update it. Named independent views have thumbnails, layout/rename/delete controls and creation above Groups.
 
-Published SplitWorkspace owns splits, adaptive arrangements, docking, swaps and accessible resizing. Splitting creates a backend view; later placement edits update it. Users manage independent named views through thumbnails, per-view layout pickers, rename/delete and creation above Groups.
+A session owns <=one view. Selecting it activates/focuses that view, even from standalone/another view; unowned sessions appear alone. Cross-view drag atomically moves membership, leaving vacancy. Pane/sidebar close terminates named session without deleting view/collapsing geometry. Only Delete view releases members without stopping them. New views create fresh sessions.
 
-Each session has at most one owning view. Selecting a member activates its owner and focuses the pane, including from another view or standalone session. Unowned sessions display alone. Cross-view dragging moves membership atomically and leaves the source slot vacant. Pane and sidebar close buttons terminate the named session; they never delete a view or collapse its geometry. Only the view action deletes a view, releasing its sessions without closing them. New views create fresh sessions. Layout selection rearranges only its target saved view: the footer targets the current view, and each view-row picker targets its own view without activating it. It preserves all members (including temporarily unavailable sessions), vacant slots, visual reading order and selected session. Published adaptive arrangements offer deduplicated balanced rows/columns, grids and four main-pane directions for 2–32 slots; standalone and single-slot views disable the picker. The compact gallery uses geometry thumbnails with an Adjust layout heading, accessible option names, current-shape selection and keyboard navigation. Choosing an option resolves the latest target membership before committing; it never applies a stale membership snapshot. Adding sessions requires explicit splitting, dragging or creation in a vacant slot. Explicit splitting uses the target group and verified local cwd or group startup directory. Group membership and cwd remain independent.
+Footer layout targets current view; row picker targets its view without activation. Preserve members, unavailable sessions, vacancies, reading order and selection. Published adaptive options deduplicate balanced rows/columns/grids/four main directions for2–32 slots; disable standalone/single-slot pickers. Geometry gallery has Adjust layout heading, accessible names/current selection/keyboard. Resolve latest target membership on apply, never stale snapshot. Add only by explicit split/drag/vacancy creation. Split uses target group and verified local cwd or group startup directory; group/cwd remain independent.
 
-Desktop starts at pane headers, with preference-controlled Workbench activity indicators. Its footer retains the graphical layout picker, search, clear, settings and creation. Groups retain scoped creation; overlays keep toolbar/drawer controls.
+Desktop begins at pane headers with preference-controlled Workbench indicators. Footer keeps layout/search/clear/settings/create; Groups scoped creation and overlay toolbar/drawer remain. Split/attach never globally covers panes. Environment/view changes fence placement. Mobile tabs do not rewrite desktop trees. No maximize mode; Alt+Shift+Left/Right cycles.
 
-Split creation/attachment never covers existing panes with global loading. Environment/view changes fence async placement. Mobile shows active-pane tabs without rewriting desktop trees. There is no pane-maximize mode; Alt+Shift+Left/Right cycles panes.
+Pane chrome uses terminal foreground/background, not ANSI blue; sidebar shell tokens. Session tiles14px, fine borders/neutral fills; headers28px. Rename preselects existing name via Floe autofocus. Idle hover pointer; dragging grabbing. Sidebar close hover/focus/touch. Previews use foreground border/background isolation/contrasting fill; no shared geometry notices.
 
-Pane chrome follows terminal foreground/background, never ANSI blue; sidebar follows shell tokens. Compact 14px session tiles use fine contrasting borders and subtle theme-neutral fills; pane headers are 28px high. Rename opens with the existing name focused and selected through Floe overlay autofocus. Idle hover uses pointer; only active drags show grabbing. Sidebar close appears on hover/focus and stays available on touch. Placement previews use terminal foreground borders with background isolation and a contrasting fill. Shared geometry notices are absent.
+## Projection
+One environment provider atomically revision-checks affected source/destination views. Edits survive acknowledgement; conflict retains draft for explicit reload/discard. Catalog waits for shell-confirmed access/current transport. Reconnect pauses requests, retains drafts and reloads after restored access. One lifecycle resets environment/permission authority; unchanged permission retains readiness/drafts, retired connections cannot publish. Edits await readiness.
 
-## View projection
-
-One environment provider batches affected source/destination views in revision-checked atomic saves. Edits survive acknowledgment; conflicts retain drafts for explicit reload/discard. Catalog loading waits for shell-confirmed access on the current transport. Reconnecting pauses requests without discarding view drafts, and restored access loads automatically. One lifecycle resets environment/permission authority before loading; unchanged permissions preserve readiness/drafts, and retired connections cannot publish. Layout edits wait for readiness.
-
-Active view stays local per panel. Legacy v1 local splits import unowned members once and clear after backend acknowledgment. Missing sessions render as vacant slots without pruning saved geometry. Closure persists fresh vacant identities; even an entirely vacant view remains selected. Each vacancy offers localized session creation and accepts a dragged session into that exact slot. Moving within a view leaves the source vacant. Slot creation shows local progress and recoverable errors; failed close restores the session. Empty-view selection never falls back to an unrelated session. Views do not restart PTYs.
+Active view is panel-local. Import unowned legacyv1 local splits once, clearing only after backend acknowledgement. Missing sessions become vacancies without pruning geometry; close persists fresh vacancy IDs and keeps even empty view selected. Each vacancy offers localized creation/exact drag target. Within-view moves leave vacancy. Local progress/errors preserve failed-close session; empty selection never chooses unrelated session. Views never restart PTYs.
 
 # Boundaries
 
-Redeven supplies placement, permissions, local-path capability and localized chrome. It must not parse output, predict echo, own history/renderer state, recreate shell token/layer/focus machinery, or overlay a retained surface with duplicate recovery. Browser/semantic carriers verify this boundary; packaged Desktop qualification is separate.
+Redeven supplies placement/permission/local-path capability/copy, not parsing/echo/history/rendering or duplicate shell token/layer/focus/recovery. Browser/semantic carriers verify integration; packaged Desktop qualification remains separate.
 
 # Evidence
 
-- redeven:internal/envapp/ui_src/src/ui/widgets/terminalWorkspace.ts - Placement/selection adapter.
-- redeven:internal/envapp/ui_src/src/ui/services/terminalViewCatalog.ts - Revisioned projection.
-- redeven:internal/envapp/ui_src/scripts/checkTerminalWorkspace.mjs - Real PTYs, retained nodes, cross-browser views, mobile and reload.
+- redeven:internal/envapp/ui_src/src/ui/widgets/terminalWorkspace.ts
+- redeven:internal/envapp/ui_src/src/ui/services/terminalViewCatalog.ts
+- redeven:internal/envapp/ui_src/scripts/checkTerminalWorkspace.mjs: real PTYs, retained nodes, cross-browser views/mobile/reload.

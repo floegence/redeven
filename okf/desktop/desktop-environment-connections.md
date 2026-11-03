@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Welcome and settings share a pure connection model derived from host access, placement, Runtime public addresses and health. Presentation never selects transport. Addresses retain their host/container namespace; missing or failed observations remain unconfirmed rather than proving process exit. Private bridge credentials never become browser, clipboard or QR targets. Explicit Stop clears addresses even when a prior window remains open.
+Welcome/settings derive connections from host access, placement, Runtime addresses and health. Presentation never selects transport; failed observations cannot prove exit. Keep host/container namespaces and private credentials distinct; explicit Stop clears addresses.
 
 # Contract
 
@@ -22,7 +22,6 @@ Welcome and settings share a pure connection model derived from host access, pla
 
 # Evidence
 
-- `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Real five-second probes, pending Cloud, per-target deduplication and disabled auto-probe.
-
-- `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - One typed Welcome/settings connection model.
-- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Real localized/theme/responsive Welcome navigation, refresh and actions.
+- `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Tests.
+- `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - Source.
+- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Tests.

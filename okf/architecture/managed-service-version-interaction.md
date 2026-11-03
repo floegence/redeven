@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns version selection; Manager owns exact update-plan admission. Users select and submit in one drawer. Preparation executes nothing, only changed required notices need confirmation, and selection/browsing survives preparation or admission failure. Accepted operations retain their existing controller after drawer closure; source failures stay actionable in place.
+Redeven presents one version-selection/submission drawer; Manager admits exact update plans. Preparation executes nothing; changed notices require consent. Failed preparation retains browsing/selection. Accepted work outlives drawer, with source failures actionable in place.
 
 # Contract
 
@@ -21,6 +21,5 @@ Only explicit submit requests execution. Selection, preparation and closing a dr
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Selection, compact feedback, Stop and admission.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceUpdatePreparation.test.ts` - Rapid selection/session/expiry and explicit Retry.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceUpdatePreparation.test.ts` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Floeterm terminal-go owns each PTY, native Ghostty VT, geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation. Redeven maps permissions, session metadata, and Activity/Workbench placement around that actor; browser views consume bounded semantic streams and never become a second terminal state machine.
+Floeterm owns PTY/Ghostty VT, geometry/controller epoch, input encoding, history/reset and atomic Presentation. Redeven maps permission/session metadata/placement. Browser consumes bounded semantic streams without parsing bytes or introducing a second terminal state machine.
 
 # Contract
 
@@ -31,6 +31,5 @@ Terminal lifecycle depends on the published Floeterm and Flowersec interfaces. R
 
 # Evidence
 
-- `redeven:internal/terminal/manager.go:14` - Wraps published Floeterm terminal-go and Flowersec types.
-
-- `redeven:internal/terminal/semantic_history_rpc_test.go` - Viewport/lane/generation/continuation/payload bounds.
+- `redeven:internal/terminal/manager.go:14` - Source.
+- `redeven:internal/terminal/semantic_history_rpc_test.go` - Tests.

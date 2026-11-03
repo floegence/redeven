@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Welcome owns immediate local page selection. Flower/Environments navigation never waits for Launcher IPC, snapshots or Runtime preparation; visited pages retain state. Runtime readiness still gates Flower requests without blocking return navigation. Explicit Environment Center tab changes may animate destination cards, while refresh and retained-page return preserve stable headers and never replay entrance motion.
+Welcome page selection is immediate and independent of Launcher IPC or Runtime preparation. Visited pages retain state; readiness gates Flower requests, not navigation. Explicit Environment tab changes may animate cards, while refresh/return preserves headers and skips entrance replay.
 
 # Contract
 
@@ -23,6 +23,5 @@ Navigation grants no Runtime authority. [Ask Flower windows](../ui/ask-flower-wi
 
 # Evidence
 
-- `redeven:desktop/src/welcome/App.tsx` - Renderer navigation and retained page visibility.
-
-- `redeven:desktop/src/main/desktopWelcomeState.ts` - Welcome snapshot projection.
+- `redeven:desktop/src/welcome/App.tsx` - Source.
+- `redeven:desktop/src/main/desktopWelcomeState.ts` - Source.

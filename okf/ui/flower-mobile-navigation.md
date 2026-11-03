@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-In shared mobile mode, Flower opens its list in a large bottom drawer over retained detail. Floe owns presence/focus/motion and scroll-preserving focus return. Keep draft/selection/DOM and stationary detail/header throughout animation. Covered detail is inert and cannot acknowledge reads until exit. Desktop uses the same adaptive-layout contract.
+Shared mobile Flower opens a bottom list drawer over retained detail. Floe owns focus/presence/motion and scroll-preserving return. Draft/selection/DOM/header remain stable; covered detail stays inert and cannot acknowledge reads until exit under the shared adaptive contract.
 
 # Contract
 
@@ -23,6 +23,5 @@ The [Activity companion](flower-activity-companion.md) owns product placement. T
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Retained mobile thread/detail DOM and engagement gates.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Mobile geometry/drafts/nodes and restored desktop layout.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Tests.

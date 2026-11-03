@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Qualify client input using real application receipts/saved bytes. Upstream owns native/Xpra adapters; Redeven verifies viewer, authorized transport, launch/recovery. Request dispatch or DOM focus is insufficient. Existing apps retain backends/resources. Simulated events cannot certify real system candidates or physical mobile input; those require separate acceptance.
+Real app receipts/saved bytes qualify client input, not dispatch or DOM focus. Upstream owns native/Xpra; Redeven verifies viewer/transport/launch/recovery and preserves existing resources. Simulated events cannot certify system candidates or physical mobile input.
 
 # Contract
 

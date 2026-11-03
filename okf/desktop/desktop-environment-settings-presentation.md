@@ -25,12 +25,8 @@ Presentation adds no modal, focus manager, persistence or lifecycle owner.
 
 # Evidence
 
-- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Shared material/fields/targets/responsive geometry.
-
-- `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.css` - Connection/access/password/workflow hierarchy.
-
-- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Released Dialog, retained panels and fixed scrolling/actions.
-
-- `redeven:desktop/src/welcome/SSHDestinationCombobox.tsx` - Shared destination field and published feedback indicator.
-
-- `redeven:desktop/scripts/check-welcome-form-alignment.mjs` - Localized browser layout/stepper/SSH/feedback and focus.
+- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Source.
+- `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.css` - Source.
+- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Source.
+- `redeven:desktop/src/welcome/SSHDestinationCombobox.tsx` - Source.
+- `redeven:desktop/scripts/check-welcome-form-alignment.mjs` - Tests.

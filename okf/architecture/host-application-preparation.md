@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floe Native Apps acquires, verifies, stages and activates Linux components. Redeven owns routes, placement and progress. Preparation needs no VM/container/package manager/admin password. Runtime upgrades are independent; optional failure preserves compatible installs. Activation requires verification and graphical qualification.
+Floe Native Apps verifies/stages/activates Linux components; Redeven routes/progress/placement. No VM/container/package manager/admin password is needed. Runtime updates are independent; optional failure retains compatible installs. Activation requires graphical qualification.
 
 # Contract
 

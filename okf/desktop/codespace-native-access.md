@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop owns each CodeSpace window, browser profile, protected loopback listener and selected route. Runtime owns editor generation, permissions and AccessGate. Editors use native HTTP/WebSockets without privileged preload or transport injection. Closing a window, revoking access or stopping an instance ends its connections. Route failure and occupied saved ports fail visibly without transport substitution or request replay.
+Desktop owns CodeSpace window/profile/loopback listener/route; Runtime owns editor generation/permissions/AccessGate. Native HTTP/WebSockets need no privileged preload. Close/revoke/stop ends connections; route or saved-port failure never substitutes transport or replays requests.
 
 # Contract
 
@@ -25,10 +25,9 @@ Descriptor acquisition uses the real environment Electron session and its [priva
 
 # Evidence
 
-- `redeven:desktop/src/main/codespaceNativeWindows.ts` - Single-window navigation/readiness/cancel and bounded diagnostics.
-
-- `redeven:desktop/src/main/codespaceNativeWindows.test.ts` - Ordering, Retry, concurrent Open and late-close regressions.
-
-- `redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts` - ID-only trusted shell request contract.
-
+- `redeven:desktop/src/main/codespaceNativeWindows.ts` - Source.
+- `redeven:desktop/src/main/codespaceNativeWindows.test.ts` - Tests.
+- `redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts` - Source.
 - `redeven:desktop/scripts/check-codespace-native-electron.mjs` - Supervised Electron descriptor/forwarding qualification. Run from `desktop`; `--real-editor` builds the Local UI test fixture and verifies workbench loading, file edit/save, terminal execution and reopen through the real private bridge. Build embedded assets first and provide an installed published editor via `REDEVEN_CODE_SERVER_BIN` when needed. `REDEVEN_NATIVE_ACCEPTANCE_REPORT` optionally retains the final scenario/cleanup report.
+
+- `redeven:desktop/scripts/check-codespace-native-electron.mjs` - Tests.

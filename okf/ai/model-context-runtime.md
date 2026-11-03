@@ -41,4 +41,4 @@ Redeven owns model preferences, credentials, gateway selection, and the one-shot
 
 - `redeven:internal/ai/floret_provider.go:55` - Provider deltas become Floret events, never direct product-state writes.
 
-- `redeven:internal/ai/prompt_builder.go` - Stable persona/policy/capability prompt without mutable runtime overlays.
+- `redeven:internal/ai/prompt_builder.go` - Source.

@@ -7,11 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns provider and model search preferences. One backend resolver supplies
-settings projections and Turn preparation; the final tool surface drives prompts
-and wire declarations. Floret v7.40.2 validates hosted events against the actual
-frozen provider request. Undeclared hosted execution remains a provider failure
-because its remote effects cannot be assumed absent.
+Redeven resolves provider/model search preferences once for settings and turns; final tools drive prompt/wire. Floret v7.40.2 validates hosted events against frozen requests. Undeclared hosted execution fails because remote effects cannot safely be assumed absent.
 
 # Contract
 
@@ -25,6 +21,6 @@ Model inventory and selected membership belong to [Model directory and selection
 
 # Evidence
 
-- redeven:internal/config/ai_web_search.go - Provider policy and effective model resolver.
+- redeven:internal/config/ai_web_search.go
 
-- redeven:internal/config/ai_web_search_controls_test.go - Switch matrix, aliases, defaults and atomic migration.
+- redeven:internal/config/ai_web_search_controls_test.go

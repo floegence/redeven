@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-OpenAI uses one API-key or ChatGPT-account method; omission keeps API-key behavior. ChatGPT uses public sign-in/Responses contracts, never Codex secrets/private backend. Floret owns engine/history/provider state; Redeven owns verified local admission, protected accounts/config/UI. Billing never silently changes; callers cannot obtain credentials. Canonical lifecycle reports failures.
+OpenAI uses explicit API-key or ChatGPT-account auth; omission preserves API keys. ChatGPT uses public contracts, never Codex secrets. Floret owns history/provider execution; Redeven owns protected local credentials/config/UI. Billing never switches silently and callers never receive secrets.
 
 # Contract
 
@@ -32,6 +32,5 @@ Old API-key-only saves remain supported.
 
 # Evidence
 
-- `redeven:internal/codeapp/appserver/chatgpt_auth.go` - Trusted local admission for account access and management.
-
-- `redeven:internal/localui/local_runtime_browser_test.go` - Native handoff, public spoof rejection and exact authority.
+- `redeven:internal/codeapp/appserver/chatgpt_auth.go` - Source.
+- `redeven:internal/localui/local_runtime_browser_test.go` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-ComputerUseRuntime owns readiness/live handshakes; Desktop/Env App share host-specific guidance. Installed Chrome or accepted launch is not control readiness or task continuation. Resource, graphical-session, launch, status and continuation failures have distinct recovery. Only a compatible live profile enters Floret Respond; preserve guidance, never substitute browsers.
+Runtime owns readiness/handshakes; both carriers provide host-specific recovery. Installed Chrome/accepted launch proves neither control nor continuation. Distinguish resource/session/launch/status failures; only compatible live profiles enter Floret Respond, without browser substitution.
 
 # Contract
 
@@ -27,8 +27,6 @@ A launch or installation acknowledgement cannot resume a task. Unreadable status
 
 # Evidence
 
-- `redeven:internal/ai/computer_extension_diagnostics.go` - resource and graphical-session prerequisites.
-
-- `redeven:internal/ai/computer_extension_onboarding.go` - bounded process observation and generation-scoped failure.
-
-- `redeven:internal/ai/computer_extension_diagnostics_test.go` - missing resources, no display and early/late process exits.
+- `redeven:internal/ai/computer_extension_diagnostics.go` - Source.
+- `redeven:internal/ai/computer_extension_onboarding.go` - Source.
+- `redeven:internal/ai/computer_extension_diagnostics_test.go` - Tests.

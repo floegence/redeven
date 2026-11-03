@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The verified current template owns Runtime baseline; Redeven owns overrides, exact release, digest, Resource Plans, secrets, journals and rebuilds. Renderer owns an unsaved draft. One resolver combines baseline and differences. Runtime apply requires stopped state, current revision, exact plan and risk checks; invalid input fails before commit and failed rebuild restores prior state or reports rollback failure.
+Verified template owns baseline; Redeven owns overrides, release/digest, resources, secrets and rebuilds. One resolver combines baseline/differences. Apply requires stopped state, current revision/plan/risk checks; failure preserves prior state or explicitly reports rollback failure.
 
 # Contract
 
@@ -22,6 +22,5 @@ No change to template topology/endpoint, ReDevPlugin or public IPC; no raw engin
 
 # Evidence
 
-- `redeven:internal/managedwebservice/configuration.go` - Override schema, canonical identity, typed validation and anchors.
-
-- `redeven:internal/managedwebservice/settings.go` - Settings, redacted secrets, candidate Resource Plans and risk classification.
+- `redeven:internal/managedwebservice/configuration.go` - Source.
+- `redeven:internal/managedwebservice/settings.go` - Source.

@@ -7,123 +7,65 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Redeven qualifies Computer use through the actual product renderer, Runtime,
-media decoder and target adapter. A passing scenario proves only its declared
-target and provider scope. Fixture outcomes, decoded pixels and cleanup are
-required evidence; successful HTTP responses or tool metadata alone are
-insufficient. Failed input and uncertain effects must never be replayed to
-manufacture a passing result.
+Qualify Computer through built renderer, Runtime, decoder and target adapter. Exact fixture effects, decoded pixels, source/artifact hashes and cleanup prove only the named target/provider scope. HTTP, metadata or model prose is insufficient; uncertain input is never replayed to produce a pass.
 
 # Contract
 
-## Evidence and isolation
-Use built product renderer, Runtime, decoder and adapter. Keep canonical results, fixture events, decoded frames, exact source/artifact hashes and cleanup. HTTP/code/model prose/Activity alone prove neither effects nor pixels. Separate assertion, model and product failures, retaining originals; never replay uncertain input or repeat until green. Native/provider/foreground suites remain explicit outside ordinary/exact-main gates.
+## Evidence/isolation
+Retain canonical results,fixture events,frames,hashes,cleanup and original assertion/model/product failures. Never repeat until green. Native/provider/foreground suites remain explicit outside ordinary/exact-main gates. Real Service/public UI verifies result-encoding loss after one counted effect/invalid optional result. Browser/native share pre-input cancel/revoke and terminal unknown-ack behavior.
 
-Result-encoding recovery uses a real task Service/public UI: one counted effect followed by invalid optional result. Browser/native semantics share cancellation/revocation-before-input and terminal unknown acknowledgements.
+## DeepSeek
+TestComputerReliabilityDeepSeek uses production Service/Floret,configured deepseek-flash (local V4.1 Flash1017),catalog Chromium,no substitute. Require REDEVEN_COMPUTER_RELIABILITY_E2E=1,absolute REDEVEN_COMPUTER_CONFIG_ROOT/EVIDENCE_DIR,REDEVEN_BROWSER_TEST_INSTALLATION. Run GOWORK=off go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m. Repeat1..5(default1);browser-only may -parallel3. Native:REDEVEN_COMPUTER_NATIVE_E2E=1,released Swift helper,serialized desktop;absolute REDEVEN_COMPUTER_NATIVE_TEST_HOST may select baseline. Preserve config/secret hashes/user threads.
 
-## DeepSeek lane
-TestComputerReliabilityDeepSeek uses production Service/Floret, configured deepseek-flash (local V4.1 Flash 1017) and catalog-installed Chromium, without substitutes. Require REDEVEN_COMPUTER_RELIABILITY_E2E=1, absolute REDEVEN_COMPUTER_CONFIG_ROOT/EVIDENCE_DIR and REDEVEN_BROWSER_TEST_INSTALLATION. Command: GOWORK=off go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m. Repetitions 1..5 (default 1); browser-only may use -parallel 3. Native requires REDEVEN_COMPUTER_NATIVE_E2E=1 and released Swift helper, serialized desktop access; absolute REDEVEN_COMPUTER_NATIVE_TEST_HOST may select a baseline. Preserve provider/secret hashes and user threads.
+Use default tools except explicit legacy-wait. Cover bounded text/budgets,confirmed prefixes,pre-focus validation,paging/image identity,delays/titles/staleness/options,scroll/conditions/natural work,timeout/below-fold,exact async text,landmarks/reset,scripts/downloads/app entry. Decode Floret ERROR/host envelope via ThreadToolResultReader. Script diagnostics require data.script_error; pre-dispatch rejection distinct. Prose/logs never replace execution; completed waits survive guest faults.
 
-Use default tools except explicit legacy-wait case. Cover bounded text/limits/budgets, confirmed prefixes, pre-focus validation, paging, image identity, delays/titles/staleness/options, scroll facts, conditions/natural tasks, timeout/below-fold input, exact asynchronous content, landmarks/reset, scripts/downloads/app entry. Canonical ThreadToolResultReader must decode Floret ERROR and host envelope. Require data.script_error for script diagnostics; pre-dispatch rejection is distinct. Final prose/logs cannot replace execution. Completed waits remain confirmed after guest failure.
-
-| Case | Required effects/evidence |
+| Case | Required independent facts |
 | --- | --- |
-| capture/refs | Four PageDown then fresh screenshot; parent ref survives child navigation |
-| options/waits | Exact unsupported field, failed index and safe condition facts |
-| stale/image | STALE_REFERENCE and zero pointers / one pointer after image |
-| visual/form/table | Vary position/labels/size; screenshot before actual visual click; exact values/totals |
-| batch | Three page reads, >=two transitions in one script, screenshot; totals checked separately |
-| download | One export/save identity, exact bytes and terminal-created project file; no anonymous reads after acquisition |
-| native entry | Discovery/confirmed selection, exact text, one click/screenshot |
-| optional/caught | Zero/timeout may branch; failed unique lookup cannot resume input even when caught |
-| observed roles | Search-purpose controls with different observed roles; exact three values and one submit |
-| evaluation error | One injected execution failure retains method/reason/prefix; zero later input, fresh screenshot |
-| output loss | Prior explicit output retained; one fault/zero later input; actual method without invented code |
-| host rejection | Real empty helper rejects before controller dispatch; canonical non-execution and prior text survive, with zero later input |
-| drag | Independent press/release/moves/endpoints/duration; invalid integer_0_5000 rejects before input |
-| observation lifetime | Complete content/image/metadata/safety through cleanup; child-frame waits, fixed refs, privacy, cancellation and unknown faults |
-| dynamic content | Natural and explicit waits, same-document SPA updates, shadow form and continuously updating unrelated content |
-| public reads | MDN, Wikipedia and GitHub title/heading/screenshot; actual adapter evidence even with emit:false; reject forbidden non-Computer tools |
+| capture/refs | Four PageDown then screenshot; parent ref survives child navigation |
+| options/waits | Exact bad field/index/safe condition |
+| stale/image | STALE_REFERENCE/zero pointer; image then one pointer |
+| visual/form/table | Varied positions/labels/sizes; screenshot before click; exact values/totals |
+| batch | Three reads,>=two transitions in one script,screenshot; independently checked totals |
+| download | One export/save ID,exact bytes,terminal-created project file; no anonymous read after acquisition |
+| native entry | Discovery/confirmed choice,exact text,one click/image |
+| optional/caught | Zero/timeout can branch; caught failed unique lookup cannot resume input |
+| observed roles | Search controls with different observed roles; three exact values/one submit |
+| evaluation | One injected fault retains method/reason/prefix;zero later input,fresh image |
+| output loss | Prior output retained;one fault/zero later input,actual method/no invented code |
+| host rejection | Real empty helper rejects before dispatch;canonical non-execution/prior text,zero later input |
+| drag | Independent down/up/moves/endpoints/time;bad integer_0_5000 before input |
+| lifetime | Content/image/metadata/safety through cleanup;child waits/fixed refs/privacy/cancel/unknown faults |
+| dynamics | Natural/explicit wait,SPA,shadow form,unrelated continuous changes |
+| public reads | MDN/Wikipedia/GitHub title/heading/image;real evidence including emit:false,no forbidden tools |
 
-Also cover >2,800 nodes, complete totals, account/tab separation, older same-name download and save followed by diagnostic failure without replay. Retain wire IDs/errors/history/events/answers. Scope success proves neither weights nor universal reliability.
+Also test>2800 nodes,complete totals,account/tab separation,older same-name download,save then diagnostic failure without replay. Retain wire/errors/history/events/answers; success proves neither remote weights nor universal reliability.
 
-## Browser/native boundaries
-Semantic scroll verifies document/tall/clipped/covered cases, counting wheels separately from scroll preparation: one valid dispatch, zero on rejection. Real extension CDP/AX faults retain method/code, zero input and explicit same-ref recovery. Managed frames/shadows/transforms and malformed reads use actual zoom/DPR.
+## Browser/native
+Semantic scroll tests document/tall/clipped/covered: one valid wheel,zero rejected;measure preparation separately. Real extension CDP/AX faults retain method/code,zero input,explicit same-ref recovery. Managed frame/shadow/transform/malformed-read checks use real zoom/DPR.
 
-Maintained batch/download examples run QuickJS→Runtime→Chromium with exact multichunk bytes/one export/ID, page values and screenshot. Native entry verifies zero/one/multiple/minimized windows; native script checks actual Swift scrolling/screenshots/focus restoration, invalidated by external input.
+Exact maintained batch/download examples execute QuickJS→Runtime→Chromium,verifying multichunk bytes/one export-ID,page values/image. Native entry tests0/1/multiple/minimized windows; real Swift scroll/image/focus restoration is invalidated by external input.
 
-AppKit drag receiver verifies 0/1/500/5000 ms plus interrupted 5000 ms, one press/release and early canceled endpoint, using independent timestamps. Fixture key-window changes require factual pause/balanced release/explicit recovery, never replay. Real-model timed/invalid/zero/focus-change cases use production receipts. Browser node tests cover both hosts/image/timing/cancellation but cannot qualify native timing.
+Independent AppKit receiver measures drag0/1/500/5000ms plus interrupted5000ms,one down/up and early endpoint. Fixture key-window changes require factual pause,balanced release,explicit recovery,never replay. Real model timed/invalid/zero/focus-change uses production receipts. Browser image/timing/cancel tests cover both hosts,not native timing.
 
-## Product carriers
-Built Desktop uses isolated exact provider config and rejects missing/overridden identity. Observe preload workspace stream; Linux Webtop may passively copy CDP. Missing decoded native/browser frame fails that scope. Name all unqualified platforms/native/connected-Chrome lanes.
+## Carriers
+Built Desktop uses isolated exact provider config,rejects missing/overridden identity;observe preload workspace stream. Linux Webtop may passively copy CDP. Missing decoded browser/native frame fails scope;name unqualified platform/native/connected-Chrome lanes.
 
-checkDesktopSystemBrowser.mjs combines built Desktop/Runtime/extension/Native Messaging with deterministic provider: canonical help before target binding, then continuation after verified connection. Existing media/takeover owns private previews. Delete owned fixture threads/servers and exact process trees; verify ports. Late decoding, expired interactions, queued input, selection and close remain separate deterministic boundaries.
+checkDesktopSystemBrowser.mjs uses built Desktop/Runtime/extension/Native Messaging and deterministic provider:canonical help before target,continuation after verified connection. Existing media/takeover owns previews. Delete owned threads/servers/exact process trees,verify ports. Late decode/expired interaction/queue/selection/close remain separate deterministic boundaries.
 
 # Boundaries
 
-This contract grants no target authority and does not replace [media](computer-use-media.md) or [takeover](computer-use-takeover.md). Native disposable-app results do not qualify arbitrary applications/accounts. Freeze source hashes and rerun affected checks after integration; fixture scope never substitutes for the exact-main gate.
+No target authority or replacement for [media](computer-use-media.md)/[takeover](computer-use-takeover.md). Disposable native app evidence certifies no arbitrary account/app. Freeze source hashes;rerun affected checks after integration. Fixture scope never replaces exact-main gate.
 
 # Evidence
 
-Historical provider runs and their original failures are retained in
-[provider qualification evidence](computer-use-provider-evidence.md).
+[Provider evidence](computer-use-provider-evidence.md) retains historical runs/failures.
 
-November 3, factual receipt qualification: 395 browser Node checks, 288 Flower
-presentation checks and 28 browser-rendered lifecycle checks pass. Native Messaging
-and catalog-installed browser sandbox/example lanes pass separately; the Chrome
-installation-picker lane remains opt-in. Affected Go packages, UI build/typecheck,
-changed-script lint and OKF integrity pass. Ten new browser fixtures cover exact
-scroll measurement, delivery/observation separation, reduced duplicate scans,
-wait timing, declared actions, original href and table-cell source reachability.
+November 3 factual receipts: Node395, presentation288, rendered lifecycle28 pass. Native Messaging/catalog sandbox/examples pass separately; picker remains opt-in. Affected Go/build/typecheck/lint/OKF pass. Ten fixtures cover scroll measurement, delivery/read separation, duplicate-scan reduction, wait timing, declared actions, original href and cell-source reachability.
 
-The updated product at 97660d396 completes a real configured-DeepSeek Search
-Console task using a connected background tab: six resource/report pairs, 37
-computer.exec calls, 32 successes and five observation interruptions. This first
-run is retained as a failed reliability baseline, not a clean qualification.
-A subsequent bounded diagnostic observes TypeError in URL construction for an
-initial child frame whose Page.getFrameTree URL is empty. Local inspection records
-only URL type/length, frame keys and call sites, never page contents. Four isolated
-regressions reproduce the empty-metadata boundary and verify actual-document URL
-resolution, private input, ungranted origin and invalid URL rejection. They pass
-with the 73 surrounding read/privacy/lifecycle checks. A new product run is required
-to certify the corrected build; prior old-thread root causes remain unproven.
+| Product build | Configured-DeepSeek connected-Chrome Search Console result | Diagnosis and qualification limit |
+| --- | --- | --- |
+| 97660d396 | Six resource/report pairs;37 computer.exec:32 success,5 observation interruptions | Failed reliability baseline. Diagnostic finds URL-construction TypeError when initial child Page.getFrameTree URL is empty; logs only type/length/frame keys/call sites. Four isolated actual-document/private-input/ungranted-origin/invalid-URL regressions plus73 surrounding checks pass. Corrected build still needs new product run; old-thread causes unproven. |
+| 26f8a1f88 | Eight pairs;25 calls:18 success,7 interruptions | No adapter/safety_scan/internal_error. One Page.createIsolatedWorld rejection; others read/capture lifetime. Renderer shows neutral confirmed-action copy. Explicit wait can stop during frame/safety preparation before sampling. Three failing regressions/four real child-replacement/privacy fixtures prove boundary; preparation now shares deadline without resetting privacy. Only typed lifecycle permits another sample; unknown protocol faults stop once. |
+| 05ae7a650, concurrent Gateway preserved | Six pairs/new background tab;18 calls:14 success,2 interruptions,1 SCRIPT_FAILED (text() treated as string),1 stale ref | Four mismatched text-role waits correctly time out after33–66 samples; later reads do not reverse them. Model uses nonexistent snapshot.tree (help says nodes) and mistakes main-only read for absent update label. Follow-up sees label/unique heading; matching wait visible in320ms. Separate one-call navigate/wait/text passes once:two samples/419ms, complete text,2434ms tool activity. Initial failures remain; one interruption lacks root-cause detail. |
 
-
-The next real connected-Chrome task at 26f8a1f88 completes eight resource/report
-pairs with 25 computer.exec calls: 18 successes and seven observation
-interruptions. None retains adapter/safety_scan/internal_error; one identifies
-Page.createIsolatedWorld protocol rejection and the others report read/capture
-lifetime interruption. The built renderer shows neutral confirmed-action copy.
-This is not a zero-interruption pass: an explicit wait could stop in frame/safety
-preparation before entering its own sampling loop. Three failing deterministic
-regressions reproduce that boundary; four real Chromium fixtures verify child
-replacement and transient privacy evidence during entry. Preparation now shares
-the caller's wait deadline without resetting privacy state; only typed lifecycle
-evidence permits another sample. Unknown protocol failures still stop once.
-
-
-Final product run at 05ae7a650 (after preserving concurrent Gateway integration)
-reads six Search Console resource/report pairs in a new background tab through
-configured DeepSeek and the installed Chrome extension. Its first turn has 18
-computer.exec calls: 14 success, two observation interruptions, one SCRIPT_FAILED
-from treating text() as a string, and one rejected stale ref. Four explicit waits
-use mismatched text-role conditions and correctly return timeout with 33–66
-samples; successful following text reads do not invalidate those results. The
-model also reads nonexistent snapshot.tree despite help defining nodes, and
-mistakes a main-only read for absence of the page's update label. A scoped
-follow-up observes that label and a unique heading; matching that heading returns
-visible in 320 ms. The separately specified one-call navigate/wait/text regression
-then passes once: visible after two samples/419 ms, complete selected text, 2,434
-ms total tool activity. These follow-ups do not replace the initial failures or
-prove every read succeeds; one remaining wait interruption has no sufficient
-stage detail to claim its exact root cause. No website-specific waits, input
-replay, hidden retries or forged success are introduced.
-
-Final source checks: 407 Node passes/two existing opt-in skips, three additional
-permission/cancellation/connection checks, catalog-managed sandbox and script
-examples, and 73 affected checks after rebase pass. Initial affected Go suites,
-288 presentation tests, 28 browser-rendered UI checks, build/typecheck, Native
-Messaging and lint also pass. Only generated knowledge artifacts conflict during
-rebase and are rebuilt from both source sets. User-directed local delivery omits
-Redeven push and its push gate; it does not claim remote synchronization. Account
-contents, exact activity evidence and earlier failures remain private outside Git.
+Final source checks: Node407/two existing opt-in skips; three permission/cancel/connection checks; managed sandbox/examples;73 affected checks after rebase pass. Initial Go, presentation288, rendered28, build/typecheck/Native Messaging/lint pass. Only generated bundles conflicted and were rebuilt from both source sets. No site-specific waits,input replay,hidden retry or fabricated success. User-directed local delivery omits push/gate and claims no remote sync. Account contents/raw evidence stay private.

@@ -7,11 +7,7 @@ reviewed_at: "2026-10-28"
 ---
 # Summary
 
-Flower's host-owned base system prompt contains its English introduction as
-Redeven's general assistant, visual output guidance and local file-delivery rules.
-Every run profile uses the same base prompt.
-Runtime facts, tool definitions and native Floret guidance retain their own owners
-and remain available independently of the product identity.
+Every Flower run profile shares one host English base prompt defining Redeven assistant identity, visual output and local delivery. Runtime facts, tool definitions and native Floret guidance retain separate ownership and availability; product identity never replaces them.
 
 # Contract
 
@@ -58,6 +54,6 @@ Redeven owns Flower's product identity, output guidance and tool adaptation. Pub
 
 # Evidence
 
-- redeven:internal/ai/prompt_builder.go — Shared identity and output instructions.
+- redeven:internal/ai/prompt_builder.go
 
-- redeven:internal/ai/prompt_builder_tool_routing_test.go — Exact prompt and file-delivery contracts.
+- redeven:internal/ai/prompt_builder_tool_routing_test.go

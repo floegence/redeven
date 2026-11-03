@@ -46,5 +46,5 @@ Floret owns summary, validation, convergence and installation. Never reclassify 
 
 # Evidence
 
-- `redeven:internal/ai/floret_thread_context.go` - Divider anchors and usage mapping.
-- `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Complete context/execution projection.
+- `redeven:internal/ai/floret_thread_context.go` - Source.
+- `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Tests.

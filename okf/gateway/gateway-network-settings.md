@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Gateway independently owns admin-confirmed share endpoints, listeners and optional Host restrictions, saved atomically by verified host admin. Listener edits require explicit restart; live sockets persist. Empty restrictions allow hostnames without weakening TLS/invitation/member/Desktop authorization. Invalid input or failed writes preserve saved/live state.
+Verified host admin atomically saves share endpoints/listeners/Host restrictions. Listener changes require explicit restart; live sockets persist. Empty hostname restrictions never weaken TLS/invitations/membership/Desktop policy. Invalid or failed writes preserve saved/live state.
 
 # Contract
 
@@ -32,6 +32,5 @@ Attachment state schema 6 owns allowed_hosts, endpoints and local egress policy.
 
 # Evidence
 
-- `redeven:internal/gatewaymembership/network.go` — Validation, atomic persistence and original Host matching.
-
+- `redeven:internal/gatewaymembership/network.go`
 - `redeven:internal/gatewaymembership/network_test.go` — Migration, preserved member authority, future rejection and failed-write rollback.

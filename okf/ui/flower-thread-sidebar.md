@@ -45,11 +45,9 @@ Read confirmation and loaded-content revisions follow the canonical [read-state 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - First-frame visibility, compact light/dark geometry, live resizing, viewport edges, touch scrolling, enlarged text and reduced motion.
-
-- `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Coalesced resize, final coordinates, cancellation and preference failures.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerContextMenu.browser.test.tsx` - Tests.
+- `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Tests.
 - `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - --resize-only: real Electron drag, bounded styles, one save, retained Markdown/draft/scroll during streaming.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Header rename/save/cancel/focus and narrow failure recovery.
-
-- `redeven:internal/flower_ui/src/threads/threadListModel.ts` - One canonical filter, comparator and pin/date grouping model.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.
+- `redeven:internal/flower_ui/src/threads/threadListModel.ts` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower owns draft/durable-thread directory intent; Env App owns destination navigation. Full-page controls select new draft directories or browse the current directory; the companion omits them. Menus freeze exact thread/directory targets. Activity opens Files/new Terminal; Workbench creates widgets without changing scale or injecting commands into existing shells.
+Flower owns draft/thread directory intent; Env App destination navigation. Full-page selects/browses directory, companion omits it. Menus freeze thread/path. Activity opens Files/new Terminal; Workbench creates widgets without scaling canvas or injecting existing-shell commands.
 
 # Contract
 
@@ -39,8 +39,6 @@ Directory callbacks express product navigation, not file-action authorization or
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - ThreadID-owned menus retain captured cwd across summary replacement.
-
-- `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` - Accessible headers/selectors with suffix-preserving names.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx` - Saved/unsaved path navigation and pinning; ten-locale theme geometry without favorite actions.
+- `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - Source.
+- `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryMenus.browser.test.tsx` - Tests.

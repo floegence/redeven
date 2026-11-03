@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Workbench input ownership is declared through explicit marker contracts so canvas zoom, local scrolling, pointer actions, and text selection remain distinguishable. A selected widget boundary does not automatically own wheel input, and local-scroll regions must declare their role rather than relying on incidental DOM structure. These contracts let the canvas remain predictable while nested product surfaces preserve native interaction.
+Explicit markers distinguish canvas zoom, local scroll, pointer actions and text selection. Selected widgets do not automatically own wheel input; regions declare their role. Workbench preserves predictable canvas behavior alongside native nested product interactions.
 
 # Contract
 
@@ -24,6 +24,5 @@ Components embedded in projected Workbench surfaces must use the shared floating
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Wheel ownership uses a dedicated data attribute.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51` - Selection props alone confer no wheel ownership.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51` - Tests.

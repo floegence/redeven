@@ -25,6 +25,5 @@ Use restrained static depth and short functional control motion. The progress di
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Env App material configuration.
-
-- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Opaque surfaces and independent control mapping.
+- `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Source.

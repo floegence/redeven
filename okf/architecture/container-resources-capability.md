@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Native container management uses one `containerengine` Docker/Podman execution layer shared with Web Services. `containerresource` alone owns native mutations, persistence and reconciliation. Managed Web Service resources are visible but read-only here. Unknown targets, stale preflights, uncertain outcomes and failed authoritative reads fail closed without mutation replay.
+Native Containers shares containerengine Docker/Podman execution with Web Services; containerresource alone owns mutations/state/reconciliation. Managed service resources are read-only here. Stale, unknown or uncertain facts fail closed without mutation replay.
 
 # Contract
 
@@ -22,6 +22,5 @@ Native container management uses one `containerengine` Docker/Podman execution l
 
 # Evidence
 
-- `redeven:internal/containerengine/container_exec.go` - Validates running-container Exec and exact argv limits.
-
-- `redeven:internal/containerengine/resource_read.go` - Bounded engine stats/Inspect and safe Podman archive reads.
+- `redeven:internal/containerengine/container_exec.go` - Source.
+- `redeven:internal/containerengine/resource_read.go` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-One product presentation registry declares initial loading and reload eligibility for every built-in Activity page and Workbench widget. Modules load inside their own surface, preserving existing successful content. Data services own readiness; access/authentication changes override retention, and loading never grants permission.
+One registry declares initial/reload presentation for built-in Activity/Workbench surfaces. Load modules locally while retaining successful content. Services own readiness; authentication/authority changes override retention. Loading states never grant permission or replace recovery.
 
 # Contract
 
@@ -39,14 +39,15 @@ Loading stays inside the selected page or widget. It cannot replace an unrelated
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Delayed/error/retry dialog geometry and stationary controls on desktop/phone.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerTaskFiles.browser.test.tsx` - Paging/row identity/refresh and Runtime/thread fencing.
-- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` - Catalog retention/invalidation and responsive extension dialogs.
-- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceSettingsDesign.browser.test.tsx` - Retained draft, stale read and initial-error recovery.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserQuickAccess.browser.test.tsx` - Retained shortcut/filter geometry and independent tree scroll.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerTaskFiles.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceSettingsDesign.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserQuickAccess.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx` - Fixed preview region and failed different-file retry.
 - `redeven:internal/envapp/ui_src/src/styles/tessiven-runtime-dialog-continuity.browser.test.tsx` - Library card/focus retention through delayed or failed opening.
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPageLoading.tsx` - Exhaustive shared presentation registry.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPageLoading.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Source.
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Activity module and access-check entry.
+- `redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx` - Tests.

@@ -7,12 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The [graphical transport contract](../architecture/graphical-window-transport.md)
-passes native direct, real encrypted tunnel, resource-authority and Linux live
-checks with published dependencies. Active macOS capture and the Electron
-fullscreen portion remain blocked by the host lock screen. Locked-host refusal
-passes, but does not qualify an unlocked desktop. These functional checks do not
-replace the separate [performance measurement contract](remote-desktop-validation.md).
+Published graphical transport passes direct, encrypted tunnel, authority and Linux checks. Host lock blocks active macOS capture/Electron fullscreen; locked-host refusal does not qualify unlocked use. Functional results remain separate from performance qualification.
 
 # Contract
 

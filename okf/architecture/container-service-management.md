@@ -3,44 +3,40 @@ type: Architecture Contract
 title: Container engine service management
 tags: [architecture, containers, docker, podman, host-control]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-One `ContainerServiceController` owns Docker/Podman service discovery, lifecycle, configuration, preflight identity and reconciliation. Opaque IDs hide endpoints. Host mutation requires full RWX and Admin without privilege elevation. Unknown ownership/revision/final state fails closed; interrupted work cannot be replayed.
+One ContainerServiceController owns Docker/Podman discovery, lifecycle, configuration, preflight identity and reconciliation. Opaque IDs hide endpoints; mutation requires full RWX/Admin without elevation. Unknown owner/revision/final state fails closed, never replaying interrupted work.
 
 # Contract
 
-## Identity and execution
+## Identity/execution
+Discover engines independently,one service each,no inactive-context scan/fallback. Share two-second command budget per engine; health reuses selected endpoint. Resource readiness separately bounded. Desktop requires selected desktop-linux/desktop-windows or exact endpoint alias; installed plugin proves no ownership. Use docker desktop version --format json,not slow status. Resolve Podman Machine before health.
 
-Discover Docker/Podman independently, one service/engine, no inactive-context scan/fallback. Each has a shared two-second command budget; reuse selected endpoint inventory for health. Resource readiness stays separately bounded. Docker Desktop requires selected desktop-linux/desktop-windows context or exact endpoint alias; installed plugins cannot claim other engines. Validate with docker desktop version --format json, never slow desktop status. Resolve Podman Machine ownership before health.
+Known management/health faults retain ID/implementation/config sources/actions. Missing CLI/permission/timeout/unknown is not stopped. Start needs stopped;Stop/Restart running;save-and-restart needs known state before write,plain save remains.
 
-Known Desktop management/health errors retain ID, implementation, config sources and supported actions. Missing CLI/permission/timeout/unknown failures never mean stopped. Start requires stopped; Stop/Restart running. Save-and-restart requires known state before writes; plain save remains available.
+Lifecycle shares two minutes across steps vs ten-second queries/two-second discovery,parent deadline/cancel honored. macOS Start uses /usr/bin/open -g -b com.docker.docker then bounded poll;Restart stops first. Other platforms/Stop use official CLI. LaunchServices allowlists identity/home/PATH/temp/shell/locale/timezone/proxy/certificates,excluding Redeven metadata,Electron/Node controls,CLI overrides,secrets. Explicit empty env stays empty;CLI/probes unchanged. Launch acceptance is not completion;reload final state under lock. Never sudo/pkexec/polkit/elevate/change groups or socket modes.
 
-Typed lifecycle actions share two minutes across steps, separate from ten-second query/two-second discovery; parent deadlines/cancel apply. macOS Start uses /usr/bin/open -g -b com.docker.docker then bounded endpoint polling; Restart stops first under that deadline. Other platforms/Stop use official CLI. LaunchServices receives only identity/home/PATH/temp/shell/locale/timezone/proxy/certificates, excluding Redeven metadata, Electron/Node controls, CLI overrides and secrets. Explicit empty env stays empty; CLI/probes retain theirs. Launch acceptance is not success; reload final state while locked. Never elevate, sudo/pkexec/polkit, alter groups/socket permissions.
-
-Read-gated GET /_redeven_proxy/api/container-resources/services exposes mode/source IDs; one failure cannot hide another. Migration maps legacy state→engine and client_proxy→docker_cli.
+Read-gated GET /_redeven_proxy/api/container-resources/services returns modes/source IDs;one engine failure cannot hide another. Legacy state→engine,client_proxy→docker_cli.
 
 ## Interaction
+One preflight confirmation names service/localized risk/impact/action,no retyped name/second review. Client binds name,server identity/authority/request+plan hashes. Cancel creates no operation;duplicates locked. Hide hashes/raw prose;history resolves names/localized errors.
 
-One preflight confirmation shows service name, localized risks/impact counts and action; no retyped name/extra review. Client binds name; server checks identity/authority/request+plan hashes. Cancel creates no operation; duplicates stay locked. Hide hashes/raw prose; history resolves names/localized errors.
+Settings warns. Header aligns square outlined Back/title independently of description;touch>=44px. Refresh retains cards,animates indicator only,errors inline. Known Desktop/unknown health retains disabled Start/guidance until revalidated. Active divider replaces controls with elapsed/cancel/secondary history;no invented percent/auto-open history. Failure offers recovery;SSE/poll completion reloads service/Runtime.
 
-Settings entry warns. Header aligns outlined square Back/title independently of description; narrow target≥44px. Refresh retains cards, animates only indicator and uses inline errors. Known Desktop/unknown health retains disabled Start/guidance; revalidation enables it. Active divider section replaces normal controls with elapsed/cancel/secondary history. Failure exposes recovery/revalidation. History never auto-opens; unmeasured work has no percent. SSE/poll completion reloads service/runtime facts.
-
-Observed health leads; active work retains locks/feedback. Terminal start/restart failure leaves card on running; stop failure leaves on stopped. Unknown/config failures retain recovery; completed/cancelled records stay in history. Current running never rewrites restart result. History keeps original result/error/duration apart from current state, no empty errors or historical time as live progress.
+Current health leads;active work retains locks/feedback. Terminal start/restart failure on running card and stop failure on stopped card clear live feedback;unknown/config failures retain recovery. Completed/canceled remains history. Current running cannot rewrite failed restart. History separates original result/error/duration from current state;no empty error or historical live timer.
 
 # Boundaries
 
-`containerengine` owns exact argv, validation, atomic replacement/rollback and observation. `containerresource` owns preflight, impact, locking and sanitized durable state. Local API owns Read/RWX/Admin and no-store delivery. Docker Desktop/Podman Machine/remote tools retain private settings; administrators own installation/OS authority.
+containerengine owns argv/validation/atomic replace-rollback/observation;containerresource preflight/impact/locks/sanitized durable state;API Read/RWX/Admin/no-store. Desktop/Machine/remote tools own private settings;admins installation/OS authority.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` and its browser suite cover recovered lifecycle failures, preserved active/configuration feedback, immutable history, and responsive status revalidation in English and Simplified/Traditional Chinese.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx`/browser:recovered lifecycle faults,active/config feedback,immutable history,responsive revalidation in English/zh-CN/zh-TW.
+- `redeven:internal/containerengine/container_services.go` - Source.
+- `redeven:internal/containerengine/container_services_desktop_test.go` - Tests.
+- `redeven:internal/containerresource/desktop_lifecycle_qualification_test.go`:opt-in authorized real macOS preflight/operation/reconciliation,ordinary CI skips.2026-10-27 dev environment reproduces Docker4.52.0 fork-server `unmarshaling start request: unexpected EOF` via LaunchServices and earlier CLI. Removing Redeven metadata restores launch. Explicit app env plus58KiB synthetic metadata passes stop10.290s/start12.111s/restart22.354s,engine29.0.1,four container IDs preserved. Earlier shell-only test missed dev failure.
+- Same date:45 browser cases (390px English/Chinese,1440px,poll controls/stream loss),158 UI/API/locale,Go race,typecheck/lint pass. Isolated built Desktop shows real service/native icons;actual stop/start uses production service separately from UI fixtures.
 
-- `redeven:internal/containerengine/container_services.go` - Typed service model, safe DTO, preflight/controller boundary.
-
-- `redeven:internal/containerengine/container_services_desktop_test.go` - Desktop ownership, bounded discovery/health/recovery and stable lifecycle identity.
-
-- `redeven:internal/containerresource/desktop_lifecycle_qualification_test.go` - Opt-in macOS stop/start/restart through production preflight, durable operations and reconciliation; requires explicit host lifecycle authorization and is skipped in ordinary CI. On 2026-10-27, the real Desktop dev environment reproduced a Docker Desktop 4.52.0 fork-server crash (`unmarshaling start request: unexpected EOF`) with LaunchServices as well as the earlier CLI path. Removing Redeven metadata allowed startup. With the explicit application environment, the same dev environment plus 58 KiB of synthetic runtime metadata passed stop (10.290 s), start (12.111 s) and restart (22.354 s), verified engine 29.0.1, and preserved the four running container IDs. The earlier shell-only start qualification did not cover this dev-environment failure.
-
-- 2026-10-27 acceptance also covered 45 browser cases (including 390 px English, Simplified/Traditional Chinese recovery, 1440 px desktop, stable polling controls and stream-loss recovery), 158 focused UI/API/localization tests, Go race checks for containerengine/containerresource, TypeScript and ESLint. An isolated built Desktop displayed the real running Docker service with its native icons and controls; real stop/start qualification used the production operation service, separately from the browser fixtures.
+- `redeven:internal/containerresource/desktop_lifecycle_qualification_test.go` - Tests.

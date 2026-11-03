@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floe remote-pointer owns Linux/Xpra/macOS viewer gestures: swipe scroll, tap click, long press drag/right-click. Bind each to one painted window/generation. Cancellation drops queued movement/scroll and releases owned buttons. Remote-input owns composition. Missing capability requires save/quit/reopen; viewer closure neither upgrades nor stops the app.
+Floe owns swipe/tap/long-press gestures bound to painted window/generation. Cancel drops queued motion and releases buttons; remote-input owns composition. Missing capability requires explicit save/quit/reopen; closing viewer neither upgrades nor stops the application.
 
 # Contract
 

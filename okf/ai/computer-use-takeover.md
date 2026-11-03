@@ -42,6 +42,5 @@ Full access retains the existing site, application and foreground rules. Histori
 
 # Evidence
 
-- `redeven:internal/ai/computer_takeover.go` - factual failures and the canonical provenance resolver.
-
-- `redeven:internal/ai/computer_input_evidence_test.go` - evidence, ambiguity, stale facts and public projection.
+- `redeven:internal/ai/computer_takeover.go` - Source.
+- `redeven:internal/ai/computer_input_evidence_test.go` - Tests.

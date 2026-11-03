@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-C05 owns results under the comparison contract; preparation owns immutable inputs/controls. Six-frame delivery exceeds 51 FPS but does not restore three-round stability or RustDesk parity. Count adverse complete trials. Lost source inputs invalidate ordinal latency; missing presentation with all inputs is failure. Retry only named fixture repairs or discriminating hypotheses recorded in the ledger.
+C05 retains all paired outcomes: six-frame delivery exceeds51FPS but not three-round stability/RustDesk parity. Lost source input invalidates latency; missing presentation with complete input is failure. Retry only documented fixture repair or discriminating hypotheses.
 
 # Contract
 

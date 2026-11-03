@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime Local UI supports concurrent independent Desktop/browser sessions. Public HTTP/WS or HTTPS/WSS shares one port; private Desktop uses numeric loopback and flowersec-private-loopback/1. Versioned SQLite owns one-shot authorization/browser spend across transports. Network exposure owns protocol, scope, password, certificate and migration policy.
+Local UI supports independent concurrent Desktop/browser sessions. Public HTTP(S)/WS(S) shares a port; Desktop private uses numeric loopback protocol. Versioned SQLite owns one-shot authorization/spend; network policy owns exposure/password/certificates/migrations.
 
 # Contract
 
@@ -34,6 +34,5 @@ Saved next-start settings never replace the running URL list.
 
 # Evidence
 
-- `redeven:internal/localui/localui.go:50` - Required bind, Agent, AppServer, state, control, version, diagnostics/access inputs.
-
-- `redeven:internal/localui/http_security.go:24` - Listener/interfaces determine exact public authority allowlist and URLs.
+- `redeven:internal/localui/localui.go:50` - Source.
+- `redeven:internal/localui/http_security.go:24` - Source.

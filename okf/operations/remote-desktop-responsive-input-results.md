@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Native v0.22.33 wakes idle capture; Floe owns bounded pointer/local text. Media/viewer contracts own authority/modes; locks are physical-only and generation/mode changes revoke input. Document contents, DRM feedback and encoded arrival are separate checks. udesk26 passes; Orange AFBC follow-up owns later repair. Native success is not complete Viewer/performance acceptance.
+Native v0.22.33 wakes capture; Floe owns pointer/text. Physical locks and generation/mode changes revoke input. Independently verify document, DRM and encoded output. udesk26 passes; Orange AFBC has separate follow-up. Native evidence is not full Viewer/performance acceptance.
 
 # Contract
 

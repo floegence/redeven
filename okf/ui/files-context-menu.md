@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe owns file-menu placement, measurement, scrolling, submenu gestures and dismissal. Redeven supplies workspace bounds, actions and localization. Menus remain eight CSS pixels inside Files/surface/visible-viewport intersection; invalid explicit bounds close them. Files never escapes its global layer or duplicates Workbench coordinate conversion.
+Floe owns file-menu placement, scrolling, gestures and dismissal; Redeven supplies bounds/actions/locales. Keep menus eight CSS pixels inside Files/surface/visible viewport intersection. Invalid bounds close; never escape global layers or duplicate Workbench transforms.
 
 # Contract
 
@@ -32,4 +32,4 @@ Existing context-event target snapshots, multi-selection, permissions, file oper
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Captured Files diff target in both layouts without content preload.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Tests.

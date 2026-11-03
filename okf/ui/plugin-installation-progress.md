@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-ReDevPlugin owns the durable official-install Execution and its progress, idempotency, and recovery. Redeven observes that authority, presents exact market review and permission setup, and retains the operation when management closes. Response loss never creates a second installation. Only current authoritative inventory can expose a launch target; failed setup cannot revive stale permissions or remove saved canvas components.
+ReDevPlugin owns durable official-install Execution, progress and recovery. Redeven presents exact review/permission setup and retains work after management closes. Lost replies cannot reinstall; only current inventory exposes launch, and failed setup preserves saved layout.
 
 # Contract
 
@@ -24,6 +24,5 @@ Install and update share one official-access presentation. Review, progress, err
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Presents review and installation state.
-
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApprovedInstallSetup.ts:1` - Completes only permitted post-install setup.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApprovedInstallSetup.ts:1` - Source.

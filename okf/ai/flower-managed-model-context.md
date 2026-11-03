@@ -7,11 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Flower consumes published Floret v7.47.1. One complete collector supplies four
-stable partitions: execution environment, date/timezone, repository rule
-sources, and available skills. Floret owns chronological admission,
-semantic changes, user-role model-context messages, compaction and recovery.
-The product owns collection and authorized presentation only.
+Floret v7.47.1 owns chronological admission, semantic updates, context messages, compaction and recovery. Flower only collects/presents authorized complete facts in four partitions: execution environment, date/timezone, repository rule sources and available skills.
 
 # Contract
 

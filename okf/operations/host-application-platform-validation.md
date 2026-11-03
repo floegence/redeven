@@ -7,13 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Host application platform acceptance records real installed-stack and native
-session evidence under the [platform contract](../architecture/host-application-platforms.md).
-The matrix identifies exactly which userspace, Runtime, CPU and display combinations
-were exercised. Container or translated-CPU results cannot certify host boot,
-kernel, security policy or native hardware behavior. Missing permissions, unavailable
-subscriptions and untested environments remain unqualified; they never become
-successful simulated acceptance.
+Native installed-stack evidence qualifies only the listed userspace, Runtime, CPU and display matrix. Containers/translated CPUs prove no host boot, kernel, security policy or native hardware behavior. Missing permissions/subscriptions and untested targets remain unqualified.
 
 # Contract
 
@@ -36,4 +30,4 @@ The matrix is evidence for its named versions and scenarios, not a distribution 
 
 # Evidence
 
-- `redeven:internal/hostapps/manager_test.go` - Installed GIO and Xpra launch, resume and stop checks.
+- `redeven:internal/hostapps/manager_test.go` - Tests.

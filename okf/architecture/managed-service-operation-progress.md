@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-A Manager Reporter owns live operation output; Registry owns history. One operation ID preserves drawer disclosure and brief completion through list/stream refresh. Redact safe command templates before persistence; output never defines Runtime identity. Persistence, capture or stream failures must not expose secrets, URL queries, private paths or control characters.
+Manager Reporter owns live output; Registry owns history. One operation ID retains disclosure/completion through refresh. Redact command templates before storage; output grants no identity. Capture/storage/transport failures must not expose secrets, queries, private paths or control bytes.
 
 # Contract
 
@@ -27,6 +27,5 @@ Operation output is observability data, not a terminal, shell, downloadable tran
 
 # Evidence
 
-- `redeven:internal/managedwebservice/operation_progress.go` - Concurrent bounded mutation, persistence, sequence and redaction.
-
-- `redeven:internal/managedwebservice/custom_host.go` - Single Host progress collector and actual command completion.
+- `redeven:internal/managedwebservice/operation_progress.go` - Source.
+- `redeven:internal/managedwebservice/custom_host.go` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floe remote-input owns viewer keyboard/composition. Clients own input method/preedit/candidates; hosts deliver confirmed Unicode/keys to the painted window. Each operation has one output owner. Binding loss cancels composition/releases keys; reconnect never replays. Unsupported old protocols require save/quit/reopen without automatic process termination. Flower, terminals and editors keep their own input.
+Floe remote-input owns keyboard/composition; clients own IME/preedit/candidates and hosts deliver confirmed Unicode/keys to painted windows. Each operation has one output owner. Binding loss cancels/releases without replay; old protocols require explicit save/quit/reopen.
 
 # Contract
 

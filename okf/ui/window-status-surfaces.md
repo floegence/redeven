@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floe owns window layout/artwork/retry/shimmer; Redeven maps actual connection/access/Desktop state. Recovery/access uses opaque neutral backgrounds over retained inert workspace, without duplicate disconnect notices. Floating windows, widgets and drag content exclude this material. Preserve recovery owner/actions; appearance grants no access or second loop.
+Floe owns window layout/retry/artwork; Redeven maps actual access/connection state. Opaque neutral recovery covers retained inert workspaces without duplicate notices. Floating windows/widgets/drag exclude this material; appearance grants neither authority nor another recovery loop.
 
 # Contract
 
@@ -31,6 +31,5 @@ Whole-window recovery, standalone documents, and access gates stay opaque; dragg
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.tsx` — Host recovery placement and real retry/stop actions.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvironmentAccessGate.browser.test.tsx` — Locale, geometry, opaque backdrop and keyboard form acceptance.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.tsx`
+- `redeven:internal/envapp/ui_src/src/ui/EnvironmentAccessGate.browser.test.tsx`

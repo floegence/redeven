@@ -7,9 +7,7 @@ reviewed_at: "2026-10-28"
 ---
 # Summary
 
-Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.
-
-Runtime permissions are clamped by local policy and file features are scoped by directory root policy.
+Runtime policy is authoritative even after control-plane session authorization. Clamp grants by local permission policy and scope every file-facing feature to explicit directory roots. Product controls present that decision; they never widen permissions or infer access from paths.
 
 # Contract
 
@@ -38,6 +36,5 @@ Provider wire configuration may enable multi-call generation, but it cannot gran
 
 # Evidence
 
-- `redeven:internal/config/permission_policy.go:11` - PermissionPolicy is the local endpoint cap for session metadata.
-
-- `redeven:internal/filesystemscope/registry.go` and `redeven:internal/filesystemscope/registry_test.go` - Default read/write roots and preservation of explicit read-only policy.
+- `redeven:internal/config/permission_policy.go:11` - Source.
+- `redeven:internal/filesystemscope/registry.go` and `redeven:internal/filesystemscope/registry_test.go`

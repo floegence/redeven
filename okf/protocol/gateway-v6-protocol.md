@@ -28,5 +28,6 @@ Runtime metadata versions do not gate attachment admission. Wire/authority misma
 # Evidence
 
 - redeven:spec/openapi/gateway-v6.yaml — Current route and DTO inventory.
-- redeven:internal/runtimegateway/protocol/openapi_contract_test.go — Go, Desktop and OpenAPI authority/field alignment.
-- redeven:internal/runtimegateway/protocol/membership.go — RuntimeAttachment and local egress policy.
+- redeven:internal/runtimegateway/protocol/openapi_contract_test.go
+
+- redeven:internal/runtimegateway/protocol/membership.go

@@ -37,6 +37,5 @@ Mobile and desktop expose the same state and cancellation authority. Service lif
 
 # Evidence
 
-- `redeven:internal/containerresource/service.go` - Interrupted operation observation without replay.
-
-- `redeven:internal/containerengine/cli_client.go` - Bounded image-pull phase/layer facts without raw output.
+- `redeven:internal/containerresource/service.go` - Source.
+- `redeven:internal/containerengine/cli_client.go` - Source.

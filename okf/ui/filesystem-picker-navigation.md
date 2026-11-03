@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe owns picker navigation, validity and request lifetime; Redeven supplies connection, authoritative path context, localization and form state. Paths are absolute and / means the target filesystem root. Home/Root shortcuts grant no access. Failed navigation preserves intent/form, disables confirmation and offers Retry; execution revalidates current policy.
+Floe owns picker navigation/validity/request lifetime; Redeven supplies authoritative path context/connection/locales/form. Absolute paths and root shortcuts grant no access. Failed navigation retains intent, disables confirmation and offers Retry; execution rechecks policy.
 
 # Contract
 
@@ -41,12 +41,10 @@ The published picker owns navigation and request lifetime. A validated selection
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx` - Ten-locale live translation preserves picker/composer inputs.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published absolute-path parsing and localized recovery.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Localized/narrow navigation recovery, retained listings, paths, cache, cancellation and permissions.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Tests.
 
 - redeven:internal/codeapp/appserver/server_fs_mkdir_test.go — actual creation, duplicate preservation, strict requests, outside-scope and session write rejection.
 - redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryPicker.test.shared.tsx — creation, explicit confirmation, failed-name retention and canceled draft preservation.
-- redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx — all shipped locales across light/dark and narrow/desktop layouts.
+- redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx

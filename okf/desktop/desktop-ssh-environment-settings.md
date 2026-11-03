@@ -22,6 +22,5 @@ Password retention, replacement and removal continue through the existing secret
 
 # Evidence
 
-- `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.tsx` - Shared forms, nested keys and validation presentation.
-
-- `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.client.test.tsx` - Editing, password actions, validation and save behavior.
+- `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.tsx` - Source.
+- `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.client.test.tsx` - Tests.

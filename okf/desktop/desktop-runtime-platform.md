@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime owns OS/distribution facts; Desktop consumes recognized trusted observations and displays bundled original-color marks with localized names. Last-known facts survive disconnect, failed probes and restart until replaced online. Unknown platforms show a device mark without blocking supported Runtime. Display retains card geometry, selection and focus; client/provider identity never substitutes for Runtime OS.
+Runtime owns OS facts; Desktop renders trusted known values with bundled marks/localized names. Last-known facts survive disconnect/restart until replaced. Unknown OS uses a device mark without blocking Runtime; updates preserve geometry/focus and never infer OS from client identity.
 
 # Contract
 
@@ -21,6 +21,5 @@ Runtime owns OS/distribution facts; Desktop consumes recognized trusted observat
 
 # Evidence
 
-- `redeven:spec/openapi/rcpp-v5.yaml` - Optional Runtime OS in the Cloud health schema.
-
-- `redeven:internal/runtimemanagement/runtime_platform_test.go` - Distribution identity, missing facts, shell literals/platform boundaries.
+- `redeven:spec/openapi/rcpp-v5.yaml` - Source.
+- `redeven:internal/runtimemanagement/runtime_platform_test.go` - Tests.

@@ -22,6 +22,5 @@ Browser or UI-side permission claims remain non-authoritative. This concept only
 
 # Evidence
 
-- `redeven:internal/config/permission_policy.go:13` - Control-plane permission intersected with user-approved local cap.
-
-- `redeven:internal/session/types.go:29` - Process launch needs both write and execute.
+- `redeven:internal/config/permission_policy.go:13` - Source.
+- `redeven:internal/session/types.go:29` - Source.

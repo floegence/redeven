@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The Desktop supervisor owns scenario/resource/cleanup deadlines and final status. Acceptance leaves no owned Electron/Runtime/bridge/fixtures. Preserve production Quit and independent Runtime lifetime; names, generic ports or foreground state grant no stop authority. Timeout/interruption/unexpected exit/force/cleanup/residue fails with retained diagnostics and explicit manifest cleanup.
+Desktop supervisor owns scenario/resource/cleanup deadlines. Acceptance leaves no owned processes, bridges or fixtures; preserve production Quit and independent Runtime. Names/ports grant no stop authority. Timeout/interruption/forced cleanup/residue fails with retained manifest evidence.
 
 # Contract
 

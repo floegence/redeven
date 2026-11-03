@@ -27,8 +27,6 @@ Transport recovery IPC is a narrow current-session capability. The separate Desk
 
 # Evidence
 
-- `redeven:desktop/src/main/nativeLocalTransportRecovery.test.ts:1` - HTTP/native listener failure, request isolation and workspace-preserving Open recovery.
-
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.test.ts:280` - Terminal Desktop failure cancels acquisition/fences late connections.
-
-- `redeven:desktop/src/main/localUIURL.ts:44` - Desktop Env entry under /_redeven_proxy/env/.
+- `redeven:desktop/src/main/nativeLocalTransportRecovery.test.ts:1` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.test.ts:280` - Tests.
+- `redeven:desktop/src/main/localUIURL.ts:44` - Source.

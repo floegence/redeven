@@ -34,5 +34,6 @@ Brand grouping is presentation only; both connection types remain in catalog/ser
 
 # Evidence
 
-- redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx - Shared settings/credential readiness.
-- redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx - Create/edit endpoint and authentication behavior.
+- redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx
+
+- redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx

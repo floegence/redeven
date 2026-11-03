@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Desktop opens a joined Runtime over its existing outbound Flowersec connection to Gateway. Gateway forwards bytes to the Runtime's fixed application entry; it has no Runtime URL to dial. TLS terminates in Desktop and Runtime. Password, MFA, Host/Origin checks and application authorization remain Runtime-owned. Access artifacts limit initial redemption; no Gateway timer shortens established business sessions.
+Desktop reaches joined Runtime over its outbound Flowersec Gateway connection; Gateway forwards to fixed application entry without dialing a Runtime URL. Desktop/Runtime terminate TLS; Runtime retains password/MFA/Host/Origin authority. Entry expiry never shortens established sessions.
 
 # Contract
 
@@ -34,8 +34,7 @@ Gateway owns reverse-stream admission and bounded forwarding only. No path in th
 
 # Evidence
 
-- `redeven:internal/gatewaymembership/listener.go` — Fixed stream dispatch and SDK relay.
+- `redeven:internal/gatewaymembership/listener.go`
+- `redeven:internal/gatewayflow/budget.go`
 
-- `redeven:internal/gatewayflow/budget.go` — Shared admission accounting.
-
-- redeven:internal/gatewaymembership/reverse_access_test.go — Exact live/pending device revocation, other-client access and Runtime continuity.
+- redeven:internal/gatewaymembership/reverse_access_test.go

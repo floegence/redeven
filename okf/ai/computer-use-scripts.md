@@ -7,108 +7,56 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-One computer.exec is one Floret effect attempt. ComputerUseRuntime checks each controlled ui/browser/log operation in QuickJS. Same-target loops and navigation may compose; new target, permission or private input stops at the existing interaction boundary. Preserve confirmed progress without uncertain replay.
+One computer.exec is one Floret effect attempt. QuickJS exposes controlled ui/browser/log under ComputerUseRuntime. Same-target loops/navigation compose, but target/permission/private-input changes stop at existing interaction boundaries, preserving confirmed progress without uncertain replay.
 
 # Contract
 
 ## Authority
-computer.exec is one Floret invocation/effect attempt. QuickJS exposes ui/browser/log only; Runtime rechecks target policy, grant, cancellation and control per operation. One canonical turn retains target; live sampling may interleave. New target/permission stops with confirmed prefix. Private input/approval uses existing interaction, temporary approval bound to current target/URL/lease.
+Recheck target policy/grant/cancel/control per operation. Canonical turn retains target; live sampling may interleave. Target/permission change preserves confirmed prefix and stops. Existing private-input/approval interactions bind temporary consent to target/URL/lease.
 
-Unrestricted turns discover targets/select_target/exec under current permissions. Explicit/saved primitive consumers retain discovery, including read-only callers. Retry asks public canonical APIs for only source-Turn primitive names/current grants; Floret prepares missing metadata once before requery. No unrelated expansion/history store. BatchExclusiveGroup rejects conflicting prepared target calls before authorization/input; inventory/unrelated tools may coexist. Cross-batch gates apply. Rejection grants no replay, alias or rebinding.
+Unrestricted turns discover/select_target/exec; explicit/saved primitives, including read-only callers, retain discovery. Retry admits only source-Turn names/current grants via canonical APIs; Floret prepares missing metadata once before requery. BatchExclusiveGroup rejects conflicting prepared targets before authority/input and preserves cross-batch gates; unrelated tools/inventory may coexist. No alias/rebind/replay.
 
-## Guest and output
-Require target, code, readable description. Bound each call to 30 s/50 operations and eight active namespaces; ui.budget/results expose remaining budget. Sequential awaits/loops/same-page navigation may compose; image judgments require returned screenshot/model review. No timers. const/let are call-local; globalThis survives healthy turn/target namespaces only.
+## Guest and diagnostics
+Require target/code/readable description. Limits:30s/50 operations/eight namespaces; ui.budget/results expose remainder. Await/loop/same-page navigation compose; image judgement waits for model. No timers; const/let call-local, globalThis only healthy turn/target lifetime.
 
-SCRIPT_NO_PROGRESS means unresolved script without pending supported work; STALE_REFERENCE means invalid observed identity. Neither implies interference or permits replay/retargeting. Any failed host operation seals the call even if caught, retires namespace/dormant Promises and returns context_reset with confirmed effects. Unique missing/ambiguous lookup fails; optional query/count returns zero and waitFor timeout is data.
+SCRIPT_NO_PROGRESS=no supported pending work; STALE_REFERENCE=invalid observed identity. Neither implies interference or allows replay/retarget. Failed host calls seal even if caught, retire namespace/dormant Promises, return context_reset/confirmed effects. Unique missing/ambiguous lookup fails; optional query/count zero and waitFor timeout remain data.
 
-Compilation errors use phase parse; rejected execution/jobs retain execution or host_operation even when their exception class is SyntaxError. Closed diagnostics carry phase, known method/field, expected form, safe example and available source position/symbol. Keep raw interpreter text private; echo only known unsupported option names. Shared guide/help(read/source/interaction/visual/downloads/legacy) owns signatures: string names, numeric deltas, supported waits, validation before dispatch. CDP preserves actual correlated method and supplied signed code. The source owner returns missing/closed/busy/identity rejections through the ordinary tool result before controller dispatch, with action_executed:false. Carrier failures retain helper_exchange plus response_unavailable, invalid_response or helper_rejected; they remain unknown effects regardless of error text. Exact request/target identity and validated result facts are required to confirm non-execution. Diagnostics authorize no retry. Core and legacy help use observed roles, never business-purpose guesses.
+Compilation phase=parse; rejected jobs/execution preserve execution/host_operation even for SyntaxError. Closed diagnostics include phase/known method/field/expected/example/available source position-symbol; raw interpreter text private. Echo known unsupported option names only. Guide/help(read/source/interaction/visual/downloads/legacy) owns signatures/deltas/waits/validation and observed roles, not business guesses. CDP retains method/signed code. Source-owner absent/closed/busy/identity rejection returns action_executed:false before dispatch. helper_exchange retains response_unavailable|invalid_response|helper_rejected and uncertainty regardless of wording; only exact request/target/validated evidence confirms non-execution.
 
-Limits: canonical snapshot 256 KiB; helper response 512 KiB; final model envelope 1 MiB; explicit UTF-8 logs 64 KiB. Explicit observations share a 384 KiB encoded prefix budget; exact-size admission rejects excess with SCRIPT_OUTPUT_LIMIT and continuation instructions. No repeated action or silently dropped middle observation. Stream logs before later operations. Retain earlier explicit output after read/navigation failure/timeout/uncertainty separately from current observations. Failed reads discard their data/pixels and stop later calls/logs; private pause discards invocation content. One bounded prefix buffer, no ledger/replay. observations retains every emitted tree with operation_index/target_id; output_order indexes observations, logs and image attachments. observation remains the current compatibility view. Historical image output survives later failed reads, but never authorizes stale coordinates. Model encoding and Flower Activity preserve ordered facts; existing UI row limits disclose preview truncation.
+## Output
+Bounds: snapshot256KiB/helper512KiB/final1MiB/log64KiB UTF-8/explicit prefix384KiB encoded. Exact-size admission yields SCRIPT_OUTPUT_LIMIT/continuation, never replay or silent middle loss. Logs precede later operations. Explicit prefix survives later failure/timeout/uncertainty; failed read drops only its own data/pixels and stops subsequent calls/logs. Private pause removes invocation content.
 
-Only snapshot/observe/locator.snapshot accept emit; collections require log,
-screenshots/help always emit. emit:false preserves identity/budget. Guest snapshots
-remain structured. Automatic canonical snapshot output uses tree_text with no
-parallel nodes array, bounded to 32 KiB including JSON escaping and metadata.
-Title/URL prefixes have separate 4 KiB encoded bounds and explicit field loss flags;
-document identity stays exact. Activity decodes display fields from this bounded
-projection, preserving page/control details and blank-page recognition.
-Legacy observe and explicit full:true/node reads retain structured detail.
+One prefix retains emitted trees/operation_index/target_id; output_order indexes logs/observations/images; observation is compatibility view. Prior images survive but authorize no stale coordinates. Encoding/Activity keeps order and discloses preview limits. Only snapshot/observe/locator.snapshot accept emit; collections need log, screenshot/help always emit. emit:false retains guest structure/identity/budget.
 
-Each line carries a JSON-quoted ref, role and name, then key=JSON facts. Indentation
-encodes ancestry; explicit parent_ref wins for sparse diffs or depths beyond eight.
-Frames inherit only within an emitted full tree; frame_absent marks absence.
-Quotes, newlines and bidi controls cannot forge records. Values remain untrusted.
-False, mixed, empty values and field/children truncation flags survive rendering.
-source_truncated reports bounded source loss; output_truncated reports presentation
-loss; truncated covers either. Coverage is not a claim of full screen completeness.
+Automatic tree_text avoids duplicate nodes;32KiB includes escaping/metadata. Title/URL each4KiB encoded with loss flags; document identity exact. Activity handles bounded/blank fields. Legacy observe/full:true/node keep structure. JSON-quoted ref/role/name and key=JSON prevent quote/newline/bidi forgery. Indent expresses ancestry; parent_ref handles sparse/depth>8. Frame inheritance only within full trees; frame_absent explicit. False/mixed/empty/loss flags survive. source_truncated vs output_truncated separates collection/presentation; truncated covers either.
 
-The single product output owner selects a parent-first depth-first prefix, keeping
-siblings ordered and complete branches adjacent. Linear charging of final encoded
-lines reserves omission markers and repeated-read advice; no tokenizer guesses or
-new provider-budget API. Released Floret owns request-wide token accounting; browser
-and native packages retain collection/input ownership. The text projection is product-owned; reusable native input comes from the published floe-native-apps package.
+Product emits parent-first depth-first prefix with sibling order/adjacent branches. Linear encoded charging reserves omissions/advice, no tokenizer guess/new budget API. Floret counts request tokens; published browser/native owns collection/input. Diff requires same document/scope/detail and complete source/output. Replace full records, remove absent fields, retain unlisted descendants. New/reordered/reparented nodes force full; use full when smaller. Detail change resets baseline. Full/node fields<=2000 code points plus loss flags.
 
-Diff requires equal document/scope/detail and complete source/output. Each line is
-a full replacement record; absent fields are removed, unlisted descendants remain.
-New/reordered/reparented nodes require full output. Compare actual encoded sizes;
-return full when smaller. Detail-mode changes reset the baseline. Failure uses the
-same projection; target, privacy, effect and uncertain-input rules remain unchanged.
-Full/node detail retains 2,000-code-point fields and explicit loss flags.
+## Reads/input
+Model chooses trees/subtrees for controls, HTML text for prose/code, rows/query for loaded data, screenshots for visuals. Retain row headings/units/period/scope. Counts/cursors prove no unseen dataset; successful reads may show application errors. Bind findings to observed object keys; denied/unvisited stays unknown. Never infer business success or relocate findings; no site/industry policy.
 
-Choose controls through trees/subtrees, prose/code through explicit HTML text,
-and loaded data through rows/query. Preserve surrounding headings, units, period
-and scope with selected rows; loaded counts never imply site-wide completeness.
-Source continuation only reads the current field, not an application's dataset pages.
-A successful read can contain an application error. Denied/unvisited scopes remain
-unknown. Models verify coverage and bind each finding to its observed object key;
-tools never infer business success, fill missing pages or reassign findings.
-Visual-only content needs screenshots. These choices stay with the model; no
-website- or industry-specific rules select targets or authorize actions.
+Input returns delivery; optional checks cannot revoke ack. Explicit reads own [privacy/observation](computer-script-read-contract.md). type inserts/fill replaces. Native doubleClick/scroll parity: scroll centers window, scrollAt uses coordinates without click; selector scroll separate. Browser waits accept text|value,equals:string,optional timeout over visible textContent/value; native rejects. Completed waits survive guest faults.
 
-## Input
-Browser pointer/key/text/scroll inputs return delivery receipts; optional post-input
-checks cannot revoke acknowledged input. A subsequent explicit read, including in
-the same script, owns the new observation. Receipt and privacy details belong to
-the [read contract](computer-script-read-contract.md).
+Drag duration_ms integer0..5000, straight held path; zero no added delay. Monotonic scheduling avoids accumulated waits,not transport cost. Cancel/takeover/document change stops/releases at last confirmed point. NativeInputSequence starts after down ack, retains authority/cancel/receipts. Unknown reply never replayed; independent AppKit proves timing.
 
-ui.type inserts, fill replaces. Native doubleClick/scroll keep parity; scroll centers the window and scrollAt selects coordinates without clicking. Semantic selector scroll is separate. Browser waits accept text|value, equals:string and optional timeout, read visible textContent/value without new input; native rejects these conditions. Completed waits survive later guest failure.
+[Semantics](computer-use-semantics.md) owns v2; [read contract](computer-script-read-contract.md) shapes/absence/limits. getByRole(role,{name?,exact?,root_ref?}) uses canonical roles beside node/subtree/snapshot/legacy reads. locator.text uniquely reads HTML innerText with fixed isolated code,<=12000 Unicode/rendered_element/truncation. Document/text/SVG gives TARGET_CAPABILITY_UNAVAILABLE,no parent/body substitution. Attributes string|null, reject>2000 code points. Keep method/capability/choose_supported_read through transport. Unsupported read stops but leaves valid refs for explicit alternative. Source/collection help has no preference order; read_options/advice promises no completeness/readiness.
 
-Drag duration_ms is integer 0..5000; straight held path, zero adds no delay. Monotonic scheduling avoids accumulated waits, not transport overhead. Cancel/takeover/document invalidation stops and releases only owned input at last confirmed position. Unknown replies never replay. NativeInputSequence starts timing after acknowledged down, retains authorization/cancellation and event receipts. Independent AppKit qualifies native timing; browser results cannot.
+Immutable image handles bind frame/document/image regardless of edited metadata. Reuse globalThis.image until context_reset/turn/target change requires recapture. Downloads include downloads and immutable cursor wait; inspect exported ID,never click again. Screenshots attach without path/export.
 
-## Reads and identity
-[Semantics](computer-use-semantics.md) owns schema v2; [read contract](computer-script-read-contract.md) owns strict shapes, branchable absence and bounds. getByRole(role,{name?, exact?, root_ref?}) uses canonical roles; snapshots/nodes/subtrees are direct, legacy observe/read wrappers remain.
-
-locator.text reads one explicit unique HTML innerText through fixed isolated-world code: <=12,000 Unicode characters, rendered_element scope and truncation; no hidden/unloaded text or arbitrary DOM script. Document/text/SVG reject TARGET_CAPABILITY_UNAVAILABLE before reading, without substituting parent/body. Attributes are string|null, rejecting >2,000 code points. Method/capability/choose_supported_read facts survive all layers. Unknown reads stop but preserve valid refs; model may explicitly choose another supported read.
-
-Core help exposes source/collection reads without a required preference order.
-Snapshot read_options and continuation hints remain model-visible. Repeated-read
-advice describes only the bounded sample, not unseen content or application readiness.
-
-Image input handles bind immutable frame/document/image; editable metadata cannot retarget. Examples persist and reuse the same globalThis.image
-name. context_reset or a turn/target change clears it; the model captures again
-rather than receiving a revived stale handle. Download results always include downloads and immutable cursor-bound wait. After export inspect existing ID instead of clicking again. Screenshots accompany results, never require paths/PNG export.
-
-One needs_observation value drives execution/output. Safe snapshot (even emit:false) or screenshot clears it; input, staleness, failed reads or unknown effects require fresh observation. observation_status requires current safe evidence; title is insufficient. Private takeover excludes pixels/observations from model history.
+One needs_observation: safe snapshot(including emit:false)/screenshot clears; input/stale/read failure/uncertainty sets. observation_status needs safe current evidence,not title. Private takeover excludes model pixels/content.
 
 # Boundaries
 
-No second history/recovery ledger. Paused/uncertain operations retain sanitized input_progress through script and assistance results. Posted/observed counts describe partial operation progress, never completed business action or replay authority. New target/permission needs explicit continuation under the existing owner.
+No second history/recovery ledger. Sanitized input_progress preserves partial posted/observed facts, not business completion/replay authority. Changed target/permission requires explicit continuation.
 
 # Evidence
 
-- `redeven:internal/ai/computer_script.go` - namespace ownership, limits and partial results.
-
-- `redeven:internal/ai/computer_observation.go` and `redeven:internal/ai/computer_observation_text.go` - bounded output, diffs and scope resets.
-
-- `redeven:internal/ai/computer_observation_text_test.go` - grammar roundtrip, byte budgets, guest/provider/Activity boundaries and native coverage.
-
-- `redeven:internal/envapp/ui_src/scripts/redevenComputerScript.mjs` - restricted QuickJS API and process protocol.
+- [Observation](../../internal/ai/computer_observation.go)/[text projection](../../internal/ai/computer_observation_text.go) and tests: order,grammar,diff,scope,native coverage.
 
 ## Qualified browser batch example
 
-For an already inspected report whose three URLs and unique Score region are
-known, one call can combine navigation, bounded reads, a condition, computation
-and a final screenshot. Visual interpretation occurs after the call returns.
+
+For inspected URLs and a unique Score region, combine navigation, reads, condition/computation and final screenshot. Visual interpretation follows the result.
 
 <!-- qualified-browser-batch -->
 ```javascript
@@ -124,9 +72,8 @@ log({scores: batchScores, total: batchTotal});
 await ui.screenshot();
 ```
 
-`TestComputerScriptExamplesQualification` runs this exact example and the
-production download-help example through QuickJS, Runtime and real installed
-Chromium. It verifies a 1.4 MB download byte-for-byte, one export and one identity,
-three page scores, retained environment state, and an actual screenshot.
-Screenshots automatically accompany the tool result. Their metadata is not a
-file path or PNG buffer; no extra export is required to display a capture.
+TestComputerScriptExamplesQualification runs this exact batch and the download-help example through QuickJS/Runtime/installed Chromium: 1.4MB exact download, one export/identity, three scores, retained state and actual screenshot. Image metadata is not a path/PNG buffer.
+
+- `redeven:internal/ai/computer_script.go` - Source.
+- `redeven:internal/ai/computer_observation_text_test.go` - Tests.
+- `redeven:internal/envapp/ui_src/scripts/redevenComputerScript.mjs` - Source.

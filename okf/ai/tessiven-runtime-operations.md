@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime Tessiven service owns UI/Flower discovery and dispatch over existing registries/catalogs/executors. Discovery neither starts processes nor acquires business sessions. Path refs grant no permission. Lost authority, changed generations/identities or revocation stop dispatch. Lost mutation replies remain uncertain; inspect original operation/current state before deciding, never auto-replay.
+Runtime Tessiven service exposes discovery/dispatch through existing registries/executors. Discovery starts no process/session; path refs grant no access. Changed identity/generation/revocation stops calls. Lost mutation replies stay uncertain pending original-operation inspection.
 
 # Contract
 
@@ -42,7 +42,7 @@ Gateway v6 application access, Tessiven DSL, and persistent database lineages re
 
 # Evidence
 
-- `internal/tessiven/runtimes.go` — Scoped directory, local host catalog and fixed local business executor.
+- `internal/tessiven/runtimes.go`
 
 - `internal/tessiven/broker_test.go` — Unattributed/device-generation denial, permission recheck and unknown effects.
 

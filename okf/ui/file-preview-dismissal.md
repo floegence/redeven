@@ -27,6 +27,5 @@ The [window actions contract](file-preview-window-actions.md) owns file actions 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts` - Immediate read cancellation; content release at presence disposal.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Retained content released by published presence disposal.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Source.

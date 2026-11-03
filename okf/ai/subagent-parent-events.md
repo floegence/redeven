@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-SubAgent reports and lifecycle events remain canonical Floret facts, visible to the direct parent without creating another handoff store. They do not wake idle parents; bounded waiting and explicit reads expose reports when the parent continues. Tool approval and user input remain ordinary child interactions, while questions and blockers can be reported through `report_to_parent` without ending the delegated task.
+Reports/lifecycle remain canonical Floret facts for the direct parent, without another handoff store or idle wakeup. Bounded wait/explicit reads expose them during continuation. Approvals/input stay child interactions; report_to_parent can communicate blockers without ending work.
 
 # Contract
 
@@ -23,6 +23,5 @@ Events are observations and context inputs, not a second result store or a backg
 
 # Evidence
 
-- `redeven:internal/ai/parent_events_test.go` - Scoped lifecycle reports, reads/waits and input attention.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Presents parent events and canonical child current views.
+- `redeven:internal/ai/parent_events_test.go` - Tests.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.

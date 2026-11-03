@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret/cache supplies canonical user text; published Floe owns transient history navigation and Redeven owns shared drafts/candidates. Unmodified ArrowUp in an exactly empty ordinary editor recalls text for editing, never submits. IME, selection, menus and structured answers retain keys. Scope or external-draft changes stop browsing without discarding text.
+Canonical Floret/cache text feeds Floe transient navigation and shared drafts. Unmodified ArrowUp in exactly empty chat recalls editable text, never submits. IME/selection/menus/structured answers keep keys; scope or external-draft changes stop browsing without losing text.
 
 # Contract
 
@@ -26,6 +26,5 @@ Recall never submits, changes canonical messages, restores attachments or overwr
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Canonical ordinary input excludes metadata and structured answers.
-
-- `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Canonical input candidates exclude secrets and duplicates.
+- `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Source.
+- `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Tests.

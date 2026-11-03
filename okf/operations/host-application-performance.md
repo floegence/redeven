@@ -7,11 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The [display contract](../architecture/host-application-display.md) owns picture
-behavior. Floe Native Apps owns capture, encoding and region decoding; Redeven owns
-forwarding, picture choices and acceptance. Measure pixels and bytes, not limits.
-Failed budgets retain their raw result and block the associated claim. Documents
-do not certify video, WAN, physical displays or universal remote-desktop parity.
+Floe Native Apps owns capture/encoding/decoding; Redeven forwards and qualifies picture choices under the display contract. Measure pixels/bytes, preserve failed budgets and limit claims to measured scope. Results cannot certify video, WAN, physical displays or universal parity.
 
 # Contract
 

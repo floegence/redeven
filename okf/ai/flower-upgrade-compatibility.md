@@ -25,4 +25,4 @@ Historical producers are immutable evidence, never helpers linked into current p
 
 - `redeven:internal/ai/tool_correction_history_compatibility_test.go` - Exact v7.69.1 failures through Retry/Send/Fork/restart.
 
-- `redeven:internal/ai/testdata/upgrade/10ce4c152/manifest.json` - Locked compatibility baseline.
+- `redeven:internal/ai/testdata/upgrade/10ce4c152/manifest.json` - Tests.

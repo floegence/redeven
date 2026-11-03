@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Approval and waiting-user prompts are projections of Floret typed pending interactions. The bottom action mode is one mutually exclusive surface with fixed priority `input_request` then `approval` then `chat`, while the ordinary thread rail always remains interactive; decision surfaces never make a shared ancestor inert or install a pointer-blocking overlay.
+Approval/input render Floret pending facts. One bottom action mode prioritizes input_request, then approval, then chat; ordinary thread rail stays interactive. Decision surfaces never make a shared ancestor inert or install pointer-blocking overlays that disable navigation.
 
 # Contract
 
@@ -28,6 +28,5 @@ The decision surface owns drafts, disabled reasons, focus, and row-local command
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Bounded questions, touch/scroll and retained choices.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Input, approval, composer, and navigation behavior.
+- `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Tests.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.

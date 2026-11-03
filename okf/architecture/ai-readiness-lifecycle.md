@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns durable Agent/Store facts; Redeven's single process-local readiness controller owns AI construction, retry, publication, request leases, drain and close. Non-AI surfaces remain usable through startup/migration/recovery. Requests use one generation. Unavailable startup returns sanitized typed state without publishing a partial service, repairing Store data or creating durable Agent state.
+One process-local Redeven controller owns AI construction/retry/publication/leases/drain/close; Floret owns durable facts. Non-AI surfaces stay usable. Requests bind one generation; failed readiness returns typed sanitized state without partial publication or Store repair.
 
 # Contract
 
@@ -23,6 +23,5 @@ The controller imports no Floret/SQLite/threadstore packages, holds no Host/Back
 
 # Evidence
 
-- `redeven:internal/codeapp/ai_readiness.go:1` - Serialized startup, sanitized generations, drain/replace/close.
-
-- `redeven:internal/codeapp/appserver/server.go:2277` - One request lease propagated through context.
+- `redeven:internal/codeapp/ai_readiness.go:1` - Source.
+- `redeven:internal/codeapp/appserver/server.go:2277` - Source.

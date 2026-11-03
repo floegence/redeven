@@ -7,198 +7,49 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Browser and native script reads return promised shapes or explicit errors.
-Missing observations never become empty data, and invalid input never dispatches.
-[Script execution](computer-use-scripts.md) owns the namespace and failure barrier.
-Completed input stays recorded even when a later read fails.
+Browser/native reads deliver the promised shape or explicit failure; absent observation never becomes empty data. Later read failure preserves confirmed input without replay. [Scripts](computer-use-scripts.md) owns namespace/failure barriers; every read retains permission, privacy and publication checks.
 
 # Contract
 
-## Successful reads and argument counts
-All guest methods, including image and download-cursor methods, validate explicit
-minimum/maximum argument counts before dispatch. Existing type and option
-validation remains authoritative; extra arguments return SCRIPT_ARGUMENT_ERROR
-with a closed method and documented_arity diagnostic. Valid signatures do not change.
+## Validation and lifetime
+All guest/image/download-cursor methods validate min/max arity before dispatch. Extras yield SCRIPT_ARGUMENT_ERROR with method/documented_arity; existing signatures/type/options remain. Empty/zero/null are valid only where promised. Missing/malformed observations seal the call; never fabricate trees.
 
-Runtime requires the promised result for semantic observations, node/text/collection/
-attribute reads and condition waits. Missing or invalidated reads fail through the
-existing observation-error boundary, seal the invocation and retain completed
-input without replay. Empty arrays, empty text, zero counts and null attributes
-remain valid data. Snapshot projection never fills absent observations with an
-empty tree. A confirmed action may invalidate an old observation and still be
-followed by an explicit fresh read. A documented wait timeout remains a result;
-requireState turns it into CONDITION_TIMEOUT. Takeovers and target changes keep
-their existing control boundaries.
+One boundary covers node/text/query/table/attribute/condition and lower-level faults, retaining semantic_read/source identity. Private invocation token binds content/image/metadata/final safety to one document through cleanup/publication, not a ledger. Scan ordinary reads at entry/publication; failed publication retires image. No page-quiescence requirement.
 
-The browser controller routes node/text/query/table/attribute/condition reads
-through one observation boundary, including direct lower-level read exceptions.
-It supplies the required semantic_read failure stage and retains the live source.
-One returned observation binds content, image, metadata and final safety to the
-same document lifecycle through input cleanup and final publication. A private
-invocation token carries the existing revision; no second lifecycle is stored.
-Ordinary reads scan at entry and final publication after cleanup; failed publication retires the image anchor. Condition waits retain a privacy check after every sample, without repeatedly fetching title/URL metadata. Wait results expose requested_state, timeout_ms, elapsed_ms and samples; these measure this operation, not application readiness.
-Ordinary content updates do not require page quiescence. Empty initial child-frame
-URL metadata is resolved by reading document.URL in that exact isolated frame.
-The same lifecycle, origin and privacy checks still apply; no parent-origin
-substitution, blank-URL allowlist or website-specific rule is introduced. Missing
-or invalid document URLs remain explicit evaluation failures.
-Condition waits own one deadline covering observer preparation, entry safety and
-independently validated read-only samples. A preparation lifecycle change remains
-inside that explicit wait; it does not reset the deadline or the privacy latch.
-Protocol rejection plus an independently observed revision change invalidates that
-sample; protocol message wording alone never does. Ordinary reads still stop. Typed lifecycle or temporary query-candidate invalidation
-discards only that sample; unknown protocol/evaluation failures, ambiguity, stale
-fixed refs/root_ref, permission changes and cancellation stop. Semantic waits
-revalidate the original unique match and scope after reading its state, keep the original query
-and deadline, and never turn an invalid sample into an absent/hidden result.
-Fixed scope identity is checked even when a descendant query has no matches.
-Ordinary reads and input do not retry candidate failures.
-The adapter owns this ephemeral boundary; Runtime adds no browser-state ledger.
-Confirmed inputs are retained separately and never enter a read retry.
-A rejected read cannot become a malformed transport response that disconnects
-the target. A later explicitly requested read can recover on the same page.
+Empty child-frame URL requires document.URL from that exact isolated frame with unchanged lifecycle/origin/privacy checks. Never substitute parent or allowlist blank. Missing/invalid URL fails without malformed reply/disconnection; later explicit same-page reads may recover. Keep input confirmation separate.
 
-## Navigation receipts
-Script navigate/back/reload accept wait_until:commit|domcontentloaded|load and
-timeout_ms:0..30000 (default load/20000). Return command_acknowledged,
-navigation_stage and wait:{state:reached|timeout,wait_until,timeout_ms,elapsed_ms}.
-Correlate milestones to the root frame and navigation loader, including events
-before command acknowledgement. Same-document navigation and downloads have
-explicit stages. Timeout is branchable data; it neither retires the guest namespace
-nor proves application readiness. A subsequent read/condition wait may share the
-script. Deadline accounting starts before dispatch; remaining lifecycle wait
-uses that deadline. Network errors, unknown acknowledgement, permission changes,
-cancellation and target changes retain existing stop boundaries. No automatic
-navigation replay, network-idle heuristic or application-specific readiness.
-Script receipts retain needs_observation/observation_invalidated without page
-content; each explicit read owns its privacy and document-lifetime checks.
-Legacy image-returning calls keep their existing observation boundary.
+## Condition waits
+One deadline covers preparation/entry safety/samples. Check privacy each sample without rereading title/URL. Return requested_state/timeout_ms/elapsed_ms/samples, not readiness. Timeout is data; requireState raises CONDITION_TIMEOUT, seals calls even if caught, preserves completed prefix. Diagnostics include method/state/timeout/zero-based operation_index and failed_action/failed_operation_index, excluding matching text/raw exception. Completed wait need not match.
 
-## Input delivery receipts
-Script pointer, key, text, fill, wheel, drag and input-sequence operations return
-closed delivery facts, needs_observation and observation_invalidated. They do not
-read title/content or assert application success. A failed optional post-input
-safety scan adds post_action_check.state=unavailable with bounded diagnostics; it
-does not revoke acknowledged input or publish unchecked content. Confirmed private
-input still pauses, and permission, cancellation, connection, target-change, cleanup
-and uncertain-effect barriers still stop. A subsequent explicit read owns its full
-privacy checks, even within the same script. Content-returning edits and legacy
-image-returning calls retain their observation contract. No input is retried.
+Typed lifecycle/temporary candidate invalidation discards only its sample, preserving deadline/privacy latch. Protocol rejection needs independently observed revision change, never wording. Revalidate original unique query/scope after state read; even absence requires valid fixed scope. Invalid samples cannot mean absent/hidden. Ambiguity/stale refs or root_ref/unknown protocol or evaluation/permission/cancel stops. Ordinary reads/input never retry candidate faults.
 
-## Controlled browser evaluation
-One result checker owns Runtime.evaluate and Runtime.callFunctionOn responses.
-A transport acknowledgement is not successful script execution: exceptionDetails,
-missing results and invalid operation-specific values fail explicitly. Empty text,
-false, zero, arrays and null remain valid when promised; void installation/reset
-operations explicitly accept undefined. Optional scroll offsets may remain null
-without changing confirmed input outcomes.
+## Navigation and delivery
+Script navigate/back/reload: wait_until commit|domcontentloaded|load, timeout_ms0..30000, defaults load/20000. Return command_acknowledged/navigation_stage/wait{state:reached|timeout,wait_until,timeout_ms,elapsed_ms}. Correlate root/loader milestones, including pre-ack events; explicitly report same-document/download. Deadline begins before dispatch. Timeout permits explicit read/wait in same namespace; network/unknown ack/permission/cancel/target change stops. No replay/network-idle heuristic.
 
-Only confirmed observer installation on the same document updates the existing
-prepared-frame map. Failed installation leaves it unprepared; a later explicit
-observation may prepare it again. No input, navigation or whole invocation is
-replayed. Internal observer readiness does not imply application readiness.
+Pointer/key/text/fill/wheel/drag/sequences return closed delivery facts/needs_observation/observation_invalidated, no page read/business-success claim. Optional safety failure yields bounded post_action_check.state=unavailable, neither revoking ack nor publishing unchecked content. Confirmed private input pauses; permission/cancel/connection/target/cleanup/uncertain barriers stop. Later reads own full privacy; content-returning edits/legacy image calls retain observation boundaries.
 
-Evaluation failures retain diagnostic phase evaluation, actual method and reason
-exception or invalid_result through the helper, Runtime and canonical tool result.
-DOMSnapshot validates the fields it consumes and accepts protocol-empty values;
-optional missing scroll offsets omit geometry rather than fabricate coordinates.
-Invalid structures retain phase adapter, actual method and invalid_result.
-Rejected read transports retain the known protocol method even without a numeric code; typed document invalidation is not erased by safety wrapping. Unclassified adapter failures retain the known stage and internal_error.
-Canonical results, Activity and correlated runtime logs retain these bounded facts.
-These are distinct from protocol rejection codes and authorize no retry. Raw exception text, stacks and
-page values do not enter diagnostics. Confirmed output survives later read failure;
-privacy takeover still discards content. Core help directs models to observed roles
-and refs instead of assigning roles from a control's business purpose.
+## Evaluation and action facts
+One Runtime.evaluate/callFunctionOn checker rejects exceptionDetails, missing or operation-invalid result; promised false/zero/empty/null and void install/reset undefined remain valid. Only same-document confirmed installation updates prepared-frame map. Explicit later read may prepare again, never replay input/navigation/call; observer readiness is not app readiness.
 
-## Action receipts
-Preparation (scroll/focus), acknowledged input events and completion of the requested
-operation are separate facts. action_executed confirms the requested action
-completed, not merely a constituent effect. preparation_executed requires a fresh
-observation but never adds click/scroll to completed_actions. Failed partial input
-retains posted/observed event counts; those counts are not business success.
-Unknown delivery or release stays uncertain. An exception from a mutating browser
-evaluation cannot confirm the operation, even if CDP transported a response.
-Safe hit-test checkpoints identify point_coordinates, point_node, target_ancestry,
-embedding_frames or scroll_intersection without copying DOM/exception text.
-CDP may return a CSSPseudoElement for generated content; hit testing follows its
-originating element before the ordinary ancestor/shadow-host check. Unrelated
-overlay owners remain non-actionable; no alternate point or target is tried.
-Flower presents prepared and partial-input interruptions distinctly from completed
-actions. Script failed_operation_phase describes the interrupted operation;
-completed prefix actions cannot overwrite that phase. Presentation never changes
-canonical error status or authorizes retry.
+Evaluation facts: phase=evaluation, actual method, exception|invalid_result. DOMSnapshot validates used fields, accepts protocol-empty, omits unavailable offsets; invalid shape retains adapter/method/invalid_result. Transport retains known method without invented code; wrapping preserves typed invalidation. Unknown faults keep stage/internal_error. Canonical result/Activity/correlated logs exclude exception text/stacks/page values. Prior output survives except privacy takeover. Help uses observed roles/refs, not business guesses.
 
-## Validated inputs and bounded browser reads
-The browser adapter validates the complete operation before virtual focus,
-scroll preparation or input. Invalid arguments retain a closed diagnostic with
-phase, field, expected form and recovery; page errors and supplied secrets are
-never copied into it. Keys use characters or documented names with
-Alt/Control/Meta/Shift modifiers; physical codes such as Equal are not names.
-Primitive computer.wait defaults to zero milliseconds and adds no settling
-promise. Legacy waitFor retains its returned state. requireState throws CONDITION_TIMEOUT and seals later host operations, even if guest code catches the error. Earlier completed input remains recorded.
-Its closed diagnostic retains method, requested state, timeout_ms and zero-based
-operation_index, mirrored in failed_action/failed_operation_index. Matching text
-and raw exceptions stay private. completed_actions records completed operations;
-a completed wait operation does not imply its requested condition was met.
+Separate preparation, acknowledged events and requested-operation completion: action_executed confirms completion; preparation_executed requests fresh read without adding click/scroll to completed_actions. Partial posted/observed counts imply no business success. Unknown delivery/release stays uncertain; mutating-evaluation exception cannot confirm completion. Hit-test diagnostics name point_coordinates/point_node/target_ancestry/embedding_frames/scroll_intersection without DOM text. Resolve CSSPseudoElement to origin before ordinary ancestor/shadow checks; unrelated overlays reject without alternate points/targets. Flower distinguishes prepared/partial interruption; failed_operation_phase never describes completed prefix.
 
-Browser locators expose query({limit,cursor}) over the authorized loaded AX
-scope and an attribute allowlist. Results carry total, truncation, document and
-cursor; changed contents invalidate pagination. Only returned page references
-enter the bounded reference table. Each page is at most 200 items and 48 KiB of
-items. Virtualized, unloaded rows are never counted as visited. getAttribute(href)
-preserves source query/fragment and relative form; URL credentials are explicitly
-redacted. linkSummary is the optional normalized view that removes query/fragment
-and is not an action URL. Long attributes remain available through source reads.
-Browser rows reads a unique table/grid and returns header/data rows, cell roles
-and source-backed cell refs for explicit detailed reads,
-with explicit loaded-tree scope. Pages contain at most 200 rows/48 KiB of item
-content; each row is limited to 200 cells/44 KiB, each cell to 2,000 Unicode
-characters. cells_truncated/text_truncated mark loss; exact totals cannot be
-inferred from incomplete rows. Cursor identity includes full cell contents.
-Nested tables are excluded. count reports loaded matches. attribute returns a
-scalar safe attribute; linkSummary labels its redacted URL as non-actionable.
-Native targets reject these browser reads inside scripts before adapter dispatch.
+## Bounded reads/input
+Validate whole operation before virtual focus/scroll/input. Diagnostics contain phase/field/expected/recovery, not secrets/page errors. Keys are characters/documented names with Alt/Control/Meta/Shift; physical Equal invalid. Primitive computer.wait defaults zero, no settling promise; legacy waitFor retains state.
 
-scroll_progress belongs to the scroll return value. scope and measured_ref identify
-the exact requested element or viewport, never a guessed wheel receiver. before,
-after and offset_changed describe only immediate offsets of that measurement;
-scroll_effect remains unknown. Invalidated or unavailable samples are null. Input
-dispatch and scroll-into-view preparation are separate facts.
-Semantic wheel input uses the visible intersection of the target, not clickable-control
-enabled state or its offscreen full-box center. Browser-native intersection geometry
-owns ancestor clipping and transforms; document targets use their viewport. Existing
-hit testing checks target ancestry and embedding-frame overlays before one wheel.
-Scroll-into-view preparation remains separately reported when the wheel is rejected;
-it can move the viewport. No alternative-point search or automatic input replay is
-added. Immediate offsets do not select the next action for the model.
+query(limit,cursor) reads authorized loaded AX/allowlisted attributes with total/truncation/document/cursor. Content change invalidates cursor; store only returned refs. Page<=200 items/48KiB; virtual unloaded rows unvisited. href retains relative/query/fragment, redacts credentials; linkSummary is normalized, non-actionable and query/fragment-free. Long fields use source reads.
 
-The core help demonstrates awaited node reads and logging the returned scroll
-result; node and snapshot objects do not carry scroll measurements.
+rows requires unique table/grid, excludes nested tables, returns header/data/cell roles/source refs. Page<=200 rows/48KiB; row<=200 cells/44KiB; cell<=2000 Unicode characters. cells_truncated/text_truncated disclose loss; incomplete rows prove no exact total. Cursor binds full cell content. count=loaded matches; attribute=string|null. Native rejects browser-only before dispatch.
 
-Repeated identical observations in the same script namespace/document/scope
-receive a bounded advisory after two repeats. It states only that this bounded
-sample is unchanged, not that unobserved content is unchanged or business data is
-ready. Truncated snapshots retain read_options, requested root/limit and explicit
-continuation guidance; the model chooses a read. This never replays input, changes
-target, adds a planner, or persists a second lifecycle.
+scroll_progress stays return-only; scope/measured_ref identifies requested element/viewport, not guessed wheel receiver. before/after/offset_changed are immediate; scroll_effect unknown; invalid/unavailable samples null. Preparation/input separate. Wheel uses clipped/transformed visible intersection (document viewport), not enabled state/offscreen center. Check ancestry/embedding overlay before one wheel; reject with preparation facts, no alternative search/replay.
 
-Single-node detail does not enumerate a subtree. child_refs describes only
-returned relationships; check children_truncated, use snapshot for a subtree
-and browser rows/query/count for loaded collections.
-
-
-## Explicit source details
-[Source detail and continuation reads](computer-source-reads.md) defines original
-AX/DOM fields, long-value chunks, child paging, bound cursors and ref retention.
-These reads share this contract's privacy and final-publication boundaries.
+After two equal observations per namespace/document/scope, bounded advice describes only observed sample. Truncation retains read_options/root/limit/continuation; model chooses. Node detail is not subtree; child_refs covers returned relations and children_truncated flags loss. Collections use snapshots/loaded rows/query/count.
 
 # Boundaries
 
-Collection results describe only the authorized loaded tree; they do not certify
-unloaded content. Native targets reject browser-only reads before dispatch.
-Validation and observation recovery never replay completed input.
+[Source reads](computer-source-reads.md) owns original AX/DOM fields/chunks/children/cursors/ref retention under the same privacy/publication boundary. Loaded collections prove no unseen dataset. Recovery never changes target, persists lifecycle or replays input.
 
 # Evidence
 
-The browser read-contract and script Node suites, Runtime script tests and
-[real-provider acceptance](computer-use-qualification.md) exercise these boundaries.
+Browser read-contract/script Node suites, Runtime script tests and [provider qualification](computer-use-qualification.md) cover these boundaries.

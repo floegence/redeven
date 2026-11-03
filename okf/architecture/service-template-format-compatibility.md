@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Released template code owns schemas, historical adapters and current types; Runtime owns execution/authorization. Supported old directories retain bytes, filenames, modes, digest and commit. Adapt only in memory into one executor; no persisted definitions or automatic lifecycle effects. Invalid, ambiguous, future or unsupported formats fail unchanged with explicit recovery.
+Released templates own schemas/adapters/types; Runtime owns execution/authority. Old directories retain bytes/names/modes/digest/commit and adapt in memory to one executor. No stored duplicate definitions/lifecycle effects; invalid or unsupported formats fail unchanged.
 
 # Contract
 
@@ -36,6 +36,5 @@ The npm SDK publishes the corresponding types, schemas, and GitHub acquisition c
 
 # Evidence
 
-- `redeven:go.mod` - Pins the formally released upstream reader and data types.
-
-- `redeven:internal/managedwebservice/template_sources.go` - Original-directory adapter reads under current Runtime policy.
+- `redeven:go.mod` - Source.
+- `redeven:internal/managedwebservice/template_sources.go` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime alone admits system-browser access to Desktop-private `unified_proxy` services. Desktop requests a short-lived single-use entry for an exact forward/path; Runtime redeems it into a Host-only session on `pf-<forward_id>.localhost:<bridge_port>`. Bridge credentials stay out of browsers and browser credentials out of services. Failure opens no URL; `desktop_loopback` is excluded.
+Runtime alone admits browser access to Desktop-private unified_proxy services. Single-use exact-forward/path entries become Host-only pf-<id>.localhost sessions. Keep bridge/browser/service credentials separate; failed admission opens nothing and desktop_loopback is excluded.
 
 # Contract
 
@@ -22,6 +22,5 @@ The cookie admits one proxy origin, never Local UI, Provider/Gateway, Flowersec 
 
 # Evidence
 
-- `redeven:internal/localui/desktop_browser_handoff.go:1` - Bounded one-use entries, redemption, replacement, expiry and cookies.
-
-- `redeven:internal/codeapp/appserver/server.go:301` - Reserved auth cookie stripped from requests and responses.
+- `redeven:internal/localui/desktop_browser_handoff.go:1` - Source.
+- `redeven:internal/codeapp/appserver/server.go:301` - Source.

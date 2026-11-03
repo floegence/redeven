@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven AI uses the trusted control channel's platform lease and gateway origin to discover authorized models. The Runtime never receives a platform Provider API key. Floret continues to own thread execution, tools, canonical history, and recovery; the platform Edge owns authorization, binding, reservations, and final accounting.
+Redeven discovers authorized models via trusted control-channel lease/origin; Runtime never receives platform Provider keys. Floret owns execution/tools/history/recovery; platform Edge admission/binding/reservations/accounting. Routing does not transfer these ownership boundaries.
 
 # Contract
 
@@ -27,6 +27,5 @@ The public Runtime does not configure LiteLLM, store its master key, settle bill
 
 # Evidence
 
-- `redeven:internal/ai/platform_catalog.go` — request-local catalog and owner-scoped preference projection.
-
-- `redeven:internal/ai/floret_provider.go` — Floret identity and bounded auxiliary requests.
+- `redeven:internal/ai/platform_catalog.go`
+- `redeven:internal/ai/floret_provider.go`

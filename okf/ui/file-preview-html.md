@@ -30,6 +30,5 @@ Edit opens the existing HTML source editor only when write permission permits. A
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.tsx` - Product placement over published HTML isolation/explicit source edit.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.browser.test.tsx` - Actual HTML/CSS/script rendering, isolation, edits, mobile/wheel behavior.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.browser.test.tsx` - Tests.

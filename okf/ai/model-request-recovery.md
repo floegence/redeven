@@ -50,9 +50,8 @@ sent. Localized copy preserves saved-result and explicit-retry guidance.
 
 # Evidence
 
-- `redeven:internal/ai/floret_request_timeout_integration_test.go` - Stream/argument deadlines, typed failure and resource release without dispatch.
-
-- `redeven:internal/ai/provider_failure.go` - Structured response-time retry advice and safe diagnostics.
-- `redeven:internal/ai/provider_failure_details_test.go` - Local failures, Desktop RPC, cancellation, retry advice and safe logs.
-- `redeven:internal/ai/model_gateway_chatgpt_floret_test.go` - Canonical failure detail preservation across restart.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx` - Visible failure reason and complete copyable attempt evidence.
+- `redeven:internal/ai/floret_request_timeout_integration_test.go` - Tests.
+- `redeven:internal/ai/provider_failure.go` - Source.
+- `redeven:internal/ai/provider_failure_details_test.go` - Tests.
+- `redeven:internal/ai/model_gateway_chatgpt_floret_test.go` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.contextErrors.test.shared.tsx` - Tests.

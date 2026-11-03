@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Flowersec owns encryption, carrier/multiplexing/framing/backpressure; Redeven owns resources, authorization and routing. All graphical state, tickets, input, clipboard, audio, pixels and disconnect use native session proxy. Static bootstrap/acquisition stays authenticated browser traffic. Missing authority fails closed; raw graphical HTTP/WS bypass is forbidden.
+Flowersec owns encrypted multiplexed transport/backpressure; Redeven resources/authorization/routes. Graphical state, tickets, input, clipboard/audio/pixels/disconnect use native proxy; static acquisition stays authenticated browser traffic. No missing-authority or raw HTTP/WS bypass.
 
 # Contract
 

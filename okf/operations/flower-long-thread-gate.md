@@ -3,48 +3,48 @@ type: Validation Contract
 title: Flower explicit long-thread qualification
 tags: [flower, performance, correctness, gates]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Complete long-conversation content and responsive interaction are required product properties. Run this fixed-budget suite explicitly for acceptance/investigation, outside unified commit, integration and CI gates; it is not a prerequisite for each commit.
+Complete conversations and responsive interaction are required. Run fixed-budget long-thread checks explicitly for acceptance/investigation, outside commit/integration/CI gates. Preserve failures and exact source/cleanup evidence; neither a reduced workload nor prior-tip timing qualifies changed product code.
 
 # Contract
 
-## Execution and evidence
-Run node scripts/check_flower_long_thread.mjs --fast for focused regressions; omit --fast for browser/sustained acceptance. Require frozen published Desktop/Env dependencies and visible composited Electron; unavailable prerequisites fail. The qualification host mirrors production Desktop's disabled background throttling so an inactive native window retains the same animation/timer policy. Unified gate manifests exclude this explicit suite.
+## Execution/evidence
+node scripts/check_flower_long_thread.mjs --fast runs focused regressions; omit flag for sustained/browser. Frozen published Desktop/Env dependencies and visible composited Electron required. Host matches production disabled background throttling for inactive-window timers/animation. Unified gates exclude suite.
 
-Record exact source/tree/cleanliness, tools/dependencies, metrics and supervised cleanup. Changed product/dependencies invalidate performance evidence; policy-only changes may cite prior unchanged-product evidence separately, never relabel an unmeasured tip. Nonzero/interrupted runs, missing tests/metrics/tools or failed cleanup fail. Preserve negative 110 ms latency/21 commits-per-second regression and profile-exclusion test. No workload/threshold override or waived failure.
+Record source/tree/cleanliness/tools/dependencies/metrics/supervised cleanup. Product/dependency changes invalidate timing; policy-only may cite unchanged-product evidence without relabeling tip. Nonzero/interrupted/missing metric-test-tool/cleanup failure fails. Retain110ms/21commits-s negative regression and profile-exclusion test; no threshold/workload override or waiver.
 
 ## Correctness
-Fast checks cover indexed records, queues, windows, turn/disclosure identity, block invalidation, keyed disposal, local thinking, structural/mutable dependencies, sealed bodies and incremental Markdown. Each sequence entry has one mounted owner; classification stays stable while live fields and first-prose boundaries update. Removed owners dispose. Title identity classifies once, visibility only on admission/claim; grouping never rescans completed bodies. Restored titles stay static. Cover 600 retained rows and actual browser arrival.
+Fast suite covers records/queues/windows/turn-disclosure identity, invalidation/keyed disposal/local thinking, structural-mutable dependencies,sealed bodies/incremental Markdown. Each sequence entry has one mounted owner; classification stable while live fields/prose boundaries change. Dispose removed owners. Titles classify once, visibility only admission/claim; no completed-body regroup scans. Restore static. Cover600 retained rows/real arrivals.
 
-Per-group disclosure observers update only changed blockers; removed groups dispose. A 600-group case forbids repeated historical folding. Body growth cannot advance restoration provenance; full hydration retains its boundary. Root/child regressions preserve fresh motion through history scans. Correct anchors synchronously on loading completion, not byte growth. Structural batches publish membership once after records are ready, without per-replacement rescans. Parent intervals own coverage independently of text; immutable turn facts add no per-field subscriptions. Cover history/reconnect/selection/input/approval/terminal state.
+Per-group observers touch changed blockers only; dispose removed groups.600-group case forbids historical refolding. Body growth cannot advance restore provenance; full hydration retains boundary. Root/child preserve fresh motion through scans. Correct anchors on loading completion,not bytes. Structural batches publish once after records,not each replacement. Parent interval owns coverage apart from text; immutable turns add no field observers. Cover history/reconnect/selection/input/approval/terminal.
 
-Sustained fixture creates 500 canonical turns, 1,000 messages and 1,000 tools through real Service/published Floret/fake providers, verifying all admitted content. No paid provider, user state, raw DB writes or product fallback. Produce mixed text/reasoning/Markdown at 80 updates/s, one tool per 60 updates and initial 32 KiB body independently of UI; accumulate >=120 seconds in one active turn.
+Sustained fixture admits500 turns/1000 messages/1000 tools through Service/published Floret/fake providers,verifies complete canonical content. No paid model/user state/raw DB writes/fallback. Independently produce text/reasoning/Markdown80updates-s,tool/60updates,initial32KiB,>=120s one active turn.
 
-After canonical terminal observation, use actual history/disclosure controls to compare every generated prose/reasoning item and exact code blocks with canonical content/full Markdown. Enter reading mode and reveal parents before children; never force hidden clicks/change disclosure state. Draft/focus/selection survive drag. Synthetic floating output does not qualify terminal emulation.
+After canonical terminal, real history/disclosure compares every prose/reasoning/exact code block to canonical/full Markdown. Enter reading mode,reveal parents first; no forced hidden clicks/disclosure mutation. Draft/focus/selection survive drag. Floating output is not terminal emulation proof.
 
-## Responsiveness
-Sample idle/early/late/repeat on the same visible production UI with two PersistentFloatingWindows, >=12 monotonic seconds each. Cancellation, button release, blur or hidden document invalidates samples. Dedicated nonfocusable Electron host uses the primary display work-area origin for repeatable visible placement and installs pointer isolation before showing, preventing native keyboard input while retaining real composition, CDP input, DOM focus and interruption checks. Assert both drafts before and throughout sampling.
+## Timing
+Same visible production UI/two PersistentFloatingWindows: idle/early/late/repeat each>=12 monotonic seconds. Cancel/release/blur/hidden invalidates sample. Nonfocusable Electron uses primary work-area origin and pointer isolation before show, preserving real composition/CDP/DOM focus/interruption. Assert both drafts throughout.
 
-Read counter before press; one CDP session performs press/move/release with no intervening backend calls. Use Chromium monotonic timestamps. Independent 60 Hz producer cannot await dispatch: offer >=55 events/s and require >=45 position commits/s and >=80% idle cadence.
+Read counter before press; one CDP session press/move/release, no backend calls between. Chromium monotonic time; independent60Hz producer cannot await dispatch. Offer>=55events-s, require>=45position-commits-s and>=80% idle cadence.
 
-Fixed budgets: presented drag P95 <=75 ms; work-minus-idle <=25 ms; >=95% prose markers with P95 <=250 ms; frame P95 <=25 ms; reactive apply P95 <=12 ms/max <=50 ms; no main-thread task >=100 ms. Known regressions do not relax them; they are requirements, not universal/photon claims.
+Budgets: drag P95<=75ms,work-minus-idle<=25ms; >=95% prose markers/P95<=250ms; frame P95<=25ms; reactive P95<=12ms/max50ms; no main-thread task>=100ms. Regressions never relax budgets; no universal/photon claim.
 
-Pair complete MOUSE_DRAGGED async spans by process/identity/scope with compositor presentation. Report coalesced/unpresented separately and require >=30 presented samples/s. Healthy rAF cannot prove input responsiveness. No profiling/screencast during timing.
+Pair complete MOUSE_DRAGGED async spans by process/identity/scope to compositor presentation. Report coalesced/unpresented separately;>=30presented-s. Healthy rAF is not input proof. No profiling/screencast during timing.
 
 # Boundaries
 
-Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Metrics/traces stay outside Git; reports identify source/locks/host. The local Go fixture exports private, exclusive-create setup/configuration/canonical evidence through an owner-selected directory handle. HTTP counters are projected to finite nonnegative safe integers; network response bodies and unknown fields cannot become evidence files. Dirty development samples cannot certify committed tips. Seeding verifies complete canonical results once instead of rescanning every prefix; coverage is unchanged.
+Desktop supervisor owns fixture/build/Electron/state/profile/ports and verifies cleanup. Keep metrics/traces outside Git with source/locks/host. Go fixture exports private exclusive-create config/canonical evidence through owner-selected directory handle. Only finite nonnegative safe-integer HTTP counters; response bodies/unknown fields never become evidence files. Dirty samples certify no commit. Seed complete canonical results once,not each prefix,without reducing coverage.
 
-Reduce synchronous envelope work through stable turn/row inputs, keyed subscriptions, linear membership and bounded offscreen layout with reading/selection/focus pins. Retain DOM/disclosure owners, including growing active turns; this is layout containment, not virtualization. Partition construction visits each retained entry once per structural change; never rescan the remaining active-turn suffix for each section. Preserve mounted partition keys through prepend, growth and completion. Preserve order/boundaries/full history/drafts/disclosure. Throttling, suppressed output, extra lifecycle or shortened fixtures cannot substitute.
+Optimize stable inputs/keyed subscriptions/linear membership/bounded offscreen layout with reading-focus-selection pins. Retain DOM/disclosure even growing active turns: containment,not virtualization. Visit entries once/structural change,not suffix per section; keep partition keys through prepend/growth/completion and preserve full order/history/drafts/choices. No throttling,suppressed output,new lifecycle or shorter fixtures.
 
-Floe owns shared floating mechanics; Redeven owns projection. Published shimmer pauses decorative paint only during shared drag/resize, retaining identity/phase. Text/tokens/content/terminal state stay live. Browser checks cover release/cancellation/blur and preserved preview drafts/selection. Workload and budgets remain unchanged.
+Floe owns floating mechanics; Redeven projection. Published shimmer pauses only decoration during shared drag/resize,retaining phase/identity. Text/tokens/content/terminal remain live. Browser checks release/cancel/blur and preview drafts/selection; budgets unchanged.
 
 # Evidence
 
-- [Explicit runner and regression suites](../../scripts/check_flower_long_thread.mjs)
-- [Sustained runtime runner](../../scripts/qualify_flower_long_thread.mjs)
-- [Budgets and fail-closed evaluator](../../scripts/flower_long_thread_contract.mjs)
-- [Explicit-execution policy and negative tests](../../scripts/flower_long_thread_contract.test.mjs)
+- [Runner/regressions](../../scripts/check_flower_long_thread.mjs)
+- [Sustained runner](../../scripts/qualify_flower_long_thread.mjs)
+- [Budgets/evaluator](../../scripts/flower_long_thread_contract.mjs)
+- [Policy/negative tests](../../scripts/flower_long_thread_contract.test.mjs)

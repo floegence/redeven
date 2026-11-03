@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Upstream owns acquisition/format validation; Redeven owns authenticated import, review and active-source pointer. Import public/private GitHub templates via Desktop or Runtime without git. Credentials are request-scoped. No background updates, installs, scripts or restarts. Failure preserves active source and blocks only its template; no old-definition fallback.
+Upstream acquires/validates templates; Redeven authorizes import/review/active pointer. Public/private GitHub import uses request-scoped credentials without git. No background updates or lifecycle effects; failure preserves active source and blocks only affected template.
 
 # Contract
 
@@ -36,6 +36,7 @@ Host hooks receive `REDEVEN_TEMPLATE_DIR` for original helper files. [Registry m
 
 # Evidence
 
-- `redeven:internal/managedwebservice/template_sources.go` - Git-source review/current identity/confirmation/orphan cleanup.
-
+- `redeven:internal/managedwebservice/template_sources.go` - Source.
 - `redeven:internal/portforward/registry/template_sources_test.go` - v4→v5 migration, rollback/stale rejection, no executable projection.
+
+- `redeven:internal/portforward/registry/template_sources_test.go` - Tests.

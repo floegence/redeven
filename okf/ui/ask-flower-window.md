@@ -29,6 +29,5 @@ Redeven supplies the Ask Flower placement policy and host measurements; publishe
 
 # Evidence
 
-- `redeven:desktop/src/shared/askFlowerWindowViewport.tsx` - Host header measurement and native chrome subscription.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Env App host integration.
+- `redeven:desktop/src/shared/askFlowerWindowViewport.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Source.

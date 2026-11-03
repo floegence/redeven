@@ -7,12 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe Webapp owns the shared Dialog structure. Redeven supplies localized
-titles, body guidance, and actions. Headers contain identity and controls;
-instructions and consequences belong in the body. This applies to ordinary
-dialogs, confirmation dialogs, drawers, and window-local confirmations. A missing
-or misplaced description is a content integration failure, never a reason to
-restore a header subtitle or hide the text.
+Published Floe owns Dialog structure; Redeven supplies localized content/actions. Headers hold identity/controls; guidance and consequences belong in bodies, including drawers and confirmations. Missing descriptions require content fixes, not hidden text or header subtitles.
 
 # Contract
 
@@ -48,10 +43,8 @@ Headers contain identity and controls only. Missing guidance must be repaired in
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Uses the published Dialog and ConfirmDialog contracts.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Window-local confirmation inside scrollable body.
-
-- `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Real Floe global/local dialog geometry, native headers, safe insets and resizing.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Header-bounded desktop/phone settings, nested editors and stable loading.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Short-window bounds, title editing, saving and focus behavior.
+- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/styles/dialogHeaderBounds.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop manages SSH-host and SSH-container Runtime only through the saved connection and placement. One process-local lifecycle coordinator, Launcher Operation, transport lease and temporary helper serve Start, Stop, Restart, Update, Refresh, Open recovery and Reinstall. Gateway/Provider credentials never substitute for SSH authority. The target stores no Desktop lifecycle lock or supervisor state.
+Desktop uses saved SSH connection/placement for host/container Runtime. One local coordinator, operation, transport lease and temporary helper own lifecycle/recovery. Gateway/Cloud credentials grant no SSH authority; targets persist no Desktop supervisor or lifecycle lock.
 
 # Contract
 
@@ -38,6 +38,6 @@ SSH registrations retain direct lifecycle menus. Gateway/Provider-only entries c
 
 # Evidence
 
-- `redeven:desktop/src/main/sshTransportManager.ts:1` - Credential-scoped SSH transport reuse and cancellation.
-- `redeven:desktop/native/windows-ssh/main.go:1` - Native Windows askpass prompt and credential boundary.
-- `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Platform execution, classification and owned cleanup.
+- `redeven:desktop/src/main/sshTransportManager.ts:1` - Source.
+- `redeven:desktop/native/windows-ssh/main.go:1` - Source.
+- `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Tests.

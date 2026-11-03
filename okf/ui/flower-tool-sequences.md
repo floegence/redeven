@@ -7,50 +7,48 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Desktop/Env App group consecutive tools with adjacent thinking. Active groups open; following prose or canonical turn end folds eligible groups, never temporary gaps. Explicit inspection survives; answered input splits settled work. This is ephemeral presentation over Floret facts, without canonical summaries or migrations.
+Desktop/Env App group consecutive tools and adjacent thinking. Active groups open; following prose or canonical turn end folds eligible work, never temporary gaps. Inspection survives and answered input separates settled work. Presentation stays ephemeral over Floret facts without summaries or migrations.
 
 # Contract
 
 ## Membership and counts
-Group >=2 same-thread/turn/run nodes including a tool; thinking qualifies. Preserve call/error/preview/output order and canonical row identity. New singleton may settle prior work without overriding inspection. Thinking moves in place; first canonical node owns DOM while the loaded anchor retains disclosure through paging/navigation.
+Group>=2 same-thread/turn/run nodes including a tool; thinking qualifies. Preserve canonical row/call/error/preview/output order. New singleton may settle prior work without overriding inspection. Thinking moves in place; first canonical node owns DOM, loaded anchor preserves disclosure through paging/navigation.
 
-Prose/users/interactions/compaction/approvals/non-tool errors/Goal updates break groups; Goal/Web Search calls remain tools. Canonically scoped SubAgent calls/report/completion and running attention/waits join, unknown parent ownership/other waits break. Exact uncertain tool errors remain grouped with complete-coverage unconfirmed counts; invalid success-with-uncertainty or uncertain parent lifecycle breaks. Empty assistant placeholders are transparent, unknown text cannot prove continuity. Answered input splits settled work, including newest groups.
+Break on prose/users/interactions/compaction/approvals/non-tool errors/Goal updates; Goal/Web Search calls remain tools. Scoped SubAgent call/report/completion/running-attention/waits join; unknown parent/other waits break. Exact uncertain tool errors join with complete-coverage unconfirmed counts; invalid success-with-uncertainty or uncertain parent lifecycle breaks. Empty placeholders transparent, unknown text proves no continuity. Answered input splits even newest settled group.
 
-[Typed observation interruptions](flower-activity-interaction.md#observation-interruptions) remain grouped with their canonical execution status, but do not increment user-visible failure counts in groups or turns. Unknown effects keep unconfirmed counts.
+[Typed observation interruptions](flower-activity-interaction.md#observation-interruptions) retain status/grouping without visible failure counts; unknown effects keep unconfirmed counts. Exact boundaries/item/events permit counts even in partial windows. Otherwise show only localized Consecutive tool calls/accessibility name, no partial total/latest/loading. Keep known failures; counts acquire no history/body. Paging preserves disclosure/focus/selection.
 
-Counts require exact boundaries/item/event coverage, possible even in partial windows. Otherwise show only localized Consecutive tool calls and its accessible name, without partial totals/latest tool/loading. Preserve known failure details. Statistics never acquire history/bodies. Paging fills coverage without losing disclosure/focus/selection.
-
-Sparse islands group only with accepted endpoint continuity proofs. Reuse Floret facts or <=8 indexed reads per explicit baseline, sharing maximal results; ordinary streaming does no queries. Hidden prose/compaction/interaction/unknown receipts/active or unsafe facts/scope changes break proof. Metadata is ephemeral; retain only surviving endpoints. Explicit expansion fills <=40 missing items/page without tail resampling or retransmitting retained islands.
+Sparse islands need accepted endpoint proofs from Floret or<=8 indexed reads/explicit baseline, sharing maximal results; streaming queries none. Hidden prose/compaction/interactions/unknown/active/unsafe/scope changes break proofs. Ephemeral metadata retains surviving endpoints. Expansion fills<=40 missing items/page without tail resampling/retained retransmission.
 
 ## Disclosure and bodies
-Settle historical group/turn defaults without motion before exposure; retain explicit choices and animation eligibility. Only admitted live arrivals fold before prose. Wait for row placement; folded turns skip inner positioning. Choices key Runtime/thread/tool and survive updates/reconnect/navigation until refresh. Focus/selection/gestures/open details/away-from-tail reading protect expansion but cannot reopen closed groups. Only explicit disclosure/navigation reopens. Observers are per-group.
+Historical group/turn defaults settle statically before display, retaining explicit choices/eligibility. Only admitted live arrivals fold before prose after row placement; folded turns skip inner placement. Choices key Runtime/thread/tool through updates/reconnect/navigation until refresh. Focus/selection/gestures/details/away-from-tail protect expansion, never reopen closed groups; only explicit disclosure/navigation reopens. Observe per group.
 
-Live fold: 260 ms to summary height (2rem desktop/2.75rem coarse), never zero. Summary fades in for last 100 ms after 140 ms delay. Incoming prose stays mounted/inert/invisible until settled, then 160 ms opacity-only reveal. Delivery continues. Existing prose, inspected/history/navigation/reduced-motion work never waits.
+Live fold260ms to summary height2rem desktop/2.75rem coarse, not zero. Summary fades last100ms after140ms; new prose remains mounted/inert/invisible then reveals opacity160ms. Delivery continues; existing/inspected/historical/navigation/reduced-motion prose never waits.
 
-Finish title arrivals first. Terminal outer turn owns motion and intact nested geometry; interrupted inner fold transfers opacity/transform. One pending-content map tracks owner/later prose. Reversal waits for new motion; disposal/reduced motion releases content. Measure row once; no per-tool timer/observer/per-frame reactive state.
+Finish titles first. Terminal outer turn owns motion/nested geometry; interrupted inner fold transfers painted opacity/transform. One pending map binds later prose to owner. Reversal awaits new motion; dispose/reduced motion releases. Measure once, no per-tool timer/observer/frame reactive state.
 
-Closed groups mount shells/summary; first opening mounts bodies, later folds keep them inert. Closed new members wait; whole-turn folding retains inspected bodies. Borrow/restore existing DOM owners at first-node viewport; preserve nested focus/selection/state. Change projections only for membership/status/disclosure/order. Sealed thinking reads only when explicitly open and visible through clips; observe its movable displayed node. Shared two-slot queue prioritizes interaction, cancels obsolete demand and reuses text. Unopened tools read/mount no bodies.
+Closed groups mount shells/summary; first open mounts bodies, subsequent folds retain inert bodies. New closed members wait; whole-turn folds retain inspected bodies. Borrow/restore existing DOM at first-node viewport with focus/selection/state. Reproject only membership/status/disclosure/order. Sealed thinking reads only explicitly open/visible through clips, observing movable displayed node. Shared two-slot read queue prioritizes interaction/cancels obsolete/reuses text. Unopened tools mount/read no bodies.
 
 ## Progressive completion
-Only explicit group opening or enclosing-turn opening that reveals an open group completes missing boundaries; automatic live groups never traverse history. Keep rows usable; transfer inner/outer anchors, focus and detail owners before paint when first node changes. Explicit reopen retains latest-tools destination.
+Only explicit group/enclosing-turn opening that reveals open group completes boundaries; auto-live groups never traverse history. Before paint transfer anchors/focus/detail owners when first node changes. Reopen retains latest-tools destination.
 
-Accept immutable pages without overwriting newer facts/bodies; mutable new IDs join existing bounded tail observation. Fence responses by thread/connection/navigation/document. Collapse stops demand but abort-ignoring transports keep physical slot until settlement. Sample finite tail once; never chase output. Empty exhausted boundaries finish; nonadvancing pages fail without loop. After 15 s show Retry without releasing unsettled slot. Parent receipts reuse interval event reads; no hidden terminal/thinking/report body acquisition.
+Immutable pages never overwrite newer facts/bodies; mutable IDs join bounded tail observation. Fence by thread/connection/navigation/document. Collapse cancels demand but abort-ignoring transport holds physical slot until settlement. Sample finite tail once, never chase output. Empty exhausted boundaries finish; nonadvancing fails.15s exposes Retry without releasing unsettled slot. Parent receipts reuse interval events; no hidden terminal/thinking/report bodies.
 
 ## Geometry and input
-Tool/thinking titles, summaries and times use 13px/18px across states. Prose/icons/summary/progress share left edge; permanent outer/native gutters prevent shifts and blank title rows, including child views. Full-row targets place time/chevron after intrinsic text; only long text shrinks. CSS owns geometry, no text-measure loop.
+Tool/thinking titles/summaries/times13px/18px. Prose/icons/summary/progress share edge; permanent gutters avoid shifts/blank titles, including children. Full-row targets put time/chevron after intrinsic text; only long text shrinks. CSS owns geometry, no text-measure loop.
 
-One native left gutter button/bracket collapses: 24px target, 44px coarse, outside tools. Folded button covers summary with trailing chevron; stable crossfade bounds prioritize counts. Rail stays outside scrolling body and ends before prose; no row connectors/hit-testing loop. Rows 2rem/2.75rem; sequence <=8 rows and 65% transcript, thinking <=20rem/45% window/transcript. Short content retains natural height; thin scrollbars and localized keyboard controls stay accessible.
+One outer left native bracket/button collapses:24px target/44px coarse. Folded button covers summary/trailing chevron; stable crossfade prioritizes counts. Rail remains outside scroll body and stops before prose, no row connectors/hit-test loop. Rows2rem/2.75rem; sequence<=8rows/65% transcript; thinking<=20rem/45% window/transcript. Natural short height, thin scrollbars/localized keyboard remain.
 
-Native scroll chaining serves thinking/sequences/read-only terminals/files/diffs/code: consume local range, propagate edges. Upward wheel/touch/key intent pauses following, actual bottom return resumes. Canceled/contained/zoom input stays local; interactive editors own input. Shared input-aware controller distinguishes user actions from geometry/programmatic events. Mounted children retain nested anchors. Explicit open positions latest tools before paint; navigation waits for row and destination placement. Restored detail is static; manual folds stay closed. Complete counts may name latest tool without reading body. Collapse focuses trigger; thinking retains offset/completion. [Activity motion](flower-activity-interaction.md#visual-motion) owns arrival coordination.
+Native scroll consumes local then chains at edges for thinking/sequences/read-only terminals/files/diffs/code. Upward wheel/touch/key pauses follow; actual bottom return resumes. Canceled/contained/zoom stays local; editors own input. Shared controller separates user/programmatic/geometry. Retain nested anchors. Explicit open positions latest tools before paint; navigation waits for row/destination. Restore static, manual folds closed. Complete counts may name latest without body read. Collapse focuses trigger; thinking retains offset/completion. [Activity motion](flower-activity-interaction.md#thinking-and-motion) coordinates arrival.
 
-Expose viewport IDs/localized counts; closed members leave no gaps/ineligible headers. [Turn folding](flower-turn-process-disclosure.md) owns automatic content anchors; manual toggles retain trigger. Both catalogs cover narrow/touch/focus/reduced-motion/forced colors.
+Expose viewport IDs/localized counts; folded members leave no gaps/ineligible headers. [Turn folding](flower-turn-process-disclosure.md) owns auto anchors; manual retains trigger. Both catalogs cover narrow/touch/focus/reduced-motion/forced colors.
 
 # Boundaries
 
-Sequence state cannot authorize tools, summarize context, infer effects or persist lifecycle. Published components/canonical timeline own behavior; see [activity](flower-activity-interaction.md) and [whole-turn disclosure](flower-turn-process-disclosure.md).
+Sequences never authorize tools, summarize context, infer effects or persist lifecycle. Published components/canonical timeline own behavior; [activity](flower-activity-interaction.md) and [turn disclosure](flower-turn-process-disclosure.md) define adjacent policies.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Sequence classification/counts/boundaries/identity.
-- `redeven:internal/flower_ui/src/flowerToolSequenceLayout.ts` - Stable row placement inside a shared bounded viewport.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - First-line geometry, native disclosure and bounded retained scrolling.
+- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Tests.
+- `redeven:internal/flower_ui/src/flowerToolSequenceLayout.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Tests.

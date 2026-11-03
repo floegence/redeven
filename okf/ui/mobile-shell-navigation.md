@@ -29,6 +29,5 @@ Desktop transitions close mobile navigation and restore the framework toolbar wi
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Shell navigation, handoff and disclosure coordination.
-
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx` - Retains plugin content while Shell owns mobile placement.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx` - Source.

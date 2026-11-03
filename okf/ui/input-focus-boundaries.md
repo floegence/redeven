@@ -7,11 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published floe-webapp owns input focus presentation. Redeven supplies product
-layout, semantic state, and one declared boundary for custom compound inputs.
-Focus changes only the existing border color; geometry and decorative shadows
-stay stable. Conflicting host styles fail source or browser checks and must be
-removed at their owner. No fallback stylesheet overrides the released contract.
+Published Floe owns focus presentation; Redeven supplies layout, semantic state and explicit compound-input boundaries. Focus changes border color only, preserving geometry/shadows. Fix conflicting styles at their owner with source/browser checks; no fallback stylesheet.
 
 # Contract
 
@@ -29,6 +25,5 @@ Third-party frames, separate application views, and editor-internal input carrie
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/package.json` - Published Floe dependency and source-policy checks.
-
-- `redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx` - All themes, compound/readonly/disabled/invalid/forced-color focus.
+- `redeven:internal/envapp/ui_src/package.json` - Source.
+- `redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx` - Tests.

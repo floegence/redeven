@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Desktop associates Gateway routes only after matching attachment ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.
+Desktop associates Gateway routes only through trusted attachment ID, Runtime public ID and Gateway-key matches; health is independent. Names/URLs/renderer claims grant nothing. Local/Cloud ownership stays separate; missing/unverified routes require explicit replacement.
 
 # Contract
 
@@ -43,6 +43,5 @@ This contract owns display association and route selection. Proof observation ne
 
 # Evidence
 
-- `redeven:internal/runtimeidentity/access_identity.go` - State identity, exclusive initialization and nonce proof.
-
-- `redeven:internal/localui/access_identity_test.go` - Public/private identity and independent Runtime auth.
+- `redeven:internal/runtimeidentity/access_identity.go` - Source.
+- `redeven:internal/localui/access_identity_test.go` - Tests.

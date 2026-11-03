@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Applications own execution; Redeven owns authorized lifecycle, native identity, launch records and opening validation. Desktop/Runtime restart or upgrade preserves launched PID/generation. No supervisor, app-specific driver, output pipe or PID-only authority. Distinguish absence/mismatch/uninspectability; only proven absence permits startup, and opening failure never stops the app.
+Apps own execution; Redeven owns authorized lifecycle/native identity/launch records/opening. Restart preserves PID/generation. No supervisor or PID-only authority. Distinguish absent/mismatched/uninspectable: only absence permits launch; opening failure never stops app.
 
 # Contract
 
@@ -34,6 +34,5 @@ Imported Host templates receive `REDEVEN_TEMPLATE_DIR` pointing to the active or
 
 # Evidence
 
-- `redeven:internal/managedwebservice/custom_host.go` - Session launch/durable identity gate and explicit Stop.
-
-- `redeven:internal/managedwebservice/process_identity_linux.go` - Native Linux boot, ticks, user, and namespace facts.
+- `redeven:internal/managedwebservice/custom_host.go` - Source.
+- `redeven:internal/managedwebservice/process_identity_linux.go` - Source.

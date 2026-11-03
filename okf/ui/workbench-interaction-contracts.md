@@ -7,13 +7,11 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Workbench interaction is governed by explicit ownership contracts rather than widget-specific event heuristics. This overview is the canonical navigation point for input ownership and surface lifecycle. Focused concepts define wheel, pointer, text, terminal, selection, recovery, lazy loading, and shared overlay behavior without mixing those independent responsibilities into one retrieval unit.
+This is the navigation point for explicit Workbench input and surface ownership. Focused concepts define wheel, pointer, text, terminal, selection, recovery, loading and overlays. Keep those responsibilities distinct rather than introducing widget-specific event heuristics.
 
 # Contract
 
 ## Mechanism
-This concept is the stable overview for the subject.
-
 - [Workbench surface lifecycle](workbench-surface-lifecycle.md)
 
 # Boundaries
@@ -22,6 +20,5 @@ Workbench widgets must not infer canvas, input, recovery, focus, or overlay owne
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Wheel ownership uses a dedicated data attribute.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Singleton reuse without implicit centering when focus is disabled.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests.

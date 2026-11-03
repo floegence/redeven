@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-The Runtime Service snapshot is a typed boundary between Runtime, Desktop and Local UI. Runtime protocol/version, compatibility epoch, capabilities, service readiness and workload identity are explicit facts. Gateway attachments are optional access paths; their absence never disables independent Runtime access or host-authorized lifecycle management.
+Typed Runtime snapshots expose protocol/version, compatibility epoch, capabilities, readiness and workload identity to Desktop/Local UI. Gateway attachment is optional routing, never a prerequisite for independent access or authenticated host lifecycle management.
 
 # Contract
 
@@ -31,6 +31,5 @@ Portal control-channel fences protect Provider authorization. Gateway attachment
 
 # Evidence
 
-- `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.
-
-- `redeven:internal/runtimeservice/workload.go:1` - Workload admission/leases/revisions and supervisor impact.
+- `redeven:internal/runtimeservice/snapshot.go:1` - Source.
+- `redeven:internal/runtimeservice/workload.go:1` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Desktop admits a managed Environment only after its exact direct target reports compatible Runtime service and Local UI readiness. Gateway/Provider/URL access readiness is separate. Missing, stopped, outdated or damaged Runtime selects direct Start, Update or reinstall recovery. Startup status gaps remain bounded waits. Retained diagnoses preserve presentation only; current Presence and command-time validation own authority.
+Managed Environments need exact-target compatible Runtime/Local UI readiness. Gateway/Cloud/URL access is separate. Missing/stopped/outdated/damaged Runtime offers direct recovery. Startup waits are bounded; retained diagnoses present state but current Presence owns authority.
 
 # Contract
 
@@ -31,6 +31,5 @@ Only Desktop chooses managed Runtime recovery. Optional platform display fields 
 
 # Evidence
 
-- `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.
-
-- `redeven:desktop/src/main/runtimeProcess.ts:1` - Local inventory and status lookup path contract.
+- `redeven:desktop/src/main/desktopBundle.ts:1` - Source.
+- `redeven:desktop/src/main/runtimeProcess.ts:1` - Source.

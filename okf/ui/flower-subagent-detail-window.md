@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The child detail window reads the complete canonical Floret `ThreadView`. HTTP and live updates share the selected parent-child identity, while Activity and queued-input controls remain attached to the same canonical child. The window preserves navigation and scroll state across updates without creating a second transcript or lifecycle owner.
+Child windows read full canonical ThreadView through matching parent-child HTTP/live identities. Activity/queue controls stay attached to that child. Updates retain navigation and scroll; presentation neither copies transcript nor creates a second lifecycle authority.
 
 # Contract
 
@@ -23,8 +23,6 @@ The detail window must not infer membership from activity, poll for updates, swi
 
 # Evidence
 
-- `redeven:internal/ai/flower_current_projection.go` - Shares the safe current projection between HTTP and SSE.
-
-- `redeven:internal/flower_ui/src/threadCache.ts` - Bounded detail/root cleanup, capacity, reconnect, attention and release.
-
+- `redeven:internal/ai/flower_current_projection.go` - Source.
+- `redeven:internal/flower_ui/src/threadCache.ts` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/flower/SubagentDetailWindow.progressDock.browser.test.tsx` - Centered footer below transcript; stable pill/inset as tokens grow 11 to 1234567.

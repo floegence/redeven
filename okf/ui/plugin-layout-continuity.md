@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven persists exact plugin widget/instance/surface identity and geometry; ReDevPlugin owns live authority. Upgrade, disable, permission/reconnect failures retain placement. Only explicit removal or confirmed exact-instance uninstall deletes it. Recovery reconciles unknown outcomes without focusing/rearranging the canvas or silently recreating authority.
+Redeven persists exact widget/instance/surface geometry; ReDevPlugin owns authority. Upgrade/disable/permission/reconnect errors retain placement. Only explicit removal or confirmed exact uninstall deletes. Unknown outcomes reconcile without moving canvas or recreating authority.
 
 # Contract
 
@@ -29,6 +29,5 @@ Redeven layout operations never grant plugin authority or inspect platform store
 
 # Evidence
 
-- `redeven:internal/workbenchlayout/plugin_widgets.go:1` - Atomic exact-instance layout/event mutation.
-
-- `redeven:internal/workbenchlayout/plugin_widgets_test.go:1` - Idempotency/concurrency/rollback and geometry preservation.
+- `redeven:internal/workbenchlayout/plugin_widgets.go:1` - Source.
+- `redeven:internal/workbenchlayout/plugin_widgets_test.go:1` - Tests.

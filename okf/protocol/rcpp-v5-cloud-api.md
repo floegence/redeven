@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-RCPP v5 separates Cloud authorization from network route. CloudRuntimeBinding owns environment, Runtime identity, Namespace, user or Namespace principal and generation. One Runtime ConnectionController handles direct and Gateway enrollment, registration, heartbeat, reserve maintenance and recovery. Desktop never creates a second credential recovery owner.
+RCPP v5 separates Cloud authority from route. CloudRuntimeBinding binds Environment/Runtime/Namespace/principal/generation. One Runtime controller owns direct/Gateway enrollment, registration, heartbeat, reserve and recovery; Desktop never duplicates credential ownership.
 
 # Contract
 
@@ -21,8 +21,8 @@ Gateway owns Runtime attachments, invitations, local access, egress admission an
 
 # Evidence
 
-- `internal/runtimecloud/client.go:1` - Independent signed machine enrollment and recovery.
+- `internal/runtimecloud/client.go:1` - Source.
 
-- `internal/config/cloud_association.go:1` - Intent, identity, binding and selected route.
+- `internal/config/cloud_association.go:1` - Source.
 
-- `internal/agent/runtime_cloud.go:1` - Sole recovery source and owner fences.
+- `internal/agent/runtime_cloud.go:1` - Source.

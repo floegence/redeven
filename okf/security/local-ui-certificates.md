@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime validates saved HTTPS identity; registered Desktop management exposes explicit create/import/regenerate/remove. Validity, trust and operation result are independent. Never silently replace identity/install trust. Invalid imports preserve the pair; changes affect next HTTPS start, not running sessions. Default HTTP needs no certificate.
+Runtime validates HTTPS identity; Desktop offers explicit create/import/regenerate/remove. Trust, validity and operation result differ. Never replace identity/install trust silently; invalid import retains pair and changes affect next HTTPS start, not sessions. HTTP needs no certificate.
 
 # Contract
 
@@ -37,6 +37,5 @@ Runtime owns saved identity validation and replacement; Desktop owns explicit ma
 
 # Evidence
 
-- `redeven:internal/localui/public_address_refresh_test.go` - CA/import/signing recovery and real TLS/WSS/session continuity.
-
-- `redeven:internal/localui/device_identity.go` - Verified certificate import/replacement/recovery/removal and bind preflight.
+- `redeven:internal/localui/public_address_refresh_test.go` - Tests.
+- `redeven:internal/localui/device_identity.go` - Source.

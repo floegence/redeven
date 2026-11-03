@@ -8,13 +8,11 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.
-
-Pins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.
-
-[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.
+Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Manifest/lock pins define the consumed release; Floe owns asset monitoring and per-view recovery, while Redeven supplies authenticated product integration.
 
 # Contract
+
+Pins: Floe Boot/Core/Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.
 
 ## Mechanism
 
@@ -44,6 +42,5 @@ Redeven owns shell presets, permissions, credentials, path authority and placeme
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/package.json` - Published pins and matching overrides.
-
-- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - Published adapters preserve grants, ownership and debugger identity.
+- `redeven:internal/envapp/ui_src/package.json` - Source.
+- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - Tests.

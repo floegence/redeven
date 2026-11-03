@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floe Native Apps owns immutable `PreparedViewer` documents/assets, digests and capabilities. Redeven pins one snapshot per authorized Xpra share. Compatible surviving apps reconnect after viewer/Runtime updates without PID/content changes. Preparation failure offers retry, never historical resources. Backends and loaded modules retain process lifetimes without hot swaps.
+Floe Native Apps owns immutable viewer documents/assets/digests/capabilities; Redeven pins one per authorized Xpra share. Compatible apps reconnect after updates without PID/content changes. Preparation failure exposes Retry; backends/modules retain lifetimes without hot swaps.
 
 # Contract
 

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Desktop opens independently runnable Runtime through machine-readable startup, scoped transport and session contracts. Its process-local coordinator owns direct Local, WSL, SSH and container lifecycle. Gateway/Provider remain access routes. Runtime service, health, process and session observations cannot become competing owners; plugins use their released brokers rather than Desktop control credentials.
+Desktop opens independent Runtime through startup, scoped transport and sessions. Its process-local coordinator manages Local/WSL/SSH/container lifecycle; Gateway/Cloud remain routes. Observations never create competing owners; plugins use released brokers, not Desktop credentials.
 
 # Contract
 
@@ -21,5 +21,5 @@ Runtime control is Desktop coordination, not a general network API or plugin gra
 
 # Evidence
 
-- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts` - Single target owner.
-- `redeven:desktop/src/main/codespaceNativeSession.ts` - Isolated request authentication.
+- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts` - Source.
+- `redeven:desktop/src/main/codespaceNativeSession.ts` - Source.

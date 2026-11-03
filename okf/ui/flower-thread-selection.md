@@ -41,6 +41,5 @@ The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title e
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Shared read demand, confirmation, cancellation/retry and bounded idle records.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - First destination, cached/delayed reads, cancellation and explicit recovery.
+- `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - Tests.

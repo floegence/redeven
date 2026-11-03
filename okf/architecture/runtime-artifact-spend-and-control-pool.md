@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Remote control and data artifacts are opaque, single-spend capabilities. Redeven binds each Lease to one digest-global tombstone, persists idempotent bootstrap and top-up request identities, and rejects stale, duplicate, malformed, expired, or cross-environment responses before a connection can consume them. Pool replenishment and relink are terminal state transitions, never silent fallback.
+Opaque single-spend control/data artifacts bind each Lease to a digest-global tombstone. Persist idempotent bootstrap/top-up identities; reject stale, duplicate, malformed, expired or cross-environment responses. Replenishment/relink are explicit terminal transitions, never silent fallback.
 
 # Contract
 
@@ -21,6 +21,5 @@ This concept owns Redeven's durable spend ledger and control-artifact pool. Prod
 
 # Evidence
 
-- `redeven:internal/agent/agent.go:1149` - Lease digest ledger checked before connection.
-
-- `redeven:internal/agent/control_artifact_pool.go:67` - Validates top-up and ACK replay through one pending request.
+- `redeven:internal/agent/agent.go:1149` - Source.
+- `redeven:internal/agent/control_artifact_pool.go:67` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The native helper owns resolution/encoding; viewer owns preferences/statistics. Current-generation decoding precedes acknowledgement. Quality/reconnect preserves app identity and native-session permissions/input. Unavailable video selects explicit image transport; report actual producing transport. Capture failures retain the existing reconnect boundary.
+Native helper owns encoding/resolution; viewer preferences/statistics. Decode current generation before ack. Quality/reconnect preserves app identity/permission/input. Unavailable video explicitly uses image transport with actual source reported; failures retain reconnect policy.
 
 # Contract
 

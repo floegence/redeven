@@ -7,12 +7,7 @@ reviewed_at: "2026-10-29"
 ---
 # Summary
 
-Flower shows how long a dispatched model request has waited and how much output
-has arrived. Edit rows show line counts while their arguments are generated,
-then use the confirmed tool result. Published Floret v7.42.0 owns the generic
-in-memory progress and preview lifecycle; Redeven interprets its own tool JSON
-and presents the safe observations. No new journal records or schema changes
-are required.
+Flower presents dispatched-request waiting/output and provisional edit line counts, then confirmed results. Published Floret v7.42.0 owns in-memory progress/preview lifecycle; Redeven interprets safe product-tool JSON. Presentation adds no journal records or schema changes.
 
 # Contract
 
@@ -40,6 +35,5 @@ Floret owns request accounting and ephemeral thread snapshots. Redeven's pure ar
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/icons/FlowerIcon.tsx` — Shared petal geometry, light outline and original dark gradient artwork.
-
-- `redeven:internal/flower_ui/src/styles/flower.css` — Compact progress sizing, whole-bloom rotation and reduced-motion suppression.
+- `redeven:internal/flower_ui/src/icons/FlowerIcon.tsx`
+- `redeven:internal/flower_ui/src/styles/flower.css`

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Redeven owns names, descriptions, state and relationships while preserving geometry/styles/handlers/focus and hidden/inert exclusion. Published Floe owns reusable controls/focus/layers. Shared gaps require source/behavior evidence and released upstream fixes. Report audit scope accurately; accessibility changes alone certify neither full WCAG nor model performance.
+Redeven owns accessible names/state/relationships while preserving layout, handlers, focus and inert exclusion. Floe owns reusable controls/layers. Shared defects require evidence and published fixes. Scope claims accurately: accessibility edits alone certify neither WCAG nor model performance.
 
 # Contract
 
@@ -30,11 +30,8 @@ Tests that deliberately filter cases qualify only the cases executed, never the 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - existing path guidance and per-instance description association.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - composer names and existing hidden/inert interaction boundaries.
-
-- `redeven:internal/envapp/ui_src/src/ui/i18n/floeControls.test.ts` - complete locale catalog and placeholder parity with the published framework.
-- `redeven:internal/envapp/ui_src/src/ui/i18n/FloeControls.browser.test.tsx` - published controls, reactive language changes, field identity and keyboard selection.
-
-- `redeven:desktop/src/welcome/DesktopFloeLocaleProvider.client.test.tsx` - Desktop catalog parity and mounted field value/focus retention during language switches.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Source.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/i18n/floeControls.test.ts` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/i18n/FloeControls.browser.test.tsx` - Tests.
+- `redeven:desktop/src/welcome/DesktopFloeLocaleProvider.client.test.tsx` - Tests.

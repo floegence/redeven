@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Collapsed Flower projects canonical summaries and current-run detail through the existing workspace stream. Work, pending decisions and drafts have explicit precedence; historical completion is never new feedback. Presence neither expands Flower nor acknowledges reads. [Activity companion](flower-activity-companion.md) owns placement, focus and dismissal.
+Collapsed Flower uses canonical summaries/current-run detail from existing stream, prioritizing work, decisions and drafts. Historical completion is not new feedback. Presence never expands or acknowledges reading; Activity companion owns placement/focus/dismissal.
 
 # Contract
 
@@ -35,6 +35,5 @@ Presence is a read-only projection of canonical work and local composer intent. 
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Canonical mutually exclusive priority groups with title fallback.
-
-- `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - Canonical waiting/thinking/tool/output projection without raw thinking.
+- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Source.
+- `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - Source.

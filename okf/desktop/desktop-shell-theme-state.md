@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop owns global `system | light | dark` mode and remembered Floe light/dark presets. One validated snapshot drives Welcome, Env App, native chrome and generated documents. New/reset selections use Porcelain Light/Dark; valid choices survive upgrades. User changes paint pending feedback before asynchronous persistence, retain acknowledged state on failure and permit retry without losing mounted content, drafts or focus.
+One validated Desktop theme snapshot drives Welcome, Env App, chrome and generated documents. New/reset themes use Porcelain; valid choices survive upgrades. Selection paints before persistence, retaining acknowledged state, drafts/focus/content and Retry on failure.
 
 # Contract
 
@@ -23,6 +23,5 @@ Resolve public npm dependencies without sibling wiring/patches. Renderer storage
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Exact public theme-source paths/declarations.
-
-- `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Generated stylesheet verified against public dependency.
+- `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Source.
+- `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Source.

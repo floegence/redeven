@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Activity/Workbench share service collection/drawer: identity, current status, action, then facts. Retain readable narrow/localized/enlarged-text layouts. Historical failure cannot replace state; failed checks retain facts with explanation and authorized inspection. Env App resource snapshots own inventory continuity; restored presentation grants no lifecycle/route authority.
+Activity/Workbench share service list/drawer: identity, state, action, facts. Retain narrow/localized/large-text usability. Historical failure never replaces current state; failed checks preserve facts and authorized recovery. Resource cache grants no lifecycle or route authority.
 
 # Contract
 
@@ -38,6 +38,5 @@ The shell retains only collection and loading-presentation styles; management an
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Shared inventory, target Open/archive and fresh facts.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/web-services.css` - Container layout, semantic surfaces/reduced motion.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/pages/web-services.css` - Source.

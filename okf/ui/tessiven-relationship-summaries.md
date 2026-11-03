@@ -29,8 +29,8 @@ Canonical endpoint indexes and Set-based deduplication bound repeated-call aggre
 
 # Evidence
 
-- `internal/tessiven_ui/src/relations.ts` - Canonical endpoint identity, exact counts and summary geometry.
+- `internal/tessiven_ui/src/relations.ts` - Source.
 
-- `internal/tessiven_ui/src/projection.ts` - Whole-pool summaries and exact physical-card projection.
+- `internal/tessiven_ui/src/projection.ts` - Source.
 
-- `internal/tessiven_ui/src/TessivenServiceRelations.tsx` - Bounded patterns and locality-aware previews.
+- `internal/tessiven_ui/src/TessivenServiceRelations.tsx` - Source.

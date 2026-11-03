@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Env App owns one remote desktop flow in Host Applications/Workbench: identify the host, show readiness and one primary action, then continue authorization in place. [Session policy](remote-desktop.md) enforces platform/permission limits. Failure retains recovery; dismissal before creation finishes releases that session. An opened viewer has an independent lifetime.
+One Host Applications/Workbench flow identifies host, readiness and primary action, continuing consent in place under session policy. Failure retains recovery; dismissing pending creation releases its session. Once opened, viewer lifetime is independent of the launcher.
 
 # Contract
 

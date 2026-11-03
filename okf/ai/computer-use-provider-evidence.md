@@ -8,59 +8,39 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-These October and November provider runs retain their original builds, failures
-and scope. They support [product qualification](computer-use-qualification.md)
-without certifying arbitrary websites or replacing final integration checks.
+October–November 2026 provider evidence retains exact builds, original failures and scope under [product qualification](computer-use-qualification.md). Canonical results and independent effects, never prose, establish execution. Supplements cannot replace failed runs or certify arbitrary websites/platforms.
 
 # Contract
 
-Keep failed, corrected and subsequent runs distinct. Only canonical tool results
-and independent fixture effects establish execution; model prose does not.
+Keep original, corrected and subsequent runs distinct. Provider names do not prove remote weights; browser evidence does not certify native platforms.
 
 # Boundaries
 
-Browser evidence does not certify native platforms. Published provider names do
-not establish remote model weights. Account data remains outside the repository.
+Account data/raw reports stay outside Git. No uncertain-input replay, target substitution, task-specific production fixes or retry-until-green.
 
 # Evidence
 
-November 2, observation-lifetime implementation at 2627dbced: 335 browser Node
-checks pass, with only the native Chrome installation-picker lane skipped;
-381 Go test/subtest records pass with browser integration enabled, while eight
-separate opt-in scopes remain skipped. Native Messaging, installed-browser
-sandbox, two relocated-bundle tests, four host-safety fixtures and documented
-script examples pass. Existing Runtime invalid-read tests verify the model-facing
-failure barrier; deterministic Chromium tests verify the actual lifecycle races.
-The final configured Flash 1017 matrix runs 20 categories twice with 291 actual
-deepseek-flash requests: 34/40 strict passes. Both explicit dynamic waits, both
-natural dynamic reports, SPA, shadow form and batched pagination pass. The six
-recorded failures include four model deviations (wrong optional locator, invalid
-wait signatures, splitting a required one-call ref test, forbidden terminal use),
-one Wikipedia network-timeout page and one visual measurement defect: the model
-had received a valid snapshot image, but the assertion recognized only a named
-screenshot operation. The model also issued an unresolved Promise, reported
-explicitly without replay. Preserve all original outcomes; no input replay or target
-substitution is added. Public reads pass 4/6 strict tasks, with actual content
-observed on 5/6. Earlier 29/38 and 32/38 runs include a measurement defect that
-missed emit:false snapshots; the separate corrected public run passes 6/6 before
-the final cleanup fix. Corrected image-evidence assertions have four focused
-regressions and two separate real-model visual passes (11 requests); production
-code remains identical to the final matrix. Keep all runs distinct. These data qualify the named
-browser contracts and tasks, not universal website success or native applications.
+## November 2: observation lifetime
+2627dbced: Node 335 passes/native Chrome-picker skip; browser-enabled Go 381 records pass/eight other opt-in skips. Native Messaging, installed sandbox, two relocated bundles, four host-safety fixtures and script examples pass. Runtime invalid-read tests cover model failure barriers; Chromium covers lifecycle races.
 
+Configured Flash 1017 final matrix: 20 categories×2, 291 deepseek-flash requests, 34/40 strict passes. Both explicit/natural dynamic waits, SPA, shadow form and batching pass. Six failures: four model deviations (wrong optional locator, invalid wait signatures, split required one-call ref test, forbidden terminal), Wikipedia timeout page, and an assertion recognizing named screenshots but missing a valid snapshot image. An unresolved Promise is explicit, without replay. Public reads: 4/6 strict, actual content 5/6. Earlier 29/38 and 32/38 missed emit:false snapshots; separate corrected public run passes 6/6 before final cleanup repair. Four image-assertion regressions and two separate real-model visual passes (11 requests) use unchanged production sources. None replaces original outcomes or qualifies universal websites/native apps.
 
-After integration onto the concurrent Floret v7.100.1 adoption, the same 12 categories run twice again with 132 actual deepseek-flash requests: 22/24 strict passes. Both empty-helper rejections pass. The remaining failures reuse a navigation-invalidated ref or omit the required optional-element wait; unsupported snapshot options and an invented visual namespace are rejected. Preserve this new-baseline run independently of the earlier 26 executions. The Go regression records 480 passes; seven browser integration records initially lack the required installation path, then pass with that prerequisite supplied. Nine other opt-in scopes remain skipped. Production Computer sources are unchanged by the rebase; generated knowledge bundles are rebuilt.
+## November 2: helper rejection
+Original helper checks: Node 193, Go 479 records, two relocated bundles and packaged IPC pass; ordinary Go skips 15 opt-in scopes, while IPC/provider matrix runs separately. Flash1017: 26 tasks/151 requests. Initial 12×2 matrix:20/24; two source-removal fixtures race lifecycle cancellation and cannot prove ordinary rejection; retain unknown effects. Two corrected empty-helper tasks pass2/2. Resulting set22/24 retains navigation-stale batch ref and omitted pre-save optional wait despite claimed completion. Configuration unchanged; managed-browser evidence excludes native/full renderer.
 
-November 2, helper results: 193 Node tests, 479 Go test/subtest records, two relocated-bundle checks and packaged IPC pass. The ordinary Go run skips 15 opt-in integration/provider/native scopes; packaged IPC and the declared DeepSeek matrix run separately. Configured Flash 1017 executes 26 tasks with 151 provider requests: the initial 12 × 2 matrix passes 20/24; two source-removal fixtures race independent lifecycle cancellation and cannot prove the intended ordinary-rejection boundary. Their unknown-effect results remain retained. Two corrected empty-helper tasks pass 2/2 without forging replies or changing cancellation behavior. The resulting 12-category acceptance set passes 22/24: one batch reuses a ref after navigation and cannot complete two transitions in one script; one optional-element task omits the requested pre-save wait despite claiming it occurred. These remain failures, with no retry-until-green or task-specific production fix. Provider configuration is unchanged; this is managed-browser evidence, not native-desktop or full Desktop renderer qualification.
+After concurrent Floret7.100.1 adoption: same12×2 categories,132 requests,22/24. Both empty-helper cases pass; failures again stale navigation ref and omitted optional wait. Unsupported snapshot options/invented visual namespace reject. Go480 passes; seven browser records initially lack installation path, then pass with it; nine other opt-in skips. Computer sources unchanged through rebase; bundles rebuilt. This is a separate baseline from the26-task run.
 
-November 2: evaluation-contract qualification passes 222 Node tests, 372 Go test/subtest records and two relocated-bundle checks. Final configured DeepSeek Flash 1017 run: 12 tasks × 2, 23/24 strict passes; one scroll task references an undefined variable before later issuing exactly one wheel. Both observed-role and execution-diagnostic tasks pass twice. Preserve the earlier 22/24 run separately (guessed wait text and premature scroll conclusion); no production task heuristics or assertion relaxation. Fault cases qualify canonical diagnostic delivery, while deterministic Chromium tests inject actual CDP responses and verify installation state, privacy and no replay. Native desktop is outside this change.
+## November 2: evaluation
+Node222, Go372 and two relocated bundles pass. Final Flash1017 12×2:23/24; scroll case references undefined variable before one later wheel. Both observed-role/diagnostic cases pass twice. Earlier22/24 retains guessed wait text/premature scroll conclusion. No heuristic/assertion relaxation. Canonical diagnostics and deterministic real CDP injection separately prove delivery, installation/privacy/no replay; native excluded.
 
-October 29: 12 scenarios × 2, 23/24 strict passes and 142 actual deepseek-flash requests. Six new fault tasks preserve prior logs, stop later input and retain one-save/one-navigation effects; method-only errors keep Runtime.evaluate. Existing content_wait fails after invalid requireState arity and unqualified value observation. Do not widen signatures. Other visual/form/table/batch/download/wait/read scopes pass. Faults inject one reply after a real operation; transport tests separately qualify diagnostics. Credentials/profile unchanged; no personal thread continued.
+## October 29
+12×2:23/24,142 requests. Six fault tasks retain prior logs, stop later input, keep one-save/one-navigation and method-only Runtime.evaluate. content_wait fails invalid requireState arity/unqualified value observation; signatures stay unchanged. Other visual/form/table/batch/download/wait/read scopes pass. Faults inject one reply after real operation; transport tests prove diagnostics. Credentials/profile unchanged; no personal thread continued.
 
-A separate integrated image-preparation/anchor-retirement run passes all 12 once with 68 requests, including three fault assertions. It does not replace 23/24. Real extension checks retire old image handles on errors and after input; a fresh screenshot permits one pointer.
+Separate integrated image-preparation/anchor-retirement:12/12,68 requests,three fault assertions. It does not replace23/24. Real extension errors/input retire old images; fresh screenshot admits one pointer.
 
-October 26: 12 × 5 strict tasks pass in 173.114 s, with 273 activities and 31 errors (18 required, 13 model mistakes). One click per image; stale refs reject without input; no save/export replay. Retain pre-canonical 60/60 (prose-based assertion), strict 51/60 and 59/60 (missing one-click requirement) separately. Source stayed exact through rebase.
+## October 26
+12×5 strict passes in173.114s;273 activities/31 errors (18 required,13 model mistakes). One click/image; stale refs cause no input; no export/save replay. Retain pre-canonical60/60 prose assertion, strict51/60 and59/60 missing one-click requirement. Source exact through rebase.
 
-Carrier 91 passes/one optional Chrome-picker skip, 12 contracts and eight headed-extension checks cover validation, 2,100 refs, image geometry, stale/live frames and partial effects. Native port is a fixture; macOS background/35 Swift checks are separate. Linux native, multimonitor and combined Desktop/Native-Messaging/Service launch remain excluded. Emulated scale is not browser zoom; debugger detach is not focus-loss proof. No paired performance claim.
+Carrier91 passes/one optional picker skip,12 contracts/eight headed extension checks cover validation,2,100 refs,geometry,stale/live frames/partial effects. Native port is a fixture; macOS background/35 Swift checks separate. Linux native,multimonitor,combined Desktop/Native-Messaging/Service excluded. Emulated scale≠browser zoom; debugger detach≠focus loss. No paired performance claim.
 
-Sources: [carrier](../../internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs), [private takeover](../../internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs), [system browser](../../internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs), [drag evidence](computer-drag-qualification.md), [historical lanes](computer-use-qualification-evidence.md). Exact raw reports remain outside the repository.
+Sources: [carrier](../../internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs), [private takeover](../../internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs), [system browser](../../internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs), [drag](computer-drag-qualification.md), [historical lanes](computer-use-qualification-evidence.md).

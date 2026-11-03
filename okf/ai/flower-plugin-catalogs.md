@@ -34,7 +34,9 @@ No hosting, content index, scheduled crawler, publication portal, rankings, auth
 
 # Evidence
 
-- `internal/ai/agentplugins/catalog_test.go` covers schema boundaries, persistence separation, unavailable sources and multiple package paths through real preparation/commit.
-- `internal/ai/agent_plugin_catalog_test.go` covers runtime configuration and read authority.
+- `internal/ai/agentplugins/catalog_test.go`
+
+- `internal/ai/agent_plugin_catalog_test.go`
+
 - `internal/envapp/ui_src/src/ui/flower/FlowerExtensions.browser.test.tsx` covers default absence, configured browsing, failure/retry, source management, actual preview metadata, responsive layouts and retained state.
 - `desktop/src/main/runtimeFlowerRoutes.test.ts` covers configured-source IDs through the shared read-only route.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floe Native Apps supplies managed Wayland/Xwayland; the library owns preparation/recovery and Desktop can transfer verified offline archives. No full desktop/monitor is needed. Snap/Flatpak require installed runtimes/services; missing prerequisites get explicit guidance, never automatic system/security changes. Platform/preparation contracts apply; refresh after admin changes.
+Floe Native Apps prepares managed Wayland/Xwayland; Desktop may transfer verified offline archives. No monitor/full desktop is needed. Snap/Flatpak require installed services; missing prerequisites get guidance, never automatic security changes. Refresh after explicit admin preparation.
 
 # Contract
 

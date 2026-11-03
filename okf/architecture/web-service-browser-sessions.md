@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Web Services accepts ports or HTTP(S) deep links to the current Environment's loopback and opens them through authorized forwarding. Other targets fail before session/window creation. Registry-owned `access_mode` selects secure `unified_proxy` or HTTP-only Desktop `desktop_loopback`; heuristics and failures cannot override it. Stale windows, mismatched routes, invalid modes and expired temporary forwards fail closed.
+Web Services opens current-Environment loopback ports/deep links through authorized forwarding. Registry access_mode alone selects unified_proxy or HTTP-only Desktop loopback. Reject other targets, stale/mismatched/expired routes and invalid modes before opening; no heuristic fallback.
 
 # Contract
 
@@ -23,6 +23,5 @@ Temporary forwards are memory-only until Save; expired/unknown identities cannot
 
 # Evidence
 
-- `redeven:internal/portforward/service.go` - Normalized addresses, exact persistent reuse and temporary expiry.
-
-- `redeven:internal/managedwebservice/open_session.go` - Applied-instance reads and shared bounded opening without implicit Restart.
+- `redeven:internal/portforward/service.go` - Source.
+- `redeven:internal/managedwebservice/open_session.go` - Source.

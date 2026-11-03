@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-One Desktop update coordinator serves Welcome, menus, command palette, settings, status and compatibility recovery. Packaged macOS uses signed architecture-specific Sparkle appcasts; Linux uses matching DEB/RPM metadata through `electron-updater`. Development, unsupported and misplaced macOS builds fail closed with manual recovery. Internal Windows NSIS builds expose no production feed and report updates unsupported.
+One Desktop update coordinator serves every entry. Packaged macOS uses signed architecture-specific Sparkle; Linux uses matching DEB/RPM feeds. Unsupported, development or misplaced builds offer manual recovery. Internal Windows NSIS has no production update feed.
 
 # Contract
 
@@ -22,6 +22,5 @@ Sparkle owns macOS discovery, verification, download UI and relaunch. Runtime, P
 
 # Evidence
 
-- `redeven:desktop/src/welcome/App.tsx:1` and `redeven:desktop/src/welcome/index.css:1` - Permanent icon entry, localized tooltip, and state presentation.
-
-- `redeven:desktop/src/main/linuxPackageUpdateAdapter.ts:1` - DEB/RPM metadata/download/cancel/install adapter.
+- `redeven:desktop/src/welcome/App.tsx:1` and `redeven:desktop/src/welcome/index.css:1`
+- `redeven:desktop/src/main/linuxPackageUpdateAdapter.ts:1` - Source.

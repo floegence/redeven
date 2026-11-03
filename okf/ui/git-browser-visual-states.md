@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Git file selection and inline diff inspection share a contained surface with independently owned request state. Floe interaction accent marks selection; semantic Git colors mark repository facts. Checked-out and inspected branches remain distinguishable when they coincide. Layout preserves local scrolling, keyboard actions and a current diff across widths and themes.
+Git selection and diff share a contained surface with independent request owners. Floe accent marks selection; semantic colors identify Git facts. Checked-out and inspected branches remain distinct when coincident. Retain local scrolling, keyboard and current diff across themes/widths.
 
 # Contract
 
@@ -29,4 +29,4 @@ Inline inspection changes local presentation and file navigation only. Product t
 
 # Evidence
 
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitLoading.browser.test.tsx - Checks mounted-frame and geometric stability through delayed and superseded commit requests in both entry points at landscape, tall, and narrow sizes.
+- redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitLoading.browser.test.tsx

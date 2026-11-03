@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Env App assigns global layers to movable windows, Flower, plugin surfaces, blocking modals and command UI. Interaction reorders only its window band. Published Floe owns visible-viewport constraints and drag geometry; Redeven persists settled geometry and preserves reachable controls, local scrolling and destination interaction.
+Env App assigns global bands for windows, Flower, plugins, modals and commands; interaction reorders only its band. Floe owns viewport constraints/drag geometry. Redeven saves settled bounds while preserving reachable controls, local scroll and destination interaction.
 
 # Contract
 
@@ -39,4 +39,4 @@ This contract governs cross-surface Env App stacking and the Activity-versus-Wor
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.browser.test.tsx` - Published drag, reachable header, persistence, maximize restore and draft.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.browser.test.tsx` - Tests.

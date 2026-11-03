@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floret owns typed approval/input; Redeven authorizes and renders without a second lifecycle. Resolve commits canonical results before view publication. Since v7.26.0, unresolved interaction and active projection publish atomically; waiting clears run_progress, other active summaries retain it. Persistence failure stays unresolved; reject/cancel is row-local, not a global failure.
+Floret owns approvals/input; Redeven authorizes/presents. Resolve commits results before publication. Since v7.26.0 pending interaction and active projection publish atomically; waiting clears run_progress. Persistence failure stays unresolved; reject/cancel is row-local, not global failure.
 
 # Contract
 

@@ -23,6 +23,5 @@ Welcome projects authoritative owners into one library. Exact Runtime/Cloud link
 
 # Evidence
 
-- `redeven:desktop/src/main/environmentAccess.ts` - Authoritative connection ownership and preserved access defaults.
-
-- `redeven:desktop/src/main/runtimeConnectionProjection.test.ts` - Raw local/remote facts, restricted Cloud, offline/deduplicated windows and conflicts.
+- `redeven:desktop/src/main/environmentAccess.ts` - Source.
+- `redeven:desktop/src/main/runtimeConnectionProjection.test.ts` - Tests.

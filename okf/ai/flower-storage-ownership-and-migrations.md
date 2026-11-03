@@ -54,6 +54,5 @@ Floret is the sole authority for canonical history, execution and queue semantic
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/schema.go` - Stable product kind and contiguous migration registration.
-
-- `redeven:internal/persistence/sqliteutil/preflight.go` - Shared readonly inspection.
+- `redeven:internal/ai/threadstore/schema.go` - Source.
+- `redeven:internal/persistence/sqliteutil/preflight.go` - Source.

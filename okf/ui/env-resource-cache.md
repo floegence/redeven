@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floe owns disposable restoration, coalescing, fencing, persistence and eviction; Redeven confirms identity/projection. Host Apps, Containers, Web Services and Codespaces retain last successful inventory during refresh, animating only its icon. Cache grants no authority. Denial/locked access clears affected display; connectivity failure retains facts with error/Retry.
+Floe owns disposable cache restoration/coalescing/fencing/persistence/eviction; Redeven verifies identity/projection. Resource lists retain successful data while refresh animates only its icon. Cache grants nothing; denial clears, connectivity failure retains facts with Retry.
 
 # Contract
 
@@ -32,6 +32,5 @@ Cached snapshots never authorize mutations. The cache does not own product ident
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/services/envResourceCache.ts` - Published cache binding and Shell identity confirmation.
-
-- `redeven:internal/codeapp/appserver/ui_cache_scope_test.go` - Authenticated scope isolation and read permission.
+- `redeven:internal/envapp/ui_src/src/ui/services/envResourceCache.ts` - Source.
+- `redeven:internal/codeapp/appserver/ui_cache_scope_test.go` - Tests.

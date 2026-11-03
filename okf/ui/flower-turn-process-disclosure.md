@@ -3,57 +3,52 @@ type: UI Contract
 title: Flower turn status and process disclosure
 tags: [ui, flower, turns, disclosure, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Floret owns turn outcome/timing. Terminal ordinary turns fold eligible process rows once, while pending controls, uncertain effects and inspected work stay visible. Explicit choices persist; user messages/finals remain mounted. Settled question/answer receipts fold with the process and reopen with complete content.
+Floret owns turn outcome and timing. Terminal turns fold eligible process rows once; pending controls, uncertain effects and inspected work remain visible. Explicit choices persist, user messages/finals stay mounted, and settled question/answer receipts reopen with complete content.
 
 # Contract
 
 ## Facts and eligibility
-Validated turn facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Summaries cannot author these facts or trigger folds; unknown prose stays visible. Typed structure determines eligibility, never prompt/time heuristics.
+Validated facts carry exact TurnID/RunID, optional control kind, start/end/outcome, work/wait/elapsed time, ordered intermediate/final IDs and complete-final boundary. Typed structure determines eligibility; summaries, prompts and time heuristics cannot trigger folds. Unknown prose stays visible.
 
-The turn header shows lifecycle status and total elapsed time, including user/approval waits; the terminal timing description retains canonical processing/waiting durations. A thinking-only process keeps its own disclosure and never acquires a whole-turn toggle. Durations show at most two nonzero units and subsecond copy. Interleaved answers default open with a whole-turn toggle; settled question/answer receipts fold with process rows and retain nested choices. Receipt decoration lives inside the viewport, leaving no folded gap/rail. Counts require complete boundaries, membership and event coverage; otherwise omit counts. [Sequences](flower-tool-sequences.md) fold settled work independently on either side.
+Headers show lifecycle and total elapsed time including waits; terminal descriptions retain processing/wait durations. Show <=two nonzero units and subsecond copy. Thinking-only work keeps its own disclosure without a whole-turn toggle. Interleaved answers default open; settled question/answer receipts fold with process rows, retaining nested choices and viewport-contained decoration without folded rail/gap. Counts require complete boundaries/membership/events; otherwise omit. [Sequences](flower-tool-sequences.md) fold independently on either side.
 
-## Disclosure ownership
-Running/preparing/retrying/finalizing/waiting turns show a non-interactive status header from canonical admission, before provider output. Status text announces changes politely; elapsed seconds do not enter a live region. Exact outcome/end enables the toggle and one automatic fold of confirmed intermediate/process rows, including latest failed/canceled/interrupted turns. Final/trailing partial output stays visible.
+## Ownership
+From canonical admission, running/preparing/retrying/finalizing/waiting turns show a non-interactive header before provider output. Announce status politely, never elapsed ticks. Exact outcome/end enables the toggle and one automatic fold of confirmed process/intermediate rows, including latest failed/canceled/interrupted turns. Final/trailing partial output remains.
 
-Focus, selection, gestures, open details/thinking and away-from-tail reading protect inspected work; later observations cannot undo protection. Capture an unaffected visible anchor only when automatic folding begins. Explicit choices survive paging/reconnect/regrouping; newly classified inspected rows remain until the next explicit toggle without reopening siblings. Only disclosure/navigation opens a closed group. Retained folded bodies are inert and preserve offsets/choices. Main/embedded/child views share rendering with independent scroll owners.
+Focus, selection, gestures, open details/thinking and away-from-tail reading protect inspected work permanently against later observations. Capture an unaffected visible anchor when automatic folding starts. Explicit choices survive paging/reconnect/regrouping. Newly classified inspected rows stay until the next explicit toggle without opening siblings; only disclosure/navigation reopens groups. Retained folded bodies are inert with offsets/choices intact. Main/embedded/child views share rendering, not scroll owners.
 
 ## Placement and motion
-The header anchors after the initiating request when loaded, otherwise before the first loaded response, independent of fold membership. The request and its header remain mounted as responses arrive. Canonical intermediate membership spans same-turn executions; engine owns supersession. In-turn Goals retain ownership; final boundaries stay run-scoped. Retained prefixes preserve confirmed intermediate facts; incoming windows replace overlapping classification. Partial windows never fetch earlier history just for presentation. Prepending the actual beginning moves header while preserving choice/focus; disclosure state is independent of anchor visibility.
+Anchor the header after its loaded request or before the first loaded response, independently of fold membership. Keep request/header mounted during arrival. Intermediate membership spans same-turn runs; Engine owns supersession. Goals keep turn ownership; finals are run-scoped. Retained prefixes preserve confirmed facts; windows replace overlapping classification. Partial windows never fetch history for presentation. Prepending the beginning moves the header while retaining choice/focus; anchor visibility does not own disclosure.
 
-Keep identical header geometry before and after eligibility so the toggle adds no space or width change. One-line status/time/detail slots use tabular digits, bounded width and overflow handling at narrow widths. Following folds align the real bottom before paint; no stale absolute offset, synthetic trailing space or competing growth animation. Long-to-short content settles at zero with final visible. Existing finals stay mounted during 260 ms fold; reduced motion settles immediately. Paused reading/manual actions retain anchors and necessary temporary insertion room, excluded from distance-to-latest. Input immediately cancels following; motion settlement cannot reclaim it.
+Eligibility changes no header geometry. One-line status/time/detail slots use tabular digits, bounded widths and narrow overflow handling. Following folds align actual bottom before paint, without stale absolute offsets, synthetic trailing space or competing growth motion. Long-to-short content ends at zero with final visible. Finals remain mounted during the 260 ms fold; reduced motion is immediate. Manual/paused reading retains anchors and necessary insertion room, excluded from distance-to-latest. Input cancels follow; settlement cannot reclaim it.
 
-Fresh visible live headers gently increase text opacity from 0.68 to 1 over 180 ms. Later state changes use a restrained 0.88-to-1 opacity transition over 160 ms. The complete current label stays readable throughout: no clipping, blank frame, overlapping old text or character queue. An in-flight transition absorbs fast completion instead of restarting. One JSX text owner survives the non-interactive wrapper becoming a native button, retaining DOM identity and animation timing. At most one bounded browser opacity animation exists per transitioning header; accessible labels, controls and geometry update immediately. Elapsed ticks never restart motion. Historical/restored headers, reconnect, urgent states and reduced motion remain immediate. Hiding the surface, reducing motion or interacting with the header settles motion.
+Fresh visible live labels fade 0.68→1 over 180 ms; later changes 0.88→1 over 160 ms. The complete current label stays readable: no clipping, blank frames, overlapping text or character queue. Fast completion joins the active transition. One JSX text owner survives wrapper-to-button changes with node/timing intact; at most one bounded opacity animation. Accessibility, controls and geometry update immediately; ticks never restart motion. History/restoration/reconnect/urgent states/reduced motion are immediate. Hide, interaction or reduced motion settles animation.
 
-If prose waits for a sequence when the turn ends, the outer row owns motion and releases prose afterward. Nested geometry stays intact; interrupted inner folds transfer painted opacity/transform. Manual reversal retains choice and motion preference. Canonical Path, not timestamps, orders dialogue/receipts; preserve final segments and secret redaction.
+When a turn ends while prose waits on an inner sequence, outer motion owns release and preserves nested geometry; interrupted inner folds transfer painted opacity/transform. Manual reversal retains choice/preferences. Canonical Path orders dialogue/receipts, never timestamps; preserve final segments and secret redaction.
 
-## Elapsed presentation
-Existing current-view server samples establish a browser-only monotonic anchor, retained across same-turn waits and continuation runs. No sample means status-only; queue time is never counted and browser wall time is not a source of authority. Newer samples reanchor after sleep/reconnect; delayed samples cannot move the live clock backward. Canonical terminal elapsed time always wins. The sample stays in the bounded detail cache and is stripped from thread summaries; it never becomes a wire field, stored lifecycle, or new event.
+## Elapsed time
+Current-view server samples establish a browser monotonic anchor across same-turn waits/continuations. Missing sample means status-only: queue/browser wall time is not authority. Newer samples reanchor after sleep/reconnect; delayed samples cannot move live time backward. Canonical terminal time wins. Keep samples in bounded detail cache, out of summaries/wire fields/storage/events.
 
-Only visible active headers subscribe to the existing Surface one-second clock. Offscreen, hidden, disconnected and terminal headers unsubscribe. Clock ticks update only the time label, never history projections, counts, folding or network demand. Reconnecting shows a status and pauses ticking until existing transport confirmation; no new poll, request, payload or server write is permitted for this presentation.
+Only visible active headers subscribe to Surface's existing one-second clock. Offscreen/hidden/disconnected/terminal headers unsubscribe. Ticks change only the time label, never projections/counts/folding/network demand. Reconnect pauses ticking until existing transport confirmation; add no poll/request/payload/write.
 
-## Outcome presentation
-Terminal labels use 13px/20px text and decorative 16px Floe warning, circled-stop or circled-alert icons for failure, cancellation or interruption. Quiet label color, first-row wrap alignment and localized status retain accessibility. Existing current-run diagnostics/recovery do not acquire duplicate outcome labels.
+## Outcome
+Terminal labels use 13px/20px text and decorative 16px Floe warning/circled-stop/circled-alert for failure/cancel/interruption. Quiet color, first-row wrap alignment and localized labels preserve accessibility; diagnostics/recovery receive no duplicate outcome labels.
 
 # Boundaries
 
-Disclosure is ephemeral UI state. Ordinary user messages and final content stay mounted and ordered. Settled question/answer receipts retain canonical turn ownership across continuation runs and become inert while folded; expansion restores their full content. Summaries and network events cannot hide pending controls.
+Disclosure is ephemeral. User/final rows retain order and mounts. Settled answers retain canonical turn ownership across runs, become inert while folded, and reopen completely. Summaries/network events cannot hide pending controls.
 
 # Evidence
 
-Browser regressions cover pre-output visible headers, local elapsed updates without extra reads, waits, reconnect/offscreen subscription bounds, minute/hour transitions at 320/390/1280px, frame-by-frame real-tail alignment and answer visibility, large and repeated folds, narrow viewports, reduced motion, subsequent growth, explicit navigation, short-history pagination, focus, selection and nested choices in main/child views. Continuation cases retain old-run prose and Goal; history prepends retain header focus and disclosure state. Existing isolated historical-copy qualification covers one opening read, no idle traversal, and complete statistics after explicit sequence expansion and progressive paging.
+- `redeven:go.mod` - Source.
+- `redeven:internal/ai/flower_current_projection_test.go` - Tests.
+- `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Source.
+- `redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts` - Tests.
+- [Surface regressions](../../internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx): pre-output headers, waits/reconnect/offscreen clock bounds without extra reads; minute/hour transitions at 320/390/1280px; real-tail/answer visibility, repeated folds, reduced motion, growth/navigation/paging, focus/selection/nested choices, continuation Goals/prose and prepended header identity. Historical-copy qualification retains one opening read, no idle traversal and complete statistics after explicit expansion/paging.
+- [Header](../../internal/flower_ui/src/FlowerTurnHeader.tsx), [clock tests](../../internal/flower_ui/src/flowerTurnClock.test.ts), [browser tests](../../internal/envapp/ui_src/src/ui/FlowerTurnHeader.browser.test.tsx): bounded subscriptions/geometry; reproduce prior text-node blank restart, retain readable single-node fast completion at all three widths, prevent timer/disclosure replay, clean animations and keep restored history static. Surface tests retain subsecond answers/focus/scroll/disclosure.
 
-- `redeven:go.mod` - Published Floret dependency.
-
-- `redeven:internal/ai/flower_current_projection_test.go` - Canonical historical turn facts preserved.
-
-- `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Validates and maps current turn facts.
-- `redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts` - Settled input folds across continuations; active/pending state and defaults persist.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Folded receipts, restored answers/choices/checkpoints and thinking/turn motion.
-
-- [Header](../../internal/flower_ui/src/FlowerTurnHeader.tsx) and [clock tests](../../internal/flower_ui/src/flowerTurnClock.test.ts): isolated visible subscriptions and server-sampled elapsed time.
-- [Header browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerTurnHeader.browser.test.tsx): bounded subscriptions and responsive geometry.
-- Header motion tests reproduce the former text-node replacement/blank restart, verify readable opacity and no overlapping labels throughout transitions at 320/390/1280px, retain one node and animation through fast completion, reject timer/disclosure replay, dispose animation resources, cancel on interaction/preferences, and keep restored history static. Full Surface coverage retains immediate subsecond answers and existing focus/scroll/disclosure behavior.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Tests.

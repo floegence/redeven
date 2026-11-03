@@ -7,13 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The primary qualification task owns C05. The optional six-frame implementation
-must use a published native module and preserve four-frame legacy/macOS behavior,
-confirmed paint, generation/order fences and finite admission. C04 establishes a
-diagnostic throughput benefit, not released recovery or full RustDesk parity.
-The [comparison contract](remote-desktop-rustdesk-comparison-results.md) owns
-acceptance. A failed release gate or invalid fixture stops qualification; retain
-its evidence and repair the named failure before retrying.
+C05 owns qualification under the comparison contract. Optional six-frame delivery requires published native bytes and preserves legacy/macOS behavior. C04 proves diagnostic throughput, not recovery or RustDesk parity. Failed release gates/fixtures stop acceptance with retained evidence.
 
 # Contract
 

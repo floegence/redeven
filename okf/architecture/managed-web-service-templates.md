@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The released `redeven-service-templates` module owns built-in identity, specifications, releases, localization, icons and service-specific notices. Redeven embeds a reproducible digest-verified offline bundle. Recommendations set defaults, never constrain source choices or replace installed releases. Malformed, missing, mismatched or future content blocks startup without local-definition fallback.
+Published redeven-service-templates owns definitions/releases/locales/icons/notices. Redeven embeds digest-verified offline bytes. Recommendations never constrain source or replace installs. Missing, malformed, mismatched or future bundles block startup without local fallback.
 
 # Contract
 
@@ -22,6 +22,5 @@ Do not copy upstream adapters, fingerprints, legacy paths, process/volume rules,
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released catalog module without local dependency wiring.
-
-- `redeven:internal/managedwebservice/types.go` - Public TemplateSpec/localization/icon aliases and product lifecycle DTOs.
+- `redeven:go.mod` - Source.
+- `redeven:internal/managedwebservice/types.go` - Source.

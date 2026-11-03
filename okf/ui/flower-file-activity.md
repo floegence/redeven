@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Canonical typed Floret Activity owns confirmed reads/mutations; output-progress owns provisional argument counts. Rows show user filename and added/deleted totals with matching unified diff. Protocol fields/private paths never become display metadata. Historical targets grant no read authority. Missing typed detail shows purpose/status without inventing a diff.
+Typed canonical Floret Activity owns confirmed file effects; provisional argument counts belong to progress. Rows show filename/add-delete totals and exact unified diff, never private protocol paths. History grants no read authority; missing facts yield purpose/status, not invented diff.
 
 # Contract
 
@@ -25,8 +25,6 @@ Activity presentation is not a filesystem authority or a second mutation record.
 
 # Evidence
 
-- `redeven:internal/ai/floret_tools.go` - One Floret result mapping for reads and ordered writes.
-
-- `redeven:internal/ai/activity_file_actions.go` - Explicit Activity targets with unrelated private fields filtered.
-
-- `redeven:internal/ai/activity_file_targets.go` - Confirmed target enrichment through canonical queries.
+- `redeven:internal/ai/floret_tools.go` - Source.
+- `redeven:internal/ai/activity_file_actions.go` - Source.
+- `redeven:internal/ai/activity_file_targets.go` - Source.

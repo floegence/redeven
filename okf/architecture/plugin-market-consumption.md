@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven atomically refreshes the validated latest-only catalog from `https://plugins.redeven.com` and exposes it only to trusted Env App. Market metadata identifies GitHub Releases; it neither hosts packages nor grants trust or installs. Exact declared assets enter released ReDevPlugin verification. Invalid responses fail closed; validated last-known-good data may support stale discovery, never automatic updates.
+Redeven atomically refreshes validated latest-only market metadata for trusted Env App. Catalog identifies GitHub releases but hosts no packages or grants. ReDevPlugin verifies exact assets. Invalid refresh fails; last-good data permits stale discovery, never automatic updates.
 
 # Contract
 
@@ -31,6 +31,5 @@ Market owns reviewed metadata/publication. Redeven owns refresh, validated cache
 
 # Evidence
 
-- `redeven:internal/pluginmarket/service.go` - Validated catalog reads/refresh and install previews without /latest fan-out.
-
-- `redeven:internal/pluginmarket/contracts.go` - Catalog generation, immutable releases, hashes/anchors and complete transport.
+- `redeven:internal/pluginmarket/service.go` - Source.
+- `redeven:internal/pluginmarket/contracts.go` - Source.

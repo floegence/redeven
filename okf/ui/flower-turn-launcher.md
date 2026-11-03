@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Each input intent has one request ID reused for retries; accepted receipts echo exact request/Thread IDs. New-thread HTTP nests it under create, existing-thread HTTP uses top-level client_request_id with URL-owned ThreadID. The short-lived outbox retains non-secret unconfirmed input/settings; composer, Stop, navigation and interactions remain usable during work.
+Each input has one retry-stable request ID echoed with ThreadID. New-thread HTTP nests it under create; existing uses client_request_id with URL thread. Short-lived nonsecret outbox retains uncertain input/settings while composer, Stop, navigation and interactions stay usable.
 
 # Contract
 
@@ -43,6 +43,5 @@ Composer drafts and the transport outbox own only unconfirmed browser input, sta
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Shared host snapshots use existing text viewer.
-
-- `redeven:internal/flower_ui/src/transportOutbox.ts` - IndexedDB request recovery without secret answers.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.
+- `redeven:internal/flower_ui/src/transportOutbox.ts` - Source.

@@ -2,130 +2,46 @@
 type: Architecture Boundary
 title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
-quality_exception: Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Redeven consumes the coordinated published ReDevPlugin Go, npm, Rust and machine-contract artifacts without forking platform mechanics. It owns session mapping, source policy/review, placement, product runtime builds and business adapters. Missing/unverifiable identity, lifecycle, interaction, package or runtime contracts fail closed without local compatibility or sibling-source fallback.
+Redeven consumes coordinated released ReDevPlugin Go/npm/Rust/machine artifacts. Product owns sessions, source review, placement, runtime builds and business adapters. Missing or unverifiable platform contracts fail without copied mechanics, sibling imports or compatibility fallback.
 
 # Contract
 
-- Upstream owns validation/hashes/trust, inspection and registry state, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secret brokers, supervision/IPC/WASM, quotas/revocation, control storage, generated clients/errors/schemas and release metadata.
-- Go/npm/runtime/machine artifacts form one coordinated release; frontend cannot downgrade independently. Current pins live in manifests and are checked by the dependency-contract test.
-- Local bootstrap keeps its bounded credential admission before session readiness. [Package lifecycle](redevplugin-package-lifecycle.md) owns inspection/install/cache/readiness; [Redeven adapters](redevplugin-redeven-adapters.md) owns host modules and presentation.
+## Ownership
+Upstream owns validation/hash/trust, inspection/registry, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secrets, supervision/IPC/WASM, quotas/revocation, control state and releases/contracts. One coordinated release; frontend cannot downgrade independently. Manifests/dependency tests own pins; bootstrap retains bounded credentials before readiness. [Packages](redevplugin-package-lifecycle.md) owns admission/cache, [adapters](redevplugin-redeven-adapters.md) product modules/display.
 
-## Product availability
+## Availability
+Plugin readiness cannot block Runtime/ordinary sessions. Market/package/runtime/storage/init failure stays local; retain files/terminal/Notes/Workbench. PLUGIN_RUNTIME_UNAVAILABLE executes nothing; rejected writes report not_committed. Localize faults; unreadable inventory is not empty, auto-failure never global interruption. Init budget10s; cancel fences results/closes integration. Error/panic unwinds construction without hiding host cancellation.
 
-Plugin subsystem readiness is never a prerequisite for Runtime readiness or
-ordinary host sessions. A plugin market, package, runtime, storage or initialization
-failure is diagnosed locally and leaves files, terminals, Notes, Workbench and
-other non-plugin services available. An unavailable subsystem exposes the released
-`PLUGIN_RUNTIME_UNAVAILABLE` failure without dispatching plugin effects; rejected
-mutation requests report `not_committed`. Plugin Center localizes the failure
-inside its own view rather than replacing the product shell. The launcher never
-claims an unreadable inventory is empty, and automatic subsystem failure does not
-interrupt unrelated work with a global toast. Initialization has a ten-second
-budget; cancellation rejects late results and closes any acquired integration.
-Caller-owned construction resources unwind on errors and recovered initialization
-panics. This boundary does not mask cancellation of the host's own startup.
+Channel auth is separate: failed/panicked binding grants nothing and cannot close host channel. Request panic releases admission; HTTP contains failure. Incompatible opaque state stays unchanged, never reauthorized.
 
-Host channel authentication and plugin execution admission are separate facts.
-A failed or panicked plugin generation binding grants no plugin authority and cannot close
-the host channel. Plugin request panics release their admission while the HTTP
-server contains the request failure. Platform storage remains opaque: isolation
-must not delete, rewrite or silently reauthorize incompatible plugin state.
+## Network/history
+ReDevPlugin3.12.0 separates routing/package verification/execution. Single-hop host transports honor explicit proxy,current macOS proxy/PAC,OS DNS/VPN for market/package/release. Synthetic/private addresses alone are not denial. Upstream validates URL/redirect/origin/size/cancel/hash/signature; downloads grant nothing.
 
-## Host network policy
+Granted HTTPS hostname connectors without private-prefix binding use released transport factory. Platform checks target/method/grant/revision,pools/quotas/revocation. Private prefixes,literal addresses/other protocols keep address-bound policy. Resolve configuration at request time; faults local.
 
-ReDevPlugin 3.12.0 separates host-selected routing from package verification and
-plugin network authority. Redeven supplies single-hop transports for market,
-package and release-document downloads. They follow explicit environment proxy
-settings, current macOS system proxy/PAC configuration, and OS DNS/VPN routing.
-VPN synthetic addresses, enterprise DNS and private package sources are not
-rejected merely for belonging to a non-public address range. The platform still
-validates each URL and redirect, exact allowed release origins, byte limits,
-cancellation, hashes and signatures. Downloads do not grant plugin execution.
+3.11.2 reads signed pre-Webv9 without changing manifest/hash/signature/generation. Incompatible install stays manageable,not executable/enabled. Explicit same-install Web update retains history; no VNode/invented declarations. Unknown/corrupt stays unchanged/local unavailable.
 
-For granted HTTPS hostname connectors without explicit private-prefix binding,
-Redeven registers the released transport factory. The platform checks target,
-method, grant and revision before dispatch, and owns pool identity, quota and
-revocation. Explicit private-prefix connections, literal addresses and other
-protocols retain their released address-bound contract. Network configuration
-resolution happens only during requests, never during Runtime construction.
-Failures remain inside the plugin boundary.
+Platform owns Web admission/package modules/sandbox/bootstrap/bridge. Product allocates origins/mounts handlers; no DOM translation/VNode renderer/ambient parent credentials.
 
-## Retained package history
+## Authoring/execution
+Platform owns config/manifest validation,bindings,build/test/package,diagnostics/watch,persistent preview,manual update candidates,connection review,verified dev runtime. Redeven version-derived skill invokes released CLI. Product owns intent/placement/review/install approval and build/signature/SBOM/publication proof; authoring grants no permissions/trust.
 
-ReDevPlugin 3.11.2 owns the bounded read-only projection of signed pre-Web v9
-installation records and version history. Normal migration retains their exact
-canonical manifests, hashes, signature facts and data generations. Their current
-Host action state is incompatible; they are manageable but cannot execute or be
-enabled. A user may explicitly update the same installation to a current Web
-package without deleting its history. No VNode renderer or fabricated Web
-declaration exists. Redeven consumes released inventory and action state without
-parsing or rewriting platform-owned records. Unknown or corrupt state remains
-unchanged and unavailable only within the plugin boundary.
+3.13.0 owns manifest actions/direct Surface KV/SQLite/files/settings without Worker forwarding. Dedicated-origin binary/WebSocket handler requires exact handshake; Host checks session ceilings/scope/grants/quotas/revoke. Product mounts/presents,never new endpoints/manifest interpretation. SDK conflict/unknown cannot replay; coalesced watches are not logs.
 
-## Ordinary Web surfaces
+Private files1→chunked2 migration stays upstream, separate from control/author schemas. Snapshots/recovery opaque; no copied SQL/rewrite.3.12.2 retains ordinary packaging/SDK. Trusted parent query/event/cancel binds current surface gateway/plugin; pass exact scope via authenticated transport/released handler. Stale/malformed cannot broaden to management; plugin-origin direct calls denied.
 
-The released platform owns Web application admission, package-local ES module assets, sandbox bootstrap and the authenticated surface bridge. Redeven supplies an origin-allocation adapter and mounts the released Web surface handler. It does not translate DOM events or render a platform-specific VNode tree. Each surface receives an independent origin; parent credentials never become ambient authority inside that origin.
-
-## Local author workflow
-
-ReDevPlugin owns project configuration and manifest validation, generated bindings,
-the shared build/test/package pipeline, diagnostics, filesystem watching,
-persistent preview state, manual update candidates, controlled connection review,
-and verified development runtime preparation. Redeven invokes the released CLI
-through its discoverable application-authoring skill and derives the CLI version
-from its imported platform package. It does not duplicate those mechanisms.
-
-Development evidence does not replace the host product's runtime build, signature,
-SBOM or publication evidence. The product remains responsible for user intent,
-placement, package review and explicit installation approval. Authoring does not
-implicitly grant execution permissions or automatic-update trust.
-
-## Platform execution boundaries
-
-ReDevPlugin 3.13.0 owns manifest-derived action bindings and direct Surface
-resources. Declared private KV, SQLite, files and settings need no forwarding
-Worker. Binary transfers and controlled WebSockets use the released dedicated-origin
-handler after the exact Surface handshake; Host checks session ceilings, resource
-scope, grants, quotas and revocation. Redeven mounts that handler and presents
-verified resource declarations without adding endpoints or interpreting manifests.
-The SDK reports explicit conflicts and unknown writes; the product never retries
-an uncertain mutation. Snapshot watches coalesce changes and are not a durable log.
-
-The upstream private files namespace automatically upgrades its released schema
-1 to chunked schema 2. This is distinct from the control database and author
-schema versions. Redeven keeps the layout opaque, including retained snapshots
-and crash recovery, and never copies migration SQL or rewrites plugin state.
-
-ReDevPlugin 3.12.2 keeps ordinary Web packaging and application SDK calls unchanged.
-The trusted parent SDK binds execution queries, event reads and cancellation to
-its current surface gateway and plugin. Redeven forwards that scope unchanged
-through its authenticated transport and mounts the released HTTP handler; malformed
-or stale surface authority cannot fall back to broader host management access.
-Direct requests from plugin origins remain denied by the product route boundary.
-
-The released Host also enforces session read/write ceilings and read-only method
-effects before process operations. Its SQLite broker authorizes compiled SQL,
-blocks host database-path metadata and bounds values, statement complexity and
-concurrent operations. Redeven retains session mapping and concrete process
-adapters without duplicating these platform checks. Existing signed manifests
-and durable plugin data remain unchanged; plugin authors need no new flags.
+Host enforces read/write ceilings/read-only effects before process operations. SQLite authorizes compiled SQL,excludes host paths,bounds values/complexity/concurrency. Product maps sessions/process adapters only; no new manifest/data flags.
 
 # Boundaries
 
-Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot write opaque state, mint tokens, fabricate trust or grant broker authority. Wrong, legacy, drifted, tampered or future roots fail unchanged.
-
-Plugin data conversion and exact historical data binding remain released Host responsibilities. Redeven displays verified review evidence and calls the existing update APIs; it does not interpret converter code, copy generations, migrate the platform database, or retry uncertain writes.
-
-Durable interval scheduling, claim fencing, restart recovery and unknown-outcome handling remain ReDevPlugin responsibilities. Redeven registers an environment/app permission-cap adapter and renders the released summary and inventory status. It does not retain a user session for background authority, implement timers, or access platform scheduling tables.
+Never mutate opaque state,mint tokens/trust/grants. Wrong/legacy/drifted/tampered/future roots fail unchanged. Conversion/history binding remains upstream; host shows review/calls update,not converter interpretation,generation copies,DB migration or unknown-write retry. Durable scheduling/claims/restart/uncertainty upstream; host supplies cap adapter/summaries,not retained user sessions/timers/table access.
 
 # Evidence
 
-- `redeven:go.mod:14` - Pins the released ReDevPlugin Go module.
-
-- `redeven:internal/session/dependency_contract_test.go:1` - Matches downstream coordinates to the release manifest.
+- `redeven:go.mod:14` - Source.
+- `redeven:internal/session/dependency_contract_test.go:1` - Tests.

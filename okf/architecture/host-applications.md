@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns discovery, authorization and independent client sharing leases for host-user apps, without containers/VMs. Open admits/resumes sharing; last-viewer closure ends transport, not the process. Quit/confirmed force quit are explicit. Linux recovery is verified; macOS uses OS inventory. Missing capability/capture never proves exit.
+Redeven owns host-user app discovery/authority/independent shares, without VM/container. Open admits sharing; last viewer closes transport, not app. Quit/force quit explicit. Linux recovery verifies identity, macOS uses OS inventory; missing capture never proves exit.
 
 # Contract
 

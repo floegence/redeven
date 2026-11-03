@@ -38,8 +38,6 @@ live context updates; aligning the fixture restored coverage without changing
 production code or weakening the assertions. Optional private historical-copy
 and real-provider lanes were not rerun by this check.
 
-- `redeven:internal/ai/flower_compaction_ui_test.go` - Isolated Runtime and optional historical-copy checks.
-
-- `redeven:scripts/check_flower_compaction_ui.mjs` - Actual FlowerSurface order, collapse and refresh assertions.
-
-- `redeven:internal/ai/run_e2e_deepseek_compaction_acceptance_test.go` - Four real-provider lanes.
+- `redeven:internal/ai/flower_compaction_ui_test.go` - Tests.
+- `redeven:scripts/check_flower_compaction_ui.mjs` - Tests.
+- `redeven:internal/ai/run_e2e_deepseek_compaction_acceptance_test.go` - Tests.

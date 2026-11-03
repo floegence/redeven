@@ -7,12 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Published Floret owns the canonical Goal, model tool, reflection and completion.
-Redeven authorizes mutations and presents the typed facts. One current Goal per
-thread describes the desired result clearly and concisely without a text-length
-recommendation, ceiling or truncation. Goal never depends on Todo. Stop, thread
-navigation and recovery remain available; an unresolved request never claims a
-successful mutation or completion.
+Floret owns canonical Goal, model tool, reflection and completion; Redeven authorizes and presents facts. One current Goal/thread states intent without text limits or Todo dependency. Stop/navigation/recovery remain usable; unresolved requests never imply successful mutation.
 
 # Contract
 
@@ -38,6 +33,6 @@ Default Flower tools, capability lists and prompts omit write_todos and current 
 
 # Evidence
 
-- redeven:internal/ai/activity_goal_test.go — public detail, timeline and live Goal   fidelity, closed display fields, exact long text and reviews during user waiting.
+- redeven:internal/ai/activity_goal_test.go
 
-- redeven:internal/ai/thread_goal.go — authorization and typed mutation mapping.
+- redeven:internal/ai/thread_goal.go

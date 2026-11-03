@@ -8,7 +8,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Redeven mounts released ReDevPlugin through one Go Host, HTTP namespace, Env App client and surface scope. Published Process Supervisor runs a verified product-built Linux/Darwin runtime. Redeven adds authenticated sessions, source policy, placement and business adapters; upstream owns package, state, protocol, trust and execution. Missing or unproven identities fail closed.
+Redeven mounts one released ReDevPlugin Host/HTTP namespace/client/scope. Published Supervisor runs verified Linux/Darwin runtime. Product supplies sessions, sources, placement and adapters; platform owns package/state/protocol/trust/execution. Unproven identity fails closed.
 
 # Contract
 
@@ -37,10 +37,8 @@ watches coalesce intermediate changes. Neither implies zero-copy or a change log
 
 # Evidence
 
-- `redeven:internal/redevpluginintegration/integration.go:1` - Opens Host modules and the canonical handler.
-
-- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
-
+- `redeven:internal/redevpluginintegration/integration.go:1` - Source.
+- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Source.
 - `redeven:internal/envapp/ui_src/src/test/pluginWebBrowser.fixture.ts:1` - Opt-in real Center/Gateway Web UI: modules, browser Worker, Canvas, private KV/settings/SQLite, binary file roundtrip, slots and close/revoke. This fixture does not qualify backend WASM execution.
 
 - `redeven:internal/redevpluginintegration/runtime_io_live_test.go:1` - Opt-in published author Worker: build the released init --template worker project with plugin ID dev.redeven.qualification.worker, package its built output, and provide REDEVEN_TEST_AUTHOR_PLUGIN_PACKAGE plus the verified product-built REDEVEN_TEST_PLUGIN_RUNTIME. TestPublishedAuthorWorkerRunsThroughRedevenRuntime checks a real WASM result, structured plugin rejection and a successful subsequent invocation.

@@ -31,6 +31,5 @@ This is Redeven product preference policy using already published Floret capabil
 
 # Evidence
 
-- `redeven:internal/ai/conversation_preferences.go` - Authenticated model/cwd/reasoning preferences.
-
-- `redeven:internal/ai/threads.go` - Root creation precedence and final validation.
+- `redeven:internal/ai/conversation_preferences.go` - Source.
+- `redeven:internal/ai/threads.go` - Source.

@@ -7,11 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The shared [Flower provider dialog](flower-provider-configuration.md) owns account
-selection and authentication feedback. Signed-in accounts remain distinct from
-previous connections, sign-out preserves a stable compact summary, and explicit
-removal forgets only a signed-out local registration. The host retains verified
-local admission and persistence ownership.
+Shared provider dialog owns account selection/auth feedback. Verified signed-in accounts differ from saved connections; sign-out retains compact stable summary. Explicit removal forgets only a signed-out local registration; host alone owns admission and protected persistence.
 
 # Contract
 
@@ -29,6 +25,5 @@ Account removal does not delete an OpenAI account or provider configuration. The
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Account selection/recovery/confirmed sign-out with continuity.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Attempt polling without account-list reloads.
+- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Tests.

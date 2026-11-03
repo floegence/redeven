@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The Redeven bootstrap owns host application toolbar presentation; macOS capture and Xpra remain the command and session authorities. Desktop provides native window geometry through the restricted [application presentation boundary](web-service-browser-window.md). One compact titlebar exposes window selection, picture settings and normal close actions without another connection or startup wait. Disconnection disables unavailable actions while preserving the native window and retry path.
+Redeven owns the compact host toolbar; macOS capture/Xpra own commands and sessions, Desktop supplies native geometry. Window selection, picture settings and close share one titlebar. Disconnect disables unavailable actions while preserving window and recovery.
 
 # Contract
 
@@ -32,6 +32,6 @@ Toolbar presentation does not own the capture or Xpra session. Disconnection dis
 
 # Evidence
 
-- `redeven:internal/codeapp/appserver/host_application_viewer/toolbar.js` and `viewer.js` - Shared control presentation and Xpra-owned action routing.
+- `redeven:internal/codeapp/appserver/host_application_viewer/toolbar.js` and `viewer.js`
 
-- `redeven:internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx` - Native safe areas, compact/dark popover bounds.
+- `redeven:internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx` - Tests.

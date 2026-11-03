@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Shared Flower setup/settings serve Desktop and Env App. Empty unconfigured profiles offer explicit setup; configured new conversations offer editable starter drafts without launching turns. A retained modal form preserves saves/errors and makes covered chat inert without acknowledging reads. Existing recovery, model identity and permission owners remain authoritative.
+Shared setup/settings serve both Flower carriers. Unconfigured profiles offer setup; configured new chats offer editable starters without launching. Retained modal preserves saves/errors and makes covered chat inert without read acknowledgement; existing model/permission/recovery owns policy.
 
 # Contract
 
@@ -37,6 +37,5 @@ Permission descriptions sit outside the single-line selection buttons and are li
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/i18n/flowerSurfaceMessages.ts` - Canonical localized task copy and complete seeded prompts.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.starterTasks.browser.test.tsx` - Localized cards, complete prompt insertion and focus without automatic Send.
+- `redeven:internal/flower_ui/src/i18n/flowerSurfaceMessages.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.starterTasks.browser.test.tsx` - Tests.

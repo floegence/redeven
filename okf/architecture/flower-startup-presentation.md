@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Env App/Desktop project one owner's readiness and typed Stop/Retry while retaining navigation and drafts. Close failure requires restart; unknown or contradictory facts are non-retryable contract failures. No surface adds an availability controller. First content admits the workspace; later refresh/reconnect retains mounted conversation state.
+Both carriers project one readiness owner and typed Stop/Retry, retaining drafts/navigation. Close failure needs restart; contradictory facts are nonretryable. Initial content admits workspace, then refresh/reconnect preserves mounted state without another availability controller.
 
 # Contract
 
@@ -26,4 +26,4 @@ Readiness is process-local availability, never Agent lifecycle. [Generation owne
 
 - [Companion readiness browser tests](../../internal/envapp/ui_src/src/ui/FlowerSurface.companionReadiness.browser.test.tsx) cover real companion geometry across both startup boundaries, explicit recovery, keyboard operation, localization, reduced motion and forced colors.
 
-- `redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx:1` - Stop deduplication, explicit retry, failure and draft continuity.
+- `redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx:1` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Git workspace queries produce bounded immutable process-local snapshots; paged/path reads bind exact revisions. Git and Files mutations share repository/topology coordination and invalidate affected snapshots before and after effects. Display state never authorizes mutation. Oversized, stale, malformed or exhausted requests return small typed errors while the Flowersec session remains usable.
+Git queries expose bounded immutable snapshots with revision-bound paging. Git/Files mutations coordinate topology and invalidate snapshots around effects; display grants no authority. Oversized/stale/malformed/exhausted reads return bounded typed errors without losing Flowersec session.
 
 # Contract
 
@@ -22,6 +22,5 @@ Git remains authoritative; snapshots are read models. Hostile external writers a
 
 # Evidence
 
-- `redeven:internal/gitrepo/workspace.go` - Captures workspace state and projects revision-bound pages.
-
-- `redeven:internal/gitrepo/service.go` - Git RPC capability/error/mutation registration.
+- `redeven:internal/gitrepo/workspace.go` - Source.
+- `redeven:internal/gitrepo/service.go` - Source.

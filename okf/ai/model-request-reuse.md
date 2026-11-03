@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns effective reuse decisions and canonical state. Redeven executes them through one prepared request and one Responses consumer. In-memory connections can optimize transmission only after the next canonical state and complete input agree. Failures return to normal turn recovery; supplemental context cannot enable reuse.
+Floret owns reuse decisions/canonical state; Redeven runs one prepared request/Responses consumer. In-memory transport reuse requires matching next canonical state and complete input. Failure follows ordinary turn recovery; supplemental context never enables reuse.
 
 # Contract
 
@@ -36,6 +36,5 @@ rotation separately invalidates the live connection before another request.
 
 # Evidence
 
-- `redeven:internal/ai/model_gateway_openai_connections.go` - Request equality is separate from authenticated connection/credential identity.
-
-- `redeven:internal/ai/openai_continuation_test.go` - Wire requests preserve full history with continuation disabled.
+- `redeven:internal/ai/model_gateway_openai_connections.go` - Source.
+- `redeven:internal/ai/openai_continuation_test.go` - Tests.

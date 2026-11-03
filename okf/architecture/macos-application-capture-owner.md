@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-One Manager-owned lazy Swift helper serves catalog, application and remote-desktop sessions for a Runtime. Suspend only the selected capture; identity, permissions, input, credit and cleanup stay independent. Helper failure ends sharing, not apps; explicit reopen may restart it. The native session contract owns OS permission and process/window validation.
+One lazy Manager-owned Swift helper serves Runtime catalog/app/desktop sessions. Suspension affects selected capture only; identity/permission/input/credit/cleanup remain independent. Failure ends sharing, not apps; explicit reopen may restart under native validation.
 
 # Contract
 

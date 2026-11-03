@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns only the adapters that bind authenticated product sessions, source policy, business capabilities, and Activity or Workbench placement to released ReDevPlugin contracts. ReDevPlugin remains the authority for host protocol, package trust, runtime execution, and platform state. Adapter failures stop at the product boundary and never create copied platform state or implicit grants.
+Redeven binds authenticated sessions, source policy, business capabilities and placement to released ReDevPlugin. Platform alone owns protocol/trust/execution/state. Adapter faults stop at product boundary without implicit grants, copied platform state or substitute lifecycle.
 
 # Contract
 
@@ -64,6 +64,5 @@ These adapters map product identity and presentation into released ReDevPlugin A
 
 # Evidence
 
-- `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules and product adapters.
-
-- `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Delegates package signature and freshness assessment upstream.
+- `redeven:internal/redevpluginintegration/integration.go:240` - Source.
+- `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Source.

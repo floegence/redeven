@@ -7,11 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The LAN record shows a measured deficit without establishing its cause or full
-RustDesk parity. The published v0.22.48 six-frame path reached 53.04 FPS in one
-round, but did not restore three-round stability. C01-C03 hypotheses were
-rejected; C04 supports optional Linux six-frame delivery as a throughput
-diagnostic only. C05 owns current paired results and remaining limits.
+LAN measurements show a deficit, not its cause or RustDesk parity. Published v0.22.48 reaches53.04FPS once without three-round stability. C01–C03 are rejected; C04 six-frame Linux is a throughput diagnostic. C05 retains paired outcomes, adverse trials and remaining limits.
 
 # Contract
 

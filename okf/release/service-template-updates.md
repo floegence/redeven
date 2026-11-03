@@ -34,6 +34,5 @@ The [Managed Service release contract](../architecture/managed-service-release-d
 
 # Evidence
 
-- `redeven:.github/workflows/update-service-template-dependency.yml` - Isolated update scheduling/dependencies and generated-output bounds.
-
-- `redeven:scripts/update_service_template_dependency.mjs` - Public modules/checksums/no-op adoption and failure restoration.
+- `redeven:.github/workflows/update-service-template-dependency.yml` - Source.
+- `redeven:scripts/update_service_template_dependency.mjs` - Source.

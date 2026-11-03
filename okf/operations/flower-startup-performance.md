@@ -19,6 +19,5 @@ Peak is not idle heap; no canonical validation skip, production store mutation, 
 
 # Evidence
 
-- `redeven:internal/ai/service_activation.go:1` - Summary/inventory preparation and explicit activation.
-
-- `redeven:internal/codeapp/ai_readiness_test.go:1` - Serialized stop, cleanup, retry and terminal close failure.
+- `redeven:internal/ai/service_activation.go:1` - Source.
+- `redeven:internal/codeapp/ai_readiness_test.go:1` - Tests.

@@ -35,9 +35,8 @@ Flower must not infer remote execution from thread context alone; it can only cl
 
 # Evidence
 
-- `redeven:internal/ai/tools/registry.go:299` - OKF tools carry read-only structured presentation policy.
-
-- `redeven:internal/ai/floret_native_tools.go` - One native web_fetch factory with invocation permission binding.
+- `redeven:internal/ai/tools/registry.go:299` - Source.
+- `redeven:internal/ai/floret_native_tools.go` - Source.
 
 - Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.
 - internal/ai/patch_prompt_qualification_test.go uses the isolated live-model lane for multi-chunk, order and duplicate-header recovery. Patches run only in memory; proposed tools never execute. Small samples do not establish production failure rates.

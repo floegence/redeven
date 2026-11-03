@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The protected account store owns verified registrations/sessions; reuse unless explicit new-account/workspace intent. Email is no identity key. OAuth persistence is independent of connection editing; identity-only grants cannot infer. Retry refreshes OAuth inputs; renewal/logout serialize tokens. Cancellation/failed storage block credential use. Durable logout tracks interrupted cleanup; remote revocation remains separate.
+Protected account storage owns verified identity/sessions, independent of connection editing; email is no identity key. OAuth retry refreshes inputs, renewal/logout serialize tokens, and failed persistence blocks use. Durable local logout tracks cleanup; remote revocation is separate.
 
 # Contract
 
@@ -32,6 +32,5 @@ This concept owns local registration and credential lifecycle. Connection config
 
 # Evidence
 
-- `redeven:internal/chatgpt/client.go` - Bounded OAuth, verified commit, client recovery and canceled cleanup.
-
-- `redeven:internal/chatgpt/account_lifecycle_contract_test.go` - OAuth failures/cancel, identity persistence, uncertain revocation and unbound renewal.
+- `redeven:internal/chatgpt/client.go` - Source.
+- `redeven:internal/chatgpt/account_lifecycle_contract_test.go` - Tests.

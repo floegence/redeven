@@ -37,7 +37,7 @@ No authority barriers, admission receipts, recovery handles or projection-cursor
 
 # Evidence
 
-- `redeven:internal/ai/floret_effect_authorization.go` - Binds one-shot effect authorization to the exact Floret attempt.
+- `redeven:internal/ai/floret_effect_authorization.go` - Source.
 
 - [Terminal wait integration](../../internal/ai/terminal_wait_floret_integration_test.go) - Exercises quiet repeated reads and mixed-effect repeat protection against published Floret.
 

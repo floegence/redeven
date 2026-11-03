@@ -33,6 +33,8 @@ The shared document-to-graph mapper passes only visible container rules from `pr
 
 - `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts` - Identity-only native request/ACK.
 
-- `desktop/src/main/main.ts` - Session-authorized Service Canvas window creation and reuse.
+- `desktop/src/main/main.ts` - Source.
 
 - `desktop/scripts/check-service-canvas-window.mjs` - Real Desktop Open/repeat/close/reopen and invalid rejection.
+
+- `desktop/scripts/check-service-canvas-window.mjs` - Tests.

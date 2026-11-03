@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Qualify process, window, decoded-frame and authenticated-viewer facts independently under application authorization/window-lifecycle contracts. Only confirmed closure ends physical viewers. Missing/inaccessible surfaces preserve apps and recovery, never retarget processes or inject stale input. Cross-platform operations retain OS differences; this is not all-app certification.
+Qualify process, window, decoded-frame and viewer facts independently. Only confirmed closure ends physical viewers; unavailable surfaces retain apps/recovery and revoke stale input. Keep OS differences and authorization boundaries explicit; results never certify arbitrary apps.
 
 # Contract
 

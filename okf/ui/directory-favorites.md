@@ -7,10 +7,7 @@ reviewed_at: "2026-10-30"
 ---
 # Summary
 
-Runtime owns one directory-favorites store. Each authenticated namespace, endpoint
-and user has an independent ordered path set and revision. Env App and Desktop
-supply this metadata to published Floe controlled pickers and filesystem menus; the
-existing filesystem navigator remains the only path validation and selection owner.
+Runtime stores independent ordered favorites/revisions per authenticated namespace/endpoint/user. Env App/Desktop supply metadata to published Floe pickers and menus; existing filesystem navigation alone validates/selects paths. Favorites neither grant authority nor duplicate navigation.
 
 # Contract
 
@@ -45,9 +42,9 @@ Favorites are personal navigation metadata owned by Redeven. Floret does not par
 
 # Evidence
 
-- redeven:internal/directoryfavorites/store.go — transactional scoped persistence and schema verification.
+- redeven:internal/directoryfavorites/store.go
 
-- redeven:internal/directoryfavorites/store_test.go — isolation, persistence, concurrency, rollback and invalid schemas.
+- redeven:internal/directoryfavorites/store_test.go
 
 - redeven:internal/codeapp/appserver/directory_favorites_api.go — authenticated read-only directory admission and item mutations.
 

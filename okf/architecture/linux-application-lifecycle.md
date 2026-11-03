@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns Linux instances, authorization and ephemeral shares; Floe Native Apps owns GIO/process observation. Applications outlive viewers and window count. Closing a share or Runtime never requests termination. Recovery requires original user/private state plus matching kernel process generation and endpoint; persisted PID alone never permits signaling. Reboot, display destruction or external cgroup cleanup can end dependent apps.
+Redeven owns Linux instances/shares; Floe Native Apps observes GIO/processes. Apps outlive viewers and Runtime. Recovery requires original user/state, kernel generation and endpoint, never PID alone. Reboot, display destruction or external cgroup cleanup may end apps.
 
 # Contract
 

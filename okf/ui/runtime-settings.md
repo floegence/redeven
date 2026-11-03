@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Env App owns runtime settings destinations, localized drafts and API adapters; published Floe owns reusable layout/navigation. Narrow layouts remain usable and revisited panels retain draft/scroll. Authenticated APIs own writes; readers cannot edit administrator fields. Failures preserve input, while maintenance uses its existing controller after explicit confirmation.
+Env App owns settings destinations/drafts/API adapters; Floe reusable layout/navigation. Narrow/revisited panels retain usability, drafts and scroll. APIs authorize writes, never reader UI. Failure retains input; maintenance continues through its controller after explicit consent.
 
 # Contract
 
@@ -31,6 +31,6 @@ Read access cannot edit administrator fields. Runtime maintenance requires expli
 
 - `redeven:internal/config/config_update.go` and   `redeven:internal/config/config_update_test.go` own coordinated configuration   transactions, settings preservation, account removal, and failed writes.
 
-- `redeven:internal/agent/gateway_membership_lifecycle_test.go`,   `redeven:internal/agent/control_artifact_source_test.go`, and   `redeven:internal/agent/cloud_link_test.go` verify saved ChatGPT bindings   survive connection maintenance, in-flight exchanges, and restart.
+- `redeven:internal/agent/gateway_membership_lifecycle_test.go`,   `redeven:internal/agent/control_artifact_source_test.go`, and   `redeven:internal/agent/cloud_link_test.go`
 
-- `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.tsx` owns destinations,   selection, and retained panels.
+- `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.tsx`

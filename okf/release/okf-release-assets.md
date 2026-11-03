@@ -7,11 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-GitHub releases ship `okf_bundle.manifest.json` and `okf_bundle.sha256` together with CLI tarballs, desktop packages, and signed `SHA256SUMS`.
-
-Release workflow publishes OKF verification assets alongside CLI and desktop artifacts.
-
-The signed aggregate checksum remains the public integrity anchor for these standalone verification files.
+Releases distribute OKF manifest and SHA256 verification assets alongside CLI/Desktop packages and signed SHA256SUMS. The signed aggregate remains their public integrity anchor; standalone verification files never replace authenticated release checksums or source provenance.
 
 # Contract
 
@@ -24,4 +20,4 @@ Downstream verification relies on releases containing both the standalone OKF ve
 
 # Evidence
 
-- `redeven:.github/workflows/release.yml:51` - Release builds embedded assets before packaging binaries.
+- `redeven:.github/workflows/release.yml:51` - Source.

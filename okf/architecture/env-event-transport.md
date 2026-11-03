@@ -32,6 +32,5 @@ An observer cannot choose another upstream, session identity or native HTTP tran
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/services/sessionHTTP.ts` - Released lifecycle fetch/event binding, no host retry/fallback.
-
-- `redeven:internal/agent/agent.go` - Local/remote session registration against fixed AppServer.
+- `redeven:internal/envapp/ui_src/src/ui/services/sessionHTTP.ts` - Source.
+- `redeven:internal/agent/agent.go` - Source.

@@ -7,12 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Flower maps authorized code, configuration, and connected Runtime facts into
-Tessiven versions through the `redeven-tessiven` system skill. Flower owns canvas
-content editing as a core workflow. Resource actions
-remain owned by the existing Managed Services and Containers managers. A
-transport failure after a mutation is dispatched is terminal with an unknown
-outcome, so the user must inspect the original manager before trying again.
+The redeven-tessiven skill maps authorized code/configuration/Runtime facts into canvas versions. Flower edits content; existing service/container managers own resource actions. Lost mutation replies remain unknown: inspect original manager state before any new attempt.
 
 # Contract
 
@@ -24,8 +19,8 @@ Flower and the UI call the same Tessiven service; neither writes its database di
 
 # Evidence
 
-- `internal/tessiven/context_test.go` - Canonical host and instance selections retain logical membership.
+- `internal/tessiven/context_test.go` - Tests.
 
-- `internal/ai/system_skills/redeven-tessiven/SKILL.md`
+- `internal/ai/system_skills/redeven-tessiven/SKILL.md` - Source.
 
 - `internal/ai/tessiven_tools.go`

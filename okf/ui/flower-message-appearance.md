@@ -7,7 +7,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Shared Flower uses published Floe colors for compact assistant/user reading and contrasting sent-message selection. Theme changes affect paint while preserving DOM, geometry and selection. Queued input stays quieter; forced colors use system roles. Media and resource cards retain canonical identity and never require an empty text bubble.
+Shared Flower uses Floe colors for compact reading and contrasting sent-message selection. Themes change paint without disturbing DOM/geometry/selection. Queue stays quieter; forced colors use system roles. Media/cards preserve identity without empty message bubbles.
 
 # Contract
 

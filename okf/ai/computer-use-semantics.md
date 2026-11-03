@@ -68,11 +68,10 @@ Confirmed actions survive an observation failure; failed content never enters mo
 
 # Evidence
 
-- `redeven:internal/ai/computer_semantic.go` - Semantic roles/schema/pruning and focus projection.
-
-- `redeven:internal/ai/computer_semantic_test.go` - Graph/state/diff/selector/privacy assertions.
-- `redeven:internal/ai/computer_field_integrity_test.go` - Semantic normalization/diffs/bounds and guest diagnostics.
-- `redeven:internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs` - Actual Chromium Unicode/full-name ref/cursor checks.
+- `redeven:internal/ai/computer_semantic.go` - Source.
+- `redeven:internal/ai/computer_semantic_test.go` - Tests.
+- `redeven:internal/ai/computer_field_integrity_test.go` - Tests.
+- `redeven:internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs` - Tests.
 
 Browser identity-read failures and explicit recovery also have real Chromium and
 connected-extension regressions in computerScrollReference.node-test.mjs and

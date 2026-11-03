@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven discovers installed macOS bundles and opens real apps as the Runtime user. Trusted Desktop Local routes launch directly; remote routes capture the selected app's actual windows, including existing single-instance processes. [Application authorization](host-applications.md) gates every operation/stream. Missing graphical login or permissions blocks capture; disconnect preserves the app and reconnect binds the same process.
+Redeven opens installed bundles as Runtime user. Trusted Desktop Local launches directly; remote capture binds actual selected windows/processes. Authorization gates operations/streams. Missing login/permissions blocks capture; disconnect preserves apps and exact-process recovery.
 
 # Contract
 

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Desktop/Env App share one Browser and desktop dialog. Runtime capability, thread selection/grants and extension consent are separate authorities. Open/refresh/close never selects, grants, runs, installs or launches. Failed reads stay unknown; lost selections remain unavailable until recovery/replacement. Floret alone owns conversation lifecycle.
+Both carriers share Browser and desktop settings. Runtime capabilities, thread grants/selection and extension consent are independent. Open/refresh/close grants or launches nothing; failed reads stay unknown and lost targets unavailable. Floret alone owns conversation lifecycle.
 
 # Contract
 
@@ -27,6 +27,5 @@ Inspection never selects a page, grants authority, starts a task or installs com
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - shared dialog and staged operations.
-
-- `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - global entry to the same dialog.
+- `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - Source.
+- `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - Source.

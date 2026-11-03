@@ -25,6 +25,5 @@ Volume usage is an observation, not a capacity, quota, free-space, billing, or c
 
 # Evidence
 
-- `redeven:internal/containerengine/volume_usage.go` - Reads bounded engine statistics and preserves unavailable sizes.
-
-- `redeven:internal/containerengine/volume_usage_test.go` - Both engine formats, validation, exact target and cancellation.
+- `redeven:internal/containerengine/volume_usage.go` - Source.
+- `redeven:internal/containerengine/volume_usage_test.go` - Tests.

@@ -7,11 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The [viewer contract](../architecture/host-application-viewer.md) owns cursor
-geometry; published `floe-native-apps` owns its implementation. Acceptance checks
-decoded images and application click receipts separately from the operating
-system's displayed pointer. A CSS declaration or ordinary page screenshot cannot
-qualify physical pointer appearance. Unavailable devices remain unpassed.
+Published Floe Native Apps owns cursor geometry. Acceptance independently checks decoded pictures, click receipts and physical OS pointer. CSS/page screenshots alone cannot prove pointer appearance; unavailable devices remain unqualified under the viewer contract.
 
 # Contract
 

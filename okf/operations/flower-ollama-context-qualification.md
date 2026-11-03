@@ -7,13 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-The opt-in Ollama qualification uses the production Flower service, its model
-gateway, and the published Floret thread runtime. Native provider usage must
-agree with canonical Flower context and cumulative totals; compaction must
-preserve facts through a real model-generated checkpoint and restart. Tests own
-their temporary state and loopback recording proxy. A provider or assertion
-failure fails the run; it never substitutes a simulated response or changes the
-user's model configuration.
+Opt-in Ollama acceptance uses production Flower, gateway and Floret. Native usage must match canonical totals; real compaction preserves facts through restart. Tests own state/proxy; failures never substitute simulated responses or alter the user model configuration.
 
 # Contract
 
@@ -36,6 +30,5 @@ Results qualify the selected installed model and its observed serving capacity, 
 
 # Evidence
 
-- `redeven:scripts/check_flower_context_ollama.sh` - Explicit installed-profile real-provider runner.
-
-- `redeven:internal/ai/model_catalog.go` - Discovers served capacity before theoretical model capacity.
+- `redeven:scripts/check_flower_context_ollama.sh` - Tests.
+- `redeven:internal/ai/model_catalog.go` - Source.

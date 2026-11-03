@@ -41,10 +41,8 @@ Management presentation never creates a second lifecycle or permission authority
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Shared card/control surfaces, light/dark screenshots, localized compact layouts, installation geometry, source focus and update reviews.
-
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterDrawer.tsx:1` - Retained global placement using released bottom-drawer Dialog.
-
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Exact selection, scoped keys, unique accessibility IDs and responsive detail.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterDrawer.tsx:1` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Source.
 
 - redeven:internal/envapp/ui_src/src/ui/plugins/PluginRetainedDataDialog.browser.test.tsx:1 - Exercises single commits, uncertain outcomes, owner/target changes, permissions, focus, localized layouts and mobile geometry.

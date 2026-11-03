@@ -30,6 +30,5 @@ Existing client request errors retain their Retry action, subsequent polling, an
 
 # Evidence
 
-- `redeven:internal/monitor/service.go` - One collector, loopback filtering and cached snapshots.
-
-- `redeven:internal/monitor/network_counters_test.go` - Flag-based accounting, isolated failures/cancel/recovery.
+- `redeven:internal/monitor/service.go` - Source.
+- `redeven:internal/monitor/network_counters_test.go` - Tests.

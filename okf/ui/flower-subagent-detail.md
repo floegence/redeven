@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret parent-scoped ThreadRuntime.List owns membership; complete child ThreadView alone owns details. Open a stable immediate live window without polling/layout-changing sync UI. Routes use thread_id and explicit task_name, never inferred aliases. Malformed identity/contracts or parent-child mismatch fail rather than accepting legacy substitutes.
+Floret parent-scoped List owns membership; complete child ThreadView owns details. Open stable immediate live windows without polling/reflowing sync UI. Routes require thread_id/task_name; malformed identity or mismatched parent-child fails without inferred legacy aliases.
 
 # Contract
 
@@ -34,10 +34,7 @@ and Escape focus restoration remain product task-list semantics.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx` - Delayed/narrow/touch geometry, read counts and explicit child navigation.
-
-- `redeven:internal/flower_ui/src/SubagentAvatarStack.tsx` - Owns bounded portrait rotation and local motion cleanup.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentHeader.browser.test.tsx` - Running/completed detail motion, theme and narrow-header access.
-
-- `redeven:internal/ai/types.go:172` - Backend SubAgent summaries expose canonical thread identity only.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx` - Tests.
+- `redeven:internal/flower_ui/src/SubagentAvatarStack.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentHeader.browser.test.tsx` - Tests.
+- `redeven:internal/ai/types.go:172` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Gateway is an independent Runtime attachment, client-device admission and relay service. A fresh Gateway and Runtime work without a Cloud account, cached Cloud authority or public Internet. Cloud membership, organizations and user roles belong only to Cloud. Gateway and Runtime maintain device trust and environment authentication, never a local user directory.
+Gateway independently owns Runtime attachment/device admission/relay, working without Cloud account, cached authority or public Internet. Cloud alone owns membership/organizations/roles. Gateway device trust and Runtime environment authentication create no local user directory.
 
 # Contract
 
@@ -39,7 +39,8 @@ Published Flowersec supplies invitation exchange, connection controllers, ByteSt
 
 - redeven:internal/gatewayservice/public_endpoint_test.go — One public endpoint admits pairing and rejects host routes.
 - redeven:internal/gatewayservice/host_admin_test.go — Private socket context plus credential; loopback/header spoof rejection.
-- redeven:internal/gatewayservice/server_test.go — Unsupported state remains unchanged.
+- redeven:internal/gatewayservice/server_test.go
+
 - redeven:cmd/redeven-gateway/configuration_reset_test.go — Explicit recovery, lock/path rejection, retained trust and recovered host catalog.
 - redeven:desktop/src/main/gatewayServiceHost.test.ts — Package replacement and reset/start ordering; ordinary update preserves rejected state.
-- redeven:desktop/src/main/gatewayStore.test.ts — Saved registration migration and pinned identity preservation.
+- redeven:desktop/src/main/gatewayStore.test.ts

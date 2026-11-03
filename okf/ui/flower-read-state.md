@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns per-user read confirmation. Unread indicators compare current activity with server confirmation and actual local presentation. Old responses never restore a dot for an already read version; new unseen activity remains unread. Temporary synchronization failures recover silently in the background, without blocking any user operation.
+Redeven confirms reads per user from server version and actual local presentation. Old responses cannot restore already-cleared indicators; unseen activity stays unread. Temporary sync failures recover in background without blocking operations or inventing acknowledgements.
 
 # Contract
 
@@ -45,6 +45,5 @@ Read confirmation belongs to Redeven product state, not Floret execution or shar
   cover foreground/reselect/cache/cold-navigation races, late and failed refreshes,
   visible unread indicators and bounded read/acknowledgement counts.
 
-- `redeven:internal/flower_ui/src/threadCache.ts` - Monotonic read/activity merge with separate content coverage.
-
-- `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Clocked retry/timeout/offline/access and late callbacks.
+- `redeven:internal/flower_ui/src/threadCache.ts` - Source.
+- `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Tests.

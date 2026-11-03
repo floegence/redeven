@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Heavy navigation acknowledges selection synchronously, commits target visibility after that intent can paint, then performs focus, resize, scroll or measurement after content paint. Published Floe separates visual from committed values; Redeven applies this ordering across Activity, Workbench, terminal, Flower, Files/Git and heavy panels without duplicating business state.
+Navigation selects synchronously, paints intent, commits target visibility, then focuses/resizes/scrolls/measures after content paint. Floe owns visual/committed value separation; Redeven applies it across heavy product surfaces without duplicating business state.
 
 # Contract
 
@@ -28,6 +28,5 @@ Explicit environment replacement, permission-root replacement, connection recove
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405` - Shared UI-first Activity/Workbench mode controller.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:3246` - Files and Git retain mounted panels after first activation.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:3246` - Source.

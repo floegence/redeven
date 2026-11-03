@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Desktop publishes each Environment session's explicit target route and identity. Accepted Runtime Stop, Restart and Update invalidate attached sessions. One model-source process handle per session starts without delaying Env App; that process owns reconnects while provider credentials remain local. Persisted Flower history stays readable when the live model source is unavailable.
+Desktop publishes explicit Environment route/identity. Accepted Stop/Restart/Update invalidates sessions. Each session has one process-local model-source owner for reconnect; startup never delays Env App and credentials stay local. Saved Flower history remains readable offline.
 
 # Contract
 
@@ -21,6 +21,5 @@ Welcome Flower and Tessiven share compatibility/AI readiness. Returning to prepa
 
 # Evidence
 
-- `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Document ownership ends on navigation/crash/destruction, not in-page navigation.
-
-- `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Canvas waits for AI readiness and retains recovery drafts.
+- `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Source.
+- `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Tests.

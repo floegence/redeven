@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Registry owns lifecycle records/transactions; Manager observes resources and available actions; Renderer presents current state, last result and next step. Unavailable inspection is not absence; historical failure is not current state. Destruction requires fresh ownership/explicit cleanup. Authorized detach works with an offline engine but preserves resources and claims no process stop.
+Registry owns lifecycle/transactions; Manager observes resources/actions; renderer shows current state/result/next step. Unavailable is not absent, failure history not current state. Destruction needs fresh ownership/consent; offline detach preserves resources and claims no stop.
 
 # Contract
 
@@ -43,6 +43,5 @@ The contiguous `portforward_registry_v2` 3-to-4 migration preserves bindings, co
 
 # Evidence
 
-- `redeven:internal/managedwebservice/management_facts.go` - Structured observation and reference facts.
-
-- `redeven:internal/managedwebservice/management_uninstall.go` - Durable per-resource uninstall results and resumption.
+- `redeven:internal/managedwebservice/management_facts.go` - Source.
+- `redeven:internal/managedwebservice/management_uninstall.go` - Source.

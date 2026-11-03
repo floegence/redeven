@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floe owns asset comparison/view isolation; Redeven owns authenticated entry, secure trigger, localization and explicit reload. Connected Runtime does not prove old page modules still load. Changed builds/import failures expose recovery instead of endless placeholders. Never reload over drafts; notices stay inside active content below unchanged shell/native controls.
+Floe compares assets/isolates views; Redeven supplies secure authenticated trigger, copy and explicit reload. Connected Runtime does not prove old modules usable. Import/build changes expose recovery within content; never reload over drafts or move native/shell controls.
 
 # Contract
 
@@ -27,6 +27,5 @@ Transport readiness does not prove document assets are current or loadable. Buil
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/createEnvAppAssetRecovery.ts` - Secure-readiness trigger and authenticated document route.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Activity isolation and Workbench content boundary.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/createEnvAppAssetRecovery.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Source.

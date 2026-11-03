@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns journal/destination identity; Redeven authorizes endpoint/source and adopts destination settings. One stable request optionally titles that returned destination only. No product fork receipt/saga/canonical copy. Invalid request, foreign source, Floret failure or conflicting settings fails explicitly, without a recovery coordinator or compensating canonical deletion.
+Floret owns Fork journal/destination; Redeven authorizes source/endpoint and adopts settings. One stable request may title that exact destination. Invalid/foreign/conflicting/failed requests stop explicitly; no product saga, canonical copy, recovery coordinator or compensating deletion.
 
 # Contract
 
@@ -23,6 +23,5 @@ Redeven never stores a fork saga, source/destination turn or run identity mappin
 
 # Evidence
 
-- `redeven:internal/ai/threads.go` - Source authorization, typed Fork, product settings and optional title.
-
-- `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.
+- `redeven:internal/ai/threads.go` - Source.
+- `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Released templates own entrance parsing; Runtime owns verified preparation/persistence, Desktop navigation and Env App display. Host/Container/Compose open current verified entrances through protected Forward, including running upgraded instances. No restart, upgrade or data change; HTTP 401 proves availability only. Unsafe/unverified entrances fail with recovery, never stop healthy apps.
+Templates parse entrances; Runtime verifies/persists preparation; Desktop navigates and Env App presents. Open verified Host/Container/Compose entrances through Forward without lifecycle/data changes. HTTP401 proves availability only; failures offer recovery and never stop healthy apps.
 
 # Contract
 
@@ -39,6 +39,5 @@ Entrance preparation operates within the existing [Managed Web Service contract]
 
 # Evidence
 
-- `redeven:internal/managedwebservice/opening_prepare.go` - Common source validation, private cache and generation checks.
-
-- `redeven:internal/managedwebservice/opening_launch.go` - Host/container launch authority and unique Compose entrance.
+- `redeven:internal/managedwebservice/opening_prepare.go` - Source.
+- `redeven:internal/managedwebservice/opening_launch.go` - Source.

@@ -27,6 +27,5 @@ A late restoration cannot replace explicit user navigation. Transient directory 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/services/activityNavigation.ts` - Versioned navigation, target validation, migration and recency.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Separate display modes, inventory checks and cancellation.
+- `redeven:internal/envapp/ui_src/src/ui/services/activityNavigation.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Source.

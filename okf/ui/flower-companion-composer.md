@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-One native Flower textarea serves collapsed entry and expanded composer, retaining draft, selection, focus and IME. Redeven owns content; published Floe owns shell motion/geometry. Expanded text precedes a bottom toolbar, with controls in More and guidance above. Phase-driven close/reversal never remounts the editor or introduces lifecycle timers.
+One native textarea survives collapsed/expanded Flower with draft, selection, focus and IME intact. Redeven owns content; Floe shell geometry/motion. Expanded text sits above bottom toolbar/More; phase-driven close/reversal never remounts or adds lifecycle timers.
 
 # Contract
 
@@ -28,6 +28,5 @@ This concept owns content presentation only. [Flower companion presence](flower-
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Retained editor and explicit entry decisions.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Stable composer focus cycles across themes/carriers, retaining forced-color focus.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Tests.

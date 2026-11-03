@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven controls/feedback use published input/playback; session contracts own authorization and capture generations. Only painted current control admits input. Separate cursor frames permit immediate pointer motion; embedded cursor hides local pointer. Recovery keeps local controls usable. Disconnect stops input/media, confirms removal or offers Retry; frozen pixels never imply connection.
+Published input/playback and session contracts own current-frame authority. Separate cursors permit immediate movement; embedded cursors hide local pointer. Recovery keeps controls usable; disconnect stops media/input with confirmed removal or Retry. Frozen pixels never imply connection.
 
 # Contract
 

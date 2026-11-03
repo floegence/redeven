@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The helper exposes single-app menus, removing Apple/cross-app visibility branches before handles exist. Keep native titles literal. Only an enabled current leaf with verified live ancestry executes; stale/rejected actions retain app/capture and localized errors. Inspect menus only on explicit requests/actions, never launch/first frame.
+Helper exposes single-app menus, removing Apple/cross-app branches before issuing handles. Titles stay literal; only enabled current leaves with verified ancestry execute. Stale actions preserve app/capture and errors. Inspect only on explicit action, never launch/first-frame.
 
 # Contract
 

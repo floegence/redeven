@@ -7,11 +7,7 @@ reviewed_at: "2026-11-03"
 ---
 # Summary
 
-`ComputerUseRuntime` owns desktop target execution. macOS targets an explicit
-application window; Linux owns a private Xvfb and D-Bus session. Semantic actions
-use native accessibility first. A foreground operation requires current task
-authorization and respects explicit Stop and takeover. Platform permissions do not prove
-that every application or action can run unobtrusively in the background.
+ComputerUseRuntime owns desktop execution: explicit macOS app window or private Linux Xvfb/D-Bus. Semantic actions prefer native accessibility. Foreground work requires task authorization and honors Stop/takeover; OS permissions alone cannot certify unobtrusive background operation.
 
 # Contract
 
@@ -69,9 +65,8 @@ Swift unit tests and real GTK/AT-SPI/Xvfb fixtures provide separate adapter proo
 
 # Evidence
 
-- `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/Accessibility.swift` - window identity, AX observation and semantic actions.
-
-- `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/ScreenCapture.swift` - bounded window capture and exclusions.
+- `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/Accessibility.swift` - Source.
+- `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/ScreenCapture.swift` - Source.
 
 - 2026-11-03 acceptance: 42 Swift tests and the real AppKit fixture pass, including copy/cut/paste effects, source reads, Unicode range checks, hover/input, scroll, privacy pause and conditional focus/pointer restoration. Repeated fixture runs may stop at unavailable input monitoring; qualification never bypasses that boundary.
 - Browser acceptance: 259 focused tests pass, plus the five real Chromium interaction/source scenarios, relocated packaged helpers, 16 Desktop bundle tests, the HTTP provider output assertion and Flower UI restart/Stop/unknown-effect checks.

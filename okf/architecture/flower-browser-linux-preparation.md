@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime discovers installations and registers Native Messaging; Host Applications owns graphical lifecycle. The guide prepares a persistent Linux Chrome/Chromium profile without launch or target authority. Clients pass opaque installation IDs, never paths/argv. Preserve personal profiles; unsupported platforms, missing installs and unsafe directories fail before launch.
+Runtime discovers installs/registers Native Messaging; Host Applications owns graphical lifecycle. Linux guide prepares persistent Chrome profiles without launch/target authority. Clients pass opaque IDs. Personal profiles remain; missing/unsafe/unsupported sources fail before launch.
 
 # Contract
 
@@ -21,6 +21,5 @@ The Flower connection guide offers this action on a remote Linux host when the e
 
 # Evidence
 
-- `redeven:internal/codeapp/appserver/browser_connection_api.go` - Authenticated preparation with fixed installation identity.
-
-- `redeven:internal/codeapp/appserver/browser_connection_api_test.go` - Missing authority and caller-selected path rejection.
+- `redeven:internal/codeapp/appserver/browser_connection_api.go` - Source.
+- `redeven:internal/codeapp/appserver/browser_connection_api_test.go` - Tests.

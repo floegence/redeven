@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Shared Flower renders canonical Floret approvals as a compact keyed list bounded by chat space with reachable header/footer. Runtime owns identity, permission and settlement; UI owns disclosure/submission feedback. Pending unavailable approvals stay visible with disabled decisions and reasons. Failures preserve content and keep Stop/navigation usable.
+Shared Flower renders keyed canonical approvals within chat space with reachable header/footer. Runtime owns identity/permission/settlement; UI disclosure/feedback. Unavailable pending items remain disabled with reasons; failure preserves content, Stop and navigation.
 
 # Contract
 
@@ -28,6 +28,5 @@ One pure presenter owns trusted operation/title/description/command/target/risk 
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Canonical approvals, guarded batches and focus handoff.
-
-- `redeven:internal/flower_ui/src/flowerApprovalPresentation.ts` - Trusted operation labels, targets, and risk fields.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
+- `redeven:internal/flower_ui/src/flowerApprovalPresentation.ts` - Source.

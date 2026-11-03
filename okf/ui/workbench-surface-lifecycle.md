@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Workbench preserves widget identity across selection, activation, loading and recovery. Floe owns generic Dock focus; Redeven adds no visibility store. Selected Terminal local viewports own wheel input without DOM focus; unselected widgets remain Canvas-owned. Shell recovery makes retained content inert above the canvas, with overlays in the shared surface layer.
+Workbench retains widget identity through selection/loading/recovery; Floe owns Dock focus. Selected Terminal viewports own wheel without DOM focus; unselected remain Canvas-owned. Shell recovery makes retained content inert in shared overlay layers without another visibility store.
 
 # Contract
 
@@ -22,6 +22,5 @@ Only the shell-level recovery snapshot may suspend the Workbench interaction tre
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Singleton reuse without implicit centering when focus is disabled.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241` - Terminal local-scroll wheel delegation without DOM-focus requirement.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241` - Source.

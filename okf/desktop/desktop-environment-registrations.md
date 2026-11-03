@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Each Environment action names one registration owner: `local_environment` for built-in Local, `runtime_target` for WSL/SSH/containers, `saved_environment` for URLs, or the Gateway-held member identity. Linked cards never choose storage or mutation behavior. Desktop serializes changes against current preferences, immediately publishes committed snapshots and fences late probes/Open tasks so removed registrations cannot reappear.
+Each Environment action names its registration owner: Local, runtime target, saved URL or Gateway member. Linked cards never choose storage. Desktop serializes preference changes, publishes commits immediately and fences late probes/Open so removed records cannot return.
 
 # Contract
 
@@ -23,6 +23,5 @@ Desktop owns registration metadata only. Editing/removing it never deletes Runti
 
 # Evidence
 
-- `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Explicit registration reference and progress-surface contracts.
-
-- `redeven:desktop/src/main/desktopPreferences.ts:1` - Canonical preference owners and non-resurrecting mutations.
+- `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Source.
+- `redeven:desktop/src/main/desktopPreferences.ts:1` - Source.

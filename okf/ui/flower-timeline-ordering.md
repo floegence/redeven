@@ -21,6 +21,5 @@ Stable row identity and order come only from the published Floret current view. 
 
 # Evidence
 
-- `redeven:go.mod` - Published current-item/turn presentation contract.
-
-- `redeven:internal/ai/floret_timeline_messages_test.go` - Public ordered items and live markers preserved in projection.
+- `redeven:go.mod` - Source.
+- `redeven:internal/ai/floret_timeline_messages_test.go` - Tests.

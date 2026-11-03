@@ -8,7 +8,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-One settings window/session per Environment opens without waiting for access reads. Registration controls sections; explicit Environment IDs resolve registered management authority for every operation. Runtime owns access config. Failure preserves drafts/diagnosis; stale responses cannot alter newer opens. Cloud/URL/Gateway cannot read or save Local access settings.
+One settings window/session opens immediately per Environment. Registered identity resolves section/management authority; Runtime owns access config. Failures retain draft/diagnosis and late replies cannot replace new opens. Cloud/URL/Gateway never reads or saves Local access.
 
 # Contract
 
@@ -37,4 +37,4 @@ SSH field and secret details are owned by [SSH environment settings](desktop-ssh
 
 # Evidence
 
-- `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Tab/action padding, keyboard, localized narrow and touch geometry.
+- `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Tests.

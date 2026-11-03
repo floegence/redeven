@@ -25,4 +25,4 @@ Scale is presentation only. Composer drafts, permissions, atomic approval batche
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/BodyTypography.browser.test.tsx` - Actual scaled dialog roles, pointer/touch differences, headings and rename.
+- `redeven:internal/envapp/ui_src/src/ui/BodyTypography.browser.test.tsx` - Tests.

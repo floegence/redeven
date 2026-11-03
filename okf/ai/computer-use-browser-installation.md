@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Runtime owns one optional Chromium install. Enabled by default, it downloads only after authenticated user confirmation, never discovery/settings/tools. Disable persists, cancels install, closes managed processes and blocks use/prompts while retaining bytes/site data. Floret owns waiting/continuation. Failed verification publishes no partial package; offer explicit retry/source choice.
+Runtime owns optional Chromium installation, enabled by default but downloaded only after authenticated confirmation. Disable cancels/closes/blocks prompts while retaining bytes/site data. Floret owns waiting/continuation; failed verification publishes nothing and exposes Retry/source choice.
 
 # Contract
 
@@ -33,6 +33,5 @@ Discovery, settings and agent execution cannot initiate installation. Verificati
 
 # Evidence
 
-- `redeven:desktop/src/main/runtimePackageCache.ts` - complete source suites and cache admission.
-
-- `redeven:internal/browserinstall/manager.go` - preference, upstream acquisition and atomic package publication.
+- `redeven:desktop/src/main/runtimePackageCache.ts` - Source.
+- `redeven:internal/browserinstall/manager.go` - Source.

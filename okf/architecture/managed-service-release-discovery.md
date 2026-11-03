@@ -8,7 +8,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Configured npm/OCI registries own release metadata; Redeven validates candidates, installed identity, updates and rollback. Users explicitly select compatible releases without a Redeven version service. Discovery never installs; recommendations are defaults only. Expiring opaque IDs are revalidated at execution. Failure preserves healthy service and last-success summaries without implicit installation.
+Configured npm/OCI registries supply releases; Redeven validates identity/compatibility/update/rollback. Discovery only recommends; users select and explicitly install. Revalidate expiring candidate IDs at execution. Failure preserves healthy service and last-success facts without implicit mutation.
 
 # Contract
 
@@ -23,8 +23,6 @@ Redeven does not mirror source content/credentials or guarantee registry availab
 
 # Evidence
 
-- `redeven:internal/managedwebservice/release_discovery.go` - Scoped durable release discovery/revalidation/restoration/scheduling.
-
-- `redeven:internal/managedwebservice/release_catalog.go` - Release discovery/cursor/verification/partial-failure owner.
-
-- `redeven:internal/managedwebservice/update_plan.go` - Single release/template plan creation, validation, expiry and consumption.
+- `redeven:internal/managedwebservice/release_discovery.go` - Source.
+- `redeven:internal/managedwebservice/release_catalog.go` - Source.
+- `redeven:internal/managedwebservice/update_plan.go` - Source.

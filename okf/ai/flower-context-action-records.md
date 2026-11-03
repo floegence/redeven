@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven owns selected context before admission; Floret owns admitted messages/references/context. One mapper validates authorization/privacy then emits durable ordered MessageReference and UserInput.Context. No product copy persists afterward. Malformed/unknown/forged or failed projection rejects admission while preserving editable draft/references.
+Redeven owns pre-admission context; Floret owns admitted messages/references/facts. One authorized privacy-checked mapper emits ordered references and UserInput.Context without product copies. Malformed/forged/unknown or failed projection rejects while preserving editable draft.
 
 # Contract
 
@@ -21,6 +21,5 @@ Context actions and references do not alter working directory, target permission
 
 # Evidence
 
-- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Bounded redacted inspection and card-owned operation.
-
-- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - State/owner/errors, omission/Unicode limits and shared wire fixture.
+- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Source.
+- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - Tests.

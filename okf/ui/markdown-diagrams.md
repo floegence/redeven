@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Mermaid fences retain their authored syntax and source. Both Flower hosts and file Markdown previews consume the published Floe diagrams API, which uses the original published Pele package. Pele is external; Floe owns shared rendering, sanitization, scheduling and controls. Redeven owns document/region identity, semantic palette, localization and host context.
+Flower and file Markdown preserve authored Mermaid while consuming published Floe/Pele. External Pele renders syntax; Floe owns sanitization/scheduling/controls. Redeven binds document identity, semantic palette, locales and context without copying an alternate renderer.
 
 # Contract
 

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime owns schema selection and explicit v1→v1.0.0→v1.1.0 migrations. New documents use redeven.io/tessiven/v1.1.0; each edge changes only its version scalar, preserving legacy automatic layout. Reads preserve YAML/digest/revision; authorized edits save current snapshots. Invalid/unknown versions or migration failure leave storage unchanged and require compatible Runtime/repair.
+Runtime owns contiguous v1→v1.0.0→v1.1.0 migration. New canvases use v1.1.0; edges change version only, retaining legacy layout. Reads preserve YAML/digest/revision; writes save current snapshots. Invalid/unknown/migration-failed state remains unchanged for explicit repair.
 
 # Contract
 

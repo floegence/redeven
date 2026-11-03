@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns service instances, bindings, resources, operations and protected forwards; verified external templates define behavior. One generic engine handles Host, Container and Compose installation, lifecycle, recovery and uninstall. Registry state and exact resource identity are authoritative. Invalid catalog, release, ownership, permission or health facts fail closed without adopting unknown resources.
+Redeven owns instances/resources/bindings/operations/forwards; verified templates define behavior. One engine serves Host/Container/Compose lifecycle. Registry and exact resource identity authorize actions; invalid provenance, ownership, permission or health never adopts unknown resources.
 
 # Contract
 
@@ -22,6 +22,5 @@ No built-in service identities, copy, assets, commands or application-specific a
 
 # Evidence
 
-- `redeven:internal/managedwebservice/builtin_templates.go` - Loads and strictly maps the released external catalog.
-
-- `redeven:internal/managedwebservice/runtime_binding.go` - Defines and validates the sole current RuntimeBinding format.
+- `redeven:internal/managedwebservice/builtin_templates.go` - Source.
+- `redeven:internal/managedwebservice/runtime_binding.go` - Source.

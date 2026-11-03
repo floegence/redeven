@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Existing threads display confirmed reasoning settings independently of runtime view versions; new drafts retain only explicit choices. Default is a configuration choice, never On or an inferred effort. Verified capabilities determine controls; unknown controls remain model-controlled. Failed saves preserve confirmed settings and active turns keep immutable execution configuration.
+Threads display confirmed reasoning independently of view revisions; new drafts retain explicit choices. Default means configuration, not On/guessed effort. Verified capabilities alone determine controls. Failed saves retain confirmed state and active turns keep frozen execution settings.
 
 # Contract
 
@@ -30,6 +30,7 @@ This is shared Redeven UI policy, not a Floret API or a second preference store.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Confirmed reasoning settings versus drafts; frozen submissions.
-
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Source.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Cold load, explicit intent, failed save/remount and ownership.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Tests.

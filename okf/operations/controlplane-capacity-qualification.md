@@ -7,7 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Control-plane capacity qualification measures ten thousand enrolled Runtime sessions through real Nginx/TLS, MySQL, and canonical authority decisions. The harness uses production heartbeats and Runtime-owned credential recovery. A full acceptance result combines client latency and recovery counts with independent server CPU, RSS, database, queue, and challenge-backlog measurements.
+Capacity acceptance runs10000 Runtime sessions through real Nginx/TLS/MySQL and canonical admission with production heartbeat/recovery. Combine client latency/recovery with independently measured server CPU/RSS/database/queues/challenges; client success alone is insufficient.
 
 # Contract
 
@@ -28,6 +28,5 @@ This opt-in qualification is separate from ordinary commit and push checks. Cred
 
 # Evidence
 
-- `redeven:internal/agent/controlplane_capacity_qualification_test.go` — Production Runtime control lifecycle harness.
-
-- `redeven:scripts/run_controlplane_capacity.sh` — Independent load-host invocation and fixture limits.
+- `redeven:internal/agent/controlplane_capacity_qualification_test.go`
+- `redeven:scripts/run_controlplane_capacity.sh`

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Wipe reinstall is Desktop's recovery for a broken managed Runtime. After exact-target/root confirmation, Desktop verifies a Runtime package, attempts process stop, isolates/replaces the root, starts and verifies Runtime, then cleans old data. Old health, databases, journals or unknown process state cannot block the direct filesystem attempt. Preserve-data reinstall instead replaces managed files and rolls back when verification fails.
+Wipe reinstall confirms exact target/root, verifies package, attempts stop, replaces root, verifies startup and cleans old data. Unknown process or broken state cannot block filesystem recovery. Preserve-data reinstall changes managed files and rolls back failed verification.
 
 # Contract
 
@@ -21,8 +21,6 @@ Never scan a home directory, follow an unconfirmed symlink, prune containers glo
 
 # Evidence
 
-- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - Confirmed target/root replacement, journal, verification and recovery.
-
-- `redeven:desktop/src/shared/desktopReinstallProgress.ts:1` - Runtime-only ordered phase contract.
-
-- `redeven:desktop/src/main/reinstallTargetProcess.ts:1` - Temporary helper inventory and best-effort stop.
+- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - Source.
+- `redeven:desktop/src/shared/desktopReinstallProgress.ts:1` - Source.
+- `redeven:desktop/src/main/reinstallTargetProcess.ts:1` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Historical Xpra userspace checks certify only their tested stack, not host policy. Current combined-backend, sandbox and product evidence belongs to desktop/package validation; platform contracts own capability/isolation. Missing subscriptions, CPU translation and untested policy remain explicit. Administrators use the setup route.
+Historical Xpra checks qualify tested userspace only, not host policy. Current combined-backend/sandbox/product results belong to desktop/package validation. CPU translation, missing subscriptions and untested policy stay explicit; administrators follow setup contracts.
 
 # Contract
 

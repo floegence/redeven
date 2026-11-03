@@ -3,40 +3,40 @@ type: UI Contract
 title: Terminal session groups
 tags: [ui, terminal, groups, activity, workbench, sqlite]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
-Runtime catalogs own groups, assignments and named views. Activity/Workbench share environment projection; expansion/active view stay local. Default is immutable; every session has one known group_id. Membership is independent of placement, cwd, controller identity and recovery.
+Runtime catalogs own groups, assignments and named views; Activity/Workbench share environment projection with local expansion/active view. Default is immutable and every session has one known group_id. Membership is independent of placement, cwd, controller and recovery.
 
 # Contract
 
-## Persistence and permissions
+## Stores and authority
+Open versioned apps/terminal/groups.sqlite and views.sqlite before readiness; future/wrong-kind/drifted state stays unchanged. Atomically reorder full non-Default list; Default stays zero.
 
-Redeven owns versioned apps/terminal/groups.sqlite and views.sqlite, opened before readiness. Future/wrong-kind/drifted stores remain unchanged. Group reorder atomically persists the full non-Default order; Default stays at zero.
+View thumbnail opens layout picker, name activates; footer targets active view, row picker may change inactive view.2–32 slot choices preserve members/vacancies/selection. Thumbnails omit visible labels but keep accessible names/keyboard.
 
-Each view thumbnail opens its compact graphical layout picker; the adjacent name activates the view. The footer targets the active view; an inactive row can be rearranged without activating it. Choices adapt to 2–32 slots and preserve membership, vacancies and session selection. Layout thumbnails carry no visible option labels; accessible names and keyboard navigation remain available.
+Views: terminal_view_catalog v3; RPC2024–2027 list/put/delete/notify,2028 atomic batch, process-launch/access-gate protected. Store ID/name/published SplitWorkspace geometry/occupancy/revision/timestamps. Pane empty:true means vacancy, no session claim. Limits64 views/32 panes/depth16/64KiB layout/128-byte IDs/64-character names. Validate shape/unique nodes/axis/ratio. Check touched views/catalog revision atomically; reject duplicate ownership/stale transfer. Cross-view transfer writes both and emits one snapshot; view deletion preserves PTYs.
 
-Views use schema kind terminal_view_catalog, version 3. RPC 2024–2027 list/put/delete/notify and 2028 atomic batch update use process-launch permission and the access gate. Records store ID, name, published SplitWorkspace geometry with product occupancy metadata, revision and timestamps. Pane-only empty:true marks a vacant slot and does not claim a session. Bounds: 64 views, 32 panes, depth 16, 64KiB layout, 128-byte IDs, 64-character names. Validate shape, unique nodes, axis and ratio. Atomic writes check every touched view and database catalog revision, rejecting duplicate session ownership. A transfer updates both source and destination in one transaction and emits one full snapshot. Stale writes reject the entire transfer. Deleting views preserves sessions. The contiguous v1→v2 migration keeps each session in the highest-revision view (then newest creation time, then lexical ID), prunes duplicate leaves from older trees and deletes empty aliases without modifying sessions or PTYs. The contiguous v2→v3 migration verifies existing records unchanged and enables vacant slots. Session closure vacates its owned slot atomically with a fresh identity, retaining geometry and emitting a catalog snapshot before the closure notification. Invalid stores fail unchanged.
+Contiguous v1→v2 keeps session in highest-revision view, then newest creation, then lexical ID; prune older duplicate leaves/empty aliases without modifying sessions. v2→v3 validates existing records unchanged and enables vacancies. Close atomically replaces owned slot with fresh vacancy identity, retains geometry and emits catalog before closure event. Invalid stores remain untouched.
 
-## Projection and interaction
+## Projection and UI
+Navigation calls collection Groups. Icon-only plus matches Views with New group tooltip/name; scoped New session in {group} remains. Editors call default path Startup directory; membership never implies cwd.
 
-Desktop and mobile navigation label the session collection Groups. Its icon-only plus action creates a group, matching the Views action and exposing the localized New group tooltip and accessible name. Each group retains its scoped New session in {group} action. Group editors label the default working path Startup directory; membership remains independent of a session's current directory.
+One provider owns membership/order. Sessions/groups/views wait for current-channel Shell access and process permission, not transport/cache alone. Restored access hydrates; retirement fences replies and retains presentation. Late replies cannot undo moves/deletes; unknown groups refresh without reassignment. Deletion closes/hides members first; failures name sessions without guessed success/retry.
 
-One Terminal Session Catalog Provider owns membership/display order. Sessions, groups and views wait for current-channel access confirmation from EnvAppShell as well as ready process-launch permissions. Connected transport or cached environment metadata alone cannot start protected catalog RPCs. Access restoration automatically hydrates all catalogs; retiring access fences pending responses and retains the existing presentation. Lifecycle fences prevent stale replies overwriting moves/deletes; unknown groups refresh without reassignment. Group deletion closes/hides members first; failures identify sessions without fabricated success or silent retry.
+Search groups/paths/session presentation, temporarily reveal folded matches; views search names. Sidebar defaults258px, persists per environment/panel220–480px and reserves space. Floe ResizeHandle owns drag; arrows/Home/End keyboard; overlays have independent width.
 
-Search matches group names/paths and session presentation, revealing folded matches temporarily. Views filter by name. Sidebar defaults to 258px, persists per environment/panel within 220–480px and reserves content space. Floe ResizeHandle owns pointer resizing; arrows/Home/End support keyboards. Overlays retain independent width.
+Search/refresh replaces Quick switch. Desktop rows32px, larger mobile targets. Yellow Floe folder/disclosure/create/actions; rounded fill-selected session tiles, no rail. No view/group count badges; paths tooltip, secondary actions menu. Close visible hover/focus/touch; desktop24px actions/compact gap/indent, empty activity no title width. Reveal without title shift.
 
-Search/refresh replaces Quick switch. Desktop rows are 32px; mobile targets are larger. Groups show Floe yellow folder icons, disclosure, creation and actions. Rounded session tiles use fill selection without rails. View/group rows have no quantity badges. Paths stay in tooltips; less frequent actions use accessible menus. Session close appears directly on row hover/focus and on touch. Desktop actions retain 24-pixel targets with compact gaps and indentation; empty activity slots consume no title width. Hover/focus reveals actions without shifting the title.
-
-Rows/icons drag independently of buttons. Session previews follow the pointer across scaled Workbench; group previews remain in the sidebar. Split drops change placement only; group targets own membership/order. Metadata must not remount runtimes.
+Rows/icons drag separately from buttons. Session preview follows scaled Workbench pointer; group preview stays sidebar. Split changes placement, group target membership/order. Metadata never remounts Runtime.
 
 # Boundaries
 
-Never duplicate membership maps, infer groups from paths or assign unknown groups to Default. [Workspace composition](../architecture/env-app-terminal-and-surface-composition.md) owns view selection/autosave/rendering.
+No duplicate membership maps, path-inferred groups or unknown→Default assignment. [Workspace](../architecture/env-app-terminal-and-surface-composition.md) owns selection/autosave/rendering.
 
 # Evidence
 
-- redeven:internal/terminal/group_catalog.go - Protected Default and atomic writes.
-- redeven:internal/terminal/view_catalog.go - Validated versioned view store.
-- redeven:internal/terminal/view_catalog_test.go - Persistence, conflicts, incompatible stores and permissions.
+- redeven:internal/terminal/group_catalog.go
+- redeven:internal/terminal/view_catalog.go
+- redeven:internal/terminal/view_catalog_test.go

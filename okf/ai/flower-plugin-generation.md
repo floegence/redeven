@@ -7,12 +7,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Flower helps users author ReDevPlugin applications through the released CLI and
-SDK. Its on-demand system skill follows the exact platform version imported by
-Redeven. Redeven owns intent collection, prompt guidance, product review and
-placement. ReDevPlugin owns templates, bindings, build validation, development
-state, preview, package admission and execution. Floret owns tool dispatch and
-approval lifecycle.
+Flower authors applications through the released ReDevPlugin CLI/SDK and version-matched skill. Redeven owns intent, guidance, review and placement; platform owns templates/build/preview/package/execution. Floret owns tool dispatch/approvals; no copied authoring implementation.
 
 # Contract
 
@@ -74,8 +69,8 @@ Development runtime evidence never substitutes for product signing or packaging.
 
 # Evidence
 
-- `redeven:internal/ai/system_skills/redeven-plugin-authoring/SKILL.md` - On-demand product authoring guidance.
-- `redeven:internal/ai/system_skills.go` - Imported platform version projection for embedded content.
-- `redeven:internal/ai/system_plugin_authoring_test.go` - Model catalog, activation, browse content and disable behavior.
-- `redeven:internal/redevpluginintegration/runtime_io_live_test.go` - Published author Worker through the product runtime and structured failure recovery.
-- `redeven:okf/ai/ai-tool-runtime.md` - Floret permission lifecycle before dispatch.
+- `redeven:internal/ai/system_skills/redeven-plugin-authoring/SKILL.md` - Source.
+- `redeven:internal/ai/system_skills.go` - Source.
+- `redeven:internal/ai/system_plugin_authoring_test.go` - Tests.
+- `redeven:internal/redevpluginintegration/runtime_io_live_test.go` - Tests.
+- `redeven:okf/ai/ai-tool-runtime.md` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns sharing preference/reset; published Floe Native Apps owns OS authorization and private recovery credentials. Logged-in Runtime defaults to reusing first approval, attempting recovery before new consent. Saved credentials are opportunities, never proof of OS admission, and never reach viewers, URLs or audits. This optional user Portal chain is separate from [SSH system-service deployment](remote-desktop-ssh-deployment.md).
+Redeven owns sharing preference/reset; Floe Native Apps owns OS consent/private recovery. Logged-in Runtime may reuse saved approval, which proves no admission and never reaches viewers/URLs/audits. This user Portal path is separate from SSH system-service deployment.
 
 # Contract
 

@@ -7,11 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Published Floret v7.74.0 owns compaction admission, installation, Goal continuation,
-Stop, Retry and restart. Redeven authorizes and transmits the frozen intent and
-presents canonical state. Pure compaction ends after installation or noop; Goal
-continuation prepares context and continues work through the existing Engine and
-current Goal review in the same execution.
+Floret v7.74.0 owns compaction, Goal continuation, Stop/Retry/restart. Redeven transmits frozen authorized intent and renders canonical state. Pure compaction ends after install/noop; Goal continuation prepares context then uses existing Engine/current review in the same execution.
 
 # Contract
 
@@ -26,6 +22,5 @@ Floret exclusively owns canonical compaction and Goal execution. [Usage and pres
 
 # Evidence
 
-- `redeven:internal/ai/compact_thread_context.go` - Authorized asynchronous admission through published Floret.
-
-- `redeven:internal/ai/compact_thread_context_test.go` - Canvas Send/Goal authorization, preparation/replay/rejection.
+- `redeven:internal/ai/compact_thread_context.go` - Source.
+- `redeven:internal/ai/compact_thread_context_test.go` - Tests.

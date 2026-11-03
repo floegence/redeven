@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Redeven environment lifecycle requests must go through the Redeven product surface, not through inferred container, SSH, systemd, launchctl, or process-manager commands. Flower learns this boundary through the standard `redeven-environment` system skill, not through a bespoke environment workflow embedded in the global prompt.
+Environment lifecycle goes through Redeven product operations, never guessed container/SSH/systemd/launchctl/process commands. Flower receives this rule from the standard redeven-environment skill; do not embed a second environment workflow into the global prompt.
 
 # Contract
 
@@ -24,6 +24,5 @@ It can be used to invoke Redeven product commands, but it must not be described 
 
 # Evidence
 
-- `redeven:cmd/redeven/env.go:13` - The `env` command dispatches lifecycle subcommands.
-
-- `redeven:internal/agentprotocol/targets.go:37` - Default local and saved targets projected from authoritative discovery.
+- `redeven:cmd/redeven/env.go:13` - Source.
+- `redeven:internal/agentprotocol/targets.go:37` - Source.

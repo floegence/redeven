@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Each Git projection belongs to one protocol client, repository and revision generation. Changes, Branches and Files have separate owners sharing monotonic invalidation. Files renders immediately and keeps committed decorations while a bounded replacement loads. Stale or invalidated responses cannot restore old state, including after unknown effects.
+Git projections bind protocol client/repository/revision. Changes, Branches and Files own state with shared monotonic invalidation. Files renders immediately, retaining decorations during bounded refresh; stale replies cannot restore invalid state, including after unknown effects.
 
 # Contract
 
@@ -31,8 +31,6 @@ Non-Git Flowersec outbound allocation is outside this feature's transport budget
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts` - Assigns the capability and path-status RPC type identifiers.
-
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.ts` - Exposes the revision-aware production RPC codec.
-
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/sdk/git.ts` - Git capability/revision/status/aggregate/stash DTOs.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.ts` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/sdk/git.ts` - Source.

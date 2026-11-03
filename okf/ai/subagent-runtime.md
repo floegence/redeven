@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret v7 owns each SubAgent as a normal canonical child Thread. Redeven exposes product tools and Flower mappings over the typed `ThreadRuntime` without a second child identity, result store, recovery projection, or child lifecycle table. Parent-scoped summaries are bounded status only; the canonical child current view is the only complete handoff authority.
+Floret v7 owns canonical child Threads. Redeven maps product tools/Flower through typed ThreadRuntime without child result/lifecycle/recovery stores. Parent-scoped summaries are bounded status; only canonical child current view supplies complete handoff authority.
 
 # Contract
 
@@ -38,6 +38,5 @@ Task labels and previews are presentation, not identity or results. Redeven must
 
 # Evidence
 
-- `redeven:internal/ai/subagents_model_payload.go` - No display echo; complete handoffs preserved.
-
-- `redeven:internal/ai/floret_tools.go` - Typed SubAgent Activity preserves action/target order.
+- `redeven:internal/ai/subagents_model_payload.go` - Source.
+- `redeven:internal/ai/floret_tools.go` - Source.

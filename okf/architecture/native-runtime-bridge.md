@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-redeven native-bridge --state-root PATH attaches to the existing Runtime via its owner-only management socket. Stdio carries redeven-native-runtime-h2/1 and only native-runtime CONNECT. Missing/inaccessible/stopped/incompatible targets fail without install, startup, address fallback or Desktop credentials. Disconnect releases this client, not Runtime.
+native-bridge --state-root attaches only to existing Runtime via owner socket. Stdio uses redeven-native-runtime-h2/1 and native-runtime CONNECT. Missing/stopped/incompatible targets fail without install/start/address fallback/Desktop credentials; disconnect releases client only.
 
 # Contract
 
@@ -27,6 +27,6 @@ Native channel tokens, artifacts, grants, and PSKs are transient and must not en
 
 - `cmd/redeven/native_bridge.go` owns CLI attachment and failure behavior.
 
-- `internal/nativebridge/` owns the native wire identity and fixed CONNECT authority.
+- `internal/nativebridge/`
 
 - `internal/stdiobridge/` owns bounded HTTP/2 stdio transport shared with Desktop.

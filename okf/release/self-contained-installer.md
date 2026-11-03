@@ -7,12 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Release packaging builds `redeven-installer_<os>_<arch>` for macOS and Linux,
-AMD64 and ARM64, with CGO disabled. It renders `redeven-install.sh` from the
-actual four binary digests and signs both the binaries and entry through
-`SHA256SUMS`. No receiving-host Go, Cosign, Python, OpenSSL or package manager
-is required. A standard shell, HTTPS downloader and SHA-256 utility remain
-bootstrap prerequisites.
+Release builds macOS/Linux amd64/arm64 self-contained installers without CGO and renders entry from exact binary digests, all signed via SHA256SUMS. Receiving hosts need no Go/Cosign/Python/OpenSSL/package manager, but require shell, HTTPS downloader and SHA256 utility.
 
 # Contract
 
@@ -57,5 +52,5 @@ this boundary without reviewing the upstream replacement and genuine fixtures.
 
 # Evidence
 
-- `redeven:internal/installer/signature.go:1` - Exact signature identity and authenticated upstream roots.
-- `redeven:internal/installer/install_test.go:1` - New activations retain resources for live old processes.
+- `redeven:internal/installer/signature.go:1` - Source.
+- `redeven:internal/installer/install_test.go:1` - Tests.

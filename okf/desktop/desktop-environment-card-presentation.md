@@ -36,7 +36,7 @@ A bundled original-color OS mark beside the Runtime name reflects trusted platfo
 
 # Evidence
 
-- `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Ten-locale theme/scale/tab/focus/busy geometry.
-- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Creation grid, connection summaries, aligned diagnostics/footer and actions.
-- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Independent card refresh and overlapping requests.
-- `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Per-target probe results before slowest completion.
+- `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Tests.
+- `redeven:desktop/scripts/check-welcome-compact-layout.mjs` - Tests.
+- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Tests.
+- `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Tests.

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-ReDevPlugin owns package trust, inspection, installation, runtime readiness, release cache, and durable lifecycle. Redeven supplies authenticated source policy, review presentation, and localized outcomes. Every source follows inspect, explicit confirmation, and released Host installation; unverified bytes, stale trust, missing runtime identity, or uncertain mutation outcomes fail closed.
+ReDevPlugin owns trust, inspection, install, readiness, caches and durable lifecycle. Redeven supplies authenticated sources/review/localized outcomes. Every source requires inspection, explicit consent and released Host admission; stale/unverified/uncertain facts fail closed.
 
 # Contract
 
@@ -34,8 +34,7 @@ Redeven does not parse plugin bytes, persist inspection receipts, implement a se
 
 # Evidence
 
-- `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules and product adapters.
+- `redeven:internal/redevpluginintegration/integration.go:240` - Source.
+- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Source.
 
-- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Published runtime admission and fixed manager.
-
-- redeven:internal/redevpluginintegration/adapters_test.go:1 - Verifies independent read, write and admin recovery permissions.
+- redeven:internal/redevpluginintegration/adapters_test.go:1

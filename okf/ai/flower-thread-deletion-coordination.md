@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floret owns canonical thread deletion and Redeven owns product settings, read state, execution authority, and attachment claims. One authenticated DELETE request performs those two owner operations in that order and returns success only after both complete. The operation is synchronous, idempotent, and retryable; it does not claim cross-database atomicity or persist a second lifecycle receipt.
+Floret deletes canonical threads; Redeven deletes settings, read state, authority and attachment claims. One authenticated request runs owners in that order and succeeds only after both. Synchronous idempotent retry creates no second lifecycle receipt or cross-database atomicity claim.
 
 # Contract
 
@@ -23,8 +23,6 @@ Redeven never opens or edits Floret tables, never restores a deleted canonical t
 
 # Evidence
 
-- `redeven:internal/ai/threads.go` - Canonical delete then idempotent product cleanup.
-
-- `redeven:internal/ai/threadstore/catalog_mutation.go` - Atomic Redeven-only thread-data cleanup.
-
-- `redeven:internal/ai/thread_delete_test.go` - Cleanup failure/retry/absence without Floret reads.
+- `redeven:internal/ai/threads.go` - Source.
+- `redeven:internal/ai/threadstore/catalog_mutation.go` - Source.
+- `redeven:internal/ai/thread_delete_test.go` - Tests.

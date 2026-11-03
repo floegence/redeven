@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Floe owns shared geometry; Redeven owns localized feedback. Request/copy/refresh/media completion cannot push adjacent content. Keep compact normal views without empty feedback rows; blocking errors stay visible, retained-content errors use existing-row disclosure. User navigation/disclosure/new records may change layout; async feedback cannot simulate them.
+Floe owns geometry; Redeven localized feedback. Async request/copy/refresh/media completion never pushes neighbors or reserves empty rows. Blocking errors stay visible; retained-content errors use disclosure. Only user navigation/disclosure/new records may change layout.
 
 # Contract
 
@@ -26,4 +26,4 @@ Normal-state acceptance measures the top of actual content, including both chart
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - Single-line localized app controls in Chromium/Firefox/WebKit.
+- `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - Tests.

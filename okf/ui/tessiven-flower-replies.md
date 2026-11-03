@@ -7,11 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven presents canvas replies in a compact, themed floating reading window.
-Flower owns the conversation, actions and live feedback; Floe owns window
-geometry, pointer interaction and floating-layer projection. Hiding the window
-keeps the composer and conversation alive. Errors, approvals and retry retain
-their canonical Flower behavior rather than a canvas-specific recovery path.
+Canvas replies use a compact themed floating reader. Flower owns conversation/actions/feedback; Floe owns geometry/pointer/layers. Hide retains composer/conversation. Errors, approvals and Retry keep canonical Flower behavior without a separate canvas recovery path.
 
 # Contract
 

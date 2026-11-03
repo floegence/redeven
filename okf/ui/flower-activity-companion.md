@@ -8,7 +8,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Env App retains one Flower product tree across its Activity page, desktop companion and available Workbench widget. Published Floe owns the companion shell; Redeven owns placement, focus and read acknowledgement; Floret owns conversation lifecycle. Changing placement or canvas selection never creates another Flower surface or workspace stream.
+Env App retains one Flower tree/stream across Activity, companion and available Workbench widget. Floe owns shell; Redeven placement/focus/read acknowledgement; Floret conversation. Moving placement or canvas selection never creates another product surface or lifecycle.
 
 # Contract
 
@@ -40,6 +40,5 @@ The companion never auto-expands for completion, failure, approval, or user inpu
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx` - Active-page trusted bridge interaction projection.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Plugin interaction dismisses Flower while preserving both surfaces.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Tests.

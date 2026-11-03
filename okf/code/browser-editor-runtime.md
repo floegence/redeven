@@ -23,6 +23,5 @@ Opening or managing Browser Editor is not just a static file route. The session-
 
 # Evidence
 
-- `redeven:internal/codeapp/appserver/server.go:80` - AppServer codespace lifecycle and ports.
-
-- `redeven:internal/localui/localui.go:132` - Local UI mounts `/cs/` for codespace routes.
+- `redeven:internal/codeapp/appserver/server.go:80` - Source.
+- `redeven:internal/localui/localui.go:132` - Source.

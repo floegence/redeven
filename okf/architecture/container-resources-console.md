@@ -8,7 +8,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Containers provides native Activity and Workbench views over [authorized targets](container-resources-capability.md). The console owns selection/navigation; [resource snapshots](../ui/env-resource-cache.md) owns shared presentation/refresh. Old-target responses cannot commit, UI exposes no endpoint selector, and every lifecycle mutation remains within `containerresource`.
+Containers console owns Activity/Workbench selection and navigation over authorized targets. Resource snapshots own shared inventory/refresh. Old-target replies cannot commit; UI has no endpoint selector, and containerresource remains the sole lifecycle mutation owner.
 
 # Contract
 
@@ -25,6 +25,5 @@ Floe owns reusable pickers/controls/icons. Redeven owns filesystem adaptation, p
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Containers console, run/Compose forms, Exec and exact-target actions.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Exact run/Compose requests, localhost defaults, Exec/files and navigation failures.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Tests.

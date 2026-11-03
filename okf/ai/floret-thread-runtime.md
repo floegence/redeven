@@ -8,7 +8,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven authorizes endpoint ownership, resolves attachments and maps provider/tool effects. Send, Respond, Cancel, Retry, and the optional independent CompactContext return typed state before continuation. Canonical records prevent duplicates; drafts and execution tokens remain transient.
+Floret v7 ThreadService alone owns active/canonical lifecycle. Redeven authorizes endpoints/resources/provider-tool effects. Send/Respond/Cancel/Retry/CompactContext return typed state before continuation. Canonical records deduplicate; drafts and execution tokens stay transient.
 
 # Contract
 
@@ -47,9 +47,10 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret typed runtime without local replacement.
-
+- `redeven:go.mod` - Source.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 
-- `redeven:internal/ai/terminal_wait_floret_integration_test.go` - Published polling, descriptions, alternation and cancellation.
-- `redeven:internal/ai/strict_repetition_integration_test.go` - Model-visible feedback and user-visible diagnostics over the released runtime.
+- `redeven:internal/ai/terminal_wait_floret_integration_test.go` - Tests.
+- `redeven:internal/ai/strict_repetition_integration_test.go` - Tests.
+
+- `redeven:internal/session/floret_v7_dependency_contract_test.go` - Tests.

@@ -12,8 +12,6 @@ Redeven registers typed tools with product policy, presentation and effects; Flo
 # Contract
 
 ## Mechanism
-This concept is the stable overview for the subject.
-
 Floret renders reference display content and snapshots into canonical model history for execution and compaction, preserving order across follow-ups.
 
 Lease release follows the canonical terminal view, not the HTTP response or Desktop connection lifetime, so an existing session cannot admit hidden work after the final lifecycle snapshot.
@@ -24,6 +22,5 @@ Redeven must consume published Floret releases and must not persist a second cop
 
 # Evidence
 
-- `redeven:internal/ai/tools/registry.go:98` - Typed tool mutation, approval and presentation specs.
-
-- `redeven:internal/ai/tools/types.go:126` - ToolPresentationSpec renderer, operation, label, fallback and payload/chip fields.
+- `redeven:internal/ai/tools/registry.go:98` - Source.
+- `redeven:internal/ai/tools/types.go:126` - Source.

@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-A new desktop companion captures one removable origin snapshot without reads/editor replacement; existing threads do not. Opening with no selection/New refreshes it, later navigation/editing does not. Submission/retry use exact visible text and existing draft/transport recovery. Terminal context captures current screen like Ask Flower; omit unloaded/unauthorized facts.
+New desktop companion captures removable origin context without reads/editor replacement; existing threads do not. New chat/open with no selection refreshes; later edits/navigation do not. Submission uses exact visible text; terminal captures current screen, excluding unauthorized/unloaded facts.
 
 # Contract
 
@@ -21,6 +21,5 @@ The automatic reference alone cannot enable empty Send.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - One host presentation for launcher and composer/chat snapshots.
-
-- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Reader functions and bounded immutable page snapshots.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Source.

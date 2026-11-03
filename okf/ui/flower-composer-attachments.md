@@ -7,9 +7,11 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Flower owns connection-local attachment editing; host adapters authenticate staging, Redeven owns staged bytes/unadmitted commands and Floret owns admitted history. Select, paste, drop, retry, remove, preview and attachment-only send share one controller. Text above 50,000 Unicode code points converts only after successful staging, preserving IME and source text on failure.
+One Flower controller owns attachment select/paste/drop/retry/remove/preview/send. Hosts authenticate staging; Redeven owns bytes/unadmitted commands, Floret admitted history. Large text converts only after successful staging, retaining IME and source on failure.
 
 # Contract
+
+Text above 50,000 Unicode code points converts only after successful staging.
 
 Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.
 
@@ -32,6 +34,5 @@ Canonical timeline projection does not fall back to a staged client snapshot whe
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Unicode, selection, upload limits and attachment identities.
-
-- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - Bounded accessible attachment states/actions.
+- `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Source.
+- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - Source.

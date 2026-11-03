@@ -40,8 +40,6 @@ The same capability and selection reach direct Environment models and Desktop mo
 
 # Evidence
 
-- `redeven:internal/config/ai_reasoning_catalog.go` - Public Floret/OpenRouter metadata mapping.
-
-- `redeven:internal/ai/model_catalog.go` - Read-only discovery from declared capabilities.
-
-- `redeven:internal/ai/initial_turn_reasoning_test.go` - Default unsupported reasoning emits no OpenAI-compatible reasoning fields.
+- `redeven:internal/config/ai_reasoning_catalog.go` - Source.
+- `redeven:internal/ai/model_catalog.go` - Source.
+- `redeven:internal/ai/initial_turn_reasoning_test.go` - Tests.

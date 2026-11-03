@@ -28,8 +28,8 @@ The saved canvas contract owns topology and versions; these browsing controls ch
 
 # Evidence
 
-- `internal/tessiven_ui/src/TessivenGraph.tsx` - Controlled graph projection, view controls and browse state.
+- `internal/tessiven_ui/src/TessivenGraph.tsx` - Source.
 
-- `internal/tessiven_ui/src/connections.ts` - Canonical root and focused-host edge projections.
+- `internal/tessiven_ui/src/connections.ts` - Source.
 
-- `internal/tessiven_ui/src/projection.ts` - Canonical identities, visibility and layer mapping.
+- `internal/tessiven_ui/src/projection.ts` - Source.

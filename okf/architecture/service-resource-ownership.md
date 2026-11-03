@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Registry records allocations/identity; engine/filesystem inspection proves current facts. Instances across Runtime state roots get independent default data/workspaces. Names grant no ownership; stopped containers count. External/unverified legacy resources cannot become deletable. Uncertainty preserves resources for review; upgrades never move/copy running data.
+Registry records allocations/identity; fresh engine/filesystem checks establish facts. State roots receive independent default data/workspaces. Names and unverified legacy resources grant no deletion authority; uncertainty preserves review and upgrades never move live data.
 
 # Contract
 
@@ -29,6 +29,5 @@ Existing volume names and directories are not renamed, moved, or recreated durin
 
 # Evidence
 
-- `redeven:internal/managedwebservice/runtime_binding.go` - Instance-scoped bindings and preserved legacy locations.
-
-- `redeven:internal/managedwebservice/runtime_resource.go` - Durable container allocation and lost-response verification.
+- `redeven:internal/managedwebservice/runtime_binding.go` - Source.
+- `redeven:internal/managedwebservice/runtime_resource.go` - Source.

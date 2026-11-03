@@ -7,12 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven's native helper owns macOS application-window lifetime. Its registry binds
-exact AX windows to the selected process instance; capture surfaces do not define
-window lifetime. Only confirmed destruction can start the last-window grace.
-Uncertain inventory, unavailable capture and transport loss retain the session and
-its recovery entrypoint while revoking stale input. Runtime preserves the helper's
-explicit end reason; the shared viewer owns whether an established page can close.
+Native helper binds exact AX windows to process instances; capture does not define lifetime. Confirmed destruction alone starts last-window grace. Uncertain inventory/capture/transport retains session recovery and revokes stale input; Runtime preserves explicit end reasons.
 
 # Contract
 

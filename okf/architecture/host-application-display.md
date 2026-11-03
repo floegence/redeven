@@ -7,7 +7,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floe Native Apps owns Linux display configuration, constraints and cursor coordinates. Redeven declares layout/quality; Desktop owns actual maximize/minimize. Remote receipts cannot create resize loops, and unchanged configuration preserves canvases without commands. Old display backends retain logical density with explicit high-resolution limits; apps never auto-restart.
+Floe Native Apps owns Linux display constraints/cursor coordinates; Redeven declares quality/layout and Desktop native window geometry. Receipts cannot loop resize; unchanged configuration preserves canvases. Old backends retain density with explicit limits, never automatic app restart.
 
 # Contract
 

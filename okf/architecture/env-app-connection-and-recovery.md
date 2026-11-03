@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Env App uses Floe's published artifact-source and connection-controller contracts for public HTTPS, explicit HTTP, remote controlplane, and Desktop-private loopback paths. It binds each source to the current origin and environment, requires exact Service Worker control, and projects Flowersec diagnostics into one immutable recovery snapshot without replaying requests or inventing retry policy.
+Env App binds published Floe artifact/connection contracts to exact origin/environment across HTTPS, explicit HTTP, Cloud and Desktop-private loopback. Require matching Service Worker control; Flowersec diagnostics form one immutable recovery view without replay or invented retry policy.
 
 # Contract
 
@@ -23,6 +23,5 @@ Floe and Flowersec own acquisition, retry timing, source consumption, protocol f
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501` - Maps local and remote acquisition into the published source.
-
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Typed reconnect projection without product retry guesses.
+- `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Source.

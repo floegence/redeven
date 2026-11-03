@@ -29,6 +29,5 @@ Remembered geometry conveys neither resource data nor authority. Storage unavail
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/index.html` - Static first-visit surface.
-
-- `redeven:internal/envapp/ui_src/src/ui/services/envReloadPresentation.ts` - Single Shell handoff and revocation boundaries.
+- `redeven:internal/envapp/ui_src/index.html` - Source.
+- `redeven:internal/envapp/ui_src/src/ui/services/envReloadPresentation.ts` - Source.

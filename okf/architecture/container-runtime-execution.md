@@ -22,6 +22,5 @@ Endpoint identifiers remain internal, and current endpoint resolution precedes e
 
 # Evidence
 
-- `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
-
-- `redeven:internal/containerengine/runtime_detection_test.go` - Stopped-daemon feedback and independent cancellable discovery under virtual time.
+- `redeven:internal/containerengine/adapter.go` - Source.
+- `redeven:internal/containerengine/runtime_detection_test.go` - Tests.
