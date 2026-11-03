@@ -1587,7 +1587,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const needed: string[] = [];
     if (props.adapter.loadHistoryItem) {
-      const placeholders = viewport.querySelectorAll<HTMLElement>('.flower-history-text-loading');
+      const placeholders = viewport.querySelectorAll<HTMLElement>('[data-flower-history-body-pending]');
       for (let index = placeholders.length - 1; index >= 0; index--) {
         const element = placeholders[index];
         const rect = element.getBoundingClientRect();
@@ -4192,8 +4192,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return Boolean(remaining?.body || remaining?.activity_bodies?.length);
     }, priority ?? (initial.live ? 'interactive' : 'visible'));
   };
-  const historyBodyControl = (threadID: Accessor<string>, itemID: Accessor<string>) => {
-    const state = () => { historyBodyRevision(); return historyBodies.state(historyBodyKey(threadID(), itemID())); };
+  const historyBodyControl = (threadID: Accessor<string>, itemID: Accessor<string>, pending = false) => {
+    const state = () => { historyBodyRevision(); return historyBodies.state(historyBodyKey(threadID(), itemID())) ?? (pending ? 'loading' : undefined); };
     return <Show when={state()}><div class="flower-history-body-control" role="status" aria-busy={state() === 'loading'}>
       <Show when={state() === 'failed'} fallback={<span>{copy().chat.history.loading}</span>}>
         <span>{copy().chat.history.failed}</span>
@@ -12274,13 +12274,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   const controller = readController();
                   if (controller) untrack(() => loadHistoryItem(tid, itemID, controller.signal, viewportScope, contentBlock().block_type === 'thinking' ? 'interactive' : undefined));
                 });
-                return <div ref={shell} class="flower-history-message" data-flower-sequence-arrival={sequenceArrival() ? '' : undefined} data-flower-sequence-pending={pendingSequence() ? '' : undefined}
+                return <div ref={shell} class="flower-history-message" data-flower-history-body-pending={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live ? '' : undefined} data-flower-sequence-arrival={sequenceArrival() ? '' : undefined} data-flower-sequence-pending={pendingSequence() ? '' : undefined}
                   inert={pendingSequence()} aria-hidden={pendingSequence() ? 'true' : undefined}><div class="flower-history-message-content">
-                  <Show when={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media, viewportScope, setThinkingElement)}>
-                    <div class={cn('flower-history-text-loading', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
-                      <div class="flower-history-text-skeleton" aria-hidden="true"><span /><span /><span /></div>
-                      {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id)}
-                    </div>
+                  {messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media, viewportScope, setThinkingElement)}
+                  <Show when={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live}>
+                    {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id, true)}
                   </Show>
                   <Show when={message().body_pending?.kind === 'text' && (message().body_pending?.retained || message().live) && (() => { historyBodyRevision(); return historyBodies.state(historyBodyKey(thread()?.thread_id ?? '', message().id)) === 'failed'; })()}>
                     {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id)}

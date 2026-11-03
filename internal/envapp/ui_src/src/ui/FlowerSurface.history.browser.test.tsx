@@ -189,16 +189,20 @@ describe('bounded Flower history', () => {
     viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
     await waitFor(() => incremental.mock.calls.some(call => call[1].item_id === '0'));
     const row = root.querySelector<HTMLElement>('[data-flower-message-id="0"]')!;
-    expect(row.querySelector('.flower-history-text-loading')).not.toBeNull();
+    expect(row.querySelector('[data-flower-history-body-pending]')).not.toBeNull();
+    expect(row.textContent).toContain(prefix);
+    expect(row.querySelector('.flower-history-text-loading')).toBeNull();
     first.resolve();
     await waitFor(() => incremental.mock.calls.some(call => call[1].item_id === '0' && call[1].offset_bytes > prefix.length));
-    expect(row.querySelector('.flower-history-text-loading')).not.toBeNull();
+    expect(row.querySelector('[data-flower-history-body-pending]')).not.toBeNull();
+    expect(row.textContent).toContain(prefix);
+    expect(row.querySelector('.flower-history-text-loading')).toBeNull();
     expect(row.querySelector('table, pre')).toBeNull();
     const frames: { top: number; height: number; tables: number; code: string; lists: number; text: string }[] = [];
     let sampling = true;
     const sample = () => {
       if (!sampling) return;
-      if (!row.querySelector('.flower-history-text-loading')) {
+      if (!row.querySelector('[data-flower-history-body-pending]')) {
         const rect = row.getBoundingClientRect();
         frames.push({ top: rect.top, height: rect.height, tables: row.querySelectorAll('table').length,
           code: row.querySelector('pre code')?.textContent ?? '', lists: row.querySelectorAll('li').length, text: row.textContent ?? '' });
@@ -530,17 +534,19 @@ describe('bounded Flower history', () => {
     expect(root.querySelector('.flower-history-body-control')).toBeNull();
   });
 
-  it('keeps user loading placeholders and hydrated text aligned to the transcript right edge', async () => {
+  it('keeps user previews and hydrated text aligned to the transcript right edge', async () => {
     const text = 'Preview text ' + 'Review the complete historical request and preserve its references. '.repeat(8);
     const { root, body, complete } = await mount(false, true, { kind: 'user', text });
     await waitFor(() => body.mock.calls.length === 1);
     const row = root.querySelector<HTMLElement>('.flower-message-row-user')!;
     const shell = row.querySelector('.flower-history-message')!;
     const right = row.getBoundingClientRect().right;
-    const loading = row.querySelector('.flower-history-text-loading')!;
+    const loading = row.querySelector('.flower-message-bubble-user')!;
+    expect(row.querySelector('[data-flower-history-body-pending]')).not.toBeNull();
+    expect(loading.textContent).toContain('Preview text');
     expect(Math.abs(loading.getBoundingClientRect().right - right)).toBeLessThanOrEqual(1);
     complete({ ...fixture('latest'), kind: 'user', text });
-    await waitFor(() => !row.querySelector('.flower-history-text-loading'));
+    await waitFor(() => !row.querySelector('[data-flower-history-body-pending]'));
     const bubble = row.querySelector<HTMLElement>('.flower-message-bubble-user')!;
     expect(row.querySelector('.flower-history-message')).toBe(shell);
     expect(bubble.textContent?.trim()).toBe(text.trim());
@@ -591,7 +597,8 @@ describe('bounded Flower history', () => {
     const active = () => body.mock.calls.filter(call => !call[2].aborted);
     expect(active()).toHaveLength(2);
     expect(body.mock.calls.length).toBeLessThan(10);
-    expect(root.querySelectorAll('.flower-history-text-loading')).toHaveLength(44);
+    expect(root.querySelectorAll('[data-flower-history-body-pending]')).toHaveLength(44);
+    expect(root.querySelector('.flower-history-text-loading')).toBeNull();
     const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
     viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
     viewport.scrollTop = 0;

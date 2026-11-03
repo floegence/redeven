@@ -122,11 +122,11 @@ export function createFlowerScrollTailController(
         const target = hit?.closest<HTMLElement>(
           '.flower-activity-inline-button, .flower-tool-sequence-toggle, .flower-turn-summary-button, [data-flower-message-id] p, [data-flower-message-id] pre, [data-flower-message-id] li, [data-parent-event], [data-flower-message-id]');
         if (target && node.contains(target) && target.getBoundingClientRect().height > 0) {
-          // The clipped end of an unresolved skeleton is not reading content.
-          // Anchor the next visible row so replacing that skeleton can grow
+          // A clipped incomplete preview is not a stable body anchor.
+          // Anchor the next visible row so completing that body can grow
           // above the reader without pushing the following messages away.
           const message = target.closest<HTMLElement>('[data-flower-message-id]');
-          if (message?.querySelector('.flower-history-text-loading') && message.getBoundingClientRect().top < bounds.top) {
+          if (message?.querySelector('[data-flower-history-body-pending]') && message.getBoundingClientRect().top < bounds.top) {
             const following = [...node.querySelectorAll<HTMLElement>('[data-flower-message-id], [data-parent-event]')].find(row => {
               const rect = row.getBoundingClientRect();
               return rect.height > 0 && rect.top >= bounds.top && rect.top < bounds.bottom;
