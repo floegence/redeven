@@ -29,6 +29,31 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 All live-model lanes use configured deepseek-flash (local V4.1 Flash 1017), which does not prove remote weights. Source credentials/configuration and personal threads remain unchanged. Exact raw reports/source/tool identities are retained outside Git; full historical tables remain in this file's Git history. Task success is not zero model errors or cross-platform reliability.
 
 ## November 3: observation presentation
+Action-receipt follow-up on 3e5997f9a separates preparation, partial input, completed
+operations and the failed operation's own presentation phase. Runtime SyntaxError
+retains execution phase. Navigation lifecycle deadlines return branchable data;
+network, permission and unknown-effect boundaries remain errors. Slow-resource,
+frame/loader, download and cancellation fixtures retain explicit ownership.
+The configured connected-Chrome Cloudflare task uses 52 computer.exec calls:
+42 success, seven observation interruptions, two script failures and one stale
+reference. Navigation acknowledgement survives subsequent read interruption.
+The same link reproduces a target_ancestry exception twice in bounded diagnostic
+follow-ups. Private debugger evidence identifies getRootNode on a non-Node; a
+generic real-Chromium generated-content fixture reproduces CSSPseudoElement.
+270b562dc resolves its originating element before normal ancestry checks. Target,
+descendant and shadow positives pass; unrelated overlays still dispatch no input.
+The rebuilt connected-Chrome follow-up passes four calls, including one requested
+link click with three posted/acknowledged events and independent destination
+URL/title/text verification. Runtime commit and five module digests match sources.
+Final Node coverage passes 423 with two conditional skips; the unconfigured direct
+sandbox entry remains a recorded failed harness attempt, while the required
+Go-owned installed sandbox and script examples pass. Relevant Go packages, 30
+renderer lifecycle checks, 188 presentation checks, typecheck, lint, build and OKF
+checks pass. These are feature checks, not the user-excluded main push gate.
+Account-wide completeness, model claims about configuration state, all-site
+reliability and performance gains are not established. Context-change observation
+interruptions remain; neither the adapter nor this evidence invents retry safety.
+
 macOS arm64, published Floret v7.102.0: regression fixtures separate script
 navigation receipts from explicit observation errors. Real Chromium covers
 delayed load, redirect, child-frame replacement, cancellation, permission changes
