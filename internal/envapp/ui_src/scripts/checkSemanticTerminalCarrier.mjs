@@ -721,7 +721,8 @@ async function verifyAtomicClear(page, panel, sessionID, tempDir) {
   const beforeCanvas = await canvasEvidence(activeRuntime.locator(semanticCanvasSelector));
   await panel.getByTitle('More options', { exact: true }).click();
   await page.getByRole('menuitem', { name: 'Clear', exact: true }).click();
-  const after = await waitForViewsToConverge(page, sessionID, before[0].sequence + 1);
+  const cleared = await waitForTrace(activeRuntime, trace => trace.content_epoch > before[0].epoch);
+  const after = await waitForViewsToConverge(page, sessionID, cleared.sequence);
   if (after[0].epoch <= before[0].epoch) throw new Error('semantic clear did not advance content epoch');
   const afterCanvas = await canvasEvidence(activeRuntime.locator(semanticCanvasSelector));
   if (afterCanvas.hash === beforeCanvas.hash) throw new Error('semantic clear did not repaint the visible Presentation');

@@ -115,6 +115,24 @@ describe('terminal history settings', () => {
   await expect.poll(()=>(test.host.querySelector('button') as HTMLButtonElement).disabled).toBe(false);
   expect(http.request.mock.calls.filter(call=>call[1].method==='PUT')).toHaveLength(1);
  });
+ it('discards an earlier read that arrives after an uncertain mutation outcome',async()=>{
+  const test=mount();await expect.poll(()=>test.host.querySelectorAll('input').length).toBe(2);
+  let rejectSave!: (error: Error) => void;
+  let resolveRead!: (value: unknown) => void;
+  http.request.mockImplementationOnce(()=>new Promise((_resolve,reject)=>{ rejectSave=reject; }));
+  await page.getByRole('button',{name:'Save for new sessions'}).click();
+  http.request.mockImplementationOnce(()=>new Promise(resolve=>{ resolveRead=resolve; }));
+  test.setSessionId('second');await expect.poll(()=>test.read.mock.calls.length).toBe(2);
+  rejectSave(new Error('response lost'));
+  await expect.poll(()=>test.host.textContent).toContain('could not be confirmed');
+  resolveRead({supported:true,can_manage:true,defaults:{max_lines:1000,max_bytes:1048576}});
+  await new Promise(requestAnimationFrame);
+  expect(test.host.textContent).toContain('could not be confirmed');
+  expect(test.host.querySelectorAll('input')).toHaveLength(0);
+  await page.getByRole('button',{name:'Reload settings'}).click();
+  await expect.poll(()=>test.host.querySelectorAll('input').length).toBe(2);
+  expect(http.request.mock.calls.filter(call=>call[1].method==='PUT')).toHaveLength(1);
+ });
  it('reports unavailable reads without enabling mutations',async()=>{
   const test=mount();await expect.poll(()=>test.host.querySelectorAll('input').length).toBe(2);
   http.request.mockResolvedValueOnce({supported:false});test.setSessionId('unsupported');

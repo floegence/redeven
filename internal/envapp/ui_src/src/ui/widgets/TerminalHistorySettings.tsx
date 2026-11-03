@@ -74,7 +74,11 @@ export function TerminalHistorySettings(props: { open: boolean; transport?: Rede
     } catch {
       // A session switch may have read defaults before this mutation settled.
       // Only a new read after the uncertain outcome can permit another change.
-      if (!disposed) { setFailed(true); setUncertain(true); setMessage(i18n.t('terminal.settings.historyChangeUnknown')); }
+      if (!disposed) {
+        epoch += 1;
+        setLoading(false); setConfirmation(null);
+        setFailed(true); setUncertain(true); setMessage(i18n.t('terminal.settings.historyChangeUnknown'));
+      }
     } finally { setSaving(false); }
   };
   return <section class="space-y-3" aria-busy={loading() || saving()} data-terminal-history-settings>
