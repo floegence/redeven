@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
+import { isMarkedWebServiceUpstreamUnavailable, isMarkedWebServiceReservedPath } from './webServiceBrowserProxyFailure';
 
 describe('webServiceBrowserProxyFailure', () => {
+  it('distinguishes a marked reserved-path document from ordinary 404s and subresources', () => {
+    const response = { statusCode: 404, resourceType: 'mainFrame', responseHeaders: { 'X-Redeven-Proxy-Error': ['port-forward-reserved-path'] } };
+    expect(isMarkedWebServiceReservedPath(response)).toBe(true);
+    expect(isMarkedWebServiceReservedPath({ ...response, responseHeaders: {} })).toBe(false);
+    expect(isMarkedWebServiceReservedPath({ ...response, statusCode: 502 })).toBe(false);
+    expect(isMarkedWebServiceReservedPath({ ...response, responseHeaders: { 'x-redeven-proxy-error': ['unknown'] } })).toBe(false);
+    for (const resourceType of ['xhr', 'subFrame', 'script', 'image']) {
+      expect(isMarkedWebServiceReservedPath({ ...response, resourceType })).toBe(false);
+    }
+  });
   it('recognizes only marked main-document proxy failures', () => {
     expect(isMarkedWebServiceUpstreamUnavailable({
       statusCode: 502,

@@ -58,7 +58,7 @@ import { prepareGatewayEnvironmentAccess, type GatewayEnvironmentAccess } from '
 import { createRemoteNativeCodeSpaceRoute } from './codespaceNativeRemote';
 import { NativeCodeSpaceProfiles, nativeCodeSpaceIdentity } from './codespaceNativeProfiles';
 import { installNativeCodeSpaceSession } from './codespaceNativeSession';
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type Session, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -343,8 +343,9 @@ import { HOST_APPLICATION_PREPARATION_CHANNEL, HOST_APPLICATION_PREPARATION_CLOS
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import { webServiceBrowserContentBounds } from '../shared/webServiceBrowserLayout';
 import { openWebServiceInSystemBrowser } from './webServiceBrowserExternal';
-import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
+import { isMarkedWebServiceUpstreamUnavailable, isMarkedWebServiceReservedPath } from './webServiceBrowserProxyFailure';
 import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcuts';
+import { buildWebServiceReservedPathDocumentURL, performWebServiceReservedPathIntent, webServiceAddressCopiedCSS } from './webServiceReservedPathDocument';
 import { buildWebServiceUnavailableDocumentURL, isWebServiceUnavailableRetryIntent, showWebServiceRetryFeedback } from './webServiceUnavailableDocument';
 import {
   startWebServiceLoopbackGateway,
@@ -642,6 +643,7 @@ import { LOCAL_UI_ENV_APP_ENTRY_PATH } from './localUIURL';
 import {
   DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL,
+  DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL,
   DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL,
   normalizeDesktopWebServiceBrowserAction,
   type DesktopWebServiceBrowserAction,
@@ -8613,7 +8615,7 @@ function createWebServiceBrowserController(
 ): DesktopWebServiceBrowserController {
   let errorMessage = '';
   let pendingExternalURL = '';
-  let authenticationFailure = false;
+  let failureReason: 'upstream' | 'authentication' | 'reserved_path' = 'upstream';
   const entranceNavigation = new ManagedWebEntranceNavigation(request.managed_entrance);
   let entranceRequest = new AbortController();
   const browserEntryURL = loopbackGateway?.entryURL(request.url) ?? request.url;
@@ -8704,14 +8706,19 @@ function createWebServiceBrowserController(
       can_go_back: !contents.isDestroyed() && contents.navigationHistory.canGoBack(),
       can_go_forward: !contents.isDestroyed() && contents.navigationHistory.canGoForward(),
       devtools_open: !contents.isDestroyed() && contents.isDevToolsOpened(),
-      open_external_available: request.access_mode === 'unified_proxy',
-      ...(request.access_mode === 'desktop_loopback' ? {
+      open_external_available: request.access_mode === 'unified_proxy' && failureReason !== 'reserved_path',
+      ...(failureReason === 'reserved_path' ? {
+        open_external_unavailable_reason: createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('webServiceBrowser.reservedPathTitle'),
+      } : request.access_mode === 'desktop_loopback' ? {
         open_external_unavailable_reason: createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
           .t('webServiceBrowser.desktopLoopbackExternalUnavailable'),
       } : {}),
       ...(errorMessage ? { error_message: errorMessage } : {}),
     };
   };
+  const failureDocumentURL = (): string => failureReason === 'reserved_path'
+    ? buildWebServiceReservedPathDocumentURL(desktopLanguageState().getSnapshot().resolved_locale, snapshot().address, desktopThemeState().getSnapshot())
+    : webServiceUnavailableDocumentURL(targetAddress, applicationWindow, failureReason === 'authentication');
   const publishState = (): void => {
     if (applicationWindow) return;
     if (win.isDestroyed() || win.webContents.isDestroyed()) return;
@@ -8722,6 +8729,7 @@ function createWebServiceBrowserController(
     requestedURL = targetURL;
     unavailableRequestURL = '';
     unavailablePageURL = '';
+    failureReason = 'upstream';
     loadingUnavailablePage = false;
     errorMessage = '';
     pendingExternalURL = '';
@@ -8748,7 +8756,7 @@ function createWebServiceBrowserController(
       return { ok: false, message: 'Desktop refused to navigate outside this Web Service route.' };
     }
     entranceNavigation.begin(entrance);
-    authenticationFailure=false;
+    failureReason = 'upstream';
     loadRequestedURL(loopbackGateway?.entryURL(url) ?? url);
     return { ok: true };
   };
@@ -8764,7 +8772,7 @@ function createWebServiceBrowserController(
     if (win.isDestroyed()) return;
     refreshHostAppearance();
     if (!unavailablePageURL || contentView.webContents.isDestroyed()) return;
-    unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow, authenticationFailure);
+    unavailablePageURL = failureDocumentURL();
     loadingUnavailablePage = true;
     void contentView.webContents.loadURL(unavailablePageURL);
   };
@@ -8802,6 +8810,9 @@ function createWebServiceBrowserController(
         toggleDevTools();
         return { ok: true };
       case 'open_external': {
+        if (failureReason === 'reserved_path') {
+          return { ok: false, message: createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('webServiceBrowser.reservedPathTitle') };
+        }
         if (request.access_mode === 'desktop_loopback') {
           const message = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
             .t('webServiceBrowser.desktopLoopbackExternalUnavailable');
@@ -8843,6 +8854,7 @@ function createWebServiceBrowserController(
     requestedURL = targetURL;
     unavailableRequestURL = '';
     unavailablePageURL = '';
+    failureReason = 'upstream';
     loadingUnavailablePage = false;
   };
   const blockExternalNavigation = (targetURL: string): void => {
@@ -8870,13 +8882,13 @@ function createWebServiceBrowserController(
       () => !win.isDestroyed() && unavailablePageURL === retryPageURL,
     ).then(async (current) => {
       if (!current) return;
-      if(authenticationFailure && entranceNavigation.context) {
+      if(failureReason === 'authentication' && entranceNavigation.context) {
         entranceRequest.abort();
         entranceRequest = new AbortController();
         const prepared=await prepareManagedWebEntrance(sessionRecord,{...request,managed_entrance:entranceNavigation.context},true,entranceRequest.signal);
         if(win.isDestroyed() || contentView.webContents.isDestroyed() || unavailablePageURL!==retryPageURL)return;
         entranceNavigation.begin(prepared.managed_entrance);
-        authenticationFailure=false;
+        failureReason = 'upstream';
         loadRequestedURL(loopbackGateway?.entryURL(prepared.url) ?? prepared.url);
       } else loadRequestedURL(retryRequestURL);
     }).catch(() => {
@@ -8888,7 +8900,20 @@ function createWebServiceBrowserController(
     });
   };
   contentView.webContents.on('will-navigate', (event, targetURL) => {
-    if (isWebServiceUnavailableRetryIntent(targetURL, contentView.webContents.getURL(), unavailablePageURL)) {
+    if (failureReason === 'reserved_path' && performWebServiceReservedPathIntent(targetURL, contentView.webContents.getURL(), unavailablePageURL, {
+      editAddress: () => {
+        win.webContents.focus();
+        win.webContents.send(DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL);
+      },
+      copyAddress: () => {
+        clipboard.writeText(snapshot().address);
+        void contentView.webContents.insertCSS(webServiceAddressCopiedCSS);
+      },
+    })) {
+      event.preventDefault();
+      return;
+    }
+    if (failureReason !== 'reserved_path' && isWebServiceUnavailableRetryIntent(targetURL, contentView.webContents.getURL(), unavailablePageURL)) {
       event.preventDefault();
       retryUnavailableService();
       return;
@@ -8922,6 +8947,7 @@ function createWebServiceBrowserController(
     if (!loadingUnavailablePage) {
       unavailableRequestURL = '';
       unavailablePageURL = '';
+      failureReason = 'upstream';
     }
     publishState();
   });
@@ -8984,18 +9010,21 @@ function createWebServiceBrowserController(
       && electronWebContents.fromId(details.webContentsId) === contentView.webContents;
     const bootstrapDocument = new URL(details.url).pathname.replace(/\/$/u, '') === '/_redeven_boot';
     const transportFailure = isMarkedWebServiceUpstreamUnavailable(details);
-    const authenticationRejected = isTargetDocument && !bootstrapDocument && !transportFailure && entranceNavigation.observe(details.resourceType,details.statusCode);
-    if (!isTargetDocument || (!authenticationRejected && !isMarkedWebServiceUpstreamUnavailable(details))) {
+    const reservedPath = !applicationWindow && isMarkedWebServiceReservedPath(details);
+    const authenticationRejected = isTargetDocument && !bootstrapDocument && !transportFailure && !reservedPath && entranceNavigation.observe(details.resourceType,details.statusCode);
+    if (!isTargetDocument || (!authenticationRejected && !transportFailure && !reservedPath)) {
       callback({});
       return;
     }
-    authenticationFailure = authenticationRejected;
     const failedRequestURL = requestedURL;
+    const responseURL = new URL(details.url);
+    responseURL.hash = new URL(failedRequestURL).hash;
     callback({ cancel: true });
     setImmediate(() => {
-      if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
-      unavailableRequestURL = failedRequestURL;
-      unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow, authenticationFailure);
+      if (win.isDestroyed() || contentView.webContents.isDestroyed() || requestedURL !== failedRequestURL) return;
+      failureReason = reservedPath ? 'reserved_path' : authenticationRejected ? 'authentication' : 'upstream';
+      unavailableRequestURL = responseURL.toString();
+      unavailablePageURL = failureDocumentURL();
       loadingUnavailablePage = true;
       pendingExternalURL = '';
       errorMessage = '';

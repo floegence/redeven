@@ -1914,6 +1914,11 @@
     "retrying": "Повторное подключение…"
   },
   "webServiceBrowser": {
+    "reservedPathTitle": "Эта страница недоступна в Web Service",
+    "reservedPathSummary": "Этот адрес использует зарезервированный путь Redeven. Чтобы перейти в Redeven, откройте соответствующее окружение.",
+    "editAddress": "Изменить адрес",
+    "copyAddress": "Копировать адрес",
+    "addressCopied": "Скопировано",
     "title": "Web Service",
     "addressLabel": "Адрес Web Service",
     "addressPlaceholder": "Введите адрес или путь",

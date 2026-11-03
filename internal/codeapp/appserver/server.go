@@ -151,6 +151,7 @@ type containerExecTerminalSessionManager interface {
 
 const (
 	portForwardProxyErrorHeader         = "X-Redeven-Proxy-Error"
+	portForwardProxyReservedPath        = "port-forward-reserved-path"
 	portForwardProxyUpstreamUnavailable = "port-forward-upstream-unavailable"
 )
 
@@ -679,7 +680,7 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if isPluginPlatformAPIPath(r) {
 		if originRole != originRoleEnv {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeReservedProxyPathNotFound(w, originRole)
 			return
 		}
 		if g.PluginPlatformEnabled() {
@@ -699,7 +700,7 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		// (env-<env_id>.<region>.<base-sandbox-domain>).
 		// Do not expose them to codespace origins (code-server is untrusted).
 		if originRole != originRoleEnv {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeReservedProxyPathNotFound(w, originRole)
 			return
 		}
 		g.handleAPIWithDiagnostics(w, r, localUI)
@@ -712,7 +713,7 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(p, "/_redeven_proxy/env"):
 			if originRole != originRoleEnv {
-				http.Error(w, "not found", http.StatusNotFound)
+				writeReservedProxyPathNotFound(w, originRole)
 				return
 			}
 		case p == windowTransportScript:
@@ -730,7 +731,7 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		default:
 			// Unknown dist path: do not serve anything else by default.
-			http.Error(w, "not found", http.StatusNotFound)
+			writeReservedProxyPathNotFound(w, originRole)
 			return
 		}
 		switch {
@@ -741,7 +742,7 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		case p == "/_redeven_proxy/inject.js":
 			g.serveDistFile(w, r, "inject.js")
 		default:
-			http.Error(w, "not found", http.StatusNotFound)
+			writeReservedProxyPathNotFound(w, originRole)
 		}
 		return
 	}
@@ -776,6 +777,15 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+}
+
+// Preserve route isolation while explaining a Runtime-owned rejection to the viewer.
+// Application responses cannot mint this marker (see handlePortForwardProxy).
+func writeReservedProxyPathNotFound(w http.ResponseWriter, role originRole) {
+	if role == originRolePortForward {
+		w.Header().Set(portForwardProxyErrorHeader, portForwardProxyReservedPath)
+	}
+	http.Error(w, "not found", http.StatusNotFound)
 }
 
 func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request) {
@@ -7687,6 +7697,9 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 			if resp == nil {
 				return nil
 			}
+
+			// Only Runtime failures may carry the trusted proxy marker.
+			resp.Header.Del(portForwardProxyErrorHeader)
 
 			// Compatibility-first for embedded iframe + injected script.
 			resp.Header.Del("Content-Security-Policy")

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop Web Service browser window
 tags: [desktop, managed-services, security, ui]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
@@ -14,6 +14,23 @@ Desktop owns protected target views, toolbar, navigation and cleanup over Runtim
 When the trusted Desktop Shell bridge is present, Env App requests a semantic Web Service window instead of creating a renderer popup. The address field always projects the protected route back onto the user's original service origin and current application path; it must not expose Runtime listener ports, private hostnames, `/pf/<id>` prefixes, forward identities, boot routes, entry tickets, or other transport details.
 
 [Managed opening](../architecture/managed-web-service-opening.md) owns the response and first-navigation boundary.
+
+A Runtime-rejected reserved path keeps HTTP 404 and carries
+`X-Redeven-Proxy-Error: port-forward-reserved-path`. The browser presentation
+replaces only a marked main-document response with a localized, scriptless
+explanation using published Floe window-status assets. It displays the original
+service address with its current path, query and fragment, offers Edit address
+and Copy address, and does not suggest retries or direct access. Edit focuses
+and selects the existing toolbar draft; Copy uses the host-projected address
+and acknowledges completion in place. Only the exact current host document can
+request these actions. Theme/language refresh retains the explanation; navigating
+to another address restores ordinary browsing. System-browser opening is disabled
+on this page because the same protected route would reject it again.
+
+Runtime strips its proxy-error header from application responses. Unmarked
+application 404s and marked subresource responses never replace the document.
+Env UI/API isolation and the saved access mode remain unchanged. This does not
+add nested Env access or an automatic loopback fallback.
 
 The semantic forward-window request optionally selects `presentation: application`. The same forward admission, isolated partition, request routing, window reuse, and teardown remain authoritative.
 
@@ -35,3 +52,5 @@ System-browser authorization and the persisted access-mode decision remain owned
 - `redeven:desktop/src/shared/desktopShellWebServiceWindowIPC.ts:1` - Semantic IPC validates HTTP(S) and DNS-safe forward IDs.
 
 - `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - Protected Forward redirects stay in the same route identity.
+
+- `redeven:desktop/scripts/check-web-service-reserved-path.mjs` - Native status rendering across published themes, four locales and two widths, address actions, redirect handling and ordinary application 404 preservation.

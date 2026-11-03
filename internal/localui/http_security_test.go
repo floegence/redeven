@@ -448,3 +448,31 @@ func TestStartOnListenersRejectsNonLoopbackListener(t *testing.T) {
 		t.Fatal("StartOnListeners() accepted a non-loopback listener")
 	}
 }
+
+func TestDesktopBridgeExplainsReservedPathOnlyAfterAdmission(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, nil)
+	s.localUIBridgeToken = "reserved-path-test-token"
+	for _, authorized := range []bool{false, true} {
+		req := httptest.NewRequest(http.MethodGet, "http://pf-demo.localhost:24000/_redeven_proxy/env/", nil)
+		if authorized {
+			req.Header.Set(localDesktopBridgeTokenHeader, s.localUIBridgeToken)
+		}
+		response := httptest.NewRecorder()
+		s.HandlerForDesktopBridge().ServeHTTP(response, req)
+		if !authorized {
+			if response.Code != http.StatusUnauthorized || response.Header().Get("X-Redeven-Proxy-Error") != "" {
+				t.Fatalf("unauthorized response = %d, %v", response.Code, response.Header())
+			}
+		} else if response.Code != http.StatusNotFound || response.Header().Get("X-Redeven-Proxy-Error") != "port-forward-reserved-path" {
+			t.Fatalf("authorized response = %d, %v", response.Code, response.Header())
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:24000/_redeven_proxy/env/", nil)
+	req.Header.Set(localDesktopBridgeTokenHeader, s.localUIBridgeToken)
+	response := httptest.NewRecorder()
+	s.HandlerForDesktopBridge().ServeHTTP(response, req)
+	if response.Code != http.StatusOK || response.Header().Get("X-Redeven-Proxy-Error") != "" {
+		t.Fatalf("Env entry changed: %d, %v", response.Code, response.Header())
+	}
+}

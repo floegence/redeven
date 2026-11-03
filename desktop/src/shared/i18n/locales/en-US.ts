@@ -672,6 +672,11 @@ export const enUS = {
     retrying: "Reconnecting…",
   },
   webServiceBrowser: {
+    reservedPathTitle: "This page cannot open in Web Service",
+    reservedPathSummary: "This address uses a path reserved by Redeven. To access Redeven, open the corresponding Environment.",
+    editAddress: "Edit address",
+    copyAddress: "Copy address",
+    addressCopied: "Copied",
     authenticationTitle: "The service entrance needs authentication",
     authenticationSummary: "The service responded, but rejected its managed entrance. Prepare the current entrance and try again. The application keeps running.",
     authenticationRetry: "Prepare entrance and retry",

@@ -17,3 +17,12 @@ export function isMarkedWebServiceUpstreamUnavailable(
   }
   return false;
 }
+
+export const WEB_SERVICE_PROXY_RESERVED_PATH = 'port-forward-reserved-path';
+
+export function isMarkedWebServiceReservedPath(details: WebServiceBrowserResponseDetails): boolean {
+  if (details.statusCode !== 404 || details.resourceType !== 'mainFrame') return false;
+  return Object.entries(details.responseHeaders ?? {}).some(([name, values]) =>
+    name.toLowerCase() === WEB_SERVICE_PROXY_ERROR_HEADER
+      && values.some(value => value === WEB_SERVICE_PROXY_RESERVED_PATH));
+}

@@ -1,3 +1,4 @@
+export const DESKTOP_WEB_SERVICE_BROWSER_FOCUS_ADDRESS_CHANNEL = 'redeven-desktop:web-service-browser-focus-address';
 export const DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL = 'redeven-desktop:web-service-browser-get-state';
 export const DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL = 'redeven-desktop:web-service-browser-action';
 export const DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL = 'redeven-desktop:web-service-browser-state-updated';

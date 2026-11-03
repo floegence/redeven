@@ -486,7 +486,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain("contentView.webContents.openDevTools({ mode: 'detach' });");
     expect(helperSrc).toContain("contentView.webContents.on('before-input-event', handleDevToolsShortcut);");
     expect(helperSrc).toContain('isMarkedWebServiceUpstreamUnavailable(details)');
-    expect(helperSrc).toContain('webServiceUnavailableDocumentURL(targetAddress, applicationWindow, authenticationFailure)');
+    expect(helperSrc).toContain("webServiceUnavailableDocumentURL(targetAddress, applicationWindow, failureReason === 'authentication')");
     expect(helperSrc).toContain('callback({ cancel: true });');
     expect(helperSrc).toContain('isWebServiceUnavailableRetryIntent(targetURL, contentView.webContents.getURL(), unavailablePageURL)');
     expect(helperSrc).toContain('showWebServiceRetryFeedback(contentView.webContents, retryPageURL,');
@@ -494,7 +494,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('else loadRequestedURL(retryRequestURL);');
     expect(helperSrc).toContain('const refreshAppearance = (): void => {');
     expect(helperSrc).not.toContain('void win.loadURL(webServiceBrowserDocumentURL());');
-    expect(helperSrc).toContain('unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow, authenticationFailure);');
+    expect(helperSrc).toContain('unavailablePageURL = failureDocumentURL();');
     expect(helperSrc).toContain('if (unavailablePageURL !== retryPageURL) return;');
     expect(helperSrc).toContain('() => !win.isDestroyed() && unavailablePageURL === retryPageURL,');
     expect(helperSrc).toContain('await openWebServiceInSystemBrowser({');

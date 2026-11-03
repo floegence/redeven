@@ -1887,6 +1887,11 @@
     "retrying": "Verbindung wird wiederhergestellt…"
   },
   "webServiceBrowser": {
+    "reservedPathTitle": "Diese Seite lässt sich nicht in Web Service öffnen",
+    "reservedPathSummary": "Diese Adresse verwendet einen für Redeven reservierten Pfad. Öffnen Sie die zugehörige Umgebung, um auf Redeven zuzugreifen.",
+    "editAddress": "Adresse bearbeiten",
+    "copyAddress": "Adresse kopieren",
+    "addressCopied": "Kopiert",
     "title": "Web Service",
     "addressLabel": "Web-Service-Adresse",
     "addressPlaceholder": "Adresse oder Pfad eingeben",

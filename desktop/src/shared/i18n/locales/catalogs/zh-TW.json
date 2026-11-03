@@ -1887,6 +1887,11 @@
     "retrying": "正在重新連線…"
   },
   "webServiceBrowser": {
+    "reservedPathTitle": "暫不支援在 Web Service 中開啟此頁面",
+    "reservedPathSummary": "此位址使用了 Redeven 的保留路徑。如需存取 Redeven 管理介面，請從對應的環境入口進入。",
+    "editAddress": "修改位址",
+    "copyAddress": "複製位址",
+    "addressCopied": "已複製",
     "title": "Web Service",
     "addressLabel": "Web Service 位址",
     "addressPlaceholder": "輸入位址或路徑",

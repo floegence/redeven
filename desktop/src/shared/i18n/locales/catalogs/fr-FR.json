@@ -1887,6 +1887,11 @@
     "retrying": "Reconnexion en cours…"
   },
   "webServiceBrowser": {
+    "reservedPathTitle": "Cette page ne peut pas s’ouvrir dans Web Service",
+    "reservedPathSummary": "Cette adresse utilise un chemin réservé à Redeven. Pour accéder à Redeven, ouvrez l’environnement correspondant.",
+    "editAddress": "Modifier l’adresse",
+    "copyAddress": "Copier l’adresse",
+    "addressCopied": "Copiée",
     "title": "Web Service",
     "addressLabel": "Adresse du Web Service",
     "addressPlaceholder": "Saisir une adresse ou un chemin",
