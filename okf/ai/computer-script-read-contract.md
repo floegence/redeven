@@ -37,7 +37,11 @@ One returned observation binds content, image, metadata and final safety to the
 same document lifecycle through input cleanup and final publication. A private
 invocation token carries the existing revision; no second lifecycle is stored.
 Ordinary reads scan at entry and final publication after cleanup; failed publication retires the image anchor. Condition waits retain a privacy check after every sample, without repeatedly fetching title/URL metadata. Wait results expose requested_state, timeout_ms, elapsed_ms and samples; these measure this operation, not application readiness.
-Ordinary content updates do not require page quiescence.
+Ordinary content updates do not require page quiescence. Empty initial child-frame
+URL metadata is resolved by reading document.URL in that exact isolated frame.
+The same lifecycle, origin and privacy checks still apply; no parent-origin
+substitution, blank-URL allowlist or website-specific rule is introduced. Missing
+or invalid document URLs remain explicit evaluation failures.
 Condition waits own a deadline and repeatedly obtain independently validated
 read-only samples. Typed lifecycle or temporary query-candidate invalidation
 discards only that sample; unknown protocol/evaluation failures, ambiguity, stale

@@ -312,15 +312,19 @@ export class BrowserComputerPage {
     for (const frame of frames) {
       // Chromium's error document has an opaque origin. Its failed URL remains
       // the permission boundary; the internal page does not grant any origin.
-      const url = frame.frame.url === 'chrome-error://chromewebdata/' && frame.frame.unreachableUrl
-        ? frame.frame.unreachableUrl : frame.frame.url;
-      if (!authorizedNavigation && url !== 'about:blank' && !url.startsWith('about:srcdoc')) {
-        try { if (!this.allowsURL(url)) {
+      try {
+        // Initial child-frame metadata may contain an empty URL. Read the
+        // actual document in that exact frame; never invent its origin or
+        // skip its content/privacy scan. Existing revision checks bind it.
+        const url = frame.frame.url === ''
+          ? await this.inFrame(frame, 'document.URL', value => typeof value === 'string' && URL.canParse(value))
+          : frame.frame.url === 'chrome-error://chromewebdata/' && frame.frame.unreachableUrl
+            ? frame.frame.unreachableUrl : frame.frame.url;
+        if (!authorizedNavigation && url !== 'about:blank' && !url.startsWith('about:srcdoc') && !this.allowsURL(url)) {
           if (new URL(url).origin === 'null') { this.requiredURL = redactedNavigationURL(url); throw new Error('TARGET_PERMISSION_REQUIRED'); }
           reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin;
-        } }
-        catch (error) { if (error.message === 'TARGET_PERMISSION_REQUIRED') throw error; scanFailure ||= error; }
-      }
+        }
+      } catch (error) { if (error.message === 'TARGET_PERMISSION_REQUIRED') throw error; scanFailure ||= error; }
       try {
         if (!checkedSessions.has(frame.session)) {
           checkedSessions.add(frame.session);

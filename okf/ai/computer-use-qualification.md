@@ -3,7 +3,7 @@ type: Acceptance Contract
 title: Computer use product qualification
 tags: [ai, computer-use, desktop, testing]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -105,3 +105,24 @@ October 26: 12 × 5 strict tasks pass in 173.114 s, with 273 activities and 31 e
 Carrier 91 passes/one optional Chrome-picker skip, 12 contracts and eight headed-extension checks cover validation, 2,100 refs, image geometry, stale/live frames and partial effects. Native port is a fixture; macOS background/35 Swift checks are separate. Linux native, multimonitor and combined Desktop/Native-Messaging/Service launch remain excluded. Emulated scale is not browser zoom; debugger detach is not focus-loss proof. No paired performance claim.
 
 Sources: [carrier](../../internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs), [private takeover](../../internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs), [system browser](../../internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs), [drag evidence](computer-drag-qualification.md), [historical lanes](computer-use-qualification-evidence.md). Exact raw reports remain outside the repository.
+
+
+November 3, factual receipt qualification: 395 browser Node checks, 288 Flower
+presentation checks and 28 browser-rendered lifecycle checks pass. Native Messaging
+and catalog-installed browser sandbox/example lanes pass separately; the Chrome
+installation-picker lane remains opt-in. Affected Go packages, UI build/typecheck,
+changed-script lint and OKF integrity pass. Ten new browser fixtures cover exact
+scroll measurement, delivery/observation separation, reduced duplicate scans,
+wait timing, declared actions, original href and table-cell source reachability.
+
+The updated product at 97660d396 completes a real configured-DeepSeek Search
+Console task using a connected background tab: six resource/report pairs, 37
+computer.exec calls, 32 successes and five observation interruptions. This first
+run is retained as a failed reliability baseline, not a clean qualification.
+A subsequent bounded diagnostic observes TypeError in URL construction for an
+initial child frame whose Page.getFrameTree URL is empty. Local inspection records
+only URL type/length, frame keys and call sites, never page contents. Four isolated
+regressions reproduce the empty-metadata boundary and verify actual-document URL
+resolution, private input, ungranted origin and invalid URL rejection. They pass
+with the 73 surrounding read/privacy/lifecycle checks. A new product run is required
+to certify the corrected build; prior old-thread root causes remain unproven.

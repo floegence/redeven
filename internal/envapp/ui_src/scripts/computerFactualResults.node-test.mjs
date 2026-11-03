@@ -105,3 +105,34 @@ test('table cell references reach complete source text beyond its displayed pref
   const source=await call('computer.action',{action:'source',selector:{ref:cell.ref},source:'dom',field:'textContent'});
   assert.equal(source.result.value.endsWith('TAIL'),true);assert.equal(source.result.truncated,false);
 }));
+
+for(const mode of ['initial_document','private_input','ungranted_origin','invalid_document_url']) {
+ test('empty child-frame URL uses its actual document without bypassing '+mode,()=>fixture('<h1>Parent</h1><iframe></iframe>',async({tab,controller,session,call})=>{
+  const frame=tab.frames().find(f=>f!==tab.mainFrame());
+  if(mode==='private_input')await frame.setContent('<input type="password" value="never-export">');
+  const send=session.send.bind(session);let documentReads=0;
+  session.send=async(method,args)=>{
+   const result=await send(method,args);
+   if(method==='Page.getFrameTree')for(const child of result.frameTree.childFrames??[])child.frame.url='';
+   if(method==='Runtime.evaluate'&&args.expression==='document.URL'){
+    documentReads++;
+    if(mode==='ungranted_origin')result.result={type:'string',value:'https://ungranted.test/frame'};
+    if(mode==='invalid_document_url')result.result={type:'string',value:''};
+   }
+   return result;
+  };
+  const result=mode==='ungranted_origin'?await controller.execute({tool_name:'computer.observe',script_operation:true,allowed_origins:[]}):await call('computer.observe');
+  assert.ok(documentReads>0);
+  if(mode==='initial_document'){
+   assert.equal(result.error,undefined,JSON.stringify(result));
+   assert.ok(result.result.observation.nodes.some(n=>n.name==='Parent'));
+  }else if(mode==='invalid_document_url'){
+   assert.equal(result.error,'TARGET_OBSERVATION_UNAVAILABLE');
+   assert.deepEqual(result.result.diagnostic,{phase:'evaluation',method:'Runtime.evaluate',reason:'invalid_result'});
+  }else{
+   assert.equal(result.safety.level,'takeover');
+   assert.ok(result.safety.reason_codes.includes(mode==='private_input'?'secret_input':'site_permission'));
+  }
+  assert.equal(JSON.stringify(result).includes('never-export'),false);
+ }));
+}
