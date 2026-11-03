@@ -402,9 +402,9 @@ it('retains the DeepSeek page reader after a failed save and allows cancel and r
   const { configure, saveModelProfile, snapshot, retryThread } = await mount({ deepseek: true });
   saveModelProfile.mockRejectedValueOnce(new Error('settings save unavailable'));
   await userEvent.click(configure());
-  await waitFor(() => Boolean(document.querySelector('[data-flower-provider-fetch] [data-floe-dropdown-trigger]')));
-  await userEvent.click(document.querySelector('[data-flower-provider-fetch] [data-floe-dropdown-trigger]')!);
-  await userEvent.click(page.getByRole('menuitem', { name: copy.settings.dialog.catalog.fetchDeepSeek, exact: true }));
+  await waitFor(() => Boolean(document.querySelector('[data-flower-provider-fetch] [role=combobox]')));
+  await userEvent.click(document.querySelector('[data-flower-provider-fetch] [role=combobox]')!);
+  await userEvent.click(page.getByRole('option', { name: copy.settings.dialog.catalog.fetchDeepSeek, exact: true }));
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
   await waitFor(() => document.querySelector('.flower-provider-dialog')?.textContent?.includes('settings save unavailable') === true);
   expect(saveModelProfile.mock.calls[0][0].model_profile!.providers[0].web_fetch).toEqual({ source: 'deepseek' });
