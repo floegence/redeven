@@ -5722,6 +5722,7 @@
       "compactionDividerProviderBytes": "模型供應商拒絕了請求大小（HTTP 413）；token 用量是另一項獨立限制。",
       "projectionUnavailableTitle": "回應無法使用",
       "projectionUnavailableDescription": "無法載入此輪已儲存的回應。",
+      "toolStatusUnknown": "結果不明",
       "toolStatusPending": "待處理",
       "toolStatusRunning": "執行中",
       "toolStatusWaiting": "等待中",

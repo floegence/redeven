@@ -1,3 +1,5 @@
+import releasedHostWork from '../../../../ai/testdata/host-work-v7.102.0/activity.json';
+import { mapFlowerActivityItem } from '../../../../flower_ui/src/flowerLiveMapper';
 import '../index.css';
 import './flower-feature.css';
 
@@ -66,6 +68,31 @@ const rowFor = (runtime: HTMLElement, id: string) => runtime.querySelector(`[dat
 const toggleFor = (runtime: HTMLElement, id: string) => rowFor(runtime, id).querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
 
 describe('SSH terminal activity', () => {
+  it('renders the exact public Activity DTO from the released-writer upgrade fixture', async () => {
+    const mapped = mapFlowerActivityItem(releasedHostWork)!;
+    const {runtime} = await mount([write(), mapped]);
+    const row = rowFor(runtime, mapped.item_id);
+    expect(row.getAttribute('data-flower-activity-status')).toBe('unknown');
+    expect(row.textContent).toContain('Outcome unknown');
+    expect(runtime.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+  });
+
+  it('renders historical unknown outcomes without hiding history or restarting observation', async () => {
+    const unknown = activityItem({ ...read(), status: 'unknown', severity: 'warning', needs_attention: true, attention_reasons: ['unknown'],
+      payload: { operation: 'exec', command: 'inspect', status: 'unknown', process_id: 'process-1', output: 'Retained historical output', first_seq: 1, last_seq: 1, latest_seq: 1 } });
+    const { runtime, base } = await mount([write(), unknown]);
+    expect(rowFor(runtime, 'read').getAttribute('data-flower-activity-status')).toBe('unknown');
+    expect(rowFor(runtime, 'read').getAttribute('aria-label')).toContain('Outcome unknown');
+    toggleFor(runtime, 'read').click();
+    await waitFor(() => rowFor(runtime, 'read').textContent?.includes('The command outcome is unknown.') === true);
+    expect(rowFor(runtime, 'read').textContent).toContain('Retained historical output');
+    expect(runtime.textContent).not.toContain('Flower contract error');
+    expect(runtime.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+    expect(rowFor(runtime, 'read').closest('[data-flower-tool-sequence]')).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 450));
+    expect(base.readTerminalProcess).not.toHaveBeenCalled();
+  });
+
   it('contains an invalid process frame, stops polling, and retries only the output read', async () => {
     const result = activityItem({ ...read(), status: 'success', payload: { operation: 'exec', command: 'inspect',
       process_id: 'process-1', output: 'first', first_seq: 1, last_seq: 1, latest_seq: 2 } });

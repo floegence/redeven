@@ -10196,7 +10196,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "ai",
           "compatibility",
@@ -10206,15 +10206,15 @@
         "title": "Flower historical writer acceptance",
         "type": "Compatibility Contract"
       },
-      "body_length": 1212,
+      "body_length": 1607,
       "summary": "Immutable fixtures come from locked released Redeven writers; current tests copy and verify them. Supported history must remain readable and continue after upgrade. Preserve source/module digests and public write paths. Fixture drift or upgrade failure blocks integration; database open alone is insufficient.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The compatibility baseline is Redeven `10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a` with published Floret `v7.5.0`.\n\nThe manifest binds the archive, every stored file and producer by SHA-256 and records source commit, Floret version, Go toolchain, scenario names and canonical IDs needed by assertions.\n\nQualification uses fake providers and copied synthetic data; production startup never resumes a user's task automatically.",
-          "char_count": 423
+          "body": "The compatibility baseline is Redeven `10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a` with published Floret `v7.5.0`.\n\nThe manifest binds the archive, every stored file and producer by SHA-256 and records source commit, Floret version, Go toolchain, scenario names and canonical IDs needed by assertions.\n\nQualification uses fake providers and copied synthetic data; production startup never resumes a user's task automatically.\n\nThe released Floret v7.102.0 host-work fixture also qualifies unknown-outcome\nhistory through the public runtime and Redeven DTO. Browser acceptance exercises\nthe same serialized Activity contract. Compatibility checks must cover legal\nstatus values, attention/counts, bounded final presentation, and rendered history;\nAPI symbol compatibility and database-open success alone are insufficient.",
+          "char_count": 818
         },
         {
           "id": "boundaries",
@@ -11747,7 +11747,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-26",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "ai",
           "runtime",
@@ -11757,15 +11757,15 @@
         "title": "AI terminal tool runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 3502,
+      "body_length": 3972,
       "summary": "Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, interactions, effect attempts, results and Activity. One adapter authorizes execution once and publishes current views. Product SQL stores no parallel terminal lifecycle or effect recovery.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "[Task-file placement](flower-task-files.md) supplies thread scratch/staging through\nchild-only environment variables while preserving project cwd and OS temporary\npath conventions. Cleanup waits for owned terminal processes to be reaped.\n\nPTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.\n\nOn macOS/Linux, one exit worker observes command exit without reaping, kills its process group, retires numeric signaling, verifies no live members within 2 seconds, then reaps and drains output. The unreaped root pins its PID through cleanup. Child cleanup preserves shell exit codes; only confirmed Stop termination means cancellation. Stop, input failure, the 30-minute limit and Service shutdown share this worker. Unconfirmed cleanup reports a runtime error and retains workload admission. Settlement stops the watchdog.\n\nLong-lived commands stay foreground under the yielded process ID. Backgrounding and `nohup` cannot transfer ownership; escaping the PTY group/session is unsupported. Independent services need a managed lifecycle; previews use the managed browser. Names, CPU use and age never establish ownership.\n\n`terminal.read` observes output after the caller's sequence for up to 60 seconds, returning early on output/exit. An expired observation retains process ID and cursor and reports `wait_expired`/`wait_ms`; `timed_out` means command timeout. Continue with the same ID and returned `last_seq`, without sleeps or command restarts.\n\nNormal expiry uses Floret `BoundedWait`; Floret measures handler time and owns repeat protection. Immediate, failed, canceled and early reads gain no exemption, nor do neighboring repeated effects. No extra retry counter, clock, wake or durable ledger exists.\n\nReads are read-only effects: cancellation preserves process and cursor, then confirms the canceled result after observation returns. Execution/input retain shell-effect uncertainty rules. `terminal.write` bounds stdin; `terminal.terminate` kills the owned group and waits for reap/output drain. Thread Stop policy governs cleanup.\n\nRead results contain incremental output, status, cursor, wait and exit facts. Command, cwd and timing remain in canonical Activity without repeated model echoes.\n\nBrowser payloads exclude local working paths, stdin, authorization proofs, and effect internals.",
-          "char_count": 2458
+          "body": "[Task-file placement](flower-task-files.md) supplies thread scratch/staging through\nchild-only environment variables while preserving project cwd and OS temporary\npath conventions. Cleanup waits for owned terminal processes to be reaped.\n\nPTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.\n\nOn macOS/Linux, one exit worker observes command exit without reaping, kills its process group, retires numeric signaling, verifies no live members within 2 seconds, then reaps and drains output. The unreaped root pins its PID through cleanup. Child cleanup preserves shell exit codes; only confirmed Stop termination means cancellation. Stop, input failure, the 30-minute limit and Service shutdown share this worker. Unconfirmed cleanup reports a runtime error and retains workload admission. Settlement stops the watchdog.\n\nLong-lived commands stay foreground under the yielded process ID. Backgrounding and `nohup` cannot transfer ownership; escaping the PTY group/session is unsupported. Independent services need a managed lifecycle; previews use the managed browser. Names, CPU use and age never establish ownership.\n\n`terminal.read` observes output after the caller's sequence for up to 60 seconds, returning early on output/exit. An expired observation retains process ID and cursor and reports `wait_expired`/`wait_ms`; `timed_out` means command timeout. Continue with the same ID and returned `last_seq`, without sleeps or command restarts.\n\nNormal expiry uses Floret `BoundedWait`; Floret measures handler time and owns repeat protection. Immediate, failed, canceled and early reads gain no exemption, nor do neighboring repeated effects. No extra retry counter, clock, wake or durable ledger exists.\n\nReads are read-only effects: cancellation preserves process and cursor, then confirms the canceled result after observation returns. Execution/input retain shell-effect uncertainty rules. `terminal.write` bounds stdin; `terminal.terminate` kills the owned group and waits for reap/output drain. Thread Stop policy governs cleanup.\n\nRead results contain incremental output, status, cursor, wait and exit facts. Command, cwd and timing remain in canonical Activity without repeated model echoes.\n\nBrowser payloads exclude local working paths, stdin, authorization proofs, and effect internals.\n\nCompletion Activity uses a separate preview selected from whole UTF-8 output chunks\nwithin the 8,000-byte presentation budget. The full retained chunk sequence is\nsealed independently. Preview truncation and sequence watermarks describe exactly\nthe bytes shown; completion omits command/cwd already owned by the invocation.\nA persistence failure is logged immediately with bounded execution identities\nand remains an error at shutdown; it never triggers effect replay.",
+          "char_count": 2928
         },
         {
           "id": "boundaries",
@@ -28913,7 +28913,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "ai",
           "flower",
@@ -28923,15 +28923,15 @@
         "title": "Flower terminal activity presentation",
         "type": "UI Contract"
       },
-      "body_length": 4280,
+      "body_length": 4686,
       "summary": "Flower renders canonical Floret Activity with host task labels and safe details for every terminal operation, including writes/empty reads. Disclosure/scroll are ephemeral; no stdin/private paths/effect internals or invented lifecycle. Approval controls remain composer-owned.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Terminal facts\nFloret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Labels and descriptions are authoritative; the typed operation supplies localized fallback text.\n\nThe five-line independently scrolling output viewport retains its existing owner.\n\nAn omitted output field is pending content, never an empty canonical frame with a nonzero first sequence. Wait for small-field hydration before polling or installing its sequence; large fields use source-bound ranges, then acknowledge their watermark before adding process deltas. Existing output and selection survive handoff.\n\nPublished Floret v7.95.0 atomic activity reads own the bytes, sequence range, process identity and deferred source together. Flower never stamps a newer summary's range onto previously accepted bytes. Canonical activity status remains current independently. Check execution identity and range before publishing optional details; retain accepted output on failure. One in-flight read coalesces revisions; failure latches until explicit Retry, visibility reentry or connection change. Collapsed/offscreen rows do not read. No additional backend scan, transcript snapshot or transport contract is introduced.\n\nMalformed process output stops its local poll and exposes a localized read-only Retry without raw diagnostics; other messages and stream observation continue. Canonical stream validation still fails at its existing connection boundary. Write acknowledgements never apply hidden output frames. Equal-watermark snapshots may fill an empty frame or extend its earlier coverage, but duplicate/older snapshots cannot replace a newer live suffix.\n\nInactive output caches have 200-entry / 8 MiB estimated-byte limits. Mounted outputs remain retained until release; frame metadata coalesces after 128 records without changing sequence checks. These cache limits do not truncate an active process output or its canonical history.\n\n## Output, completion and restart\nThe model keeps four tools: terminal.exec/read/write/terminate. Read/write/terminate\ndescriptions are optional; read uses the last returned sequence. Each page is\nbounded without an outer second truncation, and chunk boundaries preserve UTF-8.\nThe process retains at most 1 MB; gaps and invalid source encoding remain explicit.\n\nRedeven binds the process identity to Floret before Start. Confirmed completion\nseals bounded output and result facts through Floret, then supplies one bounded\nnotice at provider preparation or a natural idle continuation. Explicit final\nreads suppress duplicate delivery. The original execution's model, tool scope,\nreasoning and budgets are retained; cumulative budgets still apply per run.\n\nShutdown suspends new execution, reaps owned processes and persists observed\nresults before closing Floret. Abnormal exit preserves unknown outcomes without\nreplaying commands, resending stdin or adopting PIDs. Historical output reads\nuse authorized thread/process identity. Unknown observations stop UI polling;\nreadable sealed output remains paginated. Final Activity updates the original\nitem through Floret's canonical presentation sources.\n\n## Interaction boundary\n[Activity disclosure interaction](flower-activity-interaction.md) owns stable triggers, manual choices, animation, transcript following, and floating controls across all renderers. Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. Completing a decision removes that dock without inserting an approval outcome into history.",
-          "char_count": 3594
+          "body": "## Terminal facts\nFloret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Labels and descriptions are authoritative; the typed operation supplies localized fallback text.\n\nThe five-line independently scrolling output viewport retains its existing owner.\n\nAn omitted output field is pending content, never an empty canonical frame with a nonzero first sequence. Wait for small-field hydration before polling or installing its sequence; large fields use source-bound ranges, then acknowledge their watermark before adding process deltas. Existing output and selection survive handoff.\n\nPublished Floret v7.95.0 atomic activity reads own the bytes, sequence range, process identity and deferred source together. Flower never stamps a newer summary's range onto previously accepted bytes. Canonical activity status remains current independently. Check execution identity and range before publishing optional details; retain accepted output on failure. One in-flight read coalesces revisions; failure latches until explicit Retry, visibility reentry or connection change. Collapsed/offscreen rows do not read. No additional backend scan, transcript snapshot or transport contract is introduced.\n\nMalformed process output stops its local poll and exposes a localized read-only Retry without raw diagnostics; other messages and stream observation continue. Canonical stream validation still fails at its existing connection boundary. Write acknowledgements never apply hidden output frames. Equal-watermark snapshots may fill an empty frame or extend its earlier coverage, but duplicate/older snapshots cannot replace a newer live suffix.\n\nInactive output caches have 200-entry / 8 MiB estimated-byte limits. Mounted outputs remain retained until release; frame metadata coalesces after 128 records without changing sequence checks. These cache limits do not truncate an active process output or its canonical history.\n\n## Output, completion and restart\nThe model keeps four tools: terminal.exec/read/write/terminate. Read/write/terminate\ndescriptions are optional; read uses the last returned sequence. Each page is\nbounded without an outer second truncation, and chunk boundaries preserve UTF-8.\nThe process retains at most 1 MB; gaps and invalid source encoding remain explicit.\n\nRedeven binds the process identity to Floret before Start. Confirmed completion\nseals bounded output and result facts through Floret, then supplies one bounded\nnotice at provider preparation or a natural idle continuation. Explicit final\nreads suppress duplicate delivery. The original execution's model, tool scope,\nreasoning and budgets are retained; cumulative budgets still apply per run.\n\nShutdown suspends new execution, reaps owned processes and persists observed\nresults before closing Floret. Abnormal exit preserves unknown outcomes without\nreplaying commands, resending stdin or adopting PIDs. Historical output reads\nuse authorized thread/process identity. Unknown observations stop UI polling;\nreadable sealed output remains paginated. Final Activity updates the original\nitem through Floret's canonical presentation sources.\n\n## Interaction boundary\n[Activity disclosure interaction](flower-activity-interaction.md) owns stable triggers, manual choices, animation, transcript following, and floating controls across all renderers. Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. Completing a decision removes that dock without inserting an approval outcome into history.\n\nFloret v7.103.0 exposes unknown as a terminal Activity status and attention reason.\nFlower preserves its count, keeps the row outside successful/active sequences,\nuses a localized warning label, and retains readable historical output. The row\ndoes not imply success or authorize command retries. An unknown observation is\nnot active polling work; available retained pages may still be read to completion.",
+          "char_count": 4000
         },
         {
           "id": "boundaries",
@@ -31883,5 +31883,5 @@
       ]
     }
   ],
-  "source_sha256": "8a93863e6e59fc61af639cc7533298e8fc17a566a2f32184ceef0e350ffdc7d6"
+  "source_sha256": "bb5ada00aee247f6e7b3ed8bcd33cfc796bbf531911fe16cfed5eb9436af3f8b"
 }

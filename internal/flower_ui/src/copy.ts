@@ -809,7 +809,7 @@ export type FlowerSurfaceCopy = Readonly<{
       title: string;
       description: string;
     }>;
-    toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'declined' | 'canceled', string>>;
+    toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'declined' | 'canceled' | 'unknown', string>>;
     toolCallCanceled: string;
     toolApprovalRejectedDetail: string;
     toolApprovalRequired: string;
@@ -1371,6 +1371,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       description: 'The saved response for this turn could not be loaded.',
     },
     toolStatuses: {
+      unknown: 'Outcome unknown',
       pending: 'Pending',
       running: 'Running',
       waiting: 'Waiting',

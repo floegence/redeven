@@ -596,11 +596,11 @@ function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefine
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-const activityStatuses = new Set<FlowerActivityStatus>(['pending', 'running', 'waiting', 'success', 'error', 'declined', 'canceled']);
+const activityStatuses = new Set<FlowerActivityStatus>(['pending', 'running', 'waiting', 'success', 'error', 'declined', 'canceled', 'unknown']);
 const activitySeverities = new Set<FlowerActivitySeverity>(['quiet', 'normal', 'warning', 'error', 'blocking']);
 const activityKinds = new Set<FlowerActivityKind>(['tool', 'hosted_tool', 'control', 'budget']);
 const activityRenderers = new Set<FlowerActivityRenderer>(['structured', 'terminal', 'file', 'patch', 'web_search', 'web_fetch', 'todos', 'question', 'subagent', 'subagent_operation', 'computer', 'browser']);
-const activityAttentionReasons = new Set<FlowerActivityAttentionReason>(['running', 'waiting', 'approval', 'error']);
+const activityAttentionReasons = new Set<FlowerActivityAttentionReason>(['running', 'waiting', 'approval', 'error', 'unknown']);
 const activityApprovalStates = new Set<FlowerActivityApprovalState>(['requested', 'approved', 'rejected', 'timed_out', 'canceled']);
 
 function activityStatus(raw: unknown, field: string): FlowerActivityStatus {
@@ -1043,7 +1043,7 @@ export function mapFlowerActivityItem(raw: unknown): FlowerActivityItem | null {
 function mapActivityCounts(raw: unknown): FlowerActivityTimelineBlock['summary']['counts'] {
   const record = plainRecordValue(raw) ?? {};
   const out: Record<string, number> = {};
-  for (const key of ['pending', 'running', 'waiting', 'success', 'error', 'declined', 'canceled', 'approval']) {
+  for (const key of ['pending', 'running', 'waiting', 'success', 'error', 'declined', 'canceled', 'unknown', 'approval']) {
     const value = integerOrZero(record[key]);
     if (value > 0) out[key] = value;
   }

@@ -166,7 +166,11 @@ func (s *Service) persistTimeout() time.Duration {
 	return s.persistOpTO
 }
 
-func terminalProcessActivity(snapshot terminalProcessSnapshot, payload map[string]any) *fltools.ActivityPresentation {
+// Callers select a complete-chunk output frame before projecting Activity.
+// Display text is bounded separately without changing execution arguments.
+func terminalProcessActivity(snapshot terminalProcessSnapshot) *fltools.ActivityPresentation {
+	snapshot.Command, _ = contractSafeString(snapshot.Command, activityPayloadStringLimit)
+	payload := terminalProcessResultPayload(snapshot)
 	return contractSafeActivityPresentationForTool("terminal.exec", &fltools.ActivityPresentation{
 		Renderer: fltools.ActivityRendererTerminal,
 		Chips: []fltools.ActivityChip{

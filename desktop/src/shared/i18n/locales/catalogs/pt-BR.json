@@ -780,6 +780,7 @@
       "compactionDividerProviderBytes": "O provedor do modelo rejeitou o tamanho da solicitação (HTTP 413). O uso de tokens tem um limite independente.",
       "projectionUnavailableTitle": "Resposta indisponível",
       "projectionUnavailableDescription": "Não foi possível carregar a resposta salva para este turno.",
+      "toolStatusUnknown": "Resultado desconhecido",
       "toolStatusPending": "Pendente",
       "toolStatusRunning": "Em execução",
       "toolStatusWaiting": "Aguardando",

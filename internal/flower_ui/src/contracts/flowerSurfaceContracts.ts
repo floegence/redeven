@@ -570,11 +570,12 @@ export type FlowerActivityStatus =
   | 'success'
   | 'error'
   | 'declined'
-  | 'canceled';
+  | 'canceled'
+  | 'unknown';
 
 export type FlowerActivityKind = 'tool' | 'hosted_tool' | 'control' | 'budget';
 export type FlowerActivitySeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
-export type FlowerActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
+export type FlowerActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error' | 'unknown';
 export type FlowerActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
 export type FlowerActivityRenderer = 'structured' | 'terminal' | 'file' | 'patch' | 'web_search' | 'web_fetch' | 'todos' | 'question' | 'subagent' | 'subagent_operation' | 'computer' | 'browser';
 
@@ -641,6 +642,7 @@ export type FlowerActivityTimelineBlock = Readonly<{
       error?: number;
       declined?: number;
       canceled?: number;
+      unknown?: number;
       approval?: number;
     }>;
     duration_ms?: number;

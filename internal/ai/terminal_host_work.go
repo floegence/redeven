@@ -12,6 +12,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/logsafe"
 )
 
 type terminalSealedChunk struct {
@@ -45,6 +46,12 @@ func (r *run) bindTerminalWork(ctx context.Context, req *terminalProcessStartReq
 		}
 		p.mu.Lock()
 		snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
+		// Activity is a preview. Select complete UTF-8 chunks independently of
+		// the sealed retained output so its sequence watermark stays truthful.
+		preview := p.snapshotLocked(activityPayloadStringLimit)
+		// The canonical call already owns these fields; completion only adds
+		// the bounded output and final facts and must not overwrite the command.
+		preview.Command, preview.Cwd = "", ""
 		sealed := terminalSealedOutput{Version: 1, Snapshot: snapshot}
 		sealed.Snapshot.Output = ""
 		// The original invocation retains command and cwd. Completion facts
@@ -68,7 +75,11 @@ func (r *run) bindTerminalWork(ctx context.Context, req *terminalProcessStartReq
 		persist, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		facts, _ := json.Marshal(sealed.Snapshot)
-		return work.CompleteHostWork(persist, flruntime.CompleteHostWorkInput{Activity: terminalProcessActivity(snapshot, terminalProcessResultPayload(snapshot)), Result: facts, ThreadID: identity.ThreadID(req.ThreadID), WorkID: req.ProcessID, Notice: notice, Notify: notify, Output: &text})
+		err = work.CompleteHostWork(persist, flruntime.CompleteHostWorkInput{Activity: terminalProcessActivity(preview), Result: facts, ThreadID: identity.ThreadID(req.ThreadID), WorkID: req.ProcessID, Notice: notice, Notify: notify, Output: &text})
+		if err != nil && r.log != nil {
+			r.log.Error("ai: terminal completion persistence failed", "thread_id", logsafe.Text(req.ThreadID, 256), "run_id", logsafe.Text(req.RunID, 256), "process_id", logsafe.Text(req.ProcessID, 256), "error", logsafe.Error(err))
+		}
+		return err
 	}
 	return nil
 }

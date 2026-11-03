@@ -780,6 +780,7 @@
       "compactionDividerProviderBytes": "Der Modellanbieter hat die Anfragegröße abgelehnt (HTTP 413). Für die Token-Nutzung gilt ein separates Limit.",
       "projectionUnavailableTitle": "Antwort nicht verfügbar",
       "projectionUnavailableDescription": "Die gespeicherte Antwort für diesen Dialogschritt konnte nicht geladen werden.",
+      "toolStatusUnknown": "Ergebnis unbekannt",
       "toolStatusPending": "Ausstehend",
       "toolStatusRunning": "Läuft",
       "toolStatusWaiting": "Wartet",

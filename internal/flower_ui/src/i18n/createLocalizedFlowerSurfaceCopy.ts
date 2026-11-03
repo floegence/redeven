@@ -595,6 +595,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       expandThinking: t(i18n, k('chat.expandThinking')),
       collapseThinking: t(i18n, k('chat.collapseThinking')),
       toolStatuses: {
+        unknown: t(i18n, k('chat.toolStatusUnknown')),
         pending: t(i18n, k('chat.toolStatusPending')),
         running: t(i18n, k('chat.toolStatusRunning')),
         waiting: t(i18n, k('chat.toolStatusWaiting')),

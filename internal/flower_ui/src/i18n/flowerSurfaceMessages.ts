@@ -482,6 +482,7 @@ export const flowerSurfaceEnUS = {
     compactionDividerProviderBytes: 'The model provider rejected the request size (HTTP 413). Token usage is a separate limit.',
     projectionUnavailableTitle: 'Response unavailable',
     projectionUnavailableDescription: 'The saved response for this turn could not be loaded.',
+    toolStatusUnknown: 'Outcome unknown',
     toolStatusPending: 'Pending',
     toolStatusRunning: 'Running',
     toolStatusWaiting: 'Waiting',

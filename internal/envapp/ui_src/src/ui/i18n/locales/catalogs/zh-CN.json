@@ -5722,6 +5722,7 @@
       "compactionDividerImageCount": "请求中的 {actual} 张图片超过上限 {limit} 张",
       "compactionDividerImageBytes": "图片数据 {actual} MiB 超过上限 {limit} MiB",
       "compactionDividerProviderBytes": "模型提供商拒绝了请求大小（HTTP 413）；token 用量是另一项独立限制。",
+      "toolStatusUnknown": "结果未知",
       "toolStatusPending": "待处理",
       "toolStatusRunning": "运行中",
       "toolStatusWaiting": "等待中",

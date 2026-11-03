@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: AI terminal tool runtime
 tags: [ai, terminal, tools, runtime]
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -30,6 +30,13 @@ Reads are read-only effects: cancellation preserves process and cursor, then con
 Read results contain incremental output, status, cursor, wait and exit facts. Command, cwd and timing remain in canonical Activity without repeated model echoes.
 
 Browser payloads exclude local working paths, stdin, authorization proofs, and effect internals.
+
+Completion Activity uses a separate preview selected from whole UTF-8 output chunks
+within the 8,000-byte presentation budget. The full retained chunk sequence is
+sealed independently. Preview truncation and sequence watermarks describe exactly
+the bytes shown; completion omits command/cwd already owned by the invocation.
+A persistence failure is logged immediately with bounded execution identities
+and remains an error at shutdown; it never triggers effect replay.
 
 # Boundaries
 

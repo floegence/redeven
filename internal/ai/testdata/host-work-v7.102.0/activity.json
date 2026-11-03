@@ -1,0 +1,25 @@
+{
+  "item_id": "host-work-final:8a6589a4be864fc7d041006b1a19375d",
+  "tool_id": "shell-1",
+  "tool_name": "shell",
+  "kind": "tool",
+  "status": "unknown",
+  "severity": "warning",
+  "needs_attention": true,
+  "attention_reasons": [
+    "unknown"
+  ],
+  "requires_approval": false,
+  "started_at_unix_ms": 1793728271357,
+  "ended_at_unix_ms": 1793728271396,
+  "presentation": {
+    "label": "shell",
+    "renderer": "structured",
+    "payload": {
+      "display_name": "shell",
+      "operation": "tool",
+      "status": "unknown",
+      "summary": "command running"
+    }
+  }
+}

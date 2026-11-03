@@ -2010,3 +2010,10 @@ it.each([
  expect(result.meta).toBe(expected);
  expect(result.meta).not.toContain('Action performed');
 });
+
+it('shows a localized unknown outcome before expanding Activity details', () => {
+  const presentation = presentFlowerActivityItem(item({
+    status: 'unknown', renderer: 'terminal', payload: { operation: 'exec', command: 'inspect' },
+  }), { statuses: { ...DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses, unknown: '结果未知' } });
+  expect(presentation.meta).toBe('结果未知');
+});

@@ -110,7 +110,7 @@ function messageSequenceTokens(entry: MessageEntry,
       for (const item of activity.items) {
         const failed = item.status === 'error';
         const presentedFailure = isPresentedToolFailure(item);
-        const uncertain = Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
+        const uncertain = item.status === 'unknown' || Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
         const attentionReasons = item.attention_reasons ?? [];
         const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
           && (item.field_summary?.action ?? item.payload?.action) === 'wait' && (item.status === 'running' || item.status === 'waiting');

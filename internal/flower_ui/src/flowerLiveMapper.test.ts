@@ -1,3 +1,4 @@
+import releasedHostWork from '../../ai/testdata/host-work-v7.102.0/activity.json';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -546,5 +547,23 @@ describe('request byte capacity contract', () => {
     { kind: 'image_bytes', stage: 'prepare', source: 'provider', actual_bytes: 3, limit_bytes: 2, actual_images: 99 },
   ])('rejects ambiguous or fabricated evidence %j', capacity => {
     expect(() => mapFlowerContextCompactions([{ ...base, decision: { pressure, capacity } }])).toThrow('capacity evidence');
+  });
+});
+
+it('preserves the published unknown outcome and attention contract', () => {
+  const item = mapFlowerActivityItem({
+    item_id: 'host-work-final', tool_id: 'exec-one', tool_name: 'terminal.exec', kind: 'tool',
+    status: 'unknown', severity: 'warning', needs_attention: true, attention_reasons: ['unknown'],
+    requires_approval: false, ended_at_unix_ms: 123,
+    presentation: { renderer: 'terminal', payload: { operation: 'exec', status: 'unknown', process_id: 'process-1' } },
+  });
+  expect(item).toMatchObject({ status: 'unknown', severity: 'warning', needs_attention: true, attention_reasons: ['unknown'] });
+  expect(() => mapFlowerActivityItem({ ...releasedHostWork, status: 'invented' })).toThrow('unsupported');
+});
+
+it('maps the actual released-writer DTO emitted by the Go boundary', () => {
+  const item = mapFlowerActivityItem(releasedHostWork);
+  expect(item).toMatchObject({
+    tool_id: 'shell-1', status: 'unknown', severity: 'warning', needs_attention: true, attention_reasons: ['unknown'],
   });
 });

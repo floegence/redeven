@@ -5823,6 +5823,7 @@
       "compactionDividerProviderBytes": "Провайдер модели отклонил размер запроса (HTTP 413). Для токенов действует отдельное ограничение.",
       "projectionUnavailableTitle": "Ответ недоступен",
       "projectionUnavailableDescription": "Сохранённый ответ на этот запрос не удалось загрузить.",
+      "toolStatusUnknown": "Результат неизвестен",
       "toolStatusPending": "Ожидает",
       "toolStatusRunning": "Выполняется",
       "toolStatusWaiting": "Ожидание",

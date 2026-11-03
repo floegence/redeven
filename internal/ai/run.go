@@ -3607,8 +3607,10 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		}
 	}()
 	if activityUpdater != nil {
-		snapshot := proc.Snapshot()
-		activityUpdater(terminalProcessActivity(snapshot, terminalProcessResultPayload(snapshot)), nil)
+		proc.mu.Lock()
+		snapshot := proc.snapshotLocked(activityPayloadStringLimit)
+		proc.mu.Unlock()
+		activityUpdater(terminalProcessActivity(snapshot), nil)
 	}
 	snapshot, waitErr := proc.WaitForYieldContext(ctx, parsed.YieldMS)
 	proc.initialResult <- snapshot.Status == terminalProcessStatusRunning

@@ -3,7 +3,7 @@ type: Compatibility Contract
 title: Flower historical writer acceptance
 tags: [ai, compatibility, fixtures, release]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -16,6 +16,12 @@ The compatibility baseline is Redeven `10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a`
 The manifest binds the archive, every stored file and producer by SHA-256 and records source commit, Floret version, Go toolchain, scenario names and canonical IDs needed by assertions.
 
 Qualification uses fake providers and copied synthetic data; production startup never resumes a user's task automatically.
+
+The released Floret v7.102.0 host-work fixture also qualifies unknown-outcome
+history through the public runtime and Redeven DTO. Browser acceptance exercises
+the same serialized Activity contract. Compatibility checks must cover legal
+status values, attention/counts, bounded final presentation, and rendered history;
+API symbol compatibility and database-open success alone are insufficient.
 
 # Boundaries
 

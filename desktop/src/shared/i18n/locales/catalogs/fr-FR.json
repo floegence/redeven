@@ -780,6 +780,7 @@
       "compactionDividerProviderBytes": "Le fournisseur du modèle a refusé la taille de la requête (HTTP 413). La limite de tokens est distincte.",
       "projectionUnavailableTitle": "Réponse indisponible",
       "projectionUnavailableDescription": "La réponse enregistrée pour ce tour n’a pas pu être chargée.",
+      "toolStatusUnknown": "Résultat inconnu",
       "toolStatusPending": "En attente",
       "toolStatusRunning": "En cours",
       "toolStatusWaiting": "En attente",

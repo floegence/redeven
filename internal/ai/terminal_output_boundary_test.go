@@ -204,3 +204,39 @@ func TestTerminalCloseWaitsForAllSettlementsAndReportsFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalActivityPreviewKeepsWholeUTF8Chunks(t *testing.T) {
+	for _, output := range []string{strings.Repeat("x", 8000), strings.Repeat("x", 8001), strings.Repeat("中文🌸", 9000)} {
+		p := newTerminalReadWaitTestProcess(0)
+		p.appendOutput([]byte(output))
+		p.status = terminalProcessStatusSuccess
+		p.mu.Lock()
+		full := p.snapshotLocked(terminalProcessTailCapBytes)
+		preview := p.snapshotLocked(activityPayloadStringLimit)
+		p.mu.Unlock()
+		if len(preview.Output) > activityPayloadStringLimit || !utf8.ValidString(preview.Output) || preview.LastSeq != full.LastSeq || preview.LatestSeq != full.LatestSeq || preview.HasMore || !strings.HasSuffix(full.Output, preview.Output) {
+			t.Fatalf("invalid preview: %+v", preview)
+		}
+		if preview.Truncated != (len(preview.Output) < len(full.Output)) {
+			t.Fatal("preview truncation is inaccurate")
+		}
+		activity := terminalProcessActivity(preview)
+		if err := activity.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		if full.Output != output {
+			t.Fatal("preview changed retained output")
+		}
+	}
+}
+
+func TestTerminalActivityBoundsCommandWithoutChangingExecution(t *testing.T) {
+	snapshot := terminalProcessSnapshot{Command: strings.Repeat("中", 9000), Status: terminalProcessStatusSuccess}
+	activity := terminalProcessActivity(snapshot)
+	if err := activity.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if len([]rune(snapshot.Command)) != 9000 {
+		t.Fatal("presentation changed execution command")
+	}
+}

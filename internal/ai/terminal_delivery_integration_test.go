@@ -20,7 +20,7 @@ import (
 )
 
 func TestTerminalCompletionAutomaticallyContinuesAndRetainsOutput(t *testing.T) {
-	for _, mode := range []string{"automatic", "read", "shutdown"} {
+	for _, mode := range []string{"automatic", "read", "shutdown", "large", "large_sync"} {
 		t.Run(mode, func(t *testing.T) { testTerminalCompletionDelivery(t, mode) })
 	}
 }
@@ -40,6 +40,12 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 				raw, _ := json.Marshal(defs)
 				firstTools = string(raw)
 				command := "sleep 0.5; printf 'COMPLETE_7319 中文'"
+				if strings.HasPrefix(mode, "large") {
+					command = "printf '%09001d' 0; printf '中文🌸'"
+					if mode == "large" {
+						command = "sleep 0.5; " + command
+					}
+				}
 				if mode == "shutdown" {
 					command = "sleep 30; printf 'COMPLETE_7319 中文'"
 				}
@@ -63,7 +69,7 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 				return
 			}
 			raw, _ := json.Marshal(body["input"])
-			if mode == "shutdown" && !strings.Contains(string(raw), "finished: status=") || mode != "shutdown" && !strings.Contains(string(raw), "COMPLETE_7319") {
+			if mode == "shutdown" && !strings.Contains(string(raw), "finished: status=") || !strings.HasPrefix(mode, "large") && mode != "shutdown" && !strings.Contains(string(raw), "COMPLETE_7319") {
 				t.Errorf("completion not admitted: %s", raw)
 			}
 			toolsRaw, _ := json.Marshal(defs)
@@ -109,7 +115,7 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 		if workErr != nil {
 			t.Fatal(workErr)
 		}
-		if calls.Load() == 3 && v.Activity == flruntime.ThreadActivityIdle && len(works) == 1 && works[0].State == "completed" {
+		if (calls.Load() == 3 || mode == "large_sync" && calls.Load() == 2) && v.Activity == flruntime.ThreadActivityIdle && len(works) == 1 && works[0].State == "completed" {
 			break
 		}
 		select {
@@ -141,8 +147,27 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 		t.Fatal(err)
 	}
 	snapshot, err := readSealedTerminal(ctx, svc.threadRuntime, identity.ThreadID(thread.ThreadID), id, 0, terminalProcessModelReadBytes)
-	if err != nil || (mode != "shutdown" && (snapshot.Status != terminalProcessStatusSuccess || snapshot.Output != "COMPLETE_7319 中文")) || snapshot.Observation != "unavailable" {
+	if err != nil || (!strings.HasPrefix(mode, "large") && mode != "shutdown" && (snapshot.Status != terminalProcessStatusSuccess || snapshot.Output != "COMPLETE_7319 中文")) || snapshot.Observation != "unavailable" {
 		t.Fatalf("retained=%+v %v", snapshot, err)
+	}
+	if strings.HasPrefix(mode, "large") {
+		var output strings.Builder
+		for {
+			if snapshot.Status != terminalProcessStatusSuccess || snapshot.OutputAvailability != "retained" || snapshot.Truncated {
+				t.Fatalf("lost completion/output: %+v", snapshot)
+			}
+			output.WriteString(snapshot.Output)
+			if !snapshot.HasMore {
+				break
+			}
+			snapshot, err = readSealedTerminal(ctx, svc.threadRuntime, identity.ThreadID(thread.ThreadID), id, snapshot.LastSeq, terminalProcessModelReadBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if output.String() != strings.Repeat("0", 9001)+"中文🌸" {
+			t.Fatalf("retained output differs: %d bytes", output.Len())
+		}
 	}
 	view, err := svc.threadRuntime.View(ctx, identity.ThreadID(thread.ThreadID))
 	if err != nil {
@@ -156,12 +181,24 @@ func testTerminalCompletionDelivery(t *testing.T, mode string) {
 				t.Fatalf("stale activity after restart: %+v", item.Activity)
 			}
 			finalActivity = true
+			if err := item.Activity.Presentation.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			if strings.HasPrefix(mode, "large") {
+				payload := item.Activity.Presentation.Payload.(tools.TerminalActivityPayload)
+				if len(payload.Output) > activityPayloadStringLimit || !payload.Truncated || payload.FirstSeq <= 1 || payload.LastSeq != payload.LatestSeq {
+					t.Fatalf("invalid preview bounds: %+v", payload)
+				}
+			}
 		}
 	}
 	if !finalActivity {
 		t.Fatal("original terminal activity was lost")
 	}
 	expectedCalls := int32(3)
+	if mode == "large_sync" {
+		expectedCalls = 2
+	}
 	if mode == "shutdown" {
 		expectedCalls = 2
 	}

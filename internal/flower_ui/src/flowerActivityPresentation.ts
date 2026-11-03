@@ -1670,7 +1670,9 @@ function presentationForGoal(item: FlowerActivityItem, copy?: FlowerActivityPres
 export function presentFlowerActivityItem(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   if (item.tool_name === 'goal') return presentationForGoal(item, copy);
   const renderer = rendererForItem(item);
-  const result = FLOWER_ACTIVITY_RENDERERS[renderer](item, { copy });
+  let result = FLOWER_ACTIVITY_RENDERERS[renderer](item, { copy });
+  if (item.status === 'unknown') result = { ...result, meta: (copy?.statuses ?? DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses).unknown };
+
   const words = copy?.tools ?? toolActivityEnUS;
   if (result.title.kind === 'file') {
     const verb = words[result.title.verb === 'Read' ? 'read' : result.title.verb === 'Delete' ? 'delete' : 'edit'];

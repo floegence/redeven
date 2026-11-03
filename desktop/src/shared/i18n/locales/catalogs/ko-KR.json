@@ -780,6 +780,7 @@
       "compactionDividerProviderBytes": "모델 제공업체가 요청 크기를 거부했습니다(HTTP 413). 토큰 사용량에는 별도의 한도가 적용됩니다.",
       "projectionUnavailableTitle": "응답을 사용할 수 없음",
       "projectionUnavailableDescription": "이 턴에 저장된 응답을 불러오지 못했습니다.",
+      "toolStatusUnknown": "결과 알 수 없음",
       "toolStatusPending": "대기",
       "toolStatusRunning": "실행 중",
       "toolStatusWaiting": "기다리는 중",

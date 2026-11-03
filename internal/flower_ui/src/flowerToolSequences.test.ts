@@ -461,3 +461,10 @@ it('does not count observation interruptions as failed calls in a tool group', (
   const result = projectFlowerToolSequences([interrupted,tool('next')], 'thread');
   expect([...result.groups.values()][0]).toMatchObject({toolCount:2,failedCount:0});
 });
+
+it('keeps unknown outcomes outside successful or active tool sequences', () => {
+  const unknown = tool('unknown', { status: 'unknown', severity: 'warning', needs_attention: true, attention_reasons: ['unknown'] });
+  const result = projectFlowerToolSequences([tool('a'), tool('b'), unknown, tool('c'), tool('d')]);
+  expect(result.groups.size).toBe(2);
+  for (const group of result.groups.values()) expect(group.toolCount).toBe(2);
+});

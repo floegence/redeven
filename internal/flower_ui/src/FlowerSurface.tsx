@@ -10737,6 +10737,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (value === 'success' || value === 'succeeded' || value === 'complete' || value === 'completed') return 'success';
     if (value === 'error' || value === 'failed' || value === 'timeout' || value === 'timed_out') return 'error';
     if (value === 'canceled' || value === 'cancelled' || value === 'aborted') return 'canceled';
+    if (value === 'unknown') return 'unknown';
     if (value === 'pending') return 'pending';
     if (value === 'running') return 'running';
     return '';
@@ -10846,7 +10847,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const displayUserRejected = () => detailProps.approvalState() === 'rejected';
     const visibleOutput = liveOutput;
     const resultNotice = () => {
-      if (observationUnavailable() && !restoredProcessStatus()) return copy().chat.terminalObservationUnavailable;
+      if (displayStatus() === 'unknown' || observationUnavailable() && !restoredProcessStatus()) return copy().chat.terminalObservationUnavailable;
       if (displayUserRejected()) return copy().chat.toolApprovalRejectedDetail;
       if (displayCanceled()) return copy().chat.toolCallCanceled;
       if (terminal().operation === 'write') {

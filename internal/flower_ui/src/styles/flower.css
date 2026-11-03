@@ -12127,6 +12127,11 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   height: 1rem;
   overflow: visible;
 }
+/* Unknown is a terminal observation that needs attention, never success. */
+.flower-activity-inline-row-unknown .flower-tool-icon { color: var(--redeven-status-warning); }
+.flower-activity-inline-row-unknown .flower-activity-inline-button,
+.flower-activity-inline-row-unknown .flower-activity-inline-detail,
+.flower-activity-inline-row-unknown .flower-activity-inline-duration { color: var(--redeven-status-warning-foreground); }
 .flower-activity-inline-row-error .flower-tool-icon { color: var(--redeven-status-warning); }
 .flower-activity-inline-row-error .flower-activity-inline-button { color: var(--redeven-status-warning-foreground); }
 .flower-activity-inline-row-error .flower-activity-inline-detail,

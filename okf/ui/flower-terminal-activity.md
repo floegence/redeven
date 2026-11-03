@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower terminal activity presentation
 tags: [ai, flower, terminal, presentation]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -45,6 +45,12 @@ item through Floret's canonical presentation sources.
 
 ## Interaction boundary
 [Activity disclosure interaction](flower-activity-interaction.md) owns stable triggers, manual choices, animation, transcript following, and floating controls across all renderers. Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. Completing a decision removes that dock without inserting an approval outcome into history.
+
+Floret v7.103.0 exposes unknown as a terminal Activity status and attention reason.
+Flower preserves its count, keeps the row outside successful/active sequences,
+uses a localized warning label, and retains readable historical output. The row
+does not imply success or authorize command retries. An unknown observation is
+not active polling work; available retained pages may still be read to completion.
 
 # Boundaries
 

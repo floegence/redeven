@@ -4,6 +4,7 @@ Concepts retain contracts and qualification results; Git retains change history.
 
 ## 2026-11-03
 
+- [Terminal completion](ai/terminal-tool-runtime.md) and [history compatibility](ai/flower-upgrade-compatibility.md): preserve unknown outcomes through published Floret, the Flower DTO and UI; separate bounded previews from sealed output.
 - Condense authored OKF below 900,000 characters; preserve concepts, contracts, original failures and structured evidence; regenerate bundles.
 - [Message appearance](ui/flower-message-appearance.md): shared compact queue styling.
 - [Model recovery](ai/model-request-recovery.md): complete provider-error preservation.
