@@ -1579,11 +1579,11 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   }
   if (computer && !active) {
     const phase = item.chips?.find(chip => chip.kind === 'computer_failure_phase')?.value;
-    const phaseCopy: Record<string, string> = {validation: words.computerInputRejected, prepared: words.computerPreparedOnly, effect_confirmed: words.computerEffectConfirmed, unknown: words.effectUncertain};
+    const phaseCopy: Record<string, string> = {validation: words.computerInputRejected, prepared: words.computerPreparedOnly, partial_input: words.computerInputIncomplete, effect_confirmed: words.computerEffectConfirmed, unknown: words.effectUncertain};
     if (phase) meta = phaseCopy[phase] ?? meta;
   }
   const interruption = computerObservationInterruption(item);
-  if (interruption) meta = interruption === 'effect_confirmed' ? words.computerActionObservedUnavailable : words.computerObservationUnavailable;
+  if (interruption) meta = {effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
   if (uncertain) meta = words.effectUncertain;
   const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
     'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');

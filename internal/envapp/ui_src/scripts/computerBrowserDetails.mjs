@@ -32,8 +32,7 @@ export async function withDOM(page,element,fn,args=[],mutates=false){
       return result;
     };
     if(mutates)checked(await session.send('Runtime.callFunctionOn',{...params,arguments:[...params.arguments,{value:true}]}));
-    const raw=mutates?await page.effect(()=>session.send('Runtime.callFunctionOn',params)):await session.send('Runtime.callFunctionOn',params);
-    const result=checked(raw);
+    const result=mutates?await page.effect(async()=>checked(await session.send('Runtime.callFunctionOn',params))):checked(await session.send('Runtime.callFunctionOn',params));
     return result;
   }finally{if(object.objectId)await session.send('Runtime.releaseObject',{objectId:object.objectId});}
 }

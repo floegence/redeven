@@ -3,7 +3,7 @@ import { browserSource, browserSelection, browserEditCommand, browserClipboard, 
 import { createHash } from 'node:crypto';
 import { validateBrowserAction } from './computerBrowserArguments.mjs';
 import { documentHitPoint } from './computerBrowserFrame.mjs';
-import { evaluate, evaluationValue, protocolRead, domSnapshotValue } from './computerBrowserEvaluation.mjs';
+import { evaluate, protocolRead, domSnapshotValue, adapterFailure } from './computerBrowserEvaluation.mjs';
 
 // Display budgets never define reference or collection identity.
 const nameIdentity = text => createHash('sha256').update(text).digest('hex');
@@ -123,6 +123,9 @@ export class BrowserComputerPage {
     this.invalid = false;
     this.heldInput = new Map();
     this.effectCount = 0;
+    this.preparationCount = 0;
+    this.inputPosted = 0;
+    this.inputAcknowledged = 0;
     this.uncertainEffect = false;
     this.focusedSessions = new Set();
 
@@ -745,7 +748,7 @@ export class BrowserComputerPage {
     const before = await this.elementState(element);
     if (!before.visible || !before.enabled || (!hitTest && before.readonly)) throw new Error('ELEMENT_NOT_ACTIONABLE');
     if (!hitTest) return;
-    await this.effect(() => element.frame.session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }));
+    await this.effect(() => element.frame.session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }), 'preparation');
     let previous = await this.elementState(element);
     const deadline = Date.now() + 1000;
     do {
@@ -798,26 +801,30 @@ export class BrowserComputerPage {
       return {x:(1-u)*(1-v)*q[0]+u*(1-v)*q[2]+u*v*q[4]+(1-u)*v*q[6],y:(1-u)*(1-v)*q[1]+u*(1-v)*q[3]+u*v*q[5]+(1-u)*v*q[7]};
     } catch (error) {
       if (error.message === 'ELEMENT_NOT_ACTIONABLE') throw error;
-      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test', protocolDiagnostic: error.protocolDiagnostic });
+      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test', protocolDiagnostic: {...(error.protocolDiagnostic || adapterFailure('hit_test','internal_error').protocolDiagnostic),checkpoint:'scroll_intersection'} });
     } finally { if(object?.objectId)await session.send('Runtime.releaseObject',{objectId:object.objectId}); }
   }
 
   async receivesPoint(element, x, y) {
     const session = element.frame.session;
     const objects = [];
+    let checkpoint = 'point_coordinates';
     try {
       const point = await documentHitPoint(session, x, y);
+      checkpoint = 'point_node';
       const hit = await session.send('DOM.getNodeForLocation', { ...point, includeUserAgentShadowDOM: true });
       const { executionContextId } = await session.send('Page.createIsolatedWorld', { frameId: element.frame.frame.id, worldName: 'flower-observation' });
       for (const backendNodeId of [element.backendNodeId, hit.backendNodeId]) {
         const { object } = await session.send('DOM.resolveNode', { backendNodeId, executionContextId });
         objects.push(object.objectId);
       }
+      checkpoint = 'target_ancestry';
       const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
         functionDeclaration: 'function(hit){const target=this.nodeType===9?this.documentElement:this;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===target)return true;return false;}' }, value => typeof value === 'boolean');
       if (!result) return false;
       // An OOPIF session cannot see an overlay in its embedding document.
       // Validate the same point through each embedding session before input.
+      checkpoint = 'embedding_frames';
       let current=session;
       const frames=await this.frames();
       for (;;) {
@@ -839,7 +846,7 @@ export class BrowserComputerPage {
         current=parent.session;
       }
     } catch (error) {
-      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test', protocolDiagnostic: error.protocolDiagnostic });
+      throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test', protocolDiagnostic: {...(error.protocolDiagnostic || adapterFailure('hit_test','internal_error').protocolDiagnostic), checkpoint} });
     }
     finally { for (const objectId of objects) if (objectId) await session.send('Runtime.releaseObject', { objectId }); }
   }
@@ -856,6 +863,7 @@ export class BrowserComputerPage {
     }
     this.uncertainEffect = false;
     this.effectCount++;
+    if (stage === 'preparation' || stage === 'focus') this.preparationCount++;
     return result;
   }
 
@@ -886,7 +894,10 @@ export class BrowserComputerPage {
     const up = ['keyUp', 'mouseReleased'].includes(parameters.type);
     if (down) this.heldInput.set(heldKey, { session, method, parameters });
     if (releasing) await session.send(method, parameters);
-    else await this.effect(() => session.send(method, parameters), 'input_delivery');
+    else {
+      await this.effect(() => { this.inputPosted++; return session.send(method, parameters); }, 'input_delivery');
+      this.inputAcknowledged++;
+    }
     if (method === 'Input.dispatchMouseEvent' && parameters.type === 'mouseMoved') {
       for (const held of this.heldInput.values()) if (held.session === session && held.method === method) {
         held.parameters = { ...held.parameters, x: parameters.x, y: parameters.y };
@@ -923,59 +934,76 @@ export class BrowserComputerPage {
     const node = element ? (await frame.session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId })).object : undefined;
     try {
       if ((this.stopped || this.operationCancelled) && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
-      const result = await this.effect(() => frame.session.send('Runtime.callFunctionOn', { executionContextId: node ? undefined : executionContextId, ...(node ? { objectId: node.objectId } : {}),
+      const result = await this.effect(() => evaluate(frame.session, 'Runtime.callFunctionOn', { executionContextId: node ? undefined : executionContextId, ...(node ? { objectId: node.objectId } : {}),
         functionDeclaration: `function(text,replace){const element=replace?this:document.activeElement;if(!element)return false;element.focus();if(replace){if(typeof element.select==='function')element.select();else{const range=document.createRange();range.selectNodeContents(element);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);}}return document.execCommand(text===''&&replace?'delete':'insertText',false,text);}`,
-        arguments: [{ value: text }, { value: replace }], returnByValue: true }));
-      if (!evaluationValue(result, 'Runtime.callFunctionOn', value => typeof value === 'boolean')) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
+        arguments: [{ value: text }, { value: replace }], returnByValue: true }, value => typeof value === 'boolean'));
+      if (!result) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
     } finally { if (node?.objectId) await frame.session.send('Runtime.releaseObject', { objectId: node.objectId }); }
   }
 
-  async navigate(command, parameters) {
-    let ready;
-    const loaded = new Promise(resolve => { ready = resolve; });
-    let loaderId;
-    let acknowledged = false, loadSeen = false;
-    const loadedDocuments = new Set();
-    const listener = () => { loadSeen = true; if (acknowledged && !loaderId) ready(); };
-    const lifecycle = event => {
-      if (event.name !== 'load') return;
-      loadedDocuments.add(event.loaderId);
-      if (loaderId === event.loaderId) ready();
+  async navigate(command, parameters, {wait_until = 'load', timeout_ms = 20000} = {}) {
+    const started = performance.now();
+    const rank = {response:0,commit:1,domcontentloaded:2,load:3};
+    let ready, loaderId, frameId, sameDocument = false, acknowledged = false;
+    const reached = new Promise(resolve => { ready = resolve; });
+    const stages = new Map();
+    const roots = [];
+    const withinFrames = new Set();
+    let previousLoader;
+    if (command !== 'Page.navigate') {
+      const {frameTree} = await this.transport.send('Page.getFrameTree');
+      frameId = frameTree.frame.id;
+      previousLoader = frameTree.frame.loaderId;
+    }
+    const currentStage = () => stages.get(loaderId) || 'response';
+    const check = () => { sameDocument = !loaderId && Boolean(frameId) && withinFrames.has(frameId); if (acknowledged && (sameDocument || rank[currentStage()] >= rank[wait_until])) ready(); };
+    const committed = event => {
+      if (event.frame.parentId) return;
+      roots.push(event.frame);
+      stages.set(event.frame.loaderId, stages.get(event.frame.loaderId) || 'commit');
+      if (acknowledged && !loaderId && (!frameId || event.frame.id === frameId) && event.frame.loaderId !== previousLoader) loaderId = event.frame.loaderId;
+      check();
     };
-    this.transport.on('Page.loadEventFired', listener);
-    this.transport.on('Page.navigatedWithinDocument', listener);
+    const lifecycle = event => {
+      if (!['DOMContentLoaded','load'].includes(event.name)) return;
+      const stage = event.name === 'load' ? 'load' : 'domcontentloaded';
+      if (rank[stage] > rank[stages.get(event.loaderId) || 'response']) stages.set(event.loaderId,stage);
+      check();
+    };
+    const within = event => { withinFrames.add(event.frameId); check(); };
+    this.transport.on('Page.frameNavigated', committed);
+    this.transport.on('Page.navigatedWithinDocument', within);
     this.transport.on('Page.lifecycleEvent', lifecycle);
-    let interrupted;
+    let interrupted, timer;
     const cancelled = new Promise(resolve => { interrupted = () => { if (this.stopped || this.operationCancelled || this.invalid) resolve(); }; this.listeners.add(interrupted); });
-    let timer;
+    const receipt = state => ({command_acknowledged:true,navigation_stage:sameDocument?'same_document':currentStage(),
+      wait:{state,wait_until,timeout_ms,elapsed_ms:Math.round(performance.now()-started)}});
     try {
       const result = await this.effect(() => this.transport.send(command, parameters));
-      loaderId = result?.loaderId;
-      acknowledged = true;
-      if (loaderId && loadedDocuments.has(loaderId)) ready();
-      if (!loaderId && loadSeen) ready();
       if (!result || typeof result !== 'object' || Array.isArray(result)
         || (result.errorText !== undefined && typeof result.errorText !== 'string')
-        || (result.isDownload !== undefined && typeof result.isDownload !== 'boolean')) throw new Error('INVALID_NAVIGATION_RESPONSE');
-      // Content-Disposition navigations deliberately abort document loading.
-      // Their completed effect is the download; waiting for DOMContentLoaded
-      // would misclassify a successful export as an uncertain navigation.
-      if (result.isDownload) return { download_started: true };
-      // Even a failed or still-loading navigation makes previous references
-      // unsuitable for the next call. Observation must start from the page now.
+        || (result.isDownload !== undefined && typeof result.isDownload !== 'boolean')
+        || ['loaderId','frameId'].some(key => result[key] !== undefined && (typeof result[key] !== 'string' || !result[key]))) throw new Error('INVALID_NAVIGATION_RESPONSE');
+      loaderId = result.loaderId;
+      frameId = result.frameId || frameId;
+      if (!loaderId) loaderId = roots.find(frame => (!frameId || frame.id === frameId) && frame.loaderId !== previousLoader)?.loaderId;
+      acknowledged = true;
+      if (result.isDownload) return {download_started:true,command_acknowledged:true,navigation_stage:'download'};
       this.invalidate();
       if (result.errorText) {
         if (/ERR_UNKNOWN_URL_SCHEME|ERR_DISALLOWED_URL_SCHEME|ERR_BLOCKED_BY_ADMINISTRATOR/u.test(result.errorText)) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
         if (/ERR_ACCESS_DENIED/u.test(result.errorText)) throw new Error('TARGET_PERMISSION_REQUIRED');
         throw new BrowserNavigationError('response', result.errorText);
       }
-      await Promise.race([loaded, cancelled, new Promise((_, reject) => { timer = setTimeout(() => reject(new BrowserNavigationError('load')), 20000); })]);
+      check();
+      const state = await Promise.race([reached.then(()=>'reached'), cancelled.then(()=>'cancelled'),
+        new Promise(resolve => { timer = setTimeout(()=>resolve('timeout'),Math.max(0,timeout_ms-(performance.now()-started))); })]);
       if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
-      return { navigation_stage: 'load' };
+      return receipt(state);
     } finally {
       clearTimeout(timer);
-      this.transport.off('Page.loadEventFired', listener);
-      this.transport.off('Page.navigatedWithinDocument', listener);
+      this.transport.off('Page.frameNavigated', committed);
+      this.transport.off('Page.navigatedWithinDocument', within);
       this.transport.off('Page.lifecycleEvent', lifecycle);
       this.listeners.delete(interrupted);
     }
@@ -1137,7 +1165,7 @@ export class BrowserComputerPage {
       if (!Number.isFinite(args.delta_y) || !Number.isFinite(args.delta_x ?? 0)) throw new Error('INVALID_REQUEST');
       const target = element?.frame.session || this.transport;
       if (element && element.nodeType !== 9) {
-        await this.effect(() => target.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }));
+        await this.effect(() => target.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }), 'preparation');
       }
       if ((args.x !== undefined || args.y !== undefined) && (!Number.isFinite(args.x) || !Number.isFinite(args.y) || args.x < 0 || args.y < 0)) throw new Error('INVALID_REQUEST');
       const point = element ? await this.scrollPoint(element) : {x:args.x ?? 1,y:args.y ?? 1};

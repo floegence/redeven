@@ -119,14 +119,14 @@ test('real browser evaluation failures retain facts, never input and allow expli
     const page = await browser.newPage();
     await page.setContent('<input aria-label="Plain search"><input type="search" aria-label="Native search"><input role="combobox" aria-label="Suggested search"><section aria-label="Report">Confirmed</section><button>Save</button>');
     owner = await createComputerBrowserSource(page, 'fixture');
-    const controller = owner.controller;
+    let controller = owner.controller;
     const run = (tool_name, args = {}) => controller.execute({target_id:'fixture',tool_name,args,full_access:true,script_operation:true});
     const initial = await run('computer.observe');
     assert.equal(initial.error, undefined);
     for (const [name, role] of [['Plain search','textbox'],['Native search','searchbox'],['Suggested search','combobox']]) {
       assert.equal(initial.result.observation.nodes.find(node => node.name === name)?.role, role);
     }
-    const send = controller.transport.send.bind(controller.transport);
+    let send = controller.transport.send.bind(controller.transport);
     const cases = [
       {stage:'safety_scan',method:'Runtime.evaluate',match:p=>p.expression?.includes('secretChanged()'),tool:'computer.observe'},
       {stage:'semantic_read',method:'Runtime.callFunctionOn',match:p=>p.functionDeclaration?.includes('rendered_element'),tool:'computer.action',args:{action:'text',selector:{role:'region',name:'Report'}}},
@@ -155,8 +155,8 @@ test('real browser evaluation failures retain facts, never input and allow expli
       controller.transport.send = send;
       assert.equal((await run('computer.observe')).error, undefined);
     }
-    // An acknowledged input remains a fact even if its evaluation response
-    // reports an exception. Inspect it explicitly; never dispatch it twice.
+    // A mutation response containing an exception cannot confirm completion.
+    // Preserve uncertainty even when independent fixture inspection sees an effect.
     let edits = 0;
     controller.transport.send = async (method, parameters = {}) => {
       const result = await send(method, parameters);
@@ -167,12 +167,16 @@ test('real browser evaluation failures retain facts, never input and allow expli
       return result;
     };
     const edited = await run('computer.action', {action:'fill',selector:{role:'textbox',name:'Plain search'},text:'Confirmed edit'});
-    assert.equal(edited.error, 'TARGET_OBSERVATION_UNAVAILABLE');
-    assert.equal(edited.result.action_executed, true);
-    assert.deepEqual(edited.result.diagnostic, {phase:'evaluation',method:'Runtime.callFunctionOn',reason:'exception'});
+    assert.equal(edited.error, 'EFFECT_OUTCOME_UNKNOWN');
+    assert.notEqual(edited.result.action_executed, true);
+    assert.equal(controller.page.invalid, true);
     assert.equal(edits, 1);
     assert.equal(await page.getByRole('textbox',{name:'Plain search',exact:true}).inputValue(), 'Confirmed edit');
     controller.transport.send = send;
+    await owner.dispose();
+    owner = await createComputerBrowserSource(page, 'fixture');
+    controller = owner.controller;
+    send = controller.transport.send.bind(controller.transport);
     assert.equal((await run('computer.observe')).error, undefined);
     // Privacy evidence still takes precedence over an unavailable scan.
     await page.locator('body').evaluate(body => { const input = document.createElement('input'); input.type = 'password'; body.append(input); });

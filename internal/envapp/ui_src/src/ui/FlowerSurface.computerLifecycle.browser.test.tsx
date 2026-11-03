@@ -602,13 +602,13 @@ it('aborts an inline screenshot read when switching conversations without readin
   expect(f.surface.querySelector('.chat-media-image')).toBeNull();
 });
 
-it.each([false, true])('shows a neutral observation interruption with accessible diagnostics (confirmed=%s)', async confirmed => {
+it.each(['unavailable','effect_confirmed','prepared','partial_input'])('shows a neutral observation interruption with accessible diagnostics (phase=%s)', async phase => {
   const view = (status: 'running' | 'error'): FlowerRuntimeCurrentView => ({...current(status === 'error' ? 'completed' : undefined), view_version: status === 'error' ? 2 : 1,
     items:[{id:'read-interrupted',kind:'tool',ordinal:1,turn_id:'computer-turn',run_id:'computer-run',activity:{
       item_id:'read-interrupted',tool_id:'read-interrupted',tool_name:'computer.exec',status,
       presentation:{label:'Inspect the current page',renderer:'structured',chips:status === 'error' ? [
         {kind:'computer_observation',label:'observation',value:'unavailable'},
-        ...(confirmed ? [{kind:'computer_failure_phase',label:'phase',value:'effect_confirmed'}] : []),
+        ...(phase !== 'unavailable' ? [{kind:'computer_failure_phase',label:'phase',value:phase}] : []),
       ] : [],payload:status === 'error' ? {rows_provided:true,error:{code:'TARGET_OBSERVATION_UNAVAILABLE',message:'Computer script stopped before completion (TARGET_OBSERVATION_UNAVAILABLE)'}} : {}},
     }}],
   });
@@ -620,7 +620,7 @@ it.each([false, true])('shows a neutral observation interruption with accessible
   await waitFor(() => row.dataset.flowerActivityPresentation === 'observation_interrupted');
   expect(row.dataset.flowerActivityStatus).toBe('error');
   expect(row.classList.contains('flower-activity-inline-row-error')).toBe(false);
-  expect(row.textContent).toContain(confirmed ? 'Action performed; page could not be read' : 'Page could not be read');
+  expect(row.textContent).toContain({effect_confirmed:'Action performed; page could not be read',unavailable:'Page could not be read',prepared:'Preparation completed; input not sent',partial_input:'Input partially sent; inspect before continuing'}[phase]);
   expect(row.getAttribute('aria-label')).not.toContain('Failed');
   const trigger = row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
   trigger.focus(); await userEvent.keyboard('{Enter}');

@@ -5483,6 +5483,7 @@
         "effectUncertain": "Ergebnis unbestätigt",
         "computerInputRejected": "Ungültige Argumente; keine Eingabe gesendet",
         "computerPreparedOnly": "Vorbereitung abgeschlossen; keine Eingabe gesendet",
+        "computerInputIncomplete": "Eingabe teilweise gesendet; vor dem Fortfahren prüfen",
         "computerEffectConfirmed": "Eine Aktion wurde ausgeführt; vor dem Fortfahren prüfen",
         "computerObservationUnavailable": "Seite konnte nicht gelesen werden",
         "computerActionObservedUnavailable": "Aktion ausgeführt; Seite konnte nicht gelesen werden",

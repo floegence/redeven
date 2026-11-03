@@ -1999,3 +1999,14 @@ it.each([false, true])('presents an explicit observation interruption without ch
   expect(result.detailBlocks.find(block => block.kind === 'error')).toMatchObject({error:{code:'TARGET_OBSERVATION_UNAVAILABLE',observation_interruption:true}});
   expect(source.status).toBe('error');
 });
+
+it.each([
+ ['prepared','Preparation completed; input not sent'],
+ ['partial_input','Input partially sent; inspect before continuing'],
+])('never presents %s as a completed click when observation fails', (phase, expected) => {
+ const result=presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'structured',status:'error',
+ chips:[{kind:'computer_failure_phase',label:'phase',value:phase},{kind:'computer_observation',label:'observation',value:'unavailable'}],
+ payload:{error:{code:'TARGET_OBSERVATION_UNAVAILABLE',message:'Interrupted'}}}));
+ expect(result.meta).toBe(expected);
+ expect(result.meta).not.toContain('Action performed');
+});

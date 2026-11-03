@@ -28,7 +28,7 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 		rows = append(rows, toolDetailRow(title, meta, content, format, "", false))
 	}
 	if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil {
-		for _, key := range []string{"phase", "method", "reason", "code", "field", "expected", "example", "recovery"} {
+		for _, key := range []string{"phase", "method", "reason", "checkpoint", "code", "field", "expected", "example", "recovery"} {
 			if value, exists := diagnostic[key]; exists {
 				add(key, "", toolDetailValue(value), fltools.StructuredActivityRowFormatText)
 			}
@@ -295,8 +295,14 @@ func computerActivityFailurePhase(payload map[string]any) string {
 	if payload["effect_outcome_unknown"] == true {
 		return "unknown"
 	}
+	if phase := anyToString(payload["failed_operation_phase"]); slices.Contains([]string{"unknown", "partial_input", "effect_confirmed", "prepared", "validation"}, phase) {
+		return phase
+	}
 	if payload["action_executed"] == true {
 		return "effect_confirmed"
+	}
+	if progress := computerInputProgress(payload["input_progress"]); progress["observed"] != nil && progress["observed"].(int64) > 0 {
+		return "partial_input"
 	}
 	if payload["preparation_executed"] == true {
 		return "prepared"

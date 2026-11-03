@@ -7,7 +7,7 @@ import { getQuickJS } from 'quickjs-emscripten';
 export const computerScriptMethods = Object.freeze({
   ui: {capabilities:[0,0],hover:[2,3],input:[1,1],clipboard:[1,2],budget:[0,0],observe:[0,1],snapshot:[0,1],screenshot:[0,0],help:[0,1],type:[1,1],doubleClick:[2,2],scroll:[1,2],scrollAt:[3,4],getByRole:[1,2],ref:[1,1],click:[2,3],drag:[4,6],key:[1,1],assert:[1,2]},
   locator: {setFiles:[1,1],source:[0,1],hover:[0,0],selection:[0,0],selectText:[1,2],selectRange:[2,3],selectAll:[0,0],replaceSelection:[1,1],copy:[0,0],cut:[0,0],paste:[0,1],setValue:[1,1],performAction:[1,1],node:[0,0],snapshot:[0,1],read:[0,0],text:[0,0],query:[0,1],count:[0,0],rows:[0,1],attribute:[1,1],linkSummary:[0,0],getAttribute:[1,1],click:[0,1],fill:[1,1],press:[1,1],scroll:[1,2],waitFor:[0,1],requireState:[0,1]},
-  browser: {navigate:[1,1],back:[0,0],reload:[0,0],saveDownload:[1,1],readDownload:[1,2],downloadCursor:[0,0],waitForDownload:[0,1]},
+  browser: {navigate:[1,2],back:[0,1],reload:[0,1],saveDownload:[1,1],readDownload:[1,2],downloadCursor:[0,0],waitForDownload:[0,1]},
   image: {hover:[2,2],click:[2,3],doubleClick:[2,2],drag:[4,5],scroll:[3,4]},
   downloadCursor: {wait:[0,1]},
 });
@@ -155,6 +155,11 @@ export async function createComputerScript({ browser = true } = {}) {
         if(!['title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount',...(href?['href']:[])].includes(name)) invalid();
         return (await call({action:'attribute',selector,attribute:name,...(href?{summary:true}:{})})).value;
       };
+      const navigationOptions = (value={}) => {
+        options(value,['wait_until','timeout_ms']); waitOptions(value.timeout_ms === undefined ? {} : {timeout_ms:value.timeout_ms});
+        if(value.wait_until!==undefined&&!['commit','domcontentloaded','load'].includes(value.wait_until))invalid('wait_until','navigation_lifecycle');
+        return value;
+      };
       const clickOptions = (value={}) => {
         options(value,['button','modifiers','click_count','duration_ms']);
         if(value.button!==undefined&&!['left','right','middle'].includes(value.button))invalid();
@@ -246,9 +251,9 @@ export async function createComputerScript({ browser = true } = {}) {
           assert: (condition, message = 'Result check failed') => { if (!condition) throw new Error(message); },
         })},
         ...(${browser ? 'true' : 'false'} ? {browser: {value: expose('browser',{
-          navigate: (url) => call({action: 'navigate', url: string(url,'url')}),
-          back: () => call({action: 'back'}),
-          reload: () => call({action: 'reload'}),
+          navigate: (url,value={}) => call({action: 'navigate', url: string(url,'url'),...navigationOptions(value)}),
+          back: (value={}) => call({action: 'back',...navigationOptions(value)}),
+          reload: (value={}) => call({action: 'reload',...navigationOptions(value)}),
           saveDownload: (id) => call({action:'save_download',id:string(id,'id')}),
           readDownload: (id, value={}) => {
             string(id,'id'); options(value,['offset','limit']);
@@ -283,14 +288,14 @@ export async function createComputerScript({ browser = true } = {}) {
       if (active || typeof code !== 'string' || !code.trim() || code.length > 65536) throw new Error('INVALID_REQUEST');
       active = { dispatch, onLog, deadline: Date.now() + Math.min(timeout, 30000), pending: new Set(), deferred: [], count: 0, logs: [], outputBytes: 0, sealed: false };
       const execution = active;
-      const diagnose = error => {
+      const diagnose = (error, phase = execution.hostStopped ? 'host_operation' : 'execution') => {
         execution.sealed = true;
         const name = vm.getProp(error, 'name');
         const stack = vm.getProp(error, 'stack');
         const message = vm.getProp(error, 'message');
         try {
           execution.diagnostic ||= ({ReferenceError: 'SCRIPT_REFERENCE_ERROR', TypeError: 'SCRIPT_TYPE_ERROR', SyntaxError: 'SCRIPT_SYNTAX_ERROR'})[vm.getString(name)] || 'SCRIPT_RUNTIME_ERROR';
-          diagnostic.phase = execution.diagnostic==='SCRIPT_SYNTAX_ERROR'?'parse':execution.hostStopped?'host_operation':'execution';
+          diagnostic.phase = phase;
           const location = /computer-script\.js:(\d+)(?::(\d+))?/u.exec(vm.getString(stack));
           const line = location ? Number(location[1])-1 : 0;
           if (line>0 && line<=code.split('\n').length) {
@@ -305,7 +310,7 @@ export async function createComputerScript({ browser = true } = {}) {
       const diagnostic = {phase:'execution'};
       try {
         const evaluated = vm.evalCode(`(async () => {\n${code}\n})()`, 'computer-script.js');
-        if (evaluated.error) { diagnose(evaluated.error); evaluated.error.dispose(); throw new Error('SCRIPT_FAILED'); }
+        if (evaluated.error) { diagnose(evaluated.error, 'parse'); evaluated.error.dispose(); throw new Error('SCRIPT_FAILED'); }
         handle = evaluated.value;
         for (;;) {
           const jobs = runtime.executePendingJobs();

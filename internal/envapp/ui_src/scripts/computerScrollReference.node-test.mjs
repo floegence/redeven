@@ -51,8 +51,9 @@ test('scroll geometry failure retains preparation without wheel input',()=>fixtu
   const result=await call('scroll',{role:'region'},{delta_y:300});
   assert.equal(result.error,'TARGET_OBSERVATION_UNAVAILABLE',JSON.stringify(result));
   assert.equal(result.result.observation_stage,'hit_test');
-  assert.deepEqual(result.result.diagnostic,diagnostic);
-  assert.equal(result.result.action_executed,true,'completed preparation survives the failed read');
+  assert.deepEqual(result.result.diagnostic,{...diagnostic,checkpoint:'scroll_intersection'});
+  assert.equal(result.result.action_executed,false,'preparation is not wheel delivery');
+  assert.equal(result.result.preparation_executed,true);
   assert.equal(inputs.length,0);
 }));
 

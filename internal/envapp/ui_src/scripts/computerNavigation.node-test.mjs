@@ -79,7 +79,10 @@ test('loading timeout after acknowledgement is a known navigation result', async
   for (let turn = 0; turn < 20; turn++) await Promise.resolve();
   t.mock.timers.tick(20000);
   const result = await pending;
-  assert.deepEqual(result, { error: 'NAVIGATION_TIMEOUT', result: { action_executed: true, navigation_stage: 'load' } });
+  assert.equal(result.error, undefined);
+  assert.equal(result.result.action_executed, true);
+  assert.equal(result.result.wait.state, 'timeout');
+  assert.equal(result.result.navigation_stage, 'response');
   assert.equal(controller.page.invalid, false);
   assert.equal(controller.page.uncertainEffect, false);
   assert.equal(navigations, 1);
@@ -143,7 +146,12 @@ test('script navigation publishes only its receipt without a post-navigation pag
   };
   const response = await execute();
   assert.equal(response.error, undefined, JSON.stringify(response));
-  assert.deepEqual(response.result, { navigation_stage: 'load', action_executed: true, needs_observation: true, observation_invalidated: true, execution_mode: 'background' });
+  assert.equal(response.result.navigation_stage,'load');
+  assert.equal(response.result.wait.state,'reached');
+  assert.equal(response.result.command_acknowledged,true);
+  assert.equal(response.result.action_executed,true);
+  assert.equal(response.result.needs_observation,true);
+  assert.equal(response.result.observation_invalidated,true);
   assert.equal(response.safety.safe_to_send_to_model, false);
   assert.equal(response.screenshot, undefined);
   assert.equal(safetyReads, 1);

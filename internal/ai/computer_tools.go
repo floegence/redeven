@@ -53,9 +53,17 @@ func builtInComputerToolDefinitions() []ToolDef {
 	add("computer.drag", "Drag between browser CSS viewport points or native target coordinates.", map[string]any{"from_x": map[string]any{"type": "number"}, "from_y": map[string]any{"type": "number"}, "to_x": map[string]any{"type": "number"}, "to_y": map[string]any{"type": "number"}, "duration_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 5000}}, []string{"from_x", "from_y", "to_x", "to_y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
 	add("computer.scroll", "Scroll by viewport pixels (positive down/right). Optional x/y selects a region; otherwise uses the default position.", map[string]any{"x": map[string]any{"type": "number", "minimum": 0}, "y": map[string]any{"type": "number", "minimum": 0}, "delta_x": map[string]any{"type": "number"}, "delta_y": map[string]any{"type": "number"}}, []string{"delta_y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
 	add("computer.wait", "Delay for milliseconds (default 0, no extra delay), then return a fresh screenshot. This is not a UI-settled condition; use locator.waitFor for conditions.", map[string]any{"milliseconds": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}}, []string{}, false, []ToolCapabilityClass{ToolCapabilityInteraction})
-	add("browser.navigate", "Navigate to an absolute browser URL, including file://, data:, about: and extension/internal pages.", map[string]any{"url": map[string]any{"type": "string", "minLength": 1, "maxLength": 4096}}, []string{"url"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
-	add("browser.back", "Navigate the selected browser target one history entry back.", map[string]any{}, nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
-	add("browser.reload", "Reload the selected browser target.", map[string]any{}, nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
+	navOptions := func() map[string]any {
+		return map[string]any{
+			"wait_until": map[string]any{"type": "string", "enum": []string{"commit", "domcontentloaded", "load"}, "description": "Lifecycle milestone, not application readiness; default load."},
+			"timeout_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Lifecycle wait deadline in milliseconds; default 20000. Timeout is returned as data."},
+		}
+	}
+	nav := navOptions()
+	nav["url"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 4096}
+	add("browser.navigate", "Navigate to an absolute browser URL, including file://, data:, about: and extension/internal pages. Inspect the returned wait state before choosing further observations.", nav, []string{"url"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
+	add("browser.back", "Navigate the selected browser target one history entry back. Lifecycle timeout returns data.", navOptions(), nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
+	add("browser.reload", "Reload the selected browser target. Lifecycle timeout returns data.", navOptions(), nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
 	for i := range defs {
 		if slices.Contains([]string{"computer.click", "computer.double_click", "computer.drag", "computer.scroll"}, defs[i].Name) {
 			var schema map[string]any

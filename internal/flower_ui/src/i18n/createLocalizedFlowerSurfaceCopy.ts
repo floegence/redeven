@@ -180,6 +180,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         effectUncertain: t(i18n, k('chat.toolActivity.effectUncertain')),
         computerInputRejected: t(i18n, k('chat.toolActivity.computerInputRejected')),
         computerPreparedOnly: t(i18n, k('chat.toolActivity.computerPreparedOnly')),
+        computerInputIncomplete: t(i18n, k('chat.toolActivity.computerInputIncomplete')),
         computerEffectConfirmed: t(i18n, k('chat.toolActivity.computerEffectConfirmed')),
         computerObservationUnavailable: t(i18n, k('chat.toolActivity.computerObservationUnavailable')),
         computerActionObservedUnavailable: t(i18n, k('chat.toolActivity.computerActionObservedUnavailable')),

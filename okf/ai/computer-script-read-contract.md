@@ -59,15 +59,20 @@ A rejected read cannot become a malformed transport response that disconnects
 the target. A later explicitly requested read can recover on the same page.
 
 ## Navigation receipts
-Script navigate/back/reload return a closed acknowledged load or download receipt,
-with needs_observation and observation_invalidated. They do not perform an
-optional post-navigation page read, export title/content/images, or assert page
-safety. The next explicit read owns its privacy and document-lifetime checks.
-Preflight permission, redirect barriers, target changes, cancellation, cleanup
-and uncertain effects still apply through final publication. Navigation errors
-and load timeouts retain their distinct outcomes. Legacy image-returning calls
-keep their existing observation contract. No automatic action or read replay is
-introduced; the model chooses the next observation.
+Script navigate/back/reload accept wait_until:commit|domcontentloaded|load and
+timeout_ms:0..30000 (default load/20000). Return command_acknowledged,
+navigation_stage and wait:{state:reached|timeout,wait_until,timeout_ms,elapsed_ms}.
+Correlate milestones to the root frame and navigation loader, including events
+before command acknowledgement. Same-document navigation and downloads have
+explicit stages. Timeout is branchable data; it neither retires the guest namespace
+nor proves application readiness. A subsequent read/condition wait may share the
+script. Deadline accounting starts before dispatch; remaining lifecycle wait
+uses that deadline. Network errors, unknown acknowledgement, permission changes,
+cancellation and target changes retain existing stop boundaries. No automatic
+navigation replay, network-idle heuristic or application-specific readiness.
+Script receipts retain needs_observation/observation_invalidated without page
+content; each explicit read owns its privacy and document-lifetime checks.
+Legacy image-returning calls keep their existing observation boundary.
 
 ## Input delivery receipts
 Script pointer, key, text, fill, wheel, drag and input-sequence operations return
@@ -104,6 +109,21 @@ These are distinct from protocol rejection codes and authorize no retry. Raw exc
 page values do not enter diagnostics. Confirmed output survives later read failure;
 privacy takeover still discards content. Core help directs models to observed roles
 and refs instead of assigning roles from a control's business purpose.
+
+## Action receipts
+Preparation (scroll/focus), acknowledged input events and completion of the requested
+operation are separate facts. action_executed confirms the requested action
+completed, not merely a constituent effect. preparation_executed requires a fresh
+observation but never adds click/scroll to completed_actions. Failed partial input
+retains posted/observed event counts; those counts are not business success.
+Unknown delivery or release stays uncertain. An exception from a mutating browser
+evaluation cannot confirm the operation, even if CDP transported a response.
+Safe hit-test checkpoints identify point_coordinates, point_node, target_ancestry,
+embedding_frames or scroll_intersection without copying DOM/exception text.
+Flower presents prepared and partial-input interruptions distinctly from completed
+actions. Script failed_operation_phase describes the interrupted operation;
+completed prefix actions cannot overwrite that phase. Presentation never changes
+canonical error status or authorizes retry.
 
 ## Validated inputs and bounded browser reads
 The browser adapter validates the complete operation before virtual focus,

@@ -5584,6 +5584,7 @@
         "effectUncertain": "Результат не подтверждён",
         "computerInputRejected": "Недопустимые аргументы; ввод не отправлен",
         "computerPreparedOnly": "Подготовка завершена; ввод не отправлен",
+        "computerInputIncomplete": "Ввод отправлен частично; проверьте состояние перед продолжением",
         "computerEffectConfirmed": "Действие выполнено; проверьте результат перед продолжением",
         "computerObservationUnavailable": "Не удалось прочитать страницу",
         "computerActionObservedUnavailable": "Действие выполнено; не удалось прочитать страницу",

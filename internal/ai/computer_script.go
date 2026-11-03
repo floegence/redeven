@@ -203,6 +203,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var observationScope string
 	var argumentDiagnostic map[string]any
 	var failedInputProgress map[string]any
+	var failedOperationPhase string
 	var ambiguousDownloads []any
 	var lastFrameGeometry any
 	var fullObservation bool
@@ -265,6 +266,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if len(failedInputProgress) > 0 {
 				payload["input_progress"] = failedInputProgress
+			}
+			if failedOperationPhase != "" {
+				payload["failed_operation_phase"] = failedOperationPhase
 			}
 			if lastFrameGeometry != nil && pause == nil && targetChange == nil && !observationInvalidated && observationFailureStage == "" {
 				payload["frame_geometry"] = lastFrameGeometry
@@ -365,6 +369,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				if err != nil || takeoverResult(observed, err) {
 					facts, _ := observed.Result.(map[string]any)
 					failedInputProgress = computerInputProgress(facts["input_progress"])
+					failedOperationPhase = computerActivityFailurePhase(facts)
 				}
 				if errors.Is(err, errComputerEffectUnknown) {
 					if takeoverResult(observed, err) {
@@ -374,6 +379,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					// The failed operation's safe progress and same-target read
 					// belong to this result alongside the completed prefix.
 					facts, _ := observed.Result.(map[string]any)
+					if facts["preparation_executed"] == true {
+						preparationExecuted = true
+					}
 					result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
 					payload := result.Result.(map[string]any)
 					for _, key := range []string{"stage", "reason", "target_state", "observation"} {

@@ -117,3 +117,10 @@ export function validateBrowserAction(args, privateInput = false) {
   }
   return {};
 }
+
+export function validateNavigationOptions(args) {
+  if (Object.keys(args).some(key => !['url','wait_until','timeout_ms','target','description'].includes(key))) throw argumentFailure('arguments','documented_fields');
+  if (args.wait_until !== undefined && !['commit','domcontentloaded','load'].includes(args.wait_until)) throw argumentFailure('wait_until','navigation_lifecycle');
+  if (args.timeout_ms !== undefined && (!Number.isInteger(args.timeout_ms) || args.timeout_ms < 0 || args.timeout_ms > 30000)) throw argumentFailure('timeout_ms','integer_0_30000');
+  return {wait_until:args.wait_until ?? 'load',timeout_ms:args.timeout_ms ?? 20000};
+}

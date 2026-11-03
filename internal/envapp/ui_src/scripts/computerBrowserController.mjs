@@ -1,6 +1,6 @@
 import { BrowserComputerPage, BrowserNavigationError, BrowserObservationInvalidated, navigationURL, redactedNavigationURL } from './computerBrowserPage.mjs';
 import { adapterFailure } from './computerBrowserEvaluation.mjs';
-import { argumentFailure, validateBrowserAction } from './computerBrowserArguments.mjs';
+import { argumentFailure, validateBrowserAction, validateNavigationOptions } from './computerBrowserArguments.mjs';
 import { viewportGeometry, sameGeometry, screenshotGeometry, imageCoordinates } from './computerBrowserFrame.mjs';
 
 // Internal invocation metadata, removed before any result crosses the adapter.
@@ -70,6 +70,8 @@ export class BrowserComputerController {
   }
   async execute(request) {
     const beforeEffects = this.page.effectCount;
+    this.actionCompleted = false;
+    this.effectStart = {preparations:this.page.preparationCount, posted:this.page.inputPosted, acknowledged:this.page.inputAcknowledged};
     let response = await this.executeOperation(request);
     try { await this.page.releaseInput(); }
     catch {
@@ -90,7 +92,7 @@ export class BrowserComputerController {
       // It carries no current-page content and needs no additional page scan.
       if (this.page.invalid || this.page.guardFailure || this.page.requiredURL || this.page.requiredOrigin || this.page.stopped || this.page.operationCancelled)
         response = await this.operationFailure(new Error('TARGET_CONNECTION_REQUIRED'), request, beforeEffects);
-      else if (this.page.openedPages.length) response = await this.targetChange(this.page.effectCount > beforeEffects);
+      else if (this.page.openedPages.length) response = await this.targetChange(this.actionCompleted);
     }
     if (response[inputReceipt]) {
       delete response[inputReceipt];
@@ -98,7 +100,7 @@ export class BrowserComputerController {
         // Keep real privacy/control boundaries. A failed optional read cannot
         // revoke acknowledged input or export unchecked page content.
         const safety = await this.readObservation(() => this.page.safety(), 'safety_scan');
-        if (safety.level === 'takeover') response = this.pause(safety, this.page.effectCount > beforeEffects);
+        if (safety.level === 'takeover') response = this.pause(safety, this.actionCompleted);
       } catch (error) {
         if (error.message !== 'TARGET_OBSERVATION_UNAVAILABLE' && !(error instanceof BrowserObservationInvalidated))
           response = await this.operationFailure(error, request, beforeEffects);
@@ -106,7 +108,7 @@ export class BrowserComputerController {
       }
       if (this.page.invalid || this.page.guardFailure || this.page.requiredURL || this.page.requiredOrigin || this.page.stopped || this.page.operationCancelled)
         response = await this.operationFailure(new Error('TARGET_CONNECTION_REQUIRED'), request, beforeEffects);
-      else if (this.page.openedPages.length) response = await this.targetChange(this.page.effectCount > beforeEffects);
+      else if (this.page.openedPages.length) response = await this.targetChange(this.actionCompleted);
     }
     if (response[observationRevision] !== undefined) {
       // Cleanup may yield to navigation, cancellation or privacy changes. The
@@ -116,11 +118,11 @@ export class BrowserComputerController {
       delete response[observationRevision];
       try {
         const safety = await this.readObservation(() => this.page.safety(), 'safety_scan');
-        if (safety.level === 'takeover') response = this.pause(safety, this.page.effectCount > beforeEffects);
+        if (safety.level === 'takeover') response = this.pause(safety, this.actionCompleted);
         else {
           if (this.page.invalid || this.page.guardFailure || this.page.requiredURL || this.page.requiredOrigin
             || this.page.stopped || this.page.operationCancelled) throw new Error('TARGET_CONNECTION_REQUIRED');
-          if (this.page.openedPages.length) response = await this.targetChange(this.page.effectCount > beforeEffects);
+          if (this.page.openedPages.length) response = await this.targetChange(this.actionCompleted);
           else {
             if (revision !== this.page.revision) throw new BrowserObservationInvalidated();
             response.safety = safety;
@@ -135,10 +137,18 @@ export class BrowserComputerController {
       || response.result?.target_changed || response.result?.observation_invalidated) {
       this.frameAnchor = undefined;
     } else if (response.result?.frame_geometry) this.frameAnchor = response.result.frame_geometry;
+    if (response.result && this.effectStart) Object.assign(response.result, this.effectProgress());
     return response;
   }
+  effectProgress() {
+    const page = this.page, start = this.effectStart;
+    if (!start) return {};
+    const posted = page.inputPosted - start.posted, observed = page.inputAcknowledged - start.acknowledged;
+    return {...(page.preparationCount > start.preparations ? {preparation_executed:true} : {}),
+      ...(posted ? {input_progress:{stage:'input_delivery',posted,observed}} : {})};
+  }
   unknownEffect(stage = this.page.effectStage || 'action') {
-    return { error: 'EFFECT_OUTCOME_UNKNOWN', result: { stage, reason: 'response_unavailable', needs_observation: true } };
+    return { error: 'EFFECT_OUTCOME_UNKNOWN', result: { stage, reason: 'response_unavailable', needs_observation: true, ...this.effectProgress() } };
   }
   async executeOperation(request) {
     // The Runtime's source owner changes this mode under the same target gate
@@ -161,8 +171,9 @@ export class BrowserComputerController {
     const initialEffects = page.effectCount;
     page.uncertainEffect = false;
     page.effectStage = undefined;
-    const dispatched = () => page.effectCount > initialEffects;
+    const dispatched = () => this.actionCompleted || request.tool_name.startsWith('browser.') && page.effectCount > initialEffects;
     try {
+      const navigationOptions = ['browser.navigate','browser.back','browser.reload'].includes(request.tool_name) ? validateNavigationOptions(args) : undefined;
       if (privateInput) {
         if (!['computer.screenshot', 'computer.click', 'computer.key', 'computer.type', 'computer.scroll'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
       } else {
@@ -212,7 +223,8 @@ export class BrowserComputerController {
         const parsed = navigationURL(url);
         if (!privateInput && !page.allowsURL(parsed.href)) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: false, required_navigation_url: redactedNavigationURL(parsed.href) } };
         const command = tool === 'browser.back' ? 'Page.navigateToHistoryEntry' : tool === 'browser.reload' ? 'Page.reload' : 'Page.navigate';
-        result = await page.navigate(command, entryId !== undefined ? { entryId } : tool === 'browser.reload' ? {} : { url }) || {};
+        result = await page.navigate(command, entryId !== undefined ? { entryId } : tool === 'browser.reload' ? {} : { url }, navigationOptions) || {};
+        this.actionCompleted = true;
         if (request.script_operation === true) {
           // Navigation has its own acknowledged effect and load boundary. A
           // receipt contains no page content: the next explicit read owns its
@@ -235,6 +247,7 @@ export class BrowserComputerController {
         if (['read','text','query','table','attribute','source','selection','capabilities'].includes(mapped.action) || mapped.action==='clipboard'&&mapped.operation!=='write') read = () => page.action(mapped);
         else {
           result = await page.action(mapped);
+          this.actionCompleted = page.effectCount > initialEffects;
           if (request.script_operation === true && !privateInput && receiptActions.has(mapped.action)) {
             // Closed delivery facts survive document replacement. No title,
             // URL, page values or arbitrary adapter fields cross this boundary.
@@ -252,13 +265,14 @@ export class BrowserComputerController {
 
   async operationFailure(error, request, initialEffects) {
     const page = this.page, args = request.args || {};
-    const dispatched = () => page.effectCount > initialEffects;
+    const dispatched = () => this.actionCompleted || request.tool_name.startsWith('browser.') && page.effectCount > initialEffects;
+    const affected = () => page.effectCount > initialEffects;
     if (page.uncertainEffect) return this.unknownEffect();
     if (error.focusRejected) return { error: 'ELEMENT_NOT_ACTIONABLE', result: {
       action_executed: false, needs_observation: false, stage: 'focus', reason: 'not_focusable',
     } };
-    if (error.diagnostic) return { error: error.message, result: { action_executed: dispatched(), needs_observation: dispatched(), diagnostic: error.diagnostic } };
-    if (page.guardFailure || page.invalid) return { error: 'TARGET_CONNECTION_REQUIRED', result: { action_executed: dispatched(), needs_observation: dispatched() } };
+    if (error.diagnostic) return { error: error.message, result: { action_executed: dispatched(), needs_observation: affected(), diagnostic: error.diagnostic } };
+    if (page.guardFailure || page.invalid) return { error: 'TARGET_CONNECTION_REQUIRED', result: { action_executed: dispatched(), needs_observation: affected() } };
     if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };
     if (page.requiredOrigin || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : 'user_control'],
       safe_to_capture: false, safe_to_send_to_model: false, ...(page.requiredOrigin ? { required_origin: page.requiredOrigin } : {}) }, dispatched());
@@ -276,9 +290,9 @@ export class BrowserComputerController {
     if (error instanceof BrowserNavigationError) return { error: error.message, result: error.result };
     if (error.message === 'AMBIGUOUS_DOWNLOAD') return { error: error.message, result: { action_executed: false, downloads: error.downloads } };
     if (error.message === 'ELEMENT_NOT_ACTIONABLE') return { error: error.message,
-      result: { action_executed: false, needs_observation: dispatched(), preparation_executed: dispatched() } };
-    return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',
-      result: { action_executed: dispatched(), needs_observation: dispatched() || error.message === 'STALE_REFERENCE', ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
+      result: { action_executed: false, needs_observation: affected(), preparation_executed: page.preparationCount > (this.effectStart?.preparations ?? page.preparationCount) } };
+    return { error: rejections.has(error.message) ? error.message : affected() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',
+      result: { action_executed: dispatched(), needs_observation: affected() || error.message === 'STALE_REFERENCE', ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
   }
 
   async observeResult(request, read, effectExecuted = false, {metadata: includeMetadata = true, validateSample = false} = {}) {

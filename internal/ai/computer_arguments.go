@@ -50,11 +50,16 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 }
 
 // Closed product-authored diagnostics. Never retain raw page errors or arguments.
-func computerOperationDiagnostic(value any) map[string]any {
+func computerOperationDiagnostic(value any) (out map[string]any) {
 	raw, _ := value.(map[string]any)
+	defer func() {
+		if out != nil && slices.Contains([]string{"point_coordinates", "point_node", "target_ancestry", "embedding_frames", "scroll_intersection"}, anyToString(raw["checkpoint"])) {
+			out["checkpoint"] = raw["checkpoint"]
+		}
+	}()
 	if raw["phase"] == "adapter" {
 		method, reason := anyToString(raw["method"]), anyToString(raw["reason"])
-		if !computerProtocolMethod.MatchString(method) && !slices.Contains([]string{"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata"}, method) || !slices.Contains([]string{"invalid_result", "internal_error"}, reason) {
+		if !computerProtocolMethod.MatchString(method) && !slices.Contains([]string{"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata", "hit_test"}, method) || !slices.Contains([]string{"invalid_result", "internal_error"}, reason) {
 			return nil
 		}
 		return map[string]any{"phase": "adapter", "method": method, "reason": reason}
@@ -93,13 +98,13 @@ func computerOperationDiagnostic(value any) map[string]any {
 	}
 	field := anyToString(raw["field"])
 	expected := anyToString(raw["expected"])
-	if !slices.Contains([]string{"arguments", "selector", "name", "key", "text", "coordinates", "x", "y", "from_x", "from_y", "to_x", "to_y", "delta_x", "delta_y", "duration_ms", "milliseconds", "timeout_ms", "state", "equals", "action", "coordinate_space", "attribute", "limit", "cursor", "root_ref", "topic", "url", "id", "after", "emit", "full", "screenshot"}, field) {
+	if !slices.Contains([]string{"arguments", "selector", "name", "key", "text", "coordinates", "x", "y", "from_x", "from_y", "to_x", "to_y", "delta_x", "delta_y", "duration_ms", "milliseconds", "timeout_ms", "state", "equals", "action", "coordinate_space", "attribute", "limit", "cursor", "root_ref", "topic", "url", "id", "after", "emit", "full", "screenshot", "wait_until"}, field) {
 		return nil
 	}
-	if !slices.Contains([]string{"documented_fields", "documented_arity", "documented_selector", "canonical_role_or_observed_ref", "key_chord", "finite_number", "nonnegative_coordinates", "text_max_20000", "integer_0_5000", "integer_0_30000", "visible_hidden_enabled", "documented_condition", "condition_text_max_2000", "supported_action", "image_pixels_with_frame", "inside_image", "readable_attribute", "integer_1_200", "current_cursor", "integer_1_1000", "string", "boolean"}, expected) {
+	if !slices.Contains([]string{"documented_fields", "documented_arity", "documented_selector", "canonical_role_or_observed_ref", "key_chord", "finite_number", "nonnegative_coordinates", "text_max_20000", "integer_0_5000", "integer_0_30000", "visible_hidden_enabled", "documented_condition", "condition_text_max_2000", "supported_action", "image_pixels_with_frame", "inside_image", "readable_attribute", "integer_1_200", "current_cursor", "integer_1_1000", "string", "boolean", "navigation_lifecycle"}, expected) {
 		return nil
 	}
-	out := map[string]any{"phase": raw["phase"], "field": field, "expected": expected, "recovery": "correct_arguments"}
+	out = map[string]any{"phase": raw["phase"], "field": field, "expected": expected, "recovery": "correct_arguments"}
 	if method := anyToString(raw["method"]); slices.Contains([]string{"ui.snapshot", "ui.observe", "ui.screenshot", "ui.help", "ui.type", "ui.doubleClick", "ui.scroll", "ui.scrollAt", "ui.getByRole", "ui.ref", "ui.click", "ui.drag", "ui.key", "locator.node", "locator.snapshot", "locator.read", "locator.query", "locator.count", "locator.rows", "locator.attribute", "locator.linkSummary", "locator.getAttribute", "locator.click", "locator.fill", "locator.press", "locator.scroll", "locator.waitFor", "locator.requireState", "browser.navigate", "browser.waitForDownload", "ui.budget", "ui.assert", "locator.text", "browser.back", "browser.reload", "browser.saveDownload", "browser.readDownload", "browser.downloadCursor", "image.click", "image.doubleClick", "image.drag", "image.scroll", "downloadCursor.wait"}, method) {
 		out["method"] = method
 	}

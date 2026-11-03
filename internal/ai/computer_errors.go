@@ -89,6 +89,12 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	}
 	if code == "EFFECT_OUTCOME_UNKNOWN" {
 		facts := map[string]any{"needs_observation": true}
+		if payload["preparation_executed"] == true {
+			facts["preparation_executed"] = true
+		}
+		if progress := computerInputProgress(payload["input_progress"]); len(progress) > 0 {
+			facts["input_progress"] = progress
+		}
 		for _, key := range []string{"stage", "reason"} {
 			if value := computerDiagnosticValue(key, payload[key]); value != "" {
 				facts[key] = value
@@ -119,8 +125,12 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 		if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil {
 			result.Result.(map[string]any)["diagnostic"] = diagnostic
 		}
-		if code == "ELEMENT_NOT_ACTIONABLE" && payload["preparation_executed"] == true {
+		if payload["preparation_executed"] == true {
 			result.Result.(map[string]any)["preparation_executed"] = true
+			result.Result.(map[string]any)["needs_observation"] = true
+		}
+		if progress := computerInputProgress(payload["input_progress"]); len(progress) > 0 {
+			result.Result.(map[string]any)["input_progress"] = progress
 			result.Result.(map[string]any)["needs_observation"] = true
 		}
 		if code == "TARGET_PERMISSION_REQUIRED" {
@@ -269,6 +279,9 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 		return TargetToolResult{}, errors.New("invalid browser observation failure")
 	}
 	facts := map[string]any{"action_executed": executed, "observation_stage": stage, "needs_observation": true}
+	if payload["preparation_executed"] == true {
+		facts["preparation_executed"] = true
+	}
 	if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil && (diagnostic["phase"] == "protocol" || diagnostic["phase"] == "evaluation" || diagnostic["phase"] == "adapter") {
 		facts["diagnostic"] = diagnostic
 	}

@@ -5483,6 +5483,7 @@
         "effectUncertain": "Résultat non confirmé",
         "computerInputRejected": "Arguments invalides ; aucune saisie envoyée",
         "computerPreparedOnly": "Préparation terminée ; aucune saisie envoyée",
+        "computerInputIncomplete": "Entrée partiellement envoyée ; vérifiez avant de continuer",
         "computerEffectConfirmed": "Une action a été effectuée ; vérifiez avant de continuer",
         "computerObservationUnavailable": "Impossible de lire la page",
         "computerActionObservedUnavailable": "Action effectuée ; impossible de lire la page",

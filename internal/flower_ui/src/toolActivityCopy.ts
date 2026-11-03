@@ -29,6 +29,7 @@ export const toolActivityEnUS = {
   "previewUnavailable": "This tool did not provide a result preview.",
   "computerInputRejected": "Invalid arguments; no input sent",
   "computerPreparedOnly": "Preparation completed; input not sent",
+  "computerInputIncomplete": "Input partially sent; inspect before continuing",
   "computerEffectConfirmed": "An action completed; inspect before continuing",
   "computerObservationUnavailable": "Page could not be read",
   "computerActionObservedUnavailable": "Action performed; page could not be read",
