@@ -495,8 +495,16 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		if call.liveFrame {
 			source = "viewer"
 		}
-		slog.Info("computer observation unavailable", "thread_id", call.ThreadID, "target_id", call.TargetID,
-			"source", source, "stage", computerObservationStage(anyToString(payload["observation_stage"])), "action_executed", payload["action_executed"] == true)
+		fields := []any{"thread_id", call.ThreadID, "tool_call_id", call.ToolCallID, "target_id", call.TargetID,
+			"source", source, "stage", computerObservationStage(anyToString(payload["observation_stage"])), "action_executed", payload["action_executed"] == true}
+		if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil {
+			for _, key := range []string{"phase", "method", "reason", "code"} {
+				if value, exists := diagnostic[key]; exists {
+					fields = append(fields, "diagnostic_"+key, value)
+				}
+			}
+		}
+		slog.Info("computer observation unavailable", fields...)
 	}
 	if takeoverResult(result, err) {
 		control.recordPause(call, result, err)

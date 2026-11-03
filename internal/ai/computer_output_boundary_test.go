@@ -144,3 +144,44 @@ func TestComputerScriptEvaluationFailureKeepsConfirmedPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestComputerAdapterDiagnosticSurvivesScriptFailure(t *testing.T) {
+	for _, method := range []string{"DOMSnapshot.captureSnapshot", "safety_scan", "semantic_read"} {
+		for _, reason := range []string{"invalid_result", "internal_error"} {
+			want := map[string]any{"phase": "adapter", "method": method, "reason": reason}
+			raw := cloneAnyMap(want)
+			raw["message"], raw["stack"], raw["code"] = "private page", "private stack", -32000
+			if got := computerOperationDiagnostic(raw); !reflect.DeepEqual(got, want) {
+				t.Fatalf("diagnostic changed: %+v", got)
+			}
+			for _, field := range []string{"method", "reason"} {
+				invalid := cloneAnyMap(raw)
+				invalid[field] = "private page"
+				if computerOperationDiagnostic(invalid) != nil {
+					t.Fatal("unbounded diagnostic accepted")
+				}
+			}
+			calls := 0
+			runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+				calls++
+				if calls == 1 {
+					return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("confirmed")}}, nil
+				}
+				return computerObservationFailure(inner, map[string]any{"action_executed": false, "observation_stage": "safety_scan", "diagnostic": raw}, "fixture")
+			})
+			result, err := executeTestScript(t.Context(), runtime, call, "await ui.snapshot({emit:false}); log('confirmed'); try { await ui.snapshot(); } catch {} await ui.key('Enter');")
+			payload := result.Result.(map[string]any)
+			if err == nil || calls != 2 || !reflect.DeepEqual(payload["diagnostic"], want) || payload["context_reset"] != true || !reflect.DeepEqual(payload["logs"], []any{[]any{"confirmed"}}) {
+				t.Fatalf("failure boundary lost: %+v %v calls=%d", payload, err, calls)
+			}
+		}
+	}
+}
+
+func TestComputerAdapterReasonAppearsInActivityWithoutPrivateData(t *testing.T) {
+	payload := map[string]any{"diagnostic": map[string]any{"phase": "adapter", "method": "safety_scan", "reason": "internal_error", "message": "private page"}}
+	body, err := json.Marshal(computerActivityResultRows("computer.exec", payload))
+	if err != nil || !strings.Contains(string(body), "internal_error") || strings.Contains(string(body), "private page") {
+		t.Fatalf("activity diagnostic changed: %s %v", body, err)
+	}
+}

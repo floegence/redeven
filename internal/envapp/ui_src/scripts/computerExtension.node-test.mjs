@@ -275,6 +275,24 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       assert.equal(fresh.safety.level, 'routine', JSON.stringify(fresh));
       assert.ok(fresh.result.observation);
     });
+    await t.test('malformed debugger snapshots preserve adapter diagnostics', async () => {
+      await worker.evaluate(() => {
+        globalThis.fixtureSendCommand = chrome.debugger.sendCommand.bind(chrome.debugger);
+        chrome.debugger.sendCommand = async (target, method, args) => method === 'DOMSnapshot.captureSnapshot'
+          ? {strings:[]} : globalThis.fixtureSendCommand(target, method, args);
+      });
+      try {
+        const failed = await execute('computer.observe');
+        assert.equal(failed.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+        assert.equal(failed.result.observation_stage, 'safety_scan');
+        assert.deepEqual(failed.result.diagnostic, {phase:'adapter',method:'DOMSnapshot.captureSnapshot',reason:'invalid_result'});
+        assert.equal(failed.result.observation, undefined);
+        assert.equal(failed.result.action_executed, false);
+      } finally {
+        await worker.evaluate(() => {chrome.debugger.sendCommand=globalThis.fixtureSendCommand;delete globalThis.fixtureSendCommand;});
+      }
+      assert.equal((await execute('computer.observe')).error, undefined);
+    });
     await t.test('reference preflight preserves actual debugger rejection facts', async () => {
       const tree=(await execute('computer.observe')).result.observation;
       const ref=tree.nodes.find(node=>node.role==='button'&&node.name==='Apply').ref;

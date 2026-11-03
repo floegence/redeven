@@ -25,7 +25,7 @@ for (const operation of reads) {
     let failing = true;
     const f = fixture(() => { if (failing) throw new Error('TARGET_OBSERVATION_UNAVAILABLE'); return { verified: true }; });
     assert.deepEqual(await f.run(operation), { error: 'TARGET_OBSERVATION_UNAVAILABLE', result: {
-      action_executed: false, needs_observation: true, observation_stage: 'semantic_read',
+      action_executed: false, needs_observation: true, observation_stage: 'semantic_read', diagnostic: {phase:'adapter',method:'semantic_read',reason:'internal_error'},
     } });
     assert.deepEqual(f.facts(), { calls: 1, closes: 0, releases: 1 });
     failing = false;

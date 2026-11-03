@@ -4,13 +4,13 @@ title: Computer use qualification evidence
 tags: [ai, computer-use, testing, evidence]
 lifecycle: retained_history
 retention_reason: "Retains platform qualification failures and scope boundaries that prevent unsupported claims about current Computer Use behavior."
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-02"
 ---
 # Summary
 
 The production qualification runners establish scope-specific outcomes under
 [the acceptance contract](computer-use-qualification.md). The following results
-include September and October 2026 runs. A passing worktree run does not replace the exact-main
+include September through November 2026 runs. A passing worktree run does not replace the exact-main
 pre-push gate, certify arbitrary applications, or turn earlier failed runs into
 successes. Private text and pixels are excluded from retained diagnostics.
 
@@ -27,6 +27,26 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 # Evidence
 
 All live-model lanes use configured deepseek-flash (local V4.1 Flash 1017), which does not prove remote weights. Source credentials/configuration and personal threads remain unchanged. Exact raw reports/source/tool identities are retained outside Git; full historical tables remain in this file's Git history. Task success is not zero model errors or cross-platform reliability.
+
+## November 2
+Semantic condition waits revalidate temporary query candidates without changing
+the query, deadline or fixed scope; ordinary reads/input and stale refs do not
+retry. Consumed DOMSnapshot fields retain bounded adapter diagnostics. The
+deterministic reproduction fails 6/10 before repair; expanded contract coverage
+passes 19/19. Browser suites pass 355 with one optional installation skip; Go
+passes 404 with eight opt-in skips, plus focused race, helper staging and script
+examples. No native-platform expansion is claimed.
+
+Real DeepSeek Flash 1017 qualification covers 22 task types twice. The development
+run remains 42/44 (311 requests); the final production-source run is 39/44 (281
+requests), with both semantic-wait and injected-invalid-result repetitions passing.
+Failures retain two model argument/locator errors, one MDN network timeout, one
+public-task prompt/assertion mismatch (Home was not expressly prohibited), and one
+long-text task where the model read a text-node prefix instead of the documented
+HTML-element text read, then requested input until the runner deadline. The public
+prompt now expressly disallows keyboard/pointer input, matching its existing
+assertion; supplemental runs are separate and never rewrite these results.
+No site-specific production rule, input replay or relaxed boundary was introduced.
 
 ## October 29
 Four real Service/persistence/FlowerSurface fixture workflows qualify autonomous continuation after result loss, explicit question/retry, question cancel and offline observation. Each counts one effect through reload/restart, never replay. Offline is unobserved, not verified. Script suite passes 67 including stalled Promise after one click. These are adapter facts, not model-decision evidence. Old questions remain answerable/cancelable, never auto-answered. Sources: [UI](../../internal/ai/computer_result_ui_test.go), [tool contract](../../internal/ai/tool_design_contract_test.go), [history](../../internal/ai/tool_design_history_test.go).

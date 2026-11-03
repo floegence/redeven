@@ -1,4 +1,5 @@
 import { BrowserComputerPage, BrowserNavigationError, BrowserObservationInvalidated, navigationURL, redactedNavigationURL } from './computerBrowserPage.mjs';
+import { adapterFailure } from './computerBrowserEvaluation.mjs';
 import { argumentFailure, validateBrowserAction } from './computerBrowserArguments.mjs';
 import { viewportGeometry, sameGeometry, screenshotGeometry, imageCoordinates } from './computerBrowserFrame.mjs';
 
@@ -60,7 +61,7 @@ export class BrowserComputerController {
           if (revision !== this.page.revision) throw new BrowserObservationInvalidated();
           continue;
         }
-        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage, protocolDiagnostic: error.protocolDiagnostic });
+        throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage, protocolDiagnostic: error.protocolDiagnostic || adapterFailure(stage, 'internal_error').protocolDiagnostic });
       }
     }
   }
@@ -267,7 +268,7 @@ export class BrowserComputerController {
           if (response.safety?.level === 'takeover' || response.result?.target_changed || response.error
             || response.result?.state !== 'timeout' || Date.now() >= deadline) return response;
         } catch (error) {
-          // Only explicit document-lifecycle evidence discards a read sample.
+          // Only typed document or temporary query-candidate evidence discards a sample.
           // The same selector, permission scope and original deadline remain.
           if (!(error instanceof BrowserObservationInvalidated) || page.stopped || page.operationCancelled
             || page.invalid || page.guardFailure || Date.now() >= deadline) throw error;

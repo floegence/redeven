@@ -269,7 +269,7 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 		return TargetToolResult{}, errors.New("invalid browser observation failure")
 	}
 	facts := map[string]any{"action_executed": executed, "observation_stage": stage, "needs_observation": true}
-	if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil && (diagnostic["phase"] == "protocol" || diagnostic["phase"] == "evaluation") {
+	if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil && (diagnostic["phase"] == "protocol" || diagnostic["phase"] == "evaluation" || diagnostic["phase"] == "adapter") {
 		facts["diagnostic"] = diagnostic
 	}
 	if stage == "capture" && payload["reason"] == "viewport_unstable" {

@@ -39,9 +39,13 @@ invocation token carries the existing revision; no second lifecycle is stored.
 Final safety runs after cleanup, and failed publication retires the image anchor.
 Ordinary content updates do not require page quiescence.
 Condition waits own a deadline and repeatedly obtain independently validated
-read-only samples. Only typed lifecycle invalidation discards a sample; unknown
-protocol/evaluation failures, stale refs, permission changes and cancellation stop.
-A semantic locator keeps its original query scope; a ref never changes identity.
+read-only samples. Typed lifecycle or temporary query-candidate invalidation
+discards only that sample; unknown protocol/evaluation failures, ambiguity, stale
+fixed refs/root_ref, permission changes and cancellation stop. Semantic waits
+revalidate the sampled identity after reading its state, keep the original query
+and deadline, and never turn an invalid sample into an absent/hidden result.
+Fixed scope identity is checked even when a descendant query has no matches.
+Ordinary reads and input do not retry candidate failures.
 The adapter owns this ephemeral boundary; Runtime adds no browser-state ledger.
 Confirmed inputs are retained separately and never enter a read retry.
 A rejected read cannot become a malformed transport response that disconnects
@@ -62,7 +66,12 @@ replayed. Internal observer readiness does not imply application readiness.
 
 Evaluation failures retain diagnostic phase evaluation, actual method and reason
 exception or invalid_result through the helper, Runtime and canonical tool result.
-These are distinct from protocol rejection codes. Raw exception text, stacks and
+DOMSnapshot validates the fields it consumes and accepts protocol-empty values;
+optional missing scroll offsets omit geometry rather than fabricate coordinates.
+Invalid structures retain phase adapter, actual method and invalid_result.
+Unclassified adapter failures retain the known stage and internal_error.
+Canonical results, Activity and correlated runtime logs retain these bounded facts.
+These are distinct from protocol rejection codes and authorize no retry. Raw exception text, stacks and
 page values do not enter diagnostics. Confirmed output survives later read failure;
 privacy takeover still discards content. Core help directs models to observed roles
 and refs instead of assigning roles from a control's business purpose.

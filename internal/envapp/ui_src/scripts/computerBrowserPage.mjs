@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { validateBrowserAction } from './computerBrowserArguments.mjs';
 import { documentHitPoint } from './computerBrowserFrame.mjs';
-import { evaluate, evaluationValue } from './computerBrowserEvaluation.mjs';
+import { evaluate, evaluationValue, protocolRead, domSnapshotValue } from './computerBrowserEvaluation.mjs';
 
 // Display budgets never define reference or collection identity.
 const nameIdentity = text => createHash('sha256').update(text).digest('hex');
@@ -44,7 +44,8 @@ export class BrowserNavigationError extends Error {
   }
 }
 
-// Typed evidence of a document/frame lifecycle change; never inferred from protocol text.
+// Typed evidence that a read sample lost its document or temporary candidate identity.
+// Only explicit condition waits may resample; never inferred from error text.
 export class BrowserObservationInvalidated extends Error {
   constructor() { super('OBSERVATION_INVALIDATED'); }
 }
@@ -324,7 +325,7 @@ export class BrowserComputerPage {
           // DOMSnapshot includes closed shadow roots, which isolated-world
           // querySelector cannot inspect. Keep only classifications; attribute
           // values and input contents never cross the tool boundary.
-          const snapshot = await frame.session.send('DOMSnapshot.captureSnapshot', { computedStyles: [] });
+          const snapshot = await protocolRead(frame.session, 'DOMSnapshot.captureSnapshot', { computedStyles: [] }, domSnapshotValue);
           for (const document of snapshot.documents) {
             for (const index of document.layout.nodeIndex) {
               if (snapshot.strings[document.nodes.nodeName[index]] !== 'INPUT') continue;
@@ -370,14 +371,14 @@ export class BrowserComputerPage {
     const layoutBySession = new Map();
     for (const frame of await this.frames()) {
       if (root && root.frame.frame.id !== frame.frame.id) continue;
-      if (!layoutBySession.has(frame.session)) layoutBySession.set(frame.session, frame.session.send('DOMSnapshot.captureSnapshot', { computedStyles: [] }));
+      if (!layoutBySession.has(frame.session)) layoutBySession.set(frame.session, protocolRead(frame.session, 'DOMSnapshot.captureSnapshot', { computedStyles: [] }, domSnapshotValue));
       const [snapshot, layout] = await Promise.all([
         frame.session.send('Accessibility.getFullAXTree', { frameId: frame.frame.id }),
         layoutBySession.get(frame.session),
       ]);
       const document = layout.documents.find(document => layout.strings[document.frameId] === frame.frame.id);
       const boundsByNode = new Map();
-      for (let index = 0; index < (document?.layout.nodeIndex.length || 0); index++) {
+      for (let index = 0; Number.isFinite(document?.scrollOffsetX) && Number.isFinite(document?.scrollOffsetY) && index < document.layout.nodeIndex.length; index++) {
         const nodeIndex = document.layout.nodeIndex[index];
         const [x, y, width, height] = document.layout.bounds[index];
         boundsByNode.set(document.nodes.backendNodeId[nodeIndex], { x: x - document.scrollOffsetX, y: y - document.scrollOffsetY, width, height });
@@ -471,9 +472,9 @@ export class BrowserComputerPage {
     return entry;
   }
 
-  async resolve(selector, collect = false) {
+  async resolve(selector, collect = false, sample = false) {
     if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
-    let entry;
+    let entry, root;
     const matches = [];
     if (typeof selector.ref === 'string') {
       entry = this.references.get(selector.ref);
@@ -485,13 +486,14 @@ export class BrowserComputerPage {
       const exact = selector.exact === true;
       const wantedName = selector.name;
       if (wantedName !== undefined && typeof wantedName !== 'string') throw new Error('INVALID_REQUEST');
-      const root = selector.root_ref ? await this.resolve({ ref: selector.root_ref }) : undefined;
+      root = selector.root_ref ? await this.resolve({ ref: selector.root_ref }) : undefined;
       const revision = this.revision;
       // Resolution uses authoritative AX input independently of presentation.
       // A duplicate outside the model's bounded observation still fails closed.
       for (const frame of await this.frames()) {
         if (root && root.frame.frame.id !== frame.frame.id) continue;
         const { nodes } = await frame.session.send('Accessibility.getFullAXTree', { frameId: frame.frame.id });
+        if (revision !== this.revision) throw new BrowserObservationInvalidated();
         const source = new Map(nodes.map(node => [node.nodeId, node]));
         let allowed;
         if (root) {
@@ -515,9 +517,16 @@ export class BrowserComputerPage {
         }
       }
       if (revision !== this.revision) throw new BrowserObservationInvalidated();
+      if (sample && root) await this.resolve({ref:selector.root_ref});
       if (collect) return matches;
       if (!entry) throw new Error('ELEMENT_NOT_FOUND');
     }
+    await this.validateIdentity(entry, sample && typeof selector.ref !== 'string');
+    if (sample && root) await this.resolve({ref:selector.root_ref});
+    return collect ? [entry] : entry;
+  }
+
+  async validateIdentity(entry, transient = false) {
     let node, nodes, current;
     try {
       ({ node } = await entry.frame.session.send('DOM.describeNode', { backendNodeId: entry.backendNodeId }));
@@ -532,13 +541,14 @@ export class BrowserComputerPage {
       // the observed reference, but never authorize input without revalidation.
       throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'semantic_read', protocolDiagnostic: error?.protocolDiagnostic });
     }
-    if (!current || current.ignored || current.role?.value !== entry.role || nameIdentity(current.name?.value || '') !== entry.nameIdentity) {
+    if (!current || current.ignored || current.role?.value !== entry.role || nameIdentity(current.name?.value || '') !== entry.nameIdentity
+      || entry.document !== this.observedFrames.get(entry.frame.frame.id)) {
       this.references.delete(entry.ref);
+      if (transient) throw new BrowserObservationInvalidated();
       throw new Error('STALE_REFERENCE');
     }
-    if (entry.document !== this.observedFrames.get(entry.frame.frame.id)) throw new Error('STALE_REFERENCE');
     entry.nodeType = node.nodeType;
-    return collect ? [entry] : entry;
+    return entry;
   }
 
   async query(selector, {limit=50,cursor} = {}) {
@@ -639,7 +649,7 @@ export class BrowserComputerPage {
   async conditionState(selector, { state = 'visible', equals } = {}) {
     let found = false, enabled = false, matches = false;
     try {
-      const element = await this.resolve(selector);
+      const element = await this.resolve(selector, false, true);
       const current = await this.elementState(element);
       found = current.visible;
       enabled = current.visible && current.enabled;
@@ -650,6 +660,10 @@ export class BrowserComputerPage {
           matches=await evaluate(element.frame.session, 'Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,arguments:[{value:state},{value:equals}],functionDeclaration:'function(state,expected){return (state==="value"?this.value:this.textContent)===expected;}'}, value => typeof value === 'boolean');
         } finally {if(object.objectId)await element.frame.session.send('Runtime.releaseObject',{objectId:object.objectId});}
       }
+      // Bind the state/value read to the candidate actually sampled. A
+      // detached candidate is not proof that the original query is hidden.
+      if (selector.root_ref) await this.resolve({ref:selector.root_ref});
+      await this.validateIdentity(element, typeof selector.ref !== 'string');
     } catch (error) {
       if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
     }

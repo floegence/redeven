@@ -20,6 +20,7 @@ REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test --test-concurrenc
   internal/envapp/ui_src/scripts/computerEvaluation.node-test.mjs \
   internal/envapp/ui_src/scripts/computerReadContract.node-test.mjs \
   internal/envapp/ui_src/scripts/computerObservationLifetime.node-test.mjs \
+  internal/envapp/ui_src/scripts/computerSemanticSampling.node-test.mjs \
   internal/envapp/ui_src/scripts/computerTaskQualification.node-test.mjs \
   internal/envapp/ui_src/scripts/computerFieldIntegrity.node-test.mjs \
   internal/envapp/ui_src/scripts/computerBrowser.node-test.mjs \

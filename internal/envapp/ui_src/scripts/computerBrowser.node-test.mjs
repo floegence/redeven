@@ -449,7 +449,7 @@ test('navigation during a safety read preserves the confirmed action without exp
     // read failure; a concurrent lifecycle event must not make it retryable.
     assert.equal(result.error, 'TARGET_OBSERVATION_UNAVAILABLE', JSON.stringify(result));
     assert.equal(result.safety, undefined);
-    assert.deepEqual(result.result, { action_executed: true, needs_observation:true, observation_stage:'safety_scan' });
+    assert.deepEqual(result.result, { action_executed: true, needs_observation:true, observation_stage:'safety_scan', diagnostic:{phase:'adapter',method:'safety_scan',reason:'internal_error'} });
     assert.equal(result.screenshot, undefined);
     session.send = send;
     const fresh = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });

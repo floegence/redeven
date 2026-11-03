@@ -95,8 +95,8 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 			}
 		}
 		wanted := f.scenario == "read_failure_recovery" && action == "text" || f.scenario == "missing_snapshot" && call.ToolName == "computer.observe" || f.scenario == "missing_text" && action == "text" || f.scenario == "missing_wait" && action == "wait"
-		wanted = wanted || f.scenario == "read_output_prefix" && call.ToolName == "computer.observe" || f.scenario == "navigation_output_prefix" && call.ToolName == "browser.navigate" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception") && action == "text" && f.reads.Load() == 2
-		if (f.ready.Load() || f.scenario == "read_failure_recovery" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception")) && wanted && f.injected.CompareAndSwap(0, 1) {
+		wanted = wanted || f.scenario == "read_output_prefix" && call.ToolName == "computer.observe" || f.scenario == "navigation_output_prefix" && call.ToolName == "browser.navigate" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" || f.scenario == "adapter_invalid_result") && action == "text" && f.reads.Load() == 2
+		if (f.ready.Load() || f.scenario == "read_failure_recovery" || (f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" || f.scenario == "adapter_invalid_result")) && wanted && f.injected.CompareAndSwap(0, 1) {
 			reply.Result.Result = map[string]any{"action_executed": false, "observation_invalidated": true}
 			reply.Result.Safety = &InteractionSafetyDecision{Level: "routine", SafeToCapture: false, SafeToSendToModel: false}
 			reply.Result.Screenshot = nil
@@ -110,10 +110,13 @@ func (f *qualificationReadFaultTransport) RoundTrip(request *http.Request) (*htt
 				reply.Result.Result = map[string]any{"action_executed": true, "navigation_stage": "load"}
 				reply.Result.Safety = nil
 			}
-			if f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" {
+			if f.scenario == "protocol_without_code" || f.scenario == "evaluation_exception" || f.scenario == "adapter_invalid_result" {
 				reply.Result.Error = "TARGET_OBSERVATION_UNAVAILABLE"
 				reply.Result.Result = map[string]any{"action_executed": false, "observation_stage": "semantic_read", "diagnostic": map[string]any{"phase": "protocol", "method": "Runtime.evaluate"}}
 				reply.Result.Safety = nil
+				if f.scenario == "adapter_invalid_result" {
+					reply.Result.Result["diagnostic"] = map[string]any{"phase": "adapter", "method": "DOMSnapshot.captureSnapshot", "reason": "invalid_result"}
+				}
 				if f.scenario == "evaluation_exception" {
 					reply.Result.Result["diagnostic"] = map[string]any{"phase": "evaluation", "method": "Runtime.callFunctionOn", "reason": "exception"}
 				}
@@ -253,7 +256,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"dynamic_wait_contract", "dynamic_wait", "spa_read", "shadow_form", "public_docs", "public_encyclopedia", "public_repository", "host_rejection", "observed_roles", "evaluation_exception", "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"semantic_wait", "adapter_invalid_result", "dynamic_wait_contract", "dynamic_wait", "spa_read", "shadow_form", "public_docs", "public_encyclopedia", "public_repository", "host_rejection", "observed_roles", "evaluation_exception", "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "scroll_document", "scroll_tall_region", "scroll_clipped_region", "scroll_covered_region", "native_drag_focus_change", "visual_natural", "form_natural", "table_natural", "native_drag", "native_drag_validation", "native_drag_zero", "timed_drag", "drag_validation", "optional_probe", "caught_lookup", "media_contention", "node_scope", "native_tree", "field_integrity", "long_text_natural", "attribute_overflow", "name_tail_stale", "cursor_tail_stale", "mixed_batch_contract", "mixed_batch", "unsupported_text", "security_vocabulary", "read_failure_recovery", "excess_click", "excess_screenshot", "excess_key", "excess_image", "missing_snapshot", "missing_text", "missing_wait", "empty_values", "observation_capture", "frame_refs", "option_field", "native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				if !strings.HasPrefix(scenario, "native_") {
@@ -344,6 +347,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						return
 					}
 
+					if scenario == "semantic_wait" {
+						_, _ = io.WriteString(w, `<!doctype html><title>Live report</title><h1>Live report</h1><button onclick="this.disabled=true;fetch('/entered',{method:'POST'});const timer=setInterval(()=>{const old=document.querySelector('#finish'),fresh=old.cloneNode(true);old.replaceWith(fresh)},20);setTimeout(()=>{clearInterval(timer);document.querySelector('#finish').disabled=false;document.querySelector('section').textContent='Report ready: 37'},650)">Prepare report</button><button id="finish" disabled onclick="fetch('/submit',{method:'POST'});document.querySelector('output').textContent='Receipt: 37'">Confirm report</button><section aria-label="Report state">Pending</section><output aria-label="Receipt"></output>`)
+						return
+					}
 					if scenario == "dynamic_wait" || scenario == "dynamic_wait_contract" {
 						_, _ = io.WriteString(w, `<!doctype html><title>Live report</title><h1>Live report</h1><button onclick="this.disabled=true;fetch('/entered',{method:'POST'});document.querySelector('iframe').src='/child2';setTimeout(()=>{document.querySelector('section').textContent='Report ready: 37';document.querySelector('#finish').disabled=false},650)">Prepare report</button><button id="finish" disabled onclick="fetch('/submit',{method:'POST'});document.querySelector('output').textContent='Receipt: 37'">Confirm report</button><section aria-label="Report state">Pending</section><output aria-label="Receipt"></output><iframe title="Feed" src="/child"></iframe>`)
 						return
@@ -533,10 +540,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					"public_repository":   "https://github.com/floegence/redeven",
 				}[scenario]
 				if publicURL != "" {
-					prompt = "Use Computer Use to open " + publicURL + ". Read its current title and first visible heading, capture a screenshot, and report the observed title and heading. Do not sign in, click links, submit, download, or use terminal/network tools. If access fails, report the actual failure without inventing content."
+					prompt = "Use Computer Use to open " + publicURL + ". Read its current title and first visible heading, capture a screenshot, and report the observed title and heading. Do not sign in, send keyboard or pointer input, submit, download, or use terminal/network tools. If access fails, report the actual failure without inventing content."
 				}
 				switch scenario {
-				case "dynamic_wait_contract":
+				case "dynamic_wait_contract", "semantic_wait":
 					prompt = "Exercise the condition contract once: use one computer.exec to click Prepare report exactly once, call requireState({state:'enabled',timeout_ms:5000}) on Confirm report, click Confirm report exactly once and read Report state and Receipt. Choose observed locators and use documented APIs. Never replay either click. Report the results. Use Computer Use only."
 				case "dynamic_wait":
 					prompt = "Prepare this live report once, wait for Confirm report to become enabled, then confirm it exactly once. Read and report both Report state and Receipt. Use Computer Use only. Do not repeat preparation or confirmation."
@@ -588,7 +595,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . This disposable diagnostic routes navigation to an isolated helper with no admitted source. Report the actual returned facts, retained output and completed operations. Do not navigate again, send any key, select a replacement, or perform any further operation after the rejected call."
 				case "navigation_output_prefix":
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await browser.navigate('" + site.URL + "/prefix-destination'); await ui.key('PageDown'); . A one-time navigation-load timeout is intentional and does not undo the navigation. Report the retained output and navigation facts, then observe the current page in a separate call. Never repeat navigation or send the key."
-				case "protocol_without_code", "evaluation_exception":
+				case "protocol_without_code", "evaluation_exception", "adapter_invalid_result":
 					prompt = "Run this diagnostic exactly once as one computer.exec: const reading=await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); log({confirmed:reading.text}); await ui.getByRole('region',{name:'Scrollable',exact:true}).text(); await ui.key('PageDown'); . The second read has an intentional one-time failure. Report its returned diagnostic and retained output, then capture a screenshot in a separate call. Do not input, navigate, or repeat the diagnostic script."
 				case "read_failure_recovery":
 					prompt = "Use locator.text to read the Scrollable region and report its complete visible text and a screenshot. This disposable fixture can have a one-time read failure. Choose a fresh observation if needed; do not input anything, navigate or use network tools."
@@ -682,7 +689,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					prompt = "Wait for the Ready button to become enabled using locator.waitFor({state:'enabled',timeout_ms:5000}). Log the returned state and read the button. Do not click any buttons. Report the observed enabled state."
 				}
 
-				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "host_rejection" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "host_rejection" || (scenario == "protocol_without_code" || scenario == "evaluation_exception" || scenario == "adapter_invalid_result") {
 					client := runtime.browserHost.client
 					transport := client.Transport
 					faults := &qualificationReadFaultTransport{RoundTripper: transport, scenario: scenario, injected: &injected, inputs: &blockedInputs}
@@ -868,7 +875,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				report["injected_read_failures"] = injected.Load()
 				report["inputs_after_failed_read"] = blockedInputs.Load()
-				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "host_rejection" || (scenario == "protocol_without_code" || scenario == "evaluation_exception") {
+				if strings.HasPrefix(scenario, "missing_") || scenario == "read_failure_recovery" || scenario == "read_output_prefix" || scenario == "navigation_output_prefix" || scenario == "host_rejection" || (scenario == "protocol_without_code" || scenario == "evaluation_exception" || scenario == "adapter_invalid_result") {
 					report["scope"] = "real-provider-real-browser-single-read-fault-injection"
 					if scenario == "host_rejection" {
 						report["scope"] = "real-provider-real-browser-empty-helper-rejection"
@@ -908,7 +915,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 				}
 				switch scenario {
-				case "dynamic_wait", "dynamic_wait_contract":
+				case "dynamic_wait", "dynamic_wait_contract", "semantic_wait":
 					waited := false
 					for _, fact := range confirmedToolFacts {
 						for _, action := range toAnySlice(fact["completed_actions"]) {
@@ -916,7 +923,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						}
 					}
 					report["condition_wait_confirmed"] = waited
-					if (scenario == "dynamic_wait_contract" && !waited) || entered.Load() != 1 || submissions.Load() != 1 || !strings.Contains(text, "Report ready: 37") || !strings.Contains(text, "Receipt: 37") {
+					if ((scenario == "dynamic_wait_contract" || scenario == "semantic_wait") && !waited) || entered.Load() != 1 || submissions.Load() != 1 || !strings.Contains(text, "Report ready: 37") || !strings.Contains(text, "Receipt: 37") {
 						t.Error("dynamic report conditions, observed facts or exactly-one effects missing")
 					}
 				case "spa_read":
@@ -1180,7 +1187,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if report["host_rejection_contract_passed"] != true {
 						t.Errorf("host rejection facts: verified=%v routed=%d keys=%d navigation=%d saves=%d", verified, injected.Load(), blockedInputs.Load(), entered.Load(), submissions.Load())
 					}
-				case "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "evaluation_exception":
+				case "read_output_prefix", "navigation_output_prefix", "protocol_without_code", "evaluation_exception", "adapter_invalid_result":
 					wantCode := "TARGET_OBSERVATION_UNAVAILABLE"
 					if scenario == "navigation_output_prefix" {
 						wantCode = "NAVIGATION_TIMEOUT"
@@ -1202,9 +1209,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							wantActions = "[text click]"
 						}
 						verified = prefix && fmt.Sprint(fact["completed_actions"]) == wantActions && fact["context_reset"] == true
-						if scenario == "protocol_without_code" || scenario == "evaluation_exception" {
+						if scenario == "protocol_without_code" || scenario == "evaluation_exception" || scenario == "adapter_invalid_result" {
 							d, _ := fact["diagnostic"].(map[string]any)
 							verified = verified && d["phase"] == "protocol" && d["method"] == "Runtime.evaluate" && d["code"] == nil
+							if scenario == "adapter_invalid_result" {
+								verified = prefix && fmt.Sprint(fact["completed_actions"]) == wantActions && fact["context_reset"] == true && d["phase"] == "adapter" && d["method"] == "DOMSnapshot.captureSnapshot" && d["reason"] == "invalid_result" && d["code"] == nil
+							}
 							if scenario == "evaluation_exception" {
 								verified = prefix && fmt.Sprint(fact["completed_actions"]) == wantActions && fact["context_reset"] == true && d["phase"] == "evaluation" && d["method"] == "Runtime.callFunctionOn" && d["reason"] == "exception" && d["code"] == nil
 							}
