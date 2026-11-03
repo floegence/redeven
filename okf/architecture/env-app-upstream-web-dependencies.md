@@ -4,7 +4,7 @@ title: Env App upstream web dependencies
 tags: [architecture, dependencies, protocol, ui]
 quality_exception: Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -12,7 +12,7 @@ Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floet
 
 # Contract
 
-Pins: Floe Boot/Core/Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.
+Pins: Floe Boot/Core/Protocol v0.87.2 (Env App Core v0.87.2), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.
 
 ## Mechanism
 

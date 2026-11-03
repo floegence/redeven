@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getGitPatchRenderSnapshot,
+  gitPatchPreviewLineClass,
   parseGitPatchRenderedLines,
   summarizeGitPatchRenderedLines,
 } from './gitPatch';
@@ -28,4 +29,8 @@ describe('git patch render snapshots', () => {
       deletions: 1,
     });
   });
+});
+
+it.each(['diff --git a/file b/file', '--- a/file', '+++ b/file', '@@ -1 +1 @@'])('keeps patch metadata on the opaque secondary ink role: %s', line => {
+  expect(gitPatchPreviewLineClass(line)).toBe('text-muted-foreground');
 });

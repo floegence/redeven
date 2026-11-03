@@ -12844,7 +12844,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "architecture",
           "dependencies",
@@ -12861,7 +12861,7 @@
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Pins: Floe Boot/Core/Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "body": "Pins: Floe Boot/Core/Protocol v0.87.2 (Env App Core v0.87.2), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.11.1. Floeterm supplies Presentation/session exports. [Asset recovery](../ui/page-asset-recovery.md) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
           "char_count": 1331
         },
         {
@@ -19828,7 +19828,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "desktop",
           "electron",
@@ -19838,15 +19838,15 @@
         "title": "Desktop shell theme state",
         "type": "Desktop Contract"
       },
-      "body_length": 1643,
+      "body_length": 2245,
       "summary": "One validated Desktop theme snapshot drives Welcome, Env App, chrome and generated documents. New/reset themes use Porcelain; valid choices survive upgrades. Selection paints before persistence, retaining acknowledged state, drafts/focus/content and Retry on failure.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Admit ids/defaults/metadata from published Floe `/themes`; never copy palettes or weaken forced-color/high-contrast behavior. OS changes apply only in system mode.\n- Preload supplies the initial snapshot; user writes use asynchronous IPC without blocking input. [Surface material](../ui/surface-material.md) remains independent.\n- Settings derive content, panels, insets, dividers, controls and selections from active tokens, including Classic presets.\n- Welcome and Env App theme popovers begin with one localized, single-line Theme heading. Omit the selected-preset subtitle and visible color-mode caption; keep the color-mode radiogroup accessibly named. Inline settings retain their visible mode label.\n- Native chrome uses published preview background and semantic foreground with at least 3:1 symbol contrast. Renderers reject palette-bearing IPC and use Floe CSS/Monaco definitions.",
-          "char_count": 891
+          "body": "- Admit ids/defaults/metadata from published Floe `/themes`; never copy palettes or weaken forced-color/high-contrast behavior. OS changes apply only in system mode.\n- Preload supplies the initial snapshot; user writes use asynchronous IPC without blocking input. [Surface material](../ui/surface-material.md) remains independent.\n- Settings derive content, panels, insets, dividers, controls and selections from active tokens, including Classic presets.\n- Welcome and Env App theme popovers begin with one localized, single-line Theme heading. Omit the selected-preset subtitle and visible color-mode caption; keep the color-mode radiogroup accessibly named. Inline settings retain their visible mode label.\n- Porcelain Light uses published neutral porcelain surfaces and charcoal controls. Product CSS must preserve readable secondary text and placeholders (at least 4.5:1), essential control indicators (at least 3:1), stable focus geometry and native editing state across theme switches. Monaco syntax, colored bracket pairs and text-preserving highlights share the same reading threshold.\n- Native chrome uses published preview background and semantic foreground with at least 3:1 symbol contrast. Renderers reject palette-bearing IPC and use Floe CSS/Monaco definitions.",
+          "char_count": 1276
         },
         {
           "id": "boundaries",
@@ -19866,6 +19866,11 @@
           "id": "redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs:0:source.",
           "source": "redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/styles/porcelainLightVisibility.browser.test.tsx:0:published css, visible control and monaco bracket contrast; retained draft, selection, focus and scroll across theme switches.",
+          "source": "redeven:internal/envapp/ui_src/src/styles/porcelainLightVisibility.browser.test.tsx",
+          "description": "Published CSS, visible control and Monaco bracket contrast; retained draft, selection, focus and scroll across theme switches."
         }
       ],
       "snippet": "One validated Desktop theme snapshot drives Welcome, Env App, chrome and generated documents. New/reset themes use Porcelain; valid choices survive upgrades. Selection paints before persistence, retaining acknowledged state, drafts/focus/co",
@@ -31904,5 +31909,5 @@
       ]
     }
   ],
-  "source_sha256": "0f35d6fd1e60363cc6738d92637aba68b8b97186e0f481ef2d0d64ac01cda4f5"
+  "source_sha256": "d0e7f52e3f3d7daf66648373b022ac258b0f01b7349124ed710400b779b75430"
 }

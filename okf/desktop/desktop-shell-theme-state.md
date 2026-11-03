@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop shell theme state
 tags: [desktop, themes, ui, electron]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -15,6 +15,7 @@ One validated Desktop theme snapshot drives Welcome, Env App, chrome and generat
 - Preload supplies the initial snapshot; user writes use asynchronous IPC without blocking input. [Surface material](../ui/surface-material.md) remains independent.
 - Settings derive content, panels, insets, dividers, controls and selections from active tokens, including Classic presets.
 - Welcome and Env App theme popovers begin with one localized, single-line Theme heading. Omit the selected-preset subtitle and visible color-mode caption; keep the color-mode radiogroup accessibly named. Inline settings retain their visible mode label.
+- Porcelain Light uses published neutral porcelain surfaces and charcoal controls. Product CSS must preserve readable secondary text and placeholders (at least 4.5:1), essential control indicators (at least 3:1), stable focus geometry and native editing state across theme switches. Monaco syntax, colored bracket pairs and text-preserving highlights share the same reading threshold.
 - Native chrome uses published preview background and semantic foreground with at least 3:1 symbol contrast. Renderers reject palette-bearing IPC and use Floe CSS/Monaco definitions.
 
 # Boundaries
@@ -25,3 +26,4 @@ Resolve public npm dependencies without sibling wiring/patches. Renderer storage
 
 - `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Source.
 - `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Source.
+- `redeven:internal/envapp/ui_src/src/styles/porcelainLightVisibility.browser.test.tsx` - Published CSS, visible control and Monaco bracket contrast; retained draft, selection, focus and scroll across theme switches.

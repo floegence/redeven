@@ -125,7 +125,7 @@ export function gitPatchPreviewLineClass(line: string): string {
   if (line.startsWith('+') && !line.startsWith('+++')) return 'text-[var(--redeven-status-success-foreground)]';
   if (line.startsWith('-') && !line.startsWith('---')) return 'text-[var(--redeven-status-error-foreground)]';
   if (line.startsWith('@@') || line.startsWith('diff --git ') || line.startsWith('--- ') || line.startsWith('+++ ')) {
-    return 'text-muted-foreground/85';
+    return 'text-muted-foreground';
   }
   return 'text-foreground';
 }
