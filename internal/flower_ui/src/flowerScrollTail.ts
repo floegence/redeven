@@ -568,7 +568,7 @@ export function createFlowerScrollTailController(
         const current = gesture();
         if (current) current.scrolled = true;
         if (delta < 0) stopFollowing();
-        if (delta > 0 && input.direction >= 0 && (isNearBottom() || !readingTailSpace && reachedPreviousBottom)
+        if (delta > 0 && input.direction >= 0 && (Math.abs(distanceToLatest()) <= 1 || !readingTailSpace && reachedPreviousBottom)
           && (options.canFollowLatest?.() ?? true)) {
           // Returning to the tail ends reading-anchor ownership. Otherwise
           // a stale anchor can manufacture trailing room during the next page.

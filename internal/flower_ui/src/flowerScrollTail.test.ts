@@ -643,3 +643,18 @@ it('advances retained wheel distance only once per animation frame', () => {
     expect(title.getBoundingClientRect().top).toBeCloseTo(140, 0);
   } finally { controller.dispose(); clock.mockRestore(); }
 });
+
+it('does not add a bottom snap to a native downward wheel near the tail', () => {
+  const { controller, raf } = createController();
+  const metrics = createViewport(1000);
+  controller.bind(metrics.viewport); controller.stopFollowing();
+  metrics.setScrollTop(779); controller.onScroll();
+  controller.onWheel({ target: metrics.viewport, deltaY: 80 } as unknown as WheelEvent);
+  metrics.setScrollTop(859); controller.onScroll(); raf.flushAll();
+  expect(controller.followingLatest()).toBe(false);
+  expect(metrics.scrollTop()).toBe(859);
+  controller.onWheel({ target: metrics.viewport, deltaY: 41 } as unknown as WheelEvent);
+  metrics.setScrollTop(900); controller.onScroll(); raf.flushAll();
+  expect(controller.followingLatest()).toBe(true);
+  controller.dispose();
+});
