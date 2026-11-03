@@ -42,13 +42,14 @@ describe('Web Service collection geometry', () => {
       openUnavailableReason="Open this service in Redeven Desktop."
       onOpen={open} onEdit={() => undefined} onDelete={() => undefined} />, host);
     const button = host.querySelector<HTMLButtonElement>('.web-service-open button')!;
-    expect(button.disabled).toBe(false);
+    expect(button.disabled).toBe(true);
     expect(button.getAttribute('aria-disabled')).toBe('true');
     expect(host.querySelector('.web-service-notice')).toBeNull();
-    await userEvent.click(button, { force: true }); await settle();
+    const control = host.querySelector<HTMLElement>('.web-service-open-control')!;
+    await userEvent.click(control); await settle();
     expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Redeven Desktop');
     await userEvent.keyboard('{Escape}'); await settle();
-    button.focus(); await userEvent.keyboard('{Enter}'); await settle();
+    host.querySelector<HTMLElement>('.web-service-open-control')!.focus(); await userEvent.keyboard('{Enter}'); await settle();
     expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Redeven Desktop');
     await userEvent.keyboard(' ');
     expect(open).not.toHaveBeenCalled();
@@ -71,7 +72,7 @@ describe('Web Service collection geometry', () => {
       onOpen={open} onOpenResource={() => undefined} onAction={() => undefined}
       onOperationExpandedChange={() => undefined} onLogs={() => undefined} onUninstall={() => undefined} />, host);
     const button = host.querySelector<HTMLButtonElement>('.web-service-open button')!;
-    button.focus(); await userEvent.keyboard('{Enter}'); await settle();
+    host.querySelector<HTMLElement>('.web-service-open-control')!.focus(); await userEvent.keyboard('{Enter}'); await settle();
     const tooltip = host.querySelector<HTMLElement>('[role=tooltip]')!;
     expect(tooltip).toBeTruthy();
     expect(getComputedStyle(tooltip).position).toBe('absolute');

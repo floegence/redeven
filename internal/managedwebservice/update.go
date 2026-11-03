@@ -136,8 +136,16 @@ func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.
 		return serviceError("RELEASE_IDENTITY_MISMATCH", "The installed npm release no longer matches the selected candidate.", 409, true, identityErr)
 	}
 	targetService.ArtifactReference = artifact
-	journal.Target.ArtifactReference = artifact
-	journal.Target.ReleaseIdentityJSON, journal.Target.ReleaseIdentitySHA256 = targetService.ReleaseIdentityJSON, targetService.ReleaseIdentitySHA256
+	// Installation enriches the verified release identity (including trust).
+	// Freeze that final execution identity before stopping the previous runtime;
+	// the launch, recovery journal and committed service must describe one target.
+	installedRuntime, err := m.resolveCurrentRuntime(ctx, &targetService)
+	if err != nil {
+		return err
+	}
+	installedRuntime.applyTo(&targetService)
+	targetService.RuntimeSpecSHA256 = installedRuntime.RuntimeSpecSHA256
+	journal.Target = updateReleaseFromService(targetService)
 	journal.Phase = updatePhaseArtifactReady
 	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
 		return err

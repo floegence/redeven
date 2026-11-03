@@ -269,6 +269,10 @@ func newUpdatePlanFixture(t *testing.T) updatePlanFixture {
 	}
 	t.Cleanup(func() { _ = registry.Close() })
 	home := t.TempDir()
+	home, err = filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
 	scope, err := filesystemscope.NewDefaultRegistry(home)
 	if err != nil {
 		t.Fatal(err)

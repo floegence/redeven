@@ -2,6 +2,8 @@ import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
   FeedbackIndicator,
   StableText,
+  LinearProgress,
+  createFloatingPresence,
   Button,
   Checkbox,
   DialogPlacementProvider,
@@ -24,7 +26,7 @@ import type { ManagedWebEntranceContext } from '../../../../../../desktop/src/sh
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
 import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, ExternalLink, Loader2, Filter, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Clock, Package, Terminal, ChevronDown, ChevronRight, ExternalLink, Loader2, Filter, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { ManagedServiceManagementDrawer, managementStatusKey, managementProblemKey, type ManagementAction, type ManagementRequest } from './ManagedServiceManagementDrawer';
@@ -742,16 +744,16 @@ function ServiceOpenButton(props: { busy: boolean; busyText?: string; canOpen: b
   const restricted = () => !props.canOpen;
   const reason = () => props.reason || i18n.t('webServices.managed.actionUnavailable.SERVICE_STATE_UNAVAILABLE');
   return <Tooltip content={restricted() ? reason() : props.busyText || props.reason || i18n.t('webServices.actions.openServiceTooltip')}
-    placement="top" anchorClass="web-service-open" delay={0} clickToToggle={restricted()} class={restricted() ? 'text-warning' : undefined}>
+    placement="top" anchorClass="web-service-open" delay={0} clickToToggle={restricted()}>
+    <span class="web-service-open-control" onKeyDown={event => { if (restricted() && ['Enter', ' '].includes(event.key)) { event.preventDefault(); event.currentTarget.click(); } }} tabindex={restricted() ? 0 : undefined} aria-label={restricted() ? i18n.t('webServices.actions.open') + ': ' + reason() : undefined}>
     <Button size="sm" variant="default" class="web-service-button" classList={{ 'web-service-open-restricted': restricted() }}
-      disabled={props.busy} aria-disabled={restricted() || props.busy || undefined} aria-busy={props.busy || undefined}
+      disabled={restricted() || props.busy} aria-disabled={restricted() || props.busy || undefined} aria-busy={props.busy || undefined}
       aria-describedby={restricted() ? descriptionID : undefined}
       onClick={(event) => { if (restricted() || props.busy) { event.preventDefault(); return; } props.onOpen(); }}>
-      <Show when={props.busy} fallback={<Show when={restricted()} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}>
-        <AlertTriangle class="mr-1.5 h-3.5 w-3.5 text-warning" aria-hidden="true" />
-      </Show>}><InlineButtonSnakeLoading class="mr-1.5" /></Show>
+      <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}><InlineButtonSnakeLoading class="mr-1.5" /></Show>
       {i18n.t('webServices.actions.open')}
     </Button>
+    </span>
     <Show when={restricted()}><span id={descriptionID} class="sr-only">{reason()}</span></Show>
   </Tooltip>;
 }
@@ -969,7 +971,7 @@ function managedOperationStages(operation: ManagedOperation, deployment: Managed
     case 'start': return ['starting', 'health_check', 'completed'];
     case 'stop': return ['stopping', 'completed'];
     case 'restart': return ['stopping', 'starting', 'health_check', 'completed'];
-    case 'update': return ['update_preparing', 'pulling', 'stopping', 'installing', 'starting', 'health_check', 'completed'];
+    case 'update': return ['update_preparing', deployment === 'host' ? 'downloading' : 'pulling', 'stopping', 'installing', 'starting', 'health_check', 'completed'];
     case 'reconfigure': return ['reconfigure_preflight', 'removing_runtime', 'rebuilding_runtime', 'verifying_runtime', 'completed'];
     case 'uninstall': return ['stopping', 'uninstalling', 'completed'];
     default:
@@ -1037,11 +1039,13 @@ function ManagedOperationDisclosure(props: Readonly<{
   onCancel: () => void;
   drawer?: boolean;
   detailsOnly?: boolean;
+  onElement?: (element: HTMLDivElement) => void;
   onDetails?: () => void;
   releaseChange?: Readonly<{ current?: string; target: string }>;
 }>) {
   const i18n = useI18n();
   let outputViewport: HTMLDivElement | undefined;
+  let timeline: HTMLOListElement | undefined;
   let followOutput = true;
   const [currentTimeUnixMs, setCurrentTimeUnixMs] = createSignal(Date.now());
   const elapsedTimer = window.setInterval(() => setCurrentTimeUnixMs(Date.now()), 1_000);
@@ -1051,14 +1055,36 @@ function ManagedOperationDisclosure(props: Readonly<{
   const terminal = () => ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(props.operation.state);
   const succeeded = () => props.operation.state === 'succeeded';
   const progress = () => managedTransferProgress(props.operation);
-  const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().current / progress().total) * 100)) : 0;
-  const steps = () => managedOperationStages(props.operation, props.deployment);
+  const steps = createMemo(() => managedOperationStages(props.operation, props.deployment));
   const elapsed = () => formatManagedElapsed(
     props.operation.created_at_unix_ms ?? props.operation.progress_detail?.stage_started_at_unix_ms,
     terminal() ? props.operation.finished_at_unix_ms ?? props.operation.updated_at_unix_ms ?? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs(),
   );
   const commands = () => props.operation.progress_detail?.commands ?? [];
   const output = () => props.operation.progress_detail?.output ?? [];
+  const transcript = createMemo(() => {
+    const entries = new Map<string, { command?: NonNullable<NonNullable<ManagedOperation['progress_detail']>['commands']>[number]; line?: NonNullable<NonNullable<ManagedOperation['progress_detail']>['output']>[number] }>();
+    const remaining = new Map(commands().map(command => [command.command_id, command]));
+    // Insert each command before its first line; retain canonical output order,
+    // including interleaved output from concurrent commands.
+    for (const line of output()) {
+      const command = remaining.get(line.command_id);
+      if (command) { entries.set('command:' + command.command_id, { command }); remaining.delete(command.command_id); }
+      entries.set('output:' + line.sequence, { line });
+    }
+    for (const command of remaining.values()) entries.set('command:' + command.command_id, { command });
+    return entries;
+  });
+  const transcriptIDs = createMemo(() => [...transcript().keys()]);
+  createEffect(on(() => [props.operation.stage, props.expanded] as const, () => {
+    const frame = window.requestAnimationFrame(() => {
+      const active = timeline?.querySelector<HTMLElement>('[aria-current="step"]');
+      if (!timeline || !active || timeline.scrollWidth <= timeline.clientWidth) return;
+      const rail = timeline.getBoundingClientRect(), step = active.getBoundingClientRect();
+      if (step.left < rail.left || step.right > rail.right) timeline.scrollLeft += step.left - rail.left - (rail.width - step.width) / 2;
+    });
+    onCleanup(() => window.cancelAnimationFrame(frame));
+  }));
   const lastOutputSequence = () => output()[output().length - 1]?.sequence ?? 0;
   createEffect(on(() => [props.expanded, lastOutputSequence()] as const, ([expanded]) => {
     if (!expanded || !followOutput || !outputViewport) return;
@@ -1070,14 +1096,8 @@ function ManagedOperationDisclosure(props: Readonly<{
   const detailsID = () => `managed-operation-details-${disclosureID}`;
   return (
     <div
-      class={cn(
-        'service-operation grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-[220ms] ease-out motion-reduce:transform-none motion-reduce:transition-none',
-        props.presentationPhase === 'exiting'
-          ? 'grid-rows-[0fr] -translate-y-1 opacity-0'
-          : 'grid-rows-[1fr] translate-y-0 opacity-100 animate-in fade-in slide-in-from-top-1 duration-200 motion-reduce:animate-none',
-      )}
-      role="status"
-      aria-live="polite"
+      ref={props.onElement}
+      class="service-operation"
       aria-hidden={props.presentationPhase === 'exiting' || undefined}
       data-testid="managed-operation-disclosure"
       data-presentation-state={props.presentationPhase}
@@ -1123,61 +1143,69 @@ function ManagedOperationDisclosure(props: Readonly<{
         </Show>
         <Show when={props.detailsOnly || (!props.drawer && props.expanded)}>
         <div id={detailsID()} class="service-operation-details" data-testid="managed-service-operation-details">
-          <ol class="service-operation-timeline">
+          <ol ref={timeline} class="service-operation-timeline" aria-label={managedActionLabel(props.operation.action, i18n)} {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}>
             <For each={steps()}>{(stage, index) => {
               const state = () => managedOperationStepState(props.operation, steps(), index());
-              return <li class="flex items-center gap-2 text-xs" data-managed-operation-step data-state={state()}><span data-state={state()} class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] data-[state=complete]:border-success data-[state=complete]:bg-success/10 data-[state=complete]:text-success data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=failed]:border-destructive data-[state=failed]:bg-destructive/10 data-[state=failed]:text-destructive">{state() === 'complete' ? <Check class="h-3 w-3" aria-hidden="true" /> : index() + 1}</span><span class={state() === 'pending' ? 'text-muted-foreground' : 'font-medium text-foreground'}>{managedStageLabel(stage, i18n)}</span></li>;
+              return <li data-managed-operation-step data-state={state()} aria-current={state() === 'active' ? 'step' : undefined}>
+                <span class="service-operation-step-mark" aria-hidden="true">
+                  <Show when={state() === 'complete'} fallback={<Show when={state() === 'failed'} fallback={<span class="service-operation-step-dot" />}><AlertTriangle class="h-3 w-3" /></Show>}><Check class="h-3 w-3" /></Show>
+                </span>
+                <span>{managedStageLabel(stage, i18n)}</span>
+              </li>;
             }}</For>
           </ol>
-          <div class="min-w-0 rounded-lg border border-border/70 bg-background/70 p-3" data-testid="managed-operation-stage-detail" data-stage={props.operation.stage}>
-            <h4 class="mb-3 text-xs font-semibold text-foreground">{managedStageLabel(props.operation.stage, i18n)}</h4>
-            <Show when={transfer()} keyed>{(item) => (
-              <div>
-                <div class="flex min-w-0 items-start gap-2"><div class="min-w-0 flex-1"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t(hostTransfer() ? 'webServices.managed.softwarePackage' : 'webServices.managed.containerImage')}</div><div class="mt-1 truncate font-mono text-xs text-foreground" title={item.artifact_reference}>{item.artifact_reference || '—'}</div></div><Show when={(item.artifact_total ?? 0) > 1}><Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.managed.operationImageSequence', { current: item.artifact_index ?? 0, total: item.artifact_total ?? 0 })}</Tag></Show></div>
-                <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={i18n.t('webServices.managed.operationTransferProgress')} aria-valuemin="0" aria-valuemax={progress().total || undefined} aria-valuenow={progress().total ? Math.min(progress().current, progress().total) : undefined} data-indeterminate={progress().total === 0 ? 'true' : undefined}><div class={cn('h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none', progress().total === 0 && 'w-1/3 animate-pulse motion-reduce:animate-none')} style={progress().total ? { width: `${percent()}%` } : undefined} /></div>
-                <dl class={cn('mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs', hostTransfer() ? 'sm:grid-cols-3' : 'sm:grid-cols-4')}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationDownloaded')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_bytes ?? 0) > 0 ? `${formatManagedBytes(item.downloaded_bytes)} / ${formatManagedBytes(item.total_bytes)}` : item.phase === 'cached' ? formatManagedBytes(0) : '—'}</dd></div><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationSpeed')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.bytes_per_second ?? 0) > 0 || item.phase === 'cached' ? `${formatManagedBytes(item.bytes_per_second)}/s` : '—'}</dd></div><Show when={!hostTransfer()}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationLayers')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_layers ?? 0) > 0 ? `${item.completed_layers ?? 0} / ${item.total_layers}` : '—'}</dd></div></Show><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}</dt><dd class="mt-0.5 font-medium text-foreground" data-testid="managed-operation-elapsed">{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, terminal() ? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs())}</dd></div></dl>
+          <div class="service-operation-stage" data-testid="managed-operation-stage-detail" data-stage={props.operation.stage}>
+            <div class="service-operation-stage-title">
+              <div class="service-operation-stage-identity"><span class="service-operation-live-mark" data-state={props.operation.state} aria-hidden="true" /><h4 class="service-operation-stage-heading"><StableText reserve={steps().map(stage => managedStageLabel(stage, i18n))}>{managedStageLabel(props.operation.stage, i18n)}</StableText></h4></div>
+              <span class="service-operation-elapsed" title={i18n.t('webServices.managed.operationElapsed')} data-testid="managed-operation-elapsed"><Clock class="h-3 w-3" aria-hidden="true" />{elapsed()}</span>
+            </div>
+            <Show when={transfer()}>{(item) => (
+              <div class="service-operation-transfer">
+                <div class="service-operation-artifact"><span class="sr-only">{i18n.t(hostTransfer() ? 'webServices.managed.softwarePackage' : 'webServices.managed.containerImage')}</span><Package class="service-operation-artifact-icon" aria-hidden="true" /><code title={item().artifact_reference}>{item().artifact_reference || '—'}</code><Show when={(item().artifact_total ?? 0) > 1}><span class="service-operation-artifact-sequence">{i18n.t('webServices.managed.operationImageSequence', { current: item().artifact_index ?? 0, total: item().artifact_total ?? 0 })}</span></Show></div>
+                <div class="service-operation-transfer-progress" role="group" aria-label={i18n.t('webServices.managed.operationTransferProgress')}>
+                  <LinearProgress value={progress().current} max={progress().total || 100} indeterminate={progress().total === 0 && !terminal()} size="sm" />
+                </div>
+                <dl class="service-operation-transfer-facts">
+                  <div><dt>{i18n.t('webServices.managed.operationDownloaded')}</dt><dd>{(item().total_bytes ?? 0) > 0 ? formatManagedBytes(item().downloaded_bytes) + ' / ' + formatManagedBytes(item().total_bytes) : item().phase === 'cached' ? formatManagedBytes(0) : '—'}</dd></div>
+                  <div><dt>{i18n.t('webServices.managed.operationSpeed')}</dt><dd>{(item().bytes_per_second ?? 0) > 0 || item().phase === 'cached' ? formatManagedBytes(item().bytes_per_second) + '/s' : '—'}</dd></div>
+                  <Show when={!hostTransfer()}><div><dt>{i18n.t('webServices.managed.operationLayers')}</dt><dd>{(item().total_layers ?? 0) > 0 ? (item().completed_layers ?? 0) + ' / ' + (item().total_layers ?? 0) : '—'}</dd></div></Show>
+                </dl>
               </div>
             )}</Show>
-            <Show when={commands().length > 0 || output().length > 0}>
-              <details class={cn('service-operation-output-disclosure', transfer() && 'mt-4 border-t border-border/60 pt-4')} data-testid="managed-operation-command-output">
-                <summary class="service-operation-output-heading">
-                  <span>{i18n.t('webServices.managed.operationCommandOutput')}</span><ChevronDown class="h-3 w-3" aria-hidden="true" />
-                </summary>
-                <Show when={props.operation.progress_detail?.output_truncated}><p class="text-[11px] text-warning">{i18n.t('webServices.managed.operationOutputTruncated')}</p></Show>
-                <div class="mt-2 space-y-1.5">
-                  <For each={commands()}>{(command) => (
-                    <div class="flex min-w-0 items-center gap-2 text-[10px]">
-                      <code class="min-w-0 flex-1 truncate text-foreground" title={command.display}>{command.display}</code>
-                      <span class="shrink-0 text-muted-foreground">{i18n.t(`webServices.managed.operationCommandState.${command.state}` as EnvAppTranslationKey)}</span>
-                    </div>
-                  )}</For>
-                </div>
-                <div
-                  {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-                  ref={outputViewport}
-                  class="mt-2 max-h-52 min-h-16 overflow-y-auto overscroll-contain rounded-md bg-muted/35 px-2.5 py-2 font-mono text-[10px] leading-4 [scrollbar-gutter:stable]"
-                  role="log"
-                  aria-label={i18n.t('webServices.managed.operationOutput')}
-                  data-testid="managed-operation-output"
-                  onScroll={() => {
-                    if (!outputViewport) return;
-                    followOutput = outputViewport.scrollHeight - outputViewport.scrollTop - outputViewport.clientHeight <= 24;
-                  }}
-                >
-                  <For each={output()} fallback={<div class="text-muted-foreground">{i18n.t('webServices.managed.operationNoOutput')}</div>}>{(line) => (
-                    <div class={cn('whitespace-pre-wrap break-all text-foreground/85', line.stream === 'stderr' && 'text-warning')} data-sequence={line.sequence}>
-                      <span class="sr-only">{i18n.t(`webServices.managed.operationStream.${line.stream}` as EnvAppTranslationKey)}: </span>{line.text}
-                    </div>
-                  )}</For>
-                </div>
-              </details>
-            </Show>
-            <Show when={!transfer() && commands().length === 0 && output().length === 0 && (!terminal() || succeeded())}>
-              <div class="space-y-3">
-                <p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.operationPreparingDetails')}</p>
-                <dl class="text-xs"><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}</dt><dd class="mt-0.5 font-medium text-foreground" data-testid="managed-operation-elapsed">{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, terminal() ? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs())}</dd></div></dl>
+            <section class="service-operation-console" data-testid="managed-operation-command-output">
+              <div class="service-operation-console-bar"><h5><Terminal class="h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.operationCommandOutput')}</h5><Show when={props.operation.progress_detail?.output_truncated}><span class="service-operation-truncated">{i18n.t('webServices.managed.operationOutputTruncated')}</span></Show></div>
+              <div
+                {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+                ref={outputViewport}
+                class="service-operation-output"
+                tabindex="0"
+                role="log"
+                aria-label={i18n.t('webServices.managed.operationOutput')}
+                data-testid="managed-operation-output"
+                onScroll={() => {
+                  if (!outputViewport) return;
+                  followOutput = outputViewport.scrollHeight - outputViewport.scrollTop - outputViewport.clientHeight <= 24;
+                }}
+              >
+                <For each={transcriptIDs()}>{id => {
+                  const command = () => transcript().get(id)?.command;
+                  const line = () => transcript().get(id)?.line;
+                  return <>
+                    <Show when={command()}>{item => <div class="service-operation-command" data-state={item().state}>
+                      <span class="service-operation-command-prompt" aria-hidden="true">$</span><code>{item().display}</code>
+                      <span class="service-operation-command-status" title={i18n.t('webServices.managed.operationCommandState.' + item().state as EnvAppTranslationKey)}>
+                        <span class="sr-only">{i18n.t('webServices.managed.operationCommandState.' + item().state as EnvAppTranslationKey)}</span>
+                        <Show when={item().state === 'running'} fallback={<Show when={item().state === 'succeeded'} fallback={<AlertTriangle class="h-3 w-3" aria-hidden="true" />}><Check class="h-3 w-3" aria-hidden="true" /></Show>}><ManagedOperationSpinner /></Show>
+                      </span>
+                    </div>}</Show>
+                    <Show when={line()}>{item => <div class="service-operation-output-line" data-stream={item().stream} data-sequence={item().sequence}>
+                      <span class="sr-only">{i18n.t('webServices.managed.operationStream.' + item().stream as EnvAppTranslationKey)}: </span>{item().text}
+                    </div>}</Show>
+                  </>;
+                }}</For>
+                <Show when={output().length === 0}><div class="service-operation-output-empty">{i18n.t('webServices.managed.operationNoOutput')}</div></Show>
               </div>
-            </Show>
+            </section>
           </div>
         </div>
         </Show>
@@ -1577,6 +1605,11 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
   const i18n = useI18n();
   const presentation = () => managedServicePresentation(props.service, i18n);
   const operation = () => props.operation ?? null;
+  let operationElement: HTMLDivElement | undefined;
+  const operationPresence = createFloatingPresence({
+    open: () => props.operationExpanded && Boolean(operation()),
+    element: () => operationElement,
+  });
   const activeOperation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
   const statusLabel = createMemo(() => {
     const current = activeOperation();
@@ -1602,7 +1635,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
   });
   const operationFailed = () => operation()?.state === 'failed' || operation()?.state === 'interrupted';
   const primaryCapability = (): ManagedActionCapability => primaryAction() === 'inspect' || primaryAction() === 'recover' ? props.service.actions?.inspect ?? { available: true } : actionCapability(primaryAction() as ManagedAction);
-  const openAvailable = () => Boolean(props.service.actions?.open?.available) && props.canOpen;
+  const openAvailable = () => !activeOperation() && Boolean(props.service.actions?.open?.available) && props.canOpen;
   const startIsPrimary = () => !archived() && !openAvailable() && primaryAction() === 'start' && primaryCapability().available && props.canManage;
   const executePrimary = () => { const action = primaryAction(); if (action === 'start' || action === 'stop') props.onAction(action); else props.onInspect?.(); };
   const actionLabel = (action: ManagedAction): string => {
@@ -1702,7 +1735,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
         <div class={serviceRowActionsClass} data-archived={archived() || undefined} data-testid="managed-service-actions">
           <Show when={!archived()}><ServiceOpenButton busy={props.busy} busyText={props.busyText}
             canOpen={openAvailable()}
-            reason={!props.canOpen ? props.openUnavailableReason : !props.service.actions?.open?.available
+            reason={activeOperation() ? managedOperationActivityLabel(activeOperation()!, i18n) : !props.canOpen ? props.openUnavailableReason : !props.service.actions?.open?.available
               ? startIsPrimary() ? i18n.t('webServices.managed.openUnavailableStartRequired') : managedActionUnavailableReason(props.service.actions?.open ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' }, i18n)
               : props.openUnavailableReason}
             onOpen={props.onOpen} /></Show>
@@ -1739,12 +1772,13 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
           <div><For each={notices()}>{(message) => <p>{message}</p>}</For></div>
         </div></div>
       </div>
-      <Show when={props.operationExpanded && operation()}>{(activeOperation) => (
+      <Show when={operationPresence.mounted() && operation()}>{(activeOperation) => (
         <ManagedOperationDisclosure
+          onElement={(element) => { operationElement = element; }}
           operation={activeOperation()}
-          presentationPhase={props.operationPhase ?? 'visible'}
+          presentationPhase={operationPresence.exiting() ? 'exiting' : props.operationPhase ?? 'visible'}
           deployment={props.service.deployment}
-          expanded={props.operationExpanded}
+          expanded
           canCancel={props.canManage}
           onExpandedChange={(expanded) => props.onOperationExpandedChange(activeOperation().operation_id, expanded)}
           onCancel={() => props.onCancelOperation?.()}

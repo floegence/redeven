@@ -905,7 +905,7 @@ describe('web service metadata and template validation', () => {
     try {
       host.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')?.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
-      expect(controlText(details)).toContain('No byte transfer details are available for this stage.');
+      expect(controlText(details)).toContain('No output yet.');
       expect(controlText(details)).toContain('3s');
       await vi.advanceTimersByTimeAsync(2_000);
       expect(controlText(details)).toContain('5s');
@@ -2473,7 +2473,7 @@ describe('EnvPortForwardsPage', () => {
       const firstRow = rows.find((row) => row.dataset.managedServiceId === 'mws-one')!;
       firstRow.querySelector<HTMLButtonElement>('.web-service-status-trigger[aria-expanded]')?.click();
       expect(controlText(firstRow.querySelector('[data-testid="managed-operation-stage-detail"]'))).toContain('example-service');
-      expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('data-indeterminate')).toBe('true');
+      expect(firstRow.querySelector('[role="progressbar"] .animate-indeterminate')).toBeTruthy();
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBeNull();
       expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('.web-service-status-trigger[aria-expanded]')).toBeNull();
       expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-one/events'), expect.objectContaining({ method: 'GET' }));

@@ -979,7 +979,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(stageDetail.textContent).toContain('2.00 KB / 5.00 KB');
     expect(stageDetail.dataset.stage).toBe('pulling');
     expect(stageDetail.querySelector('[role="progressbar"]')).toBeTruthy();
-    expect(stageDetail.querySelector('[data-testid="managed-operation-command-output"]')).toBeNull();
+    expect(stageDetail.querySelector('[data-testid="managed-operation-command-output"]')).toBeTruthy();
+    expect(stageDetail.querySelector('[data-testid="managed-operation-output"]')?.textContent).toContain('No output yet.');
     expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
     expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
     expect(details.closest('[role="dialog"]')).toBeNull();
@@ -1070,6 +1071,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(commandOutput.parentElement).toBe(stageDetail);
     expect(commandOutput.getBoundingClientRect().left).toBeGreaterThanOrEqual(stageDetail.getBoundingClientRect().left);
     expect(commandOutput.getBoundingClientRect().right).toBeLessThanOrEqual(stageDetail.getBoundingClientRect().right);
+    expect(commandOutput.tagName).not.toBe('DETAILS');
+    expect(output.clientHeight).toBeGreaterThan(64);
     expect(output.scrollHeight).toBeGreaterThan(output.clientHeight);
     expect(output.scrollHeight - output.scrollTop - output.clientHeight).toBeLessThanOrEqual(2);
     expect(host.querySelector('[data-testid="managed-operation-command-output"]')?.textContent).toContain('<managed-node> <managed-npm-cli> install package@1.0.0');

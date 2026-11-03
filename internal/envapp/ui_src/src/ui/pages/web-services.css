@@ -146,3 +146,7 @@
 .web-service-operation-state { display: grid; min-width: 0; width: 100%; gap: 1px; line-height: 16px; }
 .web-service-operation-state .web-service-state { line-height: 16px; }
 .web-service-operation-stage { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-start: 20px; font-size: 11px; color: var(--muted-foreground); }
+
+.web-service-open-control { display: inline-flex; border-radius: var(--floe-radius-control); }
+.web-service-open-control:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.web-service-open-control > button:disabled { pointer-events: none; }
