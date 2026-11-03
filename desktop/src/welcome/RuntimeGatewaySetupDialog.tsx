@@ -2,6 +2,7 @@ import { type DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { Button, Dialog, Dropdown } from '@floegence/floe-webapp-core/ui';
+import { ChevronDown } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopI18n } from '../shared/i18n';
@@ -39,6 +40,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   const [requiredPreparation, setRequiredPreparation] = createSignal<'start' | 'restart' | 'update'>();
   let generation = 0;
   const environmentID = createMemo(() => props.environment?.id ?? '');
+  const managedEnvironments = createMemo(() => (props.environments ?? []).filter(environment => !!runtimeGatewayAccessPresentation(environment)));
   const available = createMemo(() => props.available !== false);
   const managementCoordinates = createMemo(() => {
     const environment = props.environment;
@@ -165,21 +167,21 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
     }</Show>;
   return <Dialog open={(props.open ?? !!props.environment) && !props.suspended && !props.covered} onPresenceChange={props.onPresenceChange} onOpenChange={value => { if (!value) (props.suspend ?? props.close)(); }} title={props.i18n.t('gatewayJoin.title')}
     closeLabel={props.i18n.t('common.close')}
-    class="redeven-gateway-dialog redeven-gateway-join-dialog redeven-gateway-wizard-dialog" contentClass="redeven-gateway-join-content">
+    class={`redeven-gateway-dialog redeven-gateway-join-dialog${props.environment ? ' redeven-gateway-wizard-dialog' : ''}`}
+    contentClass={props.environment ? 'redeven-gateway-join-content' : 'redeven-gateway-dialog__content'}>
     <Show when={!props.environment}>
       <div class="redeven-gateway-settings-section" data-gateway-environment-choice>
-        <p class="redeven-gateway-help">{props.i18n.t('gatewayExperience.chooseEnvironmentHelp')}</p>
-        <Dropdown triggerInputSurface triggerAriaLabel={props.i18n.t('gatewayMembers.chooseRuntime')}
-          trigger={props.i18n.t('gatewayMembers.chooseRuntime')}
-          items={() => (props.environments ?? []).filter(environment => !!runtimeGatewayAccessPresentation(environment)).map(environment => ({
-            id: environment.id, label: environment.label,
-            description: props.i18n.t(environment.runtime_connection_target?.runtime_running ? 'gatewayMembers.connected' : 'gatewayJoin.startAndContinue'),
-          }))}
-          onSelect={id => props.selectEnvironment?.(id)} />
-        <Show when={!(props.environments ?? []).some(environment => !!runtimeGatewayAccessPresentation(environment))}>
-          <p role="status" class="redeven-gateway-help">{props.i18n.t('gatewayExperience.noManagedEnvironments')}</p>
+        <Show when={managedEnvironments().length} fallback={<p role="status" class="redeven-gateway-help">{props.i18n.t('gatewayExperience.noManagedEnvironments')}</p>}>
+          <Dropdown class="redeven-gateway-saved-picker" triggerClass="redeven-gateway-picker-trigger"
+            triggerInputSurface triggerAriaLabel={props.i18n.t('gatewayMembers.chooseRuntime')}
+            trigger={<><span>{props.i18n.t('gatewayMembers.chooseRuntime')}</span><ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /></>}
+            items={() => managedEnvironments().map(environment => ({
+              id: environment.id, label: environment.label,
+              description: props.i18n.t(environment.runtime_connection_target?.runtime_running ? 'gatewayMembers.connected' : 'gatewayJoin.startAndContinue'),
+            }))}
+            onSelect={id => props.selectEnvironment?.(id)} />
         </Show>
-        <Button variant="ghost" onClick={props.close}>{props.i18n.t('common.cancel')}</Button>
+        <div class="redeven-gateway-dialog-actions"><Button variant="ghost" onClick={props.close}>{props.i18n.t('common.cancel')}</Button></div>
       </div>
     </Show>
     {enrollment}

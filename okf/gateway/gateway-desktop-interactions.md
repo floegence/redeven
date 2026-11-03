@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Gateway Desktop interactions
 tags: [gateway, desktop, interaction, validation]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -17,6 +17,8 @@ Desktop IPC, progress, session targets and shared Center presentation use connec
 Generic Runtime management uses DesktopRuntimeTargetID and the Runtime placement owner. The single runtime_connection_target projection carries Runtime management facts and derived Cloud connection presentation; Gateway access does not depend on Cloud association, Cloud capability or a Cloud-selected route. Cloud association keeps its own state and mutation coordination; Gateway failures use the attachment error domain. Gateway does not own Runtime lifecycle or Cloud identity.
 
 ## Enrollment and authority
+Before selecting a managed environment, enrollment uses a content-sized dialog with padded content, a styled Dropdown field and a trailing Cancel action. Empty lists show the recovery instruction without an inert selector. Only a selected Runtime enters the fixed-height wizard. Onboarding choices grow with wrapped text, including touch layouts; generic touch sizing must not collapse their content.
+
 One app session serves creation and card actions for managed Local, SSH, WSL and container targets. Creation offers Not now or Add Gateway access after setup. Each opening leases the exact sender/target Env App bridge and connects before verification/consent; prior opening is no current proof. Env App closure retains the lease, while cancel, navigation/destruction and authority changes retire it. Admitted writes retain transport until settlement; reject late requests.
 
 Try saved management authentication first, including available SSH/OpenSSH credentials. Passive auth_required or missing saved passwords cannot preempt it. Only a current typed authentication failure exposes focused, Enter-submittable temporary credentials and stops credential-free retries. Distinguish authentication, Gateway and engine failures; unknown status is not rejection. Temporary passwords belong only to scoped status, never verification/consent; do not save preferences. Carry them unchanged through the admitted action/access verification, then clear on completion/failure/closure. Startup observations cannot race clearing or interrupt the action.

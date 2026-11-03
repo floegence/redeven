@@ -8,6 +8,7 @@ import path from 'node:path';
 import electron from 'electron';
 import { _electron } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 import { createDesktopTestSession, bounded } from '../../scripts/desktop_test_session.mjs';
+import { assertGatewayEnvironmentChoiceLayout } from './gateway-environment-choice-layout.mjs';
 
 const desktop = path.resolve(import.meta.dirname, '..');
 const repository = path.dirname(desktop);
@@ -105,6 +106,8 @@ await session.run(async () => {
   await page.getByRole('dialog').getByRole('button', { name: 'Runtimes I manage', exact: true }).click();
   const dialog = page.getByRole('dialog');
   const choice = dialog.locator('[data-gateway-environment-choice] [data-floe-dropdown-trigger]');
+  const environmentChoiceLayout = await assertGatewayEnvironmentChoiceLayout(dialog);
+  await dialog.screenshot({ path: path.join(output, 'environment-choice.png') });
   await choice.click();
   const local = (await snapshot()).environments.find(entry => entry.id === 'local');
   await page.getByRole('menuitem').filter({ hasText: local.label }).click();
@@ -150,6 +153,7 @@ await session.run(async () => {
   assert.equal(joined.environments.length, 1);
   assert.deepEqual(errors, []);
   await page.locator('[data-gateway-management-page]').waitFor();
+  await page.locator('.redeven-gateway-dialog').waitFor({ state: 'detached' });
   await page.locator('[data-gateway-management-page]').screenshot({ path: path.join(output, 'returned-management.png') });
   await page.getByRole('button', { name: 'All Gateways', exact: true }).click();
   await page.screenshot({ path: path.join(output, 'connected.png') });
@@ -184,7 +188,7 @@ await session.run(async () => {
   assert.equal(joined.status, 'online');
   await session.closeElectron(application);
   await session.writeEvidence(path.join(output, 'report.json'), { scenarioStatus: 'passed', runtimeCommit: manifest.commit, gatewayCommit, gatewayVersion,
-    gatewayPIDUnchanged: finalService.pid === started.pid, gatewayBinaryUnchanged: true,
+    gatewayPIDUnchanged: finalService.pid === started.pid, gatewayBinaryUnchanged: true, environmentChoiceLayout,
     cases: ['Existing Gateway stays online across pairing, refresh and Runtime enrollment without update or restart',
       'Both Welcome entry points share one enrollment task; suspend/resume restores the selected Gateway',
     'Actual Desktop main and renderer display a paired Gateway with no advertised addresses',

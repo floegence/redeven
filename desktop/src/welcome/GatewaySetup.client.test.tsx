@@ -336,7 +336,7 @@ describe('Gateway product navigation', () => {
     document.querySelector<HTMLButtonElement>('[data-gateway-management-page] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click();
     await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());
     button('Close').click();
-    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-wizard-dialog')).toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeNull());
     expect([...page.children]).toEqual(content);
     document.querySelector<HTMLButtonElement>('[data-gateway-management-page] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click();
     await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());

@@ -655,8 +655,24 @@ it('lists stopped managed environments from the Gateway entry without opening an
  dispose=render(()=><RuntimeGatewaySetupDialog open gatewayID="saved-gateway" environments={[fixture.environment]} selectEnvironment={choose}
    i18n={i18n} refresh={async()=>true} recover={async()=>({ok:true})} edit={()=>{}} close={()=>{}}/>,root);
  await settle();
+ expect(document.querySelector('.redeven-gateway-wizard-dialog')).toBeNull();
+ expect(document.querySelector('[data-gateway-environment-choice]')?.closest('.redeven-gateway-dialog__content')).not.toBeNull();
+ expect(document.querySelector('[data-gateway-environment-choice] .redeven-gateway-picker-trigger svg')).not.toBeNull();
+ expect(document.querySelector('[data-gateway-environment-choice] .redeven-gateway-dialog-actions')).not.toBeNull();
  document.querySelector<HTMLElement>('[data-gateway-environment-choice] [data-floe-dropdown-trigger]')!.click();await settle();
  const option=[...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element=>element.textContent?.includes(fixture.environment.label));
  expect(option).toBeTruthy();option!.click();await settle();
  expect(choose).toHaveBeenCalledExactlyOnceWith(fixture.environment.id);expect(perform).not.toHaveBeenCalled();
+});
+
+it('keeps an empty Gateway environment choice compact and dismissible', async () => {
+ const close=vi.fn();
+ const root=document.createElement('div');document.body.append(root);
+ dispose=render(()=><RuntimeGatewaySetupDialog open environments={[]} i18n={i18n}
+   refresh={async()=>true} recover={async()=>({ok:true})} edit={()=>{}} close={close}/>,root);
+ await settle();
+ expect(document.querySelector('.redeven-gateway-wizard-dialog')).toBeNull();
+ expect(document.querySelector('[data-gateway-environment-choice] [data-floe-dropdown-trigger]')).toBeNull();
+ expect(document.querySelector('[data-gateway-environment-choice] [role="status"]')?.textContent).toBe(i18n.t('gatewayExperience.noManagedEnvironments'));
+ button('common.cancel').click();await settle();expect(close).toHaveBeenCalledOnce();
 });

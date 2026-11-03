@@ -4732,6 +4732,6 @@ pre,
 
 /* Gateway tasks retain the established Welcome shell and dialog geometry. */
 .redeven-gateway-onboarding-choices { display: grid; gap: 1rem; padding: .5rem 0; }
-.redeven-gateway-onboarding-choices > button { min-height: 5rem; justify-content: flex-start; text-align: left; white-space: normal; }
+.redeven-gateway-onboarding-choices > [data-floe-control='button'] { height: auto; min-height: 5rem; min-width: 0; padding: 1rem; justify-content: flex-start; text-align: left; white-space: normal; }
 .redeven-gateway-onboarding-choices strong { display: block; margin-bottom: .375rem; }
 .redeven-gateway-cloud-embedded { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }

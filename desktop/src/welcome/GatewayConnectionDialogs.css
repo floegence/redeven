@@ -802,6 +802,10 @@
 }
 
 @media (pointer: coarse) {
+  [data-gateway-environment-choice] .redeven-gateway-picker-trigger {
+    min-height: 2.75rem;
+  }
+
   .redeven-gateway-wizard-dialog .redeven-gateway-join-section input {
     height: 2.75rem;
     font-size: max(16px, 1rem);
