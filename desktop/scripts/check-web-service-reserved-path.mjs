@@ -26,6 +26,6 @@ await session.run(async () => {
   const result = await session.wait(child, 120000);
   if (result.code !== 0 || result.signal) throw new Error('Reserved path qualification failed: ' + JSON.stringify(result));
   const report = JSON.parse(await readFile(path.join(output, 'report.json'), 'utf8'));
-  if (report.scenarioStatus !== 'passed' || report.cases.length < 40 || !report.actions || !report.ordinary404) throw new Error('Incomplete reserved path qualification');
+  if (report.scenarioStatus !== 'passed' || report.cases.length < 40 || !report.actions || !report.disclosure || !report.keyboard || !report.ordinary404 || !report.redirect) throw new Error('Incomplete reserved path qualification');
   await session.writeEvidence(path.join(output, 'report.json'), report);
 });

@@ -66,6 +66,15 @@ void app.whenReady().then(async () => {
     view.webContents.debugger.detach();
     await paint();
   };
+  const disclosure = async () => view.webContents.executeJavaScript('(() => { const details = document.querySelector("details"), main = document.querySelector("main"); return { open: details.open, summary: details.querySelector("summary").textContent, reasonVisible: details.querySelector("p").checkVisibility(), addressVisible: details.querySelector("code").checkVisibility(), copyVisible: document.getElementById("copy-address").checkVisibility(), editVisible: document.getElementById("edit-address").checkVisibility(), overflow: main.scrollWidth > main.clientWidth }; })()');
+  const toggleWithKeyboard = async () => {
+    view.webContents.debugger.attach('1.3');
+    await view.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await view.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'char', text: '\r', unmodifiedText: '\r', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await view.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    view.webContents.debugger.detach();
+    await paint();
+  };
   try {
     for (const [name, preset] of Object.entries(desktopShellThemeCatalog)) {
       theme = { source: preset.mode, resolvedTheme: preset.mode, shellThemes: { version: 1, light: 'classic-light', dark: 'classic-dark' }, activeShellTheme: name, window: desktopWindowThemeSnapshotForShellTheme(name), semantic: desktopSemanticPaletteForShellTheme(name) };
@@ -79,8 +88,22 @@ void app.whenReady().then(async () => {
           const state = await view.webContents.executeJavaScript('(() => { const main = document.querySelector("main"), h = document.querySelector("h1"); return { overflow: main.scrollWidth > main.clientWidth, title: h.textContent, top: h.getBoundingClientRect().top, scripts: document.scripts.length, actions: document.querySelectorAll("a").length, address: document.querySelector("code").textContent, retry: !!document.getElementById("retry"), bridges: Object.keys(window).filter(k => k.startsWith("redevenDesktop")), buttonHeight: document.querySelector("a").getBoundingClientRect().height }; })()');
           assert.equal(state.overflow, false); assert.ok(state.top >= 0); assert.equal(state.title, i18n.t('webServiceBrowser.reservedPathTitle'));
           assert.equal(state.address, address); assert.equal(state.scripts, 0); assert.equal(state.actions, 2); assert.equal(state.retry, false); assert.deepEqual(state.bridges, []); assert.ok(state.buttonHeight >= 40);
+          const collapsed = await disclosure();
+          assert.equal(collapsed.open, false); assert.equal(collapsed.reasonVisible, false); assert.equal(collapsed.addressVisible, false); assert.equal(collapsed.copyVisible, false); assert.equal(collapsed.editVisible, true);
+          assert.equal(collapsed.summary, i18n.t('webServiceBrowser.viewDetails'));
           if (locale === 'zh-CN' && ['classic-light', 'classic-dark'].includes(name)) await writeFile(path.join(output, name + '-' + width + '.png'), (await view.webContents.capturePage()).toPNG());
-          cases.push({ name, locale, width, state });
+          await click('view-details');
+          const expanded = await disclosure();
+          assert.equal(expanded.open, true); assert.equal(expanded.reasonVisible, true); assert.equal(expanded.addressVisible, true); assert.equal(expanded.copyVisible, true); assert.equal(expanded.editVisible, true); assert.equal(expanded.overflow, false);
+          if (cases.length === 0) {
+            assert.equal(await view.webContents.executeJavaScript('document.activeElement.id'), 'view-details');
+            await toggleWithKeyboard();
+            assert.equal((await disclosure()).open, false, 'Enter collapses the focused disclosure');
+            await toggleWithKeyboard();
+            assert.equal((await disclosure()).open, true, 'Enter expands the focused disclosure');
+          }
+          if (locale === 'zh-CN' && ['classic-light', 'classic-dark'].includes(name)) await writeFile(path.join(output, name + '-' + width + '-expanded.png'), (await view.webContents.capturePage()).toPNG());
+          cases.push({ name, locale, width, state, collapsed, expanded });
         }
       }
     }
@@ -88,6 +111,8 @@ void app.whenReady().then(async () => {
     assert.equal(copied, address);
     await copyFeedback;
     assert.notEqual(await view.webContents.executeJavaScript('getComputedStyle(document.querySelector(".copied-label")).display'), 'none');
+    await click('view-details');
+    assert.equal((await disclosure()).copyVisible, false);
     await click('edit-address');
     await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
     const focus = await window.webContents.executeJavaScript('(() => { const input = document.getElementById("browser-address"); return { focus: document.activeElement === input, value: input.value, start: input.selectionStart, end: input.selectionEnd }; })()');
@@ -102,8 +127,8 @@ void app.whenReady().then(async () => {
     void ready.catch(() => {});
     await view.webContents.loadURL(origin + '/').catch((error: Error) => { if (!error.message.includes('ERR_ABORTED') && !error.message.includes('ERR_BLOCKED_BY_CLIENT')) throw error; });
     await ready; assert.equal(rejected, 1);
-    await writeFile(path.join(output, 'report.json'), JSON.stringify({ scenarioStatus: 'passed', electron: process.versions.electron, actions: true, ordinary404: true, redirect: true, cases }, null, 2));
-    console.log('Reserved path: ' + cases.length + ' theme/locale/viewport cases, native actions, redirect and application 404 passed');
+    await writeFile(path.join(output, 'report.json'), JSON.stringify({ scenarioStatus: 'passed', electron: process.versions.electron, actions: true, disclosure: true, keyboard: true, ordinary404: true, redirect: true, cases }, null, 2));
+    console.log('Reserved path: ' + cases.length + ' theme/locale/viewport cases, collapsed and expanded disclosure, keyboard, native actions, redirect and application 404 passed');
   } finally {
     view.webContents.close(); window.destroy(); await new Promise<void>(resolve => server.close(() => resolve()));
   }

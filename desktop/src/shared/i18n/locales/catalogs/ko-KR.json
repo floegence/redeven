@@ -1887,7 +1887,8 @@
     "retrying": "다시 연결하는 중…"
   },
   "webServiceBrowser": {
-    "reservedPathTitle": "Web Service에서 이 페이지를 열 수 없습니다",
+    "reservedPathTitle": "지원하지 않는 페이지입니다",
+    "viewDetails": "자세히 보기",
     "reservedPathSummary": "이 주소는 Redeven의 예약 경로를 사용합니다. Redeven에 접속하려면 해당 환경을 여세요.",
     "editAddress": "주소 수정",
     "copyAddress": "주소 복사",

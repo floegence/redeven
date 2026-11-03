@@ -22,7 +22,15 @@ describe('reserved-path explanation', () => {
     expect(html).not.toContain('<script');
     expect(html).not.toContain('id="retry"');
     expect(html).not.toContain('href="http://localhost');
-    expect(html).not.toContain('<details');
+    const details = html.match(/<details\b[^>]*>[\s\S]*?<\/details>/)?.[0];
+    expect(details).toBeDefined();
+    expect(details).toContain('<details class="floe-window-status__details">');
+    expect(details).toContain(i18n.t('webServiceBrowser.viewDetails'));
+    expect(details).toContain(i18n.t('webServiceBrowser.reservedPathSummary'));
+    expect(details).toContain('<code>http://localhost:23999/');
+    expect(details).toContain('id="copy-address"');
+    expect(details).not.toContain('id="edit-address"');
+    expect(details).not.toContain('<h1');
   });
 
   it('accepts only exact actions from the current host document', () => {

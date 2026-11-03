@@ -1887,7 +1887,8 @@
     "retrying": "Volviendo a conectar…"
   },
   "webServiceBrowser": {
-    "reservedPathTitle": "Esta página no se puede abrir en Web Service",
+    "reservedPathTitle": "Página no compatible",
+    "viewDetails": "Ver detalles",
     "reservedPathSummary": "Esta dirección utiliza una ruta reservada de Redeven. Para acceder a Redeven, abre el entorno correspondiente.",
     "editAddress": "Editar dirección",
     "copyAddress": "Copiar dirección",

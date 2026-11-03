@@ -45,12 +45,17 @@ export function buildWebServiceReservedPathDocumentURL(
     <section class="floe-window-status__content" aria-labelledby="window-title">
       ${windowStatusIllustrationSvg('service')}
       <h1 id="window-title" class="floe-window-status__title">${title}</h1>
-      <p class="floe-window-status__description">${escapeHTML(i18n.t('webServiceBrowser.reservedPathSummary'))}</p>
-      <div class="floe-window-status__activity"><code>${escapeHTML(address)}</code></div>
       <div class="floe-window-status__actions">
         <a id="edit-address" class="floe-window-status__button" href="${intentBase}edit-address">${escapeHTML(i18n.t('webServiceBrowser.editAddress'))}</a>
-        <a id="copy-address" class="floe-window-status__button" data-variant="secondary" href="${intentBase}copy-address"><span aria-live="polite"><span class="copy-label">${escapeHTML(i18n.t('webServiceBrowser.copyAddress'))}</span><span class="copied-label">${escapeHTML(i18n.t('webServiceBrowser.addressCopied'))}</span></span></a>
       </div>
+      <details class="floe-window-status__details">
+        <summary id="view-details">${escapeHTML(i18n.t('webServiceBrowser.viewDetails'))}</summary>
+        <p>${escapeHTML(i18n.t('webServiceBrowser.reservedPathSummary'))}</p>
+        <p><code>${escapeHTML(address)}</code></p>
+        <div class="floe-window-status__actions">
+          <a id="copy-address" class="floe-window-status__button" data-variant="secondary" href="${intentBase}copy-address"><span aria-live="polite"><span class="copy-label">${escapeHTML(i18n.t('webServiceBrowser.copyAddress'))}</span><span class="copied-label">${escapeHTML(i18n.t('webServiceBrowser.addressCopied'))}</span></span></a>
+        </div>
+      </details>
     </section>
   </main>
 </body>

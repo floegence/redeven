@@ -18,9 +18,10 @@ When the trusted Desktop Shell bridge is present, Env App requests a semantic We
 A Runtime-rejected reserved path keeps HTTP 404 and carries
 `X-Redeven-Proxy-Error: port-forward-reserved-path`. The browser presentation
 replaces only a marked main-document response with a localized, scriptless
-explanation using published Floe window-status assets. It displays the original
-service address with its current path, query and fragment, offers Edit address
-and Copy address, and does not suggest retries or direct access. Edit focuses
+explanation using published Floe window-status assets. The initial view shows a
+short title and Edit address. A native, initially collapsed View details disclosure
+reveals the reason, original service address with its current path, query and
+fragment, and Copy address. It does not suggest retries or direct access. Edit focuses
 and selects the existing toolbar draft; Copy uses the host-projected address
 and acknowledges completion in place. Only the exact current host document can
 request these actions. Theme/language refresh retains the explanation; navigating
@@ -53,4 +54,4 @@ System-browser authorization and the persisted access-mode decision remain owned
 
 - `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - Protected Forward redirects stay in the same route identity.
 
-- `redeven:desktop/scripts/check-web-service-reserved-path.mjs` - Native status rendering across published themes, four locales and two widths, address actions, redirect handling and ordinary application 404 preservation.
+- `redeven:desktop/scripts/check-web-service-reserved-path.mjs` - Collapsed and expanded native rendering across published themes, four locales and two widths, keyboard disclosure, address actions, redirect handling and ordinary application 404 preservation.
