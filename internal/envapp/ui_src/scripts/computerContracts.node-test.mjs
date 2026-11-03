@@ -12,7 +12,7 @@ test('scoped collection pages reject changed contents and attributes are allowli
   const call=args=>controller.execute({target_id:'query',tool_name:'computer.action',args,script_operation:true});
   const first=await call({action:'query',selector:{role:'button'},limit:2}); assert.equal(first.result.total,3); assert.equal(first.result.items.length,2); assert.ok(first.result.next_cursor);
   const second=await call({action:'query',selector:{role:'button'},limit:2,cursor:first.result.next_cursor}); assert.equal(second.result.items[0].name,'Three'); assert.equal(second.result.truncated,false);
-  const attr=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:'href'}); assert.equal(attr.result.value,'https://example.test/path');
+  const attr=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:'href'}); assert.equal(attr.result.value,'https://example.test/path?token=secret#private'); assert.deepEqual(attr.result.redacted,['url_credentials']);
   const denied=await call({action:'attribute',selector:{role:'link',name:'Entry'},attribute:'value'}); assert.equal(denied.error,'INVALID_REQUEST');
   await tab.locator('button').last().evaluate(el=>el.remove());
   const stale=await call({action:'query',selector:{role:'button'},cursor:first.result.next_cursor}); assert.equal(stale.error,'STALE_REFERENCE');
@@ -143,7 +143,7 @@ test('scroll reports immediate measurements without inventing settling', async (
   const tab=await browser.newPage();await tab.setContent('<div role="region" aria-label="List" style="height:100px;overflow:auto"><div style="height:900px">Content</div></div>');
   const controller=new BrowserComputerController(await tab.context().newCDPSession(tab));await controller.initialize();
   const result=await controller.execute({tool_name:'computer.action',args:{action:'scroll',selector:{role:'region',name:'List'},delta_y:80},script_operation:true});
-  assert.equal(result.error,undefined);assert.equal(result.result.action_executed,true);assert.equal(result.result.scroll_progress.measurement,'immediate_after_dispatch');assert.equal(result.result.scroll_progress.before.scope,'nearest_scroll_container');
+  assert.equal(result.error,undefined);assert.equal(result.result.action_executed,true);assert.equal(result.result.scroll_progress.measurement,'immediate_after_dispatch');assert.equal(result.result.scroll_progress.scope,'requested_element');
   controller.close();
  }finally{await browser.close();}
 });
@@ -169,9 +169,9 @@ test('table pages preserve cells, exclude nested rows and reject changed cursors
   const controller=new BrowserComputerController(await tab.context().newCDPSession(tab));await controller.initialize();
   const call=args=>controller.execute({tool_name:'computer.action',script_operation:true,args});
   const first=await call({action:'table',selector:{role:'table',name:'Domains',exact:true},limit:2});
-  assert.equal(first.error,undefined,JSON.stringify(first));assert.equal(first.result.total,3);assert.deepEqual(first.result.rows[0].cells,[{role:'columnheader',text:'Domain'},{role:'columnheader',text:'Score'}]);
+  assert.equal(first.error,undefined,JSON.stringify(first));assert.equal(first.result.total,3);assert.deepEqual(first.result.rows[0].cells.map(({role,text})=>({role,text})),[{role:'columnheader',text:'Domain'},{role:'columnheader',text:'Score'}]);
   const second=await call({action:'table',selector:{role:'table',name:'Domains',exact:true},cursor:first.result.next_cursor});
-  assert.deepEqual(second.result.rows[0].cells,[{role:'cell',text:'Two'},{role:'cell',text:'8'}]);assert.equal(second.result.truncated,false);
+  assert.deepEqual(second.result.rows[0].cells.map(({role,text})=>({role,text})),[{role:'cell',text:'Two'},{role:'cell',text:'8'}]);assert.equal(second.result.truncated,false);
   await tab.locator('td').first().evaluate(e=>e.textContent='Changed');
   const stale=await call({action:'table',selector:{role:'table',name:'Domains',exact:true},cursor:first.result.next_cursor});assert.equal(stale.error,'STALE_REFERENCE');
   const denied=await call({action:'table',selector:{role:'cell',name:'Changed',exact:true}});assert.equal(denied.error,'INVALID_REQUEST');

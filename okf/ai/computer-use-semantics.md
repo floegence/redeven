@@ -3,7 +3,7 @@ type: Protocol Contract
 title: Computer semantic snapshots
 tags: [ai, computer-use, accessibility, protocol]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -51,6 +51,11 @@ canonical selectors return safe field/expected/recovery diagnostics before dispa
 Browser references are opaque bounded hashes of controller, document revision,
 frame, native node identity, role and complete-name digest. The existing reference table remains their sole
 owner; no second alias registry exists.
+
+Browser nodes report actions_scope:declared_only instead of guessing click/fill
+support from roles or focusability. The listed actions are not an input allowlist;
+target capabilities expose generic inputs and dispatch validates current
+actionability. Native source-declared actions retain their platform meaning.
 
 An ignored or truncated target has no invented reference; a platform-computed name or safe description may still be available.
 

@@ -148,6 +148,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		return TargetToolResult{}, computerTargetFailure(call, "INVALID_REQUEST")
 	}
 	key := computerScriptKey{call.ThreadID, call.TurnID, call.TargetID}
+	target, targetErr := r.registry.ResolveTarget(ctx, call.TargetID)
+	if targetErr != nil {
+		return TargetToolResult{}, targetErr
+	}
 	r.releaseScripts(func(other computerScriptKey) bool { return other.thread == key.thread && other != key })
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -445,6 +449,15 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				if observation, ok := payload["observation"]; ok {
 					if tree, ok := observation.(map[string]any); ok {
 						tree = cloneAnyMap(tree)
+						tree["read_options"] = []string{"node", "snapshot", "source", "screenshot"}
+						if computerBrowserTarget(target.Kind) {
+							tree["read_options"] = []string{"node", "snapshot", "source", "query", "count", "rows", "text", "screenshot"}
+						}
+						for _, field := range []string{"root_ref", "limit"} {
+							if value, exists := msg.Operation[field]; exists {
+								tree[field] = value
+							}
+						}
 						for _, field := range []string{"url", "title"} {
 							if value, exists := payload[field]; exists {
 								tree[field] = value

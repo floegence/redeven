@@ -157,7 +157,7 @@ for(const mode of ['snapshot','screenshot','semantic_wait','ref_wait']) {
         };
         response=await controller.execute({tool_name:'computer.action',full_access:true,script_operation:true,args:{action:'wait',selector:mode==='ref_wait'?{ref}:{role:'button',name:'Ready'},state:'enabled',timeout_ms:2000}});
         if(mode==='ref_wait')assert.equal(response.error,'STALE_REFERENCE',JSON.stringify(response));
-        else {assert.equal(response.result.state,'enabled',JSON.stringify(response));assert.equal(response.result.title,'Replacement');}
+        else {assert.equal(response.result.state,'enabled',JSON.stringify(response));assert.equal(response.result.title,undefined);assert.ok(response.result.samples>=2);}
       }else{
         const read=controller.readObservation.bind(controller);
         let replaced=false;

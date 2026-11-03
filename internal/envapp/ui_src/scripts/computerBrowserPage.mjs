@@ -417,9 +417,9 @@ export class BrowserComputerPage {
         const entry = this.rememberNode(frame, node);
         const ref = entry.ref;
         const actions = ['read'];
-        if (!states.disabled && (states.focusable || ['button','link','checkbox','radio','switch','tab','menuitem','menuitemcheckbox','menuitemradio','treeitem','slider','scrollbar','canvas'].includes(role))) actions.push('click');
-        if (['textbox', 'searchbox', 'combobox'].includes(role) && !states.readonly && !states.disabled) actions.push('fill');
-        const output = { ref, child_refs: [], role, platform_role: role, frame_id: frame.frame.id, ...boundedField('name', node.name?.value || ''), states, actions };
+        // AX roles do not enumerate browser input support. Generic pointer
+        // and editing operations are discovered through target capabilities.
+        const output = { ref, child_refs: [], role, platform_role: role, frame_id: frame.frame.id, ...boundedField('name', node.name?.value || ''), states, actions, actions_scope:'declared_only' };
         if (node.description?.value) Object.assign(output, boundedField('description', node.description.value));
         if (node.value?.value !== undefined) Object.assign(output, boundedField('value', String(node.value.value)));
         if (boundsByNode.has(node.backendDOMNodeId)) output.bounds = boundsByNode.get(node.backendDOMNodeId);
@@ -605,7 +605,7 @@ export class BrowserComputerPage {
     const revision=this.revision;
     const {nodes}=await element.frame.session.send('Accessibility.getFullAXTree',{frameId:element.frame.frame.id});
     const source=new Map(nodes.map(node=>[node.nodeId,node]));
-    const rows=[], entries=[], identity=[];
+    const rows=[], entries=[], identity=[], cellsByRef=new Map();
     const visit=(id,row) => {
       const node=source.get(id);
       if (!node || visited.has(id)) return;
@@ -620,7 +620,9 @@ export class BrowserComputerPage {
         const full=node.name?.value || '';
         identity.push([node.nodeId,role,full]);
         const text=Array.from(full).slice(0,2000).join('');
-        const cell={role:role==='gridcell'?'cell':role,text,...(text!==full?{text_truncated:true}:{})};
+        const entry=node.backendDOMNodeId?this.rememberNode(element.frame,node,false):undefined;
+        if(entry)cellsByRef.set(entry.ref,entry);
+        const cell={...(entry?{ref:entry.ref}:{}),role:role==='gridcell'?'cell':role,text,...(text!==full?{text_truncated:true}:{})};
         // A single pathological row must never exceed the page budget.
         if (row.cells.length<200 && Buffer.byteLength(JSON.stringify(row))+Buffer.byteLength(JSON.stringify(cell))<44000) row.cells.push(cell);
         else row.cells_truncated=true;
@@ -630,25 +632,36 @@ export class BrowserComputerPage {
     };
     const visited=new Set(); visit(element.axNodeId);
     if (revision!==this.revision || !source.has(element.axNodeId)) throw new Error('STALE_REFERENCE');
-    return this.collectionPage({ref:element.ref},rows,entries,options,'rows',[rows,identity]);
+    const page=this.collectionPage({ref:element.ref},rows,entries,options,'rows',[rows,identity]);
+    for(const row of page.rows)for(const cell of row.cells)if(cellsByRef.has(cell.ref)){
+      if(this.references.size>=2000&&!this.references.has(cell.ref))this.references.delete(this.references.keys().next().value);
+      this.references.set(cell.ref,cellsByRef.get(cell.ref));
+    }
+    return page;
   }
 
-  async attribute(element, name) {
+  async attribute(element, name, summary = false) {
     const {node} = await element.frame.session.send('DOM.describeNode',{backendNodeId:element.backendNodeId});
     const attributes=node.attributes || [];
     let index=-1; for(let i=0;i<attributes.length;i+=2) if(attributes[i]===name) {index=i;break;}
     let value=index>=0?attributes[index+1]:null;
+    let redacted;
     if (value !== null && name==='href') {
       try {
         const url=new URL(value,element.frame.frame.url);
-        if (!['http:','https:'].includes(url.protocol)) value=null;
-        else { url.username='';url.password='';url.search='';url.hash='';value=url.href; }
-      } catch { value=null; }
+        if (summary) {
+          if (!['http:','https:'].includes(url.protocol)) value=null;
+          else { url.username='';url.password='';url.search='';url.hash='';value=url.href; }
+        } else if (url.username || url.password) {
+          url.username='';url.password='';value=value.startsWith('//')?url.href.slice(url.protocol.length):url.href;
+          redacted=['url_credentials'];
+        }
+      } catch { if(summary)value=null; }
     }
     if (value !== null && Array.from(value).length > 2000) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {
       diagnostic: {phase:'read', method:'locator.attribute', expected:'attribute_max_2000', recovery:'choose_supported_read'},
     });
-    return {attribute:name,value};
+    return {attribute:name,value,...(redacted?{redacted}:{}),...(summary?{value_kind:'link_summary'}:{})};
   }
 
   async text(element) {
@@ -710,15 +723,15 @@ export class BrowserComputerPage {
     try {
       if (!element) {
         const { cssVisualViewport: viewport } = await this.transport.send('Page.getLayoutMetrics');
-        return { scope: 'viewport', x: viewport.pageX, y: viewport.pageY };
+        return { x: viewport.pageX, y: viewport.pageY };
       }
       const session=element.frame.session;
       const {executionContextId}=await session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
       const {object}=await session.send('DOM.resolveNode',{backendNodeId:element.backendNodeId,executionContextId});
       try {
         const result=await evaluate(session, 'Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,
-          functionDeclaration:'function(){for(let e=this;e;e=e.parentElement){if(e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth)return {x:e.scrollLeft,y:e.scrollTop};}return {x:scrollX,y:scrollY};}'}, value => value && [value.x,value.y].every(Number.isFinite));
-        return {scope:'nearest_scroll_container',...result};
+          functionDeclaration:'function(){const e=this.nodeType===9?this.scrollingElement:this;if(!e?.isConnected)return null;return {x:e.scrollLeft,y:e.scrollTop};}'}, value => value && [value.x,value.y].every(Number.isFinite));
+        return result;
       } finally { if(object.objectId) await session.send('Runtime.releaseObject',{objectId:object.objectId}); }
     } catch { /* Missing offsets are not evidence that an input failed. */ }
     return null;
@@ -1072,7 +1085,7 @@ export class BrowserComputerPage {
     if(args.action==='set_value')return this.setControlValue(element,args.value);
     if(args.action==='perform_action')throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
     if (args.action === 'table') return this.table(element,args);
-    if (args.action === 'attribute') return this.attribute(element,args.attribute);
+    if (args.action === 'attribute') return this.attribute(element,args.attribute,args.summary);
     if (args.action === 'text') return this.text(element);
     if (args.action === 'read') {
       const observed = await this.observe({ root_ref: element.ref, limit: 1 });
@@ -1126,10 +1139,16 @@ export class BrowserComputerPage {
       const point = element ? await this.scrollPoint(element) : {x:args.x ?? 1,y:args.y ?? 1};
       const {x,y}=point;
       if(element && !await this.receivesPoint(element,x,y)) throw new Error('ELEMENT_NOT_ACTIONABLE');
+      const revision=this.revision, document=element?.document;
       const before=await this.scrollPosition(element);
       await this.input(target, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaY: args.delta_y, deltaX: args.delta_x || 0 });
-      const after=await this.scrollPosition(element);
-      return {action_executed:true,execution_mode:'background',scroll_progress:{before,after,changed:before&&after ? before.x!==after.x||before.y!==after.y : null,measurement:'immediate_after_dispatch'}};
+      let after=await this.scrollPosition(element);
+      if(revision!==this.revision || element && document!==this.observedFrames.get(element.frame.frame.id)) after=null;
+      return {action_executed:true,input_dispatched:true,preparation_executed:Boolean(element&&element.nodeType!==9),execution_mode:'background',scroll_progress:{
+        scope:element?'requested_element':'viewport',...(element?{measured_ref:element.ref,frame_id:element.frame.frame.id}:{}),
+        document_id:this.prefix+':'+revision,before,after,
+        offset_changed:before&&after ? before.x!==after.x||before.y!==after.y : null,
+        scroll_effect:'unknown',measurement:'immediate_after_dispatch'}};
     } else if (args.action === 'drag') {
       for (const key of ['from_x', 'from_y', 'to_x', 'to_y']) if (!Number.isFinite(args[key]) || args[key] < 0) throw new Error('INVALID_REQUEST');
       const revision = this.revision, duration = args.duration_ms ?? 0;

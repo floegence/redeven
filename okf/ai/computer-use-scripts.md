@@ -62,6 +62,11 @@ Visual-only content needs screenshots. These choices stay with the model; no
 website- or industry-specific rules select targets or authorize actions.
 
 ## Input
+Browser pointer/key/text/scroll inputs return delivery receipts; optional post-input
+checks cannot revoke acknowledged input. A subsequent explicit read, including in
+the same script, owns the new observation. Receipt and privacy details belong to
+the [read contract](computer-script-read-contract.md).
+
 ui.type inserts, fill replaces. Native doubleClick/scroll keep parity; scroll centers the window and scrollAt selects coordinates without clicking. Semantic selector scroll is separate. Browser waits accept text|value, equals:string and optional timeout, read visible textContent/value without new input; native rejects these conditions. Completed waits survive later guest failure.
 
 Drag duration_ms is integer 0..5000; straight held path, zero adds no delay. Monotonic scheduling avoids accumulated waits, not transport overhead. Cancel/takeover/document invalidation stops and releases only owned input at last confirmed position. Unknown replies never replay. NativeInputSequence starts timing after acknowledged down, retains authorization/cancellation and event receipts. Independent AppKit qualifies native timing; browser results cannot.
@@ -71,7 +76,13 @@ Drag duration_ms is integer 0..5000; straight held path, zero adds no delay. Mon
 
 locator.text reads one explicit unique HTML innerText through fixed isolated-world code: <=12,000 Unicode characters, rendered_element scope and truncation; no hidden/unloaded text or arbitrary DOM script. Document/text/SVG reject TARGET_CAPABILITY_UNAVAILABLE before reading, without substituting parent/body. Attributes are string|null, rejecting >2,000 code points. Method/capability/choose_supported_read facts survive all layers. Unknown reads stop but preserve valid refs; model may explicitly choose another supported read.
 
-Image input handles bind immutable frame/document/image; editable metadata cannot retarget. Download results always include downloads and immutable cursor-bound wait. After export inspect existing ID instead of clicking again. Screenshots accompany results, never require paths/PNG export.
+Core help exposes source/collection reads without a required preference order.
+Snapshot read_options and continuation hints remain model-visible. Repeated-read
+advice describes only the bounded sample, not unseen content or application readiness.
+
+Image input handles bind immutable frame/document/image; editable metadata cannot retarget. Examples persist and reuse the same globalThis.image
+name. context_reset or a turn/target change clears it; the model captures again
+rather than receiving a revived stale handle. Download results always include downloads and immutable cursor-bound wait. After export inspect existing ID instead of clicking again. Screenshots accompany results, never require paths/PNG export.
 
 One needs_observation value drives execution/output. Safe snapshot (even emit:false) or screenshot clears it; input, staleness, failed reads or unknown effects require fresh observation. observation_status requires current safe evidence; title is insufficient. Private takeover excludes pixels/observations from model history.
 

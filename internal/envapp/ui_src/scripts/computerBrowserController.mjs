@@ -5,6 +5,9 @@ import { viewportGeometry, sameGeometry, screenshotGeometry, imageCoordinates } 
 
 // Internal invocation metadata, removed before any result crosses the adapter.
 const observationRevision = Symbol('observationRevision');
+const inputReceipt = Symbol('inputReceipt');
+// These operations return delivery facts, not page content or application state.
+const receiptActions = new Set(['click','pointer_click','double_click','hover','fill','type','key','scroll','drag','input_sequence']);
 
 const rejections = new Set(['INVALID_REQUEST', 'ELEMENT_NOT_ACTIONABLE', 'AMBIGUOUS_DOWNLOAD', 'STALE_REFERENCE', 'AMBIGUOUS_ELEMENT', 'ELEMENT_NOT_FOUND', 'CONDITION_TIMEOUT', 'TARGET_CAPABILITY_UNAVAILABLE', 'TARGET_PERMISSION_REQUIRED', 'TARGET_CONNECTION_REQUIRED', 'TARGET_NOT_READY', 'TARGET_NOT_ALLOWED', 'TAKEOVER_REQUIRED']);
 
@@ -85,6 +88,22 @@ export class BrowserComputerController {
       && !response.error && response.result?.observation_invalidated) {
       // Receipt-only publication still respects control changes during cleanup.
       // It carries no current-page content and needs no additional page scan.
+      if (this.page.invalid || this.page.guardFailure || this.page.requiredURL || this.page.requiredOrigin || this.page.stopped || this.page.operationCancelled)
+        response = await this.operationFailure(new Error('TARGET_CONNECTION_REQUIRED'), request, beforeEffects);
+      else if (this.page.openedPages.length) response = await this.targetChange(this.page.effectCount > beforeEffects);
+    }
+    if (response[inputReceipt]) {
+      delete response[inputReceipt];
+      try {
+        // Keep real privacy/control boundaries. A failed optional read cannot
+        // revoke acknowledged input or export unchecked page content.
+        const safety = await this.readObservation(() => this.page.safety(), 'safety_scan');
+        if (safety.level === 'takeover') response = this.pause(safety, this.page.effectCount > beforeEffects);
+      } catch (error) {
+        if (error.message !== 'TARGET_OBSERVATION_UNAVAILABLE' && !(error instanceof BrowserObservationInvalidated))
+          response = await this.operationFailure(error, request, beforeEffects);
+        else response.result.post_action_check = {state:'unavailable', ...(error.protocolDiagnostic ? {diagnostic:error.protocolDiagnostic} : {})};
+      }
       if (this.page.invalid || this.page.guardFailure || this.page.requiredURL || this.page.requiredOrigin || this.page.stopped || this.page.operationCancelled)
         response = await this.operationFailure(new Error('TARGET_CONNECTION_REQUIRED'), request, beforeEffects);
       else if (this.page.openedPages.length) response = await this.targetChange(this.page.effectCount > beforeEffects);
@@ -211,7 +230,17 @@ export class BrowserComputerController {
         // Invalid inputs remain rejections; read failures never retire a source.
         if (mapped.action === 'wait') return await this.waitForCondition(request, mapped);
         if (['read','text','query','table','attribute','source','selection','capabilities'].includes(mapped.action) || mapped.action==='clipboard'&&mapped.operation!=='write') read = () => page.action(mapped);
-        else result = await page.action(mapped);
+        else {
+          result = await page.action(mapped);
+          if (request.script_operation === true && !privateInput && receiptActions.has(mapped.action)) {
+            // Closed delivery facts survive document replacement. No title,
+            // URL, page values or arbitrary adapter fields cross this boundary.
+            const receipt = {action_executed:dispatched(), needs_observation:true, observation_invalidated:true, execution_mode:'background'};
+            for (const key of ['mechanism','completed_events','input_dispatched','preparation_executed','scroll_progress'])
+              if (result[key] !== undefined) receipt[key] = result[key];
+            return {[inputReceipt]:true, result:receipt, safety:{level:'routine',reason_codes:[],safe_to_capture:false,safe_to_send_to_model:false}};
+          }
+        }
       }
       if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
       return await this.observeResult(request, read || (async () => result), dispatched());
@@ -249,23 +278,23 @@ export class BrowserComputerController {
       result: { action_executed: dispatched(), needs_observation: dispatched() || error.message === 'STALE_REFERENCE', ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
   }
 
-  async observeResult(request, read, effectExecuted = false) {
+  async observeResult(request, read, effectExecuted = false, {metadata: includeMetadata = true, validateSample = false} = {}) {
     const page = this.page, tool = request.tool_name, args = request.args || {};
     const revision = page.revision;
     if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: effectExecuted, required_navigation_url: page.requiredURL, needs_observation: true } };
-    const after = await this.readObservation(() => page.safety(), 'safety_scan');
-    if (after.level === 'takeover') return this.pause(after, effectExecuted);
     if (page.openedPages.length) return await this.targetChange(effectExecuted);
     const result = await this.readObservation(read);
     const needsFrame = tool === 'computer.screenshot' || (tool === 'computer.observe' ? args.screenshot === true : request.script_operation !== true);
     const frame = needsFrame ? await this.readObservation(() => this.capture(request.live_frame ? undefined : request.target_id), 'capture') : undefined;
-    const metadata = await this.readObservation(async () => {
+    const metadata = includeMetadata ? await this.readObservation(async () => {
       const { frameTree } = await this.transport.send('Page.getFrameTree');
       const title = await page.inFrame({ session: this.transport, frame: frameTree.frame }, 'document.title', value => typeof value === 'string');
       return { url: redactedNavigationURL(frameTree.frame.url), title };
-    }, 'metadata');
-    const captured = await this.readObservation(() => page.safety(), 'safety_scan');
-    if (captured.level === 'takeover') return this.pause(captured, effectExecuted);
+    }, 'metadata') : {};
+    // Entry and final publication own ordinary read scans. Condition waits
+    // also validate each internal sample without resetting privacy latches.
+    const captured = validateSample ? await this.readObservation(() => page.safety(), 'safety_scan') : undefined;
+    if (captured?.level === 'takeover') return this.pause(captured, effectExecuted);
     if (revision !== page.revision) throw new BrowserObservationInvalidated();
     if (page.operationCancelled) throw new Error('BROWSER_TOOL_CANCELLED');
     return { [observationRevision]: revision, result: { ...result, ...(frame?.geometry ? {frame_geometry:frame.geometry} : {}), summary: tool === 'computer.action' ? args.action : tool, ...metadata,
@@ -274,16 +303,22 @@ export class BrowserComputerController {
 
   async waitForCondition(request, args) {
     const page = this.page;
-    const deadline = Date.now() + (args.timeout_ms ?? 10000);
+    const started = Date.now(), timeout = args.timeout_ms ?? 10000;
+    const deadline = started + timeout;
+    let samples = 0;
     for (;;) {
       let changed, timer;
       const notification = new Promise(resolve => { changed = resolve; page.listeners.add(changed); });
       try {
         if (page.stopped || page.operationCancelled || page.invalid || page.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
         try {
-          const response = await this.observeResult(request, () => page.conditionState(args.selector, args));
+          samples++;
+          const response = await this.observeResult(request, () => page.conditionState(args.selector, args), false, {metadata:false,validateSample:true});
           if (response.safety?.level === 'takeover' || response.result?.target_changed || response.error
-            || response.result?.state !== 'timeout' || Date.now() >= deadline) return response;
+            || response.result?.state !== 'timeout' || Date.now() >= deadline) {
+            if (response.result?.state) Object.assign(response.result, {requested_state:args.state ?? 'visible', timeout_ms:timeout, elapsed_ms:Date.now()-started, samples});
+            return response;
+          }
         } catch (error) {
           // Only typed document or temporary query-candidate evidence discards a sample.
           // The same selector, permission scope and original deadline remain.

@@ -445,11 +445,16 @@ test('navigation during a safety read preserves the confirmed action without exp
     const result = await controller.execute({ tool_name: 'computer.action', script_operation: true, allowed_origins: [origin],
       args: { action: 'fill', selector: { role: 'textbox', name: 'Entry' }, text: 'confirmed' } });
     assert.equal(invalidated, true);
-    // The context vanished while a protocol read was pending. Keep the actual
-    // read failure; a concurrent lifecycle event must not make it retryable.
-    assert.equal(result.error, 'TARGET_OBSERVATION_UNAVAILABLE', JSON.stringify(result));
-    assert.equal(result.safety, undefined);
-    assert.deepEqual(result.result, { action_executed: true, needs_observation:true, observation_stage:'safety_scan', diagnostic:{phase:'protocol',method:'Runtime.evaluate'} });
+    // The acknowledged input has no page content to publish. Preserve the
+    // unavailable post-action check without revoking or replaying the input.
+    assert.equal(result.error, undefined, JSON.stringify(result));
+    assert.equal(result.safety.safe_to_capture, false);
+    assert.equal(result.safety.safe_to_send_to_model, false);
+    assert.equal(result.result.action_executed, true);
+    assert.equal(result.result.needs_observation, true);
+    assert.deepEqual(result.result.post_action_check, {state:'unavailable',diagnostic:{phase:'protocol',method:'Runtime.evaluate'}});
+    assert.equal(result.result.observation, undefined);
+    assert.equal(result.result.title, undefined);
     assert.equal(result.screenshot, undefined);
     session.send = send;
     const fresh = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });
@@ -579,11 +584,17 @@ test('unknown safety failures stop the read and fresh calls preserve completed e
     assert.equal(effects, 0); assert.equal(scans, 1, 'unknown read failure is not retried');
     failures = 0; failAfterEffect = true; scans = 0;
     const completed = await controller.execute(action);
-    assert.equal(completed.error, 'TARGET_OBSERVATION_UNAVAILABLE', JSON.stringify(completed));
+    assert.equal(completed.error, undefined, JSON.stringify(completed));
     assert.equal(completed.result.action_executed, true);
-    assert.equal(completed.result.observation_stage, 'safety_scan');
-    assert.equal(completed.safety, undefined); assert.equal(completed.screenshot, undefined);
+    assert.equal(completed.result.post_action_check.state, 'unavailable');
+    assert.equal(completed.safety.safe_to_send_to_model, false); assert.equal(completed.screenshot, undefined);
+    assert.equal(completed.result.observation, undefined);
     assert.equal(JSON.stringify(completed).includes('private scan exception'), false);
+    assert.equal(await page.evaluate(() => globalThis.clicks), 1);
+    const stillUnavailable = await controller.execute({ tool_name: 'computer.observe' });
+    assert.equal(stillUnavailable.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+    assert.equal(stillUnavailable.result.action_executed, false);
+    assert.equal(stillUnavailable.result.observation, undefined);
     assert.equal(await page.evaluate(() => globalThis.clicks), 1);
     session.send = send;
     await page.evaluate(() => { document.body.insertAdjacentHTML('beforeend', '<input type="password" value="private-value">'); });

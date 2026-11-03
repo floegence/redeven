@@ -8,7 +8,7 @@ import (
 
 const computerObservationTextBudget = 32 << 10
 const computerObservationRecovery = "Read a narrower root_ref; source() enumerates complete AX/DOM fields and paged child refs; rows/query/text read selected content. full:true requests structured details."
-const computerObservationAdvisory = "Repeated observation has no new information. Inspect a narrower scope or another representation only if needed; do not repeat an uncertain input."
+const computerObservationAdvisory = "This bounded observation is unchanged from the previous sample. It does not establish unchanged content outside this scope or application readiness."
 
 // Product presentation never replaces validated semantic authority or guest reads.
 func compactComputerObservation(current map[string]any) map[string]any {
@@ -17,10 +17,13 @@ func compactComputerObservation(current map[string]any) map[string]any {
 		return current
 	}
 	metadata := map[string]any{"detail": "compact", "scope": "loaded_accessibility_tree", "source_truncated": current["truncated"] == true}
-	for _, key := range []string{"document_id", "url", "title", "truncated", "total", "execution_mode", "source", "coverage"} {
+	for _, key := range []string{"document_id", "url", "title", "truncated", "total", "execution_mode", "source", "coverage", "root_ref", "limit", "read_options"} {
 		if v, ok := current[key]; ok {
 			metadata[key] = v
 		}
+	}
+	if current["truncated"] == true {
+		metadata["recovery"] = computerObservationRecovery
 	}
 	// Browser titles and addresses are outside the semantic-node field budget.
 	// Bound their encoded representation explicitly without changing document IDs.

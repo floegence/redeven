@@ -31,6 +31,7 @@ type computerSemanticNode struct {
 	Relations            map[string][]string     `json:"relations,omitempty"`
 	States               map[string]any          `json:"states"`
 	Actions              []string                `json:"actions"`
+	ActionsScope         string                  `json:"actions_scope,omitempty"`
 	PlatformActions      []string                `json:"platform_actions,omitempty"`
 	Value                any                     `json:"value,omitempty"`
 	Bounds               *computerSemanticBounds `json:"bounds,omitempty"`
@@ -188,6 +189,9 @@ func normalizeComputerSemanticNode(node *computerSemanticNode) error {
 		if len(refs) > 64 {
 			return errors.New("semantic relation exceeds its limit")
 		}
+	}
+	if node.ActionsScope != "" && node.ActionsScope != "declared_only" {
+		return errors.New("invalid semantic actions scope")
 	}
 	for _, action := range node.Actions {
 		if !slices.Contains([]string{"read", "click", "fill", "press", "scroll"}, action) {

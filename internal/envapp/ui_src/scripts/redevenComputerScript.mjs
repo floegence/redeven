@@ -153,7 +153,7 @@ export async function createComputerScript({ browser = true } = {}) {
       const attribute = async (selector, name, href = false) => {
         string(name,'attribute');
         if(!['title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount',...(href?['href']:[])].includes(name)) invalid();
-        return (await call({action:'attribute',selector,attribute:name})).value;
+        return (await call({action:'attribute',selector,attribute:name,...(href?{summary:true}:{})})).value;
       };
       const clickOptions = (value={}) => {
         options(value,['button','modifiers','click_count','duration_ms']);

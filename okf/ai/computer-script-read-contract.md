@@ -36,7 +36,7 @@ It supplies the required semantic_read failure stage and retains the live source
 One returned observation binds content, image, metadata and final safety to the
 same document lifecycle through input cleanup and final publication. A private
 invocation token carries the existing revision; no second lifecycle is stored.
-Final safety runs after cleanup, and failed publication retires the image anchor.
+Ordinary reads scan at entry and final publication after cleanup; failed publication retires the image anchor. Condition waits retain a privacy check after every sample, without repeatedly fetching title/URL metadata. Wait results expose requested_state, timeout_ms, elapsed_ms and samples; these measure this operation, not application readiness.
 Ordinary content updates do not require page quiescence.
 Condition waits own a deadline and repeatedly obtain independently validated
 read-only samples. Typed lifecycle or temporary query-candidate invalidation
@@ -61,6 +61,17 @@ and uncertain effects still apply through final publication. Navigation errors
 and load timeouts retain their distinct outcomes. Legacy image-returning calls
 keep their existing observation contract. No automatic action or read replay is
 introduced; the model chooses the next observation.
+
+## Input delivery receipts
+Script pointer, key, text, fill, wheel, drag and input-sequence operations return
+closed delivery facts, needs_observation and observation_invalidated. They do not
+read title/content or assert application success. A failed optional post-input
+safety scan adds post_action_check.state=unavailable with bounded diagnostics; it
+does not revoke acknowledged input or publish unchecked content. Confirmed private
+input still pauses, and permission, cancellation, connection, target-change, cleanup
+and uncertain-effect barriers still stop. A subsequent explicit read owns its full
+privacy checks, even within the same script. Content-returning edits and legacy
+image-returning calls retain their observation contract. No input is retried.
 
 ## Controlled browser evaluation
 One result checker owns Runtime.evaluate and Runtime.callFunctionOn responses.
@@ -104,9 +115,12 @@ Browser locators expose query({limit,cursor}) over the authorized loaded AX
 scope and an attribute allowlist. Results carry total, truncation, document and
 cursor; changed contents invalidate pagination. Only returned page references
 enter the bounded reference table. Each page is at most 200 items and 48 KiB of
-items. Virtualized, unloaded rows are never counted as visited. href removes
-credentials, query and fragment and must not be reconstructed as an action URL.
-Browser rows reads a unique table/grid and returns header/data rows and cell roles,
+items. Virtualized, unloaded rows are never counted as visited. getAttribute(href)
+preserves source query/fragment and relative form; URL credentials are explicitly
+redacted. linkSummary is the optional normalized view that removes query/fragment
+and is not an action URL. Long attributes remain available through source reads.
+Browser rows reads a unique table/grid and returns header/data rows, cell roles
+and source-backed cell refs for explicit detailed reads,
 with explicit loaded-tree scope. Pages contain at most 200 rows/48 KiB of item
 content; each row is limited to 200 cells/44 KiB, each cell to 2,000 Unicode
 characters. cells_truncated/text_truncated mark loss; exact totals cannot be
@@ -115,8 +129,11 @@ Nested tables are excluded. count reports loaded matches. attribute returns a
 scalar safe attribute; linkSummary labels its redacted URL as non-actionable.
 Native targets reject these browser reads inside scripts before adapter dispatch.
 
-scroll_progress belongs to the scroll return value. It reports immediate
-before/after measurements, with null or unchanged values remaining inconclusive.
+scroll_progress belongs to the scroll return value. scope and measured_ref identify
+the exact requested element or viewport, never a guessed wheel receiver. before,
+after and offset_changed describe only immediate offsets of that measurement;
+scroll_effect remains unknown. Invalidated or unavailable samples are null. Input
+dispatch and scroll-into-view preparation are separate facts.
 Semantic wheel input uses the visible intersection of the target, not clickable-control
 enabled state or its offscreen full-box center. Browser-native intersection geometry
 owns ancestor clipping and transforms; document targets use their viewport. Existing
@@ -129,7 +146,10 @@ The core help demonstrates awaited node reads and logging the returned scroll
 result; node and snapshot objects do not carry scroll measurements.
 
 Repeated identical observations in the same script namespace/document/scope
-receive a bounded advisory after two repeats. This never replays input, changes
+receive a bounded advisory after two repeats. It states only that this bounded
+sample is unchanged, not that unobserved content is unchanged or business data is
+ready. Truncated snapshots retain read_options, requested root/limit and explicit
+continuation guidance; the model chooses a read. This never replays input, changes
 target, adds a planner, or persists a second lifecycle.
 
 Single-node detail does not enumerate a subtree. child_refs describes only

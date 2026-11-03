@@ -12,7 +12,7 @@ export function validateBrowserAction(args, privateInput = false) {
     scroll: ['selector', 'x', 'y', 'delta_x', 'delta_y'],
     drag: ['from_x', 'from_y', 'to_x', 'to_y', 'duration_ms','button','modifiers'],
     wait: ['selector', 'state', 'equals', 'timeout_ms'], query: ['selector', 'limit', 'cursor'], table: ['selector', 'limit', 'cursor'],
-    attribute: ['selector', 'attribute'], read: ['selector'], text: ['selector'],
+    attribute: ['selector', 'attribute', 'summary'], read: ['selector'], text: ['selector'],
   };
   const allowed = fields[args.action];
   if (!allowed) throw argumentFailure('action', 'supported_action');
@@ -63,6 +63,7 @@ export function validateBrowserAction(args, privateInput = false) {
       if (args.cursor !== undefined && (typeof args.cursor!=='string' || args.cursor.length>100)) throw argumentFailure('cursor','current_cursor');
       break;
     case 'attribute':
+      if (args.summary !== undefined && (typeof args.summary !== 'boolean' || args.attribute !== 'href')) throw argumentFailure('arguments','documented_fields');
       if (!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(args.attribute)) throw argumentFailure('attribute','readable_attribute');
       break;
     case 'source':
