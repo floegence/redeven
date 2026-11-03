@@ -261,6 +261,7 @@
       "computerCompletedActions": "Completed actions",
       "computerUnavailable": "Unavailable",
       "computerBlankPage": "Blank page",
+      "computerBudgetExhausted": "Script limit reached; completed work is retained",
       "computerNoTargets": "No available pages or applications",
       "previewLoading": "Loading details…",
       "previewFailed": "Could not load details.",

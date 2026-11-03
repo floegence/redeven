@@ -175,6 +175,7 @@ export type FlowerActivityQuestionAnswer = Readonly<{
 
 export type FlowerActivityErrorDetail = Readonly<{
   observation_interruption?: boolean;
+  budget_interruption?: boolean;
   message: string;
   code?: string;
   target_kind?: string;
@@ -565,6 +566,7 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   const detail: {
     message: string;
     observation_interruption?: boolean;
+    budget_interruption?: boolean;
     code?: string;
     target_kind?: string;
     target_state?: string;
@@ -576,6 +578,7 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   if (repairAction) detail.repair_action = repairAction;
   if (suggestedTargets.length > 0) detail.suggested_targets = suggestedTargets;
   if (computerObservationInterruption(item)) detail.observation_interruption = true;
+  if (computerObservationInterruption(item) === 'budget') detail.budget_interruption = true;
   if (code && (detail.observation_interruption || targetKind || targetState || repairAction || suggestedTargets.length > 0)) detail.code = code;
   return {
     kind: 'error',
@@ -1583,7 +1586,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     if (phase) meta = phaseCopy[phase] ?? meta;
   }
   const interruption = computerObservationInterruption(item);
-  if (interruption) meta = {effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
+  if (interruption) meta = {budget:words.computerBudgetExhausted,effect_confirmed:words.computerActionObservedUnavailable,prepared:words.computerPreparedOnly,partial_input:words.computerInputIncomplete,unavailable:words.computerObservationUnavailable}[interruption];
   if (uncertain) meta = words.effectUncertain;
   const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
     'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');

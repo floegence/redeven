@@ -792,6 +792,10 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							if err != nil {
 								t.Fatalf("invalid canonical %s result (%s): %v", confirmed.ToolName, confirmed.Status, err)
 							}
+							// Activity is a bounded UI projection. Include canonical
+							// output, never the model's input scripts or final prose.
+							canonicalBody, _ := json.Marshal(data)
+							toolEvidence.Write(canonicalBody)
 							code := anyToString(data["script_error"])
 							if code != "" {
 								scriptErrors[code]++
@@ -1666,6 +1670,19 @@ func computerQualificationResultData(result flruntime.ThreadToolResult) (map[str
 	if err := json.Unmarshal([]byte(content), &envelope); err != nil {
 		return nil, err
 	}
+	if raw, indexed := envelope.Data["current_observation_index"]; indexed {
+		index, ok := raw.(float64)
+		observations := toAnySlice(envelope.Data["observations"])
+		if !ok || index < 0 || index >= float64(len(observations)) || index != float64(int(index)) {
+			return nil, fmt.Errorf("invalid current observation index")
+		}
+		emitted, _ := observations[int(index)].(map[string]any)
+		observation, valid := emitted["observation"].(map[string]any)
+		if !valid || observation == nil || envelope.Data["observation"] != nil {
+			return nil, fmt.Errorf("invalid indexed observation")
+		}
+		envelope.Data["observation"] = observation
+	}
 	return envelope.Data, nil
 }
 
@@ -1830,6 +1847,41 @@ func TestComputerQualificationCaptureBeforeInput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := qualificationCaptureBeforeInput(tc.facts); got != tc.want {
 				t.Fatalf("capture before input=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestComputerQualificationIndexedObservation(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		index        any
+		observations []any
+		want         string
+		invalid      bool
+	}{
+		{"indexed", 1, []any{map[string]any{"observation": map[string]any{"tree": "previous"}}, map[string]any{"observation": map[string]any{"tree": "navigation"}}}, "navigation", false},
+		{"out of bounds", 1, []any{}, "", true},
+		{"fraction", 0.5, []any{map[string]any{"observation": map[string]any{}}}, "", true},
+		{"negative", -1, []any{map[string]any{"observation": map[string]any{}}}, "", true},
+		{"string index", "0", []any{map[string]any{"observation": map[string]any{}}}, "", true},
+		{"missing observation", 0, []any{map[string]any{}}, "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]any{"data": map[string]any{"current_observation_index": tc.index, "observations": tc.observations}})
+			data, err := computerQualificationResultData(flruntime.ThreadToolResult{Status: "success", Content: string(body)})
+			if tc.invalid {
+				if err == nil {
+					t.Fatal("invalid observation index accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation, _ := data["observation"].(map[string]any)
+			if observation["tree"] != tc.want {
+				t.Fatalf("current observation: %#v", data)
 			}
 		})
 	}

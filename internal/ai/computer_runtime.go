@@ -534,7 +534,13 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		if call.ToolName == "computer.screenshot" {
 			stage = "capture"
 		}
-		failed, failure := computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": stage}, result.ExecutionLocation)
+		facts := map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": stage}
+		for _, key := range []string{"observation_invalidated", "reason", "diagnostic", "preparation_executed", "input_progress"} {
+			if value, ok := payload[key]; ok {
+				facts[key] = value
+			}
+		}
+		failed, failure := computerObservationFailure(call, facts, result.ExecutionLocation)
 		if payload["observation_invalidated"] == true {
 			failed.Result.(map[string]any)["observation_invalidated"] = true
 		}

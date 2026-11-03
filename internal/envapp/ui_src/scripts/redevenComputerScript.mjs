@@ -127,7 +127,8 @@ export async function createComputerScript({ browser = true } = {}) {
         return {canonical_role: role, ...value};
       };
       const observeOptions = (value) => {
-        options(value, ['root_ref', 'limit', 'emit', 'full', 'screenshot']);
+        options(value, ['root_ref', 'limit', 'emit', 'full', 'screenshot', 'on_invalidated']);
+        if (value.on_invalidated !== undefined && !['throw','return'].includes(value.on_invalidated)) invalid('on_invalidated','throw_or_return');
         if (value.root_ref !== undefined) string(value.root_ref,'root_ref');
         if (value.limit !== undefined && (!Number.isInteger(value.limit) || value.limit < 1 || value.limit > 1000)) invalid('limit','integer_1_1000');
         for (const key of ['emit', 'full', 'screenshot']) if (value[key] !== undefined && typeof value[key] !== 'boolean') invalid(key,'boolean');
@@ -141,6 +142,7 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const snapshot = async (value = {}) => {
         const result = await call({action:'snapshot', ...observeOptions(value)});
+        if (result.status === 'invalidated') return result;
         const observation = result.observation;
         return {...observation, ...(result.url === undefined ? {} : {url:result.url}), ...(result.title === undefined ? {} : {title:result.title}), nodes:observation.nodes.map(canonicalNode)};
       };
@@ -332,7 +334,7 @@ export async function createComputerScript({ browser = true } = {}) {
         // Preserve bounded output without exposing guest exception text, which
         // can include values from the page or sensitive input.
         const failure = new Error('SCRIPT_FAILED');
-        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, ...execution.argumentDiagnostic, ...execution.conditionDiagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
+        failure.result = { context_reusable: !execution.hostStopped && !execution.pending.size && !runtime.hasPendingJob() && Date.now() < execution.deadline && diagnostic.phase === 'parse', logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, ...execution.argumentDiagnostic, ...execution.conditionDiagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
         throw failure;
       } finally {
         execution.sealed = true;
@@ -376,7 +378,7 @@ async function main() {
       (failure) => {
         running = false;
         send({ type: 'error', id: message.id, error: 'SCRIPT_FAILED', result: failure.result });
-        process.exitCode = 1; lines.close();
+        if (failure.result?.context_reusable !== true) { process.exitCode = 1; lines.close(); }
       },
     );
   });

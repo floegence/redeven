@@ -30,3 +30,13 @@ it('keeps prior approval distinct from a pending user decision', () => {
 it('does not let an observation chip override a different explicit error', () => {
   expect(isPresentedToolFailure(item({payload:{error:{code:'SCRIPT_ARGUMENT_ERROR',message:'Invalid input'}},chips:[{kind:'computer_observation',label:'observation',value:'unavailable'}]}))).toBe(true);
 });
+
+it('presents a confirmed budget stop as partial work without masking other failures', () => {
+  const chips = [{kind:'computer_budget',label:'budget',value:'time'}];
+  expect(computerObservationInterruption(item({chips,payload:{error:{code:'TIMEOUT'}}}))).toBe('budget');
+  expect(computerObservationInterruption(item({chips}))).toBe('budget');
+  for (const code of ['SCRIPT_ARGUMENT_ERROR','TARGET_PERMISSION_REQUIRED','EFFECT_OUTCOME_UNKNOWN']) {
+    expect(computerObservationInterruption(item({chips,payload:{error:{code}}}))).toBeUndefined();
+  }
+  expect(computerObservationInterruption(item({chips,field_summary:{uncertain_effect:true,fields:[]}}))).toBeUndefined();
+});

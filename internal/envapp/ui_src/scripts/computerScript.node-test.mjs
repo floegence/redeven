@@ -273,11 +273,11 @@ test('reference errors expose safe source locations without claiming context reu
  try {
   await assert.rejects(script.execute("globalThis.pages=[1,2];\nawait ui.type('confirmed');\nsetTimeout(()=>{},1);",async()=>({})),e=>{
    assert.deepEqual(e.result.diagnostic,{phase:'execution',line:3,column:1,symbol:'setTimeout',code:'SCRIPT_REFERENCE_ERROR'});
-   assert.equal(e.result.context_reusable,undefined);return true;
+   assert.equal(e.result.context_reusable,false);return true;
   });
   assert.deepEqual((await script.execute('log(pages.length)',async()=>({}))).logs,[[2]]);
   await assert.rejects(script.execute("throw new Error('private-secret')",async()=>({})),e=>{
-   assert.equal(e.result.context_reusable,undefined);assert.ok(!JSON.stringify(e.result).includes('private-secret'));return true;
+   assert.equal(e.result.context_reusable,false);assert.ok(!JSON.stringify(e.result).includes('private-secret'));return true;
   });
  }finally{script.dispose();}
 });

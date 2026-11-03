@@ -10586,7 +10586,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           terminateCommand: copy().chat.toolActivityTerminateCommand,
         },
       }).label,
-      computerObservationInterruption(item) ? ({effect_confirmed:copy().chat.toolActivity.computerActionObservedUnavailable,prepared:copy().chat.toolActivity.computerPreparedOnly,partial_input:copy().chat.toolActivity.computerInputIncomplete,unavailable:copy().chat.toolActivity.computerObservationUnavailable}[computerObservationInterruption(item)!]) : copy().chat.toolStatuses[item.status],
+      computerObservationInterruption(item) ? ({budget:copy().chat.toolActivity.computerBudgetExhausted,effect_confirmed:copy().chat.toolActivity.computerActionObservedUnavailable,prepared:copy().chat.toolActivity.computerPreparedOnly,partial_input:copy().chat.toolActivity.computerInputIncomplete,unavailable:copy().chat.toolActivity.computerObservationUnavailable}[computerObservationInterruption(item)!]) : copy().chat.toolStatuses[item.status],
     ].filter(Boolean).join('. ')
   );
 
@@ -11383,7 +11383,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const errorDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'error' }>>) => (
     <Show when={block().error.observation_interruption} fallback={errorDiagnosticBlock(block)}>
       <details class="flower-activity-observation-diagnostic">
-        <summary>{copy().chat.toolActivity.computerObservationDetails}</summary>
+        <summary>{block().error.budget_interruption ? copy().chat.toolActivity.computerBudgetExhausted : copy().chat.toolActivity.computerObservationDetails}</summary>
         <div class="flower-activity-observation-message">{block().error.message}</div>
         <Show when={block().error.code}><code>{block().error.code}</code></Show>
       </details>

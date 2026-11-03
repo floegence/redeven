@@ -129,3 +129,19 @@ func TestComputerScriptInputReceiptRetainsFactsAndIndependentRead(t *testing.T) 
 		})
 	}
 }
+
+func TestComputerBudgetPresentationRetainsCanonicalFailure(t *testing.T) {
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolID: "budget", ToolName: "computer.exec", Status: toolResultStatusError, Error: &aitools.ToolError{Code: "TIMEOUT", Message: "Time limit reached"}, Data: map[string]any{"budget_exhausted": "time", "completed_actions": []string{"snapshot"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, chip := range activity.Chips {
+		if chip.Kind == "computer_budget" && chip.Value == "time" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("budget fact absent: %+v", activity)
+	}
+}

@@ -203,6 +203,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var observationScope string
 	var argumentDiagnostic map[string]any
 	var failedInputProgress map[string]any
+	var failedActionability map[string]any
 	var failedOperationPhase string
 	var ambiguousDownloads []any
 	var lastFrameGeometry any
@@ -252,6 +253,14 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				output.Attachments = nil
 			}
 			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations)}
+			if !errors.Is(outputErr, errComputerEffectUnknown) {
+				switch {
+				case errors.Is(outputErr, context.DeadlineExceeded), payload["script_error"] == "SCRIPT_TIMEOUT":
+					payload["budget_exhausted"] = "time"
+				case payload["script_error"] == "SCRIPT_OPERATION_LIMIT":
+					payload["budget_exhausted"] = "operations"
+				}
+			}
 			if failureStage != "" {
 				payload["stage"] = failureStage
 			}
@@ -263,6 +272,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if argumentDiagnostic != nil {
 				payload["diagnostic"] = argumentDiagnostic
+			}
+			if failedActionability != nil {
+				payload["actionability"] = failedActionability
 			}
 			if len(failedInputProgress) > 0 {
 				payload["input_progress"] = failedInputProgress
@@ -393,6 +405,24 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					return result, err
 				}
 			}
+			// Explicit read recovery only: typed document invalidation, zero effects,
+			// no control boundary and no automatic repeat. Never expose stale content.
+			facts, _ := observed.Result.(map[string]any)
+			var readFailure *targetToolPolicyError
+			if msg.Operation["on_invalidated"] == "return" && (msg.Operation["action"] == "snapshot" || msg.Operation["action"] == "observe") && errors.As(err, &readFailure) && readFailure.code == "target_observation_unavailable" && facts["observation_invalidated"] == true && facts["reason"] == "document_changed" && facts["action_executed"] == false && facts["preparation_executed"] != true && len(computerInputProgress(facts["input_progress"])) == 0 && !takeoverResult(observed, err) && ctx.Err() == nil {
+				if validationErr := call.revalidate(ctx); validationErr != nil {
+					return result, validationErr
+				}
+				observationInvalidated, needsObservation, currentObservation = true, true, false
+				lastObservation, lastFrameGeometry = nil, nil
+				p.observations = computerObservationOutput{}
+				observed.Result = map[string]any{"status": "invalidated", "reason": "document_changed", "observation_stage": facts["observation_stage"], "needs_observation": true, "observation_invalidated": true, "effect_outcome_unknown": false}
+				if sendErr := send(map[string]any{"type": "operation_result", "id": msg.ID, "result": observed.Result}); sendErr != nil {
+					return result, sendErr
+				}
+				failedOperationIndex, failedAction = -1, ""
+				continue
+			}
 			if err != nil {
 				stopped = err
 				facts, _ := observed.Result.(map[string]any)
@@ -425,6 +455,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
 				argumentDiagnostic = computerOperationDiagnostic(payload["diagnostic"])
+				failedActionability = computerActionabilityFacts(payload["actionability"])
 				if payload["needs_observation"] == true {
 					needsObservation = true
 				}
@@ -610,6 +641,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 						}
 					}
 				}
+				healthy = stopped == nil && msg.Result["context_reusable"] == true && ctx.Err() == nil
 				result.Result.(map[string]any)["recovery"] = "Inspect current state and completed_actions before deciding what remains; do not replay input."
 				return result, &computerScriptExecutionError{code: code}
 			}
@@ -642,6 +674,12 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	case "observe", "snapshot":
 		call.ToolName = "computer.observe"
 		delete(args, "action")
+		if value, ok := args["on_invalidated"]; ok {
+			if value != "throw" && value != "return" {
+				return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
+			}
+			delete(args, "on_invalidated")
+		}
 		for _, option := range []string{"emit", "full"} {
 			if value, exists := args[option]; exists {
 				if _, ok := value.(bool); !ok {

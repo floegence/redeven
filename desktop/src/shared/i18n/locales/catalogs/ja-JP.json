@@ -514,6 +514,7 @@
         "computerCompletedActions": "完了した操作",
         "computerUnavailable": "利用不可",
         "computerBlankPage": "空白のページ",
+        "computerBudgetExhausted": "スクリプトの実行上限に達しました。完了した作業は保持されています",
         "computerNoTargets": "利用可能なページやアプリがありません",
         "previewLoading": "詳細を読み込み中…",
         "previewFailed": "詳細を読み込めませんでした。",

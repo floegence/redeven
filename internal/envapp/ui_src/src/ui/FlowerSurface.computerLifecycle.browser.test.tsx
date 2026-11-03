@@ -652,3 +652,21 @@ it('classifies a bounded canonical observation summary without fetching hidden d
   expect(row.querySelector('[aria-expanded="true"]')).toBeNull();
   expect(f.inputComputerControl).not.toHaveBeenCalled();
 });
+
+it('shows a bounded script budget as retained partial work without changing canonical status', async () => {
+  const f=fixture({...current('completed'),items:[{id:'budget-stop',kind:'tool',ordinal:1,turn_id:'computer-turn',run_id:'computer-run',activity:{
+    item_id:'budget-stop',tool_id:'budget-stop',tool_name:'computer.exec',status:'error',
+    presentation:{label:'Read the next report',renderer:'structured',chips:[{kind:'computer_budget',label:'budget',value:'operations'}],payload:{rows_provided:true,error:{code:'SCRIPT_FAILED',message:'Computer script stopped before completion (SCRIPT_OPERATION_LIMIT)'}}},
+  }}]});
+  const selector='[data-flower-activity-item-id="budget-stop"]';
+  await waitFor(()=>Boolean(f.surface.querySelector(selector)));
+  const row=f.surface.querySelector<HTMLElement>(selector)!;
+  expect(row.dataset.flowerActivityStatus).toBe('error');
+  expect(row.classList.contains('flower-activity-inline-row-error')).toBe(false);
+  expect(row.textContent).toContain('Script limit reached; completed work is retained');
+  expect(row.getAttribute('aria-label')).not.toContain('Failed');
+  row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+  await waitFor(()=>Boolean(row.querySelector('.flower-activity-observation-diagnostic')));
+  expect(row.textContent).toContain('SCRIPT_OPERATION_LIMIT');
+  expect(f.inputComputerControl).not.toHaveBeenCalled();
+});

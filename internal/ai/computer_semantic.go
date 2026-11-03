@@ -308,15 +308,20 @@ func normalizeComputerObservation(value any) (map[string]any, error) {
 	if snapshot.ExecutionMode != "" && !slices.Contains([]string{"background", "foreground"}, snapshot.ExecutionMode) {
 		return nil, errors.New("invalid semantic execution mode")
 	}
-	// Export parent-first order so a byte-bounded prefix remains a complete
-	// forest. Pruning removes dangling edges, never fabricates relationships.
+	// Preserve depth-first reading order, including root and sibling order.
+	// Parents still precede children, so bounded prefixes can prune dangling
+	// edges without fabricating relationships.
 	ordered := make([]computerSemanticNode, 0, len(snapshot.Nodes))
 	pending := slices.Clone(snapshot.Roots)
+	slices.Reverse(pending)
 	for len(pending) > 0 {
-		ref := pending[0]
-		pending = pending[1:]
+		ref := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
 		ordered = append(ordered, *byRef[ref])
-		pending = append(pending, byRef[ref].ChildRefs...)
+		children := byRef[ref].ChildRefs
+		for index := len(children) - 1; index >= 0; index-- {
+			pending = append(pending, children[index])
+		}
 	}
 	snapshot.Nodes = ordered
 	project := func(count int) computerSemanticSnapshot {

@@ -5485,6 +5485,7 @@
         "computerPreparedOnly": "已完成准备，未发送输入",
         "computerInputIncomplete": "部分输入已发送，请先检查当前状态",
         "computerEffectConfirmed": "已有操作完成，请先检查再继续",
+        "computerBudgetExhausted": "脚本达到执行上限，已完成的工作已保留",
         "computerObservationUnavailable": "暂时无法读取页面",
         "computerActionObservedUnavailable": "操作已执行，页面暂未读取",
         "computerObservationDetails": "技术详情"

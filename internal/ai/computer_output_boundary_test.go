@@ -185,3 +185,99 @@ func TestComputerAdapterReasonAppearsInActivityWithoutPrivateData(t *testing.T) 
 		t.Fatalf("activity diagnostic changed: %s %v", body, err)
 	}
 }
+
+func TestComputerBranchableSnapshotInvalidation(t *testing.T) {
+	for _, mode := range []string{"invalidated", "protocol", "privacy", "effect", "preparation", "input", "permission", "candidate", "cancellation"} {
+		t.Run(mode, func(t *testing.T) {
+			calls := 0
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+				calls++
+				if calls > 1 {
+					return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("Recovered")}}, nil
+				}
+				if mode == "privacy" {
+					return TargetToolResult{Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"secret_input"}}}, nil
+				}
+				if mode == "protocol" {
+					return computerObservationFailure(inner, map[string]any{"action_executed": false, "observation_stage": "semantic_read", "diagnostic": map[string]any{"phase": "protocol", "method": "Runtime.evaluate"}}, "fixture")
+				}
+				facts := map[string]any{"observation_invalidated": true, "action_executed": mode == "effect", "preparation_executed": mode == "preparation", "reason": "document_changed", "observation_stage": "semantic_read"}
+				if mode == "cancellation" {
+					cancel()
+				}
+				if mode == "candidate" {
+					facts["reason"] = "candidate_changed"
+				}
+				if mode == "input" {
+					facts["input_progress"] = map[string]any{"stage": "input_delivery", "posted": float64(1), "observed": float64(1), "expected": float64(2)}
+				}
+				return TargetToolResult{Result: facts}, nil
+			})
+			if mode == "permission" {
+				call.revalidate = func(context.Context) error {
+					if calls > 0 {
+						return errors.New("revoked")
+					}
+					return nil
+				}
+			}
+			result, err := executeTestScript(ctx, runtime, call, "globalThis.saved=41; const read=await ui.snapshot({on_invalidated:'return'}); if(read.status==='invalidated'){log(read); await ui.snapshot();} saved++;")
+			p := result.Result.(map[string]any)
+			if mode == "invalidated" {
+				if err != nil || calls != 2 || p["context_reset"] != false || p["completed"] != true {
+					t.Fatalf("branch failed: %+v %v calls=%d", p, err, calls)
+				}
+				if !reflect.DeepEqual(p["completed_actions"], []string{"snapshot"}) {
+					t.Fatalf("invalid read counted as complete: %+v", p)
+				}
+				_, err = executeTestScript(t.Context(), runtime, call, "ui.assert(saved===42);")
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if calls != 1 || p["context_reset"] != true {
+				t.Fatalf("unsafe continuation: %+v %v calls=%d", p, err, calls)
+			}
+			if mode == "candidate" && p["reason"] != "candidate_changed" {
+				t.Fatalf("candidate loss mislabeled: %+v", p)
+			}
+		})
+	}
+}
+
+func TestComputerScriptCompilationErrorKeepsNamespace(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
+		t.Fatal("must not dispatch")
+		return TargetToolResult{}, nil
+	})
+	_, err := executeTestScript(t.Context(), runtime, call, "globalThis.saved={count:7};")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{"const invalid = ;"} {
+		result, err := executeTestScript(t.Context(), runtime, call, code)
+		if err == nil || result.Result.(map[string]any)["context_reset"] != false {
+			t.Fatalf("healthy local error retired VM: %+v %v", result, err)
+		}
+		_, err = executeTestScript(t.Context(), runtime, call, "ui.assert(saved.count===7);")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestComputerActionabilityFinalOutput(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		result, err, _ := computerBrowserFailure(inner, false, "ELEMENT_NOT_ACTIONABLE", map[string]any{"action_executed": false, "actionability": map[string]any{"stage": "precondition", "connected": true, "visible": true, "enabled": false, "node_type": float64(1), "bounds": []any{float64(2), float64(3), float64(20), float64(10)}, "private_text": "must stay private"}}, "fixture")
+		return result, err
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.getByRole('button',{name:'Disabled'}).click();")
+	if err == nil {
+		t.Fatal("disabled click accepted")
+	}
+	facts, _ := result.Result.(map[string]any)["actionability"].(map[string]any)
+	if facts["enabled"] != false || facts["stage"] != "precondition" || facts["private_text"] != nil || len(toAnySlice(facts["bounds"])) != 4 {
+		t.Fatalf("actionability facts lost or leaked: %#v", facts)
+	}
+}

@@ -5485,6 +5485,7 @@
         "computerPreparedOnly": "已完成準備，尚未傳送輸入",
         "computerInputIncomplete": "部分輸入已傳送，請先檢查目前狀態",
         "computerEffectConfirmed": "已有操作完成，請先檢查再繼續",
+        "computerBudgetExhausted": "指令碼已達執行上限，已完成的工作已保留",
         "computerObservationUnavailable": "暫時無法讀取頁面",
         "computerActionObservedUnavailable": "操作已執行，頁面尚未讀取",
         "computerObservationDetails": "技術詳細資料"

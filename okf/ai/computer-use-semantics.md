@@ -59,6 +59,9 @@ actionability. Native source-declared actions retain their platform meaning.
 
 An ignored or truncated target has no invented reference; a platform-computed name or safe description may still be available.
 
+## Reading order
+Browser collection and Runtime normalization both preserve preorder depth-first root/sibling order, including guest/full/model output. Parents precede children, preserving valid bounded prefixes and omission flags. Structure never joins independently filtered fields into invented records; use source relationships and explicit object keys.
+
 # Boundaries
 
 ## Privacy and output lifecycle

@@ -5586,6 +5586,7 @@
         "computerPreparedOnly": "Подготовка завершена; ввод не отправлен",
         "computerInputIncomplete": "Ввод отправлен частично; проверьте состояние перед продолжением",
         "computerEffectConfirmed": "Действие выполнено; проверьте результат перед продолжением",
+        "computerBudgetExhausted": "Достигнут лимит скрипта; выполненная работа сохранена",
         "computerObservationUnavailable": "Не удалось прочитать страницу",
         "computerActionObservedUnavailable": "Действие выполнено; не удалось прочитать страницу",
         "computerObservationDetails": "Технические сведения"

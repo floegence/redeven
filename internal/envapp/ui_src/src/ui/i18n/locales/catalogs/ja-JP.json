@@ -5485,6 +5485,7 @@
         "computerPreparedOnly": "準備は完了しました。入力は送信されていません",
         "computerInputIncomplete": "入力は一部送信済みです。続行前に状態を確認してください",
         "computerEffectConfirmed": "操作が完了しています。続行前に確認してください",
+        "computerBudgetExhausted": "スクリプトの実行上限に達しました。完了した作業は保持されています",
         "computerObservationUnavailable": "ページを読み取れませんでした",
         "computerActionObservedUnavailable": "操作は実行されました。ページを読み取れませんでした",
         "computerObservationDetails": "技術的な詳細"

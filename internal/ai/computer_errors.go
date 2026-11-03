@@ -118,6 +118,11 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 				result.Result.(map[string]any)["downloads"] = downloads
 			}
 		}
+		if code == "ELEMENT_NOT_ACTIONABLE" {
+			if facts := computerActionabilityFacts(payload["actionability"]); facts != nil {
+				result.Result.(map[string]any)["actionability"] = facts
+			}
+		}
 		if code == "ELEMENT_NOT_ACTIONABLE" && !executed && payload["stage"] == "focus" && payload["reason"] == "not_focusable" {
 			result.Result.(map[string]any)["stage"] = "focus"
 			result.Result.(map[string]any)["reason"] = "not_focusable"
@@ -284,6 +289,9 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 	}
 	if diagnostic := computerOperationDiagnostic(payload["diagnostic"]); diagnostic != nil && (diagnostic["phase"] == "protocol" || diagnostic["phase"] == "evaluation" || diagnostic["phase"] == "adapter") {
 		facts["diagnostic"] = diagnostic
+	}
+	if payload["observation_invalidated"] == true && (payload["reason"] == "document_changed" || payload["reason"] == "candidate_changed") {
+		facts["observation_invalidated"], facts["reason"] = true, payload["reason"]
 	}
 	if stage == "capture" && payload["reason"] == "viewport_unstable" {
 		facts["reason"] = "viewport_unstable"

@@ -514,6 +514,7 @@
         "computerCompletedActions": "Acciones completadas",
         "computerUnavailable": "No disponible",
         "computerBlankPage": "Página en blanco",
+        "computerBudgetExhausted": "Se alcanzó el límite del script; se conserva el trabajo completado",
         "computerNoTargets": "No hay páginas ni aplicaciones disponibles",
         "previewLoading": "Cargando detalles…",
         "previewFailed": "No se pudieron cargar los detalles.",

@@ -33,6 +33,34 @@ func TestComputerSemanticSnapshotPreservesTreeAndStates(t *testing.T) {
 	}
 }
 
+func TestComputerSemanticSnapshotPreservesDepthFirstReadingOrder(t *testing.T) {
+	root := semanticFixtureNode("root", "document", "Report")
+	root["child_refs"] = []string{"section", "next"}
+	section := semanticFixtureNode("section", "group", "Metrics")
+	section["parent_ref"], section["child_refs"] = "root", []string{"value"}
+	value := semanticFixtureNode("value", "text", "42")
+	value["parent_ref"] = "section"
+	next := semanticFixtureNode("next", "button", "Next")
+	next["parent_ref"] = "root"
+	other := semanticFixtureNode("other", "document", "Second root")
+	tree := map[string]any{"semantic_schema_version": 2, "document_id": "fixture:order", "nodes": []any{root, section, next, value, other}, "truncated": false}
+	got, err := normalizeComputerObservation(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output computerObservationOutput
+	for name, observation := range map[string]any{"guest snapshot": got, "full output": output.render(got, "all", true)} {
+		nodes := observation.(map[string]any)["nodes"].([]any)
+		var refs []string
+		for _, raw := range nodes {
+			refs = append(refs, raw.(map[string]any)["ref"].(string))
+		}
+		if !slices.Equal(refs, []string{"root", "section", "value", "next", "other"}) {
+			t.Errorf("%s reading order: %v", name, refs)
+		}
+	}
+}
+
 func TestComputerSemanticSnapshotPreservesApplicationCoverage(t *testing.T) {
 	tree := semanticTestTree()
 	tree["source"], tree["coverage"] = "macos_accessibility", "application_provided"

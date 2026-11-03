@@ -293,3 +293,24 @@ func TestFileModelOutputRetainsExistingBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestComputerFinalEnvelopeDeduplicatesOnlyExactEmittedObservation(t *testing.T) {
+	observation := map[string]any{"tree_text": "unique tree", "document_id": "doc"}
+	source := map[string]any{"observation": observation, "observations": []any{map[string]any{"observation": observation}}, "output_order": []any{map[string]any{"kind": "observation", "index": 0}}, "observation_status": "current"}
+	result, err := encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result.structured["data"].(map[string]any)
+	if data["observation"] != nil || fmt.Sprint(data["current_observation_index"]) != "0" || strings.Count(string(result.text), "unique tree") != 1 {
+		t.Fatalf("duplicate model output: %s", result.text)
+	}
+	if source["observation"] == nil {
+		t.Fatal("mutated compatibility source")
+	}
+	source["observation"] = map[string]any{"tree_text": "different recovery observation"}
+	result, err = encodeModelToolResult(ToolResult{ToolID: "test", ToolName: "computer.exec", Status: toolResultStatusSuccess, Data: source})
+	if err != nil || result.structured["data"].(map[string]any)["observation"] == nil {
+		t.Fatalf("removed distinct observation: %v", err)
+	}
+}

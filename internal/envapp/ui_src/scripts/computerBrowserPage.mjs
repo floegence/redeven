@@ -49,7 +49,7 @@ export class BrowserNavigationError extends Error {
 // Typed evidence that a read sample lost its document or temporary candidate identity.
 // Only explicit condition waits may resample; never inferred from error text.
 export class BrowserObservationInvalidated extends Error {
-  constructor() { super('OBSERVATION_INVALIDATED'); }
+  constructor(reason = 'document_changed') { super('OBSERVATION_INVALIDATED'); this.observationReason = reason; }
 }
 
 // Sensitive-field transitions are observed in a CDP isolated world, including
@@ -373,6 +373,24 @@ export class BrowserComputerPage {
     return { level: reasons.size ? 'takeover' : 'routine', reason_codes: [...reasons], safe_to_capture: !reasons.size, safe_to_send_to_model: !reasons.size, ...(requiredOrigin ? { required_origin: requiredOrigin } : {}) };
   }
 
+  observationIdentity(rootRef) {
+    if (!rootRef) return {revision:this.revision};
+    const entry = this.references.get(rootRef);
+    if (!entry || this.observedFrames.get(entry.frame.frame.id) !== entry.document) throw new Error('STALE_REFERENCE');
+    const documents = new Map();
+    let document = entry.document;
+    while (document && !documents.has(document.frame.id)) {
+      documents.set(document.frame.id,document);
+      document = this.observedFrames.get(document.frame.parentId);
+    }
+    // Metadata belongs to the main document even for a child-scoped read.
+    for (const [id, record] of this.observedFrames) if (record.session === this.transport && !record.frame.parentId) documents.set(id,record);
+    return {documents};
+  }
+  identityCurrent(identity) {
+    return identity.documents ? [...identity.documents].every(([id,record]) => this.observedFrames.get(id) === record) : identity.revision === this.revision;
+  }
+
   async observe({ limit = 200, root_ref } = {}) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('INVALID_REQUEST');
     const root = root_ref ? await this.resolve({ ref: root_ref }) : undefined;
@@ -382,10 +400,13 @@ export class BrowserComputerPage {
     for (const frame of await this.frames()) {
       if (root && root.frame.frame.id !== frame.frame.id) continue;
       if (!layoutBySession.has(frame.session)) layoutBySession.set(frame.session, protocolRead(frame.session, 'DOMSnapshot.captureSnapshot', { computedStyles: [] }, domSnapshotValue));
+      const documentIdentity = this.observedFrames.get(frame.frame.id);
+      if (!documentIdentity) throw new BrowserObservationInvalidated();
       const [snapshot, layout] = await Promise.all([
         frame.session.send('Accessibility.getFullAXTree', { frameId: frame.frame.id }),
         layoutBySession.get(frame.session),
       ]);
+      if (this.observedFrames.get(frame.frame.id) !== documentIdentity) throw new BrowserObservationInvalidated();
       const document = layout.documents.find(document => layout.strings[document.frameId] === frame.frame.id);
       const boundsByNode = new Map();
       for (let index = 0; Number.isFinite(document?.scrollOffsetX) && Number.isFinite(document?.scrollOffsetY) && index < document.layout.nodeIndex.length; index++) {
@@ -403,12 +424,12 @@ export class BrowserComputerPage {
       // AX order is not guaranteed to be parent-first. Traverse explicitly so
       // a bounded snapshot always contains every represented parent.
       const seen = new Set();
-      const pending = snapshot.nodes.filter(node => root ? node.nodeId === root.axNodeId : !source.has(node.parentId)).map(node => node.nodeId);
-      for (let index = 0; index < pending.length; index++) {
-        const node = source.get(pending[index]);
+      const pending = snapshot.nodes.filter(node => root ? node.nodeId === root.axNodeId : !source.has(node.parentId)).map(node => node.nodeId).reverse();
+      while (pending.length) {
+        const node = source.get(pending.pop());
         if (!node || seen.has(node.nodeId)) continue;
         seen.add(node.nodeId);
-        pending.push(...(node.childIds || []));
+        pending.push(...(node.childIds || []).slice().reverse());
         if (node.ignored || !node.backendDOMNodeId || (allowed && !allowed.has(node.nodeId))) continue;
         const role = node.role?.value || 'unknown';
         if (['none', 'InlineTextBox'].includes(role)) continue;
@@ -570,7 +591,7 @@ export class BrowserComputerPage {
     if (!current || current.ignored || current.role?.value !== entry.role || nameIdentity(current.name?.value || '') !== entry.nameIdentity
       || entry.document !== this.observedFrames.get(entry.frame.frame.id)) {
       this.references.delete(entry.ref);
-      if (transient) throw new BrowserObservationInvalidated();
+      if (transient) throw new BrowserObservationInvalidated(entry.document !== this.observedFrames.get(entry.frame.frame.id) ? 'document_changed' : 'candidate_changed');
       throw new Error('STALE_REFERENCE');
     }
     entry.nodeType = node.nodeType;
@@ -686,11 +707,12 @@ export class BrowserComputerPage {
   }
 
   async conditionState(selector, { state = 'visible', equals } = {}) {
-    let found = false, enabled = false, matches = false;
+    let found = false, visible = false, enabled = false, matches = false;
     try {
       const element = await this.resolve(selector, false, true);
       const current = await this.elementState(element);
-      found = current.visible;
+      found = current.connected;
+      visible = current.visible;
       enabled = current.visible && current.enabled;
       if (found && ['text','value'].includes(state)) {
         const {executionContextId}=await element.frame.session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
@@ -704,15 +726,15 @@ export class BrowserComputerPage {
       let currentMatch;
       try { currentMatch = await this.resolve(selector, false, true); }
       catch (error) {
-        if (error.message === 'ELEMENT_NOT_FOUND') throw new BrowserObservationInvalidated();
+        if (error.message === 'ELEMENT_NOT_FOUND') throw new BrowserObservationInvalidated('candidate_changed');
         throw error;
       }
-      if (currentMatch.ref !== element.ref || currentMatch.document !== element.document) throw new BrowserObservationInvalidated();
+      if (currentMatch.ref !== element.ref || currentMatch.document !== element.document) throw new BrowserObservationInvalidated(currentMatch.document !== element.document ? 'document_changed' : 'candidate_changed');
     } catch (error) {
       if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
     }
-    const met = matches || (state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled);
-    return met ? {state} : {state:'timeout',requested_state:state,last_known:{found,enabled}};
+    const met = matches || (state === 'hidden' && !visible) || (state === 'visible' && visible) || (state === 'enabled' && enabled);
+    return met ? {state} : {state:'timeout',requested_state:state,last_known:{found,visible,enabled}};
   }
 
   async elementState(element) {
@@ -721,7 +743,33 @@ export class BrowserComputerPage {
     const { object } = await session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId });
     try {
       const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true,
-        functionDeclaration: 'function(){const e=this.nodeType===9?this.documentElement:this;if(!e?.isConnected||!e.getBoundingClientRect)return {visible:false,enabled:false};const r=e.getBoundingClientRect();let visible=r.width>0&&r.height>0;for(let p=e;p;p=p.parentElement||p.getRootNode()?.host){const s=getComputedStyle(p);if(s.visibility==="hidden"||s.display==="none"||Number(s.opacity)===0)visible=false;}const x=r.left+r.width/2;const y=r.top+r.height/2;let hit=document.elementFromPoint(x,y);while(hit?.shadowRoot?.elementFromPoint){const inner=hit.shadowRoot.elementFromPoint(x,y);if(!inner||inner===hit)break;hit=inner;}let receives=false;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===e){receives=true;break;}return {visible,enabled:!e.matches(":disabled")&&!e.closest("[inert],[aria-disabled=true]"),readonly:e.readOnly===true,receives,bounds:[r.x,r.y,r.width,r.height]};}' }, value => typeof value?.visible === 'boolean' && typeof value.enabled === 'boolean' && (!value.visible || (typeof value.readonly === 'boolean' && typeof value.receives === 'boolean' && Array.isArray(value.bounds) && value.bounds.length === 4 && value.bounds.every(Number.isFinite))));
+        functionDeclaration: `function(){
+          const node=this.nodeType===9?this.documentElement:this;
+          const connected=Boolean(node?.isConnected), node_type=node?.nodeType;
+          if(!connected)return {connected:false,node_type,visible:false,enabled:false,readonly:false,editable:false,receives:false};
+          let rects, element;
+          if(node.nodeType===3){const range=document.createRange();range.selectNodeContents(node);rects=[...range.getClientRects()];element=node.parentElement;}
+          else if(node.nodeType===1){rects=[...node.getClientRects()];element=node;}
+          else return {unsupported:true,node_type};
+          if(!element)return {unsupported:true,node_type};
+          const boxes=rects.filter(r=>r.width>0&&r.height>0);
+          const r=boxes[0];
+          let visible=boxes.length>0,opacity_zero=false,inert=false,aria_disabled=false;
+          // Visibility inherits, but descendants may explicitly restore it.
+          if(['hidden','collapse'].includes(getComputedStyle(element).visibility))visible=false;
+          for(let p=element;p;p=p.parentElement||p.getRootNode()?.host){
+            const s=getComputedStyle(p);if(s.display==='none'||s.contentVisibility==='hidden')visible=false;
+            opacity_zero ||= Number(s.opacity)===0;inert ||= p.hasAttribute('inert');aria_disabled ||= p.getAttribute('aria-disabled')==='true';
+          }
+          const enabled=!element.matches(':disabled')&&!inert&&!aria_disabled;
+          const readonly=element.readOnly===true;
+          const editable=node.nodeType===1&&(element.isContentEditable||element instanceof HTMLTextAreaElement||element instanceof HTMLInputElement)&&!readonly;
+          let hit=r?document.elementFromPoint(r.left+r.width/2,r.top+r.height/2):null;
+          while(hit?.shadowRoot?.elementFromPoint){const inner=hit.shadowRoot.elementFromPoint(r.left+r.width/2,r.top+r.height/2);if(!inner||inner===hit)break;hit=inner;}
+          let receives=false;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===node){receives=true;break;}
+          return {connected,node_type,rendered:visible,visible:visible&&!opacity_zero,enabled,readonly,editable,opacity_zero,receives,...(r?{bounds:[r.x,r.y,r.width,r.height]}:{})};
+        }` }, value => value?.unsupported === true || typeof value?.connected === 'boolean' && typeof value.visible === 'boolean' && typeof value.enabled === 'boolean' && (!value.visible || (typeof value.readonly === 'boolean' && typeof value.receives === 'boolean' && Array.isArray(value.bounds) && value.bounds.length === 4 && value.bounds.every(Number.isFinite))));
+      if (result.unsupported) throw Object.assign(new Error('TARGET_CAPABILITY_UNAVAILABLE'), {diagnostic:{phase:'read',method:'element_state',expected:'element_or_text_layout',recovery:'choose_supported_read'}});
       return result;
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', { objectId: object.objectId }); }
   }
@@ -744,9 +792,14 @@ export class BrowserComputerPage {
     return null;
   }
 
-  async actionable(element, hitTest = false) {
+  actionabilityFailure(state, stage) {
+    return Object.assign(new Error('ELEMENT_NOT_ACTIONABLE'), {actionability:{stage,...state}});
+  }
+  async actionable(element, action = 'fill') {
+    const hitTest = action !== 'fill';
+    const allowed = state => state.connected && (hitTest ? state.rendered : state.visible) && (action === 'hover' || state.enabled) && (hitTest || state.editable);
     const before = await this.elementState(element);
-    if (!before.visible || !before.enabled || (!hitTest && before.readonly)) throw new Error('ELEMENT_NOT_ACTIONABLE');
+    if (!allowed(before)) throw this.actionabilityFailure(before,'precondition');
     if (!hitTest) return;
     await this.effect(() => element.frame.session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }), 'preparation');
     let previous = await this.elementState(element);
@@ -754,10 +807,10 @@ export class BrowserComputerPage {
     do {
       await this.delay(32);
       const current = await this.elementState(element);
-      if (current.visible && current.enabled && current.receives && current.bounds.every((value, index) => Math.abs(value - previous.bounds[index]) < 0.5)) return;
+      if (allowed(current) && current.receives && previous.bounds && current.bounds.every((value, index) => Math.abs(value - previous.bounds[index]) < 0.5)) return;
       previous = current;
     } while (Date.now() < deadline);
-    throw new Error('ELEMENT_NOT_ACTIONABLE');
+    throw this.actionabilityFailure(previous,'hit_or_layout');
   }
 
   async scrollPoint(element) {
@@ -805,6 +858,20 @@ export class BrowserComputerPage {
     } finally { if(object?.objectId)await session.send('Runtime.releaseObject',{objectId:object.objectId}); }
   }
 
+  async validateFrameDocument(record) {
+    const {frameTree} = await record.session.send('Page.getFrameTree');
+    const pending = [frameTree];
+    while (pending.length) {
+      const current = pending.pop();
+      if (current.frame.id === record.frame.id) {
+        if (current.frame.loaderId !== record.frame.loaderId || this.observedFrames.get(record.frame.id) !== record) throw new BrowserObservationInvalidated();
+        return;
+      }
+      pending.push(...(current.childFrames || []));
+    }
+    throw new BrowserObservationInvalidated();
+  }
+
   async receivesPoint(element, x, y) {
     const session = element.frame.session;
     const objects = [];
@@ -828,12 +895,12 @@ export class BrowserComputerPage {
       // Validate the same point through each embedding session before input.
       checkpoint = 'embedding_frames';
       let current=session;
-      const frames=await this.frames();
       for (;;) {
         const {frameTree}=await current.send('Page.getFrameTree');
         const root=frameTree.frame;
         if (!root.parentId) return true;
-        const parent=frames.find(candidate=>candidate.frame.id===root.parentId);
+        const parent=this.observedFrames.get(root.parentId);
+        if(parent) await this.validateFrameDocument(parent);
         if (!parent || parent.session===current) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
         const {backendNodeId}=await parent.session.send('DOM.getFrameOwner',{frameId:root.id});
         const {quads}=await parent.session.send('DOM.getContentQuads',{backendNodeId});
@@ -848,6 +915,7 @@ export class BrowserComputerPage {
         current=parent.session;
       }
     } catch (error) {
+      if (error instanceof BrowserObservationInvalidated) throw error;
       throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'hit_test', protocolDiagnostic: {...(error.protocolDiagnostic || adapterFailure('hit_test','internal_error').protocolDiagnostic), checkpoint} });
     }
     finally { for (const objectId of objects) if (objectId) await session.send('Runtime.releaseObject', { objectId }); }
@@ -1137,7 +1205,7 @@ export class BrowserComputerPage {
       let target = this.transport;
       if (element) {
         target = element.frame.session;
-        await this.actionable(element, true);
+        await this.actionable(element, args.action);
         const { quads } = await target.send('DOM.getContentQuads', { backendNodeId: element.backendNodeId });
         if (!quads?.length) throw new Error('ELEMENT_NOT_FOUND');
         x = (quads[0][0] + quads[0][2] + quads[0][4] + quads[0][6]) / 4;

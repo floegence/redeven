@@ -81,7 +81,7 @@ for(const outcome of ['hidden','deadline','permission','privacy']) {
     const response=await call('computer.action',{action:'wait',selector:{role:'button',name:'Ready',exact:true},state:outcome==='hidden'?'hidden':'visible',timeout_ms:80});
     assert.equal(inputs,0);assert.ok(Date.now()-start<1500);
     if(outcome==='hidden')assert.equal(response.result.state,'timeout');
-    if(outcome==='deadline'){assert.equal(response.result.observation_invalidated,true);assert.equal(response.result.state,undefined);}
+    if(outcome==='deadline'){assert.equal(response.result.observation_invalidated,true);assert.equal(response.result.reason,'candidate_changed');assert.equal(response.result.state,undefined);}
     if(outcome==='permission')assert.equal(response.error,'TARGET_PERMISSION_REQUIRED');
     if(outcome==='privacy'){assert.equal(response.safety.level,'takeover');assert.equal(response.result.state,undefined);}
   }));

@@ -514,6 +514,7 @@
         "computerCompletedActions": "已完成的操作",
         "computerUnavailable": "不可用",
         "computerBlankPage": "空白页",
+        "computerBudgetExhausted": "脚本达到执行上限，已完成的工作已保留",
         "computerNoTargets": "没有可用的页面或应用",
         "previewLoading": "正在加载详情…",
         "previewFailed": "无法加载详情。",

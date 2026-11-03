@@ -514,6 +514,7 @@
         "computerCompletedActions": "已完成的操作",
         "computerUnavailable": "無法使用",
         "computerBlankPage": "空白頁面",
+        "computerBudgetExhausted": "指令碼已達執行上限，已完成的工作已保留",
         "computerNoTargets": "沒有可用的頁面或應用程式",
         "previewLoading": "正在載入詳情…",
         "previewFailed": "無法載入詳情。",

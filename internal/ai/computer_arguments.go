@@ -98,10 +98,10 @@ func computerOperationDiagnostic(value any) (out map[string]any) {
 	}
 	field := anyToString(raw["field"])
 	expected := anyToString(raw["expected"])
-	if !slices.Contains([]string{"arguments", "selector", "name", "key", "text", "coordinates", "x", "y", "from_x", "from_y", "to_x", "to_y", "delta_x", "delta_y", "duration_ms", "milliseconds", "timeout_ms", "state", "equals", "action", "coordinate_space", "attribute", "limit", "cursor", "root_ref", "topic", "url", "id", "after", "emit", "full", "screenshot", "wait_until"}, field) {
+	if !slices.Contains([]string{"arguments", "selector", "name", "key", "text", "coordinates", "x", "y", "from_x", "from_y", "to_x", "to_y", "delta_x", "delta_y", "duration_ms", "milliseconds", "timeout_ms", "state", "equals", "action", "coordinate_space", "attribute", "limit", "cursor", "root_ref", "topic", "url", "id", "after", "emit", "full", "screenshot", "wait_until", "on_invalidated"}, field) {
 		return nil
 	}
-	if !slices.Contains([]string{"documented_fields", "documented_arity", "documented_selector", "canonical_role_or_observed_ref", "key_chord", "finite_number", "nonnegative_coordinates", "text_max_20000", "integer_0_5000", "integer_0_30000", "visible_hidden_enabled", "documented_condition", "condition_text_max_2000", "supported_action", "image_pixels_with_frame", "inside_image", "readable_attribute", "integer_1_200", "current_cursor", "integer_1_1000", "string", "boolean", "navigation_lifecycle"}, expected) {
+	if !slices.Contains([]string{"documented_fields", "documented_arity", "documented_selector", "canonical_role_or_observed_ref", "key_chord", "finite_number", "nonnegative_coordinates", "text_max_20000", "integer_0_5000", "integer_0_30000", "visible_hidden_enabled", "documented_condition", "condition_text_max_2000", "supported_action", "image_pixels_with_frame", "inside_image", "readable_attribute", "integer_1_200", "current_cursor", "integer_1_1000", "string", "boolean", "navigation_lifecycle", "throw_or_return"}, expected) {
 		return nil
 	}
 	out = map[string]any{"phase": raw["phase"], "field": field, "expected": expected, "recovery": "correct_arguments"}
@@ -119,6 +119,38 @@ func computerOperationDiagnostic(value any) (out map[string]any) {
 	}
 	if expected == "canonical_role_or_observed_ref" {
 		out["example"] = "Use a documented canonical role; other is ref-only: ui.ref(observedRef)"
+	}
+	return out
+}
+
+// Only closed layout and interaction facts; never page text or alternate targets.
+func computerActionabilityFacts(value any) map[string]any {
+	raw, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	stage := anyToString(raw["stage"])
+	if !slices.Contains([]string{"precondition", "hit_or_layout", "hit_test"}, stage) {
+		return nil
+	}
+	out := map[string]any{"stage": stage}
+	for _, key := range []string{"connected", "visible", "rendered", "enabled", "readonly", "editable", "opacity_zero", "receives"} {
+		if v, ok := raw[key].(bool); ok {
+			out[key] = v
+		}
+	}
+	if n := readInt64Field(raw, "node_type"); n >= 1 && n <= 12 {
+		out["node_type"] = n
+	}
+	if bounds := toAnySlice(raw["bounds"]); len(bounds) == 4 {
+		valid := true
+		for _, v := range bounds {
+			n, ok := v.(float64)
+			valid = valid && ok && !math.IsNaN(n) && !math.IsInf(n, 0)
+		}
+		if valid {
+			out["bounds"] = bounds
+		}
 	}
 	return out
 }

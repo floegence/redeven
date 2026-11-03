@@ -57,7 +57,7 @@ for (const boundary of ['before_preparation', 'hit_test', 'after_pointer_move', 
       const send = session.send.bind(session);
       let inputs = 0;
       session.send = async (method, params = {}) => {
-        if (boundary === 'before_preparation' && method === 'Runtime.callFunctionOn' && params.functionDeclaration.includes('getBoundingClientRect'))
+        if (boundary === 'before_preparation' && method === 'Runtime.callFunctionOn' && params.functionDeclaration.includes('getClientRects'))
           return {exceptionDetails:{text:'private exception'}};
         if (boundary === 'hit_test' && method === 'Runtime.callFunctionOn' && params.functionDeclaration.startsWith('function(hit)'))
           return {exceptionDetails:{text:'private exception'}};

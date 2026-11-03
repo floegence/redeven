@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -66,6 +67,20 @@ func encodeModelToolResult(result ToolResult) (encodedModelToolResult, error) {
 		}
 	}
 	prepared := result
+	if result.ToolName == "computer.exec" {
+		if data, ok := result.Data.(map[string]any); ok && data["observation"] != nil {
+			for index, raw := range toAnySlice(data["observations"]) {
+				emitted, _ := raw.(map[string]any)
+				if reflect.DeepEqual(data["observation"], emitted["observation"]) {
+					compact := cloneAnyMap(data)
+					delete(compact, "observation")
+					compact["current_observation_index"] = index
+					prepared.Data = compact
+					break
+				}
+			}
+		}
+	}
 	var err error
 	if !isComputerUseTool(result.ToolName) && !completeReportTool(result.ToolName) {
 		var truncated bool

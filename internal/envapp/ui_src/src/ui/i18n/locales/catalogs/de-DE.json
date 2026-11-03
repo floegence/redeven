@@ -5485,6 +5485,7 @@
         "computerPreparedOnly": "Vorbereitung abgeschlossen; keine Eingabe gesendet",
         "computerInputIncomplete": "Eingabe teilweise gesendet; vor dem Fortfahren prüfen",
         "computerEffectConfirmed": "Eine Aktion wurde ausgeführt; vor dem Fortfahren prüfen",
+        "computerBudgetExhausted": "Skriptlimit erreicht; abgeschlossene Arbeit bleibt erhalten",
         "computerObservationUnavailable": "Seite konnte nicht gelesen werden",
         "computerActionObservedUnavailable": "Aktion ausgeführt; Seite konnte nicht gelesen werden",
         "computerObservationDetails": "Technische Details"

@@ -41,8 +41,7 @@ export class BrowserComputerController {
       opened_pages: this.page.openedPages, action_executed: executed, execution_mode: 'background' },
       safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
   }
-  async readObservation(read, stage = 'semantic_read') {
-    const revision = this.page.revision;
+  async readObservation(read, stage = 'semantic_read', identity = this.page.observationIdentity()) {
     const deadline = Date.now() + 1000;
     // Only a measured viewport mismatch has a bounded settling window.
     // Unknown failures stop this read; no input or privacy state is replayed.
@@ -51,7 +50,7 @@ export class BrowserComputerController {
         const result = await read();
         // Confirmed privacy evidence wins over a concurrent frame change.
         if (stage === 'safety_scan' && result.level === 'takeover') return result;
-        if (revision !== this.page.revision) throw new BrowserObservationInvalidated();
+        if (!this.page.identityCurrent(identity)) throw new BrowserObservationInvalidated();
         return result;
       } catch (error) {
         if (this.page.invalid || this.page.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
@@ -61,7 +60,7 @@ export class BrowserComputerController {
           // Sample again within the invocation budget without replaying input
           // or resetting the privacy latch. Cancellation interrupts the delay.
           await this.page.delay(Math.min(32, deadline - Date.now()));
-          if (revision !== this.page.revision) throw new BrowserObservationInvalidated();
+          if (!this.page.identityCurrent(identity)) throw new BrowserObservationInvalidated();
           continue;
         }
         throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage, protocolDiagnostic: error.protocolDiagnostic || adapterFailure(stage, 'internal_error').protocolDiagnostic });
@@ -114,7 +113,7 @@ export class BrowserComputerController {
       // Cleanup may yield to navigation, cancellation or privacy changes. The
       // complete observation remains bound to its original document until this
       // final publication boundary; no read or effect is replayed here.
-      const revision = response[observationRevision];
+      const identity = response[observationRevision];
       delete response[observationRevision];
       try {
         const safety = await this.readObservation(() => this.page.safety(), 'safety_scan');
@@ -124,7 +123,7 @@ export class BrowserComputerController {
             || this.page.stopped || this.page.operationCancelled) throw new Error('TARGET_CONNECTION_REQUIRED');
           if (this.page.openedPages.length) response = await this.targetChange(this.actionCompleted);
           else {
-            if (revision !== this.page.revision) throw new BrowserObservationInvalidated();
+            if (!this.page.identityCurrent(identity)) throw new BrowserObservationInvalidated();
             response.safety = safety;
           }
         }
@@ -284,24 +283,24 @@ export class BrowserComputerController {
     };
     if (page.openedPages.length) return await this.targetChange(dispatched());
     if (error instanceof BrowserObservationInvalidated) return {
-      result: { observation_invalidated: true, action_executed: dispatched(), execution_mode: 'background' },
+      result: { observation_invalidated: true, reason:error.observationReason, observation_stage:error.observationStage || 'semantic_read', action_executed: dispatched(), execution_mode: 'background' },
       safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false },
     };
     if (error instanceof BrowserNavigationError) return { error: error.message, result: error.result };
     if (error.message === 'AMBIGUOUS_DOWNLOAD') return { error: error.message, result: { action_executed: false, downloads: error.downloads } };
     if (error.message === 'ELEMENT_NOT_ACTIONABLE') return { error: error.message,
-      result: { action_executed: false, needs_observation: affected(), preparation_executed: page.preparationCount > (this.effectStart?.preparations ?? page.preparationCount) } };
+      result: { action_executed: false, needs_observation: affected(), preparation_executed: page.preparationCount > (this.effectStart?.preparations ?? page.preparationCount), ...(error.actionability ? {actionability:error.actionability} : {}) } };
     return { error: rejections.has(error.message) ? error.message : affected() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',
       result: { action_executed: dispatched(), needs_observation: affected() || error.message === 'STALE_REFERENCE', ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
   }
 
   async observeResult(request, read, effectExecuted = false, {metadata: includeMetadata = true, validateSample = false} = {}) {
     const page = this.page, tool = request.tool_name, args = request.args || {};
-    const revision = page.revision;
+    const needsFrame = tool === 'computer.screenshot' || (tool === 'computer.observe' ? args.screenshot === true : request.script_operation !== true);
+    const identity = page.observationIdentity(needsFrame ? undefined : args.root_ref || args.selector?.ref || args.selector?.root_ref);
     if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: effectExecuted, required_navigation_url: page.requiredURL, needs_observation: true } };
     if (page.openedPages.length) return await this.targetChange(effectExecuted);
-    const result = await this.readObservation(read);
-    const needsFrame = tool === 'computer.screenshot' || (tool === 'computer.observe' ? args.screenshot === true : request.script_operation !== true);
+    const result = await this.readObservation(read, 'semantic_read', identity);
     const frame = needsFrame ? await this.readObservation(() => this.capture(request.live_frame ? undefined : request.target_id), 'capture') : undefined;
     const metadata = includeMetadata ? await this.readObservation(async () => {
       const { frameTree } = await this.transport.send('Page.getFrameTree');
@@ -312,9 +311,9 @@ export class BrowserComputerController {
     // also validate each internal sample without resetting privacy latches.
     const captured = validateSample ? await this.readObservation(() => page.safety(), 'safety_scan') : undefined;
     if (captured?.level === 'takeover') return this.pause(captured, effectExecuted);
-    if (revision !== page.revision) throw new BrowserObservationInvalidated();
+    if (!page.identityCurrent(identity)) throw new BrowserObservationInvalidated();
     if (page.operationCancelled) throw new Error('BROWSER_TOOL_CANCELLED');
-    return { [observationRevision]: revision, result: { ...result, ...(frame?.geometry ? {frame_geometry:frame.geometry} : {}), summary: tool === 'computer.action' ? args.action : tool, ...metadata,
+    return { [observationRevision]: identity, result: { ...result, ...(frame?.geometry ? {frame_geometry:frame.geometry} : {}), summary: tool === 'computer.action' ? args.action : tool, ...metadata,
       action_executed: effectExecuted, execution_mode: 'background', ...(page.downloads.size ? { downloads: [...page.downloads.values()] } : {}) }, safety: captured, ...(frame ? { screenshot: frame } : {}) };
   }
 
