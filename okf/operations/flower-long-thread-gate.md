@@ -25,6 +25,8 @@ Sustained fixture creates 500 canonical turns, 1,000 messages and 1,000 tools th
 
 Export canonical terminal outcome and failure before waiting for UI completion so engine failures cannot appear as unexplained UI timeouts. Require successful canonical and observed completion, then use actual history/disclosure controls to compare every generated prose/reasoning item and exact code blocks with canonical content/full Markdown. Enter reading mode and reveal parents before children; never force hidden clicks/change disclosure state. Draft/focus/selection survive drag. Synthetic floating output does not qualify terminal emulation.
 
+A responsive timing sample with a failed terminal is a failed qualification. Published Floret v7.103.1 owns linear active-path turn reads and same-read source reuse; Redeven consumes its checksummed published module without reconstructing journal records or extending engine completion deadlines. Diagnostic instrumentation and accelerated fixtures cannot certify the fixed workload.
+
 Allow preparation, ten-minute output and complete post-timing inspection to finish within the supervised fixture lifetime. Each generated item opens only its owning sequence through the real disclosure control; do not repeatedly open unrelated historical groups. A 1,200-row regression forbids geometry reads for preserved/appended baselines and verifies exact interior-gap height after removal. Actual folding still protects selection, focus and inspected content.
 
 ## Responsiveness
