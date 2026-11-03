@@ -83,6 +83,23 @@ environment and Plugin Center. Its exact bundled hardened runtime executes the
 current published author Worker successfully through production Integration;
 this does not certify the separate full Desktop I/O workflow.
 
+Both independent product endurance runs complete. The candidate browser passes
+100 unique-origin churn cycles and 30 minutes with 357 input/visibility/selection
+checks, native undo, close veto and sibling-preserving retirement; final live
+frames, page/HTTP errors and observed guest long tasks are all zero. Input plus
+switch P95 is 22.83 ms (baseline 23.02 ms). Candidate process-tree RSS during the
+soak is 1,065.02 MiB initially and 502.25 MiB at the last live sample; it is
+505.95 MiB after frame cleanup. RSS includes shared pages and retained browser
+allocations, so this is bounded-duration evidence rather than proof of no leak.
+
+Candidate Worker endurance completes 30m4.40s: 359 batches, 1,436 correct calls,
+359 expected application rejections, three normal gateway renewals and successful
+Integration close. The host and runtime exit. Observed host/runtime process-tree
+RSS is 71.55 MiB initially, 63.78 MiB finally and 78.13 MiB at peak. The baseline
+also completes 30 minutes (1,432 correct calls, 358 expected rejections). Author
+guests differ in these endurance runs; they are correctness/lifetime checks,
+not a paired throughput or memory-performance comparison.
+
 The broad browser suite has a pre-existing Monokai hover-contrast failure:
 4.3187 versus 4.5 in unchanged Floe 0.87.2 Button styles. The threshold remains
 unchanged; the same 27/28 result is reproduced with published ReDevPlugin 3.14
@@ -111,5 +128,9 @@ claim arbitrary native-library, shell, WASI or browser-sandbox escape support.
 - product-paired-summary-315.json, product-runtime-cold-summary.json,
   product-resources-candidate315-summary.json, accepted-paired-summary.json and
   accepted-throughput-summary.json record the measured aggregates.
+- product-ui-soak-summary.json and product-runtime-soak-summary.json bind the
+  completed endurance results to their retained raw samples and pass logs.
+- Redeven implementation commit is 902191cb2fe690d84d04824833cf464da82a28e1;
+  its normal staged-source commit hook passed all three groups.
 - Redeven integration is local only for this task. Its push gate and push are
   explicitly excluded by the owner; prior unpublished main commits are kept.
