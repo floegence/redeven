@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { chromium } from 'playwright';
 import { BrowserComputerController } from './computerBrowserController.mjs';
+import { BrowserObservationInvalidated } from './computerBrowserPage.mjs';
 
 const safe = {level:'routine',safe_to_capture:true,safe_to_send_to_model:true};
 function fixture() {
@@ -12,6 +13,49 @@ function fixture() {
     observe:async()=>({document_id:'original:0',nodes:[],truncated:false}),releaseInput:async()=>{}});
   return {controller,page,run:()=>controller.execute({tool_name:'computer.observe',script_operation:true,full_access:true})};
 }
+
+for(const boundary of ['frame_inventory','entry_safety']) {
+  test('explicit condition wait owns lifecycle changes during '+boundary,async()=>{
+    const {controller,page}=fixture();let starts=0,scans=0,samples=0;
+    page.beginObservation=async()=>{starts++;if(boundary==='frame_inventory'&&starts===1){page.invalidate();throw new BrowserObservationInvalidated();}};
+    page.safety=async()=>{scans++;if(boundary==='entry_safety'&&scans===1){page.invalidate();throw new BrowserObservationInvalidated();}return safe;};
+    page.conditionState=async()=>{samples++;return {state:'visible'};};
+    const result=await controller.execute({tool_name:'computer.action',script_operation:true,full_access:true,args:{action:'wait',selector:{role:'button',name:'Ready'},timeout_ms:1000}});
+    assert.equal(result.result.state,'visible',JSON.stringify(result));
+    assert.equal(result.result.action_executed,false);assert.equal(samples,1);
+    assert.ok(result.result.elapsed_ms>=0);assert.equal(page.listeners.size,0);
+  });
+}
+
+test('wait discards a protocol-rejected sample only with independent lifecycle evidence',async()=>{
+  const {controller,page}=fixture();let samples=0;
+  page.conditionState=async()=>{samples++;if(samples===1){page.invalidate();throw Object.assign(new Error('opaque transport rejection'),{protocolDiagnostic:{phase:'protocol',method:'Page.createIsolatedWorld'}});}return {state:'visible'};};
+  const result=await controller.execute({tool_name:'computer.action',script_operation:true,full_access:true,args:{action:'wait',selector:{role:'button'},timeout_ms:1000}});
+  assert.equal(result.result.state,'visible',JSON.stringify(result));assert.equal(samples,2);
+});
+
+test('wait entry protocol failure without lifecycle evidence stops once',async()=>{
+  const {controller,page}=fixture();let starts=0,samples=0;
+  page.beginObservation=async()=>{starts++;throw Object.assign(new Error('opaque transport rejection'),{protocolDiagnostic:{phase:'protocol',method:'Page.createIsolatedWorld'}});};
+  page.conditionState=async()=>{samples++;return {state:'visible'};};
+  const result=await controller.execute({tool_name:'computer.action',script_operation:true,full_access:true,args:{action:'wait',selector:{role:'button'},timeout_ms:1000}});
+  assert.equal(result.error,'TARGET_OBSERVATION_UNAVAILABLE');assert.equal(starts,1);assert.equal(samples,0);
+  assert.deepEqual(result.result.diagnostic,{phase:'protocol',method:'Page.createIsolatedWorld'});
+});
+
+for(const boundary of ['permission','cancel','connection'])test('wait lifecycle evidence never overrides '+boundary,async()=>{
+  const {controller,page}=fixture();let samples=0;
+  page.conditionState=async()=>{
+    samples++;page.invalidate();
+    if(boundary==='permission')page.requiredURL='https://ungranted.test/';
+    if(boundary==='cancel')page.operationCancelled=true;
+    if(boundary==='connection')page.invalid=true;
+    throw Object.assign(new Error('opaque rejection'),{protocolDiagnostic:{phase:'protocol',method:'Page.createIsolatedWorld'}});
+  };
+  const result=await controller.execute({tool_name:'computer.action',script_operation:true,full_access:true,args:{action:'wait',selector:{role:'button'},timeout_ms:1000}});
+  assert.equal(samples,1);assert.equal(result.result?.state,undefined);assert.equal(page.listeners.size,0);
+  assert.equal(result.error,boundary==='permission'?'TARGET_PERMISSION_REQUIRED':boundary==='connection'?'TARGET_CONNECTION_REQUIRED':'TARGET_OBSERVATION_UNAVAILABLE');
+});
 
 for(const boundary of ['after_read','before_metadata','after_metadata']) {
   test('one observation rejects document replacement '+boundary,async()=>{

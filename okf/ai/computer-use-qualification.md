@@ -126,3 +126,16 @@ regressions reproduce the empty-metadata boundary and verify actual-document URL
 resolution, private input, ungranted origin and invalid URL rejection. They pass
 with the 73 surrounding read/privacy/lifecycle checks. A new product run is required
 to certify the corrected build; prior old-thread root causes remain unproven.
+
+
+The next real connected-Chrome task at 26f8a1f88 completes eight resource/report
+pairs with 25 computer.exec calls: 18 successes and seven observation
+interruptions. None retains adapter/safety_scan/internal_error; one identifies
+Page.createIsolatedWorld protocol rejection and the others report read/capture
+lifetime interruption. The built renderer shows neutral confirmed-action copy.
+This is not a zero-interruption pass: an explicit wait could stop in frame/safety
+preparation before entering its own sampling loop. Three failing deterministic
+regressions reproduce that boundary; four real Chromium fixtures verify child
+replacement and transient privacy evidence during entry. Preparation now shares
+the caller's wait deadline without resetting privacy state; only typed lifecycle
+evidence permits another sample. Unknown protocol failures still stop once.

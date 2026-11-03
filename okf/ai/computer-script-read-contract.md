@@ -42,8 +42,11 @@ URL metadata is resolved by reading document.URL in that exact isolated frame.
 The same lifecycle, origin and privacy checks still apply; no parent-origin
 substitution, blank-URL allowlist or website-specific rule is introduced. Missing
 or invalid document URLs remain explicit evaluation failures.
-Condition waits own a deadline and repeatedly obtain independently validated
-read-only samples. Typed lifecycle or temporary query-candidate invalidation
+Condition waits own one deadline covering observer preparation, entry safety and
+independently validated read-only samples. A preparation lifecycle change remains
+inside that explicit wait; it does not reset the deadline or the privacy latch.
+Protocol rejection plus an independently observed revision change invalidates that
+sample; protocol message wording alone never does. Ordinary reads still stop. Typed lifecycle or temporary query-candidate invalidation
 discards only that sample; unknown protocol/evaluation failures, ambiguity, stale
 fixed refs/root_ref, permission changes and cancellation stop. Semantic waits
 revalidate the original unique match and scope after reading its state, keep the original query

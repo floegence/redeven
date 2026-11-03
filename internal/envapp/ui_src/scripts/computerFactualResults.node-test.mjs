@@ -136,3 +136,24 @@ for(const mode of ['initial_document','private_input','ungranted_origin','invali
   assert.equal(JSON.stringify(result).includes('never-export'),false);
  }));
 }
+
+for(const boundary of ['beginObservation','safety'])for(const privacy of [false,true]){
+ test('real wait includes '+boundary+' frame replacement and preserves privacy='+privacy,()=>fixture('<button>Ready</button><iframe srcdoc="<p>Original</p>"></iframe>',async({tab,controller,session,call})=>{
+  await tab.frameLocator('iframe').locator('p').waitFor();
+  await call('computer.observe');
+  const original=controller.page[boundary].bind(controller.page);let changed=false,inputs=0;
+  const send=session.send.bind(session);session.send=(method,args)=>{if(method.startsWith('Input.'))inputs++;return send(method,args);};
+  controller.page[boundary]=async(...args)=>{
+   const result=await original(...args);
+   if(!changed){changed=true;await tab.evaluate(privateInput=>{
+    if(privateInput){const secret=document.createElement('input');secret.type='password';document.body.append(secret);secret.remove();}
+    document.querySelector('iframe').srcdoc='<p>Replacement</p>';
+   },privacy);await tab.frameLocator('iframe').locator('p').filter({hasText:'Replacement'}).waitFor();}
+   return result;
+  };
+  const result=await call('computer.action',{action:'wait',selector:{role:'button',name:'Ready'},state:'visible',timeout_ms:1000});
+  if(privacy){assert.equal(result.safety.level,'takeover',JSON.stringify(result));assert.equal(result.result.state,undefined);}
+  else{assert.equal(result.result.state,'visible',JSON.stringify(result));assert.ok(result.result.samples>=2);}
+  assert.equal(inputs,0);assert.equal(controller.page.listeners.size,0);
+ }));
+}

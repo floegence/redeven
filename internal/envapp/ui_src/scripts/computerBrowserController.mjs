@@ -175,6 +175,10 @@ export class BrowserComputerController {
           return { result: { selected: true, action_executed: false },
             safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
         }
+        if (request.tool_name === 'computer.action' && args.action === 'wait') {
+          validateBrowserAction(args, false);
+          return await this.waitForCondition(request, args);
+        }
         await this.readObservation(() => page.beginObservation(), 'frame_inventory');
         const before = await this.readObservation(() => page.safety({ authorizedNavigation: request.tool_name === 'browser.navigate' && page.allowsURL(args.url) }), 'safety_scan');
         if (before.level === 'takeover') return this.pause(before, false);
@@ -228,7 +232,6 @@ export class BrowserComputerController {
           ? imageCoordinates(operation, this.frameAnchor, await this.readObservation(() => viewportGeometry(this.transport), 'capture'), `${page.prefix}:${page.revision}`, request.target_id) : operation;
         // Every semantic read uses the same error/observation boundary.
         // Invalid inputs remain rejections; read failures never retire a source.
-        if (mapped.action === 'wait') return await this.waitForCondition(request, mapped);
         if (['read','text','query','table','attribute','source','selection','capabilities'].includes(mapped.action) || mapped.action==='clipboard'&&mapped.operation!=='write') read = () => page.action(mapped);
         else {
           result = await page.action(mapped);
@@ -306,13 +309,27 @@ export class BrowserComputerController {
     const started = Date.now(), timeout = args.timeout_ms ?? 10000;
     const deadline = started + timeout;
     let samples = 0;
+    let observationStarted = false, entryValidated = false;
     for (;;) {
       let changed, timer;
+      const sampleRevision = page.revision;
       const notification = new Promise(resolve => { changed = resolve; page.listeners.add(changed); });
       try {
         if (page.stopped || page.operationCancelled || page.invalid || page.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
         try {
           samples++;
+          // Preparation is part of the caller's explicit wait deadline. Begin
+          // only once: a resample must not erase transient privacy evidence.
+          if (!observationStarted) {
+            observationStarted = true;
+            await this.readObservation(() => page.beginObservation(), 'frame_inventory');
+          }
+          if (!entryValidated) {
+            const before = await this.readObservation(() => page.safety(), 'safety_scan');
+            if (before.level === 'takeover') return this.pause(before, false);
+            entryValidated = true;
+          }
+          if (page.openedPages.length) return await this.targetChange(false);
           const response = await this.observeResult(request, () => page.conditionState(args.selector, args), false, {metadata:false,validateSample:true});
           if (response.safety?.level === 'takeover' || response.result?.target_changed || response.error
             || response.result?.state !== 'timeout' || Date.now() >= deadline) {
@@ -322,7 +339,9 @@ export class BrowserComputerController {
         } catch (error) {
           // Only typed document or temporary query-candidate evidence discards a sample.
           // The same selector, permission scope and original deadline remain.
-          if (!(error instanceof BrowserObservationInvalidated) || page.stopped || page.operationCancelled
+          const invalidated = error instanceof BrowserObservationInvalidated
+            || error.protocolDiagnostic?.phase === 'protocol' && sampleRevision !== page.revision && !rejections.has(error.message);
+          if (!invalidated || page.stopped || page.operationCancelled || page.requiredURL || page.requiredOrigin
             || page.invalid || page.guardFailure || Date.now() >= deadline) throw error;
         }
         await Promise.race([notification, new Promise(resolve => { timer = setTimeout(resolve, Math.min(100, Math.max(0, deadline - Date.now()))); })]);
