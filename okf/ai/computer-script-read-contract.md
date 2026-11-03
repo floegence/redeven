@@ -120,6 +120,9 @@ Unknown delivery or release stays uncertain. An exception from a mutating browse
 evaluation cannot confirm the operation, even if CDP transported a response.
 Safe hit-test checkpoints identify point_coordinates, point_node, target_ancestry,
 embedding_frames or scroll_intersection without copying DOM/exception text.
+CDP may return a CSSPseudoElement for generated content; hit testing follows its
+originating element before the ordinary ancestor/shadow-host check. Unrelated
+overlay owners remain non-actionable; no alternate point or target is tried.
 Flower presents prepared and partial-input interruptions distinctly from completed
 actions. Script failed_operation_phase describes the interrupted operation;
 completed prefix actions cannot overwrite that phase. Presentation never changes

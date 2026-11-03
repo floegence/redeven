@@ -820,7 +820,9 @@ export class BrowserComputerPage {
       }
       checkpoint = 'target_ancestry';
       const result = await evaluate(session, 'Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
-        functionDeclaration: 'function(hit){const target=this.nodeType===9?this.documentElement:this;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===target)return true;return false;}' }, value => typeof value === 'boolean');
+        // CDP may resolve a generated box as CSSPseudoElement, not a Node.
+        // Its originating element owns input; overlays still fail ancestry.
+        functionDeclaration: 'function(hit){const target=this.nodeType===9?this.documentElement:this;const owner=typeof CSSPseudoElement!=="undefined"&&hit instanceof CSSPseudoElement?hit.element:hit;for(let p=owner;p;p=p.parentElement||(p.getRootNode() instanceof ShadowRoot?p.getRootNode().host:null))if(p===target)return true;return false;}' }, value => typeof value === 'boolean');
       if (!result) return false;
       // An OOPIF session cannot see an overlay in its embedding document.
       // Validate the same point through each embedding session before input.
