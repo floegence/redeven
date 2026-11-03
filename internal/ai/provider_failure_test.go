@@ -138,7 +138,7 @@ func TestOpenRouterFailurePresentation(t *testing.T) {
 				t.Fatalf("lost safe upstream message: %s", detail)
 			}
 			for _, private := range []string{"private", "Bearer", "sk-secret", "Google AI Studio", "https://", "quota", "limit resets"} {
-				if strings.Contains(failure.Message+message+detail, private) {
+				if strings.Contains(safeFailureJSON(t, failure.Message)+message+safeFailureJSON(t, detail), private) {
 					t.Errorf("untrusted or unsupported claim exposed: %s", private)
 				}
 			}
@@ -274,7 +274,7 @@ func TestProviderDiagnosticsCaptureHTTPAndStreamFailures(t *testing.T) {
 				}
 				detail := canonicalFailureDetail(&flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: err.Error()})
 				for _, value := range []string{"private prompt", "Bearer", "sk-secret", "secret-credential"} {
-					if strings.Contains(err.Error()+message+detail, value) {
+					if strings.Contains(safeFailureJSON(t, err.Error())+message+safeFailureJSON(t, detail), value) {
 						t.Fatalf("private content leaked: %s", value)
 					}
 				}

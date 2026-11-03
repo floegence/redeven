@@ -87,7 +87,7 @@ func TestProviderAttemptPreservesUnknownFailureFacts(t *testing.T) {
 	if !ok || d.Attempt == nil || d.Attempt.HTTPStatus != 200 {
 		t.Fatalf("unclassified attempt lost: %v", err)
 	}
-	if !errors.Is(err, cause) || strings.Contains(err.Error(), "private prompt") || strings.Contains(err.Error(), "sk-secret") {
+	if !errors.Is(err, cause) || strings.Contains(safeFailureJSON(t, err.Error()), "private prompt") || strings.Contains(safeFailureJSON(t, err.Error()), "sk-secret") {
 		t.Fatalf("unsafe diagnostic: %v", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestProviderValidationDiagnosticSurvivesDesktopRPC(t *testing.T) {
 		if !ok || got.Code != string(responseHistoryCommitFailed) || got.Message != d.Message || got.Stage != "history_commit" || got.Attempt == nil || got.Attempt.ResponseID != "resp_fixture" || got.Attempt.TerminalEvent != "response.completed" || flprovider.RetryAdviceForError(normalized) != advice {
 			t.Fatalf("RPC lost diagnostic or changed retry advice: %v", normalized)
 		}
-		if strings.Contains(normalized.Error(), "private provider body") || strings.Contains(normalized.Error(), "sk-secret") {
+		if strings.Contains(safeFailureJSON(t, normalized.Error()), "private provider body") || strings.Contains(safeFailureJSON(t, normalized.Error()), "sk-secret") {
 			t.Fatal("private cause leaked")
 		}
 	}

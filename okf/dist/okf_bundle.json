@@ -10743,7 +10743,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-03",
         "tags": [
           "ai",
           "diagnostics",
@@ -10753,15 +10753,15 @@
         "title": "Model request recovery",
         "type": "AI Runtime Contract"
       },
-      "body_length": 2979,
+      "body_length": 3597,
       "summary": "Floret owns retry admission, physical-request deadlines and attempt identity. Redeven supplies protocol facts through one adapter and displays the authoritative current view. Frozen input, confirmed tool exchanges and user cancellation retain their existing authority across transport recovery.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.\n\nRedeven neither repairs old cancellation records nor owns a second retry loop.\n\nAdapter-owned response checks use typed diagnostic codes and reviewed constant\nmessages for output conflicts or gaps, tool namespace/argument conflicts, invalid\nusage and native history preparation/commit failures. Classification does not\nchange retry advice, cancellation, response validation or tool dispatch. Private\ncauses remain in the in-process error chain; arbitrary error prose, prompts and\nraw response bodies never become diagnostic text.\n\nThe Responses attempt collector normalizes failures before attaching transport\nfacts. Its bounded envelope preserves HTTP status, request/response identifiers,\nterminal event, output index when known, and Floret attempt identity through\nDesktop RPC and canonical failure storage. Logs serialize numeric timings and\nthe same safe failure classification. Restart retains the details without\nreplaying the request; older envelopes remain readable. Flower shows the safe\nreason with expandable, copyable evidence. Missing historical evidence is not\nreconstructed.\n\nTool repetition diagnostics use only validated Floret ToolRepetition fields:\ntool name, call ID, consecutive count, limit, prior feedback and non-execution.\nThey share the existing expandable/copyable error detail with canonical thread,\nturn and run identity. No argument values are exposed. Historical failures retain\ntheir safe reason without invented counts or claims that recovery feedback was\nsent. Localized copy preserves saved-result and explicit-retry guidance.",
-          "char_count": 1784
+          "body": "Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement.\n\nRedeven neither repairs old cancellation records nor owns a second retry loop.\n\nAdapter-owned response checks use typed diagnostic codes and reviewed constant\nmessages for output conflicts or gaps, tool namespace/argument conflicts, invalid\nusage and native history preparation/commit failures. Classification does not\nchange retry advice, cancellation, response validation or tool dispatch. Original error messages and wrapped causes are retained separately from the\nsanitized summary. Published Floret v7.101.0 owns the FailureDetails contract.\nThe authorized original field preserves complete HTTP/SSE bytes, messages,\nstatus and native identifiers without truncation, normalization or redaction.\nBytes remain base64 in JSON; valid UTF-8 also has a readable original_body_text\nview. Partial reads retain received bytes and explicitly mark incompleteness.\nRequest headers, keys and prompts are not collected. Returned evidence may\ncontain private provider content and must be rendered as literal text.\n\nThe Responses attempt collector normalizes failures before attaching transport\nfacts. Its versioned envelope preserves HTTP status, request/response identifiers,\nterminal event, output index when known, and Floret attempt identity through\nDesktop RPC and canonical failure storage. Logs serialize numeric timings and\nonly the safe failure classification, excluding original evidence. Restart retains the details without\nreplaying the request; older envelopes remain readable. Flower shows the safe\nreason with collapsed, expandable and fully copyable original evidence. Display\nand copy preserve whitespace; provider text is never interpreted as markup. Missing historical evidence is not\nreconstructed.\n\nTool repetition diagnostics use only validated Floret ToolRepetition fields:\ntool name, call ID, consecutive count, limit, prior feedback and non-execution.\nThey share the existing expandable/copyable error detail with canonical thread,\nturn and run identity. No argument values are exposed. Historical failures retain\ntheir safe reason without invented counts or claims that recovery feedback was\nsent. Localized copy preserves saved-result and explicit-retry guidance.",
+          "char_count": 2402
         },
         {
           "id": "boundaries",
@@ -31799,5 +31799,5 @@
       ]
     }
   ],
-  "source_sha256": "f9322ad81321274d151ced6902e6bd3f0dfda59b5ba6ba80ca5c013e7d39edf2"
+  "source_sha256": "b6db212c73abc17ef9cfa09887fdae5421fa466db56741de7dedf59d4eb9196e"
 }

@@ -428,10 +428,17 @@ func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	switch failure.Code {
 	case flruntime.ThreadTurnFailureProvider:
 		if failure.ProviderTimeout != nil && failure.ProviderTimeout.Validate() == nil {
+			var original *flprovider.FailureDetails
+			if diagnostic, ok := parseProviderFailure(failure.Message); ok {
+				original = diagnostic.Original
+			} else {
+				original = flprovider.FailureDetailsForError(errors.New(failure.Message))
+			}
 			raw, _ := json.MarshalIndent(struct {
-				Code    string                            `json:"code"`
-				Timeout *flprovider.RequestTimeoutDetails `json:"timeout"`
-			}{runErrorCodeProviderRequestTimeout, failure.ProviderTimeout}, "", "  ")
+				Code     string                            `json:"code"`
+				Timeout  *flprovider.RequestTimeoutDetails `json:"timeout"`
+				Original *flprovider.FailureDetails        `json:"original,omitempty"`
+			}{runErrorCodeProviderRequestTimeout, failure.ProviderTimeout, original}, "", "  ")
 			return string(raw)
 		}
 		if detail := providerFailureDetail(failure.Message); detail != "" {

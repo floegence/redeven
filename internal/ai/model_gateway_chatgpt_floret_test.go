@@ -313,7 +313,7 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 					t.Fatalf("local failure lost attempt evidence: %s", detail)
 				}
 			}
-			if strings.Contains(first.Failure.Message+message+detail, "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") || strings.Contains(detail, "private-output-type") {
+			if strings.Contains(safeFailureJSON(t, first.Failure.Message)+message+safeFailureJSON(t, detail), "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") || strings.Contains(safeFailureJSON(t, detail), "private-output-type") {
 				t.Fatal("canonical failure leaked credentials")
 			}
 			if err := host.Shutdown(t.Context()); err != nil {

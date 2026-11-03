@@ -19,8 +19,11 @@ func TestResponsesHistoryDiagnosticRetainsSafeStructuralCause(t *testing.T) {
 		if !ok || d.HistoryDetail == nil || d.HistoryDetail.Reason != "visible_mismatch" || *d.HistoryDetail.RecordIndex != 0 || *d.HistoryDetail.CanonicalIndex != 7 || *d.HistoryDetail.ExpectedItems != 2 || *d.HistoryDetail.AvailableItems != 1 || strings.Join(d.HistoryDetail.Fields, ",") != "arguments,content" {
 			t.Fatalf("lost typed evidence: %s", err)
 		}
-		if !errors.Is(err, cause) || strings.Contains(err.Error(), "sk-secret") || strings.Contains(err.Error(), "private conversation") {
+		if !errors.Is(err, cause) || strings.Contains(safeFailureJSON(t, err.Error()), "sk-secret") || strings.Contains(safeFailureJSON(t, err.Error()), "private conversation") {
 			t.Fatalf("cause classification or redaction changed: %s", err)
+		}
+		if d.Original == nil || !strings.Contains(strings.Join(d.Original.Causes, "\n"), "private conversation sk-secret") {
+			t.Fatal("hidden original cause was not retained")
 		}
 		if advice := flprovider.RetryAdviceForError(err); advice.Category != "" {
 			t.Fatalf("history validation must not authorize automatic retry: %+v", advice)

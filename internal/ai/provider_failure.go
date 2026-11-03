@@ -23,10 +23,10 @@ import (
 
 const providerFailurePrefix = "redeven_provider_failure_v1:"
 
-// This bounded product-owned envelope survives Floret's canonical failure
-// message. Only structured error messages and reviewed diagnostic fields enter
-// it; raw bodies, metadata, endpoints and credentials stay private.
+// The canonical envelope separates a sanitized summary from authorized original
+// evidence. Original is untrusted literal data; it must never enter shared logs.
 type providerFailureDiagnostic struct {
+	Original      *flprovider.FailureDetails  `json:"original,omitempty"`
 	HistoryDetail *responsesHistoryDiagnostic `json:"history_detail,omitempty"`
 	MediaKind     string                      `json:"media_kind,omitempty"`
 	Actual        int64                       `json:"actual,omitempty"`
@@ -57,7 +57,7 @@ type providerFailure struct {
 }
 
 func (e *providerFailure) Error() string {
-	raw, _ := json.Marshal(e.diagnostic.sanitized())
+	raw, _ := json.Marshal(diagnosticWithOriginal(e.diagnostic, e.cause))
 	return providerFailurePrefix + string(raw)
 }
 func (e *providerFailure) ProviderRetryAdvice() flprovider.RetryAdvice {
@@ -76,7 +76,40 @@ var diagnosticCodePattern = regexp.MustCompile(`^([a-z][a-z0-9_]{0,79}|[45][0-9]
 var diagnosticParamPattern = regexp.MustCompile(`^(tools|input|messages|model|instructions|reasoning|text|temperature|top_p|max_output_tokens|stream|store|include)(\.[a-z_]+|\[[0-9]{1,4}\])*$`)
 var diagnosticRequestIDPattern = regexp.MustCompile(`^req[_-][A-Za-z0-9_-]{1,120}$`)
 
+func (d providerFailureDiagnostic) safeSummary() providerFailureDiagnostic {
+	d.Original = nil
+	return d.sanitized()
+}
+
+func diagnosticWithOriginal(d providerFailureDiagnostic, cause error) providerFailureDiagnostic {
+	// Historical RPC envelopes did not retain originals. Preserve that absence.
+	var rpc *DesktopModelSourceRPCError
+	if d.Original == nil && errors.As(cause, &rpc) {
+		if _, ok := parseProviderFailure(rpc.Message); ok {
+			return d.sanitized()
+		}
+	}
+
+	if d.Original == nil && cause != nil {
+		d.Original = flprovider.FailureDetailsForError(cause)
+		if d.Original == nil {
+			d.Original = flprovider.FailureDetailsForError(flprovider.WithFailureDetails(cause, flprovider.FailureDetails{Provider: d.Provider, Phase: d.Stage}))
+		}
+	}
+	if d.Original != nil && cause != nil && d.Original.Cause == "" {
+		evidence := flprovider.FailureDetailsForError(flprovider.WithFailureDetails(cause, *d.Original))
+		d.Original = evidence
+	}
+	return d.sanitized()
+}
+
 func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
+	if d.Original != nil {
+		original := *d.Original
+		original.Body = bytes.Clone(original.Body)
+		original.Causes = append([]string(nil), original.Causes...)
+		d.Original = &original
+	}
 	switch d.MediaKind {
 	case "dimension", "animated_dimension", "count", "bytes", "total_bytes":
 		if d.Code != "image_limit_exceeded" || d.Actual <= d.Limit || d.Limit <= 0 {
@@ -201,13 +234,10 @@ func (d providerFailureDiagnostic) failureStatus() int {
 }
 
 func parseProviderFailure(message string) (providerFailureDiagnostic, bool) {
-	if len(message) > 16384 {
-		return providerFailureDiagnostic{}, false
-	}
 	for _, line := range strings.Split(message, "\n") {
 		// The Engine wraps the first cause with this fixed context.
 		line = strings.TrimPrefix(line, "provider context overflow retry exhausted: ")
-		if !strings.HasPrefix(line, providerFailurePrefix) || len(line) > 8192 {
+		if !strings.HasPrefix(line, providerFailurePrefix) {
 			continue
 		}
 		var d providerFailureDiagnostic
@@ -226,10 +256,6 @@ func parseProviderFailure(message string) (providerFailureDiagnostic, bool) {
 }
 
 func diagnosticFromBody(d providerFailureDiagnostic, raw []byte) providerFailureDiagnostic {
-	if len(raw) > 64<<10 {
-		d.Shape = "truncated"
-		return d.sanitized()
-	}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		d.Shape = "empty"
 		return d.sanitized()
@@ -305,6 +331,8 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 	var upstream *openai.Error
 	if errors.As(err, &upstream) {
 		d.Status, d.Code, d.Message, d.Param = upstream.StatusCode, upstream.Code, upstream.Message, upstream.Param
+		d.Original = originalProviderResponse(providerType, "response", upstream.StatusCode, "", []byte(upstream.RawJSON()), true)
+		d.Original.Message, d.Original.Code = upstream.Message, upstream.Code
 		if response == nil {
 			response = upstream.Response
 		}
@@ -325,12 +353,16 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 	var raw []byte
 	var readErr error
 	if response.Body != nil {
-		raw, readErr = io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
+		raw, readErr = io.ReadAll(response.Body)
+	}
+	if d.Original == nil || len(raw) > 0 {
+		d.Original = originalProviderResponse(providerType, "response", d.Status, d.RequestID, raw, readErr == nil && response.Body != nil)
+	} else {
+		d.Original.RequestID = d.RequestID
 	}
 	if readErr != nil {
 		d.Shape = "transport_error"
 		err = errors.Join(err, readErr)
-		raw = nil
 	} else if response.Body != nil {
 		d = diagnosticFromBody(d, raw)
 	} else {
@@ -343,7 +375,7 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 }
 
 // Transport classification is shared with the Engine; protocol facts remain in
-// responseRetryAdvice. Raw error prose never enters the diagnostic envelope.
+// responseRetryAdvice. Original prose is separate from the safe summary.
 func providerTransportFailure(err error, providerType string) error {
 	if err == nil {
 		return nil
@@ -395,7 +427,7 @@ func providerTransportFailure(err error, providerType string) error {
 	case flprovider.RetryTransient:
 		d.Code, d.Shape = runErrorCodeProviderUnreachable, "transport_error"
 	}
-	return &providerFailure{diagnostic: d.sanitized(), cause: err, advice: advice, adviceSet: true}
+	return newProviderFailure(d, err, advice)
 }
 
 func providerStreamFailure(raw string, response *http.Response, providerType string) *providerFailure {
@@ -410,7 +442,7 @@ func providerStreamFailure(raw string, response *http.Response, providerType str
 		var envelope struct {
 			Status int `json:"status"`
 		}
-		if len(raw) <= 64<<10 && json.Unmarshal([]byte(raw), &envelope) == nil && envelope.Status >= 400 && envelope.Status <= 599 {
+		if json.Unmarshal([]byte(raw), &envelope) == nil && envelope.Status >= 400 && envelope.Status <= 599 {
 			d.Status = envelope.Status
 		}
 	}
@@ -418,7 +450,8 @@ func providerStreamFailure(raw string, response *http.Response, providerType str
 	if providerType == "chatgpt" {
 		cause = &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID}
 	}
-	return &providerFailure{diagnostic: d.sanitized(), cause: cause, advice: responseRetryAdvice(d, response)}
+	d.Original = originalProviderResponse(providerType, "stream", d.Status, d.RequestID, []byte(raw), true)
+	return newProviderFailure(d, cause, responseRetryAdvice(d, response))
 }
 
 // One envelope owns presentation; the original chain retains private causes and
@@ -428,7 +461,8 @@ func newProviderFailure(d providerFailureDiagnostic, cause error, advice flprovi
 	if errors.As(cause, &adviser) {
 		advice = adviser.ProviderRetryAdvice()
 	}
-	return &providerFailure{diagnostic: d.sanitized(), cause: cause, advice: advice, adviceSet: true}
+	d = diagnosticWithOriginal(d, cause)
+	return &providerFailure{diagnostic: d, cause: cause, advice: advice, adviceSet: true}
 }
 
 func canonicalProviderFailure(err error) error {
@@ -452,6 +486,7 @@ func canonicalProviderFailure(err error) error {
 		d := providerFailureDiagnostic{Provider: "chatgpt", Status: account.Status, Code: account.Code, RequestID: account.RequestID, Shape: "unknown"}
 		if account.Body != nil {
 			d = diagnosticFromBody(d, account.Body)
+			d.Original = originalProviderResponse("chatgpt", "response", account.Status, account.RequestID, account.Body, true)
 		}
 		return newProviderFailure(d, err, responseRetryAdvice(d, nil))
 	}
@@ -478,12 +513,51 @@ func canonicalProviderFailure(err error) error {
 	return err
 }
 
+// Copy the complete received failure; only the summary is sanitized.
+func originalProviderResponse(provider, phase string, status int, requestID string, raw []byte, complete bool) *flprovider.FailureDetails {
+	d := &flprovider.FailureDetails{Provider: provider, Phase: phase, HTTPStatus: status, RequestID: requestID, Body: bytes.Clone(raw), BodyComplete: complete}
+	var root map[string]json.RawMessage
+	if json.Unmarshal(raw, &root) == nil {
+		_ = json.Unmarshal(root["type"], &d.Event)
+		fields := root
+		if response, ok := root["response"]; ok {
+			var nested map[string]json.RawMessage
+			if json.Unmarshal(response, &nested) == nil {
+				fields = nested
+				_ = json.Unmarshal(fields["id"], &d.ResponseID)
+			}
+		}
+		if nested, ok := fields["error"]; ok {
+			var child map[string]json.RawMessage
+			if json.Unmarshal(nested, &child) == nil {
+				fields = child
+			}
+		}
+		_ = json.Unmarshal(fields["message"], &d.Message)
+		_ = json.Unmarshal(fields["code"], &d.Code)
+	}
+	return d
+}
+
 func providerFailureDetail(message string) string {
 	d, ok := parseProviderFailure(message)
 	if !ok {
-		return ""
+		original := flprovider.FailureDetailsForError(errors.New(message))
+		if original == nil {
+			return ""
+		}
+		d = providerFailureDiagnostic{Provider: original.Provider, Status: original.HTTPStatus, Code: original.Code, Message: original.Message, RequestID: original.RequestID, Shape: "unknown", Original: original}.sanitized()
 	}
-	raw, _ := json.MarshalIndent(d, "", "  ")
+	// Text is a readable view; base64 Body remains the lossless byte authority.
+	var bodyText *string
+	if d.Original != nil && len(d.Original.Body) > 0 && utf8.Valid(d.Original.Body) {
+		value := string(d.Original.Body)
+		bodyText = &value
+	}
+	raw, _ := json.MarshalIndent(struct {
+		providerFailureDiagnostic
+		BodyText *string `json:"original_body_text,omitempty"`
+	}{d, bodyText}, "", "  ")
 	return string(raw)
 }
 

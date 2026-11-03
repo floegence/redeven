@@ -8538,9 +8538,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const diagnostics = () => (contextFailure || providerFailure || runtimeFailure || code === 'model_context_unavailable') && trimString(error?.detail) ? (
       <details class="flower-error-details">
         <summary>{copy().chat.runErrorDetails}</summary>
-        <pre>{trimString(error?.detail)}</pre>
+        <pre>{error?.detail}</pre>
         <Button size="sm" variant="ghost" icon={Copy} onClick={() => {
-          void writeTextToClipboard(trimString(error?.detail)).then(() => setDetailsCopied(true)).catch((cause) => notifyThreadActionError(getErrorMessage(cause)));
+          void writeTextToClipboard(error?.detail ?? '').then(() => setDetailsCopied(true)).catch((cause) => notifyThreadActionError(getErrorMessage(cause)));
         }}><StableText reserve={[copy().chat.messageCopied, copy().chat.runErrorCopyDetails]}>{detailsCopied() ? copy().chat.messageCopied : copy().chat.runErrorCopyDetails}</StableText></Button>
       </details>
     ) : undefined;

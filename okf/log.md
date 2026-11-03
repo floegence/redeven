@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+- 2026-11-03: Preserve complete original provider errors with published Floret
+  v7.101.0 across Desktop RPC, canonical persistence, restart and Flower copy;
+  keep banner/log summaries separate. See [model recovery](ai/model-request-recovery.md).
+
 Concepts own contracts/evidence; Git retains history.
 
 ## 2026-11-02

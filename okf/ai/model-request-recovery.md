@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model request recovery
 tags: [ai, providers, recovery, diagnostics]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-03"
 ---
 # Summary
 
@@ -18,17 +18,23 @@ Redeven neither repairs old cancellation records nor owns a second retry loop.
 Adapter-owned response checks use typed diagnostic codes and reviewed constant
 messages for output conflicts or gaps, tool namespace/argument conflicts, invalid
 usage and native history preparation/commit failures. Classification does not
-change retry advice, cancellation, response validation or tool dispatch. Private
-causes remain in the in-process error chain; arbitrary error prose, prompts and
-raw response bodies never become diagnostic text.
+change retry advice, cancellation, response validation or tool dispatch. Original error messages and wrapped causes are retained separately from the
+sanitized summary. Published Floret v7.101.0 owns the FailureDetails contract.
+The authorized original field preserves complete HTTP/SSE bytes, messages,
+status and native identifiers without truncation, normalization or redaction.
+Bytes remain base64 in JSON; valid UTF-8 also has a readable original_body_text
+view. Partial reads retain received bytes and explicitly mark incompleteness.
+Request headers, keys and prompts are not collected. Returned evidence may
+contain private provider content and must be rendered as literal text.
 
 The Responses attempt collector normalizes failures before attaching transport
-facts. Its bounded envelope preserves HTTP status, request/response identifiers,
+facts. Its versioned envelope preserves HTTP status, request/response identifiers,
 terminal event, output index when known, and Floret attempt identity through
 Desktop RPC and canonical failure storage. Logs serialize numeric timings and
-the same safe failure classification. Restart retains the details without
+only the safe failure classification, excluding original evidence. Restart retains the details without
 replaying the request; older envelopes remain readable. Flower shows the safe
-reason with expandable, copyable evidence. Missing historical evidence is not
+reason with collapsed, expandable and fully copyable original evidence. Display
+and copy preserve whitespace; provider text is never interpreted as markup. Missing historical evidence is not
 reconstructed.
 
 Tool repetition diagnostics use only validated Floret ToolRepetition fields:

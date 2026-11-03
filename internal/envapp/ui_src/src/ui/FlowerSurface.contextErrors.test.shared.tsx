@@ -209,3 +209,32 @@ it.each(['en-US', 'zh-CN', 'zh-TW'] as const)('explains local history failures i
   expect(card.querySelector('pre')?.textContent).toBe(detail);
   expect(base.retryThread).not.toHaveBeenCalled();
 });
+
+
+it('renders and copies complete original failure evidence as literal text', async () => {
+  const original = '  upstream error\r\n\t' + '完整 detail\n'.repeat(15000) + '<script>window.injected = true</script> tail  ';
+  const detail = ' \n' + JSON.stringify({ provider: 'deepseek', code: 'provider_request_failed', message: 'Brief safe summary', response_shape: 'unknown', original: { message: original, cause: original, request_id: 'DeepSeek-native-ID', body_complete: true } }, null, 2) + '\n  ';
+  const failed = thread({ status: 'failed', error: { code: 'provider_request_failed', message: 'Fallback', detail } });
+  const base = { ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) };
+  const writeText = vi.fn(async () => undefined);
+  const saved = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  try {
+    const surface = renderSurfaceWithAdapterProps(base, { focusThreadRequest: { request_id: 'original-evidence', thread_id: failed.thread_id } });
+    await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+    const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+    expect(card.querySelector('.flower-error-message')?.textContent).toBe('Brief safe summary');
+    const disclosure = card.querySelector<HTMLDetailsElement>('details')!;
+    expect(disclosure.open).toBe(false);
+    disclosure.querySelector('summary')!.click();
+    expect(disclosure.querySelector('pre')?.textContent).toBe(detail);
+    expect(disclosure.querySelector('script')).toBeNull();
+    disclosure.querySelector<HTMLButtonElement>('button')!.click();
+    await waitFor(() => writeText.mock.calls.length === 1);
+    expect(writeText).toHaveBeenCalledWith(detail);
+    expect(base.retryThread).not.toHaveBeenCalled();
+  } finally {
+    if (saved) Object.defineProperty(navigator, 'clipboard', saved);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+  }
+});

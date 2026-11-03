@@ -251,7 +251,7 @@ func (d *providerAttemptDiagnostic) finish(ctx context.Context, response *http.R
 	}
 	var failure *providerFailure
 	if errors.As(err, &failure) {
-		diagnostic := failure.diagnostic.sanitized()
+		diagnostic := failure.diagnostic.safeSummary()
 		diagnostic.Attempt = nil // The attempt is already recorded alongside it.
 		failureJSON, _ := json.Marshal(diagnostic)
 		attrs = append(attrs, "failure", string(failureJSON))
