@@ -9,7 +9,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floe-native-apps v0.25.1
-	github.com/floegence/floeterm/terminal-go v0.19.2
+	github.com/floegence/floeterm/terminal-go v0.20.0
 	github.com/floegence/floret/v7 v7.100.1
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.1
 	github.com/floegence/redeven-service-templates v0.7.0

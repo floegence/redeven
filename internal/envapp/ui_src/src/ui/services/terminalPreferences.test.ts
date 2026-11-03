@@ -42,6 +42,10 @@ describe('terminalPreferences defaults', () => {
     expect(prefs.userTheme()).toBe(DEFAULT_TERMINAL_THEME);
     expect(prefs.fontFamilyId()).toBe('jetbrains');
     expect(prefs.workIndicatorEnabled()).toBe(DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED);
+    expect(prefs.followInput()).toBe(true);
+    prefs.setFollowInput(false);
+    expect(prefs.followInput()).toBe(false);
+    expect(debouncedSave).toHaveBeenCalledWith("terminal:follow_input", false);
 
     prefs.setWorkIndicatorEnabled(false);
     expect(prefs.workIndicatorEnabled()).toBe(false);

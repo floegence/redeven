@@ -1,3 +1,4 @@
+import { fetchLocalApiJSON } from './localApi';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
   validateHistoryChunk,
@@ -73,6 +74,10 @@ export function createRedevenTerminalLiveBundle(
       };
     },
     control: {
+      historyRetention: (sessionId) => fetchLocalApiJSON('/_redeven_proxy/api/terminal/history-retention?session_id=' + encodeURIComponent(sessionId), { method: 'GET' }),
+      configureHistoryRetention: (sessionId, currentConnectionId, transportGeneration, limits) => fetchLocalApiJSON('/_redeven_proxy/api/terminal/history-retention', {
+        method: 'POST', body: JSON.stringify({ session_id: sessionId, connection_id: currentConnectionId, transport_generation: transportGeneration, limits }),
+      }),
       semanticHistory: async (
         sessionId: string,
         currentConnectionId: string,

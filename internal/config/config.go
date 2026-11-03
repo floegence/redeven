@@ -13,6 +13,7 @@ import (
 	"github.com/floegence/redeven/internal/gatewaymembership"
 	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 
+	termgo "github.com/floegence/floeterm/terminal-go"
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 )
 
@@ -304,6 +305,8 @@ type Config struct {
 	// If empty, the runtime picks a default (SHELL or /bin/bash).
 	Shell string `json:"shell,omitempty"`
 
+	TerminalHistoryRetention termgo.HistoryRetentionLimits `json:"terminal_history_retention"`
+
 	// LogFormat is "json" or "text".
 	LogFormat string `json:"log_format,omitempty"`
 	// LogLevel is "debug|info|warn|error".
@@ -327,6 +330,9 @@ type Config struct {
 func (c *Config) ValidateLocalMinimal() error {
 	if c == nil {
 		return errors.New("nil config")
+	}
+	if err := c.TerminalHistoryRetention.Validate(); err != nil {
+		return fmt.Errorf("invalid terminal_history_retention: %w", err)
 	}
 	seenGateways := map[string]bool{}
 	seenMembers := map[string]bool{}

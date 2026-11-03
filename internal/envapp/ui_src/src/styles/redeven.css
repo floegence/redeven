@@ -136,6 +136,15 @@
 }
 
 @media (forced-colors: active) {
+  [data-floeterm-scrollbar] {
+    background: Canvas !important;
+  }
+
+  [data-floeterm-scrollbar-thumb] {
+    background-color: CanvasText !important;
+    forced-color-adjust: none;
+  }
+
   .redeven-terminal-theme-option {
     border-color: CanvasText;
     background: Canvas;

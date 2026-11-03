@@ -13,6 +13,7 @@ import {
   getThemeColors,
   HistorySearchController,
   HistoryViewportController,
+  HistoryScrollbar,
   presentationAdvances,
   RendererSurface,
   semanticHistoryRowMatches,
@@ -160,6 +161,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
   autoFocus: () => boolean;
   themeColors: () => Record<string, string>;
   fontSize: () => number;
+  followInput?: () => boolean;
   fontFamily: () => string;
   agentHomePathAbs: () => string;
   canOpenFilePreview: () => boolean;
@@ -242,6 +244,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let inputElement: HTMLTextAreaElement | null = null;
   let renderer: RendererSurface | null = null;
   let historyController: HistoryViewportController | null = null;
+  let historyScrollbar: HistoryScrollbar | null = null;
+  let historyTrack: HTMLDivElement | undefined;
+  let historyThumb: HTMLDivElement | undefined;
   let historySearchController: HistorySearchController | null = null;
   let inputBridge: TerminalInputBridge | null = null;
   let resizeObserver: ResizeObserver | null = null;
@@ -287,14 +292,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     historyProjected() ? historyViewport()?.frame ?? null : latestPresentation?.frame ?? null
   );
 
-  const historySummary = createMemo(() => {
-    void presentationRevision();
-    const frame = latestPresentation?.frame;
-    return {
-      totalRows: frame?.history.totalRows ?? 0,
-      screenStartOffset: frame?.history.screenStartOffset ?? 0,
-    };
-  });
   const resolvedPalette = createMemo(() => terminalPalette(props.themeColors()));
 
   const cellMetrics = (): SemanticTerminalCellMetrics => renderer?.getCellMetrics() ?? {
@@ -315,27 +312,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     inputBridge?.syncGeometry();
     return true;
   };
-
-  const historyMaximum = createMemo(() => Math.max(0, historySummary().screenStartOffset));
-  const historyCurrent = createMemo(() => (
-    historyProjected()
-      ? Math.min(historyMaximum(), historyViewport()?.offset ?? historyMaximum())
-      : historyMaximum()
-  ));
-  const historyThumbSize = createMemo(() => {
-    const totalRows = historyViewport()?.totalRows ?? historySummary().totalRows;
-    const visibleRows = currentFrame()?.height ?? 0;
-    if (totalRows <= 0 || visibleRows <= 0) return 100;
-    return Math.max(8, Math.min(100, visibleRows / totalRows * 100));
-  });
-  const historyThumbStart = createMemo(() => {
-    const maximum = historyMaximum();
-    if (maximum <= 0) return 0;
-    return Math.min(
-      100 - historyThumbSize(),
-      historyCurrent() / maximum * (100 - historyThumbSize()),
-    );
-  });
 
   const setStatus = (status: TerminalSessionRuntimeStatus) => {
     props.onRuntimeStatus?.(sessionId, status);
@@ -690,6 +666,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const sendInput = (data: string) => {
     if (!data || !props.connected() || !props.viewActive() || !props.active()) return;
+    followAcceptedInput();
     dispatchInteraction(
       () => props.transport.sendInput(sessionId, data),
       (size) => props.transport.interactInput(sessionId, size.cols, size.rows, data),
@@ -698,6 +675,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const sendPaste = (data: string) => {
     if (!data || !props.connected() || !props.viewActive() || !props.active()) return;
+    followAcceptedInput();
     dispatchInteraction(
       () => props.transport.sendPaste(sessionId, data),
       (size) => props.transport.interactPaste(sessionId, size.cols, size.rows, data),
@@ -706,6 +684,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const sendInputIntent = (intent: TerminalKeyInputIntent) => {
     if (!props.connected() || !props.viewActive() || !props.active()) return;
+    followAcceptedInput(intent);
     dispatchInteraction(
       () => props.transport.sendInputIntent(sessionId, intent),
       (size) => props.transport.interactInputIntent(sessionId, size.cols, size.rows, intent),
@@ -781,6 +760,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     setHistoryBusy(state.busy);
     setHistoryError(state.error !== null);
     setHistoryErrorDetail(state.error ? auxiliaryTerminalErrorDetail(state.error) : '');
+    historyScrollbar?.update();
     if (!state.busy && state.error === null) retryHistoryRequest = null;
   };
 
@@ -845,7 +825,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
   };
 
-  const showLatestPresentation = () => {
+  const resetHistoryNavigation = () => {
     historyRequestEpoch += 1;
     resetSearch();
     retryHistoryRequest = null;
@@ -858,6 +838,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }));
     setHistoryError(false);
     setHistoryErrorDetail('');
+  };
+
+  const showLatestPresentation = () => {
+    resetHistoryNavigation();
     historyController?.showLatest();
   };
 
@@ -868,10 +852,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     intent();
   };
 
-  const projectHistoryOffset = (offset: number) => {
-    resetSearch();
-    runHistoryIntent(() => historyController?.showOffset(offset));
-  };
+  function followAcceptedInput(intent?: TerminalKeyInputIntent) {
+    if (!(props.followInput?.() ?? true) || intent?.action === 'release') return;
+    resetHistoryNavigation();
+    historyController?.handleUserInput(intent);
+  }
 
   const scrollHistoryByRows = (rows: number) => {
     if (!latestPresentation || rows === 0) return;
@@ -1138,6 +1123,19 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       request: requestHistoryViewport,
       onState: applyHistoryState,
     });
+    if (historyTrack && historyThumb) historyScrollbar = new HistoryScrollbar({
+      track: historyTrack, thumb: historyThumb,
+      controller: {
+        getState: () => historyController!.getState(),
+        showOffset: (offset) => {
+          if (offset >= historyController!.getState().screenStartOffset) showLatestPresentation();
+          else { resetSearch(); runHistoryIntent(() => historyController?.showOffset(offset)); }
+        },
+        showLatest: showLatestPresentation,
+        scrollByRows: scrollHistoryByRows,
+      },
+      onPointerComplete: () => inputBridge?.focus({ preventScroll: true }),
+    });
     historySearchController = new HistorySearchController({ request: requestHistoryViewport });
     if (runtimeAttachGeneration > 0) historyController.setTransportGeneration(runtimeAttachGeneration);
     if (runtimeAttachGeneration > 0) historySearchController.setTransportGeneration(runtimeAttachGeneration);
@@ -1335,6 +1333,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     lastReconnectError = null;
     inputBridge?.dispose();
     inputBridge = null;
+    historyScrollbar?.dispose();
+    historyScrollbar = null;
     historyController?.dispose();
     historyController = null;
     historySearchController?.dispose();
@@ -1394,6 +1394,18 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     return true;
   };
 
+  const handleHistoryWheel = (event: WheelEvent) => {
+    if (latestPresentation?.frame.bufferKind === 'alternate' || event.deltaY === 0) return;
+    event.preventDefault();
+    resetSearch();
+    const delta = event.deltaY;
+    const deltaMode = event.deltaMode;
+    lastWheelAt = performance.now();
+    wheelSequence += 1;
+    emitTerminalDebugTrace({ kind: 'wheel', at: lastWheelAt, delta, deltaMode });
+    runHistoryIntent(() => historyController?.handleWheel(delta, deltaMode));
+  };
+
   return (
     <div
       ref={(node) => { runtimeRoot = node; }}
@@ -1442,28 +1454,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         }}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
         id={semanticSurfaceId}
-        class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
+        class="absolute top-2 left-2 right-4 bottom-0 redeven-terminal-surface"
         data-terminal-semantic-surface="true"
         onClick={(event) => {
           if (!activateSemanticLink(event)) props.onSurfaceClick?.(event);
         }}
-        onWheel={(event) => {
-          if (latestPresentation?.frame.bufferKind === 'alternate') return;
-          if (event.deltaY === 0) return;
-          event.preventDefault();
-          resetSearch();
-          const delta = event.deltaY;
-          const deltaMode = event.deltaMode;
-          lastWheelAt = performance.now();
-          wheelSequence += 1;
-          emitTerminalDebugTrace({
-            kind: 'wheel',
-            at: lastWheelAt,
-            delta,
-            deltaMode,
-          });
-          runHistoryIntent(() => historyController?.handleWheel(delta, deltaMode));
-        }}
+        onWheel={handleHistoryWheel}
         style={{
           bottom: 'var(--terminal-bottom-inset)',
           'background-color': terminalBackground(),
@@ -1519,44 +1515,20 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
             'z-index': '2',
           }}
         />
-        <div
-          aria-label={i18n.t('terminal.historyScrollbar')}
-          aria-controls={semanticSurfaceId}
-          aria-busy={historyBusy() || undefined}
-          aria-orientation="vertical"
-          aria-valuemax={historyMaximum()}
-          aria-valuemin="0"
-          aria-valuenow={historyCurrent()}
-          data-floeterm-scrollbar=""
-          data-visible={historyMaximum() > 0 ? 'true' : 'false'}
-          hidden={historyMaximum() <= 0}
-          role="scrollbar"
-          class="absolute right-0 top-0 bottom-0 w-3"
-          onPointerDown={(event) => {
-            const bounds = event.currentTarget.getBoundingClientRect();
-            const maximum = historyMaximum();
-            const target = event.clientY <= bounds.top + 1
-              ? 0
-              : event.clientY >= bounds.bottom - 1
-                ? maximum
-                : Math.round(
-                    Math.max(0, Math.min(1, (event.clientY - bounds.top) / Math.max(1, bounds.height)))
-                    * maximum,
-                  );
-            projectHistoryOffset(target);
-          }}
-          style={{ background: `color-mix(in srgb, ${terminalForeground()} 8%, transparent)` }}
-        >
-          <div
-            data-floeterm-scrollbar-thumb=""
-            class="absolute left-0.5 right-0.5 rounded-sm"
-            style={{
-              top: `${historyThumbStart()}%`,
-              height: `${historyThumbSize()}%`,
-              background: `color-mix(in srgb, ${terminalForeground()} 38%, transparent)`,
-            }}
-          />
-        </div>
+
+      </div>
+      <div ref={historyTrack}
+        aria-label={i18n.t('terminal.historyScrollbar')}
+        aria-controls={semanticSurfaceId}
+        data-floeterm-scrollbar=""
+        onWheel={handleHistoryWheel}
+        {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
+        class="absolute right-0 top-2 bottom-0 z-[3] w-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+        style={{ bottom: 'var(--terminal-bottom-inset)', background: 'color-mix(in srgb, ' + terminalForeground() + ' 8%, transparent)' }}
+      >
+        <div ref={historyThumb} data-floeterm-scrollbar-thumb=""
+          class="absolute left-0 right-0 box-border border-x-4 border-transparent bg-clip-padding rounded-sm"
+          style={{ 'background-color': 'color-mix(in srgb, ' + terminalForeground() + ' 45%, transparent)' }} />
       </div>
 
       <RedevenLoadingCurtain

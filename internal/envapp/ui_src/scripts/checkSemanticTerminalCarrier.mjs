@@ -112,15 +112,7 @@ async function dispatchTerminalWheelBurst(canvas, deltas) {
 
 async function showLatestHistory(runtime) {
   const scrollbar = runtime.locator('[data-floeterm-scrollbar][data-visible="true"]');
-  await scrollbar.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    element.dispatchEvent(new globalThis.PointerEvent('pointerdown', {
-      bubbles: true,
-      cancelable: true,
-      clientX: bounds.right - 1,
-      clientY: bounds.bottom - 1,
-    }));
-  });
+  await scrollbar.press('End');
   await runtime.evaluate(async (element) => {
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
@@ -191,6 +183,10 @@ async function waitForStartupReport(reportPath, childState, timeoutMs = 30_000) 
 
 async function stopRuntime(runtime) {
   if (!runtime || runtime.state.exited) return;
+  if (runtime.processSession) {
+    await runtime.processSession.stopProcess(runtime.child);
+    return;
+  }
   runtime.child.kill('SIGTERM');
   const deadline = Date.now() + 10_000;
   while (!runtime.state.exited && Date.now() < deadline) await delay(50);
@@ -200,7 +196,7 @@ async function stopRuntime(runtime) {
   }
 }
 
-async function startRuntime(tempDir, { bind = '127.0.0.1:0', accessPassword } = {}) {
+async function startRuntime(tempDir, { bind = '127.0.0.1:0', accessPassword, processSession } = {}) {
   const binaryPath = path.join(tempDir, 'redeven');
   await runCommand('go', ['build', '-tags', 'floeterm_native', '-o', binaryPath, './cmd/redeven'], {
     env: { ...process.env, GOWORK: 'off', CGO_ENABLED: '1' },
@@ -219,7 +215,8 @@ async function startRuntime(tempDir, { bind = '127.0.0.1:0', accessPassword } = 
   if (authorityReport?.status !== 'generated' || typeof authorityReport.certificate_path !== 'string') {
     throw new Error('terminal carrier did not generate an isolated Local UI device CA');
   }
-  const child = spawn(binaryPath, [
+  const launch = processSession ? (...args) => processSession.spawn(...args) : spawn;
+  const child = await launch(binaryPath, [
     'run',
     '--mode', 'local',
     '--state-root', stateRoot,
@@ -241,7 +238,7 @@ async function startRuntime(tempDir, { bind = '127.0.0.1:0', accessPassword } = 
     state.signal = signal;
   });
   child.once('error', (error) => { state.stderr += error.message; });
-  const runtime = { child, state, startup: null, stateRoot, authorityCertificatePath: authorityReport.certificate_path };
+  const runtime = { child, state, startup: null, stateRoot, processSession, authorityCertificatePath: authorityReport.certificate_path };
   try {
     runtime.startup = await waitForStartupReport(startupReportPath, state);
     return runtime;
@@ -722,16 +719,8 @@ async function verifyAtomicClear(page, panel, sessionID, tempDir) {
   const activeRuntime = panel.locator(`[data-terminal-runtime-session="${sessionID}"]`).first();
   const before = await waitForViewsToConverge(page, sessionID);
   const beforeCanvas = await canvasEvidence(activeRuntime.locator(semanticCanvasSelector));
-  const clearButton = panel.locator('[data-testid="terminal-clear-active-session"]:visible').last();
-  await clearButton.click();
-  await clearButton.evaluate(async (element) => {
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline) {
-      if (element.getAttribute('data-terminal-clear-state') === 'idle' && !element.hasAttribute('disabled')) return;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    throw new Error('semantic clear did not settle');
-  });
+  await panel.getByTitle('More options', { exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Clear', exact: true }).click();
   const after = await waitForViewsToConverge(page, sessionID, before[0].sequence + 1);
   if (after[0].epoch <= before[0].epoch) throw new Error('semantic clear did not advance content epoch');
   const afterCanvas = await canvasEvidence(activeRuntime.locator(semanticCanvasSelector));

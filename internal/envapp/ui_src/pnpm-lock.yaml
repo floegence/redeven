@@ -55,8 +55,8 @@ importers:
         specifier: 0.1.28
         version: 0.1.28
       '@floegence/floeterm-terminal-web':
-        specifier: 0.19.2
-        version: 0.19.2
+        specifier: 0.20.0
+        version: 0.20.0
       '@floegence/flowersec-core':
         specifier: 5.11.1
         version: 5.11.1
@@ -592,8 +592,8 @@ packages:
     engines: {node: '>=26'}
     hasBin: true
 
-  '@floegence/floeterm-terminal-web@0.19.2':
-    resolution: {integrity: sha512-9XbdmAl51tos2CGTBRcvwC9dW7Qe+BXgXqKAQDYzx9G7ovjRioXUt0fVUXPKgb8q63ltmPr0rum0+EAgrTaaMA==}
+  '@floegence/floeterm-terminal-web@0.20.0':
+    resolution: {integrity: sha512-rQsTezenRRgLmioXDn7XsGn1d1DrYrwq3CBvPluMRm5Ysy0jKH7D16nT0i5dG8DNv0YdWYMoOtpjhKA9PWuEaA==}
 
   '@floegence/flowersec-core@5.11.1':
     resolution: {integrity: sha512-gi6ArlWpc9MZ+MIH+bfDsBZ68gxGOdj02hv56WciG9yMtOmOI8WQMmIxjEBvMrwB1qYQatwTOqRNNTzp9ConxQ==}
@@ -2813,7 +2813,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.19.2':
+  '@floegence/floeterm-terminal-web@0.20.0':
     dependencies:
       '@noble/hashes': 2.4.0
 

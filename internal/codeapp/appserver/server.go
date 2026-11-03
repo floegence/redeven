@@ -2680,6 +2680,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	if g.handleManagedWebServicesAPI(w, r) {
 		return
 	}
+	if g.handleTerminalHistoryRetentionAPI(w, r) {
+		return
+	}
 	if g.handleContainerResourcesAPI(w, r) {
 		return
 	}

@@ -27,6 +27,9 @@ import {
   isBestEffortTerminalDisconnectError,
 } from './terminalTransport';
 
+const retentionHTTP = vi.hoisted(() => ({ request: vi.fn() }));
+vi.mock('./localApi', () => ({ fetchLocalApiJSON: retentionHTTP.request }));
+
 class FakeStream implements TerminalByteStream {
   readonly writes: Uint8Array[] = [];
   private readonly reads: Array<Uint8Array | null> = [];
@@ -156,6 +159,23 @@ async function attach(bundle: ReturnType<typeof createRedevenTerminalLiveBundle>
 }
 
 describe('terminal semantic live transport', () => {
+  it('adapts retention settings through the current published attachment generation', async () => {
+    const { rpc } = createRpcMock();
+    const stream = new FakeStream();
+    const bundle = createRedevenTerminalLiveBundle(rpc, () => ({ openStream: async () => stream } as any), 'connection-1');
+    const limits = { max_lines: 1000, max_bytes: 1048576 };
+    const state = { configured: limits, effective: limits, defaults: { max_lines: null, max_bytes: 10485760 } };
+    retentionHTTP.request.mockResolvedValue(state);
+    await attach(bundle, stream);
+    await expect(bundle.transport.historyRetention!('session-1')).resolves.toEqual(state);
+    expect(retentionHTTP.request).toHaveBeenLastCalledWith('/_redeven_proxy/api/terminal/history-retention?session_id=session-1', { method: 'GET' });
+    await expect(bundle.transport.configureHistoryRetention!('session-1', limits)).resolves.toEqual(state);
+    expect(retentionHTTP.request).toHaveBeenLastCalledWith('/_redeven_proxy/api/terminal/history-retention', {
+      method: 'POST', body: JSON.stringify({ session_id: 'session-1', connection_id: 'connection-1', transport_generation: 1, limits }),
+    });
+    bundle.transport.dispose();
+  });
+
   it('uses only terminal/live_v1 for attach, input, and canonical resize settlement', async () => {
     const { rpc } = createRpcMock();
     const stream = new FakeStream();

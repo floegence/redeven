@@ -2015,9 +2015,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleHistorySummary = (
     id: string,
-    summary: Readonly<{ totalRows: number }>,
+    summary: Readonly<{ totalRows: number; screenStartOffset: number }>,
   ) => {
-    const totalRows = Math.max(0, Math.floor(Number(summary.totalRows) || 0));
+    const totalRows = Math.max(0, Math.floor(Number(summary.screenStartOffset) || 0));
     setHistoryRowsBySession((current) => (
       current[id] === totalRows ? current : { ...current, [id]: totalRows }
     ));
@@ -5334,6 +5334,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                           {/* Keep runtime identity tied to sessionId; metadata snapshots may replace session objects. */}
                           <div class="h-full">
                             <TerminalSessionRuntime
+                              followInput={terminalPrefs.followInput}
                               session={mountedSessionForId() as TerminalSessionInfo}
                               variant={variant}
                               active={() => activeDisplaySessionId() === sessionId}
@@ -5530,6 +5531,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               fontFamilyId={fontFamilyId()}
               mobileInputMode={mobileInputMode()}
               systemAppearance={theme.resolvedTheme()}
+              followInput={terminalPrefs.followInput()}
+              onFollowInputChange={terminalPrefs.setFollowInput}
+              retentionTransport={transport}
+              retentionSessionId={activeSessionId()}
               workIndicatorEnabled={workIndicatorEnabled()}
               fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
               minFontSize={TERMINAL_MIN_FONT_SIZE}

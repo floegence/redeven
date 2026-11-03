@@ -1474,7 +1474,7 @@
               "protocol",
               "ui"
             ],
-            "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
+            "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
             "section_count": 2
           },
           {
@@ -12647,7 +12647,7 @@
         "type": "Frontend Contract"
       },
       "body_length": 2907,
-      "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
+      "summary": "Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.\n\nPins are Floe Webapp Boot, Core, and Protocol v0.87.0 (Env App Core v0.87.0), FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.\n\n[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.",
       "sections": [
         {
           "id": "contract",
@@ -16968,7 +16968,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "architecture",
           "floeterm",
@@ -16978,15 +16978,15 @@
         "title": "Runtime terminal lifecycle",
         "type": "Runtime Contract"
       },
-      "body_length": 1818,
+      "body_length": 2884,
       "summary": "Floeterm terminal-go owns each PTY, native Ghostty VT, geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation. Redeven maps permissions, session metadata, and Activity/Workbench placement around that actor; browser views consume bounded semantic streams and never become a second terminal state machine.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The runtime wraps `termgo.NewManager` so one terminal-go `SessionActor` owns each PTY, native Ghostty VT, canonical geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation.\n\nOverflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.\n\n## Terminal startup and warmup\nEnv App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values.\n\nDiagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.",
-          "char_count": 874
+          "body": "The runtime wraps `termgo.NewManager` so one terminal-go `SessionActor` owns each PTY, native Ghostty VT, canonical geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation.\n\nOverflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.\n\n## Terminal startup and warmup\nEnv App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values.\n\nDiagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.\n\n## Native history budgets\nRuntime persists `terminal_history_retention` with nullable `max_lines`/`max_bytes` safe nonnegative integers and applies those defaults before terminal readiness. Published terminal-go owns validation, native limit application, pruning, snapshot invalidation and atomic Presentation. Defaults affect only subsequently created sessions; existing sessions are never silently reconfigured.\n\n`/_redeven_proxy/api/terminal/history-retention` is the product settings adapter: GET reads defaults or an authorized session; admin-only PUT persists and activates defaults; POST applies explicit limits to a session using its connection ID and transport generation. Session application reuses shell/container permission and ownership checks, is principal-bound, does not transfer controller ownership, and rejects stale attachments. Limits preserve process, live screen, geometry and content epoch, while invalidating historical snapshots through the upstream history epoch. No local implementation of terminal retention or RPC retry is introduced.",
+          "char_count": 1940
         },
         {
           "id": "boundaries",
@@ -17053,7 +17053,7 @@
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## AI Flower RPC registration\nThe local direct and remote agent production session profiles register the complete AI inventory before Flowersec freezes a session. A declared method therefore cannot fail at the router with a missing-handler 404. Stop remains one RPC lifecycle command without a fallback transport.\n\n## Independent Gateway composition\n\nThe upstream-first review uses published Flowersec 5.11.1 WebSocketHTTPServerOptions.ApplicationHandler to compose client HTTP with Runtime transport on one TLS endpoint, and its egress.HTTPSProxy for explicit Runtime Cloud routing. No upstream mechanism change, local dependency overlay or copied implementation is required.\n\n## Mechanism\nThe released runtime dependency set includes Floeterm terminal-go v0.19.2 and Flowersec Go v5.11.1.\n\nEnv App and Desktop consume Flowersec TypeScript v5.11.1.\n\nSwitching a Flower thread, Activity or Workbench mode, terminal view, or file consumer cannot reconnect Flowersec.\n\nTerminal ownership, live framing, history, attachment arbitration, and warmup are specified in [Runtime terminal lifecycle](runtime-terminal-lifecycle.md); this concept only defines the Flowersec/Floeterm dependency boundary and shared transport admission.",
+          "body": "## AI Flower RPC registration\nThe local direct and remote agent production session profiles register the complete AI inventory before Flowersec freezes a session. A declared method therefore cannot fail at the router with a missing-handler 404. Stop remains one RPC lifecycle command without a fallback transport.\n\n## Independent Gateway composition\n\nThe upstream-first review uses published Flowersec 5.11.1 WebSocketHTTPServerOptions.ApplicationHandler to compose client HTTP with Runtime transport on one TLS endpoint, and its egress.HTTPSProxy for explicit Runtime Cloud routing. No upstream mechanism change, local dependency overlay or copied implementation is required.\n\n## Mechanism\nThe released runtime dependency set includes Floeterm terminal-go v0.20.0 and Flowersec Go v5.11.1.\n\nEnv App and Desktop consume Flowersec TypeScript v5.11.1.\n\nSwitching a Flower thread, Activity or Workbench mode, terminal view, or file consumer cannot reconnect Flowersec.\n\nTerminal ownership, live framing, history, attachment arbitration, and warmup are specified in [Runtime terminal lifecycle](runtime-terminal-lifecycle.md); this concept only defines the Flowersec/Floeterm dependency boundary and shared transport admission.",
           "char_count": 1223
         },
         {
@@ -31729,7 +31729,7 @@
       "frontmatter": {
         "lifecycle": "contract",
         "quality_exception": "Cross-runtime terminal interaction contract spanning actor authority, semantic rendering, multi-view control, browser input, history, accessibility, and performance.",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-02",
         "tags": [
           "activity",
           "semantic",
@@ -31740,15 +31740,15 @@
         "title": "Workbench terminal interaction",
         "type": "UI Contract"
       },
-      "body_length": 2896,
+      "body_length": 5106,
       "summary": "Floeterm terminal-go owns PTY, native VT, geometry, controller epoch, semantic history and atomic Presentation. Released terminal-web renders one canvas per view and collects local input. Authority/renderer violations fail closed; auxiliary history or search errors stay local and retryable without disconnecting live output.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## One terminal owner and one view renderer\nOne `SessionActor` owns each session; sequence and geometry generation only advance. Every view receives the same authoritative Presentation with canonical dimensions. Paint complete backgrounds before cells, graphics, selection and cursor to avoid stale edges during resize, activation or theme changes.\n\n## Multi-view geometry and controller ownership\nPublished Floeterm owns attachment arbitration and geometry. Browser views never parse output bytes, own history or create hidden renderers.\n\n## Product footer placement\n[Activity companion](flower-activity-companion.md#activity-terminal-footer) owns the Activity-only measured footer entry. Workbench supplies none. Layout cannot attach a view, request control or intercept terminal input.\n\n## Input, links, selection, and mobile interaction\n`TerminalInputBridge` sends confirmed Unicode once, structured key intents to the native encoder and clipboard paste through its bounded interaction. Script/malformed URLs, stale capabilities and remote paths fail closed.\n\n## Clear, history, refresh, and lifecycle\nClear is the actor's semantic reset, never canvas erasure, Ctrl-L, recreation or detach; stale generations have no effect. Close/delete removes catalog, attachments and capabilities; stale notifications cannot resurrect sessions.\n\n## Product lifecycle and performance\nDormant sessions remain metadata-only and the catalog renderer-free. Ask Flower captures selection or bounded visible semantic text; working directory requires current local-path capability.",
-          "char_count": 1564
+          "body": "## One terminal owner and one view renderer\nOne `SessionActor` owns each session; sequence and geometry generation only advance. Every view receives the same authoritative Presentation with canonical dimensions. Paint complete backgrounds before cells, graphics, selection and cursor to avoid stale edges during resize, activation or theme changes.\n\n## Multi-view geometry and controller ownership\nPublished Floeterm owns attachment arbitration and geometry. Browser views never parse output bytes, own history or create hidden renderers.\n\n## Product footer placement\n[Activity companion](flower-activity-companion.md#activity-terminal-footer) owns the Activity-only measured footer entry. Workbench supplies none. Layout cannot attach a view, request control or intercept terminal input.\n\n## Input, links, selection, and mobile interaction\n`TerminalInputBridge` sends confirmed Unicode once, structured key intents to the native encoder and clipboard paste through its bounded interaction. Script/malformed URLs, stale capabilities and remote paths fail closed.\n\n## Clear, history, refresh, and lifecycle\nClear is the actor's semantic reset, never canvas erasure, Ctrl-L, recreation or detach; stale generations have no effect. Close/delete removes catalog, attachments and capabilities; stale notifications cannot resurrect sessions.\n\n## History navigation and retention controls\nFloeterm's published `HistoryScrollbar` owns drag capture, frame-coalesced pointer navigation, minimum thumb size, cursors, track paging and Arrow/Page/Home/End keyboard behavior. Redeven supplies a 16 CSS-pixel rail, localized accessible name, focus styling and input-focus restoration after pointer navigation. The history controller remains the sole offset owner. Pointer cancellation, capture loss, blur and disposal release drag state.\n\nAccepted text, paste and pressed/repeated key intents return to live by default through Floeterm's input-follow method. Release-only intents, composition preedit, selection/copy, modifiers and background output do not. The persisted local `terminal:follow_input` preference can disable this behavior. Returning to live clears product search, errors and stale retry/trace state; old history responses cannot restore browsing. Activity, Workbench and container terminal surfaces consume the same preference.\n\nSettings distinguish Runtime defaults for new sessions from explicit application to the attached current session. Blank fields select native defaults; zero retains no historical budget. Rows and memory bytes (displayed as MiB) constrain native storage together, exclude the live screen and are page-granular. These are not character counts or fixed screen dimensions. Only administrators save Runtime defaults. Current-session changes require terminal interaction permission and explicit confirmation because pruning is irreversible. The process, live screen and canonical geometry remain intact.\n\nThe dialog fences reads and confirmation to the selected session; a defaults save that settles after switching sessions refreshes the visible defaults. Unknown mutation outcomes disable further changes until an explicit read-only reload; it never replays an uncertain mutation. Old runtimes expose an unavailable state. All labels, feedback and confirmations have complete shipped-locale translations.\n\n## Product lifecycle and performance\nDormant sessions remain metadata-only and the catalog renderer-free. Ask Flower captures selection or bounded visible semantic text; working directory requires current local-path capability.",
+          "char_count": 3559
         },
         {
           "id": "boundaries",
@@ -31768,6 +31768,11 @@
           "id": "redeven:internal/terminal/live_stream_test.go:0:permission and generation-bound actor clear.",
           "source": "redeven:internal/terminal/live_stream_test.go",
           "description": "Permission and generation-bound actor clear."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/scripts/checkTerminalHistoryCarrier.mjs:0:real runtime and electron navigation, settings, 320px/200% layout, docker exec, restart persistence and supervised process/port cleanup.",
+          "source": "redeven:internal/envapp/ui_src/scripts/checkTerminalHistoryCarrier.mjs",
+          "description": "Real Runtime and Electron navigation, settings, 320px/200% layout, Docker Exec, restart persistence and supervised process/port cleanup."
         }
       ],
       "snippet": "Floeterm terminal-go owns PTY, native VT, geometry, controller epoch, semantic history and atomic Presentation. Released terminal-web renders one canvas per view and collects local input. Authority/renderer violations fail closed; auxiliary",
@@ -31794,5 +31799,5 @@
       ]
     }
   ],
-  "source_sha256": "8016cbc8f0e5cb48bd3eac28723f0e965818f4a72ea938aa3a2d0ec50396fcda"
+  "source_sha256": "b7cf59d4360c43f3c5b877608b0ae5e697dcd80a49d90f755b50c4176028fbca"
 }

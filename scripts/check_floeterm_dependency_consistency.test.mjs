@@ -23,7 +23,7 @@ function makeFixture() {
 }
 
 test('published Go and npm Floeterm dependencies use one released version', () => {
-  assert.deepEqual(validateFloetermDependencies(), { version: '0.19.2' });
+  assert.deepEqual(validateFloetermDependencies(), { version: '0.20.0' });
 });
 
 test('rejects a stale active terminal-web declaration', () => {
@@ -33,7 +33,7 @@ test('rejects a stale active terminal-web declaration', () => {
     const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
     packageJson.dependencies['@floegence/floeterm-terminal-web'] = '0.16.6';
     writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
-    assert.throws(() => validateFloetermDependencies(fixture), /must be 0\.19\.2/);
+    assert.throws(() => validateFloetermDependencies(fixture), /must be 0\.20\.0/);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
@@ -46,7 +46,7 @@ test('allows unrelated dependencies with a historical Floeterm version prefix', 
     const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
     packageJson.dependencies.katex = '0.18.10';
     writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
-    assert.deepEqual(validateFloetermDependencies(fixture), { version: '0.19.2' });
+    assert.deepEqual(validateFloetermDependencies(fixture), { version: '0.20.0' });
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

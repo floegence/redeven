@@ -17,6 +17,7 @@ import {
 // Terminal preferences are global: settings from any TerminalPanel should affect all terminal instances.
 // We keep a module-level singleton store and persist values through Floe's PersistApi.
 
+export const TERMINAL_FOLLOW_INPUT_PERSIST_KEY = 'terminal:follow_input';
 export const TERMINAL_THEME_PERSIST_KEY = 'terminal:theme';
 export const TERMINAL_FONT_SIZE_PERSIST_KEY = 'terminal:font_size';
 export const TERMINAL_FONT_FAMILY_PERSIST_KEY = 'terminal:font_family';
@@ -34,6 +35,8 @@ export {
 };
 export const DEFAULT_TERMINAL_MOBILE_INPUT_MODE: TerminalMobileInputMode = 'floe';
 export const DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED = false;
+
+const [terminalFollowInput, setTerminalFollowInput] = createSignal(true);
 
 let initialized = false;
 let persistRef: PersistApi | null = null;
@@ -68,6 +71,7 @@ export function ensureTerminalPreferencesInitialized(persist: PersistApi) {
   if (initialized) return;
   initialized = true;
   persistRef = persist;
+  setTerminalFollowInput(persist.load<boolean>(TERMINAL_FOLLOW_INPUT_PERSIST_KEY, true) !== false);
 
   const loadedTheme = persist.load<string>(TERMINAL_THEME_PERSIST_KEY, DEFAULT_TERMINAL_THEME);
   setTerminalUserTheme((loadedTheme ?? '').trim() || DEFAULT_TERMINAL_THEME);
@@ -123,6 +127,11 @@ export function useTerminalPreferences() {
   };
 
   return {
+    followInput: terminalFollowInput,
+    setFollowInput: (value: boolean) => {
+      setTerminalFollowInput(value);
+      persistRef?.debouncedSave(TERMINAL_FOLLOW_INPUT_PERSIST_KEY, value);
+    },
     userTheme: terminalUserTheme,
     fontSize: terminalFontSize,
     fontFamilyId: terminalFontFamilyId,

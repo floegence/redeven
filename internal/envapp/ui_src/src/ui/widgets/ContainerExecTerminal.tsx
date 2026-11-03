@@ -56,6 +56,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
     <div class="container-exec-terminal-surface">
       <TerminalFontStatus font={resolvedFont()} />
       <TerminalSessionRuntime
+        followInput={preferences.followInput}
         session={session()}
         variant="panel"
         active={props.active}

@@ -407,6 +407,10 @@ func New(opts Options) (*Agent, error) {
 	}
 	runtimeWorkloads := runtimeservice.NewWorkloadManager()
 	terminalManager := terminal.NewManagerWithScope(shell, filesystemScope, logger)
+	if err := terminalManager.SetHistoryRetentionDefaults(opts.Config.TerminalHistoryRetention); err != nil {
+		terminalManager.Cleanup()
+		return nil, fmt.Errorf("configure terminal history retention: %w", err)
+	}
 	if err := terminalManager.EnablePersistentGroups(filepath.Join(stateDir, "apps", "terminal", "groups.sqlite")); err != nil {
 		terminalManager.Cleanup()
 		return nil, fmt.Errorf("open terminal group catalog: %w", err)

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedVersion = '0.19.2';
+const expectedVersion = '0.20.0';
 const packageName = '@floegence/floeterm-terminal-web';
 const goModule = 'github.com/floegence/floeterm/terminal-go';
 
@@ -45,11 +45,11 @@ export function validateFloetermDependencies(root = repoRoot) {
   const pnpmLock = read(root, 'internal/envapp/ui_src/pnpm-lock.yaml');
   assert(pnpmLock.includes(`specifier: ${expectedVersion}`), 'pnpm importer Floeterm specifier is stale');
   assert(pnpmLock.includes(`'${packageName}@${expectedVersion}':`), 'pnpm Floeterm snapshot is missing');
-  assert(pnpmLock.includes('sha512-9XbdmAl51tos2CGTBRcvwC9dW7Qe+BXgXqKAQDYzx9G7ovjRioXUt0fVUXPKgb8q63ltmPr0rum0+EAgrTaaMA=='), 'pnpm Floeterm integrity is not the published artifact');
+  assert(pnpmLock.includes('sha512-rQsTezenRRgLmioXDn7XsGn1d1DrYrwq3CBvPluMRm5Ysy0jKH7D16nT0i5dG8DNv0YdWYMoOtpjhKA9PWuEaA=='), 'pnpm Floeterm integrity is not the published artifact');
 
   const goSum = read(root, 'go.sum');
-  assert(goSum.includes(`${goModule} v${expectedVersion} h1:BCqhXYaxEMcjpXl4jNY6aldyqj0DHqqUtwS9X6KaJkI=`), 'go.sum is missing the published terminal-go checksum');
-  assert(goSum.includes(`${goModule} v${expectedVersion}/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=`), 'go.sum is missing the published terminal-go go.mod checksum');
+  assert(goSum.includes(`${goModule} v${expectedVersion} h1:vwe7SgP1bfaOSiBg65YXVvMjIv9FsHs+/kV27SZ40p0=`), 'go.sum is missing the published terminal-go checksum');
+  assert(goSum.includes(`${goModule} v${expectedVersion}/go.mod h1:GUf9LNtLmwCVAe6FPus6c+uiXdmFq7cUUpvzsouHEG0=`), 'go.sum is missing the published terminal-go go.mod checksum');
 
   const floetermSumVersions = goSum
     .split('\n')

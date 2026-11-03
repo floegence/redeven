@@ -133,6 +133,7 @@ function harness(options: Readonly<{
   attachSettlement?: Promise<void>;
   activityStack?: boolean;
   splitVisible?: boolean;
+  followInput?: boolean;
 }> = {}) {
   let presentationHandler: ((value: unknown) => void) | null = null;
   let lifecycleHandler: ((event: Parameters<Parameters<RedevenTerminalEventSource['onTerminalLiveAttachmentLifecycle']>[1]>[0]) => void) | null = null;
@@ -284,6 +285,7 @@ function harness(options: Readonly<{
     const activation = options.activityStack ? useViewActivation() : null;
     return (
       <TerminalSessionRuntime
+        followInput={() => options.followInput ?? true}
         session={SESSION}
         variant="panel"
         active={active}
@@ -333,10 +335,13 @@ function harness(options: Readonly<{
     position: 'absolute',
     top: '8px',
     left: '8px',
-    right: '0',
+    right: '16px',
     bottom: '0',
     overflow: 'hidden',
   });
+  const scrollbar = root.querySelector<HTMLElement>('[data-floeterm-scrollbar]')!;
+  Object.assign(scrollbar.style, { position: 'absolute', right: '0', top: '8px', bottom: '0', width: '16px' });
+  Object.assign(scrollbar.querySelector<HTMLElement>('[data-floeterm-scrollbar-thumb]')!.style, { position: 'absolute', left: '0', right: '0' });
   Object.assign(semanticCanvas.style, {
     position: 'absolute',
     inset: '0',
@@ -427,6 +432,23 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     for (const item of mounted.splice(0)) item.dispose();
     document.body.replaceChildren();
     vi.restoreAllMocks();
+  });
+
+  for (const enabled of [true, false]) it('honors input-follow preference: ' + enabled, async () => {
+    const runtime = harness({ followInput: enabled }); mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'live-frontier'));
+    await waitForHistoryAttachment(runtime);
+    const bar = runtime.root.querySelector<HTMLElement>('[data-floeterm-scrollbar]')!;
+    bar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('true'));
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('true');
+    input.value = 'committed'; input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: 'committed', bubbles: true }));
+    await vi.waitFor(() => expect(runtime.sendInput).toHaveBeenCalledWith(SESSION.id, 'committed'));
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe(enabled ? 'false' : 'true');
+    expect(bar.tabIndex).toBe(0);
+    expect(getComputedStyle(bar).cursor).toBe('default');
   });
 
   it('mounts one semantic canvas and applies only advancing atomic presentations', async () => {
@@ -1430,12 +1452,17 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     });
 
     const scrollbar = runtime.root.querySelector<HTMLElement>('[data-floeterm-scrollbar]')!;
-    scrollbar.getBoundingClientRect = () => ({
-      x: 0, y: 0, top: 0, left: 0, right: 12, bottom: 100,
-      width: 12, height: 100, toJSON: () => ({}),
-    });
-    scrollbar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientY: 25 }));
-    scrollbar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientY: 75 }));
+    const thumb = scrollbar.querySelector<HTMLElement>('[data-floeterm-scrollbar-thumb]')!;
+    const trackBounds = scrollbar.getBoundingClientRect();
+    const thumbBounds = thumb.getBoundingClientRect();
+    scrollbar.setPointerCapture = vi.fn();
+    scrollbar.hasPointerCapture = () => false;
+    thumb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 44, clientY: thumbBounds.top + thumbBounds.height / 2 }));
+    const targetY = (fraction: number) => trackBounds.top + thumbBounds.height / 2 + fraction * (trackBounds.height - thumbBounds.height);
+    scrollbar.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 44, clientY: targetY(0.25) }));
+    await new Promise(requestAnimationFrame);
+    scrollbar.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 44, clientY: targetY(0.75) }));
+    scrollbar.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 44, clientY: targetY(0.75) }));
 
     await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')
       ?.getAttribute('data-terminal-history-offset')).toBe('750000'), { timeout: 3_000 });
@@ -1981,6 +2008,24 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('old-history-marker');
     expect(runtime.root.querySelector('[data-terminal-semantic-history-error="true"]')).toBeNull();
     expect(runtime.statuses.some((status) => status.state === 'blocking')).toBe(false);
+  });
+
+  it('invalidates an in-flight history response and its trace when committed input follows live', async () => {
+    const runtime = harness(); mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'live-before-input'));
+    await waitForHistoryAttachment(runtime);
+    let resolvePage!: (value: SemanticHistoryViewport) => void;
+    runtime.semanticHistory.mockReturnValueOnce(new Promise<SemanticHistoryViewport>(resolve => { resolvePage = resolve; }));
+    runtime.root.querySelector<HTMLElement>('[data-floeterm-scrollbar]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(1));
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    input.value = 'x'; input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: 'x', bubbles: true }));
+    resolvePage(historyViewport());
+    await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-busy')).toBe('false'));
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('false');
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-request-state')).toBe('idle');
+    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-before-input');
+    expect(runtime.root.querySelector('[data-terminal-semantic-history-retry]')).toBeNull();
   });
 
   it('discards a late history response after canonical geometry changes', async () => {

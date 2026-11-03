@@ -20,7 +20,7 @@ The local direct and remote agent production session profiles register the compl
 The upstream-first review uses published Flowersec 5.11.1 WebSocketHTTPServerOptions.ApplicationHandler to compose client HTTP with Runtime transport on one TLS endpoint, and its egress.HTTPSProxy for explicit Runtime Cloud routing. No upstream mechanism change, local dependency overlay or copied implementation is required.
 
 ## Mechanism
-The released runtime dependency set includes Floeterm terminal-go v0.19.2 and Flowersec Go v5.11.1.
+The released runtime dependency set includes Floeterm terminal-go v0.20.0 and Flowersec Go v5.11.1.
 
 Env App and Desktop consume Flowersec TypeScript v5.11.1.
 

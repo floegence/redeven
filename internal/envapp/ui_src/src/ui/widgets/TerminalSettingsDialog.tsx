@@ -1,5 +1,7 @@
 import { StableText, Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
 import './terminal-settings.css';
+import { TerminalHistorySettings } from './TerminalHistorySettings';
+import type { RedevenTerminalTransport } from '../services/terminalTransport';
 import { createEffect, createMemo, createSignal, createUniqueId, For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Dialog } from '../primitives/EnvAppModal';
@@ -58,6 +60,10 @@ const TERMINAL_THEME_GROUPS = [
 
 type TerminalSettingsDialogProps = {
   open: boolean;
+  followInput?: boolean;
+  onFollowInputChange?: (value: boolean) => void;
+  retentionTransport?: RedevenTerminalTransport;
+  retentionSessionId?: string | null;
   userTheme: string;
   fontSize: number;
   fontFamilyId: string;
@@ -476,6 +482,11 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             />
           </div>
         </div>
+        </section>
+        <section class="space-y-3">
+          <Checkbox checked={props.followInput ?? true} onChange={value => props.onFollowInputChange?.(value)}
+            label={i18n.t('terminal.settings.followInput')} size="sm" />
+          <Show when={props.retentionTransport}><TerminalHistorySettings open={props.open} transport={props.retentionTransport} sessionId={props.retentionSessionId} /></Show>
         </section>
         <section class="space-y-3">
         <SectionTitle
