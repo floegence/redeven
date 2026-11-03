@@ -29242,7 +29242,7 @@
         "title": "Flower conversation selection and detail reads",
         "type": "UI Contract"
       },
-      "body_length": 4872,
+      "body_length": 5340,
       "summary": "Flower acknowledges navigation before transcript work. One coordinator serves\nnavigation, command confirmation and reference preflight. ThreadCache owns\nselection and detail; the loader owns bounded ephemeral demand.\nReadiness controls reveal; elapsed time controls feedback only.",
       "sections": [
         {
@@ -29256,8 +29256,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title editing, pending-action presentation and pin ordering. A completed detail read alone never marks content as seen. Canonical View and Summary stay in Floret; the host does not reconstruct its history or lifecycle.",
-          "char_count": 291
+          "body": "Published Floret v7.103.1 reduces execution preparation reads through upstream\nsource locators. The host retains bounded windows, visibility-driven body reads\nand interaction state. First-use preparation of older prompt histories is\ncancellable and yields between transactions. It is separate from transcript\nreadiness and never authorizes a full-history UI load. Formal qualification uses\nthe checksummed published module without workspace or sibling source wiring.\n\nThe [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title editing, pending-action presentation and pin ordering. A completed detail read alone never marks content as seen. Canonical View and Summary stay in Floret; the host does not reconstruct its history or lifecycle.",
+          "char_count": 759
         }
       ],
       "evidence": [
@@ -32069,5 +32069,5 @@
       ]
     }
   ],
-  "source_sha256": "e2162bf8484663e3d23d826f2ccda69aa5faed34a132e677d925c03a942df6c3"
+  "source_sha256": "9d5c6e0fd98ccdd947ff43b333569ae1e02345579de827480eacd6f55a108c72"
 }

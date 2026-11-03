@@ -37,6 +37,13 @@ Floret supplies canonical summaries/windows/body reads. ThreadCache owns selecti
 
 # Boundaries
 
+Published Floret v7.103.1 reduces execution preparation reads through upstream
+source locators. The host retains bounded windows, visibility-driven body reads
+and interaction state. First-use preparation of older prompt histories is
+cancellable and yields between transactions. It is separate from transcript
+readiness and never authorizes a full-history UI load. Formal qualification uses
+the checksummed published module without workspace or sibling source wiring.
+
 The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title editing, pending-action presentation and pin ordering. A completed detail read alone never marks content as seen. Canonical View and Summary stay in Floret; the host does not reconstruct its history or lifecycle.
 
 # Evidence

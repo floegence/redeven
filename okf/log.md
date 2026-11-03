@@ -4,7 +4,11 @@ Concepts own current contracts and original qualification outcomes; Git retains 
 
 ## 2026-11-03
 
+<<<<<<< HEAD
 - [Tool sequence summaries](ui/flower-tool-sequences.md) omit thinking counts and use concise failure counts in every locale; expanded thinking remains available.
+=======
+- [Thread selection](ui/flower-thread-selection.md): adopt published Floret preparation-read optimization while preserving bounded browsing and cancellation.
+>>>>>>> f9475de44 (perf(flower): qualify bounded preparation candidate)
 
 - [Computer reads](ai/computer-script-read-contract.md) preserve layout facts, scoped identity and DFS order; [scripts](ai/computer-use-scripts.md) support explicit invalidation branching, parse-only namespace retention and exact observation deduplication. [Activity](ui/flower-activity-interaction.md) presents confirmed budget stops neutrally. Qualification retains canonical evidence and original failures.
 - [Flower setup](ui/flower-setup-and-settings.md): open, lightweight Floe setup composition, localized destination actions, no unconfigured sync or task previews.
